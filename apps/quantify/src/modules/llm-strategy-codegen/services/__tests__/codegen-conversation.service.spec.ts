@@ -8475,6 +8475,113 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('CONFIRM_GATE')
   })
 
+  it('replaces a prior dynamic grid draft when the user provides a complete fixed grid strategy', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      families: ['grid'],
+      triggers: [
+        {
+          id: 'entry-dynamic-grid',
+          key: 'price.range_position_lte',
+          phase: 'entry',
+          params: { lookbackBars: 36, positionPct: 20 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-dynamic-grid',
+          key: 'price.range_position_gte',
+          phase: 'exit',
+          params: { lookbackBars: 36, positionPct: 55 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      risk: [
+        { id: 'risk-stop-loss-old', key: 'risk.stop_loss_pct', params: { valuePct: 3 }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit-old', key: 'risk.take_profit_pct', params: { valuePct: 0.45 }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.25,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-semantic-grid-replacement',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const oldDynamicGridStrategy = {}',
+    })
+    const message = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为双向网格策略，请确认逻辑图。',
+        semanticPatch: {
+          families: ['grid'],
+          triggers: [
+            {
+              key: 'grid.fixed_range',
+              phase: 'entry',
+              params: { lowerPrice: 60000, upperPrice: 80000, stepPct: 0.5, direction: 'bidirectional' },
+            },
+          ],
+          actions: [{ key: 'open_long' }, { key: 'open_short' }, { key: 'close_position' }],
+          risk: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'both' },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+
+    await service.continueSession('s-semantic-grid-replacement', {
+      userId: 'u1',
+      message,
+    })
+
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe(message)
+    expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.semanticState.previousVersions).toHaveLength(1)
+    expect(updatePayload.semanticState.triggers).toEqual([
+      expect.objectContaining({
+        key: 'grid.fixed_range',
+        params: expect.objectContaining({ lowerPrice: 60000, upperPrice: 80000, stepPct: 0.5 }),
+      }),
+    ])
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'price.range_position_lte' }),
+      expect.objectContaining({ key: 'price.range_position_gte' }),
+    ]))
+    expect(updatePayload.semanticState.risk).toEqual([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 10 }) }),
+    ])
+    expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({ value: 0.1 }))
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('36')
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('0.45')
+  })
+
   it('consumes pending strategy replacement seed from a follow-up message', async () => {
     const currentSemanticState = {
       ...buildLockedMaSemanticState(),

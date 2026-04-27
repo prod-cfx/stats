@@ -104,6 +104,62 @@ describe('ConversationSemanticEditService', () => {
     })
   })
 
+  it('classifies a complete new grid description as a full strategy replacement instead of a merge', () => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      triggers: [
+        {
+          id: 'entry-dynamic-grid',
+          key: 'price.range_position_lte',
+          phase: 'entry' as const,
+          params: { lookbackBars: 36, positionPct: 20 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'exit-dynamic-grid',
+          key: 'price.range_position_gte',
+          phase: 'exit' as const,
+          params: { lookbackBars: 36, positionPct: 55 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'stop_loss',
+          params: { pct: 3 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.25,
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      },
+    }
+    const message = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
+
+    const decision = service.decide({
+      status: 'CONFIRM_GATE',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'REPLACE_STRATEGY_DRAFT',
+      seedText: message,
+    })
+  })
+
   it('keeps asking when pending replacement seed follow-up is still generic', () => {
     const semanticState = service.withStrategyReplacementSeedPendingEditForTest(
       service.createEmptySemanticStateForTest(),

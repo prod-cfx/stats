@@ -100,6 +100,14 @@ export class ConversationSemanticEditService {
       }
     }
 
+    const implicitReplacementSeed = this.extractImplicitStrategyReplacementSeed(message, input.semanticState)
+    if (implicitReplacementSeed) {
+      return {
+        kind: 'REPLACE_STRATEGY_DRAFT',
+        seedText: implicitReplacementSeed,
+      }
+    }
+
     const contextOperation = this.extractReplacementContextOperation(message)
     if (contextOperation) {
       return {
@@ -443,6 +451,7 @@ export class ConversationSemanticEditService {
       this.extractReplacementContextOperation(message)
         || this.extractReplacementPositionPct(message) !== null
         || this.extractIndicatorPeriodReplacement(message) !== null
+        || this.extractImplicitStrategyReplacementSeed(message, state)
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)
         || (readPendingSemanticEdit(state) && /算了|保持原来|不改了|取消/u.test(message))
@@ -455,6 +464,31 @@ export class ConversationSemanticEditService {
   private extractStrategyReplacementSeed(message: string): string | null {
     const match = /(?:之前策略不对|之前不对)[，,\s]*(重新做一个.+)$/u.exec(message)
     return match?.[1]?.trim() || null
+  }
+
+  private extractImplicitStrategyReplacementSeed(message: string, state: SemanticState): string | null {
+    if (!this.hasActiveStrategySemantics(state)) return null
+    if (!this.looksLikeCompleteStrategySeed(message)) return null
+    return message.trim()
+  }
+
+  private hasActiveStrategySemantics(state: SemanticState): boolean {
+    return state.triggers.length > 0
+      || state.actions.length > 0
+      || state.risk.length > 0
+      || state.position !== null
+      || Object.values(state.contextSlots).some((slot) => Boolean(slot?.value))
+  }
+
+  private looksLikeCompleteStrategySeed(message: string): boolean {
+    const hasContext = /(?:OKX|BINANCE|Hyperliquid|交易所|交易|现货|永续|合约|perp|swap|spot|[A-Z]{2,}[-/]?[A-Z0-9]{2,}(?:-SWAP)?|\b\d+\s*[mhdw]\b)/iu.test(message)
+    const hasCoreBehavior = /(?:策略|网格|入场|出场|开仓|平仓|买入|卖出|触发|行动|价格区间|区间\s*\d|每格|均线|MA|SMA|EMA|RSI|MACD)/iu.test(message)
+    const hasRisk = /(?:止损|止盈|亏损|盈利|回撤|风控)/u.test(message)
+    const hasPosition = /(?:仓位|单笔|资金|杠杆|倍杠杆|不使用杠杆)/u.test(message)
+    const hasGridStructure = /(?:价格区间\s*\d+(?:\.\d+)?\s*[-~到至]\s*\d+(?:\.\d+)?|双向网格|每格间距|网格)/u.test(message)
+
+    const semanticAreaCount = [hasContext, hasCoreBehavior, hasRisk, hasPosition].filter(Boolean).length
+    return semanticAreaCount >= 3 && (semanticAreaCount >= 4 || hasGridStructure)
   }
 
   private isStrategyRestartWithoutSeed(message: string): boolean {
