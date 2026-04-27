@@ -5,15 +5,14 @@ import { Activity, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 }
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAccountAiQuantStrategy,
-  fetchAccountAiQuantStrategyDetail,
   fetchAccountAiQuantStrategies,
   performAccountAiQuantStrategyAction,
 } from '@/lib/api'
-import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
-import { mapAccountStrategyDetailToRecord, mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
+import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamSummary } from './dynamic-param-summary'
 
 function fmtTime(ts: string, lng: string) {
@@ -96,6 +95,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [stopDialogStrategy, setStopDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
+  const [deleteDialogStrategy, setDeleteDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -137,21 +137,13 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
   }
 
-  const openStopDialog = async (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
+  const openStopDialog = (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
     e.preventDefault()
     e.stopPropagation()
     if (!session) return
 
-    setPendingActionId(item.id)
     setError(null)
-    try {
-      const detail = await fetchAccountAiQuantStrategyDetail(item.id, session.userId)
-      setStopDialogStrategy(mapAccountStrategyDetailToRecord(detail))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiQuant.errors.statusUpdateFailed', { defaultValue: 'Failed to update strategy status' }))
-    } finally {
-      setPendingActionId(null)
-    }
+    setStopDialogStrategy(item)
   }
 
   const handleStopDialogAction = async (action: 'stop' | 'liquidate_and_stop') => {
@@ -173,7 +165,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
   }
 
-  const handleDelete = async (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
+  const openDeleteDialog = (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
     e.preventDefault()
     e.stopPropagation()
     if (!session) return
@@ -181,18 +173,19 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       setError('运行中的策略不能删除，请先停止策略。')
       return
     }
-    const confirmed = window.confirm(
-      t('aiQuant.confirmDeleteStrategy', {
-        defaultValue: `Delete strategy "${item.name}"? This action cannot be undone.`,
-        name: item.name,
-      }),
-    )
-    if (!confirmed) return
 
-    setPendingDeleteId(item.id)
+    setError(null)
+    setDeleteDialogStrategy(item)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!session || !deleteDialogStrategy) return
+
+    setPendingDeleteId(deleteDialogStrategy.id)
     try {
-      await deleteAccountAiQuantStrategy(item.id, session.userId)
-      setStrategies(prev => prev.filter(strategy => strategy.id !== item.id))
+      await deleteAccountAiQuantStrategy(deleteDialogStrategy.id, session.userId)
+      setStrategies(prev => prev.filter(strategy => strategy.id !== deleteDialogStrategy.id))
+      setDeleteDialogStrategy(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }))
     } finally {
@@ -282,12 +275,11 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
           const StatusIcon = statusConfig.icon
 
           return (
-            <Link
+            <div
               key={item.id}
-              href={`/${lng}/account/ai-quant/strategy/${item.id}`}
               className="group flex items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 transition-all hover:border-primary/50 hover:shadow-sm"
             >
-              <div className="flex items-center gap-4">
+              <Link href={`/${lng}/account/ai-quant/strategy/${item.id}`} className="flex items-center gap-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <h4 className="font-bold text-[color:var(--cf-text-strong)] group-hover:text-primary transition-colors">
@@ -302,7 +294,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     <AiQuantStrategyPrimarySummary item={item} t={t} keyPrefix={item.id} />
                   </div>
                 </div>
-              </div>
+              </Link>
 
               <div className="flex items-center gap-4">
                 <div className="hidden text-right text-xs text-[color:var(--cf-muted)] sm:block">
@@ -316,7 +308,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                 {item.status === 'running' ? (
                   <button
                     type="button"
-                    onClick={(e) => openStopDialog(e, item)}
+                    onClick={e => openStopDialog(e, item)}
                     disabled={pendingActionId === item.id}
                     className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
                   >
@@ -326,7 +318,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                 ) : (
                   <button
                     type="button"
-                    onClick={(e) => handleStatusChange(e, item.id, 'running')}
+                    onClick={e => handleStatusChange(e, item.id, 'running')}
                     disabled={pendingActionId === item.id}
                     className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
                   >
@@ -337,7 +329,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
                 <button
                   type="button"
-                  onClick={e => handleDelete(e, item)}
+                  onClick={e => openDeleteDialog(e, item)}
                   disabled={pendingDeleteId === item.id}
                   title={item.status === 'running' ? '运行中的策略不能删除，请先停止策略。' : undefined}
                   className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
@@ -348,11 +340,14 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                     : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
                 </button>
 
-                <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] transition group-hover:border-primary/30 group-hover:text-primary">
+                <Link
+                  href={`/${lng}/account/ai-quant/strategy/${item.id}`}
+                  className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] transition group-hover:border-primary/30 group-hover:text-primary"
+                >
                   {t('aiQuant.viewDetail')}
-                </div>
+                </Link>
               </div>
-            </Link>
+            </div>
           )
         })}
       </div>
@@ -373,6 +368,50 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
           setStopDialogStrategy(null)
         }}
       />
+
+      {deleteDialogStrategy && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={() => {
+          if (!pendingDeleteId) setDeleteDialogStrategy(null)
+        }}
+        >
+          <div
+            className="w-full max-w-[480px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+            onClick={event => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+              {t('aiQuant.confirmDeleteTitle', { defaultValue: '确认删除策略？' })}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+              {t('aiQuant.confirmDeleteStrategy', {
+                defaultValue: `Delete strategy "${deleteDialogStrategy.name}"? This action cannot be undone.`,
+                name: deleteDialogStrategy.name,
+              })}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={pendingDeleteId === deleteDialogStrategy.id}
+                onClick={() => {
+                  void handleConfirmDelete()
+                }}
+                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {pendingDeleteId === deleteDialogStrategy.id
+                  ? t('aiQuant.deleting', { defaultValue: 'Deleting...' })
+                  : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
+              </button>
+              <button
+                type="button"
+                disabled={pendingDeleteId === deleteDialogStrategy.id}
+                onClick={() => setDeleteDialogStrategy(null)}
+                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t('common.cancel', { defaultValue: '取消' })}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

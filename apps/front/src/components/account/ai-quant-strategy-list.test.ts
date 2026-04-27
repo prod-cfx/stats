@@ -1,10 +1,10 @@
 /** @jest-environment jsdom */
 
-import type { AccountAiQuantStrategyDetail } from '@/lib/api'
+import type { Root } from 'react-dom/client'
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server.node'
 import {
   AiQuantStrategyList,
@@ -27,7 +27,9 @@ jest.mock('lucide-react', () => ({
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ children }: { children: unknown }) => children,
+  default: ({ children, href, className }: { children: React.ReactNode; href: string; className?: string }) => (
+    React.createElement('a', { href, className }, children)
+  ),
 }))
 
 const mockFetchAccountAiQuantStrategies = jest.fn()
@@ -40,10 +42,12 @@ const mockT = (key: string, options?: { defaultValue?: string }) => options?.def
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 jest.mock('react-i18next', () => ({
+  // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
   useTranslation: () => ({ t: mockT }),
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
+  // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
   useAuth: () => ({ session: mockSession }),
 }))
 
@@ -86,69 +90,6 @@ function makeListRecord(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuant
     schemaVersion: 'v1',
     supportsDynamicParams: false,
     updatedAt: '2026-03-20T00:00:00.000Z',
-    ...overrides,
-  }
-}
-
-function buildStrategyDetail(overrides: Partial<AccountAiQuantStrategyDetail> = {}): AccountAiQuantStrategyDetail {
-  return {
-    id: 'stg-list-1',
-    name: 'List Strategy',
-    status: 'running',
-    exchange: 'okx',
-    symbol: 'DOGEUSDT',
-    timeframe: '1h',
-    positionPct: 10,
-    isSubscribed: true,
-    paramSchema: null,
-    paramValues: null,
-    schemaVersion: null,
-    metrics: {
-      returnPct: 0,
-      maxDrawdownPct: 0,
-      winRatePct: 0,
-      tradeCount: 0,
-    },
-    updatedAt: '2026-03-20T00:00:00.000Z',
-    totalPnl: 0,
-    todayPnl: 0,
-    equitySeries: [],
-    snapshot: {
-      exchange: 'okx',
-      symbol: 'DOGEUSDT',
-      timeframe: '1h',
-      positionPct: 10,
-      publishedSnapshotId: 'snapshot-1',
-      snapshotHash: 'hash-1',
-      paramSchema: null,
-      paramValues: null,
-      schemaVersion: null,
-      strategyConfig: {
-        exchange: 'okx',
-        symbol: 'DOGEUSDT',
-        marketType: 'spot',
-        baseTimeframe: '1h',
-        positionPct: 10,
-      },
-    },
-    timeline: [],
-    runtimeExecutionStates: [],
-    accountOverview: {
-      initialBalance: 10000,
-      totalEquity: 10000,
-      availableBalance: 10000,
-      totalPnl: 0,
-      todayPnl: 0,
-      baseCurrency: 'USDT',
-    },
-    positionOverview: {
-      openPositionsCount: 0,
-      closedPositionsCount: 0,
-      totalRealizedPnl: 0,
-      totalUnrealizedPnl: 0,
-    },
-    latestOrders: [],
-    openOrdersCount: 0,
     ...overrides,
   }
 }
@@ -249,46 +190,56 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(getStrategyRuntimeActionLabel('stopped', t)).toBe('aiQuant.actions.run')
   })
 
-  it('keeps the running strategy action as a functional stop button with confirmation', async () => {
+  async function renderStrategyListWithItems(items: unknown[]) {
     mockSession = { userId: 'user-1' }
     mockFetchAccountAiQuantStrategies.mockResolvedValue({
-      items: [{
-        id: 'stg-list-1',
-        name: 'List Strategy',
-        status: 'running',
-        exchange: 'okx',
-        symbol: 'DOGEUSDT',
-        timeframe: '1h',
-        positionPct: 10,
-        isSubscribed: true,
-        paramSchema: null,
-        paramValues: null,
-        schemaVersion: null,
-        metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
-        updatedAt: '2026-03-20T00:00:00.000Z',
-      }],
+      items,
     })
-    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildStrategyDetail())
-    mockPerformAccountAiQuantStrategyAction.mockResolvedValue(buildStrategyDetail({ status: 'stopped' }))
 
     await act(async () => {
       root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
     })
     await act(async () => {})
+  }
+
+  function listItem(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'stg-list-1',
+      name: 'List Strategy',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'DOGEUSDT',
+      timeframe: '1h',
+      positionPct: 10,
+      isSubscribed: true,
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      ...overrides,
+    }
+  }
+
+  it('keeps the running strategy action as a functional stop button with confirmation', async () => {
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValue({})
+
+    await renderStrategyListWithItems([listItem()])
 
     const stopButton = Array.from(container.querySelectorAll('button'))
       .find(button => button.textContent?.includes('停止策略'))
     expect(stopButton).toBeTruthy()
+    expect(stopButton?.closest('a')).toBeNull()
 
     await act(async () => {
       stopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
-    expect(mockFetchAccountAiQuantStrategyDetail).toHaveBeenCalledWith('stg-list-1', 'user-1')
-    expect(container.textContent).toContain('确认停止策略？')
+    expect(mockFetchAccountAiQuantStrategyDetail).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
 
     await act(async () => {
-      container.querySelector('[data-testid="confirm-stop-strategy"]')?.dispatchEvent(
+      container.querySelector('[data-testid="stop-only-strategy"]')?.dispatchEvent(
         new MouseEvent('click', { bubbles: true, cancelable: true }),
       )
     })
@@ -297,6 +248,53 @@ describe('AiQuantStrategyList primary summary', () => {
       userId: 'user-1',
       action: 'stop',
     })
+  })
+
+  it('calls liquidate_and_stop from the list stop dialog when user chooses liquidation', async () => {
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValue({})
+
+    await renderStrategyListWithItems([listItem()])
+
+    const stopButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('停止策略'))
+    await act(async () => {
+      stopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    await act(async () => {
+      container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      )
+    })
+
+    expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('stg-list-1', {
+      userId: 'user-1',
+      action: 'liquidate_and_stop',
+    })
+  })
+
+  it('uses an in-app confirmation dialog for deleting stopped strategies', async () => {
+    mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
+
+    await renderStrategyListWithItems([listItem({ status: 'stopped' })])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    expect(deleteButton?.closest('a')).toBeNull()
+
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.textContent).toContain('确认删除策略？')
+
+    const confirmDeleteButton = Array.from(container.querySelectorAll('button'))
+      .filter(button => button.textContent === 'Delete')
+      .at(-1)
+    await act(async () => {
+      confirmDeleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1')
   })
 
   it('renders static fallback summary in DOM with separators and expected order', () => {
