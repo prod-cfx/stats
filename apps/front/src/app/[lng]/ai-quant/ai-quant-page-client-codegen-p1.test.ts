@@ -510,6 +510,7 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.messages).toHaveLength(3)
     expect(next.messages.at(-1)?.role).toBe('assistant')
     expect(next.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+    expect(next.llmCodegenSessionId).toBe('session-1')
   })
 
   it('appends generated code reply when published snapshot returns only historical conversationMessages', () => {

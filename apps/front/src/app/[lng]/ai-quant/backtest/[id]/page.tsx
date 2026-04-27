@@ -32,6 +32,10 @@ interface BacktestInputSummaryView {
   requestedRange?: unknown
   slippageBps?: unknown
   symbols?: unknown
+  conversationId?: unknown
+  publishedSnapshotId?: unknown
+  snapshotId?: unknown
+  strategyInstanceId?: unknown
   timeframe?: unknown
 }
 
@@ -184,6 +188,9 @@ function resolveBacktestReportContext(inputSummary: unknown, symbol: string, mar
   const priceSource = readStringField(source, ['priceSource'])
 
   return {
+    strategyInstanceId: readStringField(source, ['strategyInstanceId']),
+    publishedSnapshotId: readStringField(source, ['publishedSnapshotId', 'snapshotId']),
+    conversationId: readStringField(source, ['conversationId']),
     exchange: readStringField(source, ['exchange']),
     marketType,
     symbol,

@@ -8100,6 +8100,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+      }),
+    }))
+    expect(updatePayload.validationReport).toBeNull()
     expect(result.assistantPrompt).toContain('BTCUSDT')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
   })
@@ -8518,7 +8524,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
-    'keeps %s terminal even when the message looks like a semantic edit',
+    'allows %s terminal sessions to return to semantic editing when the message changes strategy meaning',
     async (status) => {
       const sessionId = `s-terminal-${status.toLowerCase()}`
       const sessionFixture = buildSemanticEraSessionFixture({
@@ -8531,12 +8537,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       })
       mockRepo.findById.mockResolvedValue(sessionFixture)
 
-      await expect(service.continueSession(sessionId, {
+      const result = await service.continueSession(sessionId, {
         userId: 'u1',
         message: '把交易标的改成 BTCUSDT',
-      })).rejects.toThrow('codegen.session_terminal_status')
+      })
 
-      expect(mockRepo.updateSession).not.toHaveBeenCalled()
+      expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
+      const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+      expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
+      expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+        market: expect.objectContaining({
+          symbol: 'BTCUSDT',
+        }),
+      }))
+      expect(updatePayload.validationReport).toBeNull()
+      expect(updatePayload.latestDraftCode).toBeNull()
+      expect(updatePayload.rejectReason).toBeNull()
     },
   )
 

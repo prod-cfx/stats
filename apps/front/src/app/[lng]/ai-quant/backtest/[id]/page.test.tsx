@@ -252,13 +252,16 @@ describe('AiQuantBacktestDetailPage', () => {
   it('passes normalized report context from inputSummary without tying it to OKX', async () => {
     mockFetchBacktestJobServer.mockResolvedValue({
       id: 'backtest-context',
-      inputSummary: {
-        exchange: 'binance',
-        marketType: 'perp',
-        symbols: ['BTCUSDT'],
-        baseTimeframe: '3m',
-        initialCash: 10000,
-        leverage: 5,
+        inputSummary: {
+          exchange: 'binance',
+          marketType: 'perp',
+          symbols: ['BTCUSDT'],
+          baseTimeframe: '3m',
+          strategyInstanceId: 'strategy-1',
+          snapshotId: 'snapshot-1',
+          conversationId: 'conversation-1',
+          initialCash: 10000,
+          leverage: 5,
         allowPartial: false,
         requestedRange: {
           fromTs: Date.parse('2026-04-01T00:00:00.000Z'),
@@ -297,6 +300,9 @@ describe('AiQuantBacktestDetailPage', () => {
         exchange: 'binance',
         marketType: 'perp',
         symbol: 'BTCUSDT',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        conversationId: 'conversation-1',
         timeframe: '3m',
         requestedRange: '2026-04-01 00:00 UTC ~ 2026-04-08 00:00 UTC',
         appliedRange: '2026-04-01 00:00 UTC ~ 2026-04-08 00:00 UTC',

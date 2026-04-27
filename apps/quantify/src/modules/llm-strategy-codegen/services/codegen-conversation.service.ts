@@ -819,7 +819,9 @@ export class CodegenConversationService {
       })
     const canEditPublishedSession = session.status === 'PUBLISHED'
       && (semanticEditDecision.kind !== 'NO_EDIT' || hasPublishedUnsupportedEditIntent)
-    if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession) {
+    const canEditFailedSession = (session.status === 'REJECTED' || session.status === 'CONSISTENCY_FAILED')
+      && semanticEditDecision.kind !== 'NO_EDIT'
+    if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession && !canEditFailedSession) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
@@ -1510,7 +1512,15 @@ export class CodegenConversationService {
             },
             latestSpecDesc: specDesc,
           }),
-          ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
+          semanticGraph: this.buildMinimalSemanticGraphFromState(reducedSemanticState) as Prisma.InputJsonValue,
+          validationReport: null,
+          ...(
+            args.session.status === 'PUBLISHED'
+              || args.session.status === 'REJECTED'
+              || args.session.status === 'CONSISTENCY_FAILED'
+              ? { latestDraftCode: null, rejectReason: null }
+              : {}
+          ),
         }
     await this.sessionsRepo.updateSession(args.session.id, semanticEditUpdate as Prisma.LlmStrategyCodegenSessionUpdateInput)
 

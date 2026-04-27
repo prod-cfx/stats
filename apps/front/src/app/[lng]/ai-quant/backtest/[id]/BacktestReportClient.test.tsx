@@ -6,11 +6,28 @@ import { createRoot } from 'react-dom/client'
 import { BacktestReportClient } from './BacktestReportClient'
 
 const mockGetBacktestJobResult = jest.fn()
+const mockSetIntent = jest.fn()
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    href,
+    children,
+    onClick,
+  }: {
+    href: string
+    children: React.ReactNode
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>
+  }) => (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault()
+        onClick?.(event)
+      }}
+    >
+      {children}
+    </a>
   ),
 }))
 
@@ -36,6 +53,10 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
   getBacktestJobResult: (...args: unknown[]) => mockGetBacktestJobResult(...args),
 }))
 
+jest.mock('@/components/ai-quant/intent-storage', () => ({
+  setIntent: (...args: unknown[]) => mockSetIntent(...args),
+}))
+
 describe('BacktestReportClient', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
@@ -48,6 +69,7 @@ describe('BacktestReportClient', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     mockGetBacktestJobResult.mockReset()
+    mockSetIntent.mockReset()
     mockDynamic = jest.requireMock('next/dynamic').default as jest.Mock
   })
 
@@ -420,5 +442,56 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('Funding and liquidation data were not provided by this backtest model.')
     expect(container.textContent).toContain('1 long / 1 short closed trades')
     expect(container.textContent).toContain('Review Before Deploy')
+  })
+
+  it('stores strategy edit intent when returning from a backtest report with strategy context', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="zh"
+          id="btjob-edit-context"
+          symbol="BTCUSDT"
+          marketType="perp"
+          rangeDisplay="2026-04-20 ~ 2026-04-21"
+          reportContext={{
+            strategyInstanceId: ' strategy-1 ',
+            publishedSnapshotId: ' snapshot-1 ',
+            conversationId: ' conversation-1 ',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+          }}
+          metrics={{
+            maxDrawdownPct: 5,
+            totalReturnPct: -3,
+            winRatePct: 40,
+            tradeCount: 5,
+          }}
+          report={{
+            equityCurve: [
+              { ts: Date.parse('2026-04-20T00:00:00.000Z'), equity: 10000 },
+              { ts: Date.parse('2026-04-21T00:00:00.000Z'), equity: 9700 },
+            ],
+            trades: [],
+          }}
+        />,
+      )
+    })
+
+    const link = Array.from(container.querySelectorAll('a')).find(anchor =>
+      anchor.textContent?.includes('返回 AI量化'),
+    ) as HTMLAnchorElement | undefined
+    expect(link?.getAttribute('href')).toBe('/zh/ai-quant')
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mockSetIntent).toHaveBeenCalledWith({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      conversationId: 'conversation-1',
+      source: 'backtest',
+    })
   })
 })

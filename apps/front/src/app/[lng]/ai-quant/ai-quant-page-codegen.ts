@@ -31,7 +31,7 @@ import {
   normalizeParamsFromValues,
 } from './ai-quant-page-conversation'
 
-const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
+const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
   'GENERATING',
   'VALIDATING_STATIC',
@@ -44,6 +44,7 @@ const CODEGEN_RECOVERABLE_STATUSES = new Set([
   ...CODEGEN_PROCESSING_STATUSES,
   'CONFIRM_GATE',
   'CONSISTENCY_FAILED',
+  'REJECTED',
 ])
 
 function isCodegenTerminalStatus(status: string): boolean {
