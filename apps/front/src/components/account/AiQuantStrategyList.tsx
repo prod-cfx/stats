@@ -1,7 +1,7 @@
 'use client'
 
 import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
-import { Activity, Clock, MoreHorizontal, Play, PlayCircle, Square, StopCircle, Trash2 } from 'lucide-react'
+import { Activity, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -263,15 +263,12 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                 </div>
                 
                 {item.status === 'running' ? (
-                  <button
-                    type="button"
-                    onClick={(e) => handleStatusChange(e, item.id, 'stopped')}
-                    disabled={pendingActionId === item.id}
+                  <span
                     className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
                   >
-                    <Square className="h-3 w-3 fill-current" />
-                    {t('aiQuant.actions.stop')}
-                  </button>
+                    <StopCircle className="h-3 w-3" />
+                    {t('aiQuant.actions.viewDetails', { defaultValue: '查看详情' })}
+                  </span>
                 ) : (
                   <button
                     type="button"
