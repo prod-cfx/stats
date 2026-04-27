@@ -903,9 +903,15 @@ describe('AiQuantStrategyDetail', () => {
     const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话修改')
     expect(link).toBeTruthy()
 
-    await act(async () => {
-      link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-    })
+    const preventNavigation = (event: Event) => event.preventDefault()
+    link?.addEventListener('click', preventNavigation)
+    try {
+      await act(async () => {
+        link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      })
+    } finally {
+      link?.removeEventListener('click', preventNavigation)
+    }
 
     const raw = localStorage.getItem('ai_quant_return_intent_v1')
     expect(raw).toBeTruthy()
