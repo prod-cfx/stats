@@ -97,6 +97,46 @@ describe('accountStrategyViewService.performAction', () => {
     expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
   })
 
+  it('deletes a stopped strategy only after runtime risk checks pass', async () => {
+    const { service, repo, tradingService } = createActionTestContext({ status: 'stopped' })
+
+    await service.deleteStrategy('user-1', 'inst-1')
+
+    expect(repo.loadOpenPositionsForLiquidation).toHaveBeenCalledWith('account-1')
+    expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'spot',
+      'BTC/USDT',
+      'exchange-account-1',
+    )
+    expect(repo.deleteStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-1')
+  })
+
+  it('rejects deleting a stopped strategy with open positions', async () => {
+    const { service, repo } = createActionTestContext({ status: 'stopped' })
+    repo.loadOpenPositionsForLiquidation.mockResolvedValue([{
+      id: 'pos-1',
+      quantity: { toString: () => '0.25' },
+      exchangeId: 'okx',
+      marketType: 'spot',
+      status: 'OPEN',
+    }])
+
+    await expect(service.deleteStrategy('user-1', 'inst-1')).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
+    expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
+  })
+
+  it('rejects deleting a stopped strategy with open orders', async () => {
+    const { service, repo, tradingService } = createActionTestContext({ status: 'stopped' })
+    tradingService.getOpenOrders.mockResolvedValue([
+      { id: 'order-1', symbol: 'BTC/USDT', status: 'partially_filled' },
+    ])
+
+    await expect(service.deleteStrategy('user-1', 'inst-1')).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
+    expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
+  })
+
   it('rejects subscriber changing global strategy instance status', async () => {
     const { service, strategyInstancesService } = createActionTestContext({
       createdBy: 'owner-1',

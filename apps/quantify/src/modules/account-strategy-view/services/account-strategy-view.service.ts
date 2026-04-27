@@ -1259,8 +1259,70 @@ export class AccountStrategyViewService {
         args: { strategyInstanceId },
       })
     }
+    if (row.status !== 'draft') {
+      await this.assertNoRuntimeRiskBeforeDelete(userId, row, strategyInstanceId)
+    }
 
     await this.repo.deleteStrategyForUser(userId, strategyInstanceId)
+  }
+
+  private async assertNoRuntimeRiskBeforeDelete(
+    userId: string,
+    row: StrategyRow,
+    strategyInstanceId: string,
+  ): Promise<void> {
+    const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
+    if (account) {
+      const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
+      if (openPositions.length > 0) {
+        throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: { strategyInstanceId, openPositionsCount: openPositions.length },
+        })
+      }
+    }
+
+    if (!this.tradingService) {
+      throw new DomainException('account_strategy.trading_service_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+
+    const mergedParams = {
+      ...(this.readRecord(row.strategyTemplate?.defaultParams) ?? {}),
+      ...(this.readRecord((row as Record<string, unknown>).params) ?? {}),
+      ...(this.readRecord(sub.customParams) ?? {}),
+    }
+    const exchangeId = this.resolveExchangeId(
+      this.readString(mergedParams, ['exchange', 'provider', 'exchangeId'])
+      ?? sub.exchangeAccount?.exchangeId
+      ?? null,
+    )
+    const symbol = this.readString(mergedParams, ['symbol'])
+    if (!exchangeId || !symbol) {
+      return
+    }
+
+    const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
+    const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
+    const openOrders = await this.tradingService.getOpenOrders(
+      userId,
+      exchangeId,
+      marketType,
+      executionSymbol,
+      sub.exchangeAccount?.id ?? undefined,
+    )
+    const riskyOrders = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled')
+    if (riskyOrders.length > 0) {
+      throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { strategyInstanceId, openOrdersCount: riskyOrders.length },
+      })
+    }
   }
 
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {
