@@ -1,4 +1,4 @@
-name: Sync main to prodcf/stats
+name: Sync main to prod-cfx/stats
 on:
   push:
     branches: [ main ]        # 仅当 A/main 有变更时触发
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout B repo (target)
         uses: actions/checkout@v4
         with:
-          repository: prodcf/stats
+          repository: prod-cfx/stats
           token: ${{ secrets.TARGET_REPO_TOKEN }}   # 你已在 A 仓库设置好的 Secret
           path: b-repo
           fetch-depth: 0

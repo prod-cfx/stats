@@ -1,4 +1,4 @@
-name: Sync A tag snapshot to prodcf/stats
+name: Sync A tag snapshot to prod-cfx/stats
 
 on:
   push:
@@ -64,7 +64,7 @@ jobs:
       - name: Checkout B repo (target)
         uses: actions/checkout@v4
         with:
-          repository: prodcf/stats
+          repository: prod-cfx/stats
           token: ${{ secrets.TARGET_REPO_TOKEN }}
           path: b-repo
           fetch-depth: 0
