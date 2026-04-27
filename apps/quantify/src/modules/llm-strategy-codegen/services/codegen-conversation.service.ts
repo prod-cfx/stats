@@ -940,6 +940,17 @@ export class CodegenConversationService {
     }
   }
 
+  private buildSemanticEditArtifactReset(
+    semanticState: SemanticState,
+  ): Pick<Prisma.LlmStrategyCodegenSessionUpdateInput, 'latestDraftCode' | 'rejectReason' | 'validationReport' | 'semanticGraph'> {
+    return {
+      latestDraftCode: null,
+      rejectReason: null,
+      validationReport: null,
+      semanticGraph: this.buildMinimalSemanticGraphFromState(semanticState) as Prisma.InputJsonValue,
+    }
+  }
+
   private buildRecoveredSnapshotPosition(
     strategyConfig: Record<string, unknown> | null,
     paramsSnapshot: Record<string, unknown> | null,
@@ -1111,10 +1122,17 @@ export class CodegenConversationService {
         message: dto.message,
         semanticState: currentSemanticState,
       })
+    const hasTerminalPlannerEditIntent = this.stateMachine.isTerminalStatus(session.status)
+      && semanticEditDecision.kind === 'NO_EDIT'
+      && this.conversationSemanticEdit.hasEditIntent({
+        status: session.status,
+        message: dto.message,
+        semanticState: currentSemanticState,
+      })
     const canEditPublishedSession = session.status === 'PUBLISHED'
-      && (semanticEditDecision.kind !== 'NO_EDIT' || hasPublishedUnsupportedEditIntent)
+      && (semanticEditDecision.kind !== 'NO_EDIT' || hasTerminalPlannerEditIntent)
     const canEditFailedSession = (session.status === 'REJECTED' || session.status === 'CONSISTENCY_FAILED')
-      && semanticEditDecision.kind !== 'NO_EDIT'
+      && (semanticEditDecision.kind !== 'NO_EDIT' || hasTerminalPlannerEditIntent)
     if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession && !canEditFailedSession) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
@@ -1140,7 +1158,7 @@ export class CodegenConversationService {
       if (semanticEditResponse) return semanticEditResponse
     }
 
-    if (hasPublishedUnsupportedEditIntent) {
+    if (hasPublishedUnsupportedEditIntent && !hasTerminalPlannerEditIntent) {
       const response = this.finalizeSessionResponse({
         id: session.id,
         status: session.status,
@@ -1151,7 +1169,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (this.stateMachine.isTerminalStatus(session.status)) {
+    if (this.stateMachine.isTerminalStatus(session.status) && !hasTerminalPlannerEditIntent) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
@@ -1247,6 +1265,9 @@ export class CodegenConversationService {
       semanticReadyForGenerate,
     })
     const semanticStateChanged = JSON.stringify(reducedSemanticState) !== JSON.stringify(preMergedSemanticState)
+    const terminalPlannerEditArtifactReset = this.stateMachine.isTerminalStatus(session.status)
+      ? this.buildSemanticEditArtifactReset(reducedSemanticState)
+      : {}
 
     if (deterministicAuthority) {
       const assistantPrompt = deterministicAuthority === 'clarification'
@@ -1297,18 +1318,21 @@ export class CodegenConversationService {
         dto.message,
         assistantPrompt,
       )
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: targetStatus,
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterDeterministicOutcome,
-        },
-        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization' || shouldPersistDecisionSpecDesc
-          ? { latestSpecDesc: specDesc }
-          : {}),
-      }))
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: targetStatus,
+          semanticState: reducedSemanticState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterDeterministicOutcome,
+          },
+          ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization' || shouldPersistDecisionSpecDesc
+            ? { latestSpecDesc: specDesc }
+            : {}),
+        }),
+        ...terminalPlannerEditArtifactReset,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: session.id,
@@ -1349,13 +1373,14 @@ export class CodegenConversationService {
       }
       if (inferredConfirmation.consumed) {
         const assistantPrompt = plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。'
+        const consumedUnrelatedStatus = session.status === 'CONFIRM_GATE' ? 'CONFIRM_GATE' : 'DRAFTING'
         const historyAfterConsumedUnrelated = this.appendConversationHistory(
           constraintPack.conversationHistory ?? [],
           dto.message,
           assistantPrompt,
         )
         await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-          status: session.status,
+          status: consumedUnrelatedStatus,
           semanticState: baseSemanticState,
           clarificationState: clarificationStateAfterAnswers,
           constraintPack: {
@@ -1380,15 +1405,18 @@ export class CodegenConversationService {
     )
 
     if (!plan.logicReady) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-      }))
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: reducedSemanticState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterPlanner,
+          },
+        }),
+        ...terminalPlannerEditArtifactReset,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: session.id,

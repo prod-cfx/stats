@@ -8324,7 +8324,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.latestDraftCode).toBeNull()
   })
 
-  it('returns recoverable guidance for unsupported published semantic edits', async () => {
+  it('routes published semantic edits through the general planner instead of unsupported guidance', async () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-published-risk-edit',
       userId: 'u1',
@@ -8342,14 +8342,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       lockedParams: {},
       specSnapshot: {},
     })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已把止损改成 3%，请确认逻辑图。',
+        semanticPatch: {
+          risk: [
+            {
+              key: 'risk.stop_loss_pct',
+              params: { valuePct: 3, basis: 'entry_avg_price' },
+            },
+          ],
+        },
+      }),
+    })
 
     const result = await service.continueSession('s-published-risk-edit', {
       userId: 'u1',
       message: '把止损改成 3%',
     })
 
-    expect(result.assistantPrompt).toContain('我识别到你想修改策略语义')
-    expect(mockRepo.updateSession).not.toHaveBeenCalled()
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('把止损改成 3%')
+    expect(plannerPayload.currentSemanticState.triggers).toEqual(buildLockedMaSemanticState().triggers)
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 3 }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).toEqual(buildLockedMaSemanticState().triggers)
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+      }),
+    }))
+    expect(result.assistantPrompt).not.toContain('当前可直接修改交易标的')
   })
 
   it('replaces a published script when the user pastes corrected script code', async () => {
