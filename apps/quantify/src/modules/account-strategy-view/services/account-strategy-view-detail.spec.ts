@@ -137,6 +137,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       findUserStrategyAccount: jest.fn().mockResolvedValue({
         id: 'acc-1',
         initialBalance: 10000,
+        balance: 11500,
         equity: 12000,
         totalRealizedPnl: 1500,
         totalUnrealizedPnl: 500,
@@ -1816,7 +1817,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.accountOverview).toEqual({
       initialBalance: 1000,
       totalEquity: 1000,
-      availableBalance: 1000,
+      availableBalance: 810.0686,
       executionCapital: 1000,
       nonTradableReason: null,
       totalPnl: 0,
@@ -1973,7 +1974,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.accountOverview).toEqual({
       initialBalance: 10000,
       totalEquity: 10320.12,
-      availableBalance: 10300,
+      availableBalance: 10320.12,
       executionCapital: 10320.12,
       nonTradableReason: null,
       totalPnl: 320.12,
@@ -2200,9 +2201,73 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
     expect(detail.accountOverview).toEqual(expect.objectContaining({
       totalEquity: 10320.12,
-      availableBalance: 10300,
+      availableBalance: 10320.12,
       executionCapital: 10320.12,
       nonTradableReason: null,
+      baseCurrency: 'USDT',
+    }))
+  })
+
+  it('shows persisted zero buying power after local activity even when derived equity is positive', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-local-zero-buying-power',
+        name: 'Local zero buying power strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: {
+          symbol: 'BTCUSDT',
+          exchange: 'binance',
+          marketType: 'perp',
+        },
+        strategyTemplateId: 'tpl-local-zero-buying-power',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-local-zero-buying-power',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 0,
+        equity: 10320.12,
+        totalRealizedPnl: 300,
+        totalUnrealizedPnl: 20.12,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 1 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-local-zero-buying-power')
+
+    expect(detail.accountOverview).toEqual(expect.objectContaining({
+      totalEquity: 10320.12,
+      availableBalance: 0,
+      executionCapital: 10320.12,
+      nonTradableReason: 'local_strategy_account_balance_zero',
       baseCurrency: 'USDT',
     }))
   })

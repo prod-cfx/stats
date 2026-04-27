@@ -271,7 +271,7 @@ export class AccountStrategyViewService {
       ? resolvedTotalEquity
       : paramsFundingSnapshot?.totalEquity ?? null
     const overviewAvailableBalance = account
-      ? resolvedAvailableBalance
+      ? this.toFiniteNumber(account.balance)
       : paramsFundingSnapshot?.buyingPower ?? null
     const overviewBaseCurrency = account
       ? this.readAccountBaseCurrency(account)
@@ -280,7 +280,7 @@ export class AccountStrategyViewService {
       ? resolveStrategyFundingFromStrategyAccount({
           account: {
             baseCurrency: this.readAccountBaseCurrency(account),
-            balance: hasLocalActivity ? overviewAvailableBalance : account.balance,
+            balance: account.balance,
             equity: overviewTotalEquity,
             initialBalance: account.initialBalance,
           },
@@ -1116,11 +1116,6 @@ export class AccountStrategyViewService {
     }
 
     const resolvedDeploy = await this.resolveDeployPayload(dto)
-    const resolvedExchangeAccount = await this.resolveDeployExchangeAccountForFunding({
-      userId: dto.userId,
-      exchange: resolvedDeploy.exchange,
-      exchangeAccountId: dto.exchangeAccountId ?? null,
-    })
 
     let deployRequest: { id: string }
     try {
@@ -1147,7 +1142,7 @@ export class AccountStrategyViewService {
           userId: dto.userId,
           exchangeId: resolvedDeploy.exchange,
           marketType: resolvedDeploy.marketType,
-          exchangeAccountId: resolvedExchangeAccount.id,
+          exchangeAccountId: resolvedDeploy.exchangeAccountId,
           preferredAsset: this.resolvePreferredQuoteAsset(resolvedDeploy.symbol),
         })
       : null
@@ -1184,7 +1179,7 @@ export class AccountStrategyViewService {
         accountBalanceQuote: deployFundingSnapshot?.buyingPower ?? exchangeBalance?.free,
         fundingSnapshot: deployFundingSnapshot,
         mode: dto.mode,
-        exchangeAccountId: resolvedExchangeAccount.id ?? undefined,
+        exchangeAccountId: resolvedDeploy.exchangeAccountId ?? undefined,
         exchangeAccountName: dto.exchangeAccountName,
         deploymentExecutionConfig: resolvedDeploy.deploymentExecutionConfig,
         executionConfigVersion: 1,
@@ -2138,6 +2133,7 @@ export class AccountStrategyViewService {
     sourceStrategyInstanceId: string | null
     sourceStrategyTemplateId: string | null
     snapshot: unknown
+    exchangeAccountId: string | null
   }> {
     if (!this.publishedSnapshotsRepository) {
       throw new DomainException('account_strategy.deploy_snapshot_repository_unavailable', {
@@ -2227,12 +2223,17 @@ export class AccountStrategyViewService {
       })
     }
 
+    const resolvedExchangeAccount = await this.resolveDeployExchangeAccountForFunding({
+      userId: dto.userId!,
+      exchange,
+      exchangeAccountId: dto.exchangeAccountId ?? null,
+    })
     const leverageConstraints = await this.resolveEffectiveLeverageConstraints({
       userId: dto.userId!,
       exchangeId: exchange,
       marketType,
       symbol,
-      exchangeAccountId: dto.exchangeAccountId ?? null,
+      exchangeAccountId: resolvedExchangeAccount.id,
       deploymentExecutionConstraints,
     })
     if (!leverageConstraints) {
@@ -2279,6 +2280,7 @@ export class AccountStrategyViewService {
       sourceStrategyInstanceId: snapshot.strategyInstanceId,
       sourceStrategyTemplateId: snapshot.strategyTemplateId,
       snapshot,
+      exchangeAccountId: resolvedExchangeAccount.id,
     }
   }
 

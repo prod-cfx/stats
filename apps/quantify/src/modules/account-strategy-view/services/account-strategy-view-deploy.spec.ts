@@ -791,6 +791,103 @@ describe('accountStrategyViewService.deployStrategy', () => {
     }))
   })
 
+  it('uses the resolved default exchange account for perp leverage constraints', async () => {
+    const repo = {
+      resolveDeployExchangeAccount: jest.fn().mockResolvedValue({
+        id: 'exchange-account-default-perp',
+        isTestnet: true,
+        exchangeId: 'okx',
+      }),
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-perp-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-default-perp-account',
+        snapshotHash: 'snapshot-hash-default-perp-account',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          marketType: 'perp',
+          positionPct: 12,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          strategyDeclaredLeverageRange: { min: 1, max: 8 },
+          defaultLeverage: 3,
+          supportedPriceSources: ['mark'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['IOC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const tradingService = {
+      getLeverageConstraints: jest.fn().mockResolvedValue({
+        minLeverage: 1,
+        maxLeverage: 4,
+      }),
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 58000, locked: 2000, total: 60000 },
+      ]),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-perp-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX ETH 15m',
+      publishedSnapshotId: 'snapshot-default-perp-account',
+      deployRequestId: 'deploy-req-default-perp-account',
+      deploymentExecutionConfig: {
+        leverage: 4,
+      },
+    } as any)
+
+    expect(tradingService.getLeverageConstraints).toHaveBeenCalledWith({
+      userId: 'user-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'ETHUSDT',
+      exchangeAccountId: 'exchange-account-default-perp',
+    })
+    expect(tradingService.getBalance).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'exchange-account-default-perp')
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      exchangeAccountId: 'exchange-account-default-perp',
+      deploymentExecutionConfig: expect.objectContaining({
+        leverage: 4,
+      }),
+    }))
+  })
+
   it('ignores exchange balance snapshots when the preferred quote asset is unavailable', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
