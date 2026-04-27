@@ -291,6 +291,49 @@ describe('ConversationSemanticEditService', () => {
     }))
   })
 
+  it('keeps asking for target when pending trigger replacement has multiple possible triggers', () => {
+    const pendingState = service.withPendingEditForTest(
+      service.createEmptySemanticStateForTest(),
+      '把触发改成 RSI',
+    )
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      triggers: [
+        {
+          id: 'trigger-ma',
+          key: 'indicator.ma_cross',
+          phase: 'entry' as const,
+          params: { indicator: 'ma' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'trigger-rsi-exit',
+          key: 'oscillator.rsi_gte',
+          phase: 'exit' as const,
+          params: { indicator: 'rsi', value: 70 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      pendingEdit: service.readPendingEditForTest(pendingState),
+    }
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '低于 30',
+      semanticState,
+    })
+
+    expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
+    if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
+    expect(decision.question).toContain('多个触发')
+    expect(service.applyPatch(semanticState, { operations: [{ op: 'replace_trigger', text: '低于 30' }] }).triggers)
+      .toEqual(semanticState.triggers)
+  })
+
   it('keeps an empty patch as a no-op even when a pending edit exists', () => {
     const withPending = service.withPendingEditForTest(
       service.createEmptySemanticStateForTest(),

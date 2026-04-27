@@ -72,6 +72,14 @@ export class ConversationSemanticEditService {
     }
 
     if (pendingEdit && this.isPendingRsiTriggerReplacement(pendingEdit)) {
+      if (!pendingEdit.targetRef && input.semanticState.triggers.length > 1) {
+        return {
+          kind: 'ASK_EDIT_CLARIFICATION',
+          question: '你正在把触发语义改成 RSI。当前有多个触发，请先说明要替换哪一个触发条件。',
+          pendingEdit,
+        }
+      }
+
       if (this.extractRsiThreshold(message)) {
         return {
           kind: 'APPLY_TO_SEMANTIC_STATE',
@@ -166,6 +174,7 @@ export class ConversationSemanticEditService {
   private applyTriggerReplacement(state: SemanticState, text: string): SemanticState {
     const pendingEdit = readPendingSemanticEdit(state)
     if (!pendingEdit || !this.isPendingRsiTriggerReplacement(pendingEdit)) return state
+    if (!pendingEdit.targetRef && state.triggers.length > 1) return state
 
     const threshold = this.extractRsiThreshold(text)
     if (!threshold) return state
