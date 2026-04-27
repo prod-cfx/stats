@@ -54,6 +54,12 @@ export interface AiQuantConversationSnapshotRecord {
   messages: AiQuantConversationMessageSnapshot[]
 }
 
+export interface AiQuantConversationDeleteContextRecord {
+  id: string
+  userId: string
+  codegenSessionId: string
+}
+
 @Injectable()
 export class AiQuantConversationsRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -176,6 +182,24 @@ export class AiQuantConversationsRepository {
     })
 
     return conversation ? this.mapSnapshotRecord(conversation) : null
+  }
+
+  async findActiveDeleteContextByIdAndUser(
+    conversationId: string,
+    userId: string,
+  ): Promise<AiQuantConversationDeleteContextRecord | null> {
+    return this.txHost.tx.aiQuantConversation.findFirst({
+      where: {
+        id: conversationId,
+        userId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        userId: true,
+        codegenSessionId: true,
+      },
+    })
   }
 
   async findByCodegenSessionId(codegenSessionId: string): Promise<AiQuantConversationSnapshotRecord | null> {

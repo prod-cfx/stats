@@ -72,7 +72,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const mockConversationsRepo = {
     listByUser: jest.fn(),
     listKnownSessionIdsByUser: jest.fn(),
-    findActiveByIdAndUser: jest.fn(),
+    findActiveDeleteContextByIdAndUser: jest.fn(),
     findByCodegenSessionId: jest.fn(),
     upsertConversationSnapshot: jest.fn(),
     archiveByIdAndUser: jest.fn(),
@@ -751,7 +751,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     mockConversationsRepo.listByUser.mockResolvedValue([])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
-    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue(null)
     mockConversationsRepo.findByCodegenSessionId.mockResolvedValue(null)
     mockConversationsRepo.upsertConversationSnapshot.mockResolvedValue(undefined)
     mockConversationsRepo.archiveByIdAndUser.mockResolvedValue(undefined)
@@ -2077,7 +2077,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('rejects deleting a conversation while its linked strategy is running', async () => {
-    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
       id: 'conv-1',
       userId: 'u1',
       codegenSessionId: 'session-1',
@@ -2106,7 +2106,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('archives a conversation when its linked strategy record no longer exists', async () => {
-    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
       id: 'conv-1',
       userId: 'u1',
       codegenSessionId: 'session-1',
@@ -2135,7 +2135,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('deletes the linked stopped strategy before archiving when requested', async () => {
-    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
       id: 'conv-1',
       userId: 'u1',
       codegenSessionId: 'session-1',

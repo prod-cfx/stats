@@ -335,7 +335,7 @@ export class CodegenConversationService {
     userId: string,
     options: { deleteStoppedStrategy?: boolean } = {},
   ): Promise<void> {
-    const conversation = await this.conversationsRepo.findActiveByIdAndUser(conversationId, userId)
+    const conversation = await this.conversationsRepo.findActiveDeleteContextByIdAndUser(conversationId, userId)
     if (!conversation) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
       return
