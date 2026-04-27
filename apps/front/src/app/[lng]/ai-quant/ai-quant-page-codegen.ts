@@ -383,7 +383,15 @@ export function applyCodegenResponseToConversationState(args: {
   } = args
 
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
-  const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
+  const shouldReuseCodegenSession = response.status === 'PUBLISHED'
+    ? Boolean(
+        activeSessionId
+          && (
+            confirmGenerate
+            || conversation.publishedSnapshotId === normalizePublishedSnapshotId(response.publishedSnapshotId)
+          ),
+      )
+    : !isCodegenTerminalStatus(response.status)
   const shouldUpdateGraph =
     (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)

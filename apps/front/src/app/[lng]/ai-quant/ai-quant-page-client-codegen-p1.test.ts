@@ -637,6 +637,7 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
     expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
     expect(next.publishedScriptCode).toBe('export default function strategy() { return true }')
+    expect(next.llmCodegenSessionId).toBe('session-1')
   })
 
   it('hydrates published snapshot backtest params into the live conversation state', () => {
