@@ -297,6 +297,40 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1')
   })
 
+  it('shows delete errors inside the confirmation dialog', async () => {
+    mockDeleteAccountAiQuantStrategy.mockRejectedValue(new Error('delete failed from api'))
+
+    await renderStrategyListWithItems([listItem({ status: 'stopped' })])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    const confirmDeleteButton = Array.from(container.querySelectorAll('button'))
+      .filter(button => button.textContent === 'Delete')
+      .at(-1)
+    await act(async () => {
+      confirmDeleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain('delete failed from api')
+  })
+
+  it('blocks deleting a running strategy with a localized message', async () => {
+    await renderStrategyListWithItems([listItem()])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.textContent).toContain('Running strategies cannot be deleted. Stop the strategy first.')
+    expect(mockDeleteAccountAiQuantStrategy).not.toHaveBeenCalled()
+  })
+
   it('renders static fallback summary in DOM with separators and expected order', () => {
     const record = makeListRecord({
       paramSchema: null,

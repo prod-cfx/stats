@@ -96,6 +96,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [stopDialogStrategy, setStopDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [deleteDialogStrategy, setDeleteDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
+  const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null)
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -170,11 +171,12 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     e.stopPropagation()
     if (!session) return
     if (item.status === 'running') {
-      setError('运行中的策略不能删除，请先停止策略。')
+      setError(t('aiQuant.errors.runningStrategyDeleteBlocked', { defaultValue: 'Running strategies cannot be deleted. Stop the strategy first.' }))
       return
     }
 
     setError(null)
+    setDeleteDialogError(null)
     setDeleteDialogStrategy(item)
   }
 
@@ -186,8 +188,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       await deleteAccountAiQuantStrategy(deleteDialogStrategy.id, session.userId)
       setStrategies(prev => prev.filter(strategy => strategy.id !== deleteDialogStrategy.id))
       setDeleteDialogStrategy(null)
+      setDeleteDialogError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }))
+      setDeleteDialogError(err instanceof Error ? err.message : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }))
     } finally {
       setPendingDeleteId(null)
     }
@@ -331,7 +334,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   type="button"
                   onClick={e => openDeleteDialog(e, item)}
                   disabled={pendingDeleteId === item.id}
-                  title={item.status === 'running' ? '运行中的策略不能删除，请先停止策略。' : undefined}
+                  title={item.status === 'running'
+                    ? t('aiQuant.errors.runningStrategyDeleteBlocked', { defaultValue: 'Running strategies cannot be deleted. Stop the strategy first.' })
+                    : undefined}
                   className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -370,15 +375,20 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       />
 
       {deleteDialogStrategy && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={() => {
-          if (!pendingDeleteId) setDeleteDialogStrategy(null)
-        }}
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4"
+          onClick={() => {
+            if (!pendingDeleteId) setDeleteDialogStrategy(null)
+          }}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ai-quant-delete-strategy-title"
             className="w-full max-w-[480px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
             onClick={event => event.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+            <h3 id="ai-quant-delete-strategy-title" className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
               {t('aiQuant.confirmDeleteTitle', { defaultValue: '确认删除策略？' })}
             </h3>
             <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
@@ -387,6 +397,11 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                 name: deleteDialogStrategy.name,
               })}
             </p>
+            {deleteDialogError && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {deleteDialogError}
+              </div>
+            )}
             <div className="mt-5 flex flex-wrap gap-2">
               <button
                 type="button"
