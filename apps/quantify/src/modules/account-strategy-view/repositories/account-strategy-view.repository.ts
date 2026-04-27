@@ -190,7 +190,7 @@ export class AccountStrategyViewRepository {
             ? { accountBalanceQuote: input.accountBalanceQuote }
             : {}),
           ...(fundingSnapshot
-            ? { fundingSnapshot: fundingSnapshot as unknown as Record<string, unknown> }
+            ? { fundingSnapshot: fundingSnapshot as unknown as Prisma.InputJsonValue }
             : {}),
         }
 

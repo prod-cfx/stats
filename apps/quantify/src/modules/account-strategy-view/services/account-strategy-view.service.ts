@@ -2054,7 +2054,7 @@ export class AccountStrategyViewService {
     marketType: MarketType
     exchangeAccountId: string | null
     preferredAsset: string | null
-  }): Promise<{ asset: string; free: number; total: number } | null> {
+  }): Promise<UnifiedBalance | null> {
     if (!this.tradingService) return null
 
     try {
@@ -2085,7 +2085,7 @@ export class AccountStrategyViewService {
   private pickExchangeBalance(
     balances: UnifiedBalance[],
     preferredAsset: string | null,
-  ): { asset: string; free: number; total: number } | null {
+  ): UnifiedBalance | null {
     if (!Array.isArray(balances) || balances.length === 0) return null
 
     const normalizedPreferredAsset = preferredAsset?.trim().toUpperCase() ?? 'USDT'
@@ -2094,6 +2094,7 @@ export class AccountStrategyViewService {
       return {
         asset: preferred.asset,
         free: preferred.free,
+        locked: preferred.locked,
         total: preferred.total,
       }
     }
