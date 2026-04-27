@@ -1443,6 +1443,8 @@ export class CodegenConversationService {
     if (args.decision.kind === 'ASK_EDIT_CLARIFICATION') {
       const nextState = withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit)
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState)
+      const shouldClearFailedArtifacts = args.session.status === 'REJECTED'
+        || args.session.status === 'CONSISTENCY_FAILED'
       const historyAfterQuestion = this.appendConversationHistory(
         constraintPack.conversationHistory ?? [],
         args.message,
@@ -1459,6 +1461,14 @@ export class CodegenConversationService {
           },
           latestSpecDesc: args.session.status === 'PUBLISHED' ? null : undefined,
         }),
+        ...(shouldClearFailedArtifacts
+          ? {
+              latestDraftCode: null,
+              rejectReason: null,
+              validationReport: null,
+              semanticGraph: this.buildMinimalSemanticGraphFromState(nextState) as Prisma.InputJsonValue,
+            }
+          : {}),
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({

@@ -8642,6 +8642,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('CONFIRM_GATE')
   })
 
+  it('clears failed artifacts when a rejected session enters semantic edit clarification', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-rejected-edit-clarification',
+      userId: 'u1',
+      status: 'REJECTED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const rejectedStrategy = {}',
+      semanticGraph: {
+        version: 1,
+        market: { symbol: 'ETHUSDT', primaryTimeframe: '1h' },
+        nodes: [{ id: 'old-rejected-graph' }],
+      },
+      validationReport: { ok: false, errors: ['old validation error'] },
+      rejectReason: '旧代码生成失败',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    const result = await service.continueSession('s-rejected-edit-clarification', {
+      userId: 'u1',
+      message: '把触发改成 RSI',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('RSI')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.rejectReason).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticState.pendingEdit).toEqual(expect.objectContaining({
+      status: 'needs_clarification',
+    }))
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        primaryTimeframe: '1h',
+      }),
+    }))
+    expect(JSON.stringify(updatePayload.semanticGraph)).not.toContain('old-rejected-graph')
+  })
+
   it('replaces a prior dynamic grid draft when the user provides a complete fixed grid strategy', async () => {
     const currentSemanticState = buildLockedMaSemanticState({
       families: ['grid'],
