@@ -386,6 +386,80 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.serverConversationId).toBe('server-conv-1')
   })
 
+  it('rebuilds display logic graph from updated specDesc when codegen edits strategy semantics', () => {
+    const conversation = {
+      ...createConversation((key: string) => key, 1),
+      id: 'conv-plaza-edit',
+      llmCodegenSessionId: 'session-1',
+      displayLogicGraph: {
+        blocks: [
+          {
+            type: 'IF',
+            items: [{ id: 'old-ma', kind: 'condition', text: 'SMA6 上穿 SMA48' }],
+          },
+          {
+            type: 'EXECUTE',
+            items: [{ id: 'old-position', kind: 'execute', key: 'positionPct', text: '仓位: 35%', value: '35%' }],
+          },
+        ],
+      },
+    } as any
+
+    const next = applyCodegenResponseToConversationState({
+      conversation,
+      response: {
+        id: 'session-1',
+        status: 'CONFIRM_GATE',
+        specDesc: {
+          viewType: 'canonical-semantic-view.v1',
+          version: 2,
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [
+            {
+              id: 'entry-ma-cross',
+              phase: 'entry',
+              condition: {
+                key: 'ma.golden_cross',
+                params: { indicator: 'sma', fastPeriod: 10, slowPeriod: 48 },
+              },
+              actions: [{ type: 'OPEN_LONG', sizing: { mode: 'fixed_ratio', value: 0.2 } }],
+            },
+            {
+              id: 'exit-ma-cross',
+              phase: 'exit',
+              condition: {
+                key: 'ma.death_cross',
+                params: { indicator: 'sma', fastPeriod: 10, slowPeriod: 48 },
+              },
+              actions: [{ type: 'CLOSE_LONG' }],
+            },
+          ],
+        },
+      } as any,
+      confirmGenerate: false,
+      targetParams: {
+        ...DEFAULT_PARAMS,
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 35,
+      },
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '把MA6换成MA10，仓位改成20%',
+      t: (key: string) => key,
+      loadingMessageId: null,
+    })
+
+    const displayText = JSON.stringify(next.displayLogicGraph)
+    expect(displayText).toContain('SMA10 上穿 SMA48')
+    expect(displayText).toContain('仓位: 20%')
+    expect(displayText).not.toContain('SMA6 上穿 SMA48')
+    expect(displayText).not.toContain('仓位: 35%')
+  })
+
   it('appends rejectReason when terminal failure snapshot only returns historical conversationMessages', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {

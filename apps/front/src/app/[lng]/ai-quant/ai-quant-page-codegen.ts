@@ -9,6 +9,7 @@ import {
   parseAiQuantErrorMeta,
 } from '@/components/ai-quant/ai-quant-error-stage'
 import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
+import { buildDisplayLogicGraphFromCodegenSpec } from '@/components/ai-quant/display-logic-graph'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import {
   applyCapabilitiesToParamSchema,
@@ -465,6 +466,18 @@ export function applyCodegenResponseToConversationState(args: {
         nextGraphStatus,
       )
     : conversation.logicGraph
+  const nextDisplayLogicGraph = shouldUpdateGraph
+    ? buildDisplayLogicGraphFromCodegenSpec({
+        specDesc: response.specDesc,
+        fallbackMeta: {
+          exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
+          symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
+          baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
+          positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
+          executionTags: syncResult?.executionTags ?? [],
+        },
+      })
+    : conversation.displayLogicGraph
   const nextPublishedScriptCode = (() => {
     if (response.status === 'PUBLISHED' && !response.rejectReason) {
       const responseScriptCode = normalizePublishedScriptCode(response.scriptCode)
@@ -607,6 +620,7 @@ export function applyCodegenResponseToConversationState(args: {
     paramSchema: nextParamSchema,
     paramValues: nextParamValues,
     logicGraph: nextGraph,
+    displayLogicGraph: nextDisplayLogicGraph,
     semanticGraph: nextSemanticGraph,
     validationReport: nextValidationReport,
     clarificationGate: nextClarificationGate,
