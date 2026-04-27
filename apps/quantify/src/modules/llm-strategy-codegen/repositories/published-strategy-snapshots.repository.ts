@@ -215,7 +215,7 @@ export class PublishedStrategySnapshotsRepository {
 
     const snapshot = await this.txHost.tx.publishedStrategySnapshot.findFirst({
       where: {
-        ...(publishedSnapshotId ? { id: publishedSnapshotId } : { strategyInstanceId }),
+        ...(publishedSnapshotId ? { id: publishedSnapshotId, strategyInstanceId } : { strategyInstanceId }),
         session: {
           userId: input.userId,
         },

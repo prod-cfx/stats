@@ -450,7 +450,10 @@ export class CodegenConversationService {
     if (conversationId) {
       const conversation = await this.conversationsRepo.findActiveByIdAndUser(conversationId, userId)
       if (conversation) {
-        return this.toConversationResponse(conversation)
+        const response = await this.toConversationResponse(conversation)
+        if (this.isUsableRecoveredConversationResponse(response)) {
+          return response
+        }
       }
     }
 
@@ -458,7 +461,10 @@ export class CodegenConversationService {
     if (sessionId) {
       const conversation = await this.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser([sessionId], userId)
       if (conversation) {
-        return this.toConversationResponse(conversation)
+        const response = await this.toConversationResponse(conversation)
+        if (this.isUsableRecoveredConversationResponse(response)) {
+          return response
+        }
       }
     }
 
@@ -481,20 +487,29 @@ export class CodegenConversationService {
     }
 
     const conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
-    for (const conversation of conversations.slice(0, 50)) {
+    for (const conversation of conversations) {
       const response = await this.toConversationResponse(conversation)
-      if (!response.activeCodegenSessionId) {
+      if (!this.isUsableRecoveredConversationResponse(response)) {
+        continue
+      }
+      if (publishedSnapshotId) {
+        if (response.publishedSnapshotId === publishedSnapshotId) {
+          return response
+        }
         continue
       }
       if (strategyInstanceId && response.strategyInstanceId === strategyInstanceId) {
         return response
       }
-      if (publishedSnapshotId && response.publishedSnapshotId === publishedSnapshotId) {
-        return response
-      }
     }
 
     return null
+  }
+
+  private isUsableRecoveredConversationResponse(
+    response: AiQuantConversationResponseDto,
+  ): boolean {
+    return Boolean(response.activeCodegenSessionId?.trim())
   }
 
   private async recoverEditConversationFromPublishedSnapshot(
@@ -539,7 +554,7 @@ export class CodegenConversationService {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: this.resolveSemanticClarificationArtifacts(semanticState).executionContext.context,
     })
-    const semanticGraph = specDesc
+    const semanticGraph = this.resolveRecoveredSemanticGraph(snapshot, semanticState)
     const constraintPack = {
       ...createDefaultConstraintPack(),
       conversationHistory: [`A: ${EDIT_RECOVERY_ASSISTANT_MESSAGE}`],
@@ -614,6 +629,28 @@ export class CodegenConversationService {
         marketType: marketType ? this.buildRecoveredContextSlot('marketType', marketType) : null,
         timeframe: timeframe ? this.buildRecoveredContextSlot('timeframe', timeframe) : null,
       },
+    }
+  }
+
+  private resolveRecoveredSemanticGraph(
+    snapshot: EditablePublishedStrategySnapshotRecord,
+    semanticState: SemanticState,
+  ): Record<string, unknown> {
+    return this.readJsonRecord(snapshot.semanticGraph) ?? this.buildMinimalSemanticGraphFromState(semanticState)
+  }
+
+  private buildMinimalSemanticGraphFromState(
+    semanticState: SemanticState,
+  ): Record<string, unknown> {
+    return {
+      version: 1,
+      market: {
+        symbol: this.readSemanticContextValue(semanticState.contextSlots.symbol) ?? 'UNKNOWN',
+        primaryTimeframe: this.readSemanticContextValue(semanticState.contextSlots.timeframe) ?? '1h',
+      },
+      nodes: [],
+      actions: [],
+      risk: [],
     }
   }
 
