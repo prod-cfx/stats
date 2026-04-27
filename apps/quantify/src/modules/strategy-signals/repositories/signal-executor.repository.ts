@@ -165,13 +165,17 @@ export class SignalExecutorRepository {
         userId: string
         baseCurrency: string
         balance: Prisma.Decimal
+        equity: Prisma.Decimal
+        initialBalance: Prisma.Decimal
       }>
     >`
       SELECT
         "id",
         "user_id" AS "userId",
         "base_currency" AS "baseCurrency",
-        "balance"
+        "balance",
+        "equity",
+        "initial_balance" AS "initialBalance"
       FROM "user_strategy_accounts"
       WHERE "id" = ${accountId}
       FOR UPDATE
