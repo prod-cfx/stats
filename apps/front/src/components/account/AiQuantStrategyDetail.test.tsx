@@ -888,6 +888,52 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('停止策略')
   })
 
+  it('stores strategy edit session intent before returning to chat for stopped strategy', async () => {
+    localStorage.clear()
+
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({ status: 'stopped', publishedSnapshotId: 'snapshot-1' })}
+        />,
+      )
+    })
+
+    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话修改')
+    expect(link).toBeTruthy()
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    const raw = localStorage.getItem('ai_quant_return_intent_v1')
+    expect(raw).toBeTruthy()
+    expect(JSON.parse(raw!)).toMatchObject({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'inst-runtime-control',
+      publishedSnapshotId: 'snapshot-1',
+      source: 'account-detail',
+    })
+  })
+
+  it('does not store edit session intent when running strategy opens edit guard', async () => {
+    localStorage.clear()
+
+    await act(async () => {
+      root.render(<AiQuantStrategyDetail lng="zh" strategy={buildStrategy({ status: 'running' })} />)
+    })
+
+    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话修改')
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
+    expect(container.textContent).toContain('策略正在运行，不能直接修改')
+  })
+
   it('shows liquidate_and_stop when current open orders indicate runtime risk without open positions', async () => {
     await act(async () => {
       root.render(
