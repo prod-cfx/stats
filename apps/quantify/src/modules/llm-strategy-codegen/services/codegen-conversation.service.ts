@@ -3283,6 +3283,12 @@ export class CodegenConversationService {
     const effectivePublishedSnapshotId = session.status === 'PUBLISHED'
       ? latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null
       : null
+    const effectiveScriptCode = this.resolvePublishedResponseScriptCode({
+      status: session.status,
+      latestDraftCode: session.latestDraftCode,
+      latestSnapshot,
+      effectivePublishedSnapshotId,
+    })
     const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
       publishedSnapshotId: effectivePublishedSnapshotId,
       snapshot: latestSnapshot,
@@ -3297,7 +3303,7 @@ export class CodegenConversationService {
       missingFields: [],
       createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : undefined,
       updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : undefined,
-      scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
+      scriptCode: effectiveScriptCode,
       publishedSnapshotId: effectivePublishedSnapshotId,
       publishedSnapshotParamValues: this.buildPublishedSnapshotParamValues(latestSnapshot),
       ...publishedSnapshotProjection,
@@ -3317,6 +3323,27 @@ export class CodegenConversationService {
         ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,
     })
+  }
+
+  private resolvePublishedResponseScriptCode(args: {
+    status: LlmCodegenSessionStatus
+    latestDraftCode: Prisma.JsonValue | null
+    latestSnapshot: { id?: string | null, scriptSnapshot?: unknown } | null
+    effectivePublishedSnapshotId: string | null
+  }): string | null {
+    if (typeof args.latestDraftCode === 'string' && args.latestDraftCode.trim().length > 0) {
+      return args.latestDraftCode
+    }
+    if (
+      args.status !== 'PUBLISHED'
+      || !args.effectivePublishedSnapshotId
+      || args.latestSnapshot?.id !== args.effectivePublishedSnapshotId
+    ) {
+      return null
+    }
+    return typeof args.latestSnapshot.scriptSnapshot === 'string' && args.latestSnapshot.scriptSnapshot.trim().length > 0
+      ? args.latestSnapshot.scriptSnapshot
+      : null
   }
 
   private async toConversationResponse(

@@ -1850,6 +1850,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('restores published script code from the latest snapshot when listing conversations', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-published-script',
+        userId: 'u1',
+        title: '已发布脚本会话',
+        codegenSessionId: 'session-published-script',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published-script'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-published-script',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: {
+        publishedSnapshotId: 'snapshot-script-1',
+      },
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-script-1',
+      scriptSnapshot: 'export default function strategy() { return { action: "NOOP" } }',
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id: 'conv-published-script',
+      status: 'PUBLISHED',
+      publishedSnapshotId: 'snapshot-script-1',
+      scriptCode: 'export default function strategy() { return { action: "NOOP" } }',
+    })
+  })
+
   it('includes lastBacktestRef when it matches the current published snapshot', async () => {
     mockConversationsRepo.listByUser.mockResolvedValue([
       {
