@@ -460,6 +460,9 @@ export class CodegenConversationService {
       })
     }
     const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    if (dto.confirmGenerate !== true && this.isLikelyUserSubmittedScriptCode(dto.message)) {
+      return this.handleUserSubmittedScriptCode(session, dto.message, sessionUserId)
+    }
     let semanticEditDecision: SemanticEditDecision = { kind: 'NO_EDIT' }
     if (dto.confirmGenerate !== true) {
       semanticEditDecision = this.conversationSemanticEdit.decide({
@@ -770,6 +773,159 @@ export class CodegenConversationService {
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+  }
+
+  private async handleUserSubmittedScriptCode(
+    session: PersistedConversationSessionForContinue,
+    message: string,
+    userId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const scriptCode = message.trim()
+    if (session.status !== 'PUBLISHED') {
+      const assistantPrompt = '现在还不能直接发送脚本代码。请用策略想法、触发条件、行动、风控、仓位和运行 context 来描述策略；确认逻辑图并生成脚本后，才可以粘贴修改后的脚本代码进行替换。'
+      const constraintPack = this.readConstraintPack(session.constraintPack)
+      const semanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+      const clarificationState = this.readClarificationState(session.clarificationState)
+      const targetStatus = session.status === 'CONFIRM_GATE' ? 'CONFIRM_GATE' : 'DRAFTING'
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: targetStatus,
+          semanticState,
+          clarificationState,
+          constraintPack: {
+            ...constraintPack,
+            conversationHistory: this.appendConversationHistory(
+              constraintPack.conversationHistory ?? [],
+              message,
+              assistantPrompt,
+            ),
+          },
+        }),
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: targetStatus,
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, userId, response)
+    }
+
+    return this.replacePublishedScriptWithUserSubmittedCode(session, scriptCode, userId)
+  }
+
+  private async replacePublishedScriptWithUserSubmittedCode(
+    session: PersistedConversationSessionForContinue,
+    scriptCode: string,
+    userId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const latestSnapshot = await this.publishedSnapshotsRepo.findLatestBySessionId(session.id)
+    const sessionSpecDesc = this.readJsonRecord(session.latestSpecDesc)
+    const snapshotSpecDesc = this.readJsonRecord(latestSnapshot?.specSnapshot)
+    const specDesc = {
+      ...(snapshotSpecDesc ?? {}),
+      ...(sessionSpecDesc ?? {}),
+    }
+    const consistencyReport = {
+      status: 'MANUAL_REPLACEMENT',
+      source: 'user_submitted_script',
+      message: '用户在脚本生成后手动替换了脚本代码，后续回测和部署使用该脚本快照。',
+    }
+    const strategyInstanceId = this.readNullableString(session.strategyInstanceId ?? latestSnapshot?.strategyInstanceId)
+    const strategyTemplateId = this.readNullableString(latestSnapshot?.strategyTemplateId)
+
+    await this.sessionsRepo.createVersion({
+      session: { connect: { id: session.id } },
+      scriptCode,
+      specDesc: specDesc as Prisma.InputJsonValue,
+      staticPassed: true,
+      runtimePassed: true,
+      outputPassed: true,
+    })
+
+    const snapshot = await this.publishedSnapshotsRepo.create({
+      sessionId: session.id,
+      strategyTemplateId,
+      strategyInstanceId,
+      scriptSnapshot: scriptCode,
+      specSnapshot: specDesc,
+      semanticGraph: this.readJsonRecord(latestSnapshot?.semanticGraph),
+      compiledIr: null,
+      irSnapshot: null,
+      astSnapshot: null,
+      compiledManifest: null,
+      consistencyReport,
+      userIntentSummary: this.readJsonRecord(latestSnapshot?.userIntentSummary) ?? {},
+      strategySummary: this.readJsonRecord(latestSnapshot?.strategySummary) ?? {},
+      scriptSummary: {
+        source: 'user_submitted_script',
+        preview: scriptCode.slice(0, 120),
+      },
+      lockedParams: this.readJsonRecord(latestSnapshot?.lockedParams) ?? {},
+      paramsSnapshot: this.readJsonRecord(latestSnapshot?.paramsSnapshot),
+      strategyConfig: this.readJsonRecord(latestSnapshot?.strategyConfig),
+      backtestConfigDefaults: this.readJsonRecord(latestSnapshot?.backtestConfigDefaults),
+      deploymentExecutionDefaults: this.readJsonRecord(latestSnapshot?.deploymentExecutionDefaults),
+      deploymentExecutionConstraints: this.readJsonRecord(latestSnapshot?.deploymentExecutionConstraints),
+      executionEnvelope: null,
+      executionPolicy: this.readJsonRecord(latestSnapshot?.executionPolicy),
+      dataRequirements: this.readJsonRecord(latestSnapshot?.dataRequirements),
+    })
+    const nextSpecDesc = {
+      ...specDesc,
+      consistencyReport,
+      publishedSnapshotId: snapshot.id,
+    }
+    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const assistantPrompt = '已替换为你提供的脚本代码。后续回测和部署会使用这份新的脚本快照。'
+
+    await this.sessionsRepo.updateSession(session.id, {
+      ...this.stateMachine.buildPublishedUpdate({
+        latestDraftCode: scriptCode,
+        latestSpecDesc: nextSpecDesc,
+        strategyInstanceId,
+      }),
+      constraintPack: {
+        ...constraintPack,
+        conversationHistory: this.appendConversationHistory(
+          constraintPack.conversationHistory ?? [],
+          scriptCode,
+          assistantPrompt,
+        ),
+      } as unknown as Prisma.InputJsonValue,
+    } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+
+    if (strategyInstanceId) {
+      await this.sessionsRepo.bindPublishedSnapshotToStrategyInstance?.({
+        strategyInstanceId,
+        userId,
+        publishedSnapshotId: snapshot.id,
+        snapshotHash: snapshot.snapshotHash,
+        strategyTemplateId,
+      })
+    }
+
+    const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
+      publishedSnapshotId: snapshot.id,
+      snapshot: latestSnapshot ? { ...latestSnapshot, id: snapshot.id, scriptSnapshot: scriptCode } : null,
+      strategyInstanceId,
+    })
+    const response = this.finalizeSessionResponse({
+      id: session.id,
+      status: 'PUBLISHED',
+      missingFields: [],
+      assistantPrompt,
+      scriptCode,
+      publishedSnapshotId: snapshot.id,
+      specDesc: nextSpecDesc,
+      canonicalDigest: this.readCanonicalDigest(nextSpecDesc),
+      strategyInstanceId,
+      consistencyReport,
+      ...publishedSnapshotProjection,
+    })
+    return this.returnPersistedSessionResponse(session.id, userId, response)
   }
 
   private async handleSemanticEditDecision(args: {
@@ -2305,6 +2461,24 @@ export class CodegenConversationService {
       return null
     }
     return digest.trim()
+  }
+
+  private isLikelyUserSubmittedScriptCode(message: string): boolean {
+    const text = message.trim()
+    if (text.length < 20) return false
+    return /(?:export\s+default\s+function|function\s+strategy|const\s+strategy|let\s+strategy|var\s+strategy|protocolVersion\s*:|onBar\s*:|action\s*:|module\.exports|return\s*\{)/u.test(text)
+      && /[{}();=]/u.test(text)
+  }
+
+  private readJsonRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    return value as Record<string, unknown>
+  }
+
+  private readNullableString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null
   }
 
   private restoreInferredAssumptionsFromLatestSpecDesc(

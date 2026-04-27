@@ -62,6 +62,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     }),
+    bindPublishedSnapshotToStrategyInstance: jest.fn(),
   }
   const mockAi = {
     chat: jest.fn(),
@@ -767,6 +768,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.createVersion.mockResolvedValue({ id: 'version-1' })
     mockRepo.create.mockResolvedValue({
       id: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
       consistencyReport: {},
     })
     mockRepo.findLatestBySessionId.mockResolvedValue(null)
@@ -778,6 +780,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     })
+    mockRepo.bindPublishedSnapshotToStrategyInstance.mockResolvedValue(undefined)
     mockConversationsRepo.listByUser.mockResolvedValue([])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
     mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue(null)
@@ -8332,6 +8335,130 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.assistantPrompt).toContain('我识别到你想修改策略语义')
     expect(mockRepo.updateSession).not.toHaveBeenCalled()
+  })
+
+  it('replaces a published script when the user pastes corrected script code', async () => {
+    const correctedScript = 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy'
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-script-replace',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        conversationHistory: [
+          'U: 生成 MA 策略',
+          'A: 策略代码已生成，现在可以开始回测。',
+        ],
+      },
+      latestDraftCode: 'const oldStrategy = {}',
+      latestSpecDesc: {
+        canonicalDigest: 'sha256:old-spec',
+        normalizedIntent: { context: { symbol: 'BTCUSDT' } },
+        publishedSnapshotId: 'snapshot-old',
+      },
+      strategyInstanceId: 'strategy-instance-1',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-old',
+      strategyTemplateId: 'template-old',
+      strategyInstanceId: 'strategy-instance-1',
+      scriptSnapshot: 'const oldStrategy = {}',
+      specSnapshot: {
+        canonicalDigest: 'sha256:old-spec',
+        normalizedIntent: { context: { symbol: 'BTCUSDT' } },
+      },
+      semanticGraph: { nodes: [] },
+      compiledIr: null,
+      irSnapshot: null,
+      astSnapshot: null,
+      compiledManifest: null,
+      consistencyReport: { status: 'PASSED' },
+      userIntentSummary: { text: 'MA 策略' },
+      strategySummary: { text: 'MA 策略' },
+      scriptSummary: { text: '旧脚本' },
+      lockedParams: { symbol: 'BTCUSDT', timeframe: '15m' },
+      paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
+      strategyConfig: { symbol: 'BTCUSDT', baseTimeframe: '15m', marketType: 'perp' },
+      backtestConfigDefaults: { stateTimeframes: ['15m'] },
+      deploymentExecutionDefaults: { mode: 'PAPER' },
+      deploymentExecutionConstraints: { supported: true },
+      executionEnvelope: null,
+      executionPolicy: null,
+      dataRequirements: { primary: ['15m'] },
+    })
+    mockRepo.create.mockResolvedValueOnce({
+      id: 'snapshot-manual-replacement',
+      snapshotHash: 'snapshot-hash-manual',
+      consistencyReport: { status: 'MANUAL_REPLACEMENT' },
+    })
+
+    const result = await service.continueSession('s-published-script-replace', {
+      userId: 'u1',
+      message: correctedScript,
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(result.scriptCode).toBe(correctedScript)
+    expect(result.publishedSnapshotId).toBe('snapshot-manual-replacement')
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).toHaveBeenCalledWith(expect.objectContaining({
+      scriptCode: correctedScript,
+      specDesc: expect.objectContaining({
+        version: 2,
+      }),
+    }))
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 's-published-script-replace',
+      strategyInstanceId: 'strategy-instance-1',
+      scriptSnapshot: correctedScript,
+      specSnapshot: expect.objectContaining({
+        version: 2,
+      }),
+      consistencyReport: expect.objectContaining({
+        status: 'MANUAL_REPLACEMENT',
+      }),
+    }))
+    expect(mockRepo.bindPublishedSnapshotToStrategyInstance).toHaveBeenCalledWith({
+      strategyInstanceId: 'strategy-instance-1',
+      userId: 'u1',
+      publishedSnapshotId: 'snapshot-manual-replacement',
+      snapshotHash: 'snapshot-hash-manual',
+      strategyTemplateId: 'template-old',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.status).toBe('PUBLISHED')
+    expect(updatePayload.latestDraftCode).toBe(correctedScript)
+    expect(updatePayload.latestSpecDesc).toEqual(expect.objectContaining({
+      publishedSnapshotId: 'snapshot-manual-replacement',
+      consistencyReport: expect.objectContaining({ status: 'MANUAL_REPLACEMENT' }),
+    }))
+  })
+
+  it('rejects pasted script code before the logic graph has generated a script', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-drafting-script-paste',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    const result = await service.continueSession('s-drafting-script-paste', {
+      userId: 'u1',
+      message: 'export default function strategy() { return { action: "NOOP" } }',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('现在还不能直接发送脚本代码')
+    expect(result.assistantPrompt).toContain('请用策略想法')
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.create).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).not.toHaveBeenCalled()
   })
 
   it('restores published status when canceling a published pending semantic edit', async () => {
