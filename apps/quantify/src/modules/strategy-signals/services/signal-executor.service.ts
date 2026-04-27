@@ -1092,9 +1092,8 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   }
 
   private normalizeMarketType(instrumentType: PrismaSymbol['instrumentType']): MarketType | null {
-    const normalized = String(instrumentType).toUpperCase()
-    if (normalized === 'SPOT') return 'spot'
-    if (normalized === 'PERP' || normalized === 'PERPETUAL' || normalized === 'FUTURE') return 'perp'
+    if (instrumentType === 'SPOT') return 'spot'
+    if (instrumentType === 'PERPETUAL' || instrumentType === 'FUTURE') return 'perp'
     return null
   }
 
@@ -1102,8 +1101,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     const base = symbol.baseAsset?.toUpperCase() ?? ''
     const quote = symbol.quoteAsset?.toUpperCase() ?? ''
     const pair = `${base}/${quote}`
-    const instrumentType = String(symbol.instrumentType).toUpperCase()
-    if (instrumentType === 'PERP' || instrumentType === 'PERPETUAL' || instrumentType === 'FUTURE') {
+    if (symbol.instrumentType === 'PERPETUAL' || symbol.instrumentType === 'FUTURE') {
       return `${pair}:PERP`
     }
     return pair

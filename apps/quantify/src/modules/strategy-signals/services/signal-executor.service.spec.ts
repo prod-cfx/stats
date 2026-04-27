@@ -232,7 +232,7 @@ describe('signalExecutorService', () => {
         positionSizeRatio: '0.1',
         symbol: {
           exchange: 'OKX',
-          instrumentType: 'PERP',
+          instrumentType: 'PERPETUAL',
           baseAsset: 'BTC',
           quoteAsset: 'USDT',
           precisionPrice: 2,
@@ -268,7 +268,7 @@ describe('signalExecutorService', () => {
         positionSizeRatio: '0.1',
         symbol: {
           exchange: 'OKX',
-          instrumentType: 'PERP',
+          instrumentType: 'PERPETUAL',
           baseAsset: 'BTC',
           quoteAsset: 'USDT',
           precisionPrice: 2,
@@ -313,7 +313,7 @@ describe('signalExecutorService', () => {
         entryPrice: '100',
         symbol: {
           exchange: 'OKX',
-          instrumentType: 'PERP',
+          instrumentType: 'PERPETUAL',
           baseAsset: 'BTC',
           quoteAsset: 'USDT',
           precisionPrice: 2,
