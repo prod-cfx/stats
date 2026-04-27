@@ -1027,6 +1027,7 @@ export class SemanticSeedExtractorService {
   private extractLastBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
     const matches = [
       ...Array.from(segment.matchAll(/布林带\s*[（(]\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)\s*[)）]/gu)),
+      ...Array.from(segment.matchAll(/布林带\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)/gu)),
       ...Array.from(segment.matchAll(/布林带\s*(\d{1,4})\s*(?:周期|日|根|period)?\s*(\d+(?:\.\d+)?)\s*(?:倍)?\s*标准差/gu)),
     ]
       .filter(match => match.index !== undefined)
@@ -1043,6 +1044,7 @@ export class SemanticSeedExtractorService {
 
   private extractBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
     const match = segment.match(/布林带\s*[（(]\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+      ?? segment.match(/布林带\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)/u)
       ?? segment.match(/布林带\s*(\d{1,4})\s*(?:周期|日|根|period)?\s*(\d+(?:\.\d+)?)\s*(?:倍)?\s*标准差/u)
     if (!match?.[1] || !match[2]) return null
 
@@ -1178,6 +1180,7 @@ export class SemanticSeedExtractorService {
         continue
       }
       if (depth === 0 && (char === '，' || char === ',')) {
+        if (this.isBollingerParamComma(segment, index)) continue
         const clause = segment.slice(start, index).trim()
         if (clause) clauses.push(clause)
         start = index + 1
@@ -1187,6 +1190,12 @@ export class SemanticSeedExtractorService {
     const tail = segment.slice(start).trim()
     if (tail) clauses.push(tail)
     return clauses.length > 0 ? clauses : [segment]
+  }
+
+  private isBollingerParamComma(segment: string, commaIndex: number): boolean {
+    const before = segment.slice(0, commaIndex)
+    const after = segment.slice(commaIndex + 1)
+    return /布林带\s*\d{1,4}\s*$/u.test(before) && /^\s*\d+(?:\.\d+)?/u.test(after)
   }
 
   private normalizeText(message?: string): string {

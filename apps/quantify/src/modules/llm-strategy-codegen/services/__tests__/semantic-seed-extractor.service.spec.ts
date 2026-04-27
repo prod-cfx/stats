@@ -787,6 +787,53 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('missingFields')
   })
 
+  it('binds split Bollinger aliases from bare comma parameters', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带 5,1。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          band: 'upper',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'lower',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'middle',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          band: 'middle',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+    ]))
+  })
+
   it('does not infer split Bollinger upper/lower aliases from side words alone', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(5,1)。上轨时做空，下轨时做多；单笔仓位 10%。')
     const triggerKeys = patch.triggers?.map(trigger => trigger.key) ?? []

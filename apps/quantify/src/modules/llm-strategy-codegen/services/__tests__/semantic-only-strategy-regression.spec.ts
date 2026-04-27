@@ -325,6 +325,28 @@ describe('semantic-only strategy regression verification', () => {
     ]))
   })
 
+  it('publishes two-sided Bollinger semantics from bare comma parameters', async () => {
+    const result = await generateAndPublish(
+      'bollinger-bare-comma-publish',
+      buildSemanticStateFromMessage('OKX 合约 BTCUSDT 1m，使用布林带 5,1。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。'),
+    )
+
+    expect(result.canonicalSpec.indicators).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'bollingerBands', params: { period: 5, stdDev: 1 } }),
+    ]))
+    expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
+      'bollinger.upper_break',
+      'bollinger.lower_break',
+      'bollinger.middle_revert',
+    ]))
+    expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining([
+      'OPEN_SHORT',
+      'OPEN_LONG',
+      'CLOSE_SHORT',
+      'CLOSE_LONG',
+    ]))
+  })
+
   it('publishes only the confirmed one-sided Bollinger semantic state', async () => {
     const semanticState = withLockedMarketContext(buildSemanticStateFromMessage('K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。'))
     const longOnlyState: SemanticState = {
