@@ -3,6 +3,7 @@ import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { DisplayLogicGraph } from '@/components/ai-quant/display-logic-graph'
+import type { QuantReturnIntent } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
@@ -149,6 +150,46 @@ export interface ConversationState {
   backtestExecutionConfigExplicit?: boolean
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
+}
+
+function normalizeMatchId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+export function findConversationForEditIntent(
+  conversations: ConversationState[],
+  intent: Extract<QuantReturnIntent, { type: 'strategy-edit-session' }>,
+): ConversationState | null {
+  const conversationId = normalizeMatchId(intent.conversationId)
+  const sessionId = normalizeMatchId(intent.sessionId)
+  const strategyInstanceId = normalizeMatchId(intent.strategyInstanceId)
+  const publishedSnapshotId = normalizeMatchId(intent.publishedSnapshotId)
+
+  if (conversationId || sessionId) {
+    const direct = conversations.find(conversation =>
+      (conversationId && (
+        normalizeMatchId(conversation.serverConversationId) === conversationId
+        || normalizeMatchId(conversation.id) === conversationId
+      ))
+      || (sessionId && normalizeMatchId(conversation.llmCodegenSessionId) === sessionId),
+    )
+    if (direct) return direct
+  }
+
+  if (strategyInstanceId) {
+    const byStrategy = conversations.find(conversation =>
+      normalizeMatchId(conversation.publishedStrategyInstanceId) === strategyInstanceId,
+    )
+    if (byStrategy) return byStrategy
+  }
+
+  if (publishedSnapshotId) {
+    return conversations.find(conversation =>
+      normalizeMatchId(conversation.publishedSnapshotId) === publishedSnapshotId,
+    ) ?? null
+  }
+
+  return null
 }
 
 export type ConversationIntegrityIssue =

@@ -1,9 +1,12 @@
 import { describe, expect, it } from '@jest/globals'
 
+import type { ConversationState } from './ai-quant-page-conversation'
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
   buildBacktestSummaryResult,
+  createConversation,
   createConversationFromServerConversation,
+  findConversationForEditIntent,
   hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
   hydrateConversations,
@@ -1845,6 +1848,78 @@ describe('ai-quant-page-conversation', () => {
       baseTimeframe: '15m',
       positionPct: 12,
       buyDropPct: 1.5,
+    })
+  })
+
+  describe('findConversationForEditIntent', () => {
+    const makeConversation = (overrides: Partial<ConversationState>): ConversationState => ({
+      ...createConversation((key: string) => key),
+      ...overrides,
+    })
+
+    it('prefers conversation and session identifiers over strategy identifiers', () => {
+      const byStrategy = makeConversation({
+        id: 'by-strategy',
+        publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+      })
+      const bySession = makeConversation({
+        id: 'by-session',
+        serverConversationId: 'conversation-1',
+        llmCodegenSessionId: 'session-1',
+      })
+
+      expect(findConversationForEditIntent([byStrategy, bySession], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        conversationId: 'conversation-1',
+        sessionId: 'session-1',
+        ts: Date.now(),
+      })?.id).toBe('by-session')
+    })
+
+    it('falls back to strategy instance then snapshot identifiers', () => {
+      const bySnapshot = makeConversation({ id: 'by-snapshot', publishedSnapshotId: 'snapshot-1' })
+      const byStrategy = makeConversation({ id: 'by-strategy', publishedStrategyInstanceId: 'strategy-1' })
+
+      expect(findConversationForEditIntent([bySnapshot, byStrategy], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        ts: Date.now(),
+      })?.id).toBe('by-strategy')
+
+      expect(findConversationForEditIntent([bySnapshot], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'missing',
+        publishedSnapshotId: 'snapshot-1',
+        ts: Date.now(),
+      })?.id).toBe('by-snapshot')
+    })
+
+    it('trims identifiers and returns null when nothing matches', () => {
+      const conversation = makeConversation({
+        id: 'local-1',
+        serverConversationId: ' server-1 ',
+        llmCodegenSessionId: ' session-1 ',
+        publishedStrategyInstanceId: ' strategy-1 ',
+        publishedSnapshotId: ' snapshot-1 ',
+      })
+
+      expect(findConversationForEditIntent([conversation], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: ' strategy-1 ',
+        sessionId: ' session-1 ',
+        ts: Date.now(),
+      })?.id).toBe('local-1')
+
+      expect(findConversationForEditIntent([conversation], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'missing',
+        publishedSnapshotId: 'missing-snapshot',
+        ts: Date.now(),
+      })).toBeNull()
     })
   })
 
