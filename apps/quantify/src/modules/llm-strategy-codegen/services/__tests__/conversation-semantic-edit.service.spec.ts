@@ -728,6 +728,128 @@ describe('ConversationSemanticEditService', () => {
     expect(next.position).toEqual(semanticState.position)
   })
 
+  it('classifies and applies semantic range replacement without dropping fixed grid semantics', () => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      families: ['grid.range_rebalance'],
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'BTCUSDT',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'perp',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '15m',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+      triggers: [
+        {
+          id: 'entry-fixed-grid',
+          key: 'grid.fixed_range',
+          phase: 'entry' as const,
+          sideScope: 'both' as const,
+          params: { lowerPrice: 60000, upperPrice: 80000, stepPct: 0.5, direction: 'bidirectional' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
+        { id: 'action-open-short', key: 'open_short', status: 'locked' as const, source: 'user_explicit' as const },
+      ],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 0.05, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit_pct',
+          params: { valuePct: 0.1, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'both',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      },
+    }
+    const message = '区间网格 60000-80000，改为60000-70000'
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{
+          op: 'replace_semantic_range',
+          from: { lower: 60000, upper: 80000 },
+          to: { lower: 60000, upper: 70000 },
+          text: message,
+        }],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.exchange?.value).toBe('okx')
+    expect(next.contextSlots.symbol?.value).toBe('BTCUSDT')
+    expect(next.contextSlots.marketType?.value).toBe('perp')
+    expect(next.contextSlots.timeframe?.value).toBe('15m')
+    expect(next.triggers).toHaveLength(1)
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      id: 'entry-fixed-grid',
+      params: { lowerPrice: 60000, upperPrice: 70000, stepPct: 0.5, direction: 'bidirectional' },
+    }))
+    expect(next.actions).toEqual(semanticState.actions)
+    expect(next.risk).toEqual(semanticState.risk)
+    expect(next.position).toEqual(semanticState.position)
+  })
+
   it('creates pending edit when trigger replacement text is incomplete', () => {
     const decision = service.decide({
       status: 'CONFIRM_GATE',

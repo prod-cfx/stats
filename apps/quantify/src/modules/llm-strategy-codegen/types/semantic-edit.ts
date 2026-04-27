@@ -17,6 +17,7 @@ export type SemanticEditOperation =
   | { op: 'replace_indicator_period', indicator?: string, from: number, to: number, text?: string }
   | { op: 'replace_trigger_number', from: number, to: number, direction?: 'up' | 'down', text?: string }
   | { op: 'replace_semantic_number', from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string }
+  | { op: 'replace_semantic_range', from: { lower: number, upper: number }, to: { lower: number, upper: number }, text?: string }
   | { op: 'replace_trigger', targetRef?: string, text?: string }
   | { op: 'add_trigger', text: string }
   | { op: 'remove_trigger', targetRef?: string }

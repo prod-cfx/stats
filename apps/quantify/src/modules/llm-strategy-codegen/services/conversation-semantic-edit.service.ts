@@ -45,6 +45,9 @@ export class ConversationSemanticEditService {
       if (operation.op === 'replace_semantic_number') {
         return this.applySemanticNumberReplacement(next, operation)
       }
+      if (operation.op === 'replace_semantic_range') {
+        return this.applySemanticRangeReplacement(next, operation)
+      }
       if (operation.op === 'replace_action') {
         return this.applyActionReplacement(next, operation.text ?? '')
       }
@@ -154,6 +157,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_action', text: message }],
+        },
+      }
+    }
+
+    const semanticRangeReplacement = this.extractSemanticRangeReplacement(message)
+    if (semanticRangeReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_semantic_range', ...semanticRangeReplacement, text: message }],
         },
       }
     }
@@ -474,6 +487,51 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applySemanticRangeReplacement(
+    state: SemanticState,
+    operation: { from: { lower: number, upper: number }, to: { lower: number, upper: number }, text?: string },
+  ): SemanticState {
+    let changed = false
+    const triggers = state.triggers.map((trigger) => {
+      const nextParams = this.replaceRangeParamValue(trigger.params, operation.from, operation.to)
+      if (nextParams === trigger.params) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from.lower}-${operation.from.upper}->${operation.to.lower}-${operation.to.upper}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    const risk = state.risk.map((riskItem) => {
+      const nextParams = this.replaceRangeParamValue(riskItem.params, operation.from, operation.to)
+      if (nextParams === riskItem.params) return riskItem
+
+      changed = true
+      return {
+        ...riskItem,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from.lower}-${operation.from.upper}->${operation.to.lower}-${operation.to.upper}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      risk,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
   private doesTriggerMatchNumberReplacementDirection(
     trigger: SemanticTriggerState,
     direction: 'up' | 'down' | undefined,
@@ -532,6 +590,69 @@ export class ConversationSemanticEditService {
         text: operation.text ?? `${operation.from}->${operation.to}`,
         source: 'user_explicit',
       },
+    }
+  }
+
+  private replaceRangeParamValue(
+    params: Record<string, unknown>,
+    from: { lower: number, upper: number },
+    to: { lower: number, upper: number },
+  ): Record<string, unknown> {
+    const direct = this.replaceDirectRangeParamValue(params, from, to)
+    if (direct !== params) return direct
+
+    const nested = this.replaceNestedRangeParamValue(params, from, to)
+    return nested
+  }
+
+  private replaceDirectRangeParamValue(
+    params: Record<string, unknown>,
+    from: { lower: number, upper: number },
+    to: { lower: number, upper: number },
+  ): Record<string, unknown> {
+    const pairs: Array<readonly [string, string]> = [
+      ['rangeLower', 'rangeUpper'],
+      ['rangeMin', 'rangeMax'],
+      ['lowerPrice', 'upperPrice'],
+      ['lower', 'upper'],
+      ['min', 'max'],
+    ]
+
+    for (const [lowerKey, upperKey] of pairs) {
+      const lowerValue = params[lowerKey]
+      const upperValue = params[upperKey]
+      if (
+        typeof lowerValue === 'number'
+        && typeof upperValue === 'number'
+        && this.isSameNumericValue(lowerValue, from.lower)
+        && this.isSameNumericValue(upperValue, from.upper)
+      ) {
+        return {
+          ...params,
+          [lowerKey]: to.lower,
+          [upperKey]: to.upper,
+        }
+      }
+    }
+
+    return params
+  }
+
+  private replaceNestedRangeParamValue(
+    params: Record<string, unknown>,
+    from: { lower: number, upper: number },
+    to: { lower: number, upper: number },
+  ): Record<string, unknown> {
+    const rangeValue = params.range
+    if (!rangeValue || typeof rangeValue !== 'object' || Array.isArray(rangeValue)) return params
+
+    const range = rangeValue as Record<string, unknown>
+    const nested = this.replaceDirectRangeParamValue(range, from, to)
+    if (nested === range) return params
+
+    return {
+      ...params,
+      range: nested,
     }
   }
 
@@ -788,6 +909,28 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private extractSemanticRangeReplacement(
+    message: string,
+  ): { from: { lower: number, upper: number }, to: { lower: number, upper: number } } | null {
+    const clauseMatch = /(.+?)(?:改为|改成|换成|替换为|修改为|更改为)(.+)/u.exec(message)
+    if (!clauseMatch) return null
+
+    const from = this.extractNumericRange(clauseMatch[1] ?? '')
+    const to = this.extractNumericRange(clauseMatch[2] ?? '')
+    if (!from || !to) return null
+    if (this.isSameNumericValue(from.lower, to.lower) && this.isSameNumericValue(from.upper, to.upper)) return null
+
+    return { from, to }
+  }
+
+  private extractNumericRange(text: string): { lower: number, upper: number } | null {
+    const match = /(\d+(?:\.\d+)?)\s*(?:-|~|～|到|至)\s*(\d+(?:\.\d+)?)/u.exec(text)
+    const lower = Number(match?.[1])
+    const upper = Number(match?.[2])
+    if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null
+    return { lower, upper }
+  }
+
   private extractNumericReplacementUnit(
     fromUnit: string | undefined,
     toUnit: string | undefined,
@@ -906,6 +1049,7 @@ export class ConversationSemanticEditService {
         || this.extractReplacementPositionPct(message) !== null
         || this.extractIndicatorPeriodReplacement(message) !== null
         || this.extractActionReplacement(message) !== null
+        || this.extractSemanticRangeReplacement(message) !== null
         || this.extractTriggerNumberReplacement(message) !== null
         || this.extractSemanticNumberReplacement(message) !== null
         || this.extractImplicitStrategyReplacementSeed(message, state)
