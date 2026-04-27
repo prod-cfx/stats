@@ -176,17 +176,18 @@ export function findConversationForEditIntent(
     if (direct) return direct
   }
 
+  if (publishedSnapshotId) {
+    const bySnapshot = conversations.find(conversation =>
+      normalizeMatchId(conversation.publishedSnapshotId) === publishedSnapshotId,
+    )
+    if (bySnapshot) return bySnapshot
+  }
+
   if (strategyInstanceId) {
     const byStrategy = conversations.find(conversation =>
       normalizeMatchId(conversation.publishedStrategyInstanceId) === strategyInstanceId,
     )
     if (byStrategy) return byStrategy
-  }
-
-  if (publishedSnapshotId) {
-    return conversations.find(conversation =>
-      normalizeMatchId(conversation.publishedSnapshotId) === publishedSnapshotId,
-    ) ?? null
   }
 
   return null

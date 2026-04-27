@@ -1930,7 +1930,7 @@ describe('ai-quant-page-conversation', () => {
       })?.id).toBe('by-session')
     })
 
-    it('falls back to strategy instance then snapshot identifiers', () => {
+    it('matches published snapshot before strategy instance when both identifiers are present', () => {
       const bySnapshot = makeConversation({ id: 'by-snapshot', publishedSnapshotId: 'snapshot-1' })
       const byStrategy = makeConversation({ id: 'by-strategy', publishedStrategyInstanceId: 'strategy-1' })
 
@@ -1939,7 +1939,7 @@ describe('ai-quant-page-conversation', () => {
         strategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
         ts: Date.now(),
-      })?.id).toBe('by-strategy')
+      })?.id).toBe('by-snapshot')
 
       expect(findConversationForEditIntent([bySnapshot], {
         type: 'strategy-edit-session',
@@ -1947,6 +1947,13 @@ describe('ai-quant-page-conversation', () => {
         publishedSnapshotId: 'snapshot-1',
         ts: Date.now(),
       })?.id).toBe('by-snapshot')
+
+      expect(findConversationForEditIntent([byStrategy], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'missing-snapshot',
+        ts: Date.now(),
+      })?.id).toBe('by-strategy')
     })
 
     it('trims identifiers and returns null when nothing matches', () => {
