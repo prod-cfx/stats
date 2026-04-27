@@ -65,4 +65,24 @@ describe('strategyBuyingPowerResolver', () => {
       nonTradableReason: 'local_strategy_account_balance_zero',
     })
   })
+
+  it('preserves zero local account equity instead of falling back to initial balance', () => {
+    const funding = resolveStrategyFundingFromStrategyAccount({
+      account: {
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal(0),
+        initialBalance: new Prisma.Decimal(1000),
+      },
+      mode: 'TESTNET',
+      reservedQuote: 0,
+    })
+
+    expect(funding).toMatchObject({
+      totalEquity: 0,
+      buyingPower: 0,
+      executionCapital: 0,
+      nonTradableReason: null,
+    })
+  })
 })

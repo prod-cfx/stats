@@ -21,7 +21,7 @@ interface ResolveExchangeFundingInput {
   balance: UnifiedBalance | null
   marketType: MarketType
   mode?: DeployMode | null
-  reservedQuote?: number | string | null
+  reservedQuote?: unknown
 }
 
 interface ResolveStrategyAccountFundingInput {
@@ -32,7 +32,7 @@ interface ResolveStrategyAccountFundingInput {
     initialBalance?: unknown
   }
   mode?: DeployMode | null
-  reservedQuote?: number | string | null
+  reservedQuote?: unknown
 }
 
 export function resolveStrategyFundingFromExchangeBalance(input: ResolveExchangeFundingInput): StrategyFundingSnapshot {
@@ -62,7 +62,7 @@ export function resolveStrategyFundingFromExchangeBalance(input: ResolveExchange
 export function resolveStrategyFundingFromStrategyAccount(input: ResolveStrategyAccountFundingInput): StrategyFundingSnapshot {
   const asset = normalizeAsset(input.account.baseCurrency)
   const balance = toNonNegativeFiniteNumber(input.account.balance)
-  const equity = toNonNegativeFiniteNumber(input.account.equity)
+  const equity = toFiniteFundingNumber(input.account.equity)
   const initialBalance = toNonNegativeFiniteNumber(input.account.initialBalance)
   const reservedQuote = toNonNegativeFiniteNumber(input.reservedQuote)
   const buyingPower = Math.max(0, roundFundingNumber(balance - reservedQuote))
@@ -88,8 +88,8 @@ function resolveFundingSource(mode: DeployMode | null | undefined): StrategyFund
   return mode === 'LIVE' ? 'exchange_live' : 'exchange_testnet'
 }
 
-function resolveTotalEquity(equity: number, initialBalance: number, balance: number): number {
-  if (equity > 0) return equity
+function resolveTotalEquity(equity: number | null, initialBalance: number, balance: number): number {
+  if (equity !== null) return equity
   if (initialBalance > 0) return initialBalance
   return balance
 }
@@ -114,6 +114,13 @@ function toNonNegativeFiniteNumber(value: unknown): number {
   const numeric = Number(value)
   if (!Number.isFinite(numeric) || numeric <= 0) return 0
   return roundFundingNumber(numeric)
+}
+
+function toFiniteFundingNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return roundFundingNumber(Math.max(0, numeric))
 }
 
 function roundFundingNumber(value: number): number {
