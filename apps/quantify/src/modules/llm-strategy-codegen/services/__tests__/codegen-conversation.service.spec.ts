@@ -62,6 +62,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     }),
+    bindPublishedSnapshotToStrategyInstance: jest.fn(),
   }
   const mockAi = {
     chat: jest.fn(),
@@ -150,6 +151,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       exchange: 'okx',
       symbol: 'BTCUSDT',
       marketType: 'spot',
+      timeframe: '15m',
+      ...context,
+    },
+  })
+  const rsiSemanticPatch = (context: Record<string, unknown> = {}) => ({
+    triggers: [
+      {
+        key: 'oscillator.rsi_lte',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { indicator: 'rsi', period: 14, value: 30 },
+      },
+      {
+        key: 'oscillator.rsi_gte',
+        phase: 'exit',
+        sideScope: 'long',
+        params: { indicator: 'rsi', period: 14, value: 70 },
+      },
+    ],
+    actions: [{ key: 'open_long' }, { key: 'close_long' }],
+    risk: [
+      { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+      { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+    ],
+    position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+    contextSlots: {
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
       timeframe: '15m',
       ...context,
     },
@@ -738,6 +768,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.createVersion.mockResolvedValue({ id: 'version-1' })
     mockRepo.create.mockResolvedValue({
       id: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
       consistencyReport: {},
     })
     mockRepo.findLatestBySessionId.mockResolvedValue(null)
@@ -749,6 +780,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     })
+    mockRepo.bindPublishedSnapshotToStrategyInstance.mockResolvedValue(undefined)
     mockConversationsRepo.listByUser.mockResolvedValue([])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
     mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue(null)
@@ -8010,6 +8042,738 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请确认策略交易标的')
     expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+  })
+
+  it('applies natural-language symbol edits before planner fallback can mark them unrelated', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-semantic-symbol-edit-unrelated',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-symbol-edit-unrelated', {
+      userId: 'u1',
+      message: '我要把交易标的改为BTCUSDT',
+    })
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-semantic-symbol-edit-unrelated',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          contextSlots: expect.objectContaining({
+            symbol: expect.objectContaining({
+              value: 'BTCUSDT',
+            }),
+          }),
+        }),
+      }),
+    )
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
+    expect(result.assistantPrompt).toContain('BTCUSDT')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+  })
+
+  it('applies natural-language position edits in ordinary conversations before planner fallback', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      position: {
+        ...buildLockedMaSemanticState().position,
+        value: 0.35,
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-semantic-position-edit-unrelated',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-position-edit-unrelated', {
+      userId: 'u1',
+      message: '仓位35%换成20%',
+    })
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.position.value).toBe(0.2)
+    expect(result.assistantPrompt).toContain('仓位：20%')
+    expect(result.assistantPrompt).not.toContain('仓位：35%')
+  })
+
+  it('applies natural-language moving-average period edits to returned specDesc before planner fallback', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-cross',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-ma-cross',
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        ...buildLockedMaSemanticState().position,
+        value: 0.35,
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-semantic-ma-period-edit',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-ma-period-edit', {
+      userId: 'u1',
+      message: '把MA6换成MA10',
+    })
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-ma-cross',
+        params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+      }),
+      expect.objectContaining({
+        id: 'exit-ma-cross',
+        params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+      }),
+    ]))
+    expect(result.assistantPrompt).toContain('MA10 上穿 MA48')
+    expect(result.assistantPrompt).not.toContain('MA6 上穿 MA48')
+    expect(result.specDesc?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({
+          key: 'ma.golden_cross',
+          params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+        }),
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({
+          key: 'ma.death_cross',
+          params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+        }),
+      }),
+    ]))
+  })
+
+  it('edits published session semantic state without overwriting the published snapshot', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-symbol-edit',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      publishedSnapshotId: 'snapshot-published-eth',
+      latestDraftCode: 'const publishedEthStrategy = {}',
+    })
+    const oldLatestSnapshot = {
+      id: 'snapshot-published-eth',
+      consistencyReport: { status: 'PASSED' },
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '1h',
+      },
+      lockedParams: {
+        symbol: 'ETHUSDT',
+        positionPct: 10,
+      },
+      specSnapshot: {
+        canonicalDigest: 'sha256:published-eth',
+        normalizedIntent: {
+          context: {
+            symbol: 'ETHUSDT',
+          },
+        },
+      },
+    }
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue(oldLatestSnapshot)
+
+    const result = await service.continueSession('s-published-symbol-edit', {
+      userId: 'u1',
+      message: '把交易标的改成 BTCUSDT',
+    })
+
+    expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-published-symbol-edit',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          contextSlots: expect.objectContaining({
+            symbol: expect.objectContaining({
+              value: 'BTCUSDT',
+            }),
+          }),
+        }),
+      }),
+    )
+    expect(mockRepo.create).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).not.toHaveBeenCalled()
+    expect(oldLatestSnapshot.paramsSnapshot.symbol).toBe('ETHUSDT')
+    expect(oldLatestSnapshot.lockedParams.symbol).toBe('ETHUSDT')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+  })
+
+  it('edits published session context parameters beyond symbol', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-timeframe-edit',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      publishedSnapshotId: 'snapshot-published-timeframe',
+      latestDraftCode: 'const publishedStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-published-timeframe',
+      paramsSnapshot: { timeframe: '15m' },
+      lockedParams: { timeframe: '15m' },
+      specSnapshot: {},
+    })
+
+    await service.continueSession('s-published-timeframe-edit', {
+      userId: 'u1',
+      message: '把主周期改成 1h',
+    })
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.contextSlots.timeframe.value).toBe('1h')
+    expect(updatePayload.latestDraftCode).toBeNull()
+  })
+
+  it('returns recoverable guidance for unsupported published semantic edits', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-risk-edit',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      publishedSnapshotId: 'snapshot-published-risk',
+      latestDraftCode: 'const publishedStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-published-risk',
+      paramsSnapshot: {},
+      lockedParams: {},
+      specSnapshot: {},
+    })
+
+    const result = await service.continueSession('s-published-risk-edit', {
+      userId: 'u1',
+      message: '把止损改成 3%',
+    })
+
+    expect(result.assistantPrompt).toContain('我识别到你想修改策略语义')
+    expect(mockRepo.updateSession).not.toHaveBeenCalled()
+  })
+
+  it('replaces a published script when the user pastes corrected script code', async () => {
+    const correctedScript = 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy'
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-script-replace',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        conversationHistory: [
+          'U: 生成 MA 策略',
+          'A: 策略代码已生成，现在可以开始回测。',
+        ],
+      },
+      latestDraftCode: 'const oldStrategy = {}',
+      latestSpecDesc: {
+        canonicalDigest: 'sha256:old-spec',
+        normalizedIntent: { context: { symbol: 'BTCUSDT' } },
+        publishedSnapshotId: 'snapshot-old',
+      },
+      strategyInstanceId: 'strategy-instance-1',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-old',
+      strategyTemplateId: 'template-old',
+      strategyInstanceId: 'strategy-instance-1',
+      scriptSnapshot: 'const oldStrategy = {}',
+      specSnapshot: {
+        canonicalDigest: 'sha256:old-spec',
+        normalizedIntent: { context: { symbol: 'BTCUSDT' } },
+      },
+      semanticGraph: { nodes: [] },
+      compiledIr: null,
+      irSnapshot: null,
+      astSnapshot: null,
+      compiledManifest: null,
+      consistencyReport: { status: 'PASSED' },
+      userIntentSummary: { text: 'MA 策略' },
+      strategySummary: { text: 'MA 策略' },
+      scriptSummary: { text: '旧脚本' },
+      lockedParams: { symbol: 'BTCUSDT', timeframe: '15m' },
+      paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
+      strategyConfig: { symbol: 'BTCUSDT', baseTimeframe: '15m', marketType: 'perp' },
+      backtestConfigDefaults: { stateTimeframes: ['15m'] },
+      deploymentExecutionDefaults: { mode: 'PAPER' },
+      deploymentExecutionConstraints: { supported: true },
+      executionEnvelope: null,
+      executionPolicy: null,
+      dataRequirements: { primary: ['15m'] },
+    })
+    mockRepo.create.mockResolvedValueOnce({
+      id: 'snapshot-manual-replacement',
+      snapshotHash: 'snapshot-hash-manual',
+      consistencyReport: { status: 'MANUAL_REPLACEMENT' },
+    })
+
+    const result = await service.continueSession('s-published-script-replace', {
+      userId: 'u1',
+      message: correctedScript,
+    })
+
+    expect(result.status).toBe('PUBLISHED')
+    expect(result.scriptCode).toBe(correctedScript)
+    expect(result.publishedSnapshotId).toBe('snapshot-manual-replacement')
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).toHaveBeenCalledWith(expect.objectContaining({
+      scriptCode: correctedScript,
+      specDesc: expect.objectContaining({
+        version: 2,
+      }),
+    }))
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 's-published-script-replace',
+      strategyInstanceId: 'strategy-instance-1',
+      scriptSnapshot: correctedScript,
+      specSnapshot: expect.objectContaining({
+        version: 2,
+      }),
+      consistencyReport: expect.objectContaining({
+        status: 'MANUAL_REPLACEMENT',
+      }),
+    }))
+    expect(mockRepo.bindPublishedSnapshotToStrategyInstance).toHaveBeenCalledWith({
+      strategyInstanceId: 'strategy-instance-1',
+      userId: 'u1',
+      publishedSnapshotId: 'snapshot-manual-replacement',
+      snapshotHash: 'snapshot-hash-manual',
+      strategyTemplateId: 'template-old',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.status).toBe('PUBLISHED')
+    expect(updatePayload.latestDraftCode).toBe(correctedScript)
+    expect(updatePayload.latestSpecDesc).toEqual(expect.objectContaining({
+      publishedSnapshotId: 'snapshot-manual-replacement',
+      consistencyReport: expect.objectContaining({ status: 'MANUAL_REPLACEMENT' }),
+    }))
+  })
+
+  it('rejects pasted script code before the logic graph has generated a script', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-drafting-script-paste',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    const result = await service.continueSession('s-drafting-script-paste', {
+      userId: 'u1',
+      message: 'export default function strategy() { return { action: "NOOP" } }',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('现在还不能直接发送脚本代码')
+    expect(result.assistantPrompt).toContain('请用策略想法')
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.create).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).not.toHaveBeenCalled()
+  })
+
+  it('restores published status when canceling a published pending semantic edit', async () => {
+    const currentSemanticState = {
+      ...buildLockedMaSemanticState(),
+      pendingEdit: {
+        id: 'pending-trigger-1',
+        op: 'replace_trigger',
+        targetRef: 'trigger-entry-1',
+        resumeStatusOnCancel: 'PUBLISHED',
+        candidate: {
+          id: 'candidate-trigger-1',
+          key: 'indicator.rsi_threshold',
+          phase: 'gate',
+          params: { indicator: 'rsi' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        status: 'needs_clarification',
+        createdFromMessage: '把触发改成 RSI',
+      },
+    }
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-pending-cancel',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'BLOCKED', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const publishedStrategy = {}',
+      latestSpecDesc: {
+        publishedSnapshotId: 'snapshot-old',
+      },
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    await service.continueSession('s-published-pending-cancel', {
+      userId: 'u1',
+      message: '算了，保持原来',
+    })
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.status).toBe('PUBLISHED')
+    expect(updatePayload.semanticState.pendingEdit).toBeNull()
+    expect(updatePayload.latestSpecDesc).toBeNull()
+    expect(updatePayload.latestDraftCode).toBeUndefined()
+  })
+
+  it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
+    'keeps %s terminal even when the message looks like a semantic edit',
+    async (status) => {
+      const sessionId = `s-terminal-${status.toLowerCase()}`
+      const sessionFixture = buildSemanticEraSessionFixture({
+        id: sessionId,
+        userId: 'u1',
+        status,
+        semanticState: buildLockedMaSemanticState(),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+      })
+      mockRepo.findById.mockResolvedValue(sessionFixture)
+
+      await expect(service.continueSession(sessionId, {
+        userId: 'u1',
+        message: '把交易标的改成 BTCUSDT',
+      })).rejects.toThrow('codegen.session_terminal_status')
+
+      expect(mockRepo.updateSession).not.toHaveBeenCalled()
+    },
+  )
+
+  it('replaces the whole strategy draft from a replacement seed instead of merging into the locked MA state', async () => {
+    const currentSemanticState = buildLockedMaSemanticState()
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-semantic-whole-strategy-replacement',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        conversationHistory: [
+          'U: 帮我做一个均线策略',
+          'A: 先确认入场条件：例如 5/20 金叉。',
+        ],
+      },
+      latestDraftCode: 'const oldMaStrategy = {}',
+      latestSpecDesc: {
+        canonicalSpec: {
+          rules: [{ condition: { key: 'indicator.above', indicator: 'ma' } }],
+        },
+      },
+    })
+    const oldSpecDesc = sessionFixture.latestSpecDesc
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为 RSI 策略，请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-whole-strategy-replacement', {
+      userId: 'u1',
+      message: '之前策略不对，重新做一个 RSI 策略',
+    })
+
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('重新做一个 RSI 策略')
+    expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+    expect(JSON.stringify(mockAi.chat.mock.calls[0][0])).not.toContain('均线策略')
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const replacementState = updatePayload.semanticState
+    expect(updatePayload.constraintPack.conversationHistory).toHaveLength(2)
+    expect(updatePayload.constraintPack.conversationHistory[0]).toBe('U: 之前策略不对，重新做一个 RSI 策略')
+    expect(JSON.stringify(updatePayload.constraintPack.conversationHistory)).not.toContain('均线策略')
+    expect(replacementState.previousVersions).toHaveLength(1)
+    expect(replacementState.previousVersions[0]).toEqual(expect.objectContaining({
+      reason: 'strategy_replacement',
+      semanticState: currentSemanticState,
+    }))
+    expect(replacementState.pendingEdit).toBeNull()
+    expect(replacementState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({ indicator: 'rsi' }),
+      }),
+    ]))
+    expect(replacementState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ma' }),
+      }),
+    ]))
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.latestSpecDesc).not.toEqual(oldSpecDesc)
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).toContain('rsi')
+    expect(result.status).toBe('CONFIRM_GATE')
+  })
+
+  it('replaces a prior dynamic grid draft when the user provides a complete fixed grid strategy', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      families: ['grid'],
+      triggers: [
+        {
+          id: 'entry-dynamic-grid',
+          key: 'price.range_position_lte',
+          phase: 'entry',
+          params: { lookbackBars: 36, positionPct: 20 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-dynamic-grid',
+          key: 'price.range_position_gte',
+          phase: 'exit',
+          params: { lookbackBars: 36, positionPct: 55 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      risk: [
+        { id: 'risk-stop-loss-old', key: 'risk.stop_loss_pct', params: { valuePct: 3 }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit-old', key: 'risk.take_profit_pct', params: { valuePct: 0.45 }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.25,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-semantic-grid-replacement',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const oldDynamicGridStrategy = {}',
+    })
+    const message = '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈'
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为双向网格策略，请确认逻辑图。',
+        semanticPatch: {
+          families: ['grid'],
+          triggers: [
+            {
+              key: 'grid.fixed_range',
+              phase: 'entry',
+              params: { lowerPrice: 60000, upperPrice: 80000, stepPct: 0.5, direction: 'bidirectional' },
+            },
+          ],
+          actions: [{ key: 'open_long' }, { key: 'open_short' }, { key: 'close_position' }],
+          risk: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'both' },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+
+    await service.continueSession('s-semantic-grid-replacement', {
+      userId: 'u1',
+      message,
+    })
+
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe(message)
+    expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.semanticState.previousVersions).toHaveLength(1)
+    expect(updatePayload.semanticState.triggers).toEqual([
+      expect.objectContaining({
+        key: 'grid.fixed_range',
+        params: expect.objectContaining({ lowerPrice: 60000, upperPrice: 80000, stepPct: 0.5 }),
+      }),
+    ])
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'price.range_position_lte' }),
+      expect.objectContaining({ key: 'price.range_position_gte' }),
+    ]))
+    expect(updatePayload.semanticState.risk).toEqual([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 10 }) }),
+    ])
+    expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({ value: 0.1 }))
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('36')
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('0.45')
+  })
+
+  it('consumes pending strategy replacement seed from a follow-up message', async () => {
+    const currentSemanticState = {
+      ...buildLockedMaSemanticState(),
+      pendingEdit: {
+        id: 'pending-strategy-replacement-seed-1',
+        op: 'replace_trigger',
+        candidate: {
+          id: 'candidate-strategy-replacement-seed-1',
+          key: 'pending.strategy_replacement_seed',
+          phase: 'gate',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          evidence: {
+            text: '之前不对，重新来',
+            source: 'user_explicit',
+          },
+          openSlots: [],
+        },
+        status: 'needs_clarification',
+        createdFromMessage: '之前不对，重新来',
+      },
+    }
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-pending-replacement-seed',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const oldMaStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为 RSI 策略，请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+
+    await service.continueSession('s-pending-replacement-seed', {
+      userId: 'u1',
+      message: '做一个 RSI 策略',
+    })
+
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('做一个 RSI 策略')
+    expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.semanticState.previousVersions).toHaveLength(1)
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({ indicator: 'rsi' }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ma' }),
+      }),
+    ]))
   })
 
   it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {

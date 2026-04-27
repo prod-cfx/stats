@@ -22,6 +22,7 @@ import { CompiledPublicationGateService } from './services/compiled-publication-
 import { CompiledScriptEmitterService } from './services/compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
+import { ConversationSemanticEditService } from './services/conversation-semantic-edit.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
@@ -83,6 +84,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     RecommendationIndexService,
     CallerIdentityService,
     CodegenSessionPublicationPipelineService,
+    ConversationSemanticEditService,
     CodegenConversationService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
