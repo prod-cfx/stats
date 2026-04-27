@@ -80,12 +80,21 @@ export function withPendingSemanticEdit(
   }
 }
 
+function stripSemanticEditMetadata(state: SemanticState): SemanticState {
+  const {
+    pendingEdit: _pendingEdit,
+    previousVersions: _previousVersions,
+    ...semanticState
+  } = state as SemanticStateWithPendingEdit
+  return semanticState
+}
+
 export function buildReplacementSemanticState(input: {
   previous: SemanticState
   next: SemanticState
 }): SemanticStateWithPendingEdit {
   const replacedAt = new Date().toISOString()
-  const previousVersions = (input.previous as SemanticStateWithPendingEdit).previousVersions ?? []
+  const previousVersions = ((input.previous as SemanticStateWithPendingEdit).previousVersions ?? []).slice(-4)
 
   return {
     ...(input.next as SemanticStateWithPendingEdit),
@@ -95,7 +104,7 @@ export function buildReplacementSemanticState(input: {
       {
         reason: 'strategy_replacement',
         replacedAt,
-        semanticState: input.previous,
+        semanticState: stripSemanticEditMetadata(input.previous),
       },
     ],
     updatedAt: replacedAt,

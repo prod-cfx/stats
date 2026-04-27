@@ -1,4 +1,5 @@
 import { ConversationSemanticEditService } from '../conversation-semantic-edit.service'
+import { buildReplacementSemanticState } from '../../types/semantic-edit'
 
 describe('ConversationSemanticEditService', () => {
   const service = new ConversationSemanticEditService()
@@ -225,5 +226,25 @@ describe('ConversationSemanticEditService', () => {
     )
 
     expect(service.applyPatch(withPending, { operations: [] })).toBe(withPending)
+  })
+
+  it('caps replacement history and stores previous state without edit metadata', () => {
+    const base = service.createEmptySemanticStateForTest()
+    const previous = service.withStrategyReplacementSeedPendingEditForTest(base, '之前不对，重新来') as any
+    previous.previousVersions = Array.from({ length: 6 }, (_, index) => ({
+      reason: 'strategy_replacement',
+      replacedAt: `2026-04-10T00:00:0${index}.000Z`,
+      semanticState: service.createEmptySemanticStateForTest(),
+    }))
+
+    const next = buildReplacementSemanticState({
+      previous,
+      next: service.createEmptySemanticStateForTest(),
+    })
+
+    expect(next.previousVersions).toHaveLength(5)
+    expect(next.previousVersions?.[0]?.replacedAt).toBe('2026-04-10T00:00:02.000Z')
+    expect((next.previousVersions?.at(-1)?.semanticState as any).pendingEdit).toBeUndefined()
+    expect((next.previousVersions?.at(-1)?.semanticState as any).previousVersions).toBeUndefined()
   })
 })
