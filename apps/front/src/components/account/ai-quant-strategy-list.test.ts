@@ -286,10 +286,14 @@ describe('AiQuantStrategyList primary summary', () => {
     })
 
     expect(container.textContent).toContain('确认删除策略？')
+    const dialog = container.querySelector('[role="dialog"]')
+    expect(dialog?.getAttribute('aria-modal')).toBe('true')
+    expect(dialog?.getAttribute('aria-labelledby')).toBe('ai-quant-delete-strategy-title')
 
     const confirmDeleteButton = Array.from(container.querySelectorAll('button'))
       .filter(button => button.textContent === 'Delete')
       .at(-1)
+    expect(document.activeElement).toBe(confirmDeleteButton)
     await act(async () => {
       confirmDeleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
@@ -316,6 +320,24 @@ describe('AiQuantStrategyList primary summary', () => {
     })
 
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain('delete failed from api')
+  })
+
+  it('closes the delete dialog with Escape before deletion starts', async () => {
+    await renderStrategyListWithItems([listItem({ status: 'stopped' })])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(container.querySelector('[role="dialog"]')).toBeTruthy()
+
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull()
   })
 
   it('blocks deleting a running strategy with a localized message', async () => {

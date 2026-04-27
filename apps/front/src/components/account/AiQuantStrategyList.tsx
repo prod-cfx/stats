@@ -3,7 +3,7 @@
 import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import { Activity, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { useAuth } from '@/hooks/use-auth'
@@ -97,6 +97,8 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [stopDialogStrategy, setStopDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [deleteDialogStrategy, setDeleteDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null)
+  const deleteDialogRef = useRef<HTMLDivElement | null>(null)
+  const deleteConfirmButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -119,6 +121,47 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   useEffect(() => {
     void loadStrategies()
   }, [loadStrategies])
+
+  useEffect(() => {
+    if (!deleteDialogStrategy) return
+
+    const previousActiveElement = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    deleteConfirmButtonRef.current?.focus()
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        if (!pendingDeleteId) setDeleteDialogStrategy(null)
+        return
+      }
+
+      if (event.key !== 'Tab') return
+
+      const focusableElements = Array.from(
+        deleteDialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])') ?? [],
+      )
+      if (focusableElements.length === 0) return
+
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousActiveElement?.focus()
+    }
+  }, [deleteDialogStrategy, pendingDeleteId])
 
   const handleStatusChange = async (e: React.MouseEvent, id: string, status: 'running' | 'stopped') => {
     e.preventDefault()
@@ -385,6 +428,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="ai-quant-delete-strategy-title"
+            ref={deleteDialogRef}
             className="w-full max-w-[480px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
             onClick={event => event.stopPropagation()}
           >
@@ -404,6 +448,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
             )}
             <div className="mt-5 flex flex-wrap gap-2">
               <button
+                ref={deleteConfirmButtonRef}
                 type="button"
                 disabled={pendingDeleteId === deleteDialogStrategy.id}
                 onClick={() => {
