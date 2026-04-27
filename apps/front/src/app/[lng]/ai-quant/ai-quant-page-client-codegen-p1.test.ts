@@ -460,6 +460,77 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(displayText).not.toContain('仓位: 35%')
   })
 
+  it('rebuilds draft display logic graph from DRAFTING specDesc semantic edits', () => {
+    const conversation = {
+      ...createConversation((key: string) => key, 1),
+      id: 'conv-drafting-edit',
+      llmCodegenSessionId: 'session-1',
+      backtestResult: {
+        id: 'bt-old',
+        startAt: '2026-03-01T00:00:00.000Z',
+        endAt: '2026-03-08T00:00:00.000Z',
+        maxDrawdownPct: 5,
+        totalReturnPct: 12,
+        winRatePct: 60,
+        tradeCount: 8,
+      },
+      publishedSnapshotId: 'snapshot-old',
+      publishedScriptCode: 'export default function oldStrategy() { return true }',
+      displayLogicGraph: {
+        blocks: [
+          {
+            type: 'IF',
+            items: [{ id: 'old-ma', kind: 'condition', text: 'SMA6 上穿 SMA48' }],
+          },
+        ],
+      },
+    } as any
+
+    const next = applyCodegenResponseToConversationState({
+      conversation,
+      response: {
+        id: 'session-1',
+        status: 'DRAFTING',
+        specDesc: {
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [
+            {
+              id: 'risk-stop-loss',
+              phase: 'risk',
+              condition: {
+                key: 'position_loss_pct',
+                value: 0.03,
+              },
+              actions: [{ type: 'FORCE_EXIT' }],
+            },
+          ],
+        },
+      } as any,
+      confirmGenerate: false,
+      targetParams: {
+        ...DEFAULT_PARAMS,
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+      },
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '把止损改成3%',
+      t: (key: string) => key,
+      loadingMessageId: null,
+    })
+
+    const displayText = JSON.stringify(next.displayLogicGraph)
+    expect(displayText).toContain('亏损达到 3%')
+    expect(displayText).not.toContain('SMA6 上穿 SMA48')
+    expect(next.logicGraph?.status).toBe('draft')
+    expect(next.publishedSnapshotId).toBeNull()
+    expect(next.publishedScriptCode).toBeNull()
+    expect(next.backtestResult).toBeNull()
+  })
+
   it('appends rejectReason when terminal failure snapshot only returns historical conversationMessages', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {

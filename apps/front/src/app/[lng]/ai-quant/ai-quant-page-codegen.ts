@@ -385,7 +385,7 @@ export function applyCodegenResponseToConversationState(args: {
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
   const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
   const shouldUpdateGraph =
-    (response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
+    (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
   const syncResult = shouldUpdateGraph
     ? syncStrategyParamsFromCodegen({
