@@ -824,7 +824,7 @@ export class AccountStrategyViewService {
     }
 
     if (dto.action === AccountStrategyAction.LIQUIDATE_AND_STOP) {
-      if (row.status === 'stopped') {
+      if (row.status !== 'running') {
         return this.getStrategyDetail(userId, strategyInstanceId)
       }
       return this.runLiquidateAndStopLocked(userId, strategyInstanceId, row)
@@ -861,7 +861,7 @@ export class AccountStrategyViewService {
       }
       this.assertStrategyVisible(row, strategyInstanceId)
 
-      if (row.status === 'stopped') {
+      if (row.status !== 'running') {
         return this.getStrategyDetail(userId, strategyInstanceId)
       }
 
@@ -903,39 +903,61 @@ export class AccountStrategyViewService {
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
-    await this.cancelOpenOrdersForStrategy(userId, row, sub.exchangeAccount?.id ?? undefined)
-
-    const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
-    // latestOrders is recent activity history, not authoritative open-order state.
-    if (openPositions.length > 0) {
-      if (!this.positionsService) {
-        throw new DomainException('account_strategy.liquidation_service_unavailable', {
-          code: ErrorCode.INTERNAL_SERVER_ERROR,
-          status: HttpStatus.INTERNAL_SERVER_ERROR,
-        })
-      }
-
-      for (const position of openPositions) {
-        await this.positionsService.closePosition({
-          userId,
-          userStrategyAccountId: account.id,
-          positionId: position.id,
-          quantity: position.quantity.toString(),
-          exchangeId: position.exchangeId as ExchangeId,
-          marketType: position.marketType as MarketType,
-          note: 'AI Quant 平仓并停止',
-        })
-      }
-    }
-
     await this.strategyInstancesService.updateInstance(
       strategyInstanceId,
       {
-        status: 'stopped',
+        status: 'paused',
         updatedBy: userId,
       },
       userId,
     )
+
+    try {
+      await this.cancelOpenOrdersForStrategy(userId, row, sub.exchangeAccount?.id ?? undefined)
+
+      const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
+      // latestOrders is recent activity history, not authoritative open-order state.
+      if (openPositions.length > 0) {
+        if (!this.positionsService) {
+          throw new DomainException('account_strategy.liquidation_service_unavailable', {
+            code: ErrorCode.INTERNAL_SERVER_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+          })
+        }
+
+        for (const position of openPositions) {
+          await this.positionsService.closePosition({
+            userId,
+            userStrategyAccountId: account.id,
+            positionId: position.id,
+            quantity: position.quantity.toString(),
+            exchangeId: position.exchangeId as ExchangeId,
+            marketType: position.marketType as MarketType,
+            note: 'AI Quant 平仓并停止',
+          })
+        }
+      }
+
+      await this.strategyInstancesService.updateInstance(
+        strategyInstanceId,
+        {
+          status: 'stopped',
+          updatedBy: userId,
+        },
+        userId,
+      )
+    }
+    catch (error) {
+      await this.strategyInstancesService.updateInstance(
+        strategyInstanceId,
+        {
+          status: 'running',
+          updatedBy: userId,
+        },
+        userId,
+      ).catch(() => undefined)
+      throw error
+    }
 
     return this.getStrategyDetail(userId, strategyInstanceId)
   }

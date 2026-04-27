@@ -311,6 +311,24 @@ describe('accountStrategyViewService.performAction', () => {
     )
   })
 
+  it('skips duplicate liquidate_and_stop requests when the strategy is already pausing', async () => {
+    const { service, strategyInstancesService, tradingService, positionsService } = createActionTestContext({
+      status: 'paused',
+    })
+
+    await expect(
+      service.performAction('inst-1', {
+        userId: 'user-1',
+        action: 'liquidate_and_stop' as any,
+      }),
+    ).resolves.toEqual({ id: 'inst-1' })
+
+    expect(tradingService.getOpenOrders).not.toHaveBeenCalled()
+    expect(tradingService.cancelOrder).not.toHaveBeenCalled()
+    expect(positionsService.closePosition).not.toHaveBeenCalled()
+    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
+  })
+
   it('does not stop the strategy when canceling open orders fails', async () => {
     const { service, strategyInstancesService, tradingService, positionsService } = createActionTestContext()
     tradingService.getOpenOrders.mockResolvedValue([
@@ -326,7 +344,23 @@ describe('accountStrategyViewService.performAction', () => {
     ).rejects.toThrow('cancel failed')
 
     expect(positionsService.closePosition).not.toHaveBeenCalled()
-    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
+    expect(strategyInstancesService.updateInstance).toHaveBeenNthCalledWith(
+      1,
+      'inst-1',
+      expect.objectContaining({ status: 'paused', updatedBy: 'user-1' }),
+      'user-1',
+    )
+    expect(strategyInstancesService.updateInstance).toHaveBeenNthCalledWith(
+      2,
+      'inst-1',
+      expect.objectContaining({ status: 'running', updatedBy: 'user-1' }),
+      'user-1',
+    )
+    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalledWith(
+      'inst-1',
+      expect.objectContaining({ status: 'stopped' }),
+      'user-1',
+    )
   })
 
   it('serializes duplicate liquidate_and_stop requests for the same strategy', async () => {
@@ -364,7 +398,19 @@ describe('accountStrategyViewService.performAction', () => {
 
     expect(tradingService.cancelOrder).toHaveBeenCalledTimes(1)
     expect(positionsService.closePosition).toHaveBeenCalledTimes(1)
-    expect(strategyInstancesService.updateInstance).toHaveBeenCalledTimes(1)
+    expect(strategyInstancesService.updateInstance).toHaveBeenCalledTimes(2)
+    expect(strategyInstancesService.updateInstance).toHaveBeenNthCalledWith(
+      1,
+      'inst-1',
+      expect.objectContaining({ status: 'paused', updatedBy: 'user-1' }),
+      'user-1',
+    )
+    expect(strategyInstancesService.updateInstance).toHaveBeenNthCalledWith(
+      2,
+      'inst-1',
+      expect.objectContaining({ status: 'stopped', updatedBy: 'user-1' }),
+      'user-1',
+    )
   })
 
   it('liquidates each open position before stopping the strategy', async () => {
@@ -449,6 +495,22 @@ describe('accountStrategyViewService.performAction', () => {
       }),
     ).rejects.toThrow('close failed')
 
-    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalled()
+    expect(strategyInstancesService.updateInstance).toHaveBeenNthCalledWith(
+      1,
+      'inst-1',
+      expect.objectContaining({ status: 'paused', updatedBy: 'user-1' }),
+      'user-1',
+    )
+    expect(strategyInstancesService.updateInstance).toHaveBeenNthCalledWith(
+      2,
+      'inst-1',
+      expect.objectContaining({ status: 'running', updatedBy: 'user-1' }),
+      'user-1',
+    )
+    expect(strategyInstancesService.updateInstance).not.toHaveBeenCalledWith(
+      'inst-1',
+      expect.objectContaining({ status: 'stopped' }),
+      'user-1',
+    )
   })
 })
