@@ -3082,6 +3082,7 @@ export class CodegenConversationService {
 
   private isEditableConversationSessionStatus(status: LlmCodegenSessionStatus): boolean {
     return !this.stateMachine.isTerminalStatus(status)
+      || status === 'PUBLISHED'
       || status === 'REJECTED'
       || status === 'CONSISTENCY_FAILED'
   }

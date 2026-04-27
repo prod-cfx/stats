@@ -231,6 +231,58 @@ describe('codegenConversationService edit recovery', () => {
     expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).not.toHaveBeenCalled()
   })
 
+  it('keeps published sessions recoverable so semantic edits continue from the published strategy', async () => {
+    const harness = createHarness()
+    const conversation = buildConversation({ codegenSessionId: 'published-session-1' })
+    harness.sessions.set('published-session-1', buildSession({
+      id: 'published-session-1',
+      status: 'PUBLISHED',
+      latestDraftCode: 'export default function strategy() {}',
+      latestSpecDesc: {
+        version: 1,
+        publishedSnapshotId: 'snapshot-1',
+      },
+      semanticState: {
+        version: 1,
+        contextSlots: {
+          exchange: { key: 'exchange', value: 'binance', status: 'locked' },
+          symbol: { key: 'symbol', value: 'BTCUSDT', status: 'locked' },
+          marketType: { key: 'marketType', value: 'perp', status: 'locked' },
+          timeframe: { key: 'timeframe', value: '15m', status: 'locked' },
+        },
+        triggers: [{ id: 'entry-ma', phase: 'entry', key: 'ma.cross_up', params: { fast: 5, slow: 20 } }],
+        actions: [{ id: 'open-long', key: 'open_long', params: {} }],
+        risk: [{ id: 'stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 3 } }],
+        position: { mode: 'fixed_ratio', value: 0.1 },
+        pendingEdit: null,
+        previousVersions: [],
+      },
+    }))
+    harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(conversation)
+    harness.publishedSnapshotsRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-1',
+      strategyInstanceId: 'strategy-1',
+      specSnapshot: { market: { symbol: 'BTCUSDT' } },
+      lockedParams: {},
+      semanticGraph: snapshotSemanticGraph,
+      paramsSnapshot: { symbol: 'BTCUSDT' },
+      strategyConfig: { symbol: 'BTCUSDT', baseTimeframe: '15m', marketType: 'perp' },
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await harness.service.recoverEditConversation('user-1', {
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      conversationId: 'conversation-1',
+      source: 'ai-quant',
+    })
+
+    expect(result.id).toBe('conversation-1')
+    expect(result.activeCodegenSessionId).toBe('published-session-1')
+    expect(result.publishedSnapshotId).toBe('snapshot-1')
+    expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).not.toHaveBeenCalled()
+  })
+
   it('falls through direct conversation recovery when the requested strategy context does not match', async () => {
     const harness = createHarness()
     harness.sessions.set('session-1', buildSession({
@@ -389,7 +441,7 @@ describe('codegenConversationService edit recovery', () => {
     }))
   })
 
-  it('falls through conversationId recovery when the existing conversation is terminal', async () => {
+  it('reuses a published conversation by conversationId when no exact snapshot id is requested', async () => {
     const harness = createHarness()
     harness.sessions.set('published-session-1', buildSession({
       id: 'published-session-1',
@@ -407,11 +459,12 @@ describe('codegenConversationService edit recovery', () => {
       conversationId: 'published-conversation-1',
     })
 
-    expect(result.id).toBe('recovered-conversation-1')
-    expect(result.activeCodegenSessionId).toBe('recovered-session-1')
+    expect(result.id).toBe('published-conversation-1')
+    expect(result.activeCodegenSessionId).toBe('published-session-1')
+    expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).not.toHaveBeenCalled()
   })
 
-  it('falls through sessionId recovery when the existing conversation is terminal', async () => {
+  it('reuses a published conversation by sessionId when no exact snapshot id is requested', async () => {
     const harness = createHarness()
     harness.sessions.set('published-session-1', buildSession({
       id: 'published-session-1',
@@ -429,8 +482,9 @@ describe('codegenConversationService edit recovery', () => {
       sessionId: 'published-session-1',
     })
 
-    expect(result.id).toBe('recovered-conversation-1')
-    expect(result.activeCodegenSessionId).toBe('recovered-session-1')
+    expect(result.id).toBe('published-conversation-1')
+    expect(result.activeCodegenSessionId).toBe('published-session-1')
+    expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).not.toHaveBeenCalled()
   })
 
   it('does not reuse a same-strategy stale draft when an exact published snapshot id is requested', async () => {
