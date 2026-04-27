@@ -549,6 +549,8 @@ const AccountStrategyAccountOverviewDto = z
     initialBalance: z.number().nullable(),
     totalEquity: z.number().nullable(),
     availableBalance: z.number().nullable(),
+    executionCapital: z.number().nullable(),
+    nonTradableReason: z.string().nullable(),
     totalPnl: z.number().nullable(),
     todayPnl: z.number().nullable(),
     baseCurrency: z.string().nullable(),
@@ -672,6 +674,7 @@ const AccountStrategyDetailResponseDto = z
     accountOverview: AccountStrategyAccountOverviewDto,
     positionOverview: AccountStrategyPositionOverviewDto,
     latestOrders: z.array(AccountStrategyLatestOrderDto),
+    openOrdersCount: z.number().nullish(),
     runtimeExecutionStates: z.array(RuntimeExecutionStateDto),
     runtimeSemanticSummary: AccountStrategyRuntimeSemanticSummaryDto.nullish(),
     deployment: AccountStrategyDeploymentDto.nullish(),
@@ -1788,6 +1791,11 @@ const endpoints = makeApi([
       {
         name: 'id',
         type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'deleteStoppedStrategy',
+        type: 'Query',
         schema: z.string(),
       },
     ],
