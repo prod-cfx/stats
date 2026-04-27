@@ -462,6 +462,144 @@ describe('ConversationSemanticEditService', () => {
     ])
   })
 
+  it('classifies and applies trigger numeric threshold replacement without dropping existing semantics', () => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'ETHUSDT',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'spot',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '15m',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+      triggers: [
+        {
+          id: 'entry-rsi-cross',
+          key: 'indicator.cross_over',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          params: { indicator: 'rsi', period: 14, value: 38 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'exit-rsi-gte',
+          key: 'oscillator.rsi_gte',
+          phase: 'exit' as const,
+          sideScope: 'long' as const,
+          params: { indicator: 'rsi', period: 14, value: 64 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
+        { id: 'action-close-long', key: 'close_long', status: 'locked' as const, source: 'user_explicit' as const },
+      ],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 0.05, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit_pct',
+          params: { valuePct: 0.005, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.25,
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      },
+    }
+    const message = '上穿 38改为40'
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{
+          op: 'replace_trigger_number',
+          from: 38,
+          to: 40,
+          direction: 'up',
+          text: message,
+        }],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.exchange?.value).toBe('okx')
+    expect(next.contextSlots.symbol?.value).toBe('ETHUSDT')
+    expect(next.contextSlots.timeframe?.value).toBe('15m')
+    expect(next.triggers).toHaveLength(2)
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      id: 'entry-rsi-cross',
+      params: { indicator: 'rsi', period: 14, value: 40 },
+    }))
+    expect(next.triggers[1]).toEqual(expect.objectContaining({
+      id: 'exit-rsi-gte',
+      params: { indicator: 'rsi', period: 14, value: 64 },
+    }))
+    expect(next.actions).toEqual(semanticState.actions)
+    expect(next.risk).toEqual(semanticState.risk)
+    expect(next.position).toEqual(expect.objectContaining({
+      value: 0.25,
+      positionMode: 'long_only',
+    }))
+  })
+
   it('creates pending edit when trigger replacement text is incomplete', () => {
     const decision = service.decide({
       status: 'CONFIRM_GATE',

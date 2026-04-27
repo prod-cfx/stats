@@ -15,6 +15,7 @@ export type SemanticEditOperation =
   | { op: 'replace_context', field: SemanticEditContextField, value: string }
   | { op: 'replace_position', targetRef?: string, text?: string }
   | { op: 'replace_indicator_period', indicator?: string, from: number, to: number, text?: string }
+  | { op: 'replace_trigger_number', from: number, to: number, direction?: 'up' | 'down', text?: string }
   | { op: 'replace_trigger', targetRef?: string, text?: string }
   | { op: 'add_trigger', text: string }
   | { op: 'remove_trigger', targetRef?: string }

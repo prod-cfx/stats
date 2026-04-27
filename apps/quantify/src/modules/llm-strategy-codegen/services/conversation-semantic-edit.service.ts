@@ -39,6 +39,9 @@ export class ConversationSemanticEditService {
       if (operation.op === 'replace_indicator_period') {
         return this.applyIndicatorPeriodReplacement(next, operation)
       }
+      if (operation.op === 'replace_trigger_number') {
+        return this.applyTriggerNumberReplacement(next, operation)
+      }
       if (operation.op === 'replace_action') {
         return this.applyActionReplacement(next, operation.text ?? '')
       }
@@ -148,6 +151,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_action', text: message }],
+        },
+      }
+    }
+
+    const triggerNumberReplacement = this.extractTriggerNumberReplacement(message)
+    if (triggerNumberReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_trigger_number', ...triggerNumberReplacement, text: message }],
         },
       }
     }
@@ -366,6 +379,82 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applyTriggerNumberReplacement(
+    state: SemanticState,
+    operation: { from: number, to: number, direction?: 'up' | 'down', text?: string },
+  ): SemanticState {
+    let changed = false
+    const triggers = state.triggers.map((trigger) => {
+      if (!this.doesTriggerMatchNumberReplacementDirection(trigger, operation.direction)) {
+        return trigger
+      }
+
+      const nextParams = this.replaceNumericParamValue(trigger.params, operation.from, operation.to)
+      if (nextParams === trigger.params) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private doesTriggerMatchNumberReplacementDirection(
+    trigger: SemanticTriggerState,
+    direction: 'up' | 'down' | undefined,
+  ): boolean {
+    if (!direction) return true
+    if (direction === 'up') {
+      return trigger.key.includes('cross_over')
+        || trigger.key.includes('_gte')
+        || trigger.key.includes('above')
+        || trigger.key.includes('breakout_up')
+        || trigger.params.op === 'gte'
+        || trigger.params.op === '>'
+    }
+    return trigger.key.includes('cross_under')
+      || trigger.key.includes('_lte')
+      || trigger.key.includes('below')
+      || trigger.key.includes('breakout_down')
+      || trigger.params.op === 'lte'
+      || trigger.params.op === '<'
+  }
+
+  private replaceNumericParamValue(
+    params: Record<string, unknown>,
+    from: number,
+    to: number,
+  ): Record<string, unknown> {
+    let changed = false
+    const nextParams: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === 'number' && Number.isFinite(value) && this.isSameNumericValue(value, from)) {
+        nextParams[key] = to
+        changed = true
+        continue
+      }
+      nextParams[key] = value
+    }
+    return changed ? nextParams : params
+  }
+
+  private isSameNumericValue(left: number, right: number): boolean {
+    return Math.abs(left - right) < 1e-9
+  }
+
   private applyActionReplacement(state: SemanticState, text: string): SemanticState {
     const replacement = this.extractActionReplacement(text)
     if (!replacement) return state
@@ -532,6 +621,27 @@ export class ConversationSemanticEditService {
     return { from, to }
   }
 
+  private extractTriggerNumberReplacement(message: string): { from: number, to: number, direction?: 'up' | 'down' } | null {
+    const match = /(?:上穿|下穿|高于|低于|大于|小于|超过|突破|跌破|>=|<=|>|<)?\s*(\d+(?:\.\d+)?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(\d+(?:\.\d+)?)/u.exec(message)
+    if (!match) return null
+
+    const from = Number(match[1])
+    const to = Number(match[2])
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
+
+    return {
+      from,
+      to,
+      ...this.extractTriggerDirectionHint(message),
+    }
+  }
+
+  private extractTriggerDirectionHint(message: string): { direction?: 'up' | 'down' } {
+    if (/上穿|高于|大于|超过|突破|>=|>/u.test(message)) return { direction: 'up' }
+    if (/下穿|低于|小于|跌破|<=|</u.test(message)) return { direction: 'down' }
+    return {}
+  }
+
   private normalizeActionKey(value: string | undefined): SemanticActionKey | null {
     const text = value?.trim().toLowerCase().replace(/[\s-]+/g, '_')
     if (!text) return null
@@ -601,6 +711,7 @@ export class ConversationSemanticEditService {
         || this.extractReplacementPositionPct(message) !== null
         || this.extractIndicatorPeriodReplacement(message) !== null
         || this.extractActionReplacement(message) !== null
+        || this.extractTriggerNumberReplacement(message) !== null
         || this.extractImplicitStrategyReplacementSeed(message, state)
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)
