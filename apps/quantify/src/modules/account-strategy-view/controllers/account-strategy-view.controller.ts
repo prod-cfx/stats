@@ -98,7 +98,6 @@ export class AccountStrategyViewController {
     return this.service.getStrategyDetail(userId, id)
   }
 
-  @Transactional()
   @Post(':id/actions')
   @ApiOperation({ summary: '对当前用户的 AI Quant 策略执行操作' })
   @ApiHeader({ name: 'authorization', required: false })
