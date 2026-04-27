@@ -9,6 +9,7 @@ import type {
   ContinueLlmCodegenSessionPayload,
   LlmCodegenSessionResponse,
   PaginatedResponse,
+  RecoverAiQuantEditConversationPayload,
   StartLlmCodegenSessionPayload,
 } from './api'
 
@@ -401,6 +402,42 @@ export async function deleteAiQuantConversation(
     const message = parseApiErrorMessage(response.status, json, '删除 AI Quant 会话失败')
     throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
   }
+}
+
+export async function recoverAiQuantEditConversation(
+  payload: RecoverAiQuantEditConversationPayload,
+): Promise<AiQuantConversationResponse> {
+  const strategyInstanceId = payload.strategyInstanceId.trim()
+  if (!strategyInstanceId) throw new ApiError('strategyInstanceId is required', 'INVALID_INPUT')
+
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations/edit-session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+    body: JSON.stringify({
+      strategyInstanceId,
+      publishedSnapshotId: payload.publishedSnapshotId?.trim() || undefined,
+      conversationId: payload.conversationId?.trim() || undefined,
+      sessionId: payload.sessionId?.trim() || undefined,
+      source: payload.source,
+    }),
+  })
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, '恢复 AI Quant 修改会话失败')
+    throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
+  }
+  return unwrapResponse<AiQuantConversationResponse>(
+    json as AiQuantConversationResponse | { data?: AiQuantConversationResponse; message?: string },
+  )
 }
 
 export async function updateAiQuantConversationBacktestDraft(

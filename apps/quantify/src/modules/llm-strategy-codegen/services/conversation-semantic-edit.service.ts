@@ -6,10 +6,11 @@ import type {
   SemanticEditDecision,
   SemanticEditPatch,
 } from '../types/semantic-edit'
-import type { SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticActionState, SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
+import { resolveEditableRangeParamPairs, resolveEditableScalarParamPaths } from './strategy-semantic-contracts'
 
 export interface ConversationSemanticEditDecisionInput {
   status: LlmCodegenSessionStatus
@@ -18,6 +19,7 @@ export interface ConversationSemanticEditDecisionInput {
 }
 
 const PROCESSING_REJECTION_MESSAGE = '当前策略正在生成或校验，请等待完成后再修改。'
+type SemanticActionKey = 'open_long' | 'open_short' | 'close_long' | 'close_short'
 
 @Injectable()
 export class ConversationSemanticEditService {
@@ -37,6 +39,18 @@ export class ConversationSemanticEditService {
       }
       if (operation.op === 'replace_indicator_period') {
         return this.applyIndicatorPeriodReplacement(next, operation)
+      }
+      if (operation.op === 'replace_trigger_number') {
+        return this.applyTriggerNumberReplacement(next, operation)
+      }
+      if (operation.op === 'replace_semantic_number') {
+        return this.applySemanticNumberReplacement(next, operation)
+      }
+      if (operation.op === 'replace_semantic_range') {
+        return this.applySemanticRangeReplacement(next, operation)
+      }
+      if (operation.op === 'replace_action') {
+        return this.applyActionReplacement(next, operation.text ?? '')
       }
       return next
     }, state)
@@ -134,6 +148,46 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_indicator_period', ...indicatorPeriodReplacement, text: message }],
+        },
+      }
+    }
+
+    const actionReplacement = this.extractActionReplacement(message)
+    if (actionReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_action', text: message }],
+        },
+      }
+    }
+
+    const semanticRangeReplacement = this.extractSemanticRangeReplacement(message)
+    if (semanticRangeReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_semantic_range', ...semanticRangeReplacement, text: message }],
+        },
+      }
+    }
+
+    const triggerNumberReplacement = this.extractTriggerNumberReplacement(message)
+    if (triggerNumberReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_trigger_number', ...triggerNumberReplacement, text: message }],
+        },
+      }
+    }
+
+    const semanticNumberReplacement = this.extractSemanticNumberReplacement(message)
+    if (semanticNumberReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_semantic_number', ...semanticNumberReplacement, text: message }],
         },
       }
     }
@@ -307,7 +361,6 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     const targetIndicator = operation.indicator?.trim().toLowerCase()
     let changed = false
-    const periodKeys = ['fastPeriod', 'slowPeriod', 'period', 'reference.period'] as const
     const triggers = state.triggers.map((trigger) => {
       const triggerIndicator = typeof trigger.params.indicator === 'string'
         ? trigger.params.indicator.trim().toLowerCase()
@@ -322,11 +375,11 @@ export class ConversationSemanticEditService {
         return trigger
       }
 
-      const nextParams = { ...trigger.params }
+      let nextParams = trigger.params
       let triggerChanged = false
-      for (const key of periodKeys) {
-        if (nextParams[key] === operation.from) {
-          nextParams[key] = operation.to
+      for (const paramPath of resolveEditableScalarParamPaths(trigger.key, 'bars')) {
+        if (this.readParamPath(nextParams, paramPath) === operation.from) {
+          nextParams = this.writeParamPath(nextParams, paramPath, operation.to)
           triggerChanged = true
         }
       }
@@ -352,9 +405,374 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applyTriggerNumberReplacement(
+    state: SemanticState,
+    operation: { from: number, to: number, direction?: 'up' | 'down', text?: string },
+  ): SemanticState {
+    let changed = false
+    const triggers = state.triggers.map((trigger) => {
+      if (!this.doesTriggerMatchNumberReplacementDirection(trigger, operation.direction)) {
+        return trigger
+      }
+
+      const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to)
+      if (nextParams === trigger.params) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private applySemanticNumberReplacement(
+    state: SemanticState,
+    operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
+  ): SemanticState {
+    let changed = false
+    const triggers = state.triggers.map((trigger) => {
+      const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to, operation.unit)
+      if (nextParams === trigger.params) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    const risk = state.risk.map((riskItem) => {
+      const nextParams = this.replaceNumericParamValue(riskItem.key, riskItem.params, operation.from, operation.to, operation.unit)
+      if (nextParams === riskItem.params) return riskItem
+
+      changed = true
+      return {
+        ...riskItem,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    const position = this.replacePositionNumberValue(state.position, operation)
+    if (position !== state.position) changed = true
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      risk,
+      position,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private applySemanticRangeReplacement(
+    state: SemanticState,
+    operation: { from: { lower: number, upper: number }, to: { lower: number, upper: number }, text?: string },
+  ): SemanticState {
+    let changed = false
+    const triggers = state.triggers.map((trigger) => {
+      const nextParams = this.replaceRangeParamValue(trigger.key, trigger.params, operation.from, operation.to)
+      if (nextParams === trigger.params) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from.lower}-${operation.from.upper}->${operation.to.lower}-${operation.to.upper}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    const risk = state.risk.map((riskItem) => {
+      const nextParams = this.replaceRangeParamValue(riskItem.key, riskItem.params, operation.from, operation.to)
+      if (nextParams === riskItem.params) return riskItem
+
+      changed = true
+      return {
+        ...riskItem,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from.lower}-${operation.from.upper}->${operation.to.lower}-${operation.to.upper}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      risk,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private doesTriggerMatchNumberReplacementDirection(
+    trigger: SemanticTriggerState,
+    direction: 'up' | 'down' | undefined,
+  ): boolean {
+    if (!direction) return true
+    if (direction === 'up') {
+      return trigger.key.includes('cross_over')
+        || trigger.key.includes('_gte')
+        || trigger.key.includes('above')
+        || trigger.key.includes('breakout_up')
+        || trigger.params.op === 'gte'
+        || trigger.params.op === '>'
+    }
+    return trigger.key.includes('cross_under')
+      || trigger.key.includes('_lte')
+      || trigger.key.includes('below')
+      || trigger.key.includes('breakout_down')
+      || trigger.params.op === 'lte'
+      || trigger.params.op === '<'
+  }
+
+  private replaceNumericParamValue(
+    semanticKey: string,
+    params: Record<string, unknown>,
+    from: number,
+    to: number,
+    unit: 'bars' | 'percent' | 'plain' | undefined = 'plain',
+  ): Record<string, unknown> {
+    let changed = false
+    let nextParams: Record<string, unknown> = params
+    for (const paramPath of resolveEditableScalarParamPaths(semanticKey, unit)) {
+      const value = this.readParamPath(nextParams, paramPath)
+      const replacement = this.replaceAtomicNumberValue(value, from, to, unit)
+      if (replacement.changed) {
+        nextParams = this.writeParamPath(nextParams, paramPath, replacement.value)
+        changed = true
+      }
+    }
+    return changed ? nextParams : params
+  }
+
+  private replacePositionNumberValue(
+    position: SemanticPositionState | null,
+    operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
+  ): SemanticPositionState | null {
+    if (!position || operation.unit === 'bars') return position
+    const replacement = this.replaceAtomicNumberValue(position.value, operation.from, operation.to, operation.unit)
+    if (!replacement.changed || typeof replacement.value !== 'number') return position
+
+    return {
+      ...position,
+      value: replacement.value,
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: {
+        text: operation.text ?? `${operation.from}->${operation.to}`,
+        source: 'user_explicit',
+      },
+    }
+  }
+
+  private replaceRangeParamValue(
+    semanticKey: string,
+    params: Record<string, unknown>,
+    from: { lower: number, upper: number },
+    to: { lower: number, upper: number },
+  ): Record<string, unknown> {
+    for (const [lowerPath, upperPath] of resolveEditableRangeParamPairs(semanticKey)) {
+      const lowerValue = this.readParamPath(params, lowerPath)
+      const upperValue = this.readParamPath(params, upperPath)
+      if (
+        typeof lowerValue === 'number'
+        && typeof upperValue === 'number'
+        && this.isSameNumericValue(lowerValue, from.lower)
+        && this.isSameNumericValue(upperValue, from.upper)
+      ) {
+        return this.writeParamPath(
+          this.writeParamPath(params, lowerPath, to.lower),
+          upperPath,
+          to.upper,
+        )
+      }
+    }
+
+    return params
+  }
+
+  private readParamPath(
+    params: Record<string, unknown>,
+    paramPath: string,
+  ): unknown {
+    return paramPath.split('.').reduce<unknown>((value, segment) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+      return (value as Record<string, unknown>)[segment]
+    }, params)
+  }
+
+  private writeParamPath(
+    params: Record<string, unknown>,
+    paramPath: string,
+    value: number,
+  ): Record<string, unknown> {
+    const segments = paramPath.split('.')
+    const [head, ...tail] = segments
+    if (!head) return params
+    if (tail.length === 0) {
+      return {
+        ...params,
+        [head]: value,
+      }
+    }
+
+    const child = params[head]
+    const childRecord = child && typeof child === 'object' && !Array.isArray(child)
+      ? child as Record<string, unknown>
+      : {}
+
+    return {
+      ...params,
+      [head]: this.writeParamPath(childRecord, tail.join('.'), value),
+    }
+  }
+
+  private replaceAtomicNumberValue(
+    value: unknown,
+    from: number,
+    to: number,
+    unit: 'bars' | 'percent' | 'plain' | undefined,
+  ): { changed: true, value: number } | { changed: false } {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return { changed: false }
+    if (!this.isSameSemanticNumericValue(value, from, unit)) return { changed: false }
+    return { changed: true, value: this.normalizeReplacementNumericValue(value, to, unit) }
+  }
+
+  private isSameSemanticNumericValue(value: number, expected: number, unit: 'bars' | 'percent' | 'plain' | undefined): boolean {
+    if (this.isSameNumericValue(value, expected)) return true
+    if (unit !== 'percent') return false
+    return this.isSameNumericValue(value * 100, expected)
+  }
+
+  private normalizeReplacementNumericValue(value: number, next: number, unit: 'bars' | 'percent' | 'plain' | undefined): number {
+    if (unit === 'percent' && Math.abs(value) <= 1 && Math.abs(next) > 1) {
+      return next / 100
+    }
+    return next
+  }
+
+  private isSameNumericValue(left: number, right: number): boolean {
+    return Math.abs(left - right) < 1e-9
+  }
+
+  private applyActionReplacement(state: SemanticState, text: string): SemanticState {
+    const replacement = this.extractActionReplacement(text)
+    if (!replacement) return state
+
+    let changed = false
+    const actions = state.actions.map((action) => {
+      if (action.key !== replacement.from) return action
+      changed = true
+      return this.replaceActionState(action, replacement.to, text)
+    })
+
+    const actionKeys = new Set(actions.map(action => action.key))
+    const fromSide = this.actionSide(replacement.from)
+    const toSide = this.actionSide(replacement.to)
+
+    if (fromSide && toSide && fromSide !== toSide) {
+      const pairedFromAction = this.pairedActionForSide(replacement.from, fromSide)
+      const pairedToAction = this.pairedActionForSide(replacement.from, toSide)
+      if (pairedFromAction && pairedToAction && actionKeys.has(pairedFromAction) && !actionKeys.has(pairedToAction)) {
+        changed = true
+        for (let index = 0; index < actions.length; index += 1) {
+          if (actions[index]?.key === pairedFromAction) {
+            actions[index] = this.replaceActionState(actions[index]!, pairedToAction, text)
+          }
+        }
+      }
+    }
+
+    const triggers = fromSide && toSide && fromSide !== toSide
+      ? state.triggers.map((trigger) => {
+          if (trigger.sideScope !== fromSide) return trigger
+          changed = true
+          return {
+            ...trigger,
+            sideScope: toSide,
+            evidence: {
+              text,
+              source: 'user_explicit' as const,
+            },
+          }
+        })
+      : state.triggers
+
+    const position = fromSide && toSide && fromSide !== toSide && state.position
+      ? {
+          ...state.position,
+          positionMode: this.replacePositionModeSide(state.position.positionMode, fromSide, toSide),
+          evidence: {
+            text,
+            source: 'user_explicit' as const,
+          },
+        }
+      : state.position
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      actions,
+      triggers,
+      position,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private replaceActionState(action: SemanticActionState, key: SemanticActionKey, text: string): SemanticActionState {
+    return {
+      ...action,
+      key,
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: {
+        text,
+        source: 'user_explicit',
+      },
+    }
+  }
+
   private extractReplacementSymbol(message: string): string | null {
-    const match = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
-    return canonicalizeStrategySymbolInput(match?.[1])
+    const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
+    const explicitSymbol = canonicalizeStrategySymbolInput(explicitMatch?.[1])
+    if (explicitSymbol) return explicitSymbol
+
+    const valueReplacementMatch = /(?:把\s*)?([A-Za-z0-9:/-]+)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z0-9:/-]+)/iu.exec(message)
+    const fromSymbol = canonicalizeStrategySymbolInput(valueReplacementMatch?.[1])
+    const toSymbol = canonicalizeStrategySymbolInput(valueReplacementMatch?.[2])
+    if (fromSymbol && toSymbol && fromSymbol !== toSymbol) {
+      return toSymbol
+    }
+    return null
   }
 
   private extractReplacementContextOperation(
@@ -396,11 +814,11 @@ export class ConversationSemanticEditService {
     from: number
     to: number
   } | null {
-    const match = /(?:把\s*)?(ma|sma|ema)\s*(\d{1,4})\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(?:(ma|sma|ema)\s*)?(\d{1,4})/iu.exec(message)
-      ?? /(?:把\s*)?(\d{1,4})\s*(?:周期)?\s*(?:均线|ma|sma|ema)\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(\d{1,4})\s*(?:周期)?\s*(?:均线|ma|sma|ema)/iu.exec(message)
+    const match = /(?:把\s*)?(sma|ema|ma)\s*(\d{1,4})\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(?:(sma|ema|ma)\s*)?(\d{1,4})/iu.exec(message)
+      ?? /(?:把\s*)?(\d{1,4})\s*(?:周期)?\s*(?:均线|sma|ema|ma)\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(\d{1,4})\s*(?:周期)?\s*(?:均线|sma|ema|ma)/iu.exec(message)
     if (!match) return null
 
-    const indicator = typeof match[1] === 'string' && /ma|sma|ema/iu.test(match[1])
+    const indicator = typeof match[1] === 'string' && /^(?:sma|ema|ma)$/iu.test(match[1])
       ? match[1].toLowerCase()
       : undefined
     const from = Number(indicator ? match[2] : match[1])
@@ -414,6 +832,173 @@ export class ConversationSemanticEditService {
       from,
       to,
     }
+  }
+
+  private extractActionReplacement(message: string): { from: SemanticActionKey, to: SemanticActionKey } | null {
+    const phraseMatch = /(.+?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(.+)/iu.exec(message)
+    const phraseFrom = this.normalizeActionKey(phraseMatch?.[1])
+    const phraseTo = this.normalizeActionKey(phraseMatch?.[2])
+    if (phraseFrom && phraseTo && phraseFrom !== phraseTo) {
+      return { from: phraseFrom, to: phraseTo }
+    }
+
+    const match = /(?:把\s*)?([A-Za-z_\s-]+|开多|做多|买入|开空|做空|卖空|平多|平空|平仓)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z_\s-]+|开多|做多|买入|开空|做空|卖空|平多|平空|平仓)/iu.exec(message)
+    const from = this.normalizeActionKey(match?.[1])
+    const to = this.normalizeActionKey(match?.[2])
+    if (!from || !to || from === to) return null
+    return { from, to }
+  }
+
+  private extractTriggerNumberReplacement(message: string): { from: number, to: number, direction?: 'up' | 'down' } | null {
+    const compactMatch = /(?:上穿|下穿|高于|低于|大于|小于|超过|突破|跌破|>=|<=|>|<)?\s*(\d+(?:\.\d+)?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(\d+(?:\.\d+)?)/u.exec(message)
+    if (compactMatch) {
+      const from = Number(compactMatch[1])
+      const to = Number(compactMatch[2])
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
+
+      return {
+        from,
+        to,
+        ...this.extractTriggerDirectionHint(message),
+      }
+    }
+
+    const clauseMatch = /(.+?)(?:改为|改成|换成|替换为|修改为|更改为)(.+)/u.exec(message)
+    if (!clauseMatch) return null
+
+    const source = this.extractTriggerComparisonNumber(clauseMatch[1] ?? '')
+    const target = this.extractTriggerComparisonNumber(clauseMatch[2] ?? '')
+      ?? this.extractFirstNumber(clauseMatch[2] ?? '')
+    if (!source || target === null) return null
+
+    const from = source.value
+    const to = typeof target === 'number' ? target : target.value
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
+
+    return {
+      from,
+      to,
+      ...(source.direction ? { direction: source.direction } : this.extractTriggerDirectionHint(message)),
+    }
+  }
+
+  private extractSemanticNumberReplacement(message: string): { from: number, to: number, unit?: 'bars' | 'percent' | 'plain' } | null {
+    const match = /(\d+(?:\.\d+)?)\s*(根\s*K\s*线|根K线|K\s*线|bars?|周期|%|％)?\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(\d+(?:\.\d+)?)\s*(根\s*K\s*线|根K线|K\s*线|bars?|周期|%|％)?/iu.exec(message)
+    if (!match) return null
+
+    const from = Number(match[1])
+    const to = Number(match[3])
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
+
+    return {
+      from,
+      to,
+      unit: this.extractNumericReplacementUnit(match[2], match[4]),
+    }
+  }
+
+  private extractSemanticRangeReplacement(
+    message: string,
+  ): { from: { lower: number, upper: number }, to: { lower: number, upper: number } } | null {
+    const clauseMatch = /(.+?)(?:改为|改成|换成|替换为|修改为|更改为)(.+)/u.exec(message)
+    if (!clauseMatch) return null
+
+    const from = this.extractNumericRange(clauseMatch[1] ?? '')
+    const to = this.extractNumericRange(clauseMatch[2] ?? '')
+    if (!from || !to) return null
+    if (this.isSameNumericValue(from.lower, to.lower) && this.isSameNumericValue(from.upper, to.upper)) return null
+
+    return { from, to }
+  }
+
+  private extractNumericRange(text: string): { lower: number, upper: number } | null {
+    const match = /(\d+(?:\.\d+)?)\s*(?:-|~|～|到|至)\s*(\d+(?:\.\d+)?)/u.exec(text)
+    const lower = Number(match?.[1])
+    const upper = Number(match?.[2])
+    if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null
+    return { lower, upper }
+  }
+
+  private extractNumericReplacementUnit(
+    fromUnit: string | undefined,
+    toUnit: string | undefined,
+  ): 'bars' | 'percent' | 'plain' {
+    const unitText = `${fromUnit ?? ''}${toUnit ?? ''}`
+    if (/根\s*K\s*线|根K线|K\s*线|bars?|周期/iu.test(unitText)) return 'bars'
+    if (/%|％/u.test(unitText)) return 'percent'
+    return 'plain'
+  }
+
+  private extractTriggerComparisonNumber(text: string): { value: number, direction?: 'up' | 'down' } | null {
+    const upMatch = /(?:向?上穿(?:回)?|高于|大于|超过|突破|>=|>)\s*(?:至|到|回)?\s*(\d+(?:\.\d+)?)/u.exec(text)
+    if (upMatch) {
+      const value = Number(upMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'up' } : null
+    }
+
+    const downMatch = /(?:向?下穿(?:回)?|低于|小于|跌破|<=|<)\s*(?:至|到|回)?\s*(\d+(?:\.\d+)?)/u.exec(text)
+    if (downMatch) {
+      const value = Number(downMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'down' } : null
+    }
+
+    const aboveMatch = /(\d+(?:\.\d+)?)\s*(?:以上|及以上)/u.exec(text)
+    if (aboveMatch) {
+      const value = Number(aboveMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'up' } : null
+    }
+
+    const belowMatch = /(\d+(?:\.\d+)?)\s*(?:以下|及以下)/u.exec(text)
+    if (belowMatch) {
+      const value = Number(belowMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'down' } : null
+    }
+
+    return null
+  }
+
+  private extractFirstNumber(text: string): number | null {
+    const value = Number(/(\d+(?:\.\d+)?)/u.exec(text)?.[1])
+    return Number.isFinite(value) ? value : null
+  }
+
+  private extractTriggerDirectionHint(message: string): { direction?: 'up' | 'down' } {
+    if (/上穿|高于|大于|超过|突破|>=|>/u.test(message)) return { direction: 'up' }
+    if (/下穿|低于|小于|跌破|<=|</u.test(message)) return { direction: 'down' }
+    return {}
+  }
+
+  private normalizeActionKey(value: string | undefined): SemanticActionKey | null {
+    const text = value?.trim().toLowerCase().replace(/[\s-]+/g, '_')
+    if (!text) return null
+    if (/close_?long|平多|卖出/u.test(text)) return 'close_long'
+    if (/close_?short|平空/u.test(text)) return 'close_short'
+    if (/open_?long|(?:^|_)long$|开多|做多|买入|买多/u.test(text)) return 'open_long'
+    if (/open_?short|(?:^|_)short$|开空|做空|卖空/u.test(text)) return 'open_short'
+    if (/^(开多|做多|买入|买多|open_long|long)$/iu.test(text)) return 'open_long'
+    if (/^(开空|做空|卖空|open_short|short)$/iu.test(text)) return 'open_short'
+    if (/^(平多|卖出|close_long)$/iu.test(text)) return 'close_long'
+    if (/^(平空|close_short)$/iu.test(text)) return 'close_short'
+    return null
+  }
+
+  private actionSide(action: SemanticActionKey): 'long' | 'short' {
+    return action.endsWith('_short') ? 'short' : 'long'
+  }
+
+  private pairedActionForSide(action: SemanticActionKey, side: 'long' | 'short'): SemanticActionKey | null {
+    if (action.startsWith('open_')) return side === 'long' ? 'close_long' : 'close_short'
+    if (action.startsWith('close_')) return side === 'long' ? 'open_long' : 'open_short'
+    return null
+  }
+
+  private replacePositionModeSide(
+    current: string,
+    fromSide: 'long' | 'short',
+    toSide: 'long' | 'short',
+  ): string {
+    if (current === `${fromSide}_only`) return `${toSide}_only`
+    return current
   }
 
   private extractPendingStrategyReplacementSeed(message: string): string | null {
@@ -451,6 +1036,10 @@ export class ConversationSemanticEditService {
       this.extractReplacementContextOperation(message)
         || this.extractReplacementPositionPct(message) !== null
         || this.extractIndicatorPeriodReplacement(message) !== null
+        || this.extractActionReplacement(message) !== null
+        || this.extractSemanticRangeReplacement(message) !== null
+        || this.extractTriggerNumberReplacement(message) !== null
+        || this.extractSemanticNumberReplacement(message) !== null
         || this.extractImplicitStrategyReplacementSeed(message, state)
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)

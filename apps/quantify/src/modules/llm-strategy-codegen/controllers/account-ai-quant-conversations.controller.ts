@@ -1,8 +1,9 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common'
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { AiQuantConversationBacktestDraftConfigRequestDto } from '../dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
+import { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai-quant-edit-conversation.request.dto'
 import { CallerIdentityService } from '../services/caller-identity.service'
 import { CodegenConversationService } from '../services/codegen-conversation.service'
 
@@ -23,6 +24,19 @@ export class AccountAiQuantConversationsController {
   ): Promise<AiQuantConversationResponseDto[]> {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.listConversations(callerUserId)
+  }
+
+  @Post('edit-session')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '恢复或创建 AI Quant 修改会话' })
+  @ApiResponse({ status: 200, type: AiQuantConversationResponseDto })
+  async recoverEditSession(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
+    @Body() body: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto> {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    return this.service.recoverEditConversation(callerUserId, body)
   }
 
   @Delete(':id')

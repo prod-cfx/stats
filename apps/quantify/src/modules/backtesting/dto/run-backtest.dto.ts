@@ -216,6 +216,12 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @IsNotEmpty()
   conversationId?: string
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  sessionId?: string
+
   @ApiProperty({ type: BacktestExecutionConfigDto })
   @ValidateNested()
   @Type(() => BacktestExecutionConfigDto)

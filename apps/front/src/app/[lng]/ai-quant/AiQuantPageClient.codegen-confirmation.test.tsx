@@ -1969,6 +1969,23 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(container.textContent).toContain('grid range missing')
   })
 
+  it('keeps semantic graph as internal state without rendering the debug card', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).not.toContain('Semantic Graph')
+    expect(container.textContent).not.toContain('nodes 1')
+    expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
+  })
+
   it('enables graph confirmation when a canonical digest is pending even without semanticGraph payload', async () => {
     localStorage.clear()
     seedDraftConversation(Date.now(), {

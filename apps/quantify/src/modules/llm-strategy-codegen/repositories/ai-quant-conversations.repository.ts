@@ -108,24 +108,7 @@ export class AiQuantConversationsRepository {
     const conversations = await this.txHost.tx.aiQuantConversation.findMany({
       where: { userId, archivedAt: null },
       orderBy: { updatedAt: 'desc' },
-      select: {
-        id: true,
-        userId: true,
-        codegenSessionId: true,
-        title: true,
-        archivedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        backtestDraftConfig: true,
-        lastBacktestRef: true,
-        messages: {
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            role: true,
-            content: true,
-          },
-        },
-      },
+      select: this.snapshotSelect(),
     })
 
     return conversations.map(conversation => this.mapSnapshotRecord(conversation))
@@ -161,24 +144,43 @@ export class AiQuantConversationsRepository {
         userId,
         archivedAt: null,
       },
-      select: {
-        id: true,
-        userId: true,
-        codegenSessionId: true,
-        title: true,
-        archivedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        backtestDraftConfig: true,
-        lastBacktestRef: true,
-        messages: {
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            role: true,
-            content: true,
-          },
-        },
+      select: this.snapshotSelect(),
+    })
+
+    return conversation ? this.mapSnapshotRecord(conversation) : null
+  }
+
+  async findActiveByCodegenSessionIdAndUser(
+    codegenSessionId: string,
+    userId: string,
+  ): Promise<AiQuantConversationSnapshotRecord | null> {
+    const conversation = await this.txHost.tx.aiQuantConversation.findFirst({
+      where: {
+        codegenSessionId,
+        userId,
+        archivedAt: null,
       },
+      select: this.snapshotSelect(),
+    })
+
+    return conversation ? this.mapSnapshotRecord(conversation) : null
+  }
+
+  async findActiveByAnyCodegenSessionIdAndUser(
+    codegenSessionIds: string[],
+    userId: string,
+  ): Promise<AiQuantConversationSnapshotRecord | null> {
+    const ids = codegenSessionIds.map(id => id.trim()).filter(Boolean)
+    if (ids.length === 0) return null
+
+    const conversation = await this.txHost.tx.aiQuantConversation.findFirst({
+      where: {
+        codegenSessionId: { in: ids },
+        userId,
+        archivedAt: null,
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: this.snapshotSelect(),
     })
 
     return conversation ? this.mapSnapshotRecord(conversation) : null
@@ -205,24 +207,7 @@ export class AiQuantConversationsRepository {
   async findByCodegenSessionId(codegenSessionId: string): Promise<AiQuantConversationSnapshotRecord | null> {
     const conversation = await this.txHost.tx.aiQuantConversation.findUnique({
       where: { codegenSessionId },
-      select: {
-        id: true,
-        userId: true,
-        codegenSessionId: true,
-        title: true,
-        archivedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        backtestDraftConfig: true,
-        lastBacktestRef: true,
-        messages: {
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            role: true,
-            content: true,
-          },
-        },
-      },
+      select: this.snapshotSelect(),
     })
 
     if (!conversation) return null
@@ -274,27 +259,31 @@ export class AiQuantConversationsRepository {
   private async getByIdOrThrow(id: string): Promise<AiQuantConversationSnapshotRecord> {
     const conversation = await this.txHost.tx.aiQuantConversation.findUniqueOrThrow({
       where: { id },
-      select: {
-        id: true,
-        userId: true,
-        codegenSessionId: true,
-        title: true,
-        archivedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        backtestDraftConfig: true,
-        lastBacktestRef: true,
-        messages: {
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            role: true,
-            content: true,
-          },
-        },
-      },
+      select: this.snapshotSelect(),
     })
 
     return this.mapSnapshotRecord(conversation)
+  }
+
+  private snapshotSelect() {
+    return {
+      id: true,
+      userId: true,
+      codegenSessionId: true,
+      title: true,
+      archivedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      backtestDraftConfig: true,
+      lastBacktestRef: true,
+      messages: {
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          role: true,
+          content: true,
+        },
+      },
+    } satisfies Prisma.AiQuantConversationSelect
   }
 
   private mapSnapshotRecord(conversation: {

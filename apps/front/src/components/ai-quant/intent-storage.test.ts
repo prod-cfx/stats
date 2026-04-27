@@ -33,4 +33,24 @@ describe('intent-storage', () => {
       sessionId: 'session-1',
     })
   })
+
+  it('persists strategy edit session intent with semantic recovery identifiers', () => {
+    setIntent({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      conversationId: 'conversation-1',
+      sessionId: 'session-1',
+      source: 'account-detail',
+    })
+
+    expect(getIntent(30 * 60 * 1000)).toMatchObject({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      conversationId: 'conversation-1',
+      sessionId: 'session-1',
+      source: 'account-detail',
+    })
+  })
 })

@@ -79,6 +79,9 @@ interface BacktestJobRecord {
     strategyId: string
     strategyInstanceId?: string
     strategyTemplateId?: string
+    conversationId?: string
+    sessionId?: string
+    publishedSnapshotId?: string
     snapshotId?: string
     snapshotHash?: string
     scriptHash?: string
@@ -467,6 +470,9 @@ export class BacktestJobsService {
       strategyId: input.strategy.id,
       strategyInstanceId: this.readStrategyIdentity(input.strategy, 'strategyInstanceId'),
       strategyTemplateId: this.readStrategyIdentity(input.strategy, 'strategyTemplateId'),
+      conversationId: this.readInputConversationId(input),
+      sessionId: this.readInputSessionId(input),
+      publishedSnapshotId: this.readStrategyMetadata(input.strategy, 'snapshotId'),
       snapshotId: this.readStrategyMetadata(input.strategy, 'snapshotId'),
       snapshotHash: this.readStrategyMetadata(input.strategy, 'snapshotHash'),
       scriptHash: this.readStrategyMetadata(input.strategy, 'scriptHash'),
@@ -485,6 +491,20 @@ export class BacktestJobsService {
     const value = (strategy as Record<string, unknown>)[key]
     if (typeof value !== 'string') return undefined
     const normalized = value.trim()
+    return normalized || undefined
+  }
+
+  private readInputConversationId(input: BacktestRunInput): string | undefined {
+    const candidate = input.conversationId
+    if (typeof candidate !== 'string') return undefined
+    const normalized = candidate.trim()
+    return normalized || undefined
+  }
+
+  private readInputSessionId(input: BacktestRunInput): string | undefined {
+    const candidate = input.sessionId
+    if (typeof candidate !== 'string') return undefined
+    const normalized = candidate.trim()
     return normalized || undefined
   }
 

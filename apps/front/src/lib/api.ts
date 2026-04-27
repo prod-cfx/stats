@@ -13,6 +13,7 @@ export {
   getLlmCodegenSession,
   listAiQuantConversations,
   performAccountAiQuantStrategyAction,
+  recoverAiQuantEditConversation,
   startLlmCodegenSession,
   updateAccountAiQuantStrategyLeverage,
   updateAiQuantConversationBacktestDraft,
@@ -521,6 +522,14 @@ export interface AiQuantConversationResponse {
   publishedSnapshotDeploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
   lastBacktestRef?: AiQuantConversationLastBacktestRef | null
+}
+
+export interface RecoverAiQuantEditConversationPayload {
+  strategyInstanceId: string
+  publishedSnapshotId?: string
+  conversationId?: string
+  sessionId?: string
+  source?: 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
 }
 
 export interface LlmClarificationGateItem {

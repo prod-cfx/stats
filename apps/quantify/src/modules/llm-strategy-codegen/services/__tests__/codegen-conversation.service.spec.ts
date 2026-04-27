@@ -1850,6 +1850,106 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('restores published script code from the latest snapshot when listing conversations', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-published-script',
+        userId: 'u1',
+        title: '已发布脚本会话',
+        codegenSessionId: 'session-published-script',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published-script'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-published-script',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: {
+        publishedSnapshotId: 'snapshot-script-1',
+      },
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-script-1',
+      scriptSnapshot: 'export default function strategy() { return { action: "NOOP" } }',
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id: 'conv-published-script',
+      status: 'PUBLISHED',
+      publishedSnapshotId: 'snapshot-script-1',
+      scriptCode: 'export default function strategy() { return { action: "NOOP" } }',
+    })
+  })
+
+  it('preserves older conversation messages when persisting a truncated planner window', async () => {
+    const oldMessages = Array.from({ length: 14 }, (_, index) => ({
+      role: (index % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: `old-${index + 1}`,
+    }))
+    const projectedMessages = [
+      ...oldMessages.slice(-10),
+      { role: 'user' as const, content: 'new user' },
+      { role: 'assistant' as const, content: 'new assistant' },
+    ]
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-full-history',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        conversationHistory: projectedMessages.map(message =>
+          `${message.role === 'user' ? 'U' : 'A'}: ${message.content}`,
+        ),
+      },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: null,
+    })
+    mockConversationsRepo.findByCodegenSessionId.mockResolvedValue({
+      id: 'conv-full-history',
+      userId: 'u1',
+      title: '完整历史',
+      codegenSessionId: 'session-full-history',
+      archivedAt: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: null,
+      messages: oldMessages,
+    })
+
+    await (service as any).persistConversationProjectionForSessionId('session-full-history', 'u1')
+
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      codegenSessionId: 'session-full-history',
+      messages: [
+        ...oldMessages,
+        { role: 'user', content: 'new user' },
+        { role: 'assistant', content: 'new assistant' },
+      ],
+    }))
+  })
+
   it('includes lastBacktestRef when it matches the current published snapshot', async () => {
     mockConversationsRepo.listByUser.mockResolvedValue([
       {
@@ -2224,6 +2324,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(systemPrompt).toContain('logicReady 只是建议性自评')
     expect(systemPrompt).toContain('semanticPatch 只表达当前消息涉及的增量语义')
+    expect(systemPrompt).toContain('已有 active semantic state 时，默认按增量修改处理')
+    expect(systemPrompt).toContain('输出原子语义 patch')
+    expect(systemPrompt).toContain('context、trigger、action、risk、position')
+    expect(systemPrompt).toContain('不要输出 checklist')
+    expect(systemPrompt).toContain('用户明确要求替换整个策略')
+    expect(systemPrompt).toContain('否则不得重置已有语义')
+    expect(systemPrompt).toContain('若编辑意图不完整，只追问缺失的 semantic slot')
     expect(systemPrompt).toContain('不得臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
@@ -2259,6 +2366,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(systemPrompt).toContain('semanticState 派生约束')
     expect(systemPrompt).toContain('risk / sizing / context')
+    expect(systemPrompt).toContain('不要从脚本文本反推策略语义')
+    expect(systemPrompt).toContain('逻辑图和脚本必须从更新后的 SemanticState 与 canonical spec 派生')
     expect(systemPrompt).toContain('不要为了“覆盖”而伪造无意义的运行时代码分支')
     expect(userPrompt).toContain('价格连续3根K线在轨外时直接平仓')
     expect(userPrompt).not.toContain('价格连续3根K线在轨外时直接减仓')
@@ -8091,6 +8200,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+      }),
+    }))
+    expect(updatePayload.validationReport).toBeNull()
     expect(result.assistantPrompt).toContain('BTCUSDT')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
   })
@@ -8309,7 +8424,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.latestDraftCode).toBeNull()
   })
 
-  it('returns recoverable guidance for unsupported published semantic edits', async () => {
+  it('routes published semantic edits through the general planner instead of unsupported guidance', async () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-published-risk-edit',
       userId: 'u1',
@@ -8327,14 +8442,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       lockedParams: {},
       specSnapshot: {},
     })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已把止损改成 3%，请确认逻辑图。',
+        semanticPatch: {
+          risk: [
+            {
+              key: 'risk.stop_loss_pct',
+              params: { valuePct: 3, basis: 'entry_avg_price' },
+            },
+          ],
+        },
+      }),
+    })
 
     const result = await service.continueSession('s-published-risk-edit', {
       userId: 'u1',
       message: '把止损改成 3%',
     })
 
-    expect(result.assistantPrompt).toContain('我识别到你想修改策略语义')
-    expect(mockRepo.updateSession).not.toHaveBeenCalled()
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('把止损改成 3%')
+    expect(plannerPayload.currentSemanticState.triggers).toEqual(buildLockedMaSemanticState().triggers)
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 3 }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).toEqual(buildLockedMaSemanticState().triggers)
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+      }),
+    }))
+    expect(result.assistantPrompt).not.toContain('当前可直接修改交易标的')
   })
 
   it('replaces a published script when the user pastes corrected script code', async () => {
@@ -8509,7 +8658,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
-    'keeps %s terminal even when the message looks like a semantic edit',
+    'allows %s terminal sessions to return to semantic editing when the message changes strategy meaning',
     async (status) => {
       const sessionId = `s-terminal-${status.toLowerCase()}`
       const sessionFixture = buildSemanticEraSessionFixture({
@@ -8522,12 +8671,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       })
       mockRepo.findById.mockResolvedValue(sessionFixture)
 
-      await expect(service.continueSession(sessionId, {
+      const result = await service.continueSession(sessionId, {
         userId: 'u1',
         message: '把交易标的改成 BTCUSDT',
-      })).rejects.toThrow('codegen.session_terminal_status')
+      })
 
-      expect(mockRepo.updateSession).not.toHaveBeenCalled()
+      expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
+      const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+      expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
+      expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+        market: expect.objectContaining({
+          symbol: 'BTCUSDT',
+        }),
+      }))
+      expect(updatePayload.validationReport).toBeNull()
+      expect(updatePayload.latestDraftCode).toBeNull()
+      expect(updatePayload.rejectReason).toBeNull()
     },
   )
 
@@ -8536,7 +8695,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-semantic-whole-strategy-replacement',
       userId: 'u1',
-      status: 'CONFIRM_GATE',
+      status: 'REJECTED',
       semanticState: currentSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {
@@ -8551,6 +8710,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           rules: [{ condition: { key: 'indicator.above', indicator: 'ma' } }],
         },
       },
+      semanticGraph: {
+        version: 1,
+        market: { symbol: 'ETHUSDT', primaryTimeframe: '1h' },
+        nodes: [{ id: 'old-ma-graph' }],
+      },
+      validationReport: { ok: false, errors: ['old validation error'] },
+      rejectReason: '旧代码生成失败',
     })
     const oldSpecDesc = sessionFixture.latestSpecDesc
     mockRepo.findById.mockResolvedValue(sessionFixture)
@@ -8597,9 +8763,59 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     ]))
     expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.rejectReason).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        primaryTimeframe: '15m',
+      }),
+    }))
     expect(updatePayload.latestSpecDesc).not.toEqual(oldSpecDesc)
     expect(JSON.stringify(updatePayload.latestSpecDesc)).toContain('rsi')
     expect(result.status).toBe('CONFIRM_GATE')
+  })
+
+  it('clears failed artifacts when a rejected session enters semantic edit clarification', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-rejected-edit-clarification',
+      userId: 'u1',
+      status: 'REJECTED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const rejectedStrategy = {}',
+      semanticGraph: {
+        version: 1,
+        market: { symbol: 'ETHUSDT', primaryTimeframe: '1h' },
+        nodes: [{ id: 'old-rejected-graph' }],
+      },
+      validationReport: { ok: false, errors: ['old validation error'] },
+      rejectReason: '旧代码生成失败',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    const result = await service.continueSession('s-rejected-edit-clarification', {
+      userId: 'u1',
+      message: '把触发改成 RSI',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('RSI')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.rejectReason).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticState.pendingEdit).toEqual(expect.objectContaining({
+      status: 'needs_clarification',
+    }))
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        primaryTimeframe: '1h',
+      }),
+    }))
+    expect(JSON.stringify(updatePayload.semanticGraph)).not.toContain('old-rejected-graph')
   })
 
   it('replaces a prior dynamic grid draft when the user provides a complete fixed grid strategy', async () => {
