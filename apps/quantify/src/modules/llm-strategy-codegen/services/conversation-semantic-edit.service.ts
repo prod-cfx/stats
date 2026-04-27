@@ -497,11 +497,11 @@ export class ConversationSemanticEditService {
     from: number
     to: number
   } | null {
-    const match = /(?:把\s*)?(ma|sma|ema)\s*(\d{1,4})\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(?:(ma|sma|ema)\s*)?(\d{1,4})/iu.exec(message)
-      ?? /(?:把\s*)?(\d{1,4})\s*(?:周期)?\s*(?:均线|ma|sma|ema)\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(\d{1,4})\s*(?:周期)?\s*(?:均线|ma|sma|ema)/iu.exec(message)
+    const match = /(?:把\s*)?(sma|ema|ma)\s*(\d{1,4})\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(?:(sma|ema|ma)\s*)?(\d{1,4})/iu.exec(message)
+      ?? /(?:把\s*)?(\d{1,4})\s*(?:周期)?\s*(?:均线|sma|ema|ma)\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(\d{1,4})\s*(?:周期)?\s*(?:均线|sma|ema|ma)/iu.exec(message)
     if (!match) return null
 
-    const indicator = typeof match[1] === 'string' && /ma|sma|ema/iu.test(match[1])
+    const indicator = typeof match[1] === 'string' && /^(?:sma|ema|ma)$/iu.test(match[1])
       ? match[1].toLowerCase()
       : undefined
     const from = Number(indicator ? match[2] : match[1])

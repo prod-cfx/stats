@@ -378,6 +378,8 @@ describe('ConversationSemanticEditService', () => {
   it.each([
     ['把MA6换成MA10'],
     ['MA6改成MA10'],
+    ['SMA6改为SMA10'],
+    ['把sma6改为sma10'],
     ['把6周期均线换成10周期均线'],
   ])('classifies and applies moving-average period replacement wording: %s', (message) => {
     const semanticState = {
@@ -387,7 +389,7 @@ describe('ConversationSemanticEditService', () => {
           id: 'entry-ma-cross',
           key: 'indicator.cross_over',
           phase: 'entry' as const,
-          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          params: { indicator: message.toLowerCase().includes('sma') ? 'sma' : 'ma', fastPeriod: 6, slowPeriod: 48 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -396,7 +398,7 @@ describe('ConversationSemanticEditService', () => {
           id: 'exit-ma-cross',
           key: 'indicator.cross_under',
           phase: 'exit' as const,
-          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          params: { indicator: message.toLowerCase().includes('sma') ? 'sma' : 'ma', fastPeriod: 6, slowPeriod: 48 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
