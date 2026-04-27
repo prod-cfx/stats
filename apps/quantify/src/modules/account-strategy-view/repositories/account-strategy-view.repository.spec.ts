@@ -408,6 +408,98 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(String(call.data.equity)).toBe('60000')
   })
 
+  it('normalizes funding snapshot source from inferred live exchange account mode', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+        create: jest.fn(),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-live-1', isTestnet: false, exchangeId: 'okx' }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'strategy-instance-1',
+          createdBy: 'user-1',
+          strategyTemplateId: 'template-1',
+          params: {
+            symbol: 'BTCUSDT',
+            timeframe: '5m',
+            positionPct: 10,
+          },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-created',
+            snapshotHash: 'snapshot-hash-created',
+          },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        create: jest.fn(),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
+
+    await repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'OKX BTCUSDT 5m AI策略',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-live-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
+      initialBalanceQuote: 4901.58222,
+      accountBalanceQuote: 0,
+      fundingSnapshot: {
+        asset: 'USDT',
+        totalEquity: 4901.58222,
+        availableCash: null,
+        availableEquity: 0,
+        reservedQuote: 0,
+        usedMargin: null,
+        buyingPower: 0,
+        executionCapital: 4901.58222,
+        fundingSource: 'exchange_testnet',
+        accountMode: null,
+        marginMode: null,
+        nonTradableReason: 'exchange_available_balance_zero',
+      },
+    } as any)
+
+    const updatePayload = tx.strategyInstance.update.mock.calls[0]?.[0]?.data
+    expect(updatePayload.params.fundingSnapshot).toEqual(expect.objectContaining({
+      totalEquity: 4901.58222,
+      buyingPower: 0,
+      fundingSource: 'exchange_live',
+    }))
+    const subscriptionPayload = tx.userStrategySubscription.create.mock.calls[0]?.[0]?.data
+    expect(subscriptionPayload.customParams.fundingSnapshot).toEqual(expect.objectContaining({
+      totalEquity: 4901.58222,
+      buyingPower: 0,
+      fundingSource: 'exchange_live',
+    }))
+  })
+
   it('updates deployment execution leverage with version bump and compatibility shadow fields', async () => {
     const tx = {
       strategyInstance: {

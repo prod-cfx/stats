@@ -138,6 +138,7 @@ export class AccountStrategyViewRepository {
           exchangeAccountId: resolvedExchangeAccountId,
         })
       }
+      const fundingSnapshot = this.normalizeFundingSnapshotForDeployMode(input.fundingSnapshot, resolvedMode)
 
       const reusableStrategyInstanceId = input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? null
 
@@ -188,8 +189,8 @@ export class AccountStrategyViewRepository {
           ...(typeof input.accountBalanceQuote === 'number' && Number.isFinite(input.accountBalanceQuote)
             ? { accountBalanceQuote: input.accountBalanceQuote }
             : {}),
-          ...(input.fundingSnapshot
-            ? { fundingSnapshot: input.fundingSnapshot as unknown as Record<string, unknown> }
+          ...(fundingSnapshot
+            ? { fundingSnapshot: fundingSnapshot as unknown as Record<string, unknown> }
             : {}),
         }
 
@@ -292,6 +293,17 @@ export class AccountStrategyViewRepository {
       bindingSource: record.bindingSource,
       publishedSnapshotId: record.publishedSnapshotId,
       snapshotHash: record.snapshotHash,
+    }
+  }
+
+  private normalizeFundingSnapshotForDeployMode(
+    fundingSnapshot: StrategyFundingSnapshot | null | undefined,
+    mode: 'TESTNET' | 'LIVE',
+  ): StrategyFundingSnapshot | null {
+    if (!fundingSnapshot) return null
+    return {
+      ...fundingSnapshot,
+      fundingSource: mode === 'LIVE' ? 'exchange_live' : 'exchange_testnet',
     }
   }
 
