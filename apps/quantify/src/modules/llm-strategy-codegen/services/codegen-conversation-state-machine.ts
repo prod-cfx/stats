@@ -48,7 +48,7 @@ export class CodegenConversationStateMachine {
       ...(input.semanticState ? { semanticState: input.semanticState as unknown as Prisma.InputJsonValue } : {}),
       clarificationState: input.clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: input.constraintPack as unknown as Prisma.InputJsonValue,
-      ...(input.latestSpecDesc ? { latestSpecDesc: input.latestSpecDesc as Prisma.InputJsonValue } : {}),
+      ...(input.latestSpecDesc !== undefined ? { latestSpecDesc: input.latestSpecDesc as Prisma.InputJsonValue | null } : {}),
     } as Prisma.LlmStrategyCodegenSessionUpdateInput
   }
 

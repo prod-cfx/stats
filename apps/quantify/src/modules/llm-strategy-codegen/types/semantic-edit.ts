@@ -37,6 +37,7 @@ export type PendingSemanticEditCandidate =
 interface BasePendingSemanticEdit {
   id: string
   targetRef?: string
+  resumeStatusOnCancel?: 'PUBLISHED'
   status: 'needs_clarification' | 'ready_to_apply'
   createdFromMessage: string
 }

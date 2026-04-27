@@ -8095,6 +8095,81 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.latestDraftCode).toBeNull()
   })
 
+  it('returns recoverable guidance for unsupported published semantic edits', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-risk-edit',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      publishedSnapshotId: 'snapshot-published-risk',
+      latestDraftCode: 'const publishedStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-published-risk',
+      paramsSnapshot: {},
+      lockedParams: {},
+      specSnapshot: {},
+    })
+
+    const result = await service.continueSession('s-published-risk-edit', {
+      userId: 'u1',
+      message: '把止损改成 3%',
+    })
+
+    expect(result.assistantPrompt).toContain('我识别到你想修改策略语义')
+    expect(mockRepo.updateSession).not.toHaveBeenCalled()
+  })
+
+  it('restores published status when canceling a published pending semantic edit', async () => {
+    const currentSemanticState = {
+      ...buildLockedMaSemanticState(),
+      pendingEdit: {
+        id: 'pending-trigger-1',
+        op: 'replace_trigger',
+        targetRef: 'trigger-entry-1',
+        resumeStatusOnCancel: 'PUBLISHED',
+        candidate: {
+          id: 'candidate-trigger-1',
+          key: 'indicator.rsi_threshold',
+          phase: 'gate',
+          params: { indicator: 'rsi' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        status: 'needs_clarification',
+        createdFromMessage: '把触发改成 RSI',
+      },
+    }
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-pending-cancel',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'BLOCKED', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const publishedStrategy = {}',
+      latestSpecDesc: {
+        publishedSnapshotId: 'snapshot-old',
+      },
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    await service.continueSession('s-published-pending-cancel', {
+      userId: 'u1',
+      message: '算了，保持原来',
+    })
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.status).toBe('PUBLISHED')
+    expect(updatePayload.semanticState.pendingEdit).toBeNull()
+    expect(updatePayload.latestSpecDesc).toBeNull()
+    expect(updatePayload.latestDraftCode).toBeUndefined()
+  })
+
   it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
     'keeps %s terminal even when the message looks like a semantic edit',
     async (status) => {

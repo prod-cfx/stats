@@ -46,7 +46,7 @@ import {
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
-import { buildReplacementSemanticState, withPendingSemanticEdit } from '../types/semantic-edit'
+import { buildReplacementSemanticState, readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
@@ -377,7 +377,15 @@ export class CodegenConversationService {
         semanticState: currentSemanticState,
       })
     }
-    const canEditPublishedSession = session.status === 'PUBLISHED' && semanticEditDecision.kind !== 'NO_EDIT'
+    const hasPublishedUnsupportedEditIntent = session.status === 'PUBLISHED'
+      && semanticEditDecision.kind === 'NO_EDIT'
+      && this.conversationSemanticEdit.hasEditIntent({
+        status: session.status,
+        message: dto.message,
+        semanticState: currentSemanticState,
+      })
+    const canEditPublishedSession = session.status === 'PUBLISHED'
+      && (semanticEditDecision.kind !== 'NO_EDIT' || hasPublishedUnsupportedEditIntent)
     if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
@@ -401,6 +409,17 @@ export class CodegenConversationService {
         model: dto.model,
       })
       if (semanticEditResponse) return semanticEditResponse
+    }
+
+    if (hasPublishedUnsupportedEditIntent) {
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: session.status,
+        missingFields: [],
+        assistantPrompt: '我识别到你想修改策略语义。当前可直接修改交易标的、主周期、交易所、市场类型，或说“之前策略不对，重新做一个...”来重建策略。止损、行动、仓位等语义修改请补充成完整规则后再继续。',
+        clarificationState: this.readClarificationState(session.clarificationState),
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
     if (this.stateMachine.isTerminalStatus(session.status)) {
@@ -805,8 +824,8 @@ export class CodegenConversationService {
             ...constraintPack,
             conversationHistory: historyAfterQuestion,
           },
+          latestSpecDesc: args.session.status === 'PUBLISHED' ? null : undefined,
         }),
-        ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
@@ -819,6 +838,9 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
+    const pendingEditBeforePatch = readPendingSemanticEdit(args.currentSemanticState)
+    const shouldRestorePublishedOnCancel = pendingEditBeforePatch?.resumeStatusOnCancel === 'PUBLISHED'
+      && args.decision.patch.operations.some((operation) => operation.op === 'cancel_pending_edit')
     const reducedSemanticState = this.conversationSemanticEdit.applyPatch(
       args.currentSemanticState,
       args.decision.patch,
@@ -872,25 +894,39 @@ export class CodegenConversationService {
               ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
               : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
     const assistantPrompt = this.withAppliedSemanticEditSummary(args.decision, baseAssistantPrompt)
-    const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+    const targetStatus = shouldRestorePublishedOnCancel
+      ? 'PUBLISHED'
+      : deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
     const historyAfterSemanticEdit = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       args.message,
       assistantPrompt,
     )
-    await this.sessionsRepo.updateSession(args.session.id, {
-      ...this.stateMachine.buildConversationUpdate({
-        status: targetStatus,
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterSemanticEdit,
-        },
-        latestSpecDesc: specDesc,
-      }),
-      ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
-    } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+    const semanticEditUpdate = targetStatus === 'PUBLISHED'
+      ? {
+          status: targetStatus,
+          semanticState: reducedSemanticState as unknown as Prisma.InputJsonValue,
+          clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterSemanticEdit,
+          } as unknown as Prisma.InputJsonValue,
+          latestSpecDesc: null,
+        }
+      : {
+          ...this.stateMachine.buildConversationUpdate({
+            status: targetStatus,
+            semanticState: reducedSemanticState,
+            clarificationState,
+            constraintPack: {
+              ...nextConstraintPack,
+              conversationHistory: historyAfterSemanticEdit,
+            },
+            latestSpecDesc: specDesc,
+          }),
+          ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
+        }
+    await this.sessionsRepo.updateSession(args.session.id, semanticEditUpdate as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
     const response = this.finalizeSessionResponse({
       id: args.session.id,
@@ -2290,7 +2326,9 @@ export class CodegenConversationService {
     const constraintPack = this.readConstraintPack(session.constraintPack ?? null)
     const conversationMessages = this.toConversationMessages(constraintPack.conversationHistory)
     const conversationTitle = this.deriveConversationTitle(conversationMessages)
-    const effectivePublishedSnapshotId = latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null
+    const effectivePublishedSnapshotId = session.status === 'PUBLISHED'
+      ? latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null
+      : null
     const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
       publishedSnapshotId: effectivePublishedSnapshotId,
       snapshot: latestSnapshot,

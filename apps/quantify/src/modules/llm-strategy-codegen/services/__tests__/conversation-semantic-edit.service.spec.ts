@@ -239,6 +239,58 @@ describe('ConversationSemanticEditService', () => {
     }))
   })
 
+  it('replaces the single existing trigger and parses RSI threshold after period', () => {
+    const base = {
+      ...service.createEmptySemanticStateForTest(),
+      triggers: [{
+        id: 'trigger-ma',
+        key: 'indicator.ma_cross',
+        phase: 'entry' as const,
+        params: { indicator: 'ma' },
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      }],
+    }
+    const pendingDecision = service.decide({
+      status: 'DRAFTING',
+      message: '把触发改成 RSI',
+      semanticState: base,
+    })
+    expect(pendingDecision.kind).toBe('ASK_EDIT_CLARIFICATION')
+    if (pendingDecision.kind !== 'ASK_EDIT_CLARIFICATION') return
+    expect(pendingDecision.pendingEdit.targetRef).toBe('trigger-ma')
+
+    const withPending = service.applyPatch(
+      service.withPendingEditForTest(base, '把触发改成 RSI'),
+      { operations: [{ op: 'cancel_pending_edit' }] },
+    )
+    const semanticState = {
+      ...withPending,
+      pendingEdit: pendingDecision.pendingEdit,
+    }
+    const applyDecision = service.decide({
+      status: 'DRAFTING',
+      message: 'RSI 14 周期低于 30',
+      semanticState,
+    })
+    expect(applyDecision.kind).toBe('APPLY_TO_SEMANTIC_STATE')
+    if (applyDecision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, applyDecision.patch)
+
+    expect(next.triggers).toHaveLength(1)
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      id: 'trigger-ma',
+      key: 'oscillator.rsi_lte',
+      params: {
+        indicator: 'rsi',
+        period: 14,
+        value: 30,
+      },
+    }))
+  })
+
   it('keeps an empty patch as a no-op even when a pending edit exists', () => {
     const withPending = service.withPendingEditForTest(
       service.createEmptySemanticStateForTest(),

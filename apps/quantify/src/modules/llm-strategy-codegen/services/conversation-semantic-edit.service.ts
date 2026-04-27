@@ -113,7 +113,11 @@ export class ConversationSemanticEditService {
     }
 
     if (/触发.*改成\s*RSI|把触发改成\s*RSI/u.test(message)) {
-      const triggerPendingEdit = this.createPendingTriggerReplacement(message)
+      const triggerPendingEdit = this.createPendingTriggerReplacement(
+        message,
+        this.inferSingleTriggerTargetRef(input.semanticState),
+        input.status === 'PUBLISHED' ? 'PUBLISHED' : undefined,
+      )
       return {
         kind: 'ASK_EDIT_CLARIFICATION',
         question: '你正在把触发语义改成 RSI。请确认 RSI 阈值，例如低于 30 或高于 70。',
@@ -122,6 +126,10 @@ export class ConversationSemanticEditService {
     }
 
     return { kind: 'NO_EDIT' }
+  }
+
+  hasEditIntent(input: ConversationSemanticEditDecisionInput): boolean {
+    return this.hasSemanticEditIntent(input.message.trim(), input.semanticState)
   }
 
   createEmptySemanticStateForTest(): SemanticState {
@@ -162,9 +170,10 @@ export class ConversationSemanticEditService {
     const threshold = this.extractRsiThreshold(text)
     if (!threshold) return state
 
+    const targetRef = pendingEdit.targetRef ?? (state.triggers.length === 1 ? state.triggers[0]?.id : undefined)
     const trigger: SemanticTriggerState = {
       ...pendingEdit.candidate,
-      id: pendingEdit.targetRef ?? pendingEdit.candidate.id,
+      id: targetRef ?? pendingEdit.candidate.id,
       key: threshold.direction === 'gte' ? 'oscillator.rsi_gte' : 'oscillator.rsi_lte',
       phase: pendingEdit.candidate.phase === 'exit' ? 'exit' : 'entry',
       params: {
@@ -180,8 +189,8 @@ export class ConversationSemanticEditService {
       },
       openSlots: [],
     }
-    const triggers = pendingEdit.targetRef
-      ? state.triggers.map((item) => item.id === pendingEdit.targetRef ? trigger : item)
+    const triggers = targetRef
+      ? state.triggers.map((item) => item.id === targetRef ? trigger : item)
       : [trigger, ...state.triggers.filter((item) => item.id !== trigger.id)]
 
     return withPendingSemanticEdit({
@@ -274,12 +283,15 @@ export class ConversationSemanticEditService {
   }
 
   private extractRsiThreshold(message: string): { direction: 'lte' | 'gte', value: number } | null {
-    const match = /(\d+(?:\.\d+)?)/u.exec(message)
-    if (!match) return null
-    const value = Number(match[1])
+    const gteMatch = /(?:高于|大于|超过|>=|>)\s*(\d+(?:\.\d+)?)/u.exec(message)
+      ?? /(\d+(?:\.\d+)?)\s*(?:以上|及以上)/u.exec(message)
+    const lteMatch = /(?:低于|小于|<=|<)\s*(\d+(?:\.\d+)?)/u.exec(message)
+      ?? /(\d+(?:\.\d+)?)\s*(?:以下|及以下)/u.exec(message)
+    const match = gteMatch ?? lteMatch ?? /(\d+(?:\.\d+)?)/u.exec(message)
+    const value = Number(match?.[1])
     if (!Number.isFinite(value)) return null
 
-    const direction = /高于|大于|超过|>=|>/u.test(message) ? 'gte' : 'lte'
+    const direction = gteMatch ? 'gte' : 'lte'
     return { direction, value }
   }
 
@@ -326,10 +338,20 @@ export class ConversationSemanticEditService {
     }
   }
 
-  private createPendingTriggerReplacement(text: string): PendingSemanticEdit {
+  private inferSingleTriggerTargetRef(state: SemanticState): string | undefined {
+    return state.triggers.length === 1 ? state.triggers[0]?.id : undefined
+  }
+
+  private createPendingTriggerReplacement(
+    text: string,
+    targetRef?: string,
+    resumeStatusOnCancel?: 'PUBLISHED',
+  ): PendingSemanticEdit {
     return {
       id: `pending-trigger-${Date.now()}`,
       op: 'replace_trigger',
+      targetRef,
+      resumeStatusOnCancel,
       candidate: {
         id: `candidate-trigger-${Date.now()}`,
         key: 'indicator.rsi_threshold',
