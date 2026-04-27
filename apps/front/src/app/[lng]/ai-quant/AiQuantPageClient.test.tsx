@@ -525,6 +525,27 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).not.toContain('aiQuant.messages.intentMiss')
   })
 
+  it('keeps strategy edit session intent without resuming legacy preset actions', async () => {
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      conversationId: 'conversation-1',
+      sessionId: 'session-1',
+      source: 'account-detail',
+      ts: Date.now(),
+    }))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('"type":"strategy-edit-session"')
+    expect(container.textContent).not.toContain('aiQuant.messages.intentMiss')
+  })
+
   it.each([
     ['chat', { type: 'chat', draft: 'resume draft' }],
     ['run', { type: 'run', strategyId: 'momentum-steady' }],

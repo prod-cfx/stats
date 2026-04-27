@@ -1310,6 +1310,10 @@ export function AiQuantPageClient({
       return
     }
 
+    if (intent.type === 'strategy-edit-session') {
+      return
+    }
+
     clearIntent()
     const preset = findPresetById(intent.strategyId)
     if (!preset) {
