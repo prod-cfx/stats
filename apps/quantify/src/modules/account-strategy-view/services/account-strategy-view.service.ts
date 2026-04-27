@@ -79,6 +79,7 @@ type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: Ma
 @Injectable()
 export class AccountStrategyViewService {
   private static readonly BEST_EFFORT_EXTERNAL_TIMEOUT_MS = 1_500
+  private static readonly DEFAULT_PERP_DEPLOY_MAX_LEVERAGE = 5
   private readonly logger = new Logger(AccountStrategyViewService.name)
   private readonly liquidationLocks = new Map<string, Promise<void>>()
 
@@ -2259,7 +2260,16 @@ export class AccountStrategyViewService {
     if (input.marketType === 'spot') {
       return { min: 1, max: 1, accountMax: 1 }
     }
-    const platformRiskMaxLeverage = this.readNumber(input.deploymentExecutionConstraints, ['platformRiskMaxLeverage'])
+    const effectiveAllowedLeverageRange = this.readRecord(input.deploymentExecutionConstraints.effectiveAllowedLeverageRange)
+    const effectiveRangeMin = effectiveAllowedLeverageRange
+      ? this.readNumber(effectiveAllowedLeverageRange, ['min'])
+      : null
+    const effectiveRangeMax = effectiveAllowedLeverageRange
+      ? this.readNumber(effectiveAllowedLeverageRange, ['max'])
+      : null
+    const rawPlatformRiskMaxLeverage = this.readNumber(input.deploymentExecutionConstraints, ['platformRiskMaxLeverage'])
+    const platformRiskMaxLeverage =
+      rawPlatformRiskMaxLeverage === 1 && !effectiveAllowedLeverageRange ? null : rawPlatformRiskMaxLeverage
     const strategyDeclaredLeverageRange = this.readRecord(input.deploymentExecutionConstraints.strategyDeclaredLeverageRange)
     const strategyMin = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['min']) : null
     const strategyMax = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['max']) : null
@@ -2274,9 +2284,11 @@ export class AccountStrategyViewService {
       : null
     const accountMin = typeof accountConstraints?.minLeverage === 'number' ? accountConstraints.minLeverage : 1
     const accountMax = typeof accountConstraints?.maxLeverage === 'number' ? accountConstraints.maxLeverage : null
-    const min = Math.max(accountMin, strategyMin ?? 1)
-    const maxCandidates = [platformRiskMaxLeverage, strategyMax, accountMax].filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-    const max = maxCandidates.length > 0 ? Math.min(...maxCandidates) : null
+    const min = Math.max(accountMin, effectiveRangeMin ?? 1, strategyMin ?? 1)
+    const maxCandidates = [effectiveRangeMax, platformRiskMaxLeverage, strategyMax, accountMax].filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    const max = maxCandidates.length > 0
+      ? Math.min(...maxCandidates)
+      : AccountStrategyViewService.DEFAULT_PERP_DEPLOY_MAX_LEVERAGE
     if (!max || max < min) return null
     return { min, max, accountMax }
   }

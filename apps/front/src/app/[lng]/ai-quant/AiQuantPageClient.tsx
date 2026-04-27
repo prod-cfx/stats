@@ -91,6 +91,16 @@ const CAPABILITY_FAILED_MESSAGE_DEFAULT = '回测能力加载失败，请稍后�
 const INTENT_TTL_MS = 30 * 60 * 1000
 const ACCOUNT_STRATEGY_NOT_FOUND_CODE = 'ACCOUNT_STRATEGY_NOT_FOUND'
 
+function readPositiveFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function resolvePreferredDeployLeverage(conversation: ConversationState | null | undefined): number | null {
+  return readPositiveFiniteNumber(conversation?.backtestDraftConfig?.execution.leverage)
+    ?? readPositiveFiniteNumber(conversation?.paramValues.backtestLeverage)
+    ?? readPositiveFiniteNumber(conversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage)
+}
+
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
@@ -551,9 +561,25 @@ export function AiQuantPageClient({
   const deployAccounts = useMemo(() => exchangeAccounts, [exchangeAccounts])
   const deployLeverageOptions = useMemo(() => {
     const range = activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange
-    if (!range) return []
-    return Array.from({ length: range.max - range.min + 1 }).map((_, index) => range.min + index)
-  }, [activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange])
+    const options = range
+      ? Array.from({ length: range.max - range.min + 1 }).map((_, index) => range.min + index)
+      : []
+    const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
+    if (
+      preferredLeverage !== null
+      && Number.isInteger(preferredLeverage)
+      && !options.includes(preferredLeverage)
+    ) {
+      options.push(preferredLeverage)
+      options.sort((a, b) => a - b)
+    }
+    return options
+  }, [
+    activeConversation?.backtestDraftConfig?.execution.leverage,
+    activeConversation?.paramValues.backtestLeverage,
+    activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange,
+    activeConversation?.publishedSnapshotDeploymentExecutionDefaults?.leverage,
+  ])
 
   const canDeploy = useMemo(() => {
     return isDeployableBacktestResult(activeConversation?.backtestResult)
@@ -1613,12 +1639,11 @@ export function AiQuantPageClient({
                   return
                 }
                 setDeployRequestId(createDeployRequestId())
-                const baselineLeverage = activeConversation.publishedSnapshotDeploymentExecutionDefaults?.leverage
+                const preferredLeverage = resolvePreferredDeployLeverage(activeConversation)
                 setSelectedDeployLeverage(
                   activePublishedDeployTruth?.marketType === 'perp'
-                    && typeof baselineLeverage === 'number'
-                    && Number.isFinite(baselineLeverage)
-                    ? baselineLeverage
+                    && preferredLeverage !== null
+                    ? preferredLeverage
                     : null,
                 )
                 setDeployOpen(true)
