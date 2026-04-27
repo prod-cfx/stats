@@ -25,7 +25,6 @@ import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
-import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import {
@@ -125,17 +124,6 @@ function hasRenderableDisplayLogicGraph(
     if (!block || typeof block !== 'object') return false
     return Array.isArray((block as { items?: unknown }).items)
   })
-}
-
-function hasRenderableSemanticGraph(
-  graph: ConversationState['semanticGraph'] | null | undefined,
-): graph is NonNullable<ConversationState['semanticGraph']> {
-  if (!graph || typeof graph !== 'object') return false
-  const candidate = graph as { market?: unknown, nodes?: unknown, actions?: unknown, risk?: unknown }
-  return Boolean(candidate.market)
-    && Array.isArray(candidate.nodes)
-    && Array.isArray(candidate.actions)
-    && Array.isArray(candidate.risk)
 }
 
 function isSameStrategyEditIntent(
@@ -1613,9 +1601,6 @@ export function AiQuantPageClient({
             canRunBacktest={canRunBacktest}
           />
 
-          {hasRenderableSemanticGraph(activeConversation.semanticGraph) && (
-            <SemanticGraphCard semanticGraph={activeConversation.semanticGraph} />
-          )}
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (
             <SemanticGraphValidationAlert validationReport={activeConversation.validationReport} />
           )}
