@@ -5,7 +5,9 @@ describe('tradingService', () => {
   function createService() {
     const client = {
       createOrder: jest.fn(),
+      cancelOrder: jest.fn(),
       fetchOrder: jest.fn(),
+      fetchOpenOrders: jest.fn(),
       fetchPositions: jest.fn(),
       fetchBalance: jest.fn(),
     }
@@ -42,6 +44,49 @@ describe('tradingService', () => {
 
     expect(client.fetchOrder).toHaveBeenCalledWith('order-1', 'XRP/USDT:PERP')
     expect(result).toEqual({ id: 'order-1', status: 'closed' })
+  })
+
+  it('fetches open orders through the selected exchange account', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchOpenOrders.mockResolvedValue([{ id: 'order-1', status: 'open' }])
+
+    const result = await service.getOpenOrders(
+      'user-1',
+      'okx',
+      'spot',
+      'DOGE/USDT',
+      'exchange-account-1',
+    )
+
+    expect(client.fetchOpenOrders).toHaveBeenCalledWith('DOGE/USDT')
+    expect(result).toEqual([{ id: 'order-1', status: 'open' }])
+  })
+
+  it('cancels orders through the selected exchange account', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.cancelOrder.mockResolvedValue({ id: 'order-1', status: 'canceled' })
+
+    const result = await service.cancelOrder(
+      'user-1',
+      'okx',
+      'spot',
+      'order-1',
+      'DOGE/USDT',
+      'exchange-account-1',
+    )
+
+    expect(client.cancelOrder).toHaveBeenCalledWith('order-1', 'DOGE/USDT')
+    expect(result).toEqual({ id: 'order-1', status: 'canceled' })
   })
 
   it('wraps exchange order lookup failures', async () => {

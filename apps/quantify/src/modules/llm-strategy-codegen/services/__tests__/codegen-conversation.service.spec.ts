@@ -72,9 +72,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const mockConversationsRepo = {
     listByUser: jest.fn(),
     listKnownSessionIdsByUser: jest.fn(),
+    findActiveDeleteContextByIdAndUser: jest.fn(),
     findByCodegenSessionId: jest.fn(),
     upsertConversationSnapshot: jest.fn(),
     archiveByIdAndUser: jest.fn(),
+  }
+  const mockAccountStrategyViewService = {
+    getStrategyDetail: jest.fn(),
+    deleteStrategy: jest.fn(),
   }
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
   const canonicalDigestService = new CanonicalSpecV2DigestService()
@@ -746,9 +751,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     mockConversationsRepo.listByUser.mockResolvedValue([])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue(null)
     mockConversationsRepo.findByCodegenSessionId.mockResolvedValue(null)
     mockConversationsRepo.upsertConversationSnapshot.mockResolvedValue(undefined)
     mockConversationsRepo.archiveByIdAndUser.mockResolvedValue(undefined)
+    mockAccountStrategyViewService.getStrategyDetail.mockReset()
+    mockAccountStrategyViewService.deleteStrategy.mockReset()
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
     setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'true')
     service = new (CodegenConversationService as unknown as new (...args: any[]) => CodegenConversationService)(
@@ -765,6 +773,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       new StrategyClarificationQuestionService(),
       publicationPipeline,
     )
+    ;(service as any).accountStrategyViewService = mockAccountStrategyViewService
 
   })
 
@@ -2064,6 +2073,93 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('archives a conversation through the dedicated conversation repository', async () => {
     await service.deleteConversation('conv-1', 'u1')
 
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
+  })
+
+  it('rejects deleting a conversation while its linked strategy is running', async () => {
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'u1',
+      codegenSessionId: 'session-1',
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'inst-running',
+      latestSpecDesc: null,
+      constraintPack: null,
+      latestDraftCode: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+    })
+    mockAccountStrategyViewService.getStrategyDetail.mockResolvedValue({
+      id: 'inst-running',
+      status: 'running',
+    })
+
+    await expect(service.deleteConversation('conv-1', 'u1')).rejects.toThrow('ai_quant.conversation_delete_running_strategy')
+
+    expect(mockConversationsRepo.archiveByIdAndUser).not.toHaveBeenCalled()
+    expect(mockAccountStrategyViewService.deleteStrategy).not.toHaveBeenCalled()
+  })
+
+  it('archives a conversation when its linked strategy record no longer exists', async () => {
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'u1',
+      codegenSessionId: 'session-1',
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'inst-missing',
+      latestSpecDesc: null,
+      constraintPack: null,
+      latestDraftCode: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+    })
+    mockAccountStrategyViewService.getStrategyDetail.mockRejectedValue(Object.assign(new Error('account_strategy.not_found'), {
+      code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+      status: 404,
+    }))
+
+    await service.deleteConversation('conv-1', 'u1')
+
+    expect(mockAccountStrategyViewService.deleteStrategy).not.toHaveBeenCalled()
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
+  })
+
+  it('deletes the linked stopped strategy before archiving when requested', async () => {
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'u1',
+      codegenSessionId: 'session-1',
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'inst-stopped',
+      latestSpecDesc: null,
+      constraintPack: null,
+      latestDraftCode: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+    })
+    mockAccountStrategyViewService.getStrategyDetail.mockResolvedValue({
+      id: 'inst-stopped',
+      status: 'stopped',
+    })
+
+    await (service as any).deleteConversation('conv-1', 'u1', { deleteStoppedStrategy: true })
+
+    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped')
     expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 

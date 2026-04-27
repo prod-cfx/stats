@@ -306,7 +306,9 @@ const AccountAiQuantStrategyDetailResponseDto = z
     deployment: z.object({}).partial().passthrough().nullish(),
   })
   .passthrough()
-const AccountAiQuantActionRequestDto = z.object({ action: z.enum(['run', 'stop']) }).passthrough()
+const AccountAiQuantActionRequestDto = z
+  .object({ action: z.enum(['run', 'stop', 'liquidate_and_stop']) })
+  .passthrough()
 const AccountAiQuantDeployRequestDto = z
   .object({
     name: z.string(),

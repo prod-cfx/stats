@@ -590,6 +590,9 @@ export function mapAccountStrategyDetailToRecord(
       : undefined,
     positionOverview,
     latestOrders,
+    openOrdersCount: typeof detail.openOrdersCount === 'number' && Number.isFinite(detail.openOrdersCount)
+      ? detail.openOrdersCount
+      : detail.openOrdersCount ?? null,
     equitySeries: detail.equitySeries.map(item => ({
       ts: fmtTimelineTime(item.ts),
       value: normalizeNumber(item.value),

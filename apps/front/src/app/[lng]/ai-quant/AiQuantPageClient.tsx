@@ -1,5 +1,6 @@
 'use client'
 
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
@@ -23,8 +24,10 @@ import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
+import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
@@ -35,8 +38,10 @@ import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAiQuantConversation,
+  fetchAccountAiQuantStrategyDetail,
   fetchUserExchangeAccountStatuses,
   listAiQuantConversations,
+  performAccountAiQuantStrategyAction,
   updateAiQuantConversationBacktestDraft,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
@@ -84,9 +89,22 @@ const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 const CAPABILITY_FAILED_MESSAGE_DEFAULT = '回测能力加载失败，请稍后重试。'
 
 const INTENT_TTL_MS = 30 * 60 * 1000
+const ACCOUNT_STRATEGY_NOT_FOUND_CODE = 'ACCOUNT_STRATEGY_NOT_FOUND'
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
+type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
+
+type ConversationDeleteDialogState = {
+  conversation: ConversationState
+  serverConversationId: string
+  strategyInstanceId: string
+  strategy: AccountAiQuantStrategyDetail | null
+  status: 'loading' | 'running' | 'stopped' | 'draft' | 'unknown'
+  deleteStoppedStrategy: boolean
+  pending: boolean
+  errorMessage: string | null
+} | null
 
 interface AiQuantPageClientProps {
   deployVersion?: string
@@ -103,6 +121,40 @@ function hasRenderableDisplayLogicGraph(
     if (!block || typeof block !== 'object') return false
     return Array.isArray((block as { items?: unknown }).items)
   })
+}
+
+function isAccountStrategyNotFoundError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    if (error.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE) return true
+    const details = error.details as { error?: { code?: unknown }; code?: unknown } | null | undefined
+    return details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+      || details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+  }
+
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as {
+    code?: unknown
+    statusCode?: unknown
+    details?: { error?: { code?: unknown }; code?: unknown }
+  }
+  return candidate.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+    || candidate.details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+    || candidate.details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+}
+
+function isDeploymentDetailForPublishedSnapshot(
+  detail: AccountAiQuantStrategyDetail | null,
+  publishedSnapshotId: string | null | undefined,
+): boolean {
+  const currentPublishedSnapshotId = typeof publishedSnapshotId === 'string'
+    ? publishedSnapshotId.trim()
+    : ''
+  if (!currentPublishedSnapshotId) return true
+
+  const deployedPublishedSnapshotId = typeof detail?.snapshot?.publishedSnapshotId === 'string'
+    ? detail.snapshot.publishedSnapshotId.trim()
+    : ''
+  return deployedPublishedSnapshotId === currentPublishedSnapshotId
 }
 
 export function AiQuantPageClient({
@@ -140,6 +192,17 @@ export function AiQuantPageClient({
   )
   const [conversationStorageReady, setConversationStorageReady] = useState(false)
   const [conversationSyncState, setConversationSyncState] = useState<ConversationSyncState>('idle')
+  const [deploymentDetail, setDeploymentDetail] = useState<AccountAiQuantStrategyDetail | null>(null)
+  const [deploymentDetailStatus, setDeploymentDetailStatus] =
+    useState<DeploymentDetailStatus>('idle')
+  const [deploymentActionPending, setDeploymentActionPending] = useState(false)
+  const [editGuardOpen, setEditGuardOpen] = useState(false)
+  const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [deploymentGuardErrorMessage, setDeploymentGuardErrorMessage] = useState<string | null>(
+    null,
+  )
+  const [conversationDeleteDialog, setConversationDeleteDialog] =
+    useState<ConversationDeleteDialogState>(null)
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
@@ -161,6 +224,40 @@ export function AiQuantPageClient({
       setActiveConversationId(conversations[0].id)
     }
   }, [activeConversationId, conversations])
+
+  useEffect(() => {
+    const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
+    if (!session?.userId || !publishedStrategyInstanceId) {
+      setDeploymentDetail(null)
+      setDeploymentDetailStatus('idle')
+      setDeploymentActionPending(false)
+      setEditGuardOpen(false)
+      setStopDialogOpen(false)
+      setDeploymentGuardErrorMessage(null)
+      return
+    }
+
+    let cancelled = false
+    setDeploymentDetail(null)
+    setDeploymentDetailStatus('loading')
+    setDeploymentGuardErrorMessage(null)
+
+    void fetchAccountAiQuantStrategyDetail(publishedStrategyInstanceId, session.userId)
+      .then((detail) => {
+        if (cancelled) return
+        setDeploymentDetail(detail)
+        setDeploymentDetailStatus('ready')
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setDeploymentDetail(null)
+        setDeploymentDetailStatus(isAccountStrategyNotFoundError(error) ? 'not_found' : 'error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeConversation?.id, activeConversation?.publishedStrategyInstanceId, session?.userId])
 
   useEffect(() => {
     if (serverOwnedConversations) {
@@ -461,6 +558,42 @@ export function AiQuantPageClient({
   const canDeploy = useMemo(() => {
     return isDeployableBacktestResult(activeConversation?.backtestResult)
   }, [activeConversation?.backtestResult])
+  const deploymentState = useMemo(() => {
+    const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
+    if (!publishedStrategyInstanceId) {
+      return 'not_deployed' as const
+    }
+    if (deploymentDetailStatus === 'idle' || deploymentDetailStatus === 'not_found') {
+      return 'not_deployed' as const
+    }
+    if (deploymentDetailStatus !== 'ready') {
+      return 'unknown' as const
+    }
+    if (!isDeploymentDetailForPublishedSnapshot(deploymentDetail, activeConversation?.publishedSnapshotId)) {
+      return 'not_deployed' as const
+    }
+    return deploymentDetail?.status === 'running' ? 'running' as const : 'stopped' as const
+  }, [
+    activeConversation?.publishedStrategyInstanceId,
+    activeConversation?.publishedSnapshotId,
+    deploymentDetail?.status,
+    deploymentDetail?.snapshot?.publishedSnapshotId,
+    deploymentDetailStatus,
+  ])
+  const deployLabel = useMemo(() => {
+    if (deploymentState === 'running') {
+      return t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
+    }
+    if (deploymentState === 'stopped') {
+      return t('aiQuant.deploy.redeploy', { defaultValue: '重新部署' })
+    }
+    if (deploymentState === 'unknown') {
+      return deploymentDetailStatus === 'loading'
+        ? t('aiQuant.deploy.loading', { defaultValue: '正在确认部署状态' })
+        : t('aiQuant.deploy.pending', { defaultValue: '部署状态待确认' })
+    }
+    return t('aiQuant.deploy')
+  }, [deploymentDetailStatus, deploymentState, t])
   const activePublishedDeployTruth = useMemo(() => resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId: activeConversation?.publishedSnapshotId ?? null,
     publishedSnapshotStrategyConfig: activeConversation?.publishedSnapshotStrategyConfig ?? null,
@@ -585,6 +718,249 @@ export function AiQuantPageClient({
       (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1,
     )
     backtestRunMutexRef.current.delete(conversationId)
+  }
+
+  function requestLogicGraphRevision() {
+    if (deploymentState === 'running' || deploymentState === 'unknown') {
+      setDeploymentGuardErrorMessage(null)
+      setEditGuardOpen(true)
+      return
+    }
+
+    updateActiveConversation(curr => ({
+      ...invalidateConversationPublication(curr, { markGraphDraft: true }),
+      messages: [
+        ...curr.messages,
+        {
+          id: `graph-revise-${Date.now()}`,
+          role: 'assistant',
+          content: t('aiQuant.messages.graphRevise'),
+        },
+      ],
+      updatedAt: Date.now(),
+    }))
+  }
+
+  function viewRunningStrategy() {
+    const strategyInstanceId = activeConversation?.publishedStrategyInstanceId
+    if (!strategyInstanceId) return
+    router.push(`/${lng}/account/ai-quant/strategy/${strategyInstanceId}`)
+  }
+
+  async function openStopDialogWithLatestDeploymentDetail() {
+    const strategyInstanceId = activeConversation?.publishedStrategyInstanceId
+    if (!strategyInstanceId || !session?.userId || deploymentActionPending) {
+      return
+    }
+
+    setDeploymentActionPending(true)
+    setDeploymentGuardErrorMessage(null)
+
+    try {
+      const latestDetail = await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
+      if (!isMountedRef.current) return
+      setDeploymentDetail(latestDetail)
+      setDeploymentDetailStatus('ready')
+      setStopDialogOpen(true)
+    } catch (error) {
+      if (!isMountedRef.current) return
+      setDeploymentGuardErrorMessage(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : '无法确认策略最新状态，请稍后重试。',
+      )
+    } finally {
+      if (isMountedRef.current) {
+        setDeploymentActionPending(false)
+      }
+    }
+  }
+
+  async function performPublishedStrategyRuntimeAction(action: 'stop' | 'liquidate_and_stop') {
+    const strategyInstanceId = activeConversation?.publishedStrategyInstanceId
+    if (!strategyInstanceId || !session?.userId || deploymentActionPending) {
+      return
+    }
+
+    setDeploymentActionPending(true)
+    setDeploymentGuardErrorMessage(null)
+
+    try {
+      const nextDetail = await performAccountAiQuantStrategyAction(strategyInstanceId, {
+        userId: session.userId,
+        action,
+      })
+      if (!isMountedRef.current) return
+      setDeploymentDetail(nextDetail)
+      setDeploymentDetailStatus('ready')
+      setEditGuardOpen(false)
+      setStopDialogOpen(false)
+    } catch (error) {
+      if (!isMountedRef.current) return
+      setDeploymentGuardErrorMessage(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : action === 'liquidate_and_stop'
+            ? '平仓并停止失败，请检查模拟盘账户状态后重试。'
+            : '停止策略失败，请稍后重试。',
+      )
+    } finally {
+      if (isMountedRef.current) {
+        setDeploymentActionPending(false)
+      }
+    }
+  }
+
+  function removeDeletedConversation(conversationId: string) {
+    setConversations(prev => {
+      const next = prev.filter(conv => conv.id !== conversationId)
+      if (next.length === 0) {
+        const seed = createConversation(t)
+        setActiveConversationId(seed.id)
+        return [seed]
+      }
+      if (conversationId === activeConversation.id) {
+        setActiveConversationId(next[0].id)
+      }
+      return next
+    })
+  }
+
+  async function deleteConversationByMode(args: {
+    conversation: ConversationState
+    serverConversationId: string
+    deleteStoppedStrategy?: boolean
+  }) {
+    if (args.deleteStoppedStrategy) {
+      await deleteAiQuantConversation(args.serverConversationId, { deleteStoppedStrategy: true })
+    } else {
+      await deleteAiQuantConversation(args.serverConversationId)
+    }
+    removeDeletedConversation(args.conversation.id)
+  }
+
+  async function requestDeleteConversation(conversationId: string) {
+    const targetConversation = conversations.find(conv => conv.id === conversationId)
+    if (!targetConversation) return
+    const serverConversationId = targetConversation.serverConversationId ?? conversationId
+    const strategyInstanceId = targetConversation.publishedStrategyInstanceId?.trim() ?? ''
+
+    if (!serverOwnedConversations) {
+      removeDeletedConversation(conversationId)
+      return
+    }
+
+    if (!strategyInstanceId) {
+      try {
+        await deleteConversationByMode({
+          conversation: targetConversation,
+          serverConversationId,
+        })
+      } catch {
+        // Keep the current lightweight sidebar behavior for unbound conversations.
+      }
+      return
+    }
+
+    if (!session?.userId) {
+      setConversationDeleteDialog({
+        conversation: targetConversation,
+        serverConversationId,
+        strategyInstanceId,
+        strategy: null,
+        status: 'unknown',
+        deleteStoppedStrategy: false,
+        pending: false,
+        errorMessage: '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+      })
+      return
+    }
+
+    setConversationDeleteDialog({
+      conversation: targetConversation,
+      serverConversationId,
+      strategyInstanceId,
+      strategy: null,
+      status: 'loading',
+      deleteStoppedStrategy: false,
+      pending: false,
+      errorMessage: null,
+    })
+
+    try {
+      const detail = activeConversation.id === targetConversation.id
+        && deploymentDetail?.id === strategyInstanceId
+        && deploymentDetailStatus === 'ready'
+        ? deploymentDetail
+        : await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
+      const status = detail.status === 'running' || detail.status === 'stopped' || detail.status === 'draft'
+        ? detail.status
+        : 'unknown'
+      setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+        ? {
+            ...curr,
+            strategy: detail,
+            status,
+          }
+        : curr)
+    } catch (error) {
+      if (isAccountStrategyNotFoundError(error)) {
+        try {
+          await deleteConversationByMode({
+            conversation: targetConversation,
+            serverConversationId,
+          })
+          setConversationDeleteDialog(null)
+          return
+        } catch (deleteError) {
+          setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+            ? {
+                ...curr,
+                status: 'unknown',
+                errorMessage: deleteError instanceof Error && deleteError.message.trim()
+                  ? deleteError.message
+                  : '删除失败，请稍后重试。',
+              }
+            : curr)
+          return
+        }
+      }
+
+      setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+        ? {
+            ...curr,
+            status: 'unknown',
+            errorMessage: error instanceof Error && error.message.trim()
+              ? error.message
+              : '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+          }
+        : curr)
+    }
+  }
+
+  async function confirmDeleteConversation() {
+    if (!conversationDeleteDialog || conversationDeleteDialog.pending) return
+    if (conversationDeleteDialog.status === 'running' || conversationDeleteDialog.status === 'unknown') return
+
+    setConversationDeleteDialog(curr => curr ? { ...curr, pending: true, errorMessage: null } : curr)
+    try {
+      await deleteConversationByMode({
+        conversation: conversationDeleteDialog.conversation,
+        serverConversationId: conversationDeleteDialog.serverConversationId,
+        deleteStoppedStrategy: conversationDeleteDialog.deleteStoppedStrategy,
+      })
+      setConversationDeleteDialog(null)
+    } catch (error) {
+      setConversationDeleteDialog(curr => curr
+        ? {
+            ...curr,
+            pending: false,
+            errorMessage: error instanceof Error && error.message.trim()
+              ? error.message
+              : '删除失败，请稍后重试。',
+          }
+        : curr)
+    }
   }
 
   function appendSemanticGraphGuardMessage(conversationId: string) {
@@ -1105,35 +1481,7 @@ export function AiQuantPageClient({
             )
           }}
           onDelete={id => {
-            if (serverOwnedConversations) {
-              const targetConversation = conversations.find(conv => conv.id === id)
-              const serverConversationId = targetConversation?.serverConversationId ?? id
-              void deleteAiQuantConversation(serverConversationId)
-                .then(() => {
-                  setConversations(prev => {
-                    const next = prev.filter(conv => conv.id !== id)
-                    if (next.length === 0) {
-                      const seed = createConversation(t)
-                      setActiveConversationId(seed.id)
-                      return [seed]
-                    }
-                    if (id === activeConversation.id) setActiveConversationId(next[0].id)
-                    return next
-                  })
-                })
-                .catch(() => {})
-              return
-            }
-            setConversations(prev => {
-              const next = prev.filter(conv => conv.id !== id)
-              if (next.length === 0) {
-                const seed = createConversation(t)
-                setActiveConversationId(seed.id)
-                return [seed]
-              }
-              if (id === activeConversation.id) setActiveConversationId(next[0].id)
-              return next
-            })
+            void requestDeleteConversation(id)
           }}
         />
 
@@ -1211,20 +1559,7 @@ export function AiQuantPageClient({
                   }),
                 })
               }}
-              onRevise={() => {
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [
-                    ...curr.messages,
-                    {
-                      id: `graph-revise-${Date.now()}`,
-                      role: 'assistant',
-                      content: t('aiQuant.messages.graphRevise'),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                }))
-              }}
+              onRevise={requestLogicGraphRevision}
             />
           ) : activeConversation.logicGraph ? (
             <LogicGraphPreview
@@ -1245,20 +1580,7 @@ export function AiQuantPageClient({
                   }),
                 })
               }}
-              onRevise={() => {
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [
-                    ...curr.messages,
-                    {
-                      id: `graph-revise-${Date.now()}`,
-                      role: 'assistant',
-                      content: t('aiQuant.messages.graphRevise'),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                }))
-              }}
+              onRevise={requestLogicGraphRevision}
             />
           ) : null}
 
@@ -1267,7 +1589,10 @@ export function AiQuantPageClient({
               result={activeConversation.backtestResult}
               marketType={activeBacktestMarketType}
               canDeploy={canDeploy}
+              deploymentState={deploymentState}
+              deployLabel={deployLabel}
               drawdownLimited
+              onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
               onOpenFullScreen={() => {
                 const currentBacktest = activeConversation.backtestResult
                 if (!currentBacktest) {
@@ -1283,19 +1608,10 @@ export function AiQuantPageClient({
                 }
                 router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
               }}
-              onOptimize={() => {
-                const optimizeMessage: QuantMessage = {
-                  id: `opt-${Date.now()}`,
-                  role: 'assistant',
-                  content: t('aiQuant.messages.optimizeHint'),
-                }
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [...curr.messages, optimizeMessage],
-                  updatedAt: Date.now(),
-                }))
-              }}
               onDeploy={() => {
+                if (deploymentState === 'running' || deploymentState === 'unknown') {
+                  return
+                }
                 setDeployRequestId(createDeployRequestId())
                 const baselineLeverage = activeConversation.publishedSnapshotDeploymentExecutionDefaults?.leverage
                 setSelectedDeployLeverage(
@@ -1311,6 +1627,165 @@ export function AiQuantPageClient({
           )}
         </div>
       </div>
+
+      <RunningStrategyEditGuardDialog
+        open={editGuardOpen}
+        mode={deploymentState === 'running' ? 'running' : 'unknown'}
+        stopPending={deploymentActionPending}
+        errorMessage={deploymentGuardErrorMessage}
+        onViewRunningStrategy={viewRunningStrategy}
+        onStopStrategy={() => {
+          setDeploymentGuardErrorMessage(null)
+          void openStopDialogWithLatestDeploymentDetail()
+        }}
+        onClose={() => {
+          if (deploymentActionPending) {
+            return
+          }
+          setEditGuardOpen(false)
+          setStopDialogOpen(false)
+          setDeploymentGuardErrorMessage(null)
+        }}
+      />
+
+      <StopRunningStrategyDialog
+        open={stopDialogOpen}
+        strategy={deploymentDetail}
+        pending={deploymentActionPending}
+        errorMessage={deploymentGuardErrorMessage}
+        onStopOnly={() => {
+          void performPublishedStrategyRuntimeAction('stop')
+        }}
+        onLiquidateAndStop={() => {
+          void performPublishedStrategyRuntimeAction('liquidate_and_stop')
+        }}
+        onCancel={() => {
+          if (deploymentActionPending) {
+            return
+          }
+          setStopDialogOpen(false)
+          setDeploymentGuardErrorMessage(null)
+        }}
+      />
+
+      {conversationDeleteDialog && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4"
+          onClick={() => {
+            if (!conversationDeleteDialog.pending) setConversationDeleteDialog(null)
+          }}
+        >
+          <div
+            className="w-full max-w-[560px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+            onClick={event => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+              {conversationDeleteDialog.status === 'running'
+                ? '当前策略正在运行'
+                : conversationDeleteDialog.status === 'unknown'
+                  ? '暂时无法删除会话'
+                  : '删除 AI Quant 会话'}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+              {conversationDeleteDialog.status === 'loading'
+                ? '正在确认关联策略的运行状态。'
+                : conversationDeleteDialog.status === 'running'
+                  ? '当前会话关联的策略正在运行，不能删除。请先前往策略详情停止运行；如有持仓或挂单，可选择仅停止或平仓并停止。'
+                  : conversationDeleteDialog.status === 'unknown'
+                    ? '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。'
+                    : '这个会话已生成过策略，当前策略已停止。默认只删除 AI 对话和生成过程，不删除我的策略列表中的策略记录。'}
+            </p>
+
+            <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
+              <div className="flex justify-between gap-3">
+                <span className="text-[color:var(--cf-muted)]">会话</span>
+                <span className="text-right text-[color:var(--cf-text-strong)]">
+                  {conversationDeleteDialog.conversation.title}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[color:var(--cf-muted)]">策略</span>
+                <span className="text-right text-[color:var(--cf-text-strong)]">
+                  {conversationDeleteDialog.strategy?.name ?? conversationDeleteDialog.strategyInstanceId}
+                </span>
+              </div>
+            </div>
+
+            {(conversationDeleteDialog.status === 'stopped' || conversationDeleteDialog.status === 'draft') && (
+              <label className="mt-4 flex items-start gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 text-sm text-[color:var(--cf-text)]">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={conversationDeleteDialog.deleteStoppedStrategy}
+                  disabled={conversationDeleteDialog.pending}
+                  onChange={event => {
+                    setConversationDeleteDialog(curr => curr
+                      ? { ...curr, deleteStoppedStrategy: event.target.checked }
+                      : curr)
+                  }}
+                />
+                <span>
+                  同时删除已停止策略记录
+                  <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
+                    删除后该策略将从我的策略列表移除，不能再次运行。
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {conversationDeleteDialog.errorMessage && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {conversationDeleteDialog.errorMessage}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {conversationDeleteDialog.status === 'running' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConversationDeleteDialog(null)
+                    router.push(`/${lng}/account/ai-quant/strategy/${conversationDeleteDialog.strategyInstanceId}`)
+                  }}
+                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  前往运行策略
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="confirm-delete-conversation"
+                  disabled={
+                    conversationDeleteDialog.pending
+                    || conversationDeleteDialog.status === 'loading'
+                    || conversationDeleteDialog.status === 'unknown'
+                  }
+                  onClick={() => {
+                    if (
+                      conversationDeleteDialog.deleteStoppedStrategy
+                      && !window.confirm('删除后该策略将从我的策略列表移除，不能再次运行。确认继续？')
+                    ) {
+                      return
+                    }
+                    void confirmDeleteConversation()
+                  }}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {conversationDeleteDialog.deleteStoppedStrategy ? '删除会话和策略' : '仅删除会话'}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={conversationDeleteDialog.pending}
+                onClick={() => setConversationDeleteDialog(null)}
+                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DeployDialog
         open={deployOpen}
@@ -1334,6 +1809,7 @@ export function AiQuantPageClient({
         onSelectLeverage={setSelectedDeployLeverage}
         leverageExplanation={activeConversation.publishedSnapshotDeploymentExecutionConstraints?.constraintExplanation ?? null}
         deploymentBaseline={activeConversation.publishedSnapshotDeploymentExecutionDefaults ?? null}
+        mode={deploymentState === 'stopped' ? 'redeploy' : 'deploy'}
         driftReasons={[]}
         onSelectAccount={setSelectedDeployAccountId}
         onConfirmDeploy={async () => {

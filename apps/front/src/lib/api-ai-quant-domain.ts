@@ -381,9 +381,13 @@ export async function listAiQuantConversations(): Promise<AiQuantConversationRes
   )
 }
 
-export async function deleteAiQuantConversation(conversationId: string): Promise<void> {
+export async function deleteAiQuantConversation(
+  conversationId: string,
+  options: { deleteStoppedStrategy?: boolean } = {},
+): Promise<void> {
   const authHeaders = requireAuthHeaders()
-  const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
+  const search = options.deleteStoppedStrategy ? '?deleteStoppedStrategy=true' : ''
+  const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations/${encodeURIComponent(conversationId)}${search}`, {
     method: 'DELETE',
     headers: authHeaders,
   })

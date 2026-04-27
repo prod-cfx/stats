@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { Body, Controller, Delete, Get, Headers, Param, Patch } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Query } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { AiQuantConversationBacktestDraftConfigRequestDto } from '../dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
@@ -31,9 +31,12 @@ export class AccountAiQuantConversationsController {
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
     @Param('id') id: string,
+    @Query('deleteStoppedStrategy') deleteStoppedStrategy?: string,
   ): Promise<void> {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
-    return this.service.deleteConversation(id, callerUserId)
+    return this.service.deleteConversation(id, callerUserId, {
+      deleteStoppedStrategy: deleteStoppedStrategy === 'true',
+    })
   }
 
   @Patch(':id/backtest-draft')
