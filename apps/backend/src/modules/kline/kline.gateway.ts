@@ -26,7 +26,7 @@ import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CacheService } from '@/common/services/cache.service'
-import { buildCorsOrigins } from '@/common/utils/cors-origins'
+import { buildValidatedCorsOrigins } from '@/common/utils/cors-origins'
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -47,28 +47,6 @@ const SOCKET_PING_TIMEOUT_MS = 5000
 const STALE_CONNECTION_THRESHOLD_MS = 120000
 
 /**
- * 验证 CORS origin 是否合法
- */
-export function isValidOrigin(origin: string | undefined): boolean {
-  if (!origin) {
-    return false
-  }
-
-  try {
-    const url = new URL(origin)
-    if (defaultEnvAccessor.nodeEnv() === 'production' && url.protocol !== 'https:') {
-      return false
-    }
-    if (defaultEnvAccessor.nodeEnv() !== 'development' && !['http:', 'https:'].includes(url.protocol)) {
-      return false
-    }
-    return true
-  } catch {
-    return false
-  }
-}
-
-/**
  * 解析并验证 ALLOWED_ORIGINS 环境变量
  */
 function splitOrigins(value: string | undefined): string[] {
@@ -76,20 +54,15 @@ function splitOrigins(value: string | undefined): string[] {
 }
 
 export function parseAllowedOrigins(): string[] {
-  const envOrigins = buildCorsOrigins(
+  const appEnv = defaultEnvAccessor.appEnv()
+  return buildValidatedCorsOrigins(
     splitOrigins(defaultEnvAccessor.str('FRONTEND_REDIRECT_ORIGINS')),
     splitOrigins(defaultEnvAccessor.str('ALLOWED_ORIGINS')),
+    appEnv,
+    appEnv === 'development'
+      ? ['http://localhost:3001']
+      : ['https://www.coinflux.ai', 'https://admin.coinflux.ai'],
   )
-  const validOrigins = envOrigins.filter(isValidOrigin)
-
-  // 如果没有有效的 origin，使用默认值
-  if (validOrigins.length === 0) {
-    if (defaultEnvAccessor.nodeEnv() === 'development') {
-      return ['http://localhost:3001']
-    }
-    return ['https://www.coinflux.ai', 'https://admin.coinflux.ai']
-  }
-  return validOrigins
 }
 
 function isCorsOriginAllowed(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void): void {
