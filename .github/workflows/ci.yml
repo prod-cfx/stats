@@ -42,7 +42,6 @@ jobs:
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       DX_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'prod' || 'staging' }}
       NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
-      DX_ENV_FLAG: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
@@ -110,7 +109,6 @@ jobs:
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       DX_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'prod' || 'staging' }}
       NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
-      DX_ENV_FLAG: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
     steps:
