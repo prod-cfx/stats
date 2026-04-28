@@ -33,19 +33,19 @@ assert_failure() {
 }
 
 assert_output \
-  "npx -y @ranger1/dx@0.1.97 build front --staging" \
+  "pnpm exec dx build front --staging" \
   env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
 
 assert_output \
-  "npx -y @ranger1/dx@0.1.97 build front --prod" \
+  "pnpm exec dx build front --prod" \
   env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
 
 assert_output \
-  $'APP_ENV=staging npx -y @ranger1/dx@0.1.97 build shared\nAPP_ENV=staging npx -y @ranger1/dx@0.1.97 build admin --staging' \
+  $'APP_ENV=staging pnpm exec dx build shared\nAPP_ENV=staging pnpm exec dx build admin --staging' \
   env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
 
 assert_output \
-  $'APP_ENV=production npx -y @ranger1/dx@0.1.97 build shared\nAPP_ENV=production npx -y @ranger1/dx@0.1.97 build admin --prod' \
+  $'APP_ENV=production pnpm exec dx build shared\nAPP_ENV=production pnpm exec dx build admin --prod' \
   env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
 
 assert_failure env -u APP_ENV VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh

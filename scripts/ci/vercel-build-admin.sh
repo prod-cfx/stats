@@ -2,7 +2,6 @@
 set -euo pipefail
 
 APP_ENV="${APP_ENV:?APP_ENV is required}"
-DX_VERSION="${DX_VERSION:-0.1.97}"
 
 case "$APP_ENV" in
   production)
@@ -21,11 +20,11 @@ esac
 
 run_dx() {
   if [[ "${VERCEL_BUILD_DRY_RUN:-}" == "1" ]]; then
-    printf 'APP_ENV=%s npx -y @ranger1/dx@%s %s\n' "$APP_ENV_FOR_BUILD" "$DX_VERSION" "$*"
+    printf 'APP_ENV=%s pnpm exec dx %s\n' "$APP_ENV_FOR_BUILD" "$*"
     return
   fi
 
-  APP_ENV="$APP_ENV_FOR_BUILD" npx -y "@ranger1/dx@${DX_VERSION}" "$@"
+  APP_ENV="$APP_ENV_FOR_BUILD" pnpm exec dx "$@"
 }
 
 run_dx build shared
