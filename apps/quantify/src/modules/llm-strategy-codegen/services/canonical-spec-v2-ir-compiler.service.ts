@@ -17,11 +17,14 @@ import type {
 } from '../types/canonical-strategy-spec'
 import type { SemanticExpressionOperand } from '../types/semantic-state'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
+import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 
 interface CompileCanonicalSpecV2ToIrInput {
@@ -72,6 +75,7 @@ export class CanonicalSpecV2IrCompilerService {
     private readonly specDescBuilder: SpecDescBuilderService = new SpecDescBuilderService(),
     private readonly validator: CanonicalStrategyIrValidatorService = new CanonicalStrategyIrValidatorService(),
     private readonly canonicalizer: CanonicalStrategyIrCanonicalizerService = new CanonicalStrategyIrCanonicalizerService(),
+    private readonly graphSnapshotService: CodegenGraphSnapshotService = new CodegenGraphSnapshotService(),
   ) {}
 
   compile(input: CompileCanonicalSpecV2ToIrInput): CompileCanonicalSpecV2ToIrResult {
@@ -81,7 +85,10 @@ export class CanonicalSpecV2IrCompilerService {
 
     const specHash = this.digest.hash(input.canonicalSpec)
     const graphSnapshot = this.buildGraphSnapshot(input)
-    const rawIr = this.buildIr(input, specHash, graphSnapshot.version)
+    const rawIr = this.buildIr(input, specHash, specHash, graphSnapshot.version)
+    rawIr.source.graphDigest = this.hashCanonicalJson(
+      this.graphSnapshotService.buildFromSemanticArtifacts({ canonicalSpec: input.canonicalSpec }),
+    )
     const ir = this.canonicalizer.canonicalize(rawIr)
     this.validator.validate(ir)
 
@@ -95,6 +102,7 @@ export class CanonicalSpecV2IrCompilerService {
   private buildIr(
     input: CompileCanonicalSpecV2ToIrInput,
     specHash: `sha256:${string}`,
+    graphDigest: `sha256:${string}`,
     graphVersion: number,
   ): CanonicalStrategyIrV1 {
     const exchange = input.canonicalSpec.market.exchange || input.fallback.exchange
@@ -148,7 +156,7 @@ export class CanonicalSpecV2IrCompilerService {
       irVersion: 'csi.v1',
       source: {
         graphVersion,
-        graphDigest: specHash,
+        graphDigest,
         specHash,
       },
       market: {
@@ -189,6 +197,10 @@ export class CanonicalSpecV2IrCompilerService {
         allowPartialFill: false,
       },
     }
+  }
+
+  private hashCanonicalJson(value: unknown): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
   }
 
   private buildGraphSnapshot(input: CompileCanonicalSpecV2ToIrInput): StrategyLogicGraphSnapshot {

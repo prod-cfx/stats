@@ -9,6 +9,8 @@ import type {
 } from '../types/publication-gate'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
@@ -166,7 +168,10 @@ export class CompiledPublicationGateService {
     parsed: ReturnType<CompiledScriptParserService['parse']>,
     publicationGate: PublicationGateReport,
   ): Record<string, unknown> {
-    const graphVsIrPassed = input.ir.source.graphDigest === input.ir.source.specHash
+    const semanticGraphDigest = input.semanticPredicateGraph
+      ? this.hashCanonicalJson(input.semanticPredicateGraph)
+      : input.ir.source.graphDigest
+    const graphVsIrPassed = input.ir.source.graphDigest === semanticGraphDigest
     const irVsScriptPassed = parsed.compiledManifest.irHash === input.ast.manifest.irHash
     const manifestSelfCheckPassed = parsed.compiledManifest.specHash === input.ast.manifest.specHash
 
@@ -177,6 +182,7 @@ export class CompiledPublicationGateService {
       graphVsIr: {
         passed: graphVsIrPassed,
         graphDigest: input.ir.source.graphDigest,
+        semanticGraphDigest,
         specHash: input.ir.source.specHash,
       },
       irVsScript: {
@@ -193,6 +199,10 @@ export class CompiledPublicationGateService {
       },
       publicationGate,
     }
+  }
+
+  private hashCanonicalJson(value: unknown): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
   }
 
   private buildPublicationAstSnapshot(ast: StrategyAstV1): PublishedStrategyAstSnapshot {

@@ -183,6 +183,89 @@ describe('compiledPublicationGateService', () => {
     }))
   })
 
+  it('fails compiler graph consistency when semantic predicate graph digest drifts from IR source', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-graph-drift' }),
+    }
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      undefined,
+    )
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-graph-drift',
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '1h' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1' },
+      semanticPredicateGraph: {
+        version: 2,
+        nodes: [{
+          id: 'entry-drift',
+          kind: 'predicate',
+          phase: 'entry',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'series', source: 'bar', field: 'open' },
+        }],
+        edges: [],
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'graph-drift' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      consistencyReport: expect.objectContaining({
+        status: 'FAILED',
+        compilerConsistency: expect.objectContaining({
+          status: 'FAILED',
+          graphVsIr: expect.objectContaining({
+            passed: false,
+            graphDigest: ir.source.graphDigest,
+            semanticGraphDigest: expect.stringMatching(/^sha256:/),
+          }),
+        }),
+      }),
+    }))
+  })
+
   it('persists explicit on_start runtime execution semantics when ast source refs carry on_start markers', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-on-start-1' }),
