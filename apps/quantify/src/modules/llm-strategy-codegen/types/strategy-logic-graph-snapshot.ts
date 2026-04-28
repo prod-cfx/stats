@@ -13,6 +13,7 @@ export interface StrategyLogicGraphSnapshot {
     symbol: string
     timeframe: string
     positionPct: number
+    positionSizing?: string
     executionTags: string[]
   }
 }

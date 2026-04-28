@@ -68,17 +68,20 @@ describe('canonicalSpecV2IrCompilerService', () => {
     [
       { mode: 'QUOTE', value: 10 },
       { mode: 'fixed_quote', value: 10 },
+      '10 USDT',
     ],
     [
       { mode: 'QTY', value: 0.001 },
       { mode: 'fixed_base', value: 0.001 },
+      '0.001 BTC',
     ],
   ] satisfies Array<[
     NonNullable<CanonicalStrategySpecV2['sizing']>,
     CanonicalStrategyIrV1['portfolio']['sizing'],
+    string,
   ]>)(
     'maps canonical sizing %o into IR portfolio sizing %o',
-    (canonicalSizing, irSizing) => {
+    (canonicalSizing, irSizing, graphAmount) => {
       const compiler = new CanonicalSpecV2IrCompilerService()
 
       const result = compiler.compile({
@@ -92,6 +95,10 @@ describe('canonicalSpecV2IrCompilerService', () => {
       })
 
       expect(result.ir.portfolio.sizing).toEqual(irSizing)
+      expect(result.graphSnapshot.actions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ amount: graphAmount }),
+      ]))
+      expect(result.graphSnapshot.meta.positionSizing).toBe(graphAmount)
     },
   )
 
