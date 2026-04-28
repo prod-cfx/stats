@@ -1886,8 +1886,9 @@ export class SignalGeneratorService {
     options: { skipCooldown?: boolean } = {},
     runtimeProvenance: Prisma.JsonObject = {},
   ) {
+    const effectiveParams = this.buildEffectiveParams(strategy, instance)
     const runtimeMarketType = this.readRuntimeMarketType(
-      (strategy.defaultParams as Record<string, unknown> | null | undefined)?.marketType,
+      effectiveParams?.marketType,
     )
 
     // 1. 查找 primary leg 的 symbol
@@ -1966,7 +1967,7 @@ export class SignalGeneratorService {
       })),
       dataRequirements,
       timestamp: Date.now(),
-      params: this.buildEffectiveParams(strategy, instance),
+      params: effectiveParams,
     }
 
     // 4. 执行脚本准备数据

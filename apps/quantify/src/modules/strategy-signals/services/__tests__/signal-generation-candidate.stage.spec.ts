@@ -80,4 +80,46 @@ describe('signalGenerationCandidateStage', () => {
       expect.any(Number),
     )
   })
+
+  it('loads multi-leg data with legacy symbol lookup when market type is absent', async () => {
+    const repository = {
+      findSymbolsByCode: jest.fn().mockResolvedValue([
+        {
+          id: 'symbol-legacy-1',
+          code: 'BTCUSDT:SPOT',
+        },
+      ]),
+      findSymbolsByCodeForMarket: jest.fn().mockResolvedValue([]),
+    }
+    const marketDataReadGateway = {
+      getRecentBarsBySymbolId: jest.fn().mockResolvedValue([
+        {
+          time: new Date('2026-04-20T09:00:00.000Z'),
+          timestamp: 1776675600000,
+          open: 100,
+          high: 105,
+          low: 95,
+          close: 102,
+          volume: 10,
+        },
+      ]),
+    }
+    const stage = new SignalGenerationCandidateStage(
+      repository as any,
+      marketDataReadGateway as any,
+    )
+
+    await stage.loadMultiLegDataBatch(
+      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      { primary: ['15m'] },
+    )
+
+    expect(repository.findSymbolsByCode).toHaveBeenCalledWith(['BTCUSDT'])
+    expect(repository.findSymbolsByCodeForMarket).not.toHaveBeenCalled()
+    expect(marketDataReadGateway.getRecentBarsBySymbolId).toHaveBeenCalledWith(
+      'symbol-legacy-1',
+      '15m',
+      expect.any(Number),
+    )
+  })
 })

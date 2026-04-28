@@ -360,10 +360,103 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
   })
 
-  it('uses default params market type for multi-leg primary and batch symbol lookup', async () => {
+  it('uses effective params market type for multi-leg primary and batch symbol lookup', async () => {
     const { service, generatorRepository } = createService({
       generatorRepository: {
-        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-spot-1', code: 'BTCUSDT' }),
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-legacy-1', code: 'BTCUSDT' }),
+        findSymbolByCodeForMarket: jest.fn().mockResolvedValue({
+          id: 'symbol-spot-1',
+          code: 'BTCUSDT:SPOT',
+        }),
+      },
+    })
+    const loadMultiLegDataBatch = jest.spyOn(service as any, 'loadMultiLegDataBatch').mockResolvedValue({
+      primary: {
+        '15m': {
+          bars: [
+            {
+              open: 100,
+              high: 105,
+              low: 95,
+              close: 102,
+              volume: 10,
+              timestamp: 1776675600000,
+            },
+          ],
+          indicators: {},
+          currentPrice: 102,
+        },
+      },
+    })
+    jest.spyOn((service as any).decisionStage, 'resolveMultiLegScriptPromptData').mockResolvedValue({
+      ok: true,
+      promptData: {},
+    })
+    jest.spyOn(service as any, 'buildPublishedCodegenSignalPayload').mockReturnValue({
+      type: 'signal',
+      payload: {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 80,
+        entryPrice: 102,
+        stopLoss: 90,
+        takeProfit: 120,
+        rawResponse: '{"direction":"BUY"}',
+      },
+    })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+    const createMultiLegSignal = jest.spyOn(service as any, 'createMultiLegSignal').mockResolvedValue({
+      created: true,
+      signalId: 'signal-1',
+    })
+
+    await (service as any).generateSignalForMultiLegStrategy(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {
+          marketType: 'spot',
+        },
+      },
+      {
+        id: 'template-1',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'return {}',
+        defaultParams: {
+          marketType: 'perp',
+        },
+      },
+      { timeframe: '15m', cooldownMinutes: 15 },
+      { primary: ['15m'] },
+      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      { id: 'primary', symbol: 'BTCUSDT', role: 'primary' },
+      config,
+    )
+
+    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTCUSDT', 'spot')
+    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalledWith('BTCUSDT')
+    expect(loadMultiLegDataBatch).toHaveBeenCalledWith(
+      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      { primary: ['15m'] },
+      'spot',
+    )
+    expect(createMultiLegSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ id: 'symbol-spot-1', code: 'BTCUSDT:SPOT' }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      false,
+    )
+  })
+
+  it('keeps legacy multi-leg symbol lookup when effective params omit market type', async () => {
+    const { service, generatorRepository } = createService({
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-legacy-1', code: 'BTCUSDT' }),
         findSymbolByCodeForMarket: jest.fn().mockResolvedValue({
           id: 'symbol-perp-1',
           code: 'BTCUSDT:PERP',
@@ -420,9 +513,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         id: 'template-1',
         promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
         script: 'return {}',
-        defaultParams: {
-          marketType: 'perp',
-        },
+        defaultParams: {},
       },
       { timeframe: '15m', cooldownMinutes: 15 },
       { primary: ['15m'] },
@@ -431,17 +522,17 @@ describe('signalGeneratorService coordinator behavior', () => {
       config,
     )
 
-    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTCUSDT', 'perp')
-    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalledWith('BTCUSDT')
+    expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
+    expect(generatorRepository.findSymbolByCodeForMarket).not.toHaveBeenCalled()
     expect(loadMultiLegDataBatch).toHaveBeenCalledWith(
       [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
       { primary: ['15m'] },
-      'perp',
+      null,
     )
     expect(createMultiLegSignal).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ id: 'symbol-perp-1', code: 'BTCUSDT:PERP' }),
+      expect.objectContaining({ id: 'symbol-legacy-1', code: 'BTCUSDT' }),
       expect.anything(),
       expect.anything(),
       expect.anything(),
