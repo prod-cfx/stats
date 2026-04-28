@@ -1859,6 +1859,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         codegenSessionId: 'session-published-script',
         createdAt: new Date('2026-04-10T20:00:00.000Z'),
         updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        backtestDraftConfig: null,
+        lastBacktestRef: null,
         messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
       },
     ])
@@ -1883,6 +1885,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findLatestBySessionId.mockResolvedValue({
       id: 'snapshot-script-1',
       scriptSnapshot: 'export default function strategy() { return { action: "NOOP" } }',
+      specSnapshot: {},
+      semanticGraph: null,
       consistencyReport: { status: 'PASSED' },
     })
 
@@ -1894,6 +1898,57 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'PUBLISHED',
       publishedSnapshotId: 'snapshot-script-1',
       scriptCode: 'export default function strategy() { return { action: "NOOP" } }',
+    })
+  })
+
+  it('does not fabricate script code when a published session has no draft code or snapshot script', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-published-missing-script',
+        userId: 'u1',
+        title: '缺少脚本的已发布会话',
+        codegenSessionId: 'session-published-missing-script',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        backtestDraftConfig: null,
+        lastBacktestRef: null,
+        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published-missing-script'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-published-missing-script',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: {
+        publishedSnapshotId: 'snapshot-missing-script',
+      },
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-missing-script',
+      scriptSnapshot: '',
+      specSnapshot: {},
+      semanticGraph: null,
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id: 'conv-published-missing-script',
+      status: 'PUBLISHED',
+      publishedSnapshotId: 'snapshot-missing-script',
+      scriptCode: null,
     })
   })
 
