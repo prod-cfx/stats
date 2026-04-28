@@ -26,7 +26,9 @@ export class PositionSizingContractService {
   }
 
   private parseQuote(text: string, messageIndex?: number): ParsedPositionSizingContract | null {
-    const match = text.match(/(?:固定(?:使用|用|投入)?|单笔(?:使用|用|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|投入)?|投入|用|仓位)?[^\d.]{0,8}(?<![\d.])(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|u|U|刀|美元)/u)
+    if (!this.hasQuoteSizingContext(text)) return null
+
+    const match = text.match(/(?:固定(?:使用|用|投入)?|单笔(?:使用|用|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|投入)?|投入|用|仓位)?[^\d.]{0,8}(?<![\d.])(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|[uU](?![A-Za-z0-9])|刀|美元)/iu)
     if (!match?.[1] || !match[2]) return null
 
     const value = Number(match[1])
@@ -40,6 +42,8 @@ export class PositionSizingContractService {
   }
 
   private parseBase(text: string, messageIndex?: number): ParsedPositionSizingContract | null {
+    if (!this.hasBaseSizingContext(text)) return null
+
     const match = text.match(/(?:固定(?:使用|用|买|投入)?|单笔(?:使用|用|买|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|买|投入)?|买入|买|用)?[^\d.]{0,8}(?<![\d.])(\d+(?:\.\d+)?)\s*([A-Za-z][A-Za-z0-9]{1,15})\b/u)
     if (!match?.[1] || !match[2]) return null
 
@@ -69,7 +73,7 @@ export class PositionSizingContractService {
 
     const ratioMatch = text.match(/(?:资金比例|仓位比例|比例)[^\d.]{0,8}(0?\.\d+|1(?:\.0+)?)/u)
       ?? text.match(/(^|[^\d.])(0?\.\d+|1(?:\.0+)?)\s*(?:资金比例|仓位比例|比例)/u)
-    if (!ratioMatch?.[1]) return null
+    if (!ratioMatch) return null
 
     const value = Number(ratioMatch[2] ?? ratioMatch[1])
     if (!Number.isFinite(value) || value <= 0 || value > 1) return null
@@ -97,6 +101,14 @@ export class PositionSizingContractService {
   private hasRatioSizingContext(text: string, index: number): boolean {
     const context = text.slice(Math.max(0, index - 12), index + 20)
     return /(?:仓位|资金|比例|使用|投入|固定|单笔|每次|每笔|每单|用)/u.test(context)
+  }
+
+  private hasQuoteSizingContext(text: string): boolean {
+    return /(?:仓位|资金|固定|单笔|每次|每笔|每单|使用|投入|用)/u.test(text)
+  }
+
+  private hasBaseSizingContext(text: string): boolean {
+    return /(?:仓位|资金|固定|单笔|每次|每笔|每单|使用|投入|用|买)/u.test(text)
   }
 
   private looksLikeRiskSizing(text: string): boolean {

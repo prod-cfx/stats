@@ -7,6 +7,7 @@ describe('PositionSizingContractService', () => {
     ['用 10% 仓位', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['单笔百分之10资金', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['每次使用 0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
+    ['0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
   ])('parses ratio sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })
@@ -18,6 +19,7 @@ describe('PositionSizingContractService', () => {
     ['单笔 10 刀', { kind: 'quote', value: 10, asset: 'USD' }],
     ['投入 10 美元', { kind: 'quote', value: 10, asset: 'USD' }],
     ['每次 10 USDC', { kind: 'quote', value: 10, asset: 'USDC' }],
+    ['每次 10 usdc', { kind: 'quote', value: 10, asset: 'USDC' }],
   ])('parses quote sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })
@@ -26,6 +28,7 @@ describe('PositionSizingContractService', () => {
     ['每次买 0.001 BTC', { kind: 'base', value: 0.001, asset: 'BTC' }],
     ['固定 0.01 ETH', { kind: 'base', value: 0.01, asset: 'ETH' }],
     ['单笔 2 SOL', { kind: 'base', value: 2, asset: 'SOL' }],
+    ['每次买 10 UNI', { kind: 'base', value: 10, asset: 'UNI' }],
   ])('parses base sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })
@@ -35,6 +38,8 @@ describe('PositionSizingContractService', () => {
     '单笔风险 10 USDT',
     '亏损 10% 止损',
     '价格上涨 10% 开多',
+    'BTC 跌到 60000 USDT 开多',
+    '价格达到 30000 USDT 买入',
   ])('does not parse risk text as position sizing: %s', (text) => {
     expect(service.parse(text)).toBeNull()
   })
