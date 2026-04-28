@@ -90,9 +90,15 @@ export interface SemanticRiskState {
   supersedes?: string[]
 }
 
+export type SemanticPositionSizingContract =
+  | { kind: 'ratio'; value: number; unit: 'ratio' | 'percent' }
+  | { kind: 'quote'; value: number; asset: 'USDT' | 'USDC' | 'USD' }
+  | { kind: 'base'; value: number; asset: string }
+
 export interface SemanticPositionState {
-  mode: string
-  value: number
+  sizing?: SemanticPositionSizingContract | null
+  mode?: string
+  value?: number
   positionMode: string
   status: SemanticNodeStatus
   source: SemanticSource

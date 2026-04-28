@@ -126,6 +126,35 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: true })
   })
 
+  it('accepts ratio, quote, and base position sizing contracts', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      positionMode: 'long_only',
+    }).ok).toBe(true)
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      positionMode: 'long_only',
+    }).ok).toBe(true)
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+      positionMode: 'long_only',
+    }).ok).toBe(true)
+  })
+
+  it('rejects invalid position sizing contracts', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 0, asset: 'USDT' },
+      positionMode: 'long_only',
+    }).ok).toBe(false)
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'base', value: 0.001, asset: '' },
+      positionMode: 'long_only',
+    }).ok).toBe(false)
+  })
+
   it('rejects malformed top-level semantic position contracts without throwing', () => {
     expect(validateSemanticPositionContract(undefined as never)).toEqual(expect.objectContaining({ ok: false }))
     expect(validateSemanticPositionContract('fixed_quote' as never)).toEqual(expect.objectContaining({ ok: false }))
