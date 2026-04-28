@@ -102,10 +102,10 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
       },
     } as any)
 
-    await repo.findSymbolsByCodeForMarket(['BTCUSDT', 'ETHUSDT:PERP'], 'perp')
+    await repo.findSymbolsByCodeForMarket(['BTCUSDT', 'BTCUSDT:PERP'], 'perp')
 
     expect(findMany).toHaveBeenCalledWith({
-      where: { code: { in: ['BTCUSDT:PERP', 'ETHUSDT:PERP'] } },
+      where: { code: { in: ['BTCUSDT:PERP'] } },
     })
   })
 
@@ -124,6 +124,24 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
 
     expect(() => repo.findSymbolByCodeForMarket('BTCUSDT:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
     expect(() => repo.findSymbolsByCodeForMarket(['BTCUSDT:PERP'], 'spot')).toThrow('market.symbol_unknown_suffix')
+    expect(findUnique).not.toHaveBeenCalled()
+    expect(findMany).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed explicit symbol suffixes before querying one symbol', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    expect(() => repo.findSymbolByCodeForMarket('BTCUSDT:SPOT:PERP', 'perp')).toThrow('market.symbol_unknown_suffix')
     expect(findUnique).not.toHaveBeenCalled()
     expect(findMany).not.toHaveBeenCalled()
   })

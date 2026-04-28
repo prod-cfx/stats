@@ -1,4 +1,5 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { RuntimeMarketType } from '@/modules/market-data/utils/market-symbol-code.util'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -82,7 +83,7 @@ export class SignalGeneratorRepository {
     })
   }
 
-  findSymbolsByCodeForMarket(codes: string[], marketType: 'spot' | 'perp') {
+  findSymbolsByCodeForMarket(codes: string[], marketType: RuntimeMarketType) {
     const normalizedCodes = [...new Set(codes.map(code => normalizeRequestedCodeForMarket(code, marketType)))]
     return this.txHost.tx.symbol.findMany({
       where: { code: { in: normalizedCodes } },
@@ -97,7 +98,7 @@ export class SignalGeneratorRepository {
     })
   }
 
-  findSymbolByCodeForMarket(code: string, marketType: 'spot' | 'perp') {
+  findSymbolByCodeForMarket(code: string, marketType: RuntimeMarketType) {
     return this.txHost.tx.symbol.findUnique({
       where: {
         code: normalizeRequestedCodeForMarket(code, marketType),

@@ -37,7 +37,8 @@ export const normalizeRequestedCodeForMarket = (input: string, marketType: Runti
     return toSymbolCode(normalized, expectedMarket)
   }
 
-  const actualMarket = parseSymbolMarket(normalized)
+  const parts = normalized.split(':')
+  const actualMarket = parts.length === 2 ? parseSymbolMarket(normalized) : null
   if (actualMarket !== expectedMarket) {
     throw new DomainException('market.symbol_unknown_suffix', {
       code: ErrorCode.MARKET_INVALID_SYMBOL,
