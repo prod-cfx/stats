@@ -28,7 +28,10 @@ export interface SemanticEditableSlotContract {
 export type SemanticContractValidationResult = { ok: true } | { ok: false, reason: string }
 
 export type SemanticActionContractInput = Pick<SemanticActionState, 'key'> & Partial<Omit<SemanticActionState, 'key'>>
-export type SemanticPositionContractInput = Pick<SemanticPositionState, 'positionMode'> & Partial<Omit<SemanticPositionState, 'positionMode'>>
+export type SemanticPositionContractInput = (
+  | { sizing: SemanticPositionSizingContract | null }
+  | Pick<SemanticPositionState, 'mode' | 'value'>
+) & Pick<SemanticPositionState, 'positionMode'> & Partial<Omit<SemanticPositionState, 'sizing' | 'mode' | 'value' | 'positionMode'>>
 export type SemanticRiskContractInput = Pick<SemanticRiskState, 'key' | 'params'> & Partial<Omit<SemanticRiskState, 'key' | 'params'>>
 
 const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
@@ -146,7 +149,8 @@ const SUPPORTED_SERIES_FIELDS = new Set<string>(['open', 'high', 'low', 'close']
 const SUPPORTED_INDICATOR_NAMES = new Set<string>(['sma', 'ema', 'rsi', 'macd'])
 const SUPPORTED_POSITION_FIELDS = new Set<string>(['avg_price', 'pnl_pct', 'bars_held', 'has_position'])
 const SUPPORTED_ACTION_KEYS = new Set<string>(['open_long', 'close_long', 'open_short', 'close_short'])
-const SUPPORTED_QUOTE_ASSETS = new Set<string>(['USDT', 'USDC', 'USD'])
+const SUPPORTED_QUOTE_ASSETS = ['USDT', 'USDC', 'USD'] as const
+const SUPPORTED_QUOTE_ASSET_SET = new Set<string>(SUPPORTED_QUOTE_ASSETS)
 const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only', 'long_short'])
 const SUPPORTED_RISK_KEYS = new Set<string>(['risk.stop_loss_pct', 'risk.take_profit_pct'])
 
@@ -216,7 +220,7 @@ export function validateSemanticPositionContract(position: unknown): SemanticCon
     return invalid('invalid_position_contract')
   }
 
-  const sizingResult = validatePositionSizingContract(normalizeLegacyPositionSizing(position))
+  const sizingResult = validatePositionSizingContract(resolvePositionSizingCandidate(position))
   if (!sizingResult.ok) return sizingResult
 
   if (typeof position.positionMode !== 'string' || !SUPPORTED_POSITION_SIDE_MODES.has(position.positionMode)) {
@@ -228,7 +232,9 @@ export function validateSemanticPositionContract(position: unknown): SemanticCon
 
 export function normalizeLegacyPositionSizing(position: unknown): SemanticPositionSizingContract | null {
   if (!isRecord(position)) return null
-  if (isRecord(position.sizing)) return position.sizing as SemanticPositionSizingContract
+  if (isRecord(position.sizing)) {
+    return isSemanticPositionSizingContract(position.sizing) ? position.sizing : null
+  }
   if (typeof position.mode !== 'string' || typeof position.value !== 'number' || !Number.isFinite(position.value)) return null
 
   if (position.mode === 'fixed_ratio') {
@@ -243,6 +249,10 @@ export function normalizeLegacyPositionSizing(position: unknown): SemanticPositi
   return null
 }
 
+function resolvePositionSizingCandidate(position: Record<string, unknown>): unknown {
+  return isRecord(position.sizing) ? position.sizing : normalizeLegacyPositionSizing(position)
+}
+
 function validatePositionSizingContract(sizing: unknown): SemanticContractValidationResult {
   if (!isRecord(sizing) || typeof sizing.kind !== 'string') return invalid('invalid_position_sizing_contract')
   if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return invalid('invalid_position_value')
@@ -251,7 +261,7 @@ function validatePositionSizingContract(sizing: unknown): SemanticContractValida
     return sizing.unit === 'ratio' || sizing.unit === 'percent' ? valid() : invalid('invalid_position_ratio_unit')
   }
   if (sizing.kind === 'quote') {
-    return typeof sizing.asset === 'string' && SUPPORTED_QUOTE_ASSETS.has(sizing.asset)
+    return typeof sizing.asset === 'string' && SUPPORTED_QUOTE_ASSET_SET.has(sizing.asset)
       ? valid()
       : invalid('invalid_position_quote_asset')
   }
@@ -261,6 +271,10 @@ function validatePositionSizingContract(sizing: unknown): SemanticContractValida
       : invalid('invalid_position_base_asset')
   }
   return invalid('unsupported_position_sizing_kind')
+}
+
+function isSemanticPositionSizingContract(sizing: unknown): sizing is SemanticPositionSizingContract {
+  return validatePositionSizingContract(sizing).ok
 }
 
 export function validateSemanticRiskContract(risk: SemanticRiskContractInput): SemanticContractValidationResult

@@ -1,4 +1,5 @@
 import {
+  normalizeLegacyPositionSizing,
   resolveSemanticContract,
   validateSemanticActionContract,
   validateSemanticExpressionContract,
@@ -147,12 +148,25 @@ describe('strategySemanticContracts', () => {
     expect(validateSemanticPositionContract({
       sizing: { kind: 'quote', value: 0, asset: 'USDT' },
       positionMode: 'long_only',
-    }).ok).toBe(false)
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_position_value',
+    }))
 
     expect(validateSemanticPositionContract({
       sizing: { kind: 'base', value: 0.001, asset: '' },
       positionMode: 'long_only',
-    }).ok).toBe(false)
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_position_base_asset',
+    }))
+  })
+
+  it('does not normalize malformed position sizing contracts', () => {
+    expect(normalizeLegacyPositionSizing({
+      sizing: { kind: 'quote', value: 0, asset: 'USDT' },
+      positionMode: 'long_only',
+    })).toBeNull()
   })
 
   it('rejects malformed top-level semantic position contracts without throwing', () => {

@@ -97,8 +97,8 @@ export type SemanticPositionSizingContract =
 
 export interface SemanticPositionState {
   sizing?: SemanticPositionSizingContract | null
-  mode?: string
-  value?: number
+  mode: string
+  value: number
   positionMode: string
   status: SemanticNodeStatus
   source: SemanticSource
