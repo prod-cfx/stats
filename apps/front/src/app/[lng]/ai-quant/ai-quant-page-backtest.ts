@@ -74,16 +74,9 @@ function buildInvalidExecutionConfigMessage(args: {
 }): string {
   const { activeConversation, executionConfig, marketType, t } = args
 
-  if (!executionConfig.allowPartialValid) {
-    return t('aiQuant.messages.backtestPayloadInvalid', {
-      reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
-    })
-  }
-
   if (activeConversation.publishedSnapshotId) {
     if (
       !activeConversation.publishedSnapshotStrategyConfig ||
-      !activeConversation.publishedSnapshotBacktestConfigDefaults ||
       activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
     ) {
       return t('aiQuant.messages.backtestPayloadInvalid', {
@@ -95,6 +88,12 @@ function buildInvalidExecutionConfigMessage(args: {
 
   if (!marketType) {
     return '请先确认策略交易的是现货还是合约，然后再开始回测。'
+  }
+
+  if (!executionConfig.allowPartialValid) {
+    return t('aiQuant.messages.backtestPayloadInvalid', {
+      reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
+    })
   }
 
   const invalidFields: string[] = []
@@ -136,45 +135,27 @@ function buildBacktestTimeoutMessage(args: { createdJobId: string; t: Translate 
   })
 }
 
-function isRepublishRequiredSnapshotError(code: string | undefined, args?: Record<string, unknown>): boolean {
-  if (code === 'BACKTEST_SNAPSHOT_REQUIRED') {
-    return true
-  }
-  if (args?.requiresRepublish !== true) {
-    return false
-  }
-
-  const missingFields = Array.isArray(args.missingFields)
-    ? args.missingFields.filter((field): field is string => typeof field === 'string')
-    : []
-
-  return missingFields.includes('strategyConfig') || missingFields.includes('backtestConfigDefaults')
-}
-
 function buildDynamicBacktestAvailabilityMessage(
   t: Translate,
   code: string | undefined,
   args?: Record<string, unknown>,
 ): string | null {
   if (!code) return null
-  const normalizedCode = isRepublishRequiredSnapshotError(code, args)
-    ? 'BACKTEST_SNAPSHOT_REQUIRED'
-    : code
 
   if (
-    normalizedCode === 'BACKTEST_SNAPSHOT_REQUIRED'
-    || normalizedCode === 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
-    || normalizedCode === 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING'
-    || normalizedCode === 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
-    || normalizedCode === 'BACKTEST_SYMBOL_UNAVAILABLE'
-    || normalizedCode === 'BACKTEST_SYMBOL_REFRESH_FAILED'
-    || normalizedCode === 'BACKTEST_MARKET_DATA_UNAVAILABLE'
-    || normalizedCode === 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE'
-    || normalizedCode === 'SERVICE_TEMPORARILY_UNAVAILABLE'
-    || normalizedCode === 'TOO_MANY_REQUESTS'
+    code === 'BACKTEST_SNAPSHOT_REQUIRED'
+    || code === 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+    || code === 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING'
+    || code === 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
+    || code === 'BACKTEST_SYMBOL_UNAVAILABLE'
+    || code === 'BACKTEST_SYMBOL_REFRESH_FAILED'
+    || code === 'BACKTEST_MARKET_DATA_UNAVAILABLE'
+    || code === 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'TOO_MANY_REQUESTS'
   ) {
     return buildLocalizedBacktestErrorMessage(t, 400, {
-      code: normalizedCode,
+      code,
       stage: 'backtest',
       args,
     })
@@ -305,16 +286,6 @@ export async function runAiQuantBacktest(args: {
         'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
       )
     }
-    const executionConfig = resolveBacktestExecutionConfig(activeConversation.paramValues)
-    if (!executionConfig.allowPartialValid) {
-      throw new BacktestPayloadBuilderError('invalid_execution_config')
-    }
-    if (!activeConversation.publishedSnapshotBacktestConfigDefaults) {
-      throw new ApiError(
-        '当前已发布快照缺少回测配置真相，请重新发布后再回测。',
-        'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
-      )
-    }
     if (
       requiresRepublishForPublishedSnapshot({
         publishedSnapshotId: activeConversation.publishedSnapshotId,
@@ -327,8 +298,12 @@ export async function runAiQuantBacktest(args: {
       throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
     }
 
+    const executionConfig = resolveBacktestExecutionConfig(activeConversation.paramValues)
     const snapshotStateTimeframes =
       activeConversation.publishedSnapshotBacktestConfigDefaults?.stateTimeframes ?? []
+    if (!executionConfig.allowPartialValid) {
+      throw new BacktestPayloadBuilderError('invalid_execution_config')
+    }
     backtestExchange = effectiveInputs.exchange
     backtestMarketType = effectiveInputs.marketType
     payload = buildBacktestPayload({
