@@ -1708,7 +1708,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('allows published snapshot backtest without snapshot defaults when AI-Quant page execution params are valid', async () => {
+  it('blocks published snapshot backtest without truthful snapshot defaults even when AI-Quant page execution params are valid', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].backtestExecutionConfigExplicit = false
     seeded[0].paramValues = {
@@ -1743,20 +1743,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
-    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
-    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stateTimeframes: ['15m'],
-        initialCash: 18000,
-        leverage: 2,
-        execution: expect.objectContaining({
-          slippageBps: 3,
-          feeBps: 1,
-          priceSource: 'open',
-        }),
-      }),
-    )
-    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').toContain(
       '重新发布',
     )
   })
