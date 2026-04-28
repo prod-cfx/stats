@@ -575,6 +575,7 @@ export class CanonicalSpecBuilderService {
           trigger,
           sizing,
           defaultTimeframe,
+          gateConditions,
         }))
         continue
       }
@@ -595,7 +596,9 @@ export class CanonicalSpecBuilderService {
       }
       const ruleCondition = trigger.phase === 'gate'
         ? condition
-        : this.attachSemanticGateConditions(condition, gateConditions)
+        : trigger.phase === 'entry'
+          ? this.attachSemanticGateConditions(condition, gateConditions)
+          : condition
 
       for (const ruleVariant of this.splitSemanticRuleVariants(trigger, actions)) {
         counters[trigger.phase] += 1
@@ -1835,6 +1838,7 @@ export class CanonicalSpecBuilderService {
     trigger: SemanticTriggerState
     sizing: CanonicalStrategySpecV2['sizing']
     defaultTimeframe: string | null
+    gateConditions?: CanonicalConditionNode[]
   }): CanonicalRuleV2[] {
     const gridParams = this.resolveGridParamsFromSemanticTrigger(input.trigger, input.defaultTimeframe)
     if (!gridParams) {
@@ -1847,30 +1851,36 @@ export class CanonicalSpecBuilderService {
       sideScope: 'long' | 'short',
       op: 'LTE' | 'GTE',
       actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT',
-    ): CanonicalRuleV2 => ({
-      id: `semantic-${phase}-grid-range-rebalance-${sideScope}`,
-      phase,
-      sideScope,
-      priority: phase === 'entry' ? 170 : 120,
-      condition: {
+    ): CanonicalRuleV2 => {
+      const condition: CanonicalConditionNode = {
         kind: 'atom',
         key: 'grid.range_rebalance',
         semanticScope: 'market',
         op,
         params: gridParams,
-      },
-      actions: [phase === 'entry'
-        ? this.buildOpenAction(actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
-        : { type: actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
-      metadata: {
-        semantic: {
-          source: 'semantic-state',
-          triggerKeys: [input.trigger.key],
-          actionKeys: [actionType],
-          family: 'grid.range_rebalance',
+      }
+
+      return {
+        id: `semantic-${phase}-grid-range-rebalance-${sideScope}`,
+        phase,
+        sideScope,
+        priority: phase === 'entry' ? 170 : 120,
+        condition: phase === 'entry'
+          ? this.attachSemanticGateConditions(condition, input.gateConditions ?? [])
+          : condition,
+        actions: [phase === 'entry'
+          ? this.buildOpenAction(actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+          : { type: actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+        metadata: {
+          semantic: {
+            source: 'semantic-state',
+            triggerKeys: [input.trigger.key],
+            actionKeys: [actionType],
+            family: 'grid.range_rebalance',
+          },
         },
-      },
-    })
+      }
+    }
 
     const rules: CanonicalRuleV2[] = []
     if (sideMode === 'long_only' || sideMode === 'bidirectional') {

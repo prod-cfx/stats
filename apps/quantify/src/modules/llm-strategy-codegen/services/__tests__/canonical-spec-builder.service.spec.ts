@@ -212,6 +212,64 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('attaches generic semantic gates to entry rules without blocking exits', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'entry-close-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('GT') },
+        },
+        {
+          id: 'exit-close-open',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('LT') },
+        },
+        {
+          id: 'regime-gate',
+          key: 'market.regime',
+          phase: 'gate',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { value: 'range', mode: 'hard_gate' },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const entryRule = spec.rules.find(rule => rule.phase === 'entry')
+    const exitRule = spec.rules.find(rule => rule.phase === 'exit')
+
+    expect(entryRule?.condition).toEqual(expect.objectContaining({
+      kind: 'AND',
+      children: expect.arrayContaining([
+        expect.objectContaining({ kind: 'expression', op: 'GT' }),
+        expect.objectContaining({ key: 'market.regime', value: 'range' }),
+      ]),
+    }))
+    expect(exitRule?.condition).toEqual(expect.objectContaining({
+      kind: 'expression',
+      op: 'LT',
+    }))
+    expect(JSON.stringify(exitRule?.condition)).not.toContain('market.regime')
+  })
+
   it('builds valid SemanticState entry rules when sideScope both opens long and short', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({
