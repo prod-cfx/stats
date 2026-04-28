@@ -685,6 +685,7 @@ describe('compiledPublicationGateService', () => {
         viewType: 'canonical-semantic-view.v1',
         canonicalDigest: 'sha256:multi',
       },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -717,6 +718,7 @@ describe('compiledPublicationGateService', () => {
       }),
       paramsSnapshot: expect.objectContaining({ timeframe: '3m' }),
       dataRequirements: expect.objectContaining({ requiredTimeframes: ['3m', '15m'] }),
+      consistencyReport: expect.objectContaining({ status: 'PASSED' }),
     }))
   })
 
