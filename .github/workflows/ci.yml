@@ -40,6 +40,7 @@ jobs:
       NX_DAEMON: 'false'
       CI: '1'
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      DX_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'prod' || 'staging' }}
       NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
@@ -103,6 +104,7 @@ jobs:
       NX_DAEMON: 'false'
       CI: '1'
       APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      DX_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'prod' || 'staging' }}
       NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
