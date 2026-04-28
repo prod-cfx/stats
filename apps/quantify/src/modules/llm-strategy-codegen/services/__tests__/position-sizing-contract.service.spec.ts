@@ -8,6 +8,7 @@ describe('PositionSizingContractService', () => {
     ['单笔百分之10资金', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['每次使用 0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
+    ['BTC 跌到 60000 USDT 用 10% 仓位开多', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
   ])('parses ratio sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })
@@ -38,6 +39,7 @@ describe('PositionSizingContractService', () => {
     '单笔风险 10 USDT',
     '亏损 10% 止损',
     '价格上涨 10% 开多',
+    '资金费率达到 0.1% 开多',
     'BTC 跌到 60000 USDT 开多',
     '价格达到 30000 USDT 买入',
   ])('does not parse risk text as position sizing: %s', (text) => {

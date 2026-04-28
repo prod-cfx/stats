@@ -16,9 +16,9 @@ export class PositionSizingContractService {
     for (const clause of this.splitClauses(normalized)) {
       if (this.looksLikeRiskSizing(clause)) continue
 
-      const parsed = this.parseQuote(clause, messageIndex)
+      const parsed = this.parseRatio(clause, messageIndex)
+        ?? this.parseQuote(clause, messageIndex)
         ?? this.parseBase(clause, messageIndex)
-        ?? this.parseRatio(clause, messageIndex)
       if (parsed) return parsed
     }
 
@@ -100,7 +100,7 @@ export class PositionSizingContractService {
 
   private hasRatioSizingContext(text: string, index: number): boolean {
     const context = text.slice(Math.max(0, index - 12), index + 20)
-    return /(?:仓位|资金|比例|使用|投入|固定|单笔|每次|每笔|每单|用)/u.test(context)
+    return /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)/u.test(context)
   }
 
   private hasQuoteSizingContext(text: string): boolean {
