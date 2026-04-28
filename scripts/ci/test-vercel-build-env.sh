@@ -19,12 +19,16 @@ assert_output() {
 }
 
 assert_failure() {
+  local stdout_file
+  local stderr_file
+  stdout_file="$(mktemp)"
+  stderr_file="$(mktemp)"
+  trap 'rm -f "$stdout_file" "$stderr_file"' RETURN
+
   set +e
-  "$@" >/tmp/vercel-build-env-test.out 2>/tmp/vercel-build-env-test.err
+  "$@" >"$stdout_file" 2>"$stderr_file"
   local status=$?
   set -e
-
-  rm -f /tmp/vercel-build-env-test.out /tmp/vercel-build-env-test.err
 
   if (( status == 0 )); then
     echo "Expected failure for: $*" >&2
