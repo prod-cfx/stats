@@ -104,7 +104,6 @@ export class SemanticAtomInvariantService {
   private isBlockingGenericExpressionTrigger(trigger: SemanticTriggerState): boolean {
     return trigger.key === 'condition.expression'
       && trigger.status === 'locked'
-      && trigger.source === 'user_explicit'
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
       && this.isSemanticExpression(trigger.params.expression)
   }

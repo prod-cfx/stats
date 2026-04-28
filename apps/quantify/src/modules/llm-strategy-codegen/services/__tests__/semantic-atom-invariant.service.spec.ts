@@ -698,6 +698,31 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('detects inferred generic expression drift once the trigger is locked', () => {
+    const state = buildCloseOpenExpressionSemanticState()
+    state.triggers = state.triggers.map(trigger => ({
+      ...trigger,
+      source: 'inferred',
+    }))
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const driftChecks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: driftCloseOpenExpressionAst(ast),
+    })
+
+    expect(driftChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'failed',
+        level: 'critical',
+        message: expect.stringMatching(/semantic expression drift/i),
+      }),
+    ]))
+  })
+
   it('detects logical generic expression leaf drift', () => {
     const state = buildLogicalExpressionSemanticState()
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
