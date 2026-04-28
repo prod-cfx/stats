@@ -12,6 +12,7 @@ import type {
   CanonicalConditionNode,
   CanonicalExpressionCondition,
   CanonicalRuleAction,
+  CanonicalRuleSideScope,
   CanonicalRuleV2,
   CanonicalStrategySpecV2,
 } from '../types/canonical-strategy-spec'
@@ -1112,7 +1113,7 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'STOP_LOSS_PCT',
         scope: 'position',
-        appliesTo: rule.sideScope ?? 'both',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
         onBreach,
       }
@@ -1125,7 +1126,7 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'TAKE_PROFIT_PCT',
         scope: 'position',
-        appliesTo: rule.sideScope ?? 'both',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
         onBreach,
       }
@@ -1136,13 +1137,18 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'TRAILING_STOP_PCT',
         scope: 'position',
-        appliesTo: rule.sideScope ?? 'both',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
         onBreach,
       }
     }
 
     return null
+  }
+
+  private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {
+    if (sideScope === 'long' || sideScope === 'short') return sideScope
+    return 'both'
   }
 
   private compileActions(

@@ -2029,6 +2029,60 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('normalizes flat risk side scope before emitting IR guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'risk-flat-stop-loss',
+            phase: 'risk',
+            sideScope: 'flat',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.05,
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'STOP_LOSS_PCT',
+        appliesTo: 'both',
+      }),
+    ]))
+  })
+
   it('compiles partial take-profit into rebalance reduce actions instead of a force-exit guard', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
