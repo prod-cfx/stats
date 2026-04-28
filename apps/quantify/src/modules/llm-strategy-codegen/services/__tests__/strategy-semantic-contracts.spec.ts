@@ -25,6 +25,28 @@ describe('strategySemanticContracts', () => {
     expect(contract.defaultableParams).toEqual(expect.arrayContaining(['recycle']))
   })
 
+  it('keeps range rebalance grid aliases aligned with semantic canonical params', () => {
+    const contract = resolveSemanticContract('grid.range_rebalance')
+
+    expect(contract.requiredParams).toEqual(['rangeMin', 'rangeMax', 'stepPct'])
+    expect(contract.optionalParams).toEqual(expect.arrayContaining(['sideMode', 'recycle']))
+    expect(contract.editableSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'grid.range',
+        valueShape: 'range',
+        rangeParamPairs: expect.arrayContaining([
+          ['rangeMin', 'rangeMax'],
+          ['rangeLower', 'rangeUpper'],
+          ['range.lower', 'range.upper'],
+        ]),
+      }),
+      expect.objectContaining({
+        slotKey: 'grid.stepPct',
+        paramPaths: ['stepPct'],
+      }),
+    ]))
+  })
+
   it('accepts close greater than open predicate expressions', () => {
     expect(validateSemanticExpressionContract({
       kind: 'predicate',
