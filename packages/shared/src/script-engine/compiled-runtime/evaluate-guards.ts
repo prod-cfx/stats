@@ -3,12 +3,13 @@ import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 
 interface GuardProgramNode {
   id: string
-  payload: {
-    kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT' | 'MAX_POSITION_PCT'
-    scope?: 'position' | 'strategy' | 'order_program'
-    value?: number
-    onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
-  }
+	payload: {
+		kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT' | 'MAX_POSITION_PCT'
+		scope?: 'position' | 'strategy' | 'order_program'
+		appliesTo?: 'long' | 'short' | 'both'
+		value?: number
+		onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
+	}
 }
 
 export interface CompiledGuardState {
@@ -77,11 +78,14 @@ function isGuardBreached(
   const currentPrice = readCurrentPrice(ctx)
   const thresholdPct = readThresholdPct(guard)
 
-  if (qty === 0 || entryPrice == null || currentPrice == null || thresholdPct == null) {
-    return false
-  }
+	if (qty === 0 || entryPrice == null || currentPrice == null || thresholdPct == null) {
+		return false
+	}
+	if (!doesGuardApplyToPositionSide(guard, qty)) {
+		return false
+	}
 
-  switch (guard.payload.kind) {
+	switch (guard.payload.kind) {
     case 'STOP_LOSS_PCT':
       return thresholdPct > 0 && readPositionPnlPct(qty, entryPrice, currentPrice) <= -thresholdPct
     case 'TAKE_PROFIT_PCT':
@@ -100,7 +104,18 @@ function isGuardBreached(
     }
     default:
       return false
-  }
+	}
+}
+
+function doesGuardApplyToPositionSide(
+	guard: GuardProgramNode,
+	qty: number,
+): boolean {
+	const appliesTo = guard.payload.appliesTo ?? 'both'
+	if (appliesTo === 'both') {
+		return true
+	}
+	return appliesTo === (qty > 0 ? 'long' : 'short')
 }
 
 function isMaxPositionPctBreached(
