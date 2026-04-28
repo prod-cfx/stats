@@ -204,13 +204,20 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: false, reason: 'invalid_position_value' })
   })
 
-  it('rejects position contracts whose quote asset conflicts with legacy fixed quote', () => {
+  it('accepts explicit quote assets over legacy fixed quote compatibility metadata', () => {
     expect(validateSemanticPositionContract({
       sizing: { kind: 'quote', value: 10, asset: 'USDC' },
       mode: 'fixed_quote',
       value: 10,
       positionMode: 'long_only',
-    })).toEqual({ ok: false, reason: 'position_sizing_legacy_mismatch' })
+    })).toEqual({ ok: true })
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USD' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: true })
   })
 
   it('accepts explicit base asset sizing over the legacy fixed quantity placeholder', () => {

@@ -308,10 +308,10 @@ function isEquivalentPositionSizing(
     return legacySizing.kind === 'ratio' && sizing.unit === legacySizing.unit
   }
   if (sizing.kind === 'quote') {
-    return legacySizing.kind === 'quote' && sizing.asset === legacySizing.asset
+    return legacySizing.kind === 'quote'
   }
   if (sizing.kind === 'base') {
-    return legacySizing.kind === 'base' && sizing.asset === legacySizing.asset
+    return legacySizing.kind === 'base'
   }
 
   return false
