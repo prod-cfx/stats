@@ -19,5 +19,14 @@ case "$APP_ENV" in
     ;;
 esac
 
-APP_ENV="$APP_ENV_FOR_BUILD" npx -y "@ranger1/dx@${DX_VERSION}" build shared
-APP_ENV="$APP_ENV_FOR_BUILD" npx -y "@ranger1/dx@${DX_VERSION}" build admin "$DX_ENV_FLAG"
+run_dx() {
+  if [[ "${VERCEL_BUILD_DRY_RUN:-}" == "1" ]]; then
+    printf 'APP_ENV=%s npx -y @ranger1/dx@%s %s\n' "$APP_ENV_FOR_BUILD" "$DX_VERSION" "$*"
+    return
+  fi
+
+  APP_ENV="$APP_ENV_FOR_BUILD" npx -y "@ranger1/dx@${DX_VERSION}" "$@"
+}
+
+run_dx build shared
+run_dx build admin "$DX_ENV_FLAG"

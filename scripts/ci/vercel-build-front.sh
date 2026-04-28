@@ -17,4 +17,9 @@ case "$APP_ENV" in
     ;;
 esac
 
+if [[ "${VERCEL_BUILD_DRY_RUN:-}" == "1" ]]; then
+  printf 'npx -y @ranger1/dx@%s build front %s\n' "$DX_VERSION" "$DX_ENV_FLAG"
+  exit 0
+fi
+
 npx -y "@ranger1/dx@${DX_VERSION}" build front "$DX_ENV_FLAG"
