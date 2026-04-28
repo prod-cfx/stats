@@ -534,10 +534,10 @@ export class CanonicalSpecBuilderService {
     }
 
     if (sizing.kind === 'quote') {
-      return { mode: 'QUOTE', value: sizing.value }
+      return { mode: 'QUOTE', value: sizing.value, asset: sizing.asset }
     }
     if (sizing.kind === 'base') {
-      return { mode: 'QTY', value: sizing.value }
+      return { mode: 'QTY', value: sizing.value, asset: sizing.asset }
     }
 
     return { mode: 'RATIO', value: sizing.value }

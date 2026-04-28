@@ -4,7 +4,7 @@ import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
 import type { SemanticExpression, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState } from '../../types/semantic-state'
 
-type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY', value: number }
+type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY', value: number, asset?: string }
 
 function closeOpenPredicate(op: SemanticExpressionOperator): SemanticExpression {
   return {
@@ -107,11 +107,11 @@ describe('canonicalSpecBuilderService', () => {
     ],
     [
       { kind: 'quote', value: 10, asset: 'USDT' },
-      { mode: 'QUOTE', value: 10 },
+      { mode: 'QUOTE', value: 10, asset: 'USDT' },
     ],
     [
       { kind: 'base', value: 0.001, asset: 'BTC' },
-      { mode: 'QTY', value: 0.001 },
+      { mode: 'QTY', value: 0.001, asset: 'BTC' },
     ],
   ] satisfies Array<[SemanticPositionSizingContract, ExpectedCanonicalSizing]>)(
     'maps semantic position contract %o into canonical sizing %o',
@@ -232,7 +232,7 @@ describe('canonicalSpecBuilderService', () => {
       marketType: null,
       defaultTimeframe: '1m',
     })
-    expect(spec.sizing).toEqual({ mode: 'QUOTE', value: 10 })
+    expect(spec.sizing).toEqual({ mode: 'QUOTE', value: 10, asset: 'USDT' })
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'semantic-entry-1',
@@ -246,7 +246,7 @@ describe('canonicalSpecBuilderService', () => {
         }),
         actions: [expect.objectContaining({
           type: 'OPEN_LONG',
-          sizing: { mode: 'QUOTE', value: 10 },
+          sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
         })],
       }),
       expect.objectContaining({

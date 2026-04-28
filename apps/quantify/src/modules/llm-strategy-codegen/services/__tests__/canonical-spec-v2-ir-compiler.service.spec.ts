@@ -71,9 +71,19 @@ describe('canonicalSpecV2IrCompilerService', () => {
       '10 USDT',
     ],
     [
+      { mode: 'QUOTE', value: 10, asset: 'USDC' },
+      { mode: 'fixed_quote', value: 10, asset: 'USDC' },
+      '10 USDC',
+    ],
+    [
       { mode: 'QTY', value: 0.001 },
       { mode: 'fixed_base', value: 0.001 },
       '0.001 BTC',
+    ],
+    [
+      { mode: 'QTY', value: 0.001, asset: 'ETH' },
+      { mode: 'fixed_base', value: 0.001, asset: 'ETH' },
+      '0.001 ETH',
     ],
   ] satisfies Array<[
     NonNullable<CanonicalStrategySpecV2['sizing']>,

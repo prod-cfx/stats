@@ -1227,12 +1227,14 @@ export class CanonicalSpecV2IrCompilerService {
       return {
         mode: 'fixed_quote',
         value: sizing.value,
+        ...(sizing.asset ? { asset: sizing.asset } : {}),
       }
     }
 
     return {
       mode: 'fixed_base',
       value: sizing.value,
+      ...(sizing.asset ? { asset: sizing.asset } : {}),
     }
   }
 
@@ -1258,12 +1260,14 @@ export class CanonicalSpecV2IrCompilerService {
       return {
         mode: 'fixed_quote',
         value: spec.sizing.value,
+        ...(spec.sizing.asset ? { asset: spec.sizing.asset } : {}),
       }
     }
 
     return {
       mode: 'fixed_base',
       value: spec.sizing.value,
+      ...(spec.sizing.asset ? { asset: spec.sizing.asset } : {}),
     }
   }
 
@@ -1494,10 +1498,10 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     if (sizing.mode === 'QUOTE') {
-      return `${this.formatDisplayNumber(sizing.value)} ${this.inferQuoteAsset(symbol)}`
+      return `${this.formatDisplayNumber(sizing.value)} ${sizing.asset ?? this.inferQuoteAsset(symbol)}`
     }
 
-    return `${this.formatDisplayNumber(sizing.value)} ${this.inferBaseAsset(symbol)}`
+    return `${this.formatDisplayNumber(sizing.value)} ${sizing.asset ?? this.inferBaseAsset(symbol)}`
   }
 
   private inferQuoteAsset(symbol: string): string {
