@@ -33,7 +33,7 @@ if (missingEnvVars.length > 0) {
 }
 
 // 检查 APP_ENV 的值是否合法
-const validAppEnvValues = ['dev', 'development', 'production', 'test', 'local', 'e2e']
+const validAppEnvValues = ['dev', 'development', 'staging', 'production', 'test', 'local', 'e2e']
 const appEnv = process.env.APP_ENV
 if (!validAppEnvValues.includes(appEnv)) {
   console.error('\x1B[31m%s\x1B[0m', '错误: APP_ENV 的值必须是以下之一:')
