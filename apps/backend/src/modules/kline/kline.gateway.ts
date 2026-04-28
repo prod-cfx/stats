@@ -45,37 +45,32 @@ const SOCKET_PING_INTERVAL_MS = 25000
 const SOCKET_PING_TIMEOUT_MS = 5000
 const STALE_CONNECTION_THRESHOLD_MS = 120000
 
-// 允许的 CORS origin 正则模式
-const ALLOWED_ORIGIN_PATTERNS = [
-  ...(defaultEnvAccessor.nodeEnv() === 'development'
-    ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
-    : []),
-  /^https:\/\/(www|app|admin)\.coinflux\.com$/,
-]
-
 /**
  * 验证 CORS origin 是否合法
  */
-function isValidOrigin(origin: string | undefined): boolean {
+export function isValidOrigin(origin: string | undefined): boolean {
   if (!origin) {
     return false
   }
-  // 检查是否为有效 URL 格式
+
   try {
     const url = new URL(origin)
     if (defaultEnvAccessor.nodeEnv() === 'production' && url.protocol !== 'https:') {
       return false
     }
+    if (defaultEnvAccessor.nodeEnv() !== 'development' && !['http:', 'https:'].includes(url.protocol)) {
+      return false
+    }
+    return true
   } catch {
     return false
   }
-  return ALLOWED_ORIGIN_PATTERNS.some(pattern => pattern.test(origin))
 }
 
 /**
  * 解析并验证 ALLOWED_ORIGINS 环境变量
  */
-function parseAllowedOrigins(): string[] {
+export function parseAllowedOrigins(): string[] {
   const envOrigins =
     defaultEnvAccessor.str('ALLOWED_ORIGINS')?.split(',')
       .map(o => o.trim())
@@ -87,7 +82,7 @@ function parseAllowedOrigins(): string[] {
     if (defaultEnvAccessor.nodeEnv() === 'development') {
       return ['http://localhost:3001']
     }
-    return ['https://app.coinflux.com']
+    return ['https://www.coinflux.ai']
   }
   return validOrigins
 }
