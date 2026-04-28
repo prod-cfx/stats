@@ -670,7 +670,7 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
-  it.each(['10%', '百分之10', '百分10', '10'])(
+  it.each(['10%', '百分之10', '百分10', '百分之十', '10'])(
     'locks position sizing from a semantic clarification answer: %s',
     (answer) => {
     const next = service.applyClarificationAnswer({
@@ -787,7 +787,14 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
-  it.each(['止损 5%', '资金费率达到 0.1% 开多', '价格上涨 1% 时开多'])(
+  it.each([
+    '止损 5%',
+    '止损 5% 用市价平仓',
+    '资金费率达到 0.1% 开多',
+    '资金费率达到 0.1% 用市价开多',
+    '价格上涨 1% 时开多',
+    '价格上涨 1% 时用市价开多',
+  ])(
     'keeps position sizing open when clarification answer is semantic trigger/risk percentage: %s',
     (answer) => {
       const next = service.applyClarificationAnswer({
