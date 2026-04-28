@@ -26,10 +26,6 @@ export const databaseConfig = registerAs('database', () => ({
 
 export const redisConfig = registerAs('redis', () => ({
   url: env.str('REDIS_URL', ''),
-  host: env.str('REDIS_HOST', 'localhost'),
-  port: env.int('REDIS_PORT', 6379),
-  password: env.str('REDIS_PASSWORD', ''),
-  db: env.int('REDIS_DB', 0),
   tls: env.bool('REDIS_TLS'),
 }))
 
@@ -282,4 +278,3 @@ export const backendConfigLoaders = [
   polymarketConfig,
   // 其他配置在需要时再加入 ConfigModule.load
 ]
-
