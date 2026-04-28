@@ -78,6 +78,12 @@ interface StrategyAccountFallback {
   totalUnrealizedPnl: unknown
 }
 
+interface SnapshotPositionSizing {
+  mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
+  value: number
+  asset?: string
+}
+
 type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository['findStrategyForUser']>>>
 type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: MarketType }
 
@@ -1194,6 +1200,7 @@ export class AccountStrategyViewService {
         marketType: resolvedDeploy.marketType,
         timeframe: resolvedDeploy.timeframe,
         positionPct: resolvedDeploy.positionPct,
+        positionSizing: resolvedDeploy.positionSizing,
         publishedSnapshotBinding: {
           bindingSource: 'PUBLISHED_SNAPSHOT',
           publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
@@ -1603,6 +1610,32 @@ export class AccountStrategyViewService {
       }
     }
     return null
+  }
+
+  private readSnapshotPositionSizing(
+    source: Record<string, unknown>,
+    positionPct: number | null,
+  ): SnapshotPositionSizing | null {
+    const sizing = this.readRecord(source.positionSizing)
+    if (sizing) {
+      const mode = sizing.mode
+      const value = this.readNumber(sizing, ['value'])
+      const asset = this.readString(sizing, ['asset'])
+      if (
+        (mode === 'pct_equity' || mode === 'fixed_quote' || mode === 'fixed_base' || mode === 'position_pct')
+        && value !== null
+      ) {
+        return {
+          mode,
+          value,
+          ...(asset ? { asset } : {}),
+        }
+      }
+    }
+
+    return positionPct !== null
+      ? { mode: 'pct_equity', value: positionPct }
+      : null
   }
 
   private readStatsNumber(stats: any, key: string): number | null {
@@ -2154,7 +2187,8 @@ export class AccountStrategyViewService {
     exchange: 'binance' | 'okx' | 'hyperliquid'
     symbol: string
     timeframe: string
-    positionPct: number
+    positionPct: number | null
+    positionSizing: SnapshotPositionSizing
     marketType: MarketType
     deploymentExecutionConfig: {
       leverage: number
@@ -2240,9 +2274,10 @@ export class AccountStrategyViewService {
     const symbol = this.readString(strategyConfig, ['symbol'])
     const timeframe = this.readString(strategyConfig, ['baseTimeframe', 'timeframe', 'period'])
     const positionPct = this.readNumber(strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
+    const positionSizing = this.readSnapshotPositionSizing(strategyConfig, positionPct)
     const marketType = this.readSnapshotMarketType(strategyConfig)
 
-    if (!exchange || !symbol || !timeframe || positionPct === null || !marketType) {
+    if (!exchange || !symbol || !timeframe || !positionSizing || !marketType) {
       throw new DomainException('account_strategy.deploy_missing_required_fields', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
@@ -2251,6 +2286,7 @@ export class AccountStrategyViewService {
           symbol,
           timeframe,
           positionPct,
+          positionSizing,
           marketType,
           publishedSnapshotId,
         },
@@ -2302,6 +2338,7 @@ export class AccountStrategyViewService {
       symbol,
       timeframe,
       positionPct,
+      positionSizing,
       marketType,
       deploymentExecutionConfig: {
         leverage: requestedLeverage,
