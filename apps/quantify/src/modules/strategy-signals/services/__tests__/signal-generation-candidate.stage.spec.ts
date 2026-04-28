@@ -37,4 +37,47 @@ describe('signalGenerationCandidateStage', () => {
     expect(groups[0]?.fields.get('rsi')?.id).toBe('cfg-1')
     expect(groups[0]?.fields.get('ema')?.id).toBe('cfg-2')
   })
+
+  it('loads multi-leg data with market-aware symbol lookup for perp runtime', async () => {
+    const repository = {
+      findSymbolsByCode: jest.fn().mockResolvedValue([]),
+      findSymbolsByCodeForMarket: jest.fn().mockResolvedValue([
+        {
+          id: 'symbol-perp-1',
+          code: 'BTCUSDT:PERP',
+        },
+      ]),
+    }
+    const marketDataReadGateway = {
+      getRecentBarsBySymbolId: jest.fn().mockResolvedValue([
+        {
+          time: new Date('2026-04-20T09:00:00.000Z'),
+          timestamp: 1776675600000,
+          open: 100,
+          high: 105,
+          low: 95,
+          close: 102,
+          volume: 10,
+        },
+      ]),
+    }
+    const stage = new SignalGenerationCandidateStage(
+      repository as any,
+      marketDataReadGateway as any,
+    )
+
+    await stage.loadMultiLegDataBatch(
+      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      { primary: ['15m'] },
+      'perp',
+    )
+
+    expect(repository.findSymbolsByCodeForMarket).toHaveBeenCalledWith(['BTCUSDT'], 'perp')
+    expect(repository.findSymbolsByCode).not.toHaveBeenCalled()
+    expect(marketDataReadGateway.getRecentBarsBySymbolId).toHaveBeenCalledWith(
+      'symbol-perp-1',
+      '15m',
+      expect.any(Number),
+    )
+  })
 })

@@ -1870,8 +1870,9 @@ export class SignalGeneratorService {
   private async loadMultiLegDataBatch(
     legs: StrategyLegDefinition[],
     dataRequirements: StrategyDataRequirements,
+    marketType: 'spot' | 'perp' | null = null,
   ): Promise<Record<string, Record<string, any>>> {
-    return this.candidateStage.loadMultiLegDataBatch(legs, dataRequirements)
+    return this.candidateStage.loadMultiLegDataBatch(legs, dataRequirements, marketType)
   }
 
   private async generateSignalForMultiLegStrategy(
@@ -1885,8 +1886,12 @@ export class SignalGeneratorService {
     options: { skipCooldown?: boolean } = {},
     runtimeProvenance: Prisma.JsonObject = {},
   ) {
+    const runtimeMarketType = this.readRuntimeMarketType(
+      (strategy.defaultParams as Record<string, unknown> | null | undefined)?.marketType,
+    )
+
     // 1. 查找 primary leg 的 symbol
-    const primarySymbol = await this.generatorRepository.findSymbolByCode(primaryLeg.symbol)
+    const primarySymbol = await this.findRuntimeSymbol(primaryLeg.symbol, runtimeMarketType)
 
     if (!primarySymbol) {
       this.logger.warn(`Symbol ${primaryLeg.symbol} not found for strategy ${strategy.id}`)
@@ -1900,7 +1905,7 @@ export class SignalGeneratorService {
     }
 
     // 2. 批量加载所有 leg 的数据（性能优化）
-    const multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements)
+    const multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements, runtimeMarketType)
 
     // 2.1 校验数据完整性：确保所有 dataRequirements 中定义的数据都已加载
     for (const leg of legs) {
