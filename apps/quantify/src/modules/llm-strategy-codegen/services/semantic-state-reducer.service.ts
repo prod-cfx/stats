@@ -356,15 +356,22 @@ export class SemanticStateReducerService {
       return null
     }
 
+    const parsed = this.positionSizingContracts.parse(answerText, messageIndex)
+    if (parsed) {
+      return {
+        sizing: parsed.sizing,
+        evidence: { text: answerText, messageIndex, source: 'user_explicit' },
+      }
+    }
+
     if (this.hasMultiplePercentCandidates(answerText)) {
       return null
     }
 
-    const parsed = this.positionSizingContracts.parse(answerText, messageIndex)
-      ?? this.positionSizingContracts.parse(`仓位 ${answerText}`, messageIndex)
-    if (parsed) {
+    const contextualParsed = this.positionSizingContracts.parse(`仓位 ${answerText}`, messageIndex)
+    if (contextualParsed) {
       return {
-        sizing: parsed.sizing,
+        sizing: contextualParsed.sizing,
         evidence: { text: answerText, messageIndex, source: 'user_explicit' },
       }
     }

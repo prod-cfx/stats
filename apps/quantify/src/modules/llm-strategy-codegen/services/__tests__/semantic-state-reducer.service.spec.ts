@@ -670,7 +670,15 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
-  it.each(['10%', '百分之10', '百分10', '百分之十', '10'])(
+  it.each([
+    '10%',
+    '百分之10',
+    '百分10',
+    '百分之十',
+    '10',
+    '价格下跌 1% 时用 10% 仓位开多',
+    '用 10% 仓位，止损 5%',
+  ])(
     'locks position sizing from a semantic clarification answer: %s',
     (answer) => {
     const next = service.applyClarificationAnswer({
