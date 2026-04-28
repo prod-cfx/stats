@@ -13,6 +13,7 @@ describe('PositionSizingContractService', () => {
 
   it.each([
     ['固定使用 10 USDT', { kind: 'quote', value: 10, asset: 'USDT' }],
+    ['固定使用 10 USDT，止损 5%', { kind: 'quote', value: 10, asset: 'USDT' }],
     ['每次 10u', { kind: 'quote', value: 10, asset: 'USDT' }],
     ['单笔 10 刀', { kind: 'quote', value: 10, asset: 'USD' }],
     ['投入 10 美元', { kind: 'quote', value: 10, asset: 'USD' }],
@@ -33,6 +34,7 @@ describe('PositionSizingContractService', () => {
     '止损 10 USDT',
     '单笔风险 10 USDT',
     '亏损 10% 止损',
+    '价格上涨 10% 开多',
   ])('does not parse risk text as position sizing: %s', (text) => {
     expect(service.parse(text)).toBeNull()
   })
