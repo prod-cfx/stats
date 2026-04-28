@@ -216,6 +216,78 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-1')
   })
 
+  it('deploys fixed quote sizing snapshots without requiring legacy positionPct', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-fixed', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-fixed' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-fixed-quote',
+        snapshotHash: 'snapshot-hash-fixed',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '1m',
+          marketType: 'perp',
+          positionPct: null,
+          positionSizing: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-fixed',
+        strategyTemplateId: 'template-fixed',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-fixed' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX BTC fixed',
+      publishedSnapshotId: 'snapshot-fixed-quote',
+      deployRequestId: 'deploy-req-fixed',
+      exchangeAccountId: 'acc-1',
+    } as any)
+
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      positionPct: null,
+      positionSizing: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+    }))
+    expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-fixed')
+  })
+
   it('deploys with buying power zero while preserving exchange total equity', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),

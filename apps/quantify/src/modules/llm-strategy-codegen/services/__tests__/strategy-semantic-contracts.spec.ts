@@ -1,4 +1,5 @@
 import {
+  normalizeLegacyPositionSizing,
   resolveSemanticContract,
   validateSemanticActionContract,
   validateSemanticExpressionContract,
@@ -122,6 +123,108 @@ describe('strategySemanticContracts', () => {
     expect(validateSemanticPositionContract({
       mode: 'fixed_quote',
       value: 10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: true })
+  })
+
+  it('accepts matching sizing and legacy fixed quote position contracts', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: true })
+  })
+
+  it('accepts ratio, quote, and base position sizing contracts', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    }).ok).toBe(true)
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    }).ok).toBe(true)
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'base', value: 0.001, asset: 'BASE' },
+      mode: 'fixed_qty',
+      value: 0.001,
+      positionMode: 'long_only',
+    }).ok).toBe(true)
+  })
+
+  it('rejects invalid position sizing contracts', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 0, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 0,
+      positionMode: 'long_only',
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_position_value',
+    }))
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'base', value: 0.001, asset: '' },
+      mode: 'fixed_qty',
+      value: 0.001,
+      positionMode: 'long_only',
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_position_base_asset',
+    }))
+  })
+
+  it('does not normalize malformed position sizing contracts', () => {
+    expect(normalizeLegacyPositionSizing({
+      sizing: { kind: 'quote', value: 0, asset: 'USDT' },
+      positionMode: 'long_only',
+    })).toBeNull()
+  })
+
+  it('rejects position contracts whose sizing conflicts with legacy mode and value', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })).toEqual({ ok: false, reason: 'position_sizing_legacy_mismatch' })
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: -10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: false, reason: 'invalid_position_value' })
+  })
+
+  it('accepts explicit quote assets over legacy fixed quote compatibility metadata', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDC' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: true })
+
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USD' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: true })
+  })
+
+  it('accepts explicit base asset sizing over the legacy fixed quantity placeholder', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+      mode: 'fixed_qty',
+      value: 0.001,
       positionMode: 'long_only',
     })).toEqual({ ok: true })
   })

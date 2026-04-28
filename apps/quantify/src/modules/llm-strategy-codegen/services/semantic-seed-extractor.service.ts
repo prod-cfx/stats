@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import type { SemanticExpression, SemanticExpressionOperator, SemanticExpressionOperand } from '../types/semantic-state'
+import type { SemanticExpression, SemanticExpressionOperator, SemanticExpressionOperand, SemanticPositionSizingContract } from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
+import { PositionSizingContractService } from './position-sizing-contract.service'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -21,6 +22,10 @@ type SemanticAliasContext = {
 
 @Injectable()
 export class SemanticSeedExtractorService {
+  constructor(
+    private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+  ) {}
+
   extract(message?: string): CodegenSemanticPatch {
     const text = this.normalizeText(message)
     if (!text) {
@@ -204,38 +209,23 @@ export class SemanticSeedExtractorService {
     text: string,
     triggers: SeedTrigger[],
   ): NonNullable<CodegenSemanticPatch['position']> | null {
-    const fixedQuote = this.extractFixedQuoteSizing(text)
-    if (fixedQuote !== null) {
-      return {
-        mode: 'fixed_quote',
-        value: fixedQuote,
-        positionMode: this.resolvePositionMode(text, triggers),
-      }
-    }
-
-    const percent = this.extractPercent(text, [
-      /单笔\s*(\d+(?:\.\d+)?)\s*%/u,
-      /单笔\s*(?:使用|用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:资金|仓位)?/u,
-      /单笔\s*(?:使用|用|投入)?\s*百分之?\s*(\d+(?:\.\d+)?)\s*(?:资金|仓位)?/u,
-      /仓位\s*(\d+(?:\.\d+)?)\s*%/u,
-      /仓位\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-      /(\d+(?:\.\d+)?)\s*%\s*(?:固定)?\s*仓位/u,
-      /(\d+(?:\.\d+)?)\s*%\s*仓位/u,
-      /(\d+(?:\.\d+)?)\s*%\s*资金/u,
-      /百分之?\s*(\d+(?:\.\d+)?)\s*(?:仓位|资金)/u,
-      /每笔\s*(\d+(?:\.\d+)?)\s*%/u,
-      /每笔\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-    ])
-
-    if (percent === null) {
+    const parsed = this.positionSizingContracts.parse(text)
+    if (!parsed) {
       return null
     }
 
     return {
-      mode: 'fixed_ratio',
-      value: percent / 100,
+      sizing: parsed.sizing,
+      mode: this.resolveLegacySizingMode(parsed.sizing),
+      value: parsed.sizing.value,
       positionMode: this.resolvePositionMode(text, triggers),
     }
+  }
+
+  private resolveLegacySizingMode(sizing: SemanticPositionSizingContract): 'fixed_ratio' | 'fixed_quote' | 'fixed_qty' {
+    if (sizing.kind === 'quote') return 'fixed_quote'
+    if (sizing.kind === 'base') return 'fixed_qty'
+    return 'fixed_ratio'
   }
 
   private pushCandleExpressionTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
@@ -350,20 +340,6 @@ export class SemanticSeedExtractorService {
 
   private hasExistingPositionContext(segment: string): boolean {
     return /(?:已有|已经有|当前|现有)(?:持仓|仓位)|(?:持仓|仓位)(?:已存在|存在|不为空)/u.test(segment)
-  }
-
-  private extractFixedQuoteSizing(text: string): number | null {
-    for (const segment of this.splitSegments(text)) {
-      if (/(?:止盈|止损|盈利|亏损|收益|损失|风险|风险额|最大风险|单笔风险)/u.test(segment)) continue
-
-      const value = this.extractNumber(segment, [
-        /(?:固定(?:使用|用|投入)?|单笔(?:使用|用|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|投入)?|仓位)[^\d]{0,8}(\d+(?:\.\d+)?)\s*(?:USDT|USDC|USD)\b/iu,
-        /(\d+(?:\.\d+)?)\s*(?:USDT|USDC|USD)\s*(?:固定|每次开仓|每笔开仓|每单开仓|每次下单|每笔下单|单笔|开仓|下单|买入|开多|开空|仓位)/iu,
-      ])
-      if (value !== null) return value
-    }
-
-    return null
   }
 
   private pushMovingAverageTrigger(

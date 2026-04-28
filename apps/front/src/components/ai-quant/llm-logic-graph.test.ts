@@ -148,6 +148,47 @@ describe('buildLogicGraphFromCodegenSpec', () => {
     expect(graph.actions.map(item => item.action)).toEqual(expect.arrayContaining(['SELL', 'BUY', 'CLOSE']))
   })
 
+  it('uses fixed quote sizing for action amount instead of fallback percent', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        rules: [
+          {
+            id: 'entry-close-gt-open',
+            phase: 'entry',
+            condition: { key: 'condition.expression' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' } }],
+          },
+        ],
+        canonicalSpec: {
+          market: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '1m',
+          },
+          sizing: {
+            mode: 'QUOTE',
+            value: 10,
+            asset: 'USDT',
+          },
+        },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+      15,
+    )
+
+    expect(graph.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ amount: '10 USDT' }),
+    ]))
+    expect(graph.actions).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ amount: '10%' }),
+    ]))
+  })
+
   it('uses canonical timeframe when top-level market timeframes are missing', () => {
     const graph = buildLogicGraphFromCodegenSpec(
       {

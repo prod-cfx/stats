@@ -73,6 +73,44 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[2].items.map(item => item.text).join(' ')).toContain('永续')
   })
 
+  it('displays fixed quote position sizing from canonical spec instead of fallback percent', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        canonicalSpec: {
+          market: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '1m',
+          },
+          sizing: {
+            mode: 'QUOTE',
+            value: 10,
+            asset: 'USDT',
+          },
+        },
+        rules: [
+          {
+            id: 'entry-close-gt-open',
+            phase: 'entry',
+            condition: { key: 'condition.expression' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' } }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '1m',
+        positionPct: 10,
+      },
+    })
+
+    const executeText = graph.blocks.at(-1)?.items.map(item => item.text).join(' ') ?? ''
+
+    expect(executeText).toContain('仓位: 10 USDT')
+    expect(executeText).not.toContain('仓位: 10%')
+  })
+
   it('falls back to legacy entryRules and exitRules when canonical rules are missing', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

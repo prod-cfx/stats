@@ -208,6 +208,7 @@ export class CanonicalSpecV2IrCompilerService {
     const symbol = input.canonicalSpec.market.symbol || input.fallback.symbol
     const timeframe = input.canonicalSpec.market.defaultTimeframe || input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
     const positionPct = this.resolvePositionPct(input.canonicalSpec.sizing, input.fallback.positionPct)
+    const defaultSizingAmount = this.formatGraphSizingAmount(input.canonicalSpec.sizing, input.fallback.positionPct, symbol)
     const movingAverage = this.resolveMovingAverageConfig(input.canonicalSpec)
     const rsi = this.resolveRsiConfig(input.canonicalSpec)
     const macd = this.resolveMacdConfig(input.canonicalSpec)
@@ -239,7 +240,7 @@ export class CanonicalSpecV2IrCompilerService {
             id: `action-${ruleIndex + 1}-${mapped.actionIndex + 1}`,
             action: mapped.action,
             target: symbol,
-            amount: `${positionPct}%`,
+            amount: this.formatGraphSizingAmount(rule.actions[mapped.actionIndex]?.sizing ?? input.canonicalSpec.sizing, input.fallback.positionPct, symbol),
           }))
       }),
       risk: input.canonicalSpec.rules
@@ -250,6 +251,7 @@ export class CanonicalSpecV2IrCompilerService {
         symbol,
         timeframe,
         positionPct,
+        positionSizing: defaultSizingAmount,
         executionTags: input.fallback.executionTags ?? [],
       },
     }
@@ -1225,12 +1227,14 @@ export class CanonicalSpecV2IrCompilerService {
       return {
         mode: 'fixed_quote',
         value: sizing.value,
+        ...(sizing.asset ? { asset: sizing.asset } : {}),
       }
     }
 
     return {
       mode: 'fixed_base',
       value: sizing.value,
+      ...(sizing.asset ? { asset: sizing.asset } : {}),
     }
   }
 
@@ -1256,12 +1260,14 @@ export class CanonicalSpecV2IrCompilerService {
       return {
         mode: 'fixed_quote',
         value: spec.sizing.value,
+        ...(spec.sizing.asset ? { asset: spec.sizing.asset } : {}),
       }
     }
 
     return {
       mode: 'fixed_base',
       value: spec.sizing.value,
+      ...(spec.sizing.asset ? { asset: spec.sizing.asset } : {}),
     }
   }
 
@@ -1476,6 +1482,51 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value
+  }
+
+  private formatGraphSizingAmount(
+    sizing: CanonicalStrategySpecV2['sizing'],
+    fallbackPositionPct: number,
+    symbol: string,
+  ): string {
+    if (!sizing) {
+      return `${fallbackPositionPct}%`
+    }
+
+    if (sizing.mode === 'RATIO') {
+      return `${this.formatDisplayNumber(this.resolvePositionPct(sizing, fallbackPositionPct))}%`
+    }
+
+    if (sizing.mode === 'QUOTE') {
+      return `${this.formatDisplayNumber(sizing.value)} ${sizing.asset ?? this.inferQuoteAsset(symbol)}`
+    }
+
+    return `${this.formatDisplayNumber(sizing.value)} ${sizing.asset ?? this.inferBaseAsset(symbol)}`
+  }
+
+  private inferQuoteAsset(symbol: string): string {
+    const normalized = symbol.toUpperCase()
+    for (const quote of ['USDT', 'USDC', 'USD', 'BTC', 'ETH'] as const) {
+      if (normalized.endsWith(quote) && normalized.length > quote.length) {
+        return quote
+      }
+    }
+
+    return 'QUOTE'
+  }
+
+  private inferBaseAsset(symbol: string): string {
+    const normalized = symbol.toUpperCase()
+    const quote = this.inferQuoteAsset(normalized)
+    if (quote !== 'QUOTE' && normalized.endsWith(quote)) {
+      return normalized.slice(0, -quote.length)
+    }
+
+    return 'BASE'
+  }
+
+  private formatDisplayNumber(value: number): string {
+    return Number(value.toFixed(8)).toString()
   }
 
   private resolveComparisonKind(op: CanonicalConditionAtom['op']): Extract<PredicateDef['kind'], 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ'> {

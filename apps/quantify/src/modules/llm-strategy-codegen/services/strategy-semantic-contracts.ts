@@ -1,6 +1,7 @@
 import type {
   SemanticActionState,
   SemanticExpression,
+  SemanticPositionSizingContract,
   SemanticPositionState,
   SemanticRiskState,
 } from '../types/semantic-state'
@@ -145,9 +146,11 @@ const SUPPORTED_SERIES_FIELDS = new Set<string>(['open', 'high', 'low', 'close']
 const SUPPORTED_INDICATOR_NAMES = new Set<string>(['sma', 'ema', 'rsi', 'macd'])
 const SUPPORTED_POSITION_FIELDS = new Set<string>(['avg_price', 'pnl_pct', 'bars_held', 'has_position'])
 const SUPPORTED_ACTION_KEYS = new Set<string>(['open_long', 'close_long', 'open_short', 'close_short'])
-const SUPPORTED_POSITION_MODES = new Set<string>(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
+const SUPPORTED_QUOTE_ASSETS = ['USDT', 'USDC', 'USD'] as const
+const SUPPORTED_QUOTE_ASSET_SET = new Set<string>(SUPPORTED_QUOTE_ASSETS)
 const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only', 'long_short'])
 const SUPPORTED_RISK_KEYS = new Set<string>(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+const POSITION_SIZING_VALUE_EPSILON = 1e-9
 
 const FALLBACK_EDITABLE_SLOTS: SemanticEditableSlotContract[] = [
   {
@@ -214,17 +217,108 @@ export function validateSemanticPositionContract(position: unknown): SemanticCon
   if (!isRecord(position)) {
     return invalid('invalid_position_contract')
   }
-  if (typeof position.mode !== 'string' || !SUPPORTED_POSITION_MODES.has(position.mode)) {
-    return invalid('unsupported_position_mode')
+
+  const legacySizing = normalizeLegacyModeValuePositionSizing(position)
+  const legacySizingResult = validatePositionSizingContract(legacySizing)
+  if (!legacySizingResult.ok) return legacySizingResult
+
+  if (position.sizing !== undefined && position.sizing !== null) {
+    const explicitSizing = isSemanticPositionSizingContract(position.sizing) ? position.sizing : null
+    if (!explicitSizing) return validatePositionSizingContract(position.sizing)
+    if (!isEquivalentPositionSizing(explicitSizing, legacySizing)) {
+      return invalid('position_sizing_legacy_mismatch')
+    }
   }
-  if (typeof position.value !== 'number' || !Number.isFinite(position.value) || position.value <= 0) {
-    return invalid('invalid_position_value')
-  }
+
   if (typeof position.positionMode !== 'string' || !SUPPORTED_POSITION_SIDE_MODES.has(position.positionMode)) {
     return invalid('unsupported_position_side_mode')
   }
 
   return valid()
+}
+
+export function normalizeLegacyPositionSizing(position: unknown): SemanticPositionSizingContract | null {
+  if (!isRecord(position)) return null
+  if (isRecord(position.sizing)) {
+    return isSemanticPositionSizingContract(position.sizing) ? position.sizing : null
+  }
+  return normalizeLegacyModeValuePositionSizing(position)
+}
+
+function normalizeLegacyModeValuePositionSizing(position: unknown): SemanticPositionSizingContract | null {
+  if (!isRecord(position)) return null
+  if (typeof position.mode !== 'string' || typeof position.value !== 'number' || !Number.isFinite(position.value)) return null
+
+  if (position.mode === 'fixed_ratio') {
+    return { kind: 'ratio', value: position.value, unit: 'ratio' }
+  }
+  if (position.mode === 'fixed_quote') {
+    return { kind: 'quote', value: position.value, asset: 'USDT' }
+  }
+  if (position.mode === 'fixed_qty') {
+    return {
+      kind: 'base',
+      value: position.value,
+      asset: readExplicitPositionSizingAsset(position.sizing, 'base') ?? 'BASE',
+    }
+  }
+  return null
+}
+
+function readExplicitPositionSizingAsset(sizing: unknown, kind: 'quote' | 'base'): string | null {
+  if (!isRecord(sizing) || sizing.kind !== kind || typeof sizing.asset !== 'string') {
+    return null
+  }
+
+  return sizing.asset
+}
+
+function validatePositionSizingContract(sizing: unknown): SemanticContractValidationResult {
+  if (!isRecord(sizing) || typeof sizing.kind !== 'string') return invalid('invalid_position_sizing_contract')
+  if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return invalid('invalid_position_value')
+
+  if (sizing.kind === 'ratio') {
+    return sizing.unit === 'ratio' || sizing.unit === 'percent' ? valid() : invalid('invalid_position_ratio_unit')
+  }
+  if (sizing.kind === 'quote') {
+    return typeof sizing.asset === 'string' && SUPPORTED_QUOTE_ASSET_SET.has(sizing.asset)
+      ? valid()
+      : invalid('invalid_position_quote_asset')
+  }
+  if (sizing.kind === 'base') {
+    return typeof sizing.asset === 'string' && /^[A-Z][A-Z0-9]{1,15}$/u.test(sizing.asset)
+      ? valid()
+      : invalid('invalid_position_base_asset')
+  }
+  return invalid('unsupported_position_sizing_kind')
+}
+
+function isSemanticPositionSizingContract(sizing: unknown): sizing is SemanticPositionSizingContract {
+  return validatePositionSizingContract(sizing).ok
+}
+
+function isEquivalentPositionSizing(
+  sizing: SemanticPositionSizingContract,
+  legacySizing: SemanticPositionSizingContract,
+): boolean {
+  if (sizing.kind !== legacySizing.kind) return false
+  if (!isEquivalentPositionSizingValue(sizing.value, legacySizing.value)) return false
+
+  if (sizing.kind === 'ratio') {
+    return legacySizing.kind === 'ratio' && sizing.unit === legacySizing.unit
+  }
+  if (sizing.kind === 'quote') {
+    return legacySizing.kind === 'quote'
+  }
+  if (sizing.kind === 'base') {
+    return legacySizing.kind === 'base'
+  }
+
+  return false
+}
+
+function isEquivalentPositionSizingValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= POSITION_SIZING_VALUE_EPSILON
 }
 
 export function validateSemanticRiskContract(risk: SemanticRiskContractInput): SemanticContractValidationResult
