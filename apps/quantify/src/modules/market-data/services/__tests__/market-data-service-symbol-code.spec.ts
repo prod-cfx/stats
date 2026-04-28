@@ -33,6 +33,18 @@ describe('marketDataService symbol code compatibility', () => {
     await expect(service.getSymbolOrThrow('BTCUSDT:PERP')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
   })
 
+  it('resolves OKX native swap symbols to canonical PERP symbols', async () => {
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+
+    await expect(service.getSymbolOrThrow('BTC-USDT-SWAP')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
+    expect(repoMock.findSymbolsByCodeIn).toHaveBeenCalledWith(expect.arrayContaining(['BTCUSDT:PERP']))
+  })
+
+  it('rejects OKX native swap symbols with explicit SPOT suffix', async () => {
+    await expect(service.getSymbolOrThrow('BTC-USDT-SWAP:SPOT')).rejects.toThrow('market.symbol_unknown_suffix')
+    expect(repoMock.findSymbolsByCodeIn).not.toHaveBeenCalled()
+  })
+
   it('falls back to legacy unsuffixed symbol when spot code is missing', async () => {
     repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'legacy-id', code: 'BTCUSDT' }])
 

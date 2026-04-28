@@ -148,6 +148,7 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
 
     expect(() => repo.findSymbolByCodeForMarket('BTCUSDT:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
     expect(() => repo.findSymbolByCodeForMarket('BTC-USDT-SWAP:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
+    expect(() => repo.findSymbolByCodeForMarket('BTC-USDT-SWAP', 'spot')).toThrow('market.symbol_unknown_suffix')
     expect(() => repo.findSymbolsByCodeForMarket(['BTCUSDT:PERP'], 'spot')).toThrow('market.symbol_unknown_suffix')
     expect(findUnique).not.toHaveBeenCalled()
     expect(findMany).not.toHaveBeenCalled()
