@@ -5395,12 +5395,9 @@ export class CodegenConversationService {
 
   private buildCanonicalSpecForConversation(
     semanticState: SemanticState,
-    normalization: NormalizationResult = this.buildNormalizationFromSemanticState(semanticState),
+    _normalization: NormalizationResult = this.buildNormalizationFromSemanticState(semanticState),
   ) {
-    return this.canonicalSpecBuilder.buildFromNormalizedIntent(
-      this.buildSemanticCanonicalContext(semanticState),
-      normalization.normalizedIntent,
-    )
+    return this.canonicalSpecBuilder.buildFromSemanticState(semanticState)
   }
 
   /**

@@ -1,4 +1,13 @@
 import type { CanonicalConditionNode, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type {
+  SemanticExpression,
+  SemanticExpressionOperand,
+  SemanticPositionState,
+  SemanticRiskState,
+  SemanticSlotState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../types/semantic-state'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { StrategyIR } from '../types/strategy-ir'
 import type {
@@ -18,6 +27,7 @@ import {
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
+import { validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 interface StrategyLogicSnapshotInput {
   symbols?: unknown
@@ -466,6 +476,485 @@ export class CanonicalSpecBuilderService {
 
   buildFromStrategyIr(strategyIr: StrategyIR): CanonicalStrategySpecV2 {
     return this.strategyIrCanonicalAdapter.adapt(strategyIr)
+  }
+
+  buildFromSemanticState(state: SemanticState): CanonicalStrategySpecV2 {
+    const market = this.resolveSemanticStateMarket(state)
+    const sizing = this.resolveSizingFromSemanticState(state.position)
+
+    const rules = this.buildRulesFromSemanticState(state, sizing)
+    const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
+
+    return {
+      version: 2,
+      market,
+      indicators: this.resolveIndicatorsFromSemanticTriggers(state.triggers),
+      sizing,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes,
+      },
+      rules,
+    }
+  }
+
+  private resolveSemanticStateMarket(state: SemanticState): CanonicalStrategySpecV2['market'] {
+    const exchange = this.readLockedContextSlotString(state.contextSlots.exchange)?.toLowerCase() ?? null
+    const marketType = this.readLockedContextSlotString(state.contextSlots.marketType)?.toLowerCase() ?? null
+
+    return {
+      exchange: exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid' ? exchange : null,
+      symbol: this.readLockedContextSlotString(state.contextSlots.symbol),
+      marketType: marketType === 'spot' || marketType === 'perp' ? marketType : null,
+      defaultTimeframe: this.readLockedContextSlotString(state.contextSlots.timeframe),
+    }
+  }
+
+  private readLockedContextSlotString(slot: SemanticSlotState | null): string | null {
+    if (slot?.status !== 'locked' || typeof slot.value !== 'string') {
+      return null
+    }
+    const value = slot.value.trim()
+    return value.length > 0 ? value : null
+  }
+
+  private resolveSizingFromSemanticState(
+    position: SemanticPositionState | null,
+  ): CanonicalStrategySpecV2['sizing'] {
+    if (!position || position.status !== 'locked' || !validateSemanticPositionContract(position).ok) {
+      return null
+    }
+
+    if (position.mode === 'fixed_quote') {
+      return { mode: 'QUOTE', value: position.value }
+    }
+    if (position.mode === 'fixed_qty') {
+      return { mode: 'QTY', value: position.value }
+    }
+    if (position.mode === 'fixed_ratio') {
+      return { mode: 'RATIO', value: position.value }
+    }
+
+    return null
+  }
+
+  private buildRulesFromSemanticState(
+    state: SemanticState,
+    sizing: CanonicalStrategySpecV2['sizing'],
+  ): CanonicalRuleV2[] {
+    const actionKeys = new Set(state.actions
+      .filter(action => action.status === 'locked')
+      .map(action => action.key))
+    const counters: Record<'entry' | 'exit' | 'gate', number> = {
+      entry: 0,
+      exit: 0,
+      gate: 0,
+    }
+    const rules: CanonicalRuleV2[] = []
+    const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
+    const gateConditions = state.triggers
+      .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
+      .map(trigger => trigger.key === 'condition.expression'
+        ? this.buildConditionFromSemanticExpressionTrigger(trigger)
+        : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe))
+      .filter((condition): condition is CanonicalConditionNode => condition !== null)
+      .filter(condition => !this.isNoPositionGateCondition(condition))
+
+    for (const trigger of state.triggers) {
+      if (trigger.status !== 'locked') {
+        continue
+      }
+      if (trigger.phase !== 'entry' && trigger.phase !== 'exit' && trigger.phase !== 'gate') {
+        continue
+      }
+      if (trigger.key === 'grid.range_rebalance') {
+        rules.push(...this.buildGridRulesFromSemanticTrigger({
+          trigger,
+          sizing,
+          defaultTimeframe,
+        }))
+        continue
+      }
+
+      const condition = trigger.key === 'condition.expression'
+        ? this.buildConditionFromSemanticExpressionTrigger(trigger)
+        : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe)
+      if (!condition) {
+        continue
+      }
+      if (trigger.phase === 'gate' && !this.isNoPositionGateCondition(condition)) {
+        continue
+      }
+
+      const actions = this.buildActionsForSemanticTrigger(trigger, actionKeys, sizing)
+      if (actions.length === 0) {
+        continue
+      }
+      const ruleCondition = trigger.phase === 'gate'
+        ? condition
+        : this.attachSemanticGateConditions(condition, gateConditions)
+
+      for (const ruleVariant of this.splitSemanticRuleVariants(trigger, actions)) {
+        counters[trigger.phase] += 1
+        rules.push({
+          id: `semantic-${trigger.phase}-${counters[trigger.phase]}`,
+          phase: trigger.phase,
+          sideScope: ruleVariant.sideScope,
+          priority: this.resolveSemanticRulePriority(trigger.phase, counters[trigger.phase]),
+          condition: ruleCondition,
+          actions: ruleVariant.actions,
+        })
+      }
+    }
+
+    rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position))
+
+    return rules
+  }
+
+  private attachSemanticGateConditions(
+    condition: CanonicalConditionNode,
+    gateConditions: CanonicalConditionNode[],
+  ): CanonicalConditionNode {
+    if (gateConditions.length === 0) {
+      return condition
+    }
+
+    return {
+      kind: 'AND',
+      children: [condition, ...gateConditions],
+    }
+  }
+
+  private isNoPositionGateCondition(condition: CanonicalConditionNode): boolean {
+    return condition.kind === 'atom'
+      && condition.key === 'position.has_position'
+      && condition.op === 'EQ'
+      && condition.value === false
+  }
+
+  private buildConditionFromSemanticExpressionTrigger(
+    trigger: SemanticTriggerState,
+  ): CanonicalConditionNode | null {
+    const expression = trigger.params.expression
+    if (!this.isValidSemanticExpression(expression)) {
+      return null
+    }
+
+    if (trigger.phase === 'gate') {
+      const noPositionGate = this.buildNoPositionGateCondition(expression, trigger.sideScope)
+      if (noPositionGate) {
+        return noPositionGate
+      }
+    }
+
+    return this.buildConditionFromSemanticExpression(expression)
+  }
+
+  private buildNoPositionGateCondition(
+    expression: SemanticExpression,
+    sideScope: SemanticTriggerState['sideScope'],
+  ): CanonicalConditionNode | null {
+    const noPositionSide = this.resolveNoPositionGateSide(expression)
+    if (!noPositionSide) {
+      return null
+    }
+
+    return {
+      kind: 'atom',
+      key: 'position.has_position',
+      semanticScope: 'position',
+      op: 'EQ',
+      value: false,
+      params: {
+        side: noPositionSide === 'both' ? 'both' : sideScope ?? noPositionSide,
+      },
+    }
+  }
+
+  private resolveNoPositionGateSide(expression: SemanticExpression): 'long' | 'short' | 'both' | null {
+    if (expression.kind === 'NOT') {
+      const child = expression.children[0]
+      return child && this.isHasPositionPredicate(child, true)
+        ? this.resolveHasPositionPredicateSide(child)
+        : null
+    }
+
+    return this.isHasPositionPredicate(expression, false)
+      ? this.resolveHasPositionPredicateSide(expression)
+      : null
+  }
+
+  private isHasPositionPredicate(
+    expression: SemanticExpression,
+    expectedValue: boolean,
+  ): expression is Extract<SemanticExpression, { kind: 'predicate' }> {
+    if (expression.kind !== 'predicate' || expression.op !== 'EQ') {
+      return false
+    }
+
+    return (
+      this.isHasPositionOperand(expression.left)
+      && this.isBooleanConstantOperand(expression.right, expectedValue)
+    ) || (
+      this.isBooleanConstantOperand(expression.left, expectedValue)
+      && this.isHasPositionOperand(expression.right)
+    )
+  }
+
+  private resolveHasPositionPredicateSide(
+    expression: Extract<SemanticExpression, { kind: 'predicate' }>,
+  ): 'long' | 'short' | 'both' {
+    if (this.isHasPositionOperand(expression.left)) {
+      return expression.left.side ?? 'both'
+    }
+    if (this.isHasPositionOperand(expression.right)) {
+      return expression.right.side ?? 'both'
+    }
+    return 'both'
+  }
+
+  private isHasPositionOperand(
+    operand: SemanticExpressionOperand,
+  ): operand is Extract<SemanticExpressionOperand, { kind: 'position' }> {
+    return operand.kind === 'position' && operand.field === 'has_position'
+  }
+
+  private isBooleanConstantOperand(
+    operand: SemanticExpressionOperand,
+    expectedValue: boolean,
+  ): operand is Extract<SemanticExpressionOperand, { kind: 'constant' }> {
+    return operand.kind === 'constant' && operand.value === expectedValue
+  }
+
+  private buildConditionFromSemanticTriggerContract(
+    trigger: SemanticTriggerState,
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    return this.buildConditionFromNormalizedTrigger({
+      key: trigger.key as NormalizedTriggerAtom['key'],
+      phase: trigger.phase,
+      sideScope: trigger.sideScope,
+      params: trigger.params as Record<string, string | number | boolean>,
+      closureStatus: 'closed',
+      unresolvedSlots: [],
+    }, defaultTimeframe)
+  }
+
+  private buildConditionFromSemanticExpression(expression: SemanticExpression): CanonicalConditionNode | null {
+    if (expression.kind === 'predicate') {
+      return {
+        kind: 'expression',
+        op: expression.op,
+        left: expression.left,
+        right: expression.right,
+      }
+    }
+
+    const children = expression.children
+      .map(child => this.buildConditionFromSemanticExpression(child))
+      .filter((condition): condition is CanonicalConditionNode => condition !== null)
+    if (children.length === 0) {
+      return null
+    }
+
+    return {
+      kind: expression.kind,
+      children,
+    }
+  }
+
+  private isValidSemanticExpression(expression: unknown): expression is SemanticExpression {
+    return validateSemanticExpressionContract(expression as SemanticExpression).ok
+  }
+
+  private buildActionsForSemanticTrigger(
+    trigger: SemanticTriggerState,
+    actionKeys: Set<string>,
+    sizing: CanonicalStrategySpecV2['sizing'],
+  ): CanonicalRuleV2['actions'] {
+    const actions: CanonicalRuleV2['actions'] = []
+    const sideScope = trigger.sideScope ?? 'long'
+
+    if (trigger.phase === 'entry') {
+      if ((sideScope === 'long' || sideScope === 'both') && (actionKeys.has('open_long') || trigger.key === 'execution.on_start')) {
+        actions.push(this.buildOpenAction('OPEN_LONG', sizing))
+      }
+      if ((sideScope === 'short' || sideScope === 'both') && (actionKeys.has('open_short') || trigger.key === 'execution.on_start')) {
+        actions.push(this.buildOpenAction('OPEN_SHORT', sizing))
+      }
+    }
+
+    if (trigger.phase === 'exit') {
+      if ((sideScope === 'long' || sideScope === 'both') && actionKeys.has('close_long')) {
+        actions.push({ type: 'CLOSE_LONG' })
+      }
+      if ((sideScope === 'short' || sideScope === 'both') && actionKeys.has('close_short')) {
+        actions.push({ type: 'CLOSE_SHORT' })
+      }
+    }
+
+    if (trigger.phase === 'gate') {
+      actions.push({ type: 'BLOCK_NEW_ENTRY' })
+    }
+
+    return actions
+  }
+
+  private resolveIndicatorsFromSemanticTriggers(
+    triggers: SemanticTriggerState[],
+  ): CanonicalStrategySpecV2['indicators'] {
+    const normalizedLikeIntent = {
+      triggers: triggers
+        .filter(trigger => trigger.status === 'locked')
+        .map(trigger => ({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope,
+          params: trigger.params,
+          closureStatus: 'closed' as const,
+          unresolvedSlots: [],
+        })) as NormalizedTriggerAtom[],
+      grid: null,
+    } as StrategyNormalizedIntent
+
+    return this.resolveIndicatorsFromNormalizedIntent(normalizedLikeIntent)
+  }
+
+  private resolveSemanticStateRequiredTimeframes(
+    rules: CanonicalRuleV2[],
+    defaultTimeframe: string | null | undefined,
+  ): string[] {
+    const ordered: string[] = []
+    const add = (value: unknown) => {
+      if (typeof value !== 'string' || value.trim().length === 0) return
+      const timeframe = value.trim()
+      if (!ordered.includes(timeframe)) {
+        ordered.push(timeframe)
+      }
+    }
+
+    add(defaultTimeframe)
+    for (const rule of rules) {
+      this.collectConditionTimeframes(rule.condition, add)
+    }
+
+    return ordered
+  }
+
+  private collectConditionTimeframes(
+    condition: CanonicalConditionNode,
+    add: (value: unknown) => void,
+  ): void {
+    if (condition.kind === 'atom') {
+      add(condition.params?.timeframe)
+      return
+    }
+
+    if (condition.kind === 'expression') {
+      this.collectExpressionOperandTimeframes(condition.left, add)
+      this.collectExpressionOperandTimeframes(condition.right, add)
+      return
+    }
+
+    for (const child of condition.children) {
+      this.collectConditionTimeframes(child, add)
+    }
+  }
+
+  private collectExpressionOperandTimeframes(
+    operand: SemanticExpressionOperand,
+    add: (value: unknown) => void,
+  ): void {
+    if (operand.kind === 'series') {
+      add(operand.timeframe)
+    }
+    if (operand.kind === 'indicator') {
+      add(operand.params.timeframe)
+    }
+  }
+
+  private splitSemanticRuleVariants(
+    trigger: SemanticTriggerState,
+    actions: CanonicalRuleV2['actions'],
+  ): Array<{ sideScope: CanonicalRuleV2['sideScope']; actions: CanonicalRuleV2['actions'] }> {
+    if (
+      trigger.phase !== 'entry'
+      || trigger.sideScope !== 'both'
+      || !actions.some(action => action.type === 'OPEN_LONG')
+      || !actions.some(action => action.type === 'OPEN_SHORT')
+    ) {
+      return [{ sideScope: trigger.sideScope, actions }]
+    }
+
+    return [
+      { sideScope: 'long', actions: actions.filter(action => action.type === 'OPEN_LONG') },
+      { sideScope: 'short', actions: actions.filter(action => action.type === 'OPEN_SHORT') },
+    ]
+  }
+
+  private buildRiskRulesFromSemanticState(
+    risks: SemanticRiskState[],
+    position: SemanticPositionState | null,
+  ): CanonicalRuleV2[] {
+    const sideScope = this.resolveSemanticRiskSideScope(position)
+    const rules: CanonicalRuleV2[] = []
+    let priority = 120
+
+    for (const risk of risks) {
+      if (risk.status !== 'locked' || !validateSemanticRiskContract(risk).ok) {
+        continue
+      }
+      if (risk.key !== 'risk.stop_loss_pct' && risk.key !== 'risk.take_profit_pct') {
+        continue
+      }
+
+      const valuePct = typeof risk.params.valuePct === 'number' ? risk.params.valuePct : null
+      if (valuePct === null || !Number.isFinite(valuePct)) {
+        continue
+      }
+
+      rules.push({
+        id: risk.key === 'risk.stop_loss_pct' ? 'semantic-risk-stop-loss' : 'semantic-risk-take-profit',
+        phase: 'risk',
+        sideScope,
+        priority: priority--,
+        condition: {
+          kind: 'atom',
+          key: risk.key === 'risk.stop_loss_pct' ? CANONICAL_RULE_KEYS.positionLossPct : risk.key,
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+          ...(typeof risk.params.basis === 'string' ? { params: { basis: risk.params.basis } } : {}),
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+      })
+    }
+
+    return rules
+  }
+
+  private resolveSemanticRiskSideScope(position: SemanticPositionState | null): 'long' | 'short' | 'both' {
+    if (position?.positionMode === 'long_only') {
+      return 'long'
+    }
+    if (position?.positionMode === 'short_only') {
+      return 'short'
+    }
+    return 'both'
+  }
+
+  private resolveSemanticRulePriority(phase: 'entry' | 'exit' | 'gate', index: number): number {
+    if (phase === 'entry') {
+      return 210 - index
+    }
+    if (phase === 'exit') {
+      return 140 - index
+    }
+    return 90 - index
   }
 
   private detectOpenAction(ruleText: string): { type: 'OPEN_LONG' | 'OPEN_SHORT'; sideScope: 'long' | 'short' } | null {
@@ -1340,6 +1829,133 @@ export class CanonicalSpecBuilderService {
     }
 
     return rules
+  }
+
+  private buildGridRulesFromSemanticTrigger(input: {
+    trigger: SemanticTriggerState
+    sizing: CanonicalStrategySpecV2['sizing']
+    defaultTimeframe: string | null
+  }): CanonicalRuleV2[] {
+    const gridParams = this.resolveGridParamsFromSemanticTrigger(input.trigger, input.defaultTimeframe)
+    if (!gridParams) {
+      return []
+    }
+
+    const sideMode = this.resolveGridSideModeFromSemanticTrigger(input.trigger)
+    const buildRule = (
+      phase: 'entry' | 'exit',
+      sideScope: 'long' | 'short',
+      op: 'LTE' | 'GTE',
+      actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT',
+    ): CanonicalRuleV2 => ({
+      id: `semantic-${phase}-grid-range-rebalance-${sideScope}`,
+      phase,
+      sideScope,
+      priority: phase === 'entry' ? 170 : 120,
+      condition: {
+        kind: 'atom',
+        key: 'grid.range_rebalance',
+        semanticScope: 'market',
+        op,
+        params: gridParams,
+      },
+      actions: [phase === 'entry'
+        ? this.buildOpenAction(actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+      metadata: {
+        semantic: {
+          source: 'semantic-state',
+          triggerKeys: [input.trigger.key],
+          actionKeys: [actionType],
+          family: 'grid.range_rebalance',
+        },
+      },
+    })
+
+    const rules: CanonicalRuleV2[] = []
+    if (sideMode === 'long_only' || sideMode === 'bidirectional') {
+      rules.push(buildRule('entry', 'long', 'LTE', 'OPEN_LONG'))
+      rules.push(buildRule('exit', 'long', 'GTE', 'CLOSE_LONG'))
+    }
+    if (sideMode === 'short_only' || sideMode === 'bidirectional') {
+      rules.push(buildRule('entry', 'short', 'GTE', 'OPEN_SHORT'))
+      rules.push(buildRule('exit', 'short', 'LTE', 'CLOSE_SHORT'))
+    }
+
+    return rules
+  }
+
+  private resolveGridParamsFromSemanticTrigger(
+    trigger: SemanticTriggerState,
+    defaultTimeframe: string | null,
+  ): Record<string, number | string | boolean> | null {
+    const lower = this.readSemanticGridNumber(trigger.params, 'rangeMin')
+      ?? this.readSemanticGridNumber(trigger.params, 'rangeLower')
+      ?? this.readSemanticGridRangeNumber(trigger.params, 'lower')
+    const upper = this.readSemanticGridNumber(trigger.params, 'rangeMax')
+      ?? this.readSemanticGridNumber(trigger.params, 'rangeUpper')
+      ?? this.readSemanticGridRangeNumber(trigger.params, 'upper')
+    const stepPct = this.readSemanticGridNumber(trigger.params, 'stepPct')
+
+    if (
+      lower === null
+      || upper === null
+      || stepPct === null
+      || lower <= 0
+      || upper <= lower
+      || stepPct <= 0
+    ) {
+      return null
+    }
+
+    const normalizedStepPct = Number(stepPct.toFixed(4))
+    return {
+      rangeMin: lower,
+      rangeMax: upper,
+      stepPct: normalizedStepPct,
+      levelCount: this.deriveGridLevelCount(lower, upper, normalizedStepPct),
+      ...(defaultTimeframe ? { timeframe: defaultTimeframe } : {}),
+      recycle: typeof trigger.params.recycle === 'boolean' ? trigger.params.recycle : true,
+    }
+  }
+
+  private readSemanticGridNumber(
+    params: Record<string, unknown>,
+    key: string,
+  ): number | null {
+    const value = params[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readSemanticGridRangeNumber(
+    params: Record<string, unknown>,
+    key: 'lower' | 'upper',
+  ): number | null {
+    const range = params.range
+    if (!range || typeof range !== 'object' || Array.isArray(range)) {
+      return null
+    }
+
+    const value = (range as Record<string, unknown>)[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private resolveGridSideModeFromSemanticTrigger(
+    trigger: SemanticTriggerState,
+  ): 'long_only' | 'short_only' | 'bidirectional' {
+    const sideMode = trigger.params.sideMode
+    if (sideMode === 'long_only' || sideMode === 'short_only' || sideMode === 'bidirectional') {
+      return sideMode
+    }
+
+    if (trigger.sideScope === 'long') {
+      return 'long_only'
+    }
+    if (trigger.sideScope === 'short') {
+      return 'short_only'
+    }
+
+    return 'bidirectional'
   }
 
   private buildRiskRuleFromNormalizedAtom(

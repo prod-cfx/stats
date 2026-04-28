@@ -23,6 +23,7 @@ interface PublishCompiledSnapshotInput {
   strategyInstanceId?: string | null
   canonicalSnapshot: Record<string, unknown>
   semanticView: Record<string, unknown>
+  semanticPredicateGraph?: Record<string, unknown>
   graphSnapshot: StrategyLogicGraphSnapshot
   clarificationState?: StrategyClarificationState | null
   ir: CanonicalStrategyIrV1
@@ -126,7 +127,7 @@ export class CompiledPublicationGateService {
       strategyInstanceId: input.strategyInstanceId ?? null,
       scriptSnapshot: input.script,
       specSnapshot: input.canonicalSnapshot,
-      semanticGraph: input.semanticView,
+      semanticGraph: input.semanticPredicateGraph ?? input.semanticView,
       compiledIr: input.ir as unknown as Record<string, unknown>,
       irSnapshot: input.ir as unknown as Record<string, unknown>,
       astSnapshot,

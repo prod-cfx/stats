@@ -51,6 +51,9 @@ export class CanonicalSpecV2ValidatorService {
     if (condition.kind === 'atom') {
       return condition.semanticScope === 'position'
     }
+    if (condition.kind === 'expression') {
+      return condition.left.kind === 'position' || condition.right.kind === 'position'
+    }
 
     return condition.children.some(child => this.containsSideSensitiveCondition(child))
   }

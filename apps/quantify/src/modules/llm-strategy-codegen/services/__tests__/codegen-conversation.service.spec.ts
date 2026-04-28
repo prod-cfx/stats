@@ -100,6 +100,121 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new StrategySummaryObservationService(),
     new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
   )
+  const closeOpenExpressionSemanticState = (contextOverrides: Record<string, any> = {}) => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-close-gt-open',
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-close-lt-open',
+        key: 'condition.expression',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'gate-no-position',
+        key: 'condition.expression',
+        phase: 'gate',
+        params: {
+          expression: {
+            kind: 'NOT',
+            children: [
+              {
+                kind: 'predicate',
+                op: 'EQ',
+                left: { kind: 'position', field: 'has_position', side: 'long' },
+                right: { kind: 'constant', value: true },
+              },
+            ],
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: null,
+        status: 'open',
+        priority: 'context',
+        questionHint: '请选择交易所',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择交易标的',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: null,
+        status: 'open',
+        priority: 'context',
+        questionHint: '请选择市场类型',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '1m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择周期',
+        affectsExecution: true,
+      },
+      ...contextOverrides,
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-28T00:00:00.000Z',
+  })
+
   const buildConfirmedCanonicalDigest = (
     semanticState: Record<string, unknown>,
   ): string => {
@@ -815,6 +930,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
   afterAll(() => {
     restoreProcessEnv(envSnapshot)
+  })
+
+  it('uses SemanticState expression completeness for new sessions', () => {
+    const semanticState = closeOpenExpressionSemanticState()
+    const buildFromSemanticStateSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromSemanticState')
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+
+    const artifacts = (service as any).resolveSemanticClarificationArtifacts(semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, artifacts.normalization)
+
+    expect(artifacts.clarificationPrompt).toContain('请选择交易所')
+    expect(artifacts.clarificationPrompt).not.toContain('入场规则')
+    expect(artifacts.clarificationPrompt).not.toContain('出场规则')
+    expect(artifacts.clarificationState.items[0]).toEqual(expect.objectContaining({
+      key: 'executionContext.exchange',
+      question: '请选择交易所',
+    }))
+    expect(buildFromSemanticStateSpy).toHaveBeenCalledWith(semanticState)
+    expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
+    expect(canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({ kind: 'expression', op: 'GT' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({ kind: 'expression', op: 'LT' }),
+      }),
+    ]))
   })
 
 
@@ -7499,6 +7643,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       risk: [lockedStopLossRisk()],
     })
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const buildFromSemanticStateSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromSemanticState')
     const publicationPipelineRunSpy = jest.spyOn(publicationPipeline, 'run').mockResolvedValue(undefined)
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's5-semantic-generate',
@@ -7532,23 +7677,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
-    expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
-      {
-        market: {
-          exchange: 'okx',
-          marketType: 'perp',
-          defaultTimeframe: '1h',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-      },
-      expect.objectContaining({
-        triggers: expect.arrayContaining([
-          expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
-          expect.objectContaining({ key: 'indicator.below', phase: 'exit' }),
-        ]),
-      }),
-    )
+    expect(buildFromSemanticStateSpy).toHaveBeenCalledWith(persistedSemanticState)
+    expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
     expect(buildChecklistSpy).not.toHaveBeenCalled()
     expect(publicationPipelineRunSpy).toHaveBeenCalledWith(expect.objectContaining({
       canonicalSpecOverride: expect.objectContaining({
@@ -7835,13 +7965,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             expect.objectContaining({ key: 'market.regime', value: 'range' }),
           ]),
         }),
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            gateKeys: expect.arrayContaining(['market.regime']),
-          }),
-        }),
       }),
     ]))
+    expect(JSON.stringify(publishedSnapshot?.specSnapshot?.rules)).not.toContain('"normalized"')
     expect(publishedSnapshot?.compiledIr?.signalCatalog?.series).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
       expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),

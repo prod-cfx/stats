@@ -16,6 +16,10 @@ interface NormalizeResult {
   blockerReason?: string
 }
 
+/**
+ * Legacy adapter: converts StrategyLogicSnapshot checklist payloads into normalized intent.
+ * New semantic mainline code should prefer SemanticState -> canonical contracts directly.
+ */
 @Injectable()
 export class StrategyIntentNormalizerService {
   normalize(checklist: StrategyLogicSnapshot): NormalizeResult {

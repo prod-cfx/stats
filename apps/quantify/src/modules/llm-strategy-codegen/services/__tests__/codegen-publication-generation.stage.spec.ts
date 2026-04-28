@@ -4,10 +4,10 @@ import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compil
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
+import { CodegenGraphSnapshotService } from '../codegen-graph-snapshot.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
-import { buildNormalizedIntentFromSemanticState } from '../semantic-state-normalization'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
@@ -128,6 +128,120 @@ describe('codegenPublicationGenerationStage', () => {
     },
     normalizationNotes: [],
     updatedAt: '2026-04-15T10:00:00.000Z',
+  })
+
+  const buildLockedCloseOpenExpressionSemanticState = (): SemanticState => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-close-gt-open',
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-close-lt-open',
+        key: 'condition.expression',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'gate-no-position',
+        key: 'condition.expression',
+        phase: 'gate',
+        params: {
+          expression: {
+            kind: 'NOT',
+            children: [
+              {
+                kind: 'predicate',
+                op: 'EQ',
+                left: { kind: 'position', field: 'has_position', side: 'long' },
+                right: { kind: 'constant', value: true },
+              },
+            ],
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择交易所',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择交易标的',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'perp',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择市场类型',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '1m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择周期',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-28T00:00:00.000Z',
   })
 
   const buildLockedBollingerSemanticState = (): SemanticState => ({
@@ -452,13 +566,13 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
-  it('routes semantic-state publication through normalized canonical compilation', async () => {
+  it('routes semantic-state publication through semantic canonical compilation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedGridSemanticState()
-    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
     const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const buildFromSemanticStateSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromSemanticState')
     const executionEnvelopeBuild = jest.fn().mockReturnValue({})
 
     const stage = new CodegenPublicationGenerationStage(
@@ -497,21 +611,17 @@ describe('codegenPublicationGenerationStage', () => {
 
     const artifacts = await stage.generate({ semanticState })
 
-    expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
-      {
-        market: {
-          exchange: 'okx',
-          marketType: 'perp',
-          defaultTimeframe: '15m',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-      },
-      expectedNormalizedIntent,
-    )
+    expect(buildFromSemanticStateSpy).toHaveBeenCalledWith(semanticState)
+    expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
     expect(buildSpy).not.toHaveBeenCalled()
     expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(artifacts.canonicalSpec)
-    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expectedNormalizedIntent)
+    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expect.objectContaining({
+      grid: expect.objectContaining({
+        family: 'grid.range_rebalance',
+        range: { lower: 60000, upper: 80000 },
+        stepPct: 1,
+      }),
+    }))
     expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
     expect(artifacts.sessionSpecDesc.semanticAtomInvariant).toEqual(artifacts.semanticAtomInvariant)
     expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('entryRules')
@@ -530,7 +640,7 @@ describe('codegenPublicationGenerationStage', () => {
           key: 'grid.range_rebalance',
         }),
         metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
+          semantic: expect.objectContaining({
             family: 'grid.range_rebalance',
           }),
         }),
@@ -542,18 +652,7 @@ describe('codegenPublicationGenerationStage', () => {
   it('rejects publication generation when a previous-close rise atom drifts before script publication', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const semanticState = buildPreviousCloseRiseSemanticState()
-    const canonicalSpecOverride = canonicalSpecBuilder.buildFromNormalizedIntent(
-      {
-        market: {
-          exchange: 'okx',
-          marketType: 'spot',
-          defaultTimeframe: '1h',
-        },
-        symbols: ['ORDIUSDT'],
-        timeframes: ['1h'],
-      },
-      buildNormalizedIntentFromSemanticState(semanticState),
-    )
+    const canonicalSpecOverride = canonicalSpecBuilder.buildFromSemanticState(semanticState)
     canonicalSpecOverride.rules = canonicalSpecOverride.rules.map(rule =>
       rule.phase === 'exit' && rule.actions.some(action => action.type === 'CLOSE_LONG')
         ? {
@@ -828,18 +927,7 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const semanticState = buildLockedMaSemanticState()
-    const canonicalSpecOverride = canonicalSpecBuilder.buildFromNormalizedIntent(
-      {
-        market: {
-          exchange: 'okx',
-          marketType: 'spot',
-          defaultTimeframe: '15m',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m', '3m'],
-      },
-      buildNormalizedIntentFromSemanticState(semanticState),
-    )
+    const canonicalSpecOverride = canonicalSpecBuilder.buildFromSemanticState(semanticState)
     canonicalSpecOverride.dataRequirements.requiredTimeframes = ['3m', '15m']
 
     const artifacts = await stage.generate({
@@ -864,18 +952,7 @@ describe('codegenPublicationGenerationStage', () => {
     const digestService = new CanonicalSpecV2DigestService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedMaSemanticState()
-    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
-    const expectedDigest = digestService.hash(
-      canonicalSpecBuilder.buildFromNormalizedIntent({
-        market: {
-          exchange: 'okx',
-          marketType: 'spot',
-          defaultTimeframe: '15m',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-      }, expectedNormalizedIntent),
-    )
+    const expectedDigest = digestService.hash(canonicalSpecBuilder.buildFromSemanticState(semanticState))
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -930,18 +1007,7 @@ describe('codegenPublicationGenerationStage', () => {
     const digestService = new CanonicalSpecV2DigestService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedBollingerSemanticState()
-    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
-    const expectedDigest = digestService.hash(
-      canonicalSpecBuilder.buildFromNormalizedIntent({
-        market: {
-          exchange: 'okx',
-          marketType: 'perp',
-          defaultTimeframe: '15m',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-      }, expectedNormalizedIntent),
-    )
+    const expectedDigest = digestService.hash(canonicalSpecBuilder.buildFromSemanticState(semanticState))
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -996,18 +1062,7 @@ describe('codegenPublicationGenerationStage', () => {
     const digestService = new CanonicalSpecV2DigestService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedGridSemanticState()
-    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
-    const expectedDigest = digestService.hash(
-      canonicalSpecBuilder.buildFromNormalizedIntent({
-        market: {
-          exchange: 'okx',
-          marketType: 'perp',
-          defaultTimeframe: '15m',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-      }, expectedNormalizedIntent),
-    )
+    const expectedDigest = digestService.hash(canonicalSpecBuilder.buildFromSemanticState(semanticState))
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -1178,12 +1233,7 @@ describe('codegenPublicationGenerationStage', () => {
     semanticState.contextSlots.symbol = null
     semanticState.contextSlots.timeframe = null
 
-    const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(
-      {
-        market: { marketType: 'spot' },
-      },
-      buildNormalizedIntentFromSemanticState(semanticState),
-    )
+    const canonicalSpec = canonicalSpecBuilder.buildFromSemanticState(semanticState)
     canonicalSpec.market.symbol = null
     canonicalSpec.market.defaultTimeframe = null
     canonicalSpec.dataRequirements.requiredTimeframes = []
@@ -1221,18 +1271,8 @@ describe('codegenPublicationGenerationStage', () => {
       marketType: null,
       timeframe: null,
     }
-    const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(
-      {
-        market: {
-          exchange: 'okx',
-          marketType: 'perp',
-          defaultTimeframe: '15m',
-        },
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-      },
-      buildNormalizedIntentFromSemanticState(semanticState),
-    )
+    const canonicalSpec = canonicalSpecBuilder.buildFromSemanticState(buildLockedMaSemanticState())
+    canonicalSpec.market.marketType = 'perp'
 
     const artifacts = await stage.generate({
       semanticState,
@@ -1249,6 +1289,99 @@ describe('codegenPublicationGenerationStage', () => {
       timeframe: expect.any(String),
       exchange: expect.any(String),
       marketType: expect.any(String),
+    }))
+  })
+
+  it('uses SemanticState canonical expression mainline', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const semanticState = buildLockedCloseOpenExpressionSemanticState()
+    const buildFromSemanticStateSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromSemanticState')
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const graphSnapshotService = new CodegenGraphSnapshotService()
+    const buildFromSemanticArtifactsSpy = jest.spyOn(graphSnapshotService, 'buildFromSemanticArtifacts')
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      new CanonicalSpecV2IrCompilerService(),
+      new CanonicalStrategyAstCompilerService(),
+      new CompiledScriptEmitterService(),
+      new CompiledScriptExecutionEnvelopeService(),
+      new CompiledScriptParserService(),
+      undefined,
+      undefined,
+      graphSnapshotService,
+    )
+
+    const artifacts = await stage.generate({ semanticState })
+    const priceSeries = artifacts.compiled.ir.signalCatalog.series.filter(series => series.kind === 'PRICE')
+
+    expect(buildFromSemanticStateSpy).toHaveBeenCalledWith(semanticState)
+    expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
+    expect(artifacts.canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({ kind: 'expression', op: 'GT' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({ kind: 'expression', op: 'LT' }),
+      }),
+      expect.objectContaining({
+        phase: 'gate',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'position.has_position',
+          op: 'EQ',
+          value: false,
+        }),
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      }),
+    ]))
+    expect(priceSeries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'close', timeframe: '1m' }),
+      expect.objectContaining({ field: 'open', timeframe: '1m' }),
+    ]))
+    expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+    expect(buildFromSemanticArtifactsSpy).toHaveBeenCalledWith({ canonicalSpec: artifacts.canonicalSpec })
+    expect(artifacts.semanticPredicateGraph).toEqual(expect.objectContaining({
+      version: 2,
+      nodes: expect.arrayContaining([
+        expect.objectContaining({ kind: 'predicate', op: 'GT' }),
+        expect.objectContaining({ kind: 'predicate', op: 'LT' }),
+        expect.objectContaining({
+          kind: 'predicate',
+          phase: 'gate',
+          op: 'EQ',
+          left: expect.objectContaining({ kind: 'position', field: 'has_position' }),
+          right: expect.objectContaining({ kind: 'constant', value: false }),
+        }),
+      ]),
     }))
   })
 

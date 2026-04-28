@@ -1,3 +1,10 @@
+import type {
+  SemanticActionState,
+  SemanticExpression,
+  SemanticPositionState,
+  SemanticRiskState,
+} from '../types/semantic-state'
+
 export interface SemanticContract {
   semanticKey: string
   family: 'trigger' | 'grid' | 'risk'
@@ -16,6 +23,12 @@ export interface SemanticEditableSlotContract {
   paramPaths?: string[]
   rangeParamPairs?: Array<readonly [string, string]>
 }
+
+export type SemanticContractValidationResult = { ok: true } | { ok: false, reason: string }
+
+export type SemanticActionContractInput = Pick<SemanticActionState, 'key'> & Partial<Omit<SemanticActionState, 'key'>>
+export type SemanticPositionContractInput = Pick<SemanticPositionState, 'mode' | 'value' | 'positionMode'> & Partial<Omit<SemanticPositionState, 'mode' | 'value' | 'positionMode'>>
+export type SemanticRiskContractInput = Pick<SemanticRiskState, 'key' | 'params'> & Partial<Omit<SemanticRiskState, 'key' | 'params'>>
 
 const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
   'execution.on_start': {
@@ -127,6 +140,15 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
   },
 }
 
+const SUPPORTED_EXPRESSION_OPERATORS = new Set<string>(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'CROSS_OVER', 'CROSS_UNDER'])
+const SUPPORTED_SERIES_FIELDS = new Set<string>(['open', 'high', 'low', 'close'])
+const SUPPORTED_INDICATOR_NAMES = new Set<string>(['sma', 'ema', 'rsi', 'macd'])
+const SUPPORTED_POSITION_FIELDS = new Set<string>(['avg_price', 'pnl_pct', 'bars_held', 'has_position'])
+const SUPPORTED_ACTION_KEYS = new Set<string>(['open_long', 'close_long', 'open_short', 'close_short'])
+const SUPPORTED_POSITION_MODES = new Set<string>(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
+const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only', 'long_short'])
+const SUPPORTED_RISK_KEYS = new Set<string>(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+
 const FALLBACK_EDITABLE_SLOTS: SemanticEditableSlotContract[] = [
   {
     slotKey: 'semantic.range',
@@ -169,6 +191,65 @@ export function resolveSemanticContract(semanticKey: string): SemanticContract {
   return contract
 }
 
+export function validateSemanticExpressionContract(expression: SemanticExpression): SemanticContractValidationResult {
+  return validateExpressionNode(expression)
+}
+
+export function validateSemanticActionContract(action: SemanticActionContractInput): SemanticContractValidationResult
+export function validateSemanticActionContract(action: unknown): SemanticContractValidationResult
+export function validateSemanticActionContract(action: unknown): SemanticContractValidationResult {
+  if (!isRecord(action)) {
+    return invalid('invalid_action_contract')
+  }
+  if (typeof action.key !== 'string' || !SUPPORTED_ACTION_KEYS.has(action.key)) {
+    return invalid('unsupported_action_key')
+  }
+
+  return valid()
+}
+
+export function validateSemanticPositionContract(position: SemanticPositionContractInput): SemanticContractValidationResult
+export function validateSemanticPositionContract(position: unknown): SemanticContractValidationResult
+export function validateSemanticPositionContract(position: unknown): SemanticContractValidationResult {
+  if (!isRecord(position)) {
+    return invalid('invalid_position_contract')
+  }
+  if (typeof position.mode !== 'string' || !SUPPORTED_POSITION_MODES.has(position.mode)) {
+    return invalid('unsupported_position_mode')
+  }
+  if (typeof position.value !== 'number' || !Number.isFinite(position.value) || position.value <= 0) {
+    return invalid('invalid_position_value')
+  }
+  if (typeof position.positionMode !== 'string' || !SUPPORTED_POSITION_SIDE_MODES.has(position.positionMode)) {
+    return invalid('unsupported_position_side_mode')
+  }
+
+  return valid()
+}
+
+export function validateSemanticRiskContract(risk: SemanticRiskContractInput): SemanticContractValidationResult
+export function validateSemanticRiskContract(risk: unknown): SemanticContractValidationResult
+export function validateSemanticRiskContract(risk: unknown): SemanticContractValidationResult {
+  if (!isRecord(risk)) {
+    return invalid('invalid_risk_contract')
+  }
+  if (typeof risk.key !== 'string' || !SUPPORTED_RISK_KEYS.has(risk.key)) {
+    return invalid('unsupported_risk_key')
+  }
+  if (!isRecord(risk.params)) {
+    return invalid('invalid_risk_params')
+  }
+  if (
+    typeof risk.params.valuePct !== 'number'
+    || !Number.isFinite(risk.params.valuePct)
+    || risk.params.valuePct <= 0
+  ) {
+    return invalid('invalid_risk_value_pct')
+  }
+
+  return valid()
+}
+
 export function resolveEditableScalarParamPaths(
   semanticKey: string,
   unit: SemanticEditableUnit | undefined,
@@ -197,6 +278,108 @@ function resolveEditableSlots(semanticKey: string): SemanticEditableSlotContract
 function isEditableUnitMatch(slotUnit: SemanticEditableUnit | undefined, requestedUnit: SemanticEditableUnit | undefined): boolean {
   if (!requestedUnit || requestedUnit === 'plain') return !slotUnit || slotUnit === 'plain'
   return slotUnit === requestedUnit
+}
+
+function validateExpressionNode(expression: unknown): SemanticContractValidationResult {
+  if (!isRecord(expression)) {
+    return invalid('invalid_expression')
+  }
+
+  if (expression.kind === 'predicate') {
+    if (typeof expression.op !== 'string' || !SUPPORTED_EXPRESSION_OPERATORS.has(expression.op)) {
+      return invalid('unsupported_expression_operator')
+    }
+
+    const leftResult = validateExpressionOperand(expression.left)
+    if (!leftResult.ok) return leftResult
+
+    return validateExpressionOperand(expression.right)
+  }
+
+  if (expression.kind === 'AND' || expression.kind === 'OR' || expression.kind === 'NOT') {
+    const children = expression.children
+    if (!Array.isArray(children) || children.length === 0 || (expression.kind === 'NOT' && children.length !== 1)) {
+      return invalid('invalid_logical_children')
+    }
+
+    for (const child of children) {
+      const result = validateExpressionNode(child)
+      if (!result.ok) return result
+    }
+
+    return valid()
+  }
+
+  return invalid('unsupported_expression_kind')
+}
+
+function validateExpressionOperand(operand: unknown): SemanticContractValidationResult {
+  if (!isRecord(operand)) {
+    return invalid('invalid_expression_operand')
+  }
+
+  if (operand.kind === 'series') {
+    if (operand.source !== 'bar') {
+      return invalid('unsupported_series_source')
+    }
+    if (typeof operand.field !== 'string' || !SUPPORTED_SERIES_FIELDS.has(operand.field)) {
+      return invalid('unsupported_series_field')
+    }
+    const offsetBars = operand.offsetBars
+    if (
+      offsetBars !== undefined
+      && (typeof offsetBars !== 'number' || !Number.isInteger(offsetBars) || offsetBars < 0)
+    ) {
+      return invalid('invalid_series_offset')
+    }
+
+    return valid()
+  }
+
+  if (operand.kind === 'indicator') {
+    if (typeof operand.name !== 'string' || !SUPPORTED_INDICATOR_NAMES.has(operand.name)) {
+      return invalid('unsupported_indicator_name')
+    }
+    if (!isRecord(operand.params)) {
+      return invalid('invalid_indicator_params')
+    }
+
+    return valid()
+  }
+
+  if (operand.kind === 'position') {
+    if (typeof operand.field !== 'string' || !SUPPORTED_POSITION_FIELDS.has(operand.field)) {
+      return invalid('unsupported_position_field')
+    }
+
+    return valid()
+  }
+
+  if (operand.kind === 'constant') {
+    if (
+      typeof operand.value !== 'string'
+      && typeof operand.value !== 'boolean'
+      && !(typeof operand.value === 'number' && Number.isFinite(operand.value))
+    ) {
+      return invalid('invalid_constant_value')
+    }
+
+    return valid()
+  }
+
+  return invalid('unsupported_expression_operand_kind')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function valid(): SemanticContractValidationResult {
+  return { ok: true }
+}
+
+function invalid(reason: string): SemanticContractValidationResult {
+  return { ok: false, reason }
 }
 
 function uniqueStrings(values: string[]): string[] {

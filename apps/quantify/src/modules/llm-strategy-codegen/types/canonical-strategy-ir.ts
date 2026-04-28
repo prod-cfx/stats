@@ -107,7 +107,6 @@ export interface PredicateDef {
   kind:
     | 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ'
     | 'CROSS_OVER' | 'CROSS_UNDER'
-    | 'BETWEEN'
     | 'TOUCH_LEVEL_UP' | 'TOUCH_LEVEL_DOWN'
     | 'AND' | 'OR' | 'NOT'
   args: string[]

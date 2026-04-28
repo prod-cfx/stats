@@ -171,6 +171,7 @@ export class CodegenSessionPublicationPipelineService {
           strategyInstanceId: strategyInstanceId ?? null,
           canonicalSnapshot: artifacts.canonicalSpec as unknown as Record<string, unknown>,
           semanticView: artifacts.semanticView,
+          semanticPredicateGraph: artifacts.semanticPredicateGraph as unknown as Record<string, unknown>,
           graphSnapshot: artifacts.compiled.graphSnapshot as unknown as Record<string, unknown>,
           ir: artifacts.compiled.ir as unknown as Record<string, unknown>,
           ast: artifacts.ast as unknown as Record<string, unknown>,

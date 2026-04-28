@@ -1,8 +1,130 @@
-import type { SemanticRiskState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 describe('SemanticStateProjectionService', () => {
   const service = new SemanticStateProjectionService()
+
+  const closeOpenExpressionState = (): SemanticState => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-close-gt-open',
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-close-lt-open',
+        key: 'condition.expression',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'gate-no-position',
+        key: 'condition.expression',
+        phase: 'gate',
+        params: {
+          expression: {
+            kind: 'NOT',
+            children: [
+              {
+                kind: 'predicate',
+                op: 'EQ',
+                left: { kind: 'position', field: 'has_position', side: 'long' },
+                right: { kind: 'constant', value: true },
+              },
+            ],
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: null,
+        status: 'open',
+        priority: 'context',
+        questionHint: '请选择交易所',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择交易标的',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: null,
+        status: 'open',
+        priority: 'context',
+        questionHint: '请选择市场类型',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '1m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请选择周期',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-28T00:00:00.000Z',
+  })
+
+  it('formats generic close-open expressions', () => {
+    const result = service.buildClarificationView(closeOpenExpressionState())
+
+    expect(result.summary).toContain('入场：收盘价高于开盘价时做多开仓')
+    expect(result.summary).toContain('出场：收盘价低于开盘价时平多')
+    expect(result.nextQuestion).toBe('请选择交易所')
+  })
 
   it('builds summary and next question from semanticState instead of checklist text', () => {
     const result = service.buildClarificationView({

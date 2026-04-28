@@ -1,6 +1,6 @@
 import type { SemanticGraphBuildResult } from './semantic-graph-builder.service'
 import { Injectable } from '@nestjs/common'
-import { semanticStrategyGraphSchema } from '../types/semantic-strategy-graph.zod'
+import { semanticStrategyGraphV1Schema } from '../types/semantic-strategy-graph.zod'
 
 export interface SemanticGraphValidationError {
   code:
@@ -44,7 +44,7 @@ export class SemanticGraphValidatorService {
       }
     }
 
-    const parsed = semanticStrategyGraphSchema.safeParse(input.graph)
+    const parsed = semanticStrategyGraphV1Schema.safeParse(input.graph)
     if (!parsed.success) {
       const hasInvalidReference = parsed.error.issues.some(issue =>
         issue.message.includes('logical group references unknown node'),
