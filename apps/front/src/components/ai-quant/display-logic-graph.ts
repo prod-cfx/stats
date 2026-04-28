@@ -40,6 +40,7 @@ interface DisplayLogicGraphAction {
   sizing?: {
     mode?: string
     value?: unknown
+    asset?: unknown
   }
 }
 
@@ -68,6 +69,7 @@ interface DisplayLogicGraphSpecDesc {
   lockedParams?: Record<string, unknown>
   canonicalSpec?: {
     market?: DisplayLogicGraphMarket
+    sizing?: DisplayLogicGraphAction['sizing']
   }
   market?: DisplayLogicGraphMarket
 }
@@ -374,6 +376,36 @@ function toPositionPct(value: unknown): string | null {
   return `${formatNumber(pct)}%`
 }
 
+function formatSizingAmount(sizing: DisplayLogicGraphAction['sizing'] | null | undefined): string | null {
+  if (!sizing || typeof sizing.value !== 'number' || !Number.isFinite(sizing.value)) return null
+  const value = formatNumber(sizing.value)
+  if (!value) return null
+
+  if (sizing.mode === 'RATIO') {
+    return toPositionPct(sizing.value)
+  }
+
+  if (sizing.mode === 'QUOTE' || sizing.mode === 'QTY') {
+    const asset = asString(sizing.asset)
+    return asset ? `${value} ${asset}` : value
+  }
+
+  return null
+}
+
+function extractPositionSizing(specDesc: DisplayLogicGraphSpecDesc | null, fallbackPositionPct: unknown): string | null {
+  const canonicalSizing = formatSizingAmount(specDesc?.canonicalSpec?.sizing)
+  if (canonicalSizing) return canonicalSizing
+
+  const actionSizing = extractRules(specDesc)
+    .flatMap(rule => rule.actions ?? [])
+    .map(action => formatSizingAmount(action.sizing))
+    .find((item): item is string => Boolean(item))
+  if (actionSizing) return actionSizing
+
+  return toPositionPct(fallbackPositionPct)
+}
+
 function extractRules(specDesc: DisplayLogicGraphSpecDesc | null): DisplayLogicGraphRule[] {
   return Array.isArray(specDesc?.rules) ? specDesc.rules : []
 }
@@ -446,7 +478,8 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
     fallbackMeta?.timeframe,
     fallbackMeta?.baseTimeframe,
   )
-  const positionPct = toPositionPct(
+  const positionSizing = extractPositionSizing(
+    specDesc,
     lockedParams.positionPct
       ?? lockedParams.position
       ?? fallbackMeta?.positionPct,
@@ -463,7 +496,7 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
     exchange,
     symbol,
     timeframe,
-    positionPct,
+    positionSizing,
     marketType,
     executionTags,
   }
@@ -531,13 +564,13 @@ function buildExecuteBlock(meta: ReturnType<typeof extractExecuteMeta>): Display
     })
   }
 
-  if (meta.positionPct) {
+  if (meta.positionSizing) {
     items.push({
       kind: 'execute',
       id: 'execute-position',
-      key: 'positionPct',
-      value: meta.positionPct,
-      text: `仓位: ${meta.positionPct}`,
+      key: 'positionSizing',
+      value: meta.positionSizing,
+      text: `仓位: ${meta.positionSizing}`,
     })
   }
 

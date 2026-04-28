@@ -147,6 +147,7 @@ describe('compiledPublicationGateService', () => {
         timeframe: '1h',
         marketType: 'spot',
         positionPct: 25,
+        positionSizing: { mode: 'pct_equity', value: 25 },
       },
       strategyConfig: {
         exchange: 'binance',
@@ -155,6 +156,7 @@ describe('compiledPublicationGateService', () => {
         baseTimeframe: '1h',
         stateTimeframes: [],
         positionPct: 25,
+        positionSizing: { mode: 'pct_equity', value: 25 },
         strategyDeclaredLeverageRange: null,
       },
       backtestConfigDefaults: {
@@ -633,6 +635,7 @@ describe('compiledPublicationGateService', () => {
         timeframe: '1h',
         marketType: 'perp',
         positionPct: 25,
+        positionSizing: { mode: 'pct_equity', value: 25 },
       },
       strategyConfig: {
         exchange: 'binance',
@@ -641,8 +644,90 @@ describe('compiledPublicationGateService', () => {
         baseTimeframe: '1h',
         stateTimeframes: [],
         positionPct: 25,
+        positionSizing: { mode: 'pct_equity', value: 25 },
         strategyDeclaredLeverageRange: null,
       },
+    }))
+  })
+
+  it('publishes fixed quote position sizing without fabricating a legacy positionPct', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-fixed-quote' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const baseIr = createIrFixture()
+    const ir = {
+      ...baseIr,
+      portfolio: {
+        ...baseIr.portfolio,
+        sizing: { mode: 'fixed_quote' as const, value: 10, asset: 'USDT' },
+      },
+      ruleBlocks: baseIr.ruleBlocks.map(rule => rule.phase === 'entry'
+        ? {
+            ...rule,
+            actions: rule.actions.map(action => action.kind === 'OPEN_LONG'
+              ? { ...action, quantity: { mode: 'fixed_quote' as const, value: 10, asset: 'USDT' } }
+              : action),
+          }
+        : rule),
+    }
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-fixed-quote',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', defaultTimeframe: '1h' },
+        rules: [],
+      } as any,
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:fixed-quote',
+      },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: null,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'fixed quote' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: {},
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      paramsSnapshot: expect.objectContaining({
+        positionPct: null,
+        positionSizing: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+      }),
+      strategyConfig: expect.objectContaining({
+        positionPct: null,
+        positionSizing: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+      }),
     }))
   })
 

@@ -43,6 +43,7 @@ export interface CanonicalRuleAction {
   sizing?: {
     mode: 'RATIO' | 'QUOTE' | 'QTY'
     value: number
+    asset?: string
   }
   params?: Record<string, number | string | boolean>
 }
@@ -90,6 +91,7 @@ export interface CanonicalStrategySpecV2 {
   sizing: {
     mode: 'RATIO' | 'QUOTE' | 'QTY'
     value: number
+    asset?: string
   } | null
   executionPolicy: {
     signalTiming: 'BAR_CLOSE'

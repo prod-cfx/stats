@@ -31,7 +31,12 @@ interface DeployStrategyInput {
   symbol: string
   marketType: 'spot' | 'perp'
   timeframe: string
-  positionPct: number
+  positionPct: number | null
+  positionSizing?: {
+    mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
+    value: number
+    asset?: string
+  }
   deploymentExecutionConfig?: {
     leverage?: number | null
     priceSource?: string | null
@@ -236,7 +241,8 @@ export class AccountStrategyViewRepository {
           symbol: input.symbol,
           marketType: input.marketType,
           timeframe: input.timeframe,
-          positionPct: input.positionPct,
+          ...(input.positionPct !== null ? { positionPct: input.positionPct } : {}),
+          ...(input.positionSizing ? { positionSizing: input.positionSizing } : {}),
           ...(input.deploymentExecutionConfig
             ? {
                 deploymentExecutionConfig: input.deploymentExecutionConfig,

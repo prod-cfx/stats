@@ -1578,10 +1578,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         openSlots: [
           {
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
             status: 'open',
             priority: 'risk',
-            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             affectsExecution: true,
           },
         ],
@@ -1691,7 +1691,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       openSlots: expect.arrayContaining([
         expect.objectContaining({
           slotKey: 'position.sizing',
-          fieldPath: 'position.value',
+          fieldPath: 'position.sizing',
           status: 'open',
         }),
       ]),
@@ -3454,10 +3454,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         openSlots: [
           {
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
             status: 'open',
             priority: 'risk',
-            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             affectsExecution: true,
           },
         ],
@@ -3511,14 +3511,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             reason: 'missing_position_pct',
             field: 'riskRules.positionPct',
             blocking: true,
-            question: '请确认单笔仓位百分比（例如 10%）。',
+            question: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             status: 'answered',
             slotId: buildSemanticSlotId({
               slotKey: 'position.sizing',
-              fieldPath: 'position.value',
+              fieldPath: 'position.sizing',
             }),
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
           },
           {
             key: 'executionContext.exchange',
@@ -4970,7 +4970,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('regression: fixed quote position sizing from the user is not replaced by a percent clarification slot', async () => {
+  it('position contract regression: fixed quote sizing from the user is not replaced by a percent clarification slot', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
         related: true,
@@ -5042,6 +5042,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
 
     expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
       mode: 'fixed_quote',
       value: 10,
       positionMode: 'long_only',
@@ -5053,6 +5054,138 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({
         slotKey: 'position.sizing',
         reason: 'missing_position_pct',
+      }),
+    ]))
+  })
+
+  it('position contract regression: fixed base sizing from the user is not replaced by a percent clarification slot', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认交易所。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'condition.expression',
+              phase: 'entry',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'GT',
+                  left: { kind: 'series', source: 'bar', field: 'close' },
+                  right: { kind: 'series', source: 'bar', field: 'open' },
+                },
+              },
+            },
+            {
+              key: 'condition.expression',
+              phase: 'exit',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'LT',
+                  left: { kind: 'series', source: 'bar', field: 'close' },
+                  right: { kind: 'series', source: 'bar', field: 'open' },
+                },
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          contextSlots: {
+            symbol: 'BTCUSDT',
+            timeframe: '1m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-fixed-base-position' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '用 BTCUSDT 1m K 线。每次买 0.001 BTC，收盘价高于开盘价时尝试开多，收盘价低于开盘价时平多。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+      mode: 'fixed_qty',
+      value: 0.001,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+    expect(createPayload.clarificationState.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+      }),
+    ]))
+  })
+
+  it('position contract regression: missing sizing asks a generic amount question', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充仓位。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'condition.expression',
+              phase: 'entry',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'GT',
+                  left: { kind: 'series', source: 'bar', field: 'close' },
+                  right: { kind: 'series', source: 'bar', field: 'open' },
+                },
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+          ],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '1m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-missing-position-contract' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '用 OKX 现货 BTCUSDT 1m K 线。收盘价高于开盘价时尝试开多。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      sizing: null,
+      status: 'open',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'position.sizing',
+          fieldPath: 'position.sizing',
+          questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+        }),
+      ]),
+    }))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        fieldPath: 'position.sizing',
+        question: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
       }),
     ]))
   })
@@ -7081,7 +7214,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             reason: 'missing_position_pct',
             field: 'riskRules.positionPct',
             blocking: true,
-            question: '请确认单笔仓位百分比（例如 10%）。',
+            question: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             status: 'pending',
           },
         ],
@@ -7157,10 +7290,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         openSlots: [
           {
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
             status: 'open',
             priority: 'risk',
-            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             affectsExecution: true,
           },
         ],
@@ -7180,14 +7313,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             reason: 'missing_position_pct',
             field: 'riskRules.positionPct',
             blocking: true,
-            question: '请确认单笔仓位百分比（例如 10%）。',
+            question: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             status: 'pending',
             slotId: buildSemanticSlotId({
               slotKey: 'position.sizing',
-              fieldPath: 'position.value',
+              fieldPath: 'position.sizing',
             }),
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
           },
           {
             key: 'semantic.risk.protective_exit',
@@ -9189,7 +9322,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 10 }) }),
     ])
     expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({ value: 0.1 }))
-    expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('36')
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('price.range_position')
     expect(JSON.stringify(updatePayload.latestSpecDesc)).not.toContain('0.45')
   })
 

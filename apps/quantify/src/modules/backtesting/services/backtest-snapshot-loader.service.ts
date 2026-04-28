@@ -92,7 +92,8 @@ interface FormalSnapshotTruth {
     marketType: string
     baseTimeframe: string
     stateTimeframes: string[]
-    positionPct: number
+    positionPct: number | null
+    positionSizing?: SnapshotPositionSizing
   }
   backtestConfigDefaults: {
     initialCash: number
@@ -113,6 +114,12 @@ interface FormalSnapshotTruth {
     supportedOrderTypes: string[]
     supportedTimeInForce: string[]
   }
+}
+
+interface SnapshotPositionSizing {
+  mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
+  value: number
+  asset?: string
 }
 
 function readSnapshotBoundTrimmedString(value: unknown): string | null {
@@ -193,12 +200,11 @@ export class BacktestSnapshotLoaderService {
       symbol: snapshot.strategyConfig.symbol,
       marketType: snapshot.strategyConfig.marketType,
       timeframe: snapshot.strategyConfig.baseTimeframe,
-      positionPct: snapshot.strategyConfig.positionPct,
+      ...(snapshot.strategyConfig.positionPct !== null ? { positionPct: snapshot.strategyConfig.positionPct } : {}),
+      ...(snapshot.strategyConfig.positionSizing ? { positionSizing: snapshot.strategyConfig.positionSizing } : {}),
     }
 
-    const positionPct = resolvedParams?.positionPct
-    const hasPositionPct = typeof positionPct === 'number' && Number.isFinite(positionPct)
-    if (!resolvedParams || Object.keys(resolvedParams).length === 0 || !hasPositionPct) {
+    if (!resolvedParams || Object.keys(resolvedParams).length === 0) {
       throw new DomainException('backtest.snapshot_params_missing', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
@@ -278,7 +284,8 @@ export class BacktestSnapshotLoaderService {
     const baseTimeframe = this.readTrimmedString(raw.baseTimeframe)
     const stateTimeframes = this.readStringArray(raw.stateTimeframes)
     const positionPct = this.readFiniteNumber(raw.positionPct)
-    if (!exchange || !symbol || !marketType || !baseTimeframe || positionPct === null) {
+    const positionSizing = this.parsePositionSizing(raw.positionSizing, positionPct)
+    if (!exchange || !symbol || !marketType || !baseTimeframe) {
       return null
     }
 
@@ -289,7 +296,31 @@ export class BacktestSnapshotLoaderService {
       baseTimeframe,
       stateTimeframes,
       positionPct,
+      ...(positionSizing ? { positionSizing } : {}),
     }
+  }
+
+  private parsePositionSizing(raw: unknown, positionPct: number | null): SnapshotPositionSizing | undefined {
+    const sizing = this.readJsonRecord(raw)
+    if (sizing) {
+      const mode = sizing.mode
+      const value = this.readFiniteNumber(sizing.value)
+      const asset = this.readTrimmedString(sizing.asset)
+      if (
+        (mode === 'pct_equity' || mode === 'fixed_quote' || mode === 'fixed_base' || mode === 'position_pct')
+        && value !== null
+      ) {
+        return {
+          mode,
+          value,
+          ...(asset ? { asset } : {}),
+        }
+      }
+    }
+
+    return positionPct !== null
+      ? { mode: 'pct_equity', value: positionPct }
+      : undefined
   }
 
   private parseBacktestConfigDefaults(

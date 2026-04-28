@@ -19,6 +19,7 @@ export interface CanonicalStrategyIrV1 {
     sizing: {
       mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
       value: number
+      asset?: string
     }
     maxConcurrentPositions: number
     allowPyramiding: boolean
@@ -130,6 +131,7 @@ export interface ActionDef {
   quantity: {
     mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
     value: number
+    asset?: string
   }
 }
 
@@ -149,6 +151,7 @@ export interface OrderProgram {
   quantity: {
     mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
     value: number
+    asset?: string
   }
   orderType: 'limit'
   recycleOnFill: boolean

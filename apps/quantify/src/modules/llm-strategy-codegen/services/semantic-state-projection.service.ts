@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 export interface SemanticConversationView {
   summary: string
@@ -483,23 +484,26 @@ export class SemanticStateProjectionService {
       return ''
     }
 
-    if (position.mode === 'fixed_quote') {
-      return `仓位：${this.formatNumber(position.value)} USDT`
+    const sizing = position.sizing ?? normalizeLegacyPositionSizing(position)
+    if (!sizing) {
+      return ''
     }
 
-    if (position.mode === 'fixed_qty') {
-      return `仓位：${this.formatNumber(position.value)} base`
+    if (sizing.kind === 'ratio') {
+      const ratioValue = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
+      return `仓位：${this.formatPercent(ratioValue)}%`
     }
 
-    return `仓位：${this.formatRatio(position.value)}%`
+    if (sizing.kind === 'quote' || sizing.kind === 'base') {
+      return `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
+    }
+
+    return ''
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {
-    return !!position
-      && position.status === 'locked'
-      && (position.mode === 'fixed_ratio' || position.mode === 'fixed_quote' || position.mode === 'fixed_qty')
-      && Number.isFinite(position.value)
-      && position.value > 0
+    return position?.status === 'locked'
+      && validateSemanticPositionContract(position).ok
   }
 
   private buildRecommendationSignals(input: {
@@ -636,11 +640,6 @@ export class SemanticStateProjectionService {
   private formatNumber(value: number): string {
     const normalized = Number.parseFloat(Number(value).toFixed(6))
     return `${normalized}`
-  }
-
-  private formatRatio(value: number): string {
-    const percent = value <= 1 ? value * 100 : value
-    return this.formatPercent(percent)
   }
 
   private buildInferredDefaults(riskItems: SemanticState['risk']): {

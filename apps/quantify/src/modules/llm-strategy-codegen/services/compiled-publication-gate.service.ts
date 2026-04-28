@@ -46,6 +46,11 @@ interface FormalStrategyConfig {
   baseTimeframe: string | null
   stateTimeframes?: string[]
   positionPct: number | null
+  positionSizing: {
+    mode: CanonicalStrategyIrV1['portfolio']['sizing']['mode']
+    value: number
+    asset?: string
+  }
   strategyDeclaredLeverageRange: null
 }
 
@@ -146,6 +151,7 @@ export class CompiledPublicationGateService {
         timeframe: strategyConfig.baseTimeframe,
         marketType: strategyConfig.marketType,
         positionPct: strategyConfig.positionPct,
+        positionSizing: strategyConfig.positionSizing,
       },
       strategyConfig: strategyConfig as unknown as Record<string, unknown>,
       backtestConfigDefaults: backtestConfigDefaults as unknown as Record<string, unknown>,
@@ -255,6 +261,7 @@ export class CompiledPublicationGateService {
       positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
         ? input.ir.portfolio.sizing.value
         : null,
+      positionSizing: input.ir.portfolio.sizing,
       strategyDeclaredLeverageRange: null,
     }
   }

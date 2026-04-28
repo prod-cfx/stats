@@ -18,6 +18,7 @@ interface CodegenSpecRuleAction {
   sizing?: {
     mode?: string
     value?: unknown
+    asset?: unknown
   }
 }
 
@@ -36,6 +37,7 @@ interface CanonicalSpecMarket {
 
 interface CanonicalSpec {
   market?: CanonicalSpecMarket
+  sizing?: CodegenSpecRuleAction['sizing']
 }
 
 interface CodegenSpec {
@@ -156,6 +158,40 @@ function extractPositionPct(spec: CodegenSpec, fallback: GraphFallbackMeta): num
   return fallback.positionPct
 }
 
+function formatNumber(value: number): string {
+  if (Number.isInteger(value)) return String(value)
+  return value.toFixed(8).replace(/\.?0+$/, '')
+}
+
+function formatSizingAmount(sizing: CodegenSpecRuleAction['sizing'] | null | undefined): string | null {
+  if (!sizing || typeof sizing.value !== 'number' || !Number.isFinite(sizing.value)) return null
+
+  if (sizing.mode === 'RATIO') {
+    return `${formatNumber(sizing.value <= 1 ? sizing.value * 100 : sizing.value)}%`
+  }
+
+  if (sizing.mode === 'QUOTE' || sizing.mode === 'QTY') {
+    return typeof sizing.asset === 'string' && sizing.asset.trim().length > 0
+      ? `${formatNumber(sizing.value)} ${sizing.asset.trim()}`
+      : formatNumber(sizing.value)
+  }
+
+  return null
+}
+
+function extractPositionSizing(spec: CodegenSpec, fallback: GraphFallbackMeta): string {
+  const canonicalSizing = formatSizingAmount(spec.canonicalSpec?.sizing)
+  if (canonicalSizing) return canonicalSizing
+
+  const actionSizing = spec.rules
+    ?.flatMap(rule => rule.actions ?? [])
+    .map(action => formatSizingAmount(action.sizing))
+    .find((item): item is string => Boolean(item))
+  if (actionSizing) return actionSizing
+
+  return `${extractPositionPct(spec, fallback)}%`
+}
+
 function extractTimeframe(spec: CodegenSpec, fallback: GraphFallbackMeta): string {
   const canonicalTimeframe = typeof spec.canonicalSpec?.market?.timeframe === 'string'
     ? spec.canonicalSpec.market.timeframe.trim()
@@ -206,6 +242,7 @@ export function buildLogicGraphFromCodegenSpec(
     || (typeof typed.canonicalSpec?.market?.symbol === 'string' ? typed.canonicalSpec.market.symbol : null)
     || fallback.symbol
   const positionPct = extractPositionPct(typed, fallback)
+  const positionSizing = extractPositionSizing(typed, fallback)
   const timeframe = extractTimeframe(typed, fallback)
   const trigger = [
     ...entryRules.map((rule, idx) => ({
@@ -245,7 +282,7 @@ export function buildLogicGraphFromCodegenSpec(
                 : `action-${version}-${ruleIndex}-${actionIndex}`,
               action: mappedAction,
               target: symbol,
-              amount: `${positionPct}%`,
+              amount: formatSizingAmount(action.sizing) ?? positionSizing,
             } satisfies StrategyLogicGraph['actions'][number]
           }),
         )
@@ -257,7 +294,7 @@ export function buildLogicGraphFromCodegenSpec(
             id: `action-buy-${version}`,
             action: 'BUY',
             target: symbol,
-            amount: `${positionPct}%`,
+            amount: positionSizing,
           })
         }
         if (exitRules.length > 0) {
@@ -265,7 +302,7 @@ export function buildLogicGraphFromCodegenSpec(
             id: `action-sell-${version}`,
             action: 'SELL',
             target: symbol,
-            amount: `${positionPct}%`,
+            amount: positionSizing,
           })
         }
         return fallbackActions
@@ -294,6 +331,7 @@ export function buildLogicGraphFromCodegenSpec(
       symbol,
       timeframe,
       positionPct,
+      positionSizing,
       executionTags: fallback.executionTags ?? [],
     },
   }

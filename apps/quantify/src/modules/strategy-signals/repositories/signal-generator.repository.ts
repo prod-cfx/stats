@@ -7,6 +7,8 @@ import { Injectable } from '@nestjs/common'
 import { normalizeRequestedCode, normalizeRequestedCodeForMarket } from '@/modules/market-data/utils/market-symbol-code.util'
 import { RUNTIME_BINDING_STATUS } from '../types/runtime-binding-status.type'
 
+const COOLDOWN_SIGNAL_STATUSES = ['PENDING', 'EXECUTED', 'PARTIAL'] as const
+
 export interface RuntimeCooldownScope {
   strategyInstanceId: string
   publishedSnapshotId: string
@@ -138,6 +140,7 @@ export class SignalGeneratorRepository {
             strategyId: params.strategyId,
             symbolId: params.symbolId,
             createdAt: { gte: params.cooldownSince },
+            status: { in: [...COOLDOWN_SIGNAL_STATUSES] },
             OR: [{ strategyInstanceId: params.instanceId }, { strategyInstanceId: null }],
           },
         })
@@ -188,6 +191,7 @@ export class SignalGeneratorRepository {
         strategyId: input.strategyId,
         symbolId: input.symbolId,
         createdAt: { gte: input.since },
+        status: { in: [...COOLDOWN_SIGNAL_STATUSES] },
         strategyInstanceId: input.runtimeScope.strategyInstanceId,
         AND: [{
           metadata: {
@@ -207,6 +211,7 @@ export class SignalGeneratorRepository {
       strategyId: input.strategyId,
       symbolId: input.symbolId,
       createdAt: { gte: input.since },
+      status: { in: [...COOLDOWN_SIGNAL_STATUSES] },
       ...(input.instanceId
         ? {
             OR: [{ strategyInstanceId: input.instanceId }, { strategyInstanceId: null }],

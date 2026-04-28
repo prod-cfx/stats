@@ -698,6 +698,64 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('detects position sizing contract asset drift across canonical, IR and AST', () => {
+    const state = {
+      ...buildCloseOpenExpressionSemanticState(),
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        sizing: { kind: 'quote' as const, value: 10, asset: 'USDC' as const },
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+      },
+    }
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const passingChecks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+    const driftChecks = service.validate({
+      semanticState: state,
+      canonicalSpec: {
+        ...canonicalSpec,
+        sizing: { mode: 'QUOTE', value: 10 },
+      },
+      ir: {
+        ...ir,
+        portfolio: {
+          ...ir.portfolio,
+          sizing: { mode: 'fixed_quote', value: 10 },
+        },
+      },
+      ast: {
+        ...ast,
+        decisionPrograms: ast.decisionPrograms.map(program => ({
+          ...program,
+          actions: program.actions.map(action =>
+            action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT'
+              ? { ...action, quantity: { mode: 'fixed_quote' as const, value: 10 } }
+              : action,
+          ),
+        })),
+      },
+    })
+
+    expect(passingChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+    expect(driftChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'failed',
+        level: 'critical',
+        message: expect.stringMatching(/position sizing contract drift/i),
+      }),
+    ]))
+  })
+
   it('detects inferred generic expression drift once the trigger is locked', () => {
     const state = buildCloseOpenExpressionSemanticState()
     state.triggers = state.triggers.map(trigger => ({
@@ -956,9 +1014,10 @@ describe('SemanticAtomInvariantService', () => {
     const { canonicalSpec, ir, ast } = compile(state)
 
     const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+    const priceChecks = checks.filter(check => check.key === 'semantic_atom.price_percent_change')
 
-    expect(checks).toHaveLength(2)
-    expect(checks).toEqual([
+    expect(priceChecks).toHaveLength(2)
+    expect(priceChecks).toEqual([
       expect.objectContaining({
         key: 'semantic_atom.price_percent_change',
         status: 'passed',
@@ -970,6 +1029,13 @@ describe('SemanticAtomInvariantService', () => {
         level: 'critical',
       }),
     ])
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
   })
 
   it('fails when a both-side percent-change trigger loses the short-side close action', () => {
@@ -977,9 +1043,10 @@ describe('SemanticAtomInvariantService', () => {
     const { canonicalSpec, ir, ast } = removeCloseShort(compile(state))
 
     const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+    const priceChecks = checks.filter(check => check.key === 'semantic_atom.price_percent_change')
 
-    expect(checks).toHaveLength(2)
-    expect(checks).toEqual(expect.arrayContaining([
+    expect(priceChecks).toHaveLength(2)
+    expect(priceChecks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic_atom.price_percent_change',
         status: 'passed',
@@ -988,6 +1055,13 @@ describe('SemanticAtomInvariantService', () => {
       expect.objectContaining({
         key: 'semantic_atom.price_percent_change',
         status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.position_sizing',
+        status: 'passed',
         level: 'critical',
       }),
     ]))

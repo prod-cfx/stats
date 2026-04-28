@@ -171,4 +171,25 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     expect(findUnique).not.toHaveBeenCalled()
     expect(findMany).not.toHaveBeenCalled()
   })
+
+  it('excludes cancelled and failed signals from cooldown checks', async () => {
+    const count = jest.fn().mockResolvedValue(0)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        tradingSignal: { count },
+      },
+    } as any)
+
+    await repo.countRecentSignals({
+      strategyId: 'strategy-1',
+      symbolId: 'symbol-1',
+      since: new Date('2026-04-28T14:10:00.000Z'),
+    })
+
+    expect(count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        status: { in: ['PENDING', 'EXECUTED', 'PARTIAL'] },
+      }),
+    })
+  })
 })

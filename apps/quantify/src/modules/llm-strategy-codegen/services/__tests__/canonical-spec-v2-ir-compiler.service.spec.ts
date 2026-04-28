@@ -25,7 +25,93 @@ function findPredicate(
   return found as PredicateDef
 }
 
+function createSizingCanonicalSpec(
+  sizing: NonNullable<CanonicalStrategySpecV2['sizing']>,
+): CanonicalStrategySpecV2 {
+  return {
+    version: 2,
+    market: {
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      defaultTimeframe: '1m',
+    },
+    indicators: [],
+    sizing,
+    executionPolicy: {
+      signalTiming: 'BAR_CLOSE',
+      fillTiming: 'NEXT_BAR_OPEN',
+    },
+    dataRequirements: {
+      requiredTimeframes: ['1m'],
+    },
+    rules: [
+      {
+        id: 'entry-close-above-open',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: {
+          kind: 'expression',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'series', source: 'bar', field: 'open' },
+        },
+        actions: [{ type: 'OPEN_LONG', sizing }],
+      },
+    ],
+  }
+}
+
 describe('canonicalSpecV2IrCompilerService', () => {
+  it.each([
+    [
+      { mode: 'QUOTE', value: 10 },
+      { mode: 'fixed_quote', value: 10 },
+      '10 USDT',
+    ],
+    [
+      { mode: 'QUOTE', value: 10, asset: 'USDC' },
+      { mode: 'fixed_quote', value: 10, asset: 'USDC' },
+      '10 USDC',
+    ],
+    [
+      { mode: 'QTY', value: 0.001 },
+      { mode: 'fixed_base', value: 0.001 },
+      '0.001 BTC',
+    ],
+    [
+      { mode: 'QTY', value: 0.001, asset: 'ETH' },
+      { mode: 'fixed_base', value: 0.001, asset: 'ETH' },
+      '0.001 ETH',
+    ],
+  ] satisfies Array<[
+    NonNullable<CanonicalStrategySpecV2['sizing']>,
+    CanonicalStrategyIrV1['portfolio']['sizing'],
+    string,
+  ]>)(
+    'maps canonical sizing %o into IR portfolio sizing %o',
+    (canonicalSizing, irSizing, graphAmount) => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+
+      const result = compiler.compile({
+        canonicalSpec: createSizingCanonicalSpec(canonicalSizing),
+        fallback: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '1m',
+          positionPct: 10,
+        },
+      })
+
+      expect(result.ir.portfolio.sizing).toEqual(irSizing)
+      expect(result.graphSnapshot.actions).toEqual(expect.arrayContaining([
+        expect.objectContaining({ amount: graphAmount }),
+      ]))
+      expect(result.graphSnapshot.meta.positionSizing).toBe(graphAmount)
+    },
+  )
+
   it('compiles generic close-open expressions', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

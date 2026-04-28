@@ -1,9 +1,10 @@
 import type { ExprNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
 import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import type { CanonicalConditionAtom, CanonicalConditionNode, CanonicalExpressionCondition, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
-import type { SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { StrategyConsistencyCheck } from '../types/strategy-consistency-report'
 import { Injectable } from '@nestjs/common'
+import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -58,6 +59,12 @@ interface ExpectedGenericExpressionSnapshot {
   right: string | null
 }
 
+interface PositionSizingSnapshot {
+  mode: string
+  value: number
+  asset?: string
+}
+
 @Injectable()
 export class SemanticAtomInvariantService {
   validate(input: {
@@ -69,7 +76,115 @@ export class SemanticAtomInvariantService {
     return [
       ...this.validatePricePercentChange(input),
       ...this.validateGenericExpressions(input),
+      ...this.validatePositionSizingContract(input),
     ]
+  }
+
+  private validatePositionSizingContract(input: {
+    semanticState: SemanticState
+    canonicalSpec: CanonicalStrategySpec
+    ir: CanonicalStrategyIrV1
+    ast: StrategyAstV1
+  }): StrategyConsistencyCheck[] {
+    const position = input.semanticState.position
+    if (!position || position.status !== 'locked' || !validateSemanticPositionContract(position).ok) {
+      return []
+    }
+
+    const semanticSizing = normalizeLegacyPositionSizing(position)
+    if (!semanticSizing) {
+      return []
+    }
+
+    const expectedCanonical = this.toCanonicalPositionSizingSnapshot(semanticSizing)
+    const expectedIr = this.toIrPositionSizingSnapshot(semanticSizing)
+    const canonical = {
+      passed: this.matchesPositionSizingSnapshot(this.readCanonicalPositionSizing(input.canonicalSpec), expectedCanonical),
+      expected: expectedCanonical,
+      actual: this.readCanonicalPositionSizing(input.canonicalSpec),
+    }
+    const ir = {
+      passed: this.matchesPositionSizingSnapshot(input.ir.portfolio.sizing, expectedIr),
+      expected: expectedIr,
+      actual: input.ir.portfolio.sizing,
+    }
+    const astCandidates = this.readAstOpenActionPositionSizings(input.ast)
+    const ast = {
+      passed: astCandidates.length > 0
+        && astCandidates.every(candidate => this.matchesPositionSizingSnapshot(candidate, expectedIr)),
+      expected: expectedIr,
+      candidates: astCandidates,
+    }
+    const passed = canonical.passed && ir.passed && ast.passed
+
+    return [{
+      key: 'semantic_contract.position_sizing',
+      level: 'critical',
+      status: passed ? 'passed' : 'failed',
+      expected: expectedCanonical,
+      actual: { canonical, ir, ast },
+      message: passed
+        ? 'position sizing contract matches canonicalSpec, IR, and AST.'
+        : 'position sizing contract drift: expected SemanticState position sizing to match canonicalSpec, IR, and AST open action quantities.',
+    }]
+  }
+
+  private toCanonicalPositionSizingSnapshot(sizing: SemanticPositionSizingContract): PositionSizingSnapshot {
+    if (sizing.kind === 'ratio') {
+      return { mode: 'RATIO', value: sizing.value }
+    }
+
+    if (sizing.kind === 'quote') {
+      return { mode: 'QUOTE', value: sizing.value, asset: sizing.asset }
+    }
+
+    return { mode: 'QTY', value: sizing.value, asset: sizing.asset }
+  }
+
+  private toIrPositionSizingSnapshot(sizing: SemanticPositionSizingContract): PositionSizingSnapshot {
+    if (sizing.kind === 'ratio') {
+      return {
+        mode: 'pct_equity',
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
+      }
+    }
+
+    if (sizing.kind === 'quote') {
+      return { mode: 'fixed_quote', value: sizing.value, asset: sizing.asset }
+    }
+
+    return { mode: 'fixed_base', value: sizing.value, asset: sizing.asset }
+  }
+
+  private readCanonicalPositionSizing(spec: CanonicalStrategySpec): PositionSizingSnapshot | null {
+    if (!spec.sizing) {
+      return null
+    }
+
+    return {
+      mode: spec.sizing.mode,
+      value: spec.sizing.value,
+      ...('asset' in spec.sizing && spec.sizing.asset ? { asset: spec.sizing.asset } : {}),
+    }
+  }
+
+  private readAstOpenActionPositionSizings(ast: StrategyAstV1): PositionSizingSnapshot[] {
+    return ast.decisionPrograms.flatMap(program =>
+      program.actions
+        .filter(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
+        .map(action => action.quantity),
+    )
+  }
+
+  private matchesPositionSizingSnapshot(
+    actual: PositionSizingSnapshot | null | undefined,
+    expected: PositionSizingSnapshot,
+  ): boolean {
+    if (!actual) return false
+    if (actual.mode !== expected.mode) return false
+    if (Math.abs(actual.value - expected.value) > 0.000001) return false
+    if (expected.asset !== undefined && actual.asset !== expected.asset) return false
+    return true
   }
 
   private validateGenericExpressions(input: {
