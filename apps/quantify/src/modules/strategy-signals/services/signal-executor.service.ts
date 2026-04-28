@@ -29,6 +29,7 @@ import { PositionsService } from '@/modules/positions/positions.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { EXECUTION_STAGES } from '@/modules/trading/core/execution-stage'
+import { resolveStrategyFundingFromStrategyAccount } from '@/modules/trading/core/strategy-buying-power.resolver'
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
@@ -51,6 +52,10 @@ const Decimal = Prisma.Decimal
 /* eslint-enable no-redeclare, ts/no-redeclare */
 
 type LoadedSignal = NonNullable<Awaited<ReturnType<TradingSignalRepository['findById']>>>
+type LockedStrategyAccount = Pick<
+  UserStrategyAccount,
+  'id' | 'userId' | 'baseCurrency' | 'balance' | 'equity' | 'initialBalance'
+>
 
 interface OrderParams {
   exchangeId: 'binance' | 'okx' | 'hyperliquid'
@@ -791,14 +796,14 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
   private async lockAccount(
     accountId: string,
-  ): Promise<Pick<UserStrategyAccount, 'id' | 'userId' | 'baseCurrency' | 'balance'> | null> {
+  ): Promise<LockedStrategyAccount | null> {
     const rows = await this.executorRepository.lockAccount(accountId)
     return rows[0] ?? null
   }
 
   private buildOrderParamsWithLockedAccount(
     signal: LoadedSignal,
-    account: Pick<UserStrategyAccount, 'id' | 'userId' | 'baseCurrency' | 'balance'>,
+    account: LockedStrategyAccount,
     config: StrategySignalsRuntimeConfig,
     closePositionQuantity?: Decimal,
     riskProfile?: StrategyInstanceRiskProfile | null,
@@ -837,12 +842,18 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       return { ok: false, reason: 'Entry price missing' }
     }
 
-    const balance = account.balance
+    const funding = resolveStrategyFundingFromStrategyAccount({
+      account,
+      mode: null,
+      reservedQuote: 0,
+    })
+    const buyingPower = new Decimal(funding.buyingPower)
+    const executionCapital = new Decimal(funding.executionCapital)
     // 开仓场景才检查最低余额与风险预算；平仓/EXIT 不应因为 quote 余额不足而无法卖出
     if (!isCloseSignal) {
       const minBalance = new Decimal(config.execution.minBalanceThreshold)
-      if (balance.lt(minBalance)) {
-        return { ok: false, reason: 'Account balance below minimum threshold' }
+      if (buyingPower.lt(minBalance)) {
+        return { ok: false, reason: 'Buying power below minimum threshold' }
       }
     }
 
@@ -865,39 +876,39 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         ? new Decimal(riskProfile.effectivePerOrderMaxQuote)
         : new Decimal(config.execution.defaultQuoteAmount)
 
-      // 计算风险上限（基于账户余额和风险比例）
-      const maxRiskQuote = balance.mul(effectiveMaxRiskFraction)
+      // 计算风险上限（基于执行资金和风险比例）
+      const maxRiskQuote = executionCapital.mul(effectiveMaxRiskFraction)
       const defaultQuote = effectivePerOrderMaxQuote
 
-      // 优先使用策略指定的仓位大小，仅受 maxRiskFraction 约束
+      // 优先使用策略指定的仓位大小，受 maxRiskFraction 与 buying power 共同约束
       // defaultQuoteAmount 仅在策略未指定仓位时作为 fallback
       if (signal.positionSizeQuote && new Decimal(signal.positionSizeQuote).gt(0)) {
         // 策略指定了绝对金额
         const strategyQuote = new Decimal(signal.positionSizeQuote)
-        quoteBudget = Decimal.min(strategyQuote, maxRiskQuote)
+        quoteBudget = Decimal.min(strategyQuote, maxRiskQuote, buyingPower)
         this.logger.debug(
           `Strategy-specified position size (quote): ${strategyQuote.toString()}, ` +
           `max risk limit (${effectiveMaxRiskFraction}): ${maxRiskQuote.toString()}, ` +
-          `final budget: ${quoteBudget.toString()}`
+          `buying power: ${buyingPower.toString()}, final budget: ${quoteBudget.toString()}`,
         )
       }
       else if (signal.positionSizeRatio && new Decimal(signal.positionSizeRatio).gt(0)) {
         // 策略指定了仓位比例
         const ratio = new Decimal(signal.positionSizeRatio)
-        const strategyQuote = balance.mul(ratio)
-        quoteBudget = Decimal.min(strategyQuote, maxRiskQuote)
+        const strategyQuote = executionCapital.mul(ratio)
+        quoteBudget = Decimal.min(strategyQuote, maxRiskQuote, buyingPower)
         this.logger.debug(
-          `Strategy-specified position size (ratio): ${ratio.toString()} of balance ${balance.toString()} = ${strategyQuote.toString()}, ` +
+          `Strategy-specified position size (ratio): ${ratio.toString()} of execution capital ${executionCapital.toString()} = ${strategyQuote.toString()}, ` +
           `max risk limit (${effectiveMaxRiskFraction}): ${maxRiskQuote.toString()}, ` +
-          `final budget: ${quoteBudget.toString()}`
+          `buying power: ${buyingPower.toString()}, final budget: ${quoteBudget.toString()}`,
         )
       }
       else {
         // 回退到全局配置：此时才使用 defaultQuoteAmount
-        quoteBudget = Decimal.min(maxRiskQuote, defaultQuote)
+        quoteBudget = Decimal.min(maxRiskQuote, defaultQuote, buyingPower)
         this.logger.debug(
           `No strategy position size, using global config: ` +
-          `min(maxRisk=${maxRiskQuote.toString()}, default=${defaultQuote.toString()}) = ${quoteBudget.toString()}`
+          `min(maxRisk=${maxRiskQuote.toString()}, default=${defaultQuote.toString()}, buyingPower=${buyingPower.toString()}) = ${quoteBudget.toString()}`,
         )
       }
 

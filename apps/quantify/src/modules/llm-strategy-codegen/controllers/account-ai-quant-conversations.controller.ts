@@ -1,6 +1,6 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common'
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { AiQuantConversationBacktestDraftConfigRequestDto } from '../dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai-quant-edit-conversation.request.dto'
@@ -41,6 +41,7 @@ export class AccountAiQuantConversationsController {
 
   @Delete(':id')
   @ApiOperation({ summary: '删除当前用户的 AI Quant 会话' })
+  @ApiQuery({ name: 'deleteStoppedStrategy', required: false, type: String })
   async remove(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,

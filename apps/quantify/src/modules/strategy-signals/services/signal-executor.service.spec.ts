@@ -221,6 +221,128 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('skips opening orders when buying power is below the minimum threshold even if equity is positive', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'ENTRY',
+        direction: 'SELL',
+        entryPrice: '77789.4',
+        positionSizeRatio: '0.1',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 6,
+          lotSize: '0.000001',
+        },
+      },
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal('4901.58222'),
+        initialBalance: new Prisma.Decimal('4901.58222'),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+    )
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'Buying power below minimum threshold',
+    })
+  })
+
+  it('sizes ratio orders from execution capital and caps budget by buying power', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        entryPrice: '100',
+        positionSizeRatio: '0.1',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      },
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(120),
+        equity: new Prisma.Decimal(4901.58222),
+        initialBalance: new Prisma.Decimal(4901.58222),
+      },
+      {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+        execution: {
+          ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+          minBalanceThreshold: 50,
+          maxRiskFraction: 1,
+        },
+      } as any,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      quoteBudget: new Prisma.Decimal(120),
+      params: expect.objectContaining({
+        amount: 1.2,
+      }),
+    })
+  })
+
+  it('does not require quote buying power for close signals', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        entryPrice: '100',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      },
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal(4901.58222),
+        initialBalance: new Prisma.Decimal(4901.58222),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      new Prisma.Decimal('0.25'),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      quoteBudget: new Prisma.Decimal(0),
+      params: expect.objectContaining({
+        reduceOnly: true,
+        amount: 0.25,
+      }),
+    })
+  })
+
   it('does not markExecuted when a market order stays open with 0 fill after reconciliation', async () => {
     const prisma = {}
     const configService = { get: jest.fn() }

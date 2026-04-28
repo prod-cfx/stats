@@ -119,6 +119,12 @@ export class AccountStrategyAccountOverviewDto {
   @ApiPropertyOptional({ nullable: true })
   availableBalance!: number | null
 
+  @ApiPropertyOptional({ description: '策略执行本金，用于百分比仓位计算', example: 4901.58, nullable: true })
+  executionCapital?: number | null
+
+  @ApiPropertyOptional({ description: '总权益有值但不可开仓时的原因', example: 'exchange_available_balance_zero', nullable: true })
+  nonTradableReason?: string | null
+
   @ApiPropertyOptional({ nullable: true })
   totalPnl!: number | null
 
