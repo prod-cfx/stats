@@ -210,28 +210,32 @@ export class BacktestSnapshotLoaderService {
   }
 
   private resolveFormalSnapshotTruth(snapshot: PublishedSnapshotRecord): FormalSnapshotTruth {
-    const missingFields: string[] = []
-
     const strategyConfigRaw = this.readJsonRecord(snapshot.strategyConfig)
-    const strategyConfig = strategyConfigRaw ? this.parseStrategyConfig(strategyConfigRaw) : null
-    if (!strategyConfig) missingFields.push('strategyConfig')
+    const strategyConfig = (strategyConfigRaw ? this.parseStrategyConfig(strategyConfigRaw) : null)
+      ?? this.recoverStrategyConfigFromImmutableSnapshot(snapshot)
 
     const backtestConfigDefaultsRaw = this.readJsonRecord(snapshot.backtestConfigDefaults)
-    const backtestConfigDefaults = backtestConfigDefaultsRaw
+    const backtestConfigDefaults = (backtestConfigDefaultsRaw
       ? this.parseBacktestConfigDefaults(backtestConfigDefaultsRaw, strategyConfig?.marketType ?? null)
-      : null
-    if (!backtestConfigDefaults) missingFields.push('backtestConfigDefaults')
+      : null)
+      ?? this.recoverBacktestConfigDefaultsFromImmutableSnapshot(snapshot, strategyConfig?.marketType ?? null)
 
     const deploymentExecutionDefaultsRaw = this.readJsonRecord(snapshot.deploymentExecutionDefaults)
-    const deploymentExecutionDefaults = deploymentExecutionDefaultsRaw
+    const deploymentExecutionDefaults = (deploymentExecutionDefaultsRaw
       ? this.parseDeploymentExecutionDefaults(deploymentExecutionDefaultsRaw)
-      : null
-    if (!deploymentExecutionDefaults) missingFields.push('deploymentExecutionDefaults')
+      : null)
+      ?? this.recoverDeploymentExecutionDefaultsFromImmutableSnapshot(snapshot)
 
     const deploymentExecutionConstraintsRaw = this.readJsonRecord(snapshot.deploymentExecutionConstraints)
-    const deploymentExecutionConstraints = deploymentExecutionConstraintsRaw
+    const deploymentExecutionConstraints = (deploymentExecutionConstraintsRaw
       ? this.parseDeploymentExecutionConstraints(deploymentExecutionConstraintsRaw)
-      : null
+      : null)
+      ?? this.recoverDeploymentExecutionConstraintsFromImmutableSnapshot(snapshot, strategyConfig?.marketType ?? null, deploymentExecutionDefaults)
+
+    const missingFields: string[] = []
+    if (!strategyConfig) missingFields.push('strategyConfig')
+    if (!backtestConfigDefaults) missingFields.push('backtestConfigDefaults')
+    if (!deploymentExecutionDefaults) missingFields.push('deploymentExecutionDefaults')
     if (!deploymentExecutionConstraints) missingFields.push('deploymentExecutionConstraints')
 
     if (missingFields.length > 0) {
@@ -252,6 +256,123 @@ export class BacktestSnapshotLoaderService {
       deploymentExecutionDefaults,
       deploymentExecutionConstraints,
     }
+  }
+
+  private recoverStrategyConfigFromImmutableSnapshot(
+    snapshot: PublishedSnapshotRecord,
+  ): FormalSnapshotTruth['strategyConfig'] | null {
+    const ir = this.readJsonRecord(snapshot.irSnapshot)
+    if (!ir) {
+      return null
+    }
+    const irMarket = this.readJsonRecord(ir?.market)
+    const irPortfolio = this.readJsonRecord(ir?.portfolio)
+    const irSizing = this.readJsonRecord(irPortfolio?.sizing)
+    const params = this.readJsonRecord(snapshot.paramsSnapshot)
+    const exchange = this.readTrimmedString(irMarket?.venue) ?? this.readTrimmedString(params?.exchange)
+    const symbol = this.readTrimmedString(irMarket?.symbol) ?? this.readTrimmedString(params?.symbol)
+    const instrumentType = this.readTrimmedString(irMarket?.instrumentType)
+    const paramMarketType = this.readTrimmedString(params?.marketType)
+    const marketType = instrumentType === 'perpetual'
+      ? 'perp'
+      : instrumentType === 'spot'
+        ? 'spot'
+        : paramMarketType === 'spot' || paramMarketType === 'perp'
+          ? paramMarketType
+          : null
+    const timeframes = this.readStringArray(irMarket?.timeframes)
+    const baseTimeframe = timeframes[0] ?? this.readTrimmedString(params?.timeframe)
+    const positionPct = irSizing?.mode === 'pct_equity'
+      ? this.readFiniteNumber(irSizing.value)
+      : this.readFiniteNumber(params?.positionPct)
+
+    if (!exchange || !symbol || !marketType || !baseTimeframe || positionPct === null) {
+      return null
+    }
+
+    return {
+      exchange,
+      symbol,
+      marketType,
+      baseTimeframe,
+      stateTimeframes: timeframes.slice(1),
+      positionPct,
+    }
+  }
+
+  private recoverBacktestConfigDefaultsFromImmutableSnapshot(
+    snapshot: PublishedSnapshotRecord,
+    marketType: string | null,
+  ): FormalSnapshotTruth['backtestConfigDefaults'] | null {
+    if (marketType !== 'spot' && marketType !== 'perp') {
+      return null
+    }
+    const ir = this.readJsonRecord(snapshot.irSnapshot)
+    if (!ir) {
+      return null
+    }
+    const irMarket = this.readJsonRecord(ir?.market)
+    const irExecutionPolicy = this.readJsonRecord(ir?.executionPolicy)
+    const priceSource = this.resolveBacktestPriceSource(this.readTrimmedString(irMarket?.priceFeed))
+    const allowPartial = typeof irExecutionPolicy?.allowPartialFill === 'boolean'
+      ? irExecutionPolicy.allowPartialFill
+      : false
+
+    return {
+      initialCash: 10000,
+      leverage: marketType === 'perp' ? 1 : null,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource,
+      allowPartial,
+    }
+  }
+
+  private recoverDeploymentExecutionDefaultsFromImmutableSnapshot(
+    snapshot: PublishedSnapshotRecord,
+  ): FormalSnapshotTruth['deploymentExecutionDefaults'] | null {
+    const ir = this.readJsonRecord(snapshot.irSnapshot)
+    if (!ir) {
+      return null
+    }
+    const irMarket = this.readJsonRecord(ir?.market)
+    const irExecutionPolicy = this.readJsonRecord(ir?.executionPolicy)
+    const priceSource = this.resolveBacktestPriceSource(this.readTrimmedString(irMarket?.priceFeed))
+    const orderType = this.readTrimmedString(irExecutionPolicy?.orderTypeDefault) ?? 'market'
+    const timeInForce = this.readTrimmedString(irExecutionPolicy?.timeInForce) ?? 'gtc'
+
+    return {
+      priceSource,
+      orderType,
+      timeInForce,
+    }
+  }
+
+  private recoverDeploymentExecutionConstraintsFromImmutableSnapshot(
+    snapshot: PublishedSnapshotRecord,
+    marketType: string | null,
+    defaults: FormalSnapshotTruth['deploymentExecutionDefaults'] | null,
+  ): FormalSnapshotTruth['deploymentExecutionConstraints'] | null {
+    if (!this.readJsonRecord(snapshot.irSnapshot) || !defaults || (marketType !== 'spot' && marketType !== 'perp')) {
+      return null
+    }
+
+    return {
+      defaultLeverage: 1,
+      supportedPriceSources: [defaults.priceSource],
+      supportedOrderTypes: [defaults.orderType],
+      supportedTimeInForce: [defaults.timeInForce],
+    }
+  }
+
+  private resolveBacktestPriceSource(value: string | null): 'open' | 'close' | 'mid' {
+    if (value === 'open' || value === 'close') {
+      return value
+    }
+    if (value === 'hlc3' || value === 'ohlc4' || value === 'mid') {
+      return 'mid'
+    }
+    return 'close'
   }
 
   private resolveStrategyId(

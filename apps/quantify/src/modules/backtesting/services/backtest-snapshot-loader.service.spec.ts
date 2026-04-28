@@ -401,6 +401,95 @@ describe('backtestSnapshotLoaderService', () => {
     expect(strategyAdapter.build).not.toHaveBeenCalled()
   })
 
+  it('recovers formal backtest truth from immutable compiled artifacts when PR #921 snapshots missed formal fields', async () => {
+    const compiledSnapshot = createCompiledSnapshotFixture()
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-semantic-mainline',
+        strategyInstanceId: 'instance-semantic-mainline',
+        strategyTemplateId: 'template-semantic-mainline',
+        snapshotHash: 'snapshot-hash',
+        scriptHash: 'script-hash',
+        specHash: compiledSnapshot.compiledManifest.specHash,
+        irHash: compiledSnapshot.compiledManifest.irHash,
+        astDigest: compiledSnapshot.compiledManifest.astDigest,
+        structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
+        scriptSnapshot: compiledSnapshot.scriptSnapshot,
+        paramsSnapshot: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
+          positionPct: 25,
+        },
+        lockedParams: {},
+        executionPolicy: {
+          signalEvaluation: 'bar_close',
+          fillPolicy: 'next_bar_open',
+          timeframeAlignment: 'strict',
+          orderTypeDefault: 'market',
+          timeInForce: 'gtc',
+          allowPartialFill: false,
+        },
+        dataRequirements: { primary: ['1h'], requiredTimeframes: ['1h'] },
+        irSnapshot: compiledSnapshot.ir,
+        astSnapshot: compiledSnapshot.ast,
+        compiledManifest: compiledSnapshot.compiledManifest,
+        executionEnvelope: compiledSnapshot.executionEnvelope,
+        specSnapshot: {
+          version: 2,
+          market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1h' },
+          indicators: [],
+          rules: [],
+        },
+      }),
+    }
+    const adaptedStrategy = {
+      id: 'strategy-1',
+      params: {
+        positionPct: 25,
+        exchange: 'binance',
+      },
+      fn: jest.fn(),
+    }
+    const strategyAdapter = {
+      build: jest.fn().mockResolvedValue(adaptedStrategy),
+    }
+    const service = new BacktestSnapshotLoaderService(snapshotsRepository as never, strategyAdapter as never)
+
+    const strategy = await service.load({
+      id: 'strategy-1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-semantic-mainline',
+      userId: 'user-1',
+    })
+
+    expect(strategyAdapter.build).toHaveBeenCalledWith({
+      id: 'instance-semantic-mainline',
+      protocolVersion: 'v1',
+      scriptCode: compiledSnapshot.scriptSnapshot,
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        timeframe: '1h',
+        positionPct: 25,
+      },
+    })
+    expect(strategy).toMatchObject({
+      id: 'instance-semantic-mainline',
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        timeframe: '1h',
+        positionPct: 25,
+      },
+      stateTimeframes: [],
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+    })
+  })
+
   it('fails fast when legacy snapshot does not contain formal structured fields required for backtest', async () => {
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({

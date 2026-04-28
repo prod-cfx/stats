@@ -83,7 +83,6 @@ function buildInvalidExecutionConfigMessage(args: {
   if (activeConversation.publishedSnapshotId) {
     if (
       !activeConversation.publishedSnapshotStrategyConfig ||
-      !activeConversation.publishedSnapshotBacktestConfigDefaults ||
       activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
     ) {
       return t('aiQuant.messages.backtestPayloadInvalid', {
@@ -308,12 +307,6 @@ export async function runAiQuantBacktest(args: {
     const executionConfig = resolveBacktestExecutionConfig(activeConversation.paramValues)
     if (!executionConfig.allowPartialValid) {
       throw new BacktestPayloadBuilderError('invalid_execution_config')
-    }
-    if (!activeConversation.publishedSnapshotBacktestConfigDefaults) {
-      throw new ApiError(
-        '当前已发布快照缺少回测配置真相，请重新发布后再回测。',
-        'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
-      )
     }
     if (
       requiresRepublishForPublishedSnapshot({
