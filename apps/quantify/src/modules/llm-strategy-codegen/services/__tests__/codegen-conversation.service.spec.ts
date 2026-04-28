@@ -4970,6 +4970,93 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('regression: fixed quote position sizing from the user is not replaced by a percent clarification slot', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认交易所。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'condition.expression',
+              phase: 'entry',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'GT',
+                  left: { kind: 'series', source: 'bar', field: 'close' },
+                  right: { kind: 'series', source: 'bar', field: 'open' },
+                },
+              },
+            },
+            {
+              key: 'condition.expression',
+              phase: 'exit',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'LT',
+                  left: { kind: 'series', source: 'bar', field: 'close' },
+                  right: { kind: 'series', source: 'bar', field: 'open' },
+                },
+              },
+            },
+            {
+              key: 'condition.expression',
+              phase: 'gate',
+              params: {
+                expression: {
+                  kind: 'NOT',
+                  children: [
+                    {
+                      kind: 'predicate',
+                      op: 'EQ',
+                      left: { kind: 'position', field: 'has_position', side: 'long' },
+                      right: { kind: 'constant', value: true },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          contextSlots: {
+            symbol: 'BTCUSDT',
+            timeframe: '1m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-fixed-quote-position' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多，固定使用 10 USDT。如果已有持仓则不再开仓。收盘价低于开盘价时平多。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+    expect(createPayload.clarificationState.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+    ]))
+  })
+
   it('regression: semanticPatch position keeps explicit deterministic stop loss risk', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({

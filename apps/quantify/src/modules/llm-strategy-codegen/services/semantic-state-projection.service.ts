@@ -483,16 +483,21 @@ export class SemanticStateProjectionService {
       return ''
     }
 
-    const ratio = position.mode === 'fixed_ratio'
-      ? this.formatRatio(position.value)
-      : String(position.value)
-    return `仓位：${ratio}%`
+    if (position.mode === 'fixed_quote') {
+      return `仓位：${this.formatNumber(position.value)} USDT`
+    }
+
+    if (position.mode === 'fixed_qty') {
+      return `仓位：${this.formatNumber(position.value)} base`
+    }
+
+    return `仓位：${this.formatRatio(position.value)}%`
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {
     return !!position
       && position.status === 'locked'
-      && position.mode === 'fixed_ratio'
+      && (position.mode === 'fixed_ratio' || position.mode === 'fixed_quote' || position.mode === 'fixed_qty')
       && Number.isFinite(position.value)
       && position.value > 0
   }

@@ -1292,4 +1292,33 @@ describe('SemanticStateProjectionService', () => {
 
     expect(view.positionSummary).toBe('仓位：30%')
   })
+
+  it('formats fixed quote position sizing as quote currency instead of a percent', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.positionSummary).toBe('仓位：10 USDT')
+    expect(view.hasDeterministicSemantics).toBe(true)
+  })
 })

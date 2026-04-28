@@ -2415,7 +2415,7 @@ export class CodegenConversationService {
           fieldPath: 'position.value',
           status: 'open',
           priority: 'risk',
-          questionHint: '请确认单笔仓位百分比（例如 10%）。',
+          questionHint: '请确认单笔仓位大小（例如 10% 或 10 USDT）。',
           affectsExecution: true,
         }],
       },
@@ -2982,7 +2982,7 @@ export class CodegenConversationService {
     position: SemanticState['position'],
   ): boolean {
     return position?.status === 'locked'
-      && position.mode === 'fixed_ratio'
+      && (position.mode === 'fixed_ratio' || position.mode === 'fixed_quote' || position.mode === 'fixed_qty')
       && Number.isFinite(position.value)
       && position.value > 0
   }
