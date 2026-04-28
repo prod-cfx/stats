@@ -1359,7 +1359,7 @@ export class SignalGeneratorService {
       return
     }
 
-    const hasRuntimeMarketTypeParam = Object.hasOwn(params, 'marketType')
+    const hasRuntimeMarketTypeParam = this.hasOwnProperty(params, 'marketType')
     const marketType = this.readRuntimeMarketType(params.marketType)
     if (hasRuntimeMarketTypeParam && !marketType) {
       this.logger.warn(
@@ -1800,6 +1800,10 @@ export class SignalGeneratorService {
     return 'spot'
   }
 
+  private hasOwnProperty(record: Record<string, unknown>, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(record, key)
+  }
+
   private isMarketInvalidSymbolError(error: unknown): boolean {
     return error instanceof DomainException && error.code === ErrorCode.MARKET_INVALID_SYMBOL
   }
@@ -1937,7 +1941,7 @@ export class SignalGeneratorService {
     const runtimeMarketType = this.readRuntimeMarketType(
       effectiveParams?.marketType,
     )
-    if (effectiveParams && Object.hasOwn(effectiveParams, 'marketType') && !runtimeMarketType) {
+    if (effectiveParams && this.hasOwnProperty(effectiveParams, 'marketType') && !runtimeMarketType) {
       this.logger.warn(`Invalid marketType for multi-leg strategy ${strategy.id}: ${String(effectiveParams.marketType)}`)
       await this.handleStrategyFailure(instance.id, config)
       this.telemetry.recordGeneration({
