@@ -450,7 +450,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         orderMarketType: effectiveOrderParams.marketType,
       })
 
-      if (!marketTypeValidation.ok) {
+      if ('reason' in marketTypeValidation) {
         await this.executionRepository.markSkipped(execution.id, marketTypeValidation.reason)
         await this.releaseReservation(account.id, reservedQuote, reserveReference)
         return 'skipped'

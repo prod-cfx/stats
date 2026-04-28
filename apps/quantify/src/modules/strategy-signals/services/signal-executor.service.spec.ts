@@ -308,6 +308,69 @@ describe('signalExecutorService', () => {
     expect(result).toEqual({ ok: false, reason: 'MARKET_TYPE_MISMATCH' })
   })
 
+  it('skips order submission when runtime market type mismatches final order params', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingService = (service as any).tradingService
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-market-mismatch'
+
+    jest.spyOn(service as any, 'prepareExecution').mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-market-mismatch' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.01,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-market-mismatch',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          instrumentType: 'SPOT',
+          quoteAsset: 'USDT',
+        },
+        metadata: {
+          runtimeProvenance: {
+            marketType: 'perp',
+          },
+        },
+      },
+      { id: 'acct-market-mismatch', userId: 'user-market-mismatch' },
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('skipped')
+    expect(executionRepository.markSkipped).toHaveBeenCalledWith(
+      'exec-market-mismatch',
+      'MARKET_TYPE_MISMATCH',
+    )
+    expect(releaseReservation).toHaveBeenCalledWith(
+      'acct-market-mismatch',
+      reservedQuote,
+      reserveReference,
+    )
+    expect(executionRepository.markStage).not.toHaveBeenCalledWith(
+      'exec-market-mismatch',
+      'ORDER_SUBMITTED',
+      expect.anything(),
+    )
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('sizes ratio orders from execution capital and caps budget by buying power', () => {
     const service = createService()
 
