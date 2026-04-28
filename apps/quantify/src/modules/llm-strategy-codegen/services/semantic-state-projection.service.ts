@@ -121,8 +121,8 @@ export class SemanticStateProjectionService {
       .sort((left, right) => this.compareTriggers(left, right))
       .map((trigger) => {
         if (trigger.key === 'grid.range_rebalance') {
-          const lower = trigger.params.rangeLower
-          const upper = trigger.params.rangeUpper
+          const lower = this.readGridRangeValue(trigger.params, 'lower')
+          const upper = this.readGridRangeValue(trigger.params, 'upper')
           const stepPct = trigger.params.stepPct
           return [
             '入场：区间网格',
@@ -225,6 +225,31 @@ export class SemanticStateProjectionService {
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private readGridRangeValue(
+    params: Record<string, unknown>,
+    side: 'lower' | 'upper',
+  ): number | null {
+    const flatKeys = side === 'lower'
+      ? ['rangeMin', 'rangeLower']
+      : ['rangeMax', 'rangeUpper']
+    for (const key of flatKeys) {
+      const value = params[key]
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value
+      }
+    }
+
+    const range = params.range
+    if (range && typeof range === 'object' && !Array.isArray(range)) {
+      const nested = (range as Record<string, unknown>)[side]
+      if (typeof nested === 'number' && Number.isFinite(nested)) {
+        return nested
+      }
+    }
+
+    return null
   }
 
   private formatCrossTriggerSummary(trigger: SemanticState['triggers'][number]): string {

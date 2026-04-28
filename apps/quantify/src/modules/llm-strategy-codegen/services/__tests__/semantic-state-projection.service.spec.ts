@@ -436,6 +436,72 @@ describe('SemanticStateProjectionService', () => {
     expect(view.nextQuestion).toBe('请确认网格区间下界。')
   })
 
+  it('formats grid summaries from canonical rangeMin/rangeMax params', () => {
+    const view = service.buildClarificationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: { rangeMin: 100, rangeMax: 110, stepPct: 1 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('100-110')
+    expect(view.summary).toContain('步长 1%')
+    expect(view.summary).not.toContain('区间待补充')
+  })
+
+  it('formats grid summaries from nested range params', () => {
+    const view = service.buildClarificationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: { range: { lower: 90, upper: 120 }, stepPct: 2 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('90-120')
+    expect(view.summary).toContain('步长 2%')
+    expect(view.summary).not.toContain('区间待补充')
+  })
+
   it('surfaces an open position sizing slot before context slots', () => {
     const result = service.buildClarificationView({
       version: 1,
