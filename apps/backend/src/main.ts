@@ -5,7 +5,7 @@ import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { loadEnvironment } from '@net/config'
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston'
-import { buildCorsOrigins } from './common/utils/cors-origins'
+import { buildValidatedCorsOrigins } from './common/utils/cors-origins'
 import { AppModule } from './modules/app.module'
 import 'reflect-metadata'
 
@@ -55,7 +55,12 @@ async function bootstrap() {
   // 设置全局路由前缀
   app.setGlobalPrefix('api/v1')
 
-  const corsOrigins = buildCorsOrigins(env.FRONTEND_REDIRECT_ORIGINS, env.ALLOWED_ORIGINS)
+  const corsOrigins = buildValidatedCorsOrigins(
+    env.FRONTEND_REDIRECT_ORIGINS,
+    env.ALLOWED_ORIGINS,
+    env.APP_ENV,
+    env.APP_ENV === 'development' ? ['http://localhost:3001'] : ['https://www.coinflux.ai', 'https://admin.coinflux.ai'],
+  )
 
   app.enableCors({
     origin: corsOrigins,

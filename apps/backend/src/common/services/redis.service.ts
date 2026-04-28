@@ -1,5 +1,4 @@
 import type { LoggerService, OnApplicationShutdown } from '@nestjs/common'
-import type { RedisOptions } from 'ioredis'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -17,18 +16,31 @@ export class RedisService implements OnApplicationShutdown {
   ) {
     this.logger.debug?.('[RedisService] constructor: creating client...')
     try {
-      if (this.configService.get<boolean>('USE_MOCK_DATA', false)) {
-        this.logger.warn('[RedisService] USE_MOCK_DATA is true, using mock redis client')
+      if (this.shouldUseMockClient()) {
+        this.logger.warn('[RedisService] mock redis mode is enabled, using mock redis client')
         this.client = this.createMockClient()
       } else {
         this.client = this.createClient()
       }
       this.logger.debug?.('[RedisService] constructor: client created successfully')
-      this.registerEvents()
     } catch (error) {
-      this.logger.error?.('[RedisService] constructor: failed to create client, falling back to mock client', error as Error)
+      if (!this.shouldUseMockClient()) {
+        this.logger.error?.('[RedisService] constructor: failed to create redis client', error as Error)
+        throw error
+      }
+      this.logger.warn('[RedisService] failed to create redis client in mock-enabled environment, using mock redis client')
       this.client = this.createMockClient()
     }
+    this.registerEvents()
+  }
+
+  private shouldUseMockClient(): boolean {
+    if (this.configService.get<boolean>('USE_MOCK_DATA', false)) {
+      return true
+    }
+
+    const appEnv = this.configService.get<string>('app.appEnv') ?? process.env.APP_ENV ?? process.env.NODE_ENV
+    return appEnv === 'test' || appEnv === 'e2e'
   }
 
   private createMockClient(): Redis {
@@ -51,36 +63,11 @@ export class RedisService implements OnApplicationShutdown {
       return new Redis(url)
     }
 
-    const host = this.configService.get<string>('redis.host')
-    const port = this.configService.get<number>('redis.port')
-    const passwordRaw = this.configService.get<string | undefined>('redis.password')
-    const password = passwordRaw && passwordRaw.length > 0 ? passwordRaw : undefined
-    const db = this.configService.get<number>('redis.db', 0)
-    const tlsEnabled = this.configService.get<boolean>('redis.tls', false)
-
-    this.logger.debug?.(
-      `[RedisService] createClient: host=${host}, port=${port}, db=${db}, password=${password ? '***' : 'none'}`,
-    )
-
-    if (!host || !port)
-      throw new DomainException('redis.connection_error', {
-        code: ErrorCode.REDIS_CONNECTION_ERROR,
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        args: { reason: 'Redis configuration is incomplete. Please set REDIS_URL or host/port.' },
-      })
-
-    const options: RedisOptions = {
-      host,
-      port,
-      password,
-      db,
-    }
-
-    if (tlsEnabled) {
-      ;(options as Record<string, unknown>).tls = {}
-    }
-
-    return new Redis(options)
+    throw new DomainException('redis.connection_error', {
+      code: ErrorCode.REDIS_CONNECTION_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { reason: 'Redis configuration is incomplete. Please set REDIS_URL.' },
+    })
   }
 
   private registerEvents(): void {
@@ -122,5 +109,3 @@ export class RedisService implements OnApplicationShutdown {
     }
   }
 }
-
-
