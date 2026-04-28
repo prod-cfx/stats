@@ -1,5 +1,6 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
+import type { SemanticPredicateStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { StrategySummary } from '../types/strategy-summary'
@@ -9,12 +10,13 @@ import type { CanonicalStrategyAstCompilerService } from './canonical-strategy-a
 import type { CompiledScriptEmitterService } from './compiled-script-emitter.service'
 import type { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
 import type { CompiledScriptParserService } from './compiled-script-parser.service'
+import type { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
 import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
-import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
+import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 export interface CompiledScriptValidationResult {
@@ -55,6 +57,7 @@ export interface CodegenPublicationArtifacts {
   strategySummary: StrategySummary
   scriptSummary: StrategySummary
   summaryObservation: StrategySummaryObservationReport
+  semanticPredicateGraph: SemanticPredicateStrategyGraph
   normalizedIntent: StrategyNormalizedIntent
   lockedParams: Record<string, unknown>
   publishParams: {
@@ -82,23 +85,21 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptParser: CompiledScriptParserService,
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
     private readonly semanticAtomInvariant: SemanticAtomInvariantService = new SemanticAtomInvariantService(),
+    private readonly graphSnapshotService: CodegenGraphSnapshotService = new DefaultCodegenGraphSnapshotService(),
   ) {}
 
   async generate(input: CodegenPublicationGenerationInput): Promise<CodegenPublicationArtifacts> {
-    const normalization = this.buildNormalizationFromSemanticState(input.semanticState)
     const canonicalSpec = input.canonicalSpecOverride
-      ?? this.canonicalSpecBuilder.buildFromNormalizedIntent(
-        this.buildSemanticCanonicalContext(input.semanticState),
-        normalization.normalizedIntent,
-      )
+      ?? this.canonicalSpecBuilder.buildFromSemanticState(input.semanticState)
+    const semanticPredicateGraph = this.graphSnapshotService.buildFromSemanticArtifacts({ canonicalSpec })
+    const normalizedIntent = this.buildLegacyNormalizedIntentSnapshot(input.semanticState)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
-      normalizedIntent: normalization.normalizedIntent,
+      normalizedIntent,
     })
     const userIntentSummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildSemanticLockedParams({
       semanticState: input.semanticState,
       canonicalSpec,
-      normalizedIntent: normalization.normalizedIntent,
     })
     const publishParams = this.buildSemanticPublishParams({
       canonicalSpec,
@@ -113,7 +114,7 @@ export class CodegenPublicationGenerationStage {
     })
     const executionEnvelope = this.compiledScriptExecutionEnvelope.build(
       canonicalSpec,
-      normalization.normalizedIntent.position.positionMode,
+      this.resolveSemanticPositionMode(input.semanticState, canonicalSpec),
     )
     const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
     const semanticAtomInvariant = this.buildSemanticAtomInvariantReport(this.semanticAtomInvariant.validate({
@@ -144,7 +145,10 @@ export class CodegenPublicationGenerationStage {
       profile: semanticConsistency.specProfile,
       market: {
         symbol: canonicalSpec.market.symbol ?? undefined,
-        timeframe: canonicalSpec.market.timeframe ?? undefined,
+        timeframe: canonicalSpec.market.defaultTimeframe
+          ?? canonicalSpec.market.timeframe
+          ?? canonicalSpec.dataRequirements?.requiredTimeframes?.[0]
+          ?? undefined,
         marketType: canonicalSpec.market.marketType,
       },
     })
@@ -158,7 +162,7 @@ export class CodegenPublicationGenerationStage {
     })
     const sessionSpecDesc = {
       ...semanticView,
-      normalizedIntent: normalization.normalizedIntent,
+      normalizedIntent,
       canonicalSpec,
       userIntentSummary,
       strategySummary,
@@ -167,6 +171,7 @@ export class CodegenPublicationGenerationStage {
       lockedParams,
       consistencyReport: semanticConsistency,
       semanticAtomInvariant,
+      semanticPredicateGraph,
     } satisfies Record<string, unknown>
 
     return {
@@ -184,7 +189,8 @@ export class CodegenPublicationGenerationStage {
       strategySummary,
       scriptSummary,
       summaryObservation,
-      normalizedIntent: normalization.normalizedIntent,
+      semanticPredicateGraph,
+      normalizedIntent,
       lockedParams,
       publishParams,
     }
@@ -268,7 +274,6 @@ export class CodegenPublicationGenerationStage {
   private buildSemanticLockedParams(args: {
     semanticState: SemanticState
     canonicalSpec: CanonicalStrategySpecV2
-    normalizedIntent: StrategyNormalizedIntent
   }): Record<string, unknown> {
     const locked: Record<string, unknown> = {}
     const exchange = this.readSemanticContextValue(args.semanticState.contextSlots.exchange)
@@ -292,13 +297,19 @@ export class CodegenPublicationGenerationStage {
       locked.marketType = marketType
     }
 
-    if (args.normalizedIntent.position?.mode === 'fixed_ratio' && Number.isFinite(args.normalizedIntent.position.value)) {
-      locked.positionPct = args.normalizedIntent.position.value <= 1
-        ? args.normalizedIntent.position.value * 100
-        : args.normalizedIntent.position.value
+    const position = args.semanticState.position
+    if (
+      position?.status === 'locked'
+      && position.mode === 'fixed_ratio'
+      && Number.isFinite(position.value)
+    ) {
+      locked.positionPct = position.value <= 1 ? position.value * 100 : position.value
     }
 
-    for (const risk of args.normalizedIntent.risk) {
+    for (const risk of args.semanticState.risk) {
+      if (risk.status !== 'locked') {
+        continue
+      }
       if (risk.key === 'risk.stop_loss_pct' && typeof risk.params.valuePct === 'number') {
         locked.stopLossPct = risk.params.valuePct
       }
@@ -350,14 +361,96 @@ export class CodegenPublicationGenerationStage {
     }
   }
 
-  private buildNormalizationFromSemanticState(semanticState: SemanticState): {
-    normalizedIntent: StrategyNormalizedIntent
-    blocked: boolean
-  } {
-    return {
-      normalizedIntent: buildNormalizedIntentFromSemanticState(semanticState),
-      blocked: false,
+  private buildLegacyNormalizedIntentSnapshot(semanticState: SemanticState): StrategyNormalizedIntent {
+    const families = new Set(semanticState.families)
+    if (semanticState.triggers.some(trigger => trigger.phase === 'gate')) {
+      families.add('state-gated')
     }
+    const gridTrigger = semanticState.triggers.find(trigger =>
+      trigger.key === 'grid.range_rebalance'
+      && trigger.status !== 'superseded'
+      && typeof trigger.params.rangeLower === 'number'
+      && typeof trigger.params.rangeUpper === 'number'
+      && typeof trigger.params.stepPct === 'number',
+    )
+
+    return {
+      families: Array.from(families) as StrategyNormalizedIntent['families'],
+      triggers: semanticState.triggers
+        .filter(trigger => trigger.status !== 'superseded')
+        .map(trigger => ({
+          key: trigger.key as StrategyNormalizedIntent['triggers'][number]['key'],
+          phase: trigger.phase,
+          ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+          params: { ...trigger.params } as StrategyNormalizedIntent['triggers'][number]['params'],
+          closureStatus: trigger.status === 'locked' && trigger.openSlots.length === 0 ? 'closed' : 'open',
+          unresolvedSlots: trigger.openSlots.map(slot => ({
+            slotKey: slot.slotKey,
+            fieldPath: slot.fieldPath,
+            reason: 'missing_definition' as const,
+            questionHint: slot.questionHint,
+            priority: slot.priority,
+            affectsExecution: slot.affectsExecution,
+            ...(slot.evidence?.text ? { evidenceText: slot.evidence.text } : {}),
+          })),
+          ...(trigger.evidence?.text ? { evidenceText: trigger.evidence.text } : {}),
+        })),
+      actions: semanticState.actions.map(action => ({
+        key: action.key,
+        ...(action.params ? { params: { ...action.params } } : {}),
+      })),
+      risk: semanticState.risk.map(risk => ({
+        key: risk.key,
+        params: { ...risk.params },
+      })),
+      position: semanticState.position
+        ? {
+            mode: semanticState.position.mode as StrategyNormalizedIntent['position']['mode'],
+            value: semanticState.position.value,
+            positionMode: semanticState.position.positionMode as StrategyNormalizedIntent['position']['positionMode'],
+          }
+        : null,
+      ...(gridTrigger
+        ? {
+            grid: {
+              family: 'grid.range_rebalance',
+              range: {
+                lower: gridTrigger.params.rangeLower as number,
+                upper: gridTrigger.params.rangeUpper as number,
+              },
+              stepPct: gridTrigger.params.stepPct as number,
+              sideMode: (gridTrigger.params.sideMode as StrategyNormalizedIntent['grid']['sideMode']) ?? 'bidirectional',
+              recycle: gridTrigger.params.recycle !== false,
+              ...(gridTrigger.params.breakoutAction === 'pause' || gridTrigger.params.breakoutAction === 'continue'
+                ? { breakoutAction: gridTrigger.params.breakoutAction }
+                : {}),
+            },
+          }
+        : {}),
+      unresolved: [],
+      normalizationNotes: [...semanticState.normalizationNotes],
+    }
+  }
+
+  private resolveSemanticPositionMode(
+    semanticState: SemanticState,
+    canonicalSpec: CanonicalStrategySpecV2,
+  ): ReturnType<CompiledScriptExecutionEnvelopeService['build']>['positionMode'] | undefined {
+    const semanticMode = semanticState.position?.positionMode
+    if (semanticMode === 'long_only' || semanticMode === 'short_only' || semanticMode === 'long_short') {
+      return semanticMode
+    }
+
+    const hasLong = canonicalSpec.rules.some(rule => rule.actions.some(action =>
+      action.type === 'OPEN_LONG' || action.type === 'REDUCE_LONG',
+    ))
+    const hasShort = canonicalSpec.rules.some(rule => rule.actions.some(action =>
+      action.type === 'OPEN_SHORT' || action.type === 'REDUCE_SHORT',
+    ))
+    if (hasLong && hasShort) return 'long_short'
+    if (hasShort) return 'short_only'
+    if (hasLong) return 'long_only'
+    return undefined
   }
 
   private buildSemanticCanonicalContext(semanticState: SemanticState): {

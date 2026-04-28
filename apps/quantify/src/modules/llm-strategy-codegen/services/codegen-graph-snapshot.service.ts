@@ -1,5 +1,14 @@
+import type {
+  CanonicalConditionAtom,
+  CanonicalConditionNode,
+  CanonicalRulePhase,
+  CanonicalRuleV2,
+  CanonicalStrategySpecV2,
+} from '../types/canonical-strategy-spec-v2'
+import type { SemanticGraphExpressionOperand, SemanticPredicateGraphNode, SemanticPredicateStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyLogicGraphActionNode, StrategyLogicGraphSnapshot, StrategyLogicGraphTriggerNode } from '../types/strategy-logic-graph-snapshot'
 import { Injectable } from '@nestjs/common'
+import { semanticStrategyPredicateGraphSchema } from '../types/semantic-strategy-graph.zod'
 
 interface GraphSpecMarket {
   symbols?: unknown
@@ -25,6 +34,10 @@ interface BuildGraphSnapshotInput {
   }
 }
 
+interface BuildSemanticArtifactsInput {
+  canonicalSpec: CanonicalStrategySpecV2
+}
+
 function asStringList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
   return input.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -40,6 +53,10 @@ function stringifyRiskRule(key: string, value: unknown): string {
 
 @Injectable()
 export class CodegenGraphSnapshotService {
+  /**
+   * Legacy checklist graph snapshot builder. It preserves the old publication
+   * boundary that stores human-readable trigger operators from specDesc.
+   */
   build(input: BuildGraphSnapshotInput): StrategyLogicGraphSnapshot {
     const spec = (input.specDesc && typeof input.specDesc === 'object' ? input.specDesc : {}) as GraphSpecDesc
     const entryRules = asStringList(spec.entryRules)
@@ -63,6 +80,147 @@ export class CodegenGraphSnapshotService {
         executionTags: input.fallback.executionTags ?? [],
       },
     }
+  }
+
+  buildFromSemanticArtifacts(input: BuildSemanticArtifactsInput): SemanticPredicateStrategyGraph {
+    const nodes: SemanticPredicateGraphNode[] = []
+
+    input.canonicalSpec.rules.forEach((rule) => {
+      this.appendPredicateGraphNodeFromCondition(rule, rule.condition, nodes, [])
+    })
+
+    return semanticStrategyPredicateGraphSchema.parse({
+      version: 2,
+      nodes,
+      edges: [],
+    })
+  }
+
+  private appendPredicateGraphNodeFromCondition(
+    rule: CanonicalRuleV2,
+    condition: CanonicalConditionNode,
+    nodes: SemanticPredicateGraphNode[],
+    path: string[],
+  ): string {
+    const phase = this.toPredicatePhase(rule.phase)
+
+    if (condition.kind === 'expression') {
+      const id = this.resolvePredicateNodeId(rule.id, path, nodes)
+
+      nodes.push({
+        id,
+        kind: 'predicate',
+        phase,
+        op: condition.op,
+        left: condition.left,
+        right: condition.right,
+      })
+      return id
+    }
+
+    if (condition.kind === 'atom') {
+      const id = this.resolvePredicateNodeId(rule.id, path, nodes)
+      nodes.push({
+        id,
+        kind: 'predicate',
+        phase,
+        op: condition.op ?? 'EQ',
+        left: this.buildAtomGraphLeftOperand(condition),
+        right: this.buildAtomGraphRightOperand(condition),
+      })
+      return id
+    }
+
+    if (condition.kind === 'AND' || condition.kind === 'OR' || condition.kind === 'NOT') {
+      const id = this.resolvePredicateNodeId(rule.id, path, nodes)
+      const childIds = condition.children.map((child, index) => {
+        return this.appendPredicateGraphNodeFromCondition(
+          rule,
+          child,
+          nodes,
+          [...path, `${condition.kind.toLowerCase()}-${index + 1}`],
+        )
+      })
+      nodes.push({
+        id,
+        kind: 'logical_group',
+        phase,
+        join: condition.kind,
+        members: childIds,
+      })
+      return id
+    }
+    throw new Error('codegen.semantic_graph_condition_unsupported')
+  }
+
+  private buildAtomGraphLeftOperand(condition: CanonicalConditionAtom): SemanticGraphExpressionOperand {
+    if (condition.key === 'price.change_pct') {
+      return {
+        kind: 'atom',
+        key: condition.key,
+        params: {
+          basis: condition.params?.basis ?? 'prev_close',
+          timeframe: condition.params?.timeframe ?? '',
+          lookbackBars: condition.params?.lookbackBars ?? 1,
+        },
+      }
+    }
+
+    if (condition.key === 'position_gain_pct' || condition.key === 'position_loss_pct') {
+      return {
+        kind: 'position',
+        field: 'pnl_pct',
+      }
+    }
+
+    if (condition.key === 'position.has_position') {
+      return {
+        kind: 'position',
+        field: 'has_position',
+        side: typeof condition.params?.side === 'string'
+          && (condition.params.side === 'long' || condition.params.side === 'short' || condition.params.side === 'both')
+          ? condition.params.side
+          : undefined,
+      }
+    }
+
+    return {
+      kind: 'atom',
+      key: condition.key,
+      params: {
+        ...(condition.params ?? {}),
+      },
+    }
+  }
+
+  private buildAtomGraphRightOperand(condition: CanonicalConditionAtom): SemanticGraphExpressionOperand {
+    const value = condition.value
+    return {
+      kind: 'constant',
+      value: typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean'
+        ? value
+        : true,
+    }
+  }
+
+  private resolvePredicateNodeId(ruleId: string, path: string[], nodes: SemanticPredicateGraphNode[]): string {
+    const preferredId = path.length === 0 ? ruleId : `${ruleId}-${path.join('-')}`
+    if (!nodes.some(node => node.id === preferredId)) {
+      return preferredId
+    }
+
+    let suffix = 2
+    while (nodes.some(node => node.id === `${preferredId}-${suffix}`)) {
+      suffix += 1
+    }
+    return `${preferredId}-${suffix}`
+  }
+
+  private toPredicatePhase(phase: CanonicalRulePhase): SemanticPredicateGraphNode['phase'] {
+    if (phase === 'entry' || phase === 'exit' || phase === 'risk' || phase === 'gate') {
+      return phase
+    }
+    throw new Error(`codegen.semantic_graph_phase_unsupported:${phase}`)
   }
 
   private buildTriggerNodes(version: number, entryRules: string[], exitRules: string[]): StrategyLogicGraphTriggerNode[] {

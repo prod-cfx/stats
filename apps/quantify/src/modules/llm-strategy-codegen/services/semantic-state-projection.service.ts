@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
-import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
 
 export interface SemanticConversationView {
   summary: string
@@ -121,8 +121,8 @@ export class SemanticStateProjectionService {
       .sort((left, right) => this.compareTriggers(left, right))
       .map((trigger) => {
         if (trigger.key === 'grid.range_rebalance') {
-          const lower = trigger.params.rangeLower
-          const upper = trigger.params.rangeUpper
+          const lower = this.readGridRangeValue(trigger.params, 'lower')
+          const upper = this.readGridRangeValue(trigger.params, 'upper')
           const stepPct = trigger.params.stepPct
           return [
             '入场：区间网格',
@@ -135,6 +135,17 @@ export class SemanticStateProjectionService {
           return trigger.phase === 'entry'
             ? '入场：立即开始时市价执行一次'
             : '出场：立即开始时市价执行一次'
+        }
+
+        if (trigger.key === 'condition.expression') {
+          const condition = this.formatSemanticExpression(trigger.params.expression)
+          if (!condition) return ''
+          const phase = trigger.phase === 'entry'
+            ? '入场'
+            : trigger.phase === 'exit'
+              ? '出场'
+              : '条件'
+          return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
         if (trigger.key === 'price.percent_change') {
@@ -216,6 +227,31 @@ export class SemanticStateProjectionService {
       .join('；')
   }
 
+  private readGridRangeValue(
+    params: Record<string, unknown>,
+    side: 'lower' | 'upper',
+  ): number | null {
+    const flatKeys = side === 'lower'
+      ? ['rangeMin', 'rangeLower']
+      : ['rangeMax', 'rangeUpper']
+    for (const key of flatKeys) {
+      const value = params[key]
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value
+      }
+    }
+
+    const range = params.range
+    if (range && typeof range === 'object' && !Array.isArray(range)) {
+      const nested = (range as Record<string, unknown>)[side]
+      if (typeof nested === 'number' && Number.isFinite(nested)) {
+        return nested
+      }
+    }
+
+    return null
+  }
+
   private formatCrossTriggerSummary(trigger: SemanticState['triggers'][number]): string {
     const indicator = typeof trigger.params.indicator === 'string'
       ? trigger.params.indicator.trim().toLowerCase()
@@ -271,6 +307,117 @@ export class SemanticStateProjectionService {
     }
 
     return ''
+  }
+
+  private formatSemanticExpression(expression: unknown): string {
+    if (!this.isSemanticExpression(expression)) {
+      return ''
+    }
+
+    if (expression.kind === 'predicate') {
+      const left = this.formatSemanticExpressionOperand(expression.left)
+      const right = this.formatSemanticExpressionOperand(expression.right)
+      const operator = this.formatSemanticExpressionOperator(expression.op)
+      if (!left || !right || !operator) {
+        return ''
+      }
+      return `${left}${operator}${right}`
+    }
+
+    const children = expression.children
+      .map(child => this.formatSemanticExpression(child))
+      .filter(item => item.length > 0)
+    if (children.length === 0) {
+      return ''
+    }
+    if (expression.kind === 'NOT') {
+      return `非（${children[0]}）`
+    }
+    return children.join(expression.kind === 'AND' ? '且' : '或')
+  }
+
+  private formatSemanticExpressionOperand(operand: SemanticExpressionOperand): string {
+    if (operand.kind === 'series' && operand.source === 'bar') {
+      const fieldLabels: Record<typeof operand.field, string> = {
+        open: '开盘价',
+        high: '最高价',
+        low: '最低价',
+        close: '收盘价',
+      }
+      const offset = typeof operand.offsetBars === 'number' && operand.offsetBars > 0
+        ? `前 ${operand.offsetBars} 根`
+        : ''
+      return `${offset}${fieldLabels[operand.field]}`
+    }
+
+    if (operand.kind === 'indicator') {
+      const name = operand.name.toUpperCase()
+      const period = typeof operand.params.period === 'number' ? `${operand.params.period}` : ''
+      const output = operand.output && operand.output !== 'value' ? ` ${operand.output}` : ''
+      return `${name}${period}${output}`
+    }
+
+    if (operand.kind === 'position') {
+      const fieldLabels: Record<typeof operand.field, string> = {
+        avg_price: '持仓均价',
+        pnl_pct: '持仓收益率',
+        bars_held: '持仓 K 线数',
+        has_position: operand.side === 'short' ? '持有空仓' : operand.side === 'both' ? '持有仓位' : '持有多仓',
+      }
+      return fieldLabels[operand.field]
+    }
+
+    if (operand.kind === 'constant') {
+      if (operand.unit === 'percent') return `${operand.value}%`
+      return String(operand.value)
+    }
+
+    return ''
+  }
+
+  private formatSemanticExpressionOperator(op: SemanticExpressionOperator): string {
+    switch (op) {
+      case 'GT':
+        return '高于'
+      case 'GTE':
+        return '高于或等于'
+      case 'LT':
+        return '低于'
+      case 'LTE':
+        return '低于或等于'
+      case 'EQ':
+        return '等于'
+      case 'CROSS_OVER':
+        return '上穿'
+      case 'CROSS_UNDER':
+        return '下穿'
+      default:
+        return ''
+    }
+  }
+
+  private isSemanticExpression(expression: unknown): expression is SemanticExpression {
+    if (!expression || typeof expression !== 'object') {
+      return false
+    }
+    const kind = (expression as { kind?: unknown }).kind
+    if (kind === 'predicate') {
+      const predicate = expression as { op?: unknown; left?: unknown; right?: unknown }
+      return typeof predicate.op === 'string'
+        && this.isSemanticExpressionOperand(predicate.left)
+        && this.isSemanticExpressionOperand(predicate.right)
+    }
+    if (kind === 'AND' || kind === 'OR' || kind === 'NOT') {
+      return Array.isArray((expression as { children?: unknown }).children)
+        && (expression as { children: unknown[] }).children.every(child => this.isSemanticExpression(child))
+    }
+    return false
+  }
+
+  private isSemanticExpressionOperand(operand: unknown): operand is SemanticExpressionOperand {
+    return !!operand
+      && typeof operand === 'object'
+      && typeof (operand as { kind?: unknown }).kind === 'string'
   }
 
   private buildRiskSummary(riskItems: SemanticState['risk']): string {
@@ -336,16 +483,21 @@ export class SemanticStateProjectionService {
       return ''
     }
 
-    const ratio = position.mode === 'fixed_ratio'
-      ? this.formatRatio(position.value)
-      : String(position.value)
-    return `仓位：${ratio}%`
+    if (position.mode === 'fixed_quote') {
+      return `仓位：${this.formatNumber(position.value)} USDT`
+    }
+
+    if (position.mode === 'fixed_qty') {
+      return `仓位：${this.formatNumber(position.value)} base`
+    }
+
+    return `仓位：${this.formatRatio(position.value)}%`
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {
     return !!position
       && position.status === 'locked'
-      && position.mode === 'fixed_ratio'
+      && (position.mode === 'fixed_ratio' || position.mode === 'fixed_quote' || position.mode === 'fixed_qty')
       && Number.isFinite(position.value)
       && position.value > 0
   }

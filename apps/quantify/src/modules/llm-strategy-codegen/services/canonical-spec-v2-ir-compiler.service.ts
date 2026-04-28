@@ -10,16 +10,22 @@ import type {
 import type {
   CanonicalConditionAtom,
   CanonicalConditionNode,
+  CanonicalExpressionCondition,
   CanonicalRuleAction,
+  CanonicalRuleSideScope,
   CanonicalRuleV2,
   CanonicalStrategySpecV2,
 } from '../types/canonical-strategy-spec'
+import type { SemanticExpressionOperand } from '../types/semantic-state'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
+import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 
 interface CompileCanonicalSpecV2ToIrInput {
@@ -70,6 +76,7 @@ export class CanonicalSpecV2IrCompilerService {
     private readonly specDescBuilder: SpecDescBuilderService = new SpecDescBuilderService(),
     private readonly validator: CanonicalStrategyIrValidatorService = new CanonicalStrategyIrValidatorService(),
     private readonly canonicalizer: CanonicalStrategyIrCanonicalizerService = new CanonicalStrategyIrCanonicalizerService(),
+    private readonly graphSnapshotService: CodegenGraphSnapshotService = new CodegenGraphSnapshotService(),
   ) {}
 
   compile(input: CompileCanonicalSpecV2ToIrInput): CompileCanonicalSpecV2ToIrResult {
@@ -79,7 +86,10 @@ export class CanonicalSpecV2IrCompilerService {
 
     const specHash = this.digest.hash(input.canonicalSpec)
     const graphSnapshot = this.buildGraphSnapshot(input)
-    const rawIr = this.buildIr(input, specHash, graphSnapshot.version)
+    const rawIr = this.buildIr(input, specHash, specHash, graphSnapshot.version)
+    rawIr.source.graphDigest = this.hashCanonicalJson(
+      this.graphSnapshotService.buildFromSemanticArtifacts({ canonicalSpec: input.canonicalSpec }),
+    )
     const ir = this.canonicalizer.canonicalize(rawIr)
     this.validator.validate(ir)
 
@@ -93,6 +103,7 @@ export class CanonicalSpecV2IrCompilerService {
   private buildIr(
     input: CompileCanonicalSpecV2ToIrInput,
     specHash: `sha256:${string}`,
+    graphDigest: `sha256:${string}`,
     graphVersion: number,
   ): CanonicalStrategyIrV1 {
     const exchange = input.canonicalSpec.market.exchange || input.fallback.exchange
@@ -146,7 +157,7 @@ export class CanonicalSpecV2IrCompilerService {
       irVersion: 'csi.v1',
       source: {
         graphVersion,
-        graphDigest: specHash,
+        graphDigest,
         specHash,
       },
       market: {
@@ -187,6 +198,10 @@ export class CanonicalSpecV2IrCompilerService {
         allowPartialFill: false,
       },
     }
+  }
+
+  private hashCanonicalJson(value: unknown): `sha256:${string}` {
+    return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
   }
 
   private buildGraphSnapshot(input: CompileCanonicalSpecV2ToIrInput): StrategyLogicGraphSnapshot {
@@ -269,12 +284,33 @@ export class CanonicalSpecV2IrCompilerService {
       return
     }
 
+    if (condition.kind === 'expression') {
+      this.collectExpressionOperandTimeframes(condition.left, ordered, fallbackTimeframe)
+      this.collectExpressionOperandTimeframes(condition.right, ordered, fallbackTimeframe)
+      return
+    }
+
     const atom = condition as CanonicalConditionAtom
     const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
       ? atom.params.timeframe.trim()
       : fallbackTimeframe
     if (timeframe) {
       ordered.add(timeframe)
+    }
+  }
+
+  private collectExpressionOperandTimeframes(
+    operand: SemanticExpressionOperand,
+    ordered: Set<string>,
+    fallbackTimeframe: string,
+  ): void {
+    if (operand.kind === 'series') {
+      ordered.add(this.resolveOperandTimeframe(operand.timeframe, fallbackTimeframe))
+      return
+    }
+
+    if (operand.kind === 'indicator') {
+      ordered.add(this.resolveOperandTimeframe(this.readStringParam(operand.params.timeframe), fallbackTimeframe))
     }
   }
 
@@ -347,7 +383,157 @@ export class CanonicalSpecV2IrCompilerService {
       return this.compileAtom(condition, context, seed)
     }
 
+    if (condition.kind === 'expression') {
+      return this.compileExpressionCondition(condition, context, seed)
+    }
+
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
+  }
+
+  private compileExpressionCondition(
+    condition: CanonicalExpressionCondition,
+    context: CompileContext,
+    seed: string,
+  ): string {
+    const leftRef = this.compileExpressionOperand(condition.left, context)
+    const rightRef = this.compileExpressionOperand(condition.right, context)
+    return this.upsertPredicate(
+      context.predicateMap,
+      `${seed}_expression`,
+      condition.op,
+      [leftRef, rightRef],
+    )
+  }
+
+  private compileExpressionOperand(
+    operand: SemanticExpressionOperand,
+    context: CompileContext,
+  ): string {
+    switch (operand.kind) {
+      case 'series': {
+        if (operand.source !== 'bar') {
+          throw new Error(`codegen.semantic_expression_operand_unsupported:series:${operand.source}`)
+        }
+
+        return this.ensurePriceSeries(
+          context,
+          operand.field,
+          this.resolveOperandTimeframe(operand.timeframe, context.timeframe),
+          operand.offsetBars ?? 0,
+        )
+      }
+
+      case 'constant':
+        if (typeof operand.value === 'boolean') {
+          throw new Error('codegen.semantic_expression_operand_unsupported:constant:boolean')
+        }
+        return this.ensureConstSeries(context, operand.value)
+
+      case 'indicator':
+        return this.compileIndicatorExpressionOperand(operand, context)
+
+      case 'position':
+        return this.compilePositionExpressionOperand(operand, context)
+
+      default: {
+        const unsupported = operand as { kind?: string }
+        throw new Error(`codegen.semantic_expression_operand_unsupported:${unsupported.kind ?? 'unknown'}`)
+      }
+    }
+  }
+
+  private compileIndicatorExpressionOperand(
+    operand: Extract<SemanticExpressionOperand, { kind: 'indicator' }>,
+    context: CompileContext,
+  ): string {
+    const timeframe = this.resolveOperandTimeframe(
+      this.readStringParam(operand.params.timeframe),
+      context.timeframe,
+    )
+
+    if (operand.name === 'sma' || operand.name === 'ema') {
+      this.assertIndicatorOutputSupported(operand, ['value'])
+      return this.ensureIndicatorSeries(
+        context,
+        operand.name === 'sma' ? 'SMA' : 'EMA',
+        this.readNumber([
+          operand.params.period,
+          operand.params.fastPeriod,
+          operand.params.slowPeriod,
+          operand.params.fast,
+          operand.params.slow,
+        ], operand.name === 'sma' ? context.movingAverage.slow : context.movingAverage.fast),
+        timeframe,
+      )
+    }
+
+    if (operand.name === 'rsi') {
+      this.assertIndicatorOutputSupported(operand, ['value'])
+      return this.ensureIndicatorSeries(
+        context,
+        'RSI',
+        this.readNumber([operand.params.period], context.rsi.period),
+        timeframe,
+      )
+    }
+
+    if (operand.name === 'macd') {
+      const macd = this.resolveMacdExpressionConfig(operand, context.macd)
+      const output = operand.output ?? 'line'
+      if (output === 'line' || output === 'macd') {
+        return this.ensureMacdSeries(context, 'MACD_LINE', timeframe, macd)
+      }
+      if (output === 'signal') {
+        return this.ensureMacdSeries(context, 'MACD_SIGNAL', timeframe, macd)
+      }
+      throw new Error(`codegen.semantic_expression_operand_unsupported:indicator:${operand.name}`)
+    }
+
+    throw new Error(`codegen.semantic_expression_operand_unsupported:indicator:${operand.name}`)
+  }
+
+  private compilePositionExpressionOperand(
+    operand: Extract<SemanticExpressionOperand, { kind: 'position' }>,
+    context: CompileContext,
+  ): string {
+    switch (operand.field) {
+      case 'avg_price':
+        return this.ensurePositionSeries(context, 'POSITION_AVG_PRICE', 'position_avg_price')
+
+      case 'pnl_pct':
+        return this.ensurePositionSeries(context, 'POSITION_PNL_PCT', 'position_pnl_pct')
+
+      case 'bars_held':
+        return this.ensurePositionHeldBarsSeries(context)
+
+      case 'has_position':
+        throw new Error('codegen.semantic_expression_operand_unsupported:position:has_position')
+
+      default: {
+        const unsupported = operand as { field?: string }
+        throw new Error(`codegen.semantic_expression_operand_unsupported:position:${unsupported.field ?? 'unknown'}`)
+      }
+    }
+  }
+
+  private assertIndicatorOutputSupported(
+    operand: Extract<SemanticExpressionOperand, { kind: 'indicator' }>,
+    supportedOutputs: string[],
+  ): void {
+    if (operand.output && !supportedOutputs.includes(operand.output)) {
+      throw new Error(`codegen.semantic_expression_operand_unsupported:indicator:${operand.name}`)
+    }
+  }
+
+  private resolveMacdExpressionConfig(
+    operand: Extract<SemanticExpressionOperand, { kind: 'indicator' }>,
+    fallback: CompileContext['macd'],
+  ): CompileContext['macd'] {
+    return {
+      fastPeriod: this.readNumber([operand.params.fastPeriod, operand.params.fast], fallback.fastPeriod),
+      slowPeriod: this.readNumber([operand.params.slowPeriod, operand.params.slow], fallback.slowPeriod),
+      signalPeriod: this.readNumber([operand.params.signalPeriod, operand.params.signal], fallback.signalPeriod),
+    }
   }
 
   private compileAtom(atom: CanonicalConditionAtom, context: CompileContext, seed: string): string {
@@ -635,7 +821,7 @@ export class CanonicalSpecV2IrCompilerService {
 
   private ensurePriceSeries(
     context: CompileContext,
-    field: 'close',
+    field: NonNullable<SeriesDef['field']>,
     timeframe = context.timeframe,
     offsetBars = 0,
   ): string {
@@ -647,6 +833,26 @@ export class CanonicalSpecV2IrCompilerService {
         timeframe,
         field,
         ...(offsetBars > 0 ? { offsetBars } : {}),
+      })
+    }
+    return id
+  }
+
+  private ensureIndicatorSeries(
+    context: CompileContext,
+    kind: Extract<SeriesDef['kind'], 'SMA' | 'EMA' | 'RSI'>,
+    period: number,
+    timeframe = context.timeframe,
+  ): string {
+    const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
+    const id = `${kind.toLowerCase()}_${period}_${timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind,
+        timeframe,
+        inputs: [closeRef],
+        params: { period },
       })
     }
     return id
@@ -684,18 +890,20 @@ export class CanonicalSpecV2IrCompilerService {
   private ensureMacdSeries(
     context: CompileContext,
     kind: Extract<SeriesDef['kind'], 'MACD_LINE' | 'MACD_SIGNAL'>,
+    timeframe = context.timeframe,
+    macd = context.macd,
   ): string {
-    const closeRef = this.ensurePriceSeries(context, 'close')
-    const id = `${kind.toLowerCase()}_${context.macd.fastPeriod}_${context.macd.slowPeriod}_${context.macd.signalPeriod}_${context.timeframe}`
+    const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
+    const id = `${kind.toLowerCase()}_${macd.fastPeriod}_${macd.slowPeriod}_${macd.signalPeriod}_${timeframe}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
         kind,
         inputs: [closeRef],
         params: {
-          fastPeriod: context.macd.fastPeriod,
-          slowPeriod: context.macd.slowPeriod,
-          signalPeriod: context.macd.signalPeriod,
+          fastPeriod: macd.fastPeriod,
+          slowPeriod: macd.slowPeriod,
+          signalPeriod: macd.signalPeriod,
         },
       })
     }
@@ -781,6 +989,20 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
+  private ensurePositionSeries(
+    context: CompileContext,
+    kind: Extract<SeriesDef['kind'], 'POSITION_AVG_PRICE' | 'POSITION_PNL_PCT'>,
+    id: string,
+  ): string {
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind,
+      })
+    }
+    return id
+  }
+
   private ensureBollingerSeries(
     context: CompileContext,
     kind: Extract<SeriesDef['kind'], 'UPPER_BAND' | 'MID_BAND' | 'LOWER_BAND'>,
@@ -856,7 +1078,27 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private tryCompileRiskGuard(rule: CanonicalRuleV2): RiskGuard | null {
-    if (rule.phase !== 'risk' || rule.condition.kind !== 'atom') {
+    if (rule.condition.kind !== 'atom') {
+      return null
+    }
+
+    if (
+      rule.phase === 'gate'
+      && rule.condition.key === 'position.has_position'
+      && rule.condition.op === 'EQ'
+      && rule.condition.value === false
+      && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
+    ) {
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'MAX_POSITION_PCT',
+        scope: 'position',
+        value: 0,
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }
+    }
+
+    if (rule.phase !== 'risk') {
       return null
     }
 
@@ -871,6 +1113,7 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'STOP_LOSS_PCT',
         scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
         onBreach,
       }
@@ -883,6 +1126,7 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'TAKE_PROFIT_PCT',
         scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
         onBreach,
       }
@@ -893,12 +1137,18 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'TRAILING_STOP_PCT',
         scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
         onBreach,
       }
     }
 
     return null
+  }
+
+  private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {
+    if (sideScope === 'long' || sideScope === 'short') return sideScope
+    return 'both'
   }
 
   private compileActions(
@@ -1066,6 +1316,10 @@ export class CanonicalSpecV2IrCompilerService {
       return `NOT(${this.describeCondition(condition.children[0] ?? { kind: 'atom', key: 'unknown' }, config)})`
     }
 
+    if (condition.kind === 'expression') {
+      return `${condition.op}(${this.describeExpressionOperand(condition.left, config)},${this.describeExpressionOperand(condition.right, config)})`
+    }
+
     if (!this.isConditionAtom(condition)) {
       return 'unsupported'
     }
@@ -1143,6 +1397,59 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+  private describeExpressionOperand(
+    operand: SemanticExpressionOperand,
+    config: {
+      movingAverage: CompileContext['movingAverage']
+      rsi: CompileContext['rsi']
+      macd: CompileContext['macd']
+      bollinger: CompileContext['bollinger']
+    },
+  ): string {
+    switch (operand.kind) {
+      case 'series':
+        return operand.offsetBars && operand.offsetBars > 0
+          ? `${operand.field.toUpperCase()}[${operand.offsetBars}]`
+          : operand.field.toUpperCase()
+
+      case 'constant':
+        return String(operand.value)
+
+      case 'indicator': {
+        if (operand.name === 'sma' || operand.name === 'ema') {
+          const period = this.readNumber([
+            operand.params.period,
+            operand.params.fastPeriod,
+            operand.params.slowPeriod,
+            operand.params.fast,
+            operand.params.slow,
+          ], operand.name === 'sma' ? config.movingAverage.slow : config.movingAverage.fast)
+          return `${operand.name.toUpperCase()}(CLOSE,${period})`
+        }
+
+        if (operand.name === 'rsi') {
+          return `RSI(CLOSE,${this.readNumber([operand.params.period], config.rsi.period)})`
+        }
+
+        if (operand.name === 'macd') {
+          const macd = this.resolveMacdExpressionConfig(operand, config.macd)
+          const output = operand.output === 'signal' ? 'MACD_SIGNAL' : 'MACD_LINE'
+          return `${output}(CLOSE,${macd.fastPeriod},${macd.slowPeriod},${macd.signalPeriod})`
+        }
+
+        return `INDICATOR(${operand.name})`
+      }
+
+      case 'position':
+        return `POSITION_${operand.field.toUpperCase()}`
+
+      default: {
+        const unsupported = operand as { kind?: string }
+        return `UNSUPPORTED(${unsupported.kind ?? 'unknown'})`
+      }
+    }
+  }
+
   private mapGraphAction(action: CanonicalRuleAction): StrategyLogicGraphSnapshot['actions'][number]['action'] | null {
     switch (action.type) {
       case 'OPEN_LONG':
@@ -1189,6 +1496,14 @@ export class CanonicalSpecV2IrCompilerService {
 
   private normalizeTextToken(value: string): string {
     return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'empty'
+  }
+
+  private resolveOperandTimeframe(value: string | undefined, fallbackTimeframe: string): string {
+    return value && value.trim().length > 0 ? value.trim() : fallbackTimeframe
+  }
+
+  private readStringParam(value: unknown): string | undefined {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
   }
 
   private readNumber(candidates: unknown[], fallback: number): number {

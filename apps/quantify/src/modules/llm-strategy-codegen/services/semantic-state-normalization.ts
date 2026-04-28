@@ -4,6 +4,10 @@ import type {
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 
+/**
+ * Legacy adapter: projects SemanticState into StrategyNormalizedIntent for compatibility paths.
+ * New semantic mainline code should build canonical specs from SemanticState contracts directly.
+ */
 export function buildNormalizedIntentFromSemanticState(state: SemanticState): StrategyNormalizedIntent {
   const families = new Set(state.families)
   if (state.triggers.some(trigger => trigger.phase === 'gate')) {

@@ -183,21 +183,20 @@ export class StrategyConsistencyService {
       }
     }
 
+    const irPredicatesById = new Map(ir.signalCatalog.predicates.map(predicate => [predicate.id, predicate]))
     for (const predicate of ir.signalCatalog.predicates) {
       const actions = ir.ruleBlocks.filter(rule => rule.when === predicate.id).flatMap(rule => rule.actions)
       for (const action of actions) {
         const normalizedAction = this.normalizeAction(action.kind)
         if (!normalizedAction) continue
-        const key = this.inferRuleKeyFromPredicate({
-          predicateKind: predicate.kind,
-          predicateId: predicate.id,
-        })
-        if (!key) continue
-        pushRule({
-          key,
-          action: normalizedAction,
-          phase: this.resolvePhaseFromAction(normalizedAction),
-          sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        const keys = this.collectRuleKeysFromIrPredicate(predicate.id, irPredicatesById)
+        keys.forEach((key) => {
+          pushRule({
+            key,
+            action: normalizedAction,
+            phase: this.resolvePhaseFromAction(normalizedAction),
+            sideScope: this.resolveRuleSideScope('both', normalizedAction),
+          })
         })
       }
     }
@@ -294,13 +293,9 @@ export class StrategyConsistencyService {
       }
     }
 
+    const projectionExprsById = new Map(projection.exprPool.map(expr => [expr.id, expr]))
     for (const expr of projection.exprPool) {
       if (expr.nodeType !== 'predicate') continue
-      const key = this.inferRuleKeyFromPredicate({
-        predicateKind: expr.payload.kind,
-        predicateId: expr.sourceRef,
-      })
-      if (!key) continue
 
       const actions = projection.decisionPrograms
         .filter(program => program.when === expr.id)
@@ -308,11 +303,14 @@ export class StrategyConsistencyService {
       for (const action of actions) {
         const normalizedAction = this.normalizeAction(action.kind)
         if (!normalizedAction) continue
-        pushRule({
-          key,
-          action: normalizedAction,
-          phase: this.resolvePhaseFromAction(normalizedAction),
-          sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        const keys = this.collectRuleKeysFromProjectionExpr(expr.id, projectionExprsById)
+        keys.forEach((key) => {
+          pushRule({
+            key,
+            action: normalizedAction,
+            phase: this.resolvePhaseFromAction(normalizedAction),
+            sideScope: this.resolveRuleSideScope('both', normalizedAction),
+          })
         })
       }
     }
@@ -342,7 +340,10 @@ export class StrategyConsistencyService {
         key,
         action: normalizedAction,
         phase: 'risk',
-        sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        sideScope: this.resolveRuleSideScope(
+          this.resolveGuardAppliesToSideScope(guard.payload.appliesTo),
+          normalizedAction,
+        ),
       })
     }
 
@@ -1497,6 +1498,9 @@ export class StrategyConsistencyService {
     ) {
       return 'exit'
     }
+    if (rule.phase === 'gate') {
+      return 'risk'
+    }
 
     return rule.phase
   }
@@ -1504,6 +1508,9 @@ export class StrategyConsistencyService {
   private collectRuleKeys(condition: CanonicalRuleV2['condition']): StrategySemanticRuleKey[] {
     if (condition.kind === 'atom') {
       return this.isSupportedRuleKey(condition.key) ? [condition.key] : []
+    }
+    if (condition.kind === 'expression') {
+      return []
     }
 
     return condition.children.flatMap(child => this.collectRuleKeys(child))
@@ -1564,6 +1571,83 @@ export class StrategyConsistencyService {
     if (action === 'OPEN_LONG' || action === 'CLOSE_LONG' || action === 'REDUCE_LONG') return 'long'
     if (action === 'OPEN_SHORT' || action === 'CLOSE_SHORT' || action === 'REDUCE_SHORT') return 'short'
     return fallbackScope
+  }
+
+  private collectRuleKeysFromIrPredicate(
+    predicateId: string,
+    predicatesById: Map<string, { id: string; kind: string; args: string[] }>,
+    visited: Set<string> = new Set(),
+  ): StrategySemanticRuleKey[] {
+    if (visited.has(predicateId)) {
+      return []
+    }
+    visited.add(predicateId)
+
+    const predicate = predicatesById.get(predicateId)
+    if (!predicate) {
+      return []
+    }
+    if (predicate.kind === 'AND' || predicate.kind === 'OR' || predicate.kind === 'NOT') {
+      const key = this.inferRuleKeyFromPredicate({
+        predicateKind: predicate.kind,
+        predicateId: predicate.id,
+      })
+      return [
+        ...(key ? [key] : []),
+        ...predicate.args.flatMap(childId => this.collectRuleKeysFromIrPredicate(childId, predicatesById, visited)),
+      ]
+    }
+
+    const key = this.inferRuleKeyFromPredicate({
+      predicateKind: predicate.kind,
+      predicateId: predicate.id,
+    })
+    return key ? [key] : []
+  }
+
+  private collectRuleKeysFromProjectionExpr(
+    exprId: string,
+    exprsById: Map<string, { id: string; sourceRef: string; nodeType: string; payload: { kind?: string }; deps: string[] }>,
+    visited: Set<string> = new Set(),
+  ): StrategySemanticRuleKey[] {
+    if (visited.has(exprId)) {
+      return []
+    }
+    visited.add(exprId)
+
+    const expr = exprsById.get(exprId)
+    if (!expr || expr.nodeType !== 'predicate') {
+      return []
+    }
+    const kind = expr.payload.kind
+    if (kind === 'AND' || kind === 'OR' || kind === 'NOT') {
+      const key = this.inferRuleKeyFromPredicate({
+        predicateKind: kind,
+        predicateId: expr.sourceRef,
+      })
+      return [
+        ...(key ? [key] : []),
+        ...expr.deps.flatMap(childId => this.collectRuleKeysFromProjectionExpr(childId, exprsById, visited)),
+      ]
+    }
+    if (!kind) {
+      return []
+    }
+
+    const key = this.inferRuleKeyFromPredicate({
+      predicateKind: kind,
+      predicateId: expr.sourceRef,
+    })
+    return key ? [key] : []
+  }
+
+  private resolveGuardAppliesToSideScope(
+    appliesTo: string | undefined,
+  ): StrategySemanticRuleProfile['sideScope'] {
+    if (appliesTo === 'long' || appliesTo === 'short' || appliesTo === 'both') {
+      return appliesTo
+    }
+    return 'both'
   }
 
   private resolvePhaseFromAction(action: CanonicalAction): StrategySemanticRuleProfile['phase'] {

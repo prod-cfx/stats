@@ -451,6 +451,58 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(guardState.triggered).toEqual(['guard_stop_loss'])
   })
 
+  it('does not trigger side-specific risk guards for the opposite position side', () => {
+    const stopLossState = evaluateGuards(
+      {
+        currentPrice: 105,
+        baseTimeframeBar: { close: 105 },
+        position: { qty: -1, avgEntryPrice: 100 },
+      } as any,
+      [
+        {
+          id: 'guard_long_stop_loss',
+          payload: {
+            kind: 'STOP_LOSS_PCT',
+            scope: 'position',
+            appliesTo: 'long',
+            value: 5,
+            onBreach: 'FORCE_EXIT',
+          },
+        },
+      ] as any,
+      {},
+      ['guard_long_stop_loss'],
+    )
+
+    expect(stopLossState.forceExit).toBe(false)
+    expect(stopLossState.triggered).toEqual([])
+
+    const takeProfitState = evaluateGuards(
+      {
+        currentPrice: 105,
+        baseTimeframeBar: { close: 105 },
+        position: { qty: 1, avgEntryPrice: 100 },
+      } as any,
+      [
+        {
+          id: 'guard_short_take_profit',
+          payload: {
+            kind: 'TAKE_PROFIT_PCT',
+            scope: 'position',
+            appliesTo: 'short',
+            value: 5,
+            onBreach: 'FORCE_EXIT',
+          },
+        },
+      ] as any,
+      {},
+      ['guard_short_take_profit'],
+    )
+
+    expect(takeProfitState.forceExit).toBe(false)
+    expect(takeProfitState.triggered).toEqual([])
+  })
+
   it('forces exit when TRAILING_STOP_PCT is breached with explicit peak context', () => {
     const guardState = evaluateGuards(
       {
@@ -479,6 +531,37 @@ describe('backtestCompiledRuntimeCompat', () => {
 
     expect(guardState.forceExit).toBe(true)
     expect(guardState.triggered).toEqual(['guard_trailing_stop'])
+  })
+
+  it('does not trigger side-specific trailing stops for the opposite position side', () => {
+    const guardState = evaluateGuards(
+      {
+        currentPrice: 108,
+        baseTimeframeBar: { close: 108 },
+        position: {
+          qty: 1,
+          avgEntryPrice: 100,
+          highestPriceSinceEntry: 120,
+        },
+      } as any,
+      [
+        {
+          id: 'guard_short_trailing_stop',
+          payload: {
+            kind: 'TRAILING_STOP_PCT',
+            scope: 'position',
+            appliesTo: 'short',
+            value: 10,
+            onBreach: 'FORCE_EXIT',
+          },
+        },
+      ] as any,
+      {},
+      ['guard_short_trailing_stop'],
+    )
+
+    expect(guardState.forceExit).toBe(false)
+    expect(guardState.triggered).toEqual([])
   })
 
   it('does not trigger TRAILING_STOP_PCT without an explicit trailing anchor', () => {

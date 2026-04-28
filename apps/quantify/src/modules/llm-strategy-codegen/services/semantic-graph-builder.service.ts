@@ -1,10 +1,10 @@
 import type { StrategyLogicSnapshot, StrategyRuleBasis } from '../types/strategy-logic-snapshot'
-import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
+import type { SemanticLegacyStrategyGraph } from '../types/semantic-strategy-graph'
 import { Injectable } from '@nestjs/common'
 import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe, resolveRulePhaseDefaultTimeframe } from './rule-draft-projection'
 
 export interface SemanticGraphBuildResult {
-  graph: SemanticStrategyGraph | null
+  graph: SemanticLegacyStrategyGraph | null
   unsupportedFeatures: string[]
   diagnostics: string[]
 }
@@ -12,6 +12,14 @@ export interface SemanticGraphBuildResult {
 @Injectable()
 export class SemanticGraphBuilderService {
   build(checklist: StrategyLogicSnapshot): SemanticGraphBuildResult {
+    return this.buildLegacyFromChecklist(checklist)
+  }
+
+  /**
+   * Legacy text/checklist graph builder. New semantic graph snapshots should use
+   * canonical artifacts instead of parsing human-readable checklist strings.
+   */
+  buildLegacyFromChecklist(checklist: StrategyLogicSnapshot): SemanticGraphBuildResult {
     const drafts = buildStrategyRuleDrafts(checklist)
     const entryRules = this.normalizeRules(checklist.entryRules)
     const exitRules = this.normalizeRules(checklist.exitRules)
@@ -24,9 +32,9 @@ export class SemanticGraphBuilderService {
     const symbol = this.resolveSymbol(checklist.symbols)
     const unsupportedFeatures = this.collectUnsupportedFeatures(ruleText)
     const diagnostics: string[] = []
-    const nodes: Array<SemanticStrategyGraph['nodes'][number]> = []
-    const actions: Array<SemanticStrategyGraph['actions'][number]> = []
-    const risk: Array<SemanticStrategyGraph['risk'][number]> = []
+    const nodes: Array<SemanticLegacyStrategyGraph['nodes'][number]> = []
+    const actions: Array<SemanticLegacyStrategyGraph['actions'][number]> = []
+    const risk: Array<SemanticLegacyStrategyGraph['risk'][number]> = []
     const openSizePct = this.resolveOpenSizePct(checklist.riskRules)
 
     const entryNodeIds: string[] = []
@@ -151,7 +159,7 @@ export class SemanticGraphBuilderService {
 
   private appendRiskNodes(
     riskRules: Record<string, unknown> | undefined,
-    risk: Array<SemanticStrategyGraph['risk'][number]>,
+    risk: Array<SemanticLegacyStrategyGraph['risk'][number]>,
   ): void {
     if (!riskRules) return
     if (typeof riskRules.stopLossPct === 'number' && Number.isFinite(riskRules.stopLossPct) && riskRules.stopLossPct > 0) {
@@ -177,7 +185,7 @@ export class SemanticGraphBuilderService {
     entryDrafts: StrategyLogicSnapshot['entryRuleDrafts'] | undefined,
     entryRuleBases: StrategyLogicSnapshot['entryRuleBases'],
     fallbackTimeframe: string,
-    nodes: Array<SemanticStrategyGraph['nodes'][number]>,
+    nodes: Array<SemanticLegacyStrategyGraph['nodes'][number]>,
     entryNodeIds: string[],
   ): boolean {
     let created = false
@@ -219,7 +227,7 @@ export class SemanticGraphBuilderService {
     exitDrafts: StrategyLogicSnapshot['exitRuleDrafts'] | undefined,
     exitRuleBases: StrategyLogicSnapshot['exitRuleBases'],
     fallbackTimeframe: string,
-    nodes: Array<SemanticStrategyGraph['nodes'][number]>,
+    nodes: Array<SemanticLegacyStrategyGraph['nodes'][number]>,
   ): boolean {
     let created = false
     for (const [index, rule] of exitRules.entries()) {
@@ -257,7 +265,7 @@ export class SemanticGraphBuilderService {
     exitDrafts: StrategyLogicSnapshot['exitRuleDrafts'] | undefined,
     exitRuleBases: StrategyLogicSnapshot['exitRuleBases'],
     fallbackTimeframe: string,
-    nodes: Array<SemanticStrategyGraph['nodes'][number]>,
+    nodes: Array<SemanticLegacyStrategyGraph['nodes'][number]>,
   ): boolean {
     let created = false
     for (const [index, rule] of exitRules.entries()) {
@@ -303,7 +311,7 @@ export class SemanticGraphBuilderService {
     exitDrafts: StrategyLogicSnapshot['exitRuleDrafts'] | undefined,
     entryDefaultTimeframe: string,
     exitDefaultTimeframe: string,
-    nodes: Array<SemanticStrategyGraph['nodes'][number]>,
+    nodes: Array<SemanticLegacyStrategyGraph['nodes'][number]>,
     diagnostics: string[],
   ): { hasEntry: boolean; hasExit: boolean } {
     const entryText = entryRules.join(' ')
@@ -380,7 +388,7 @@ export class SemanticGraphBuilderService {
   private appendBollingerNodes(
     text: string,
     fallbackTimeframe: string,
-    nodes: Array<SemanticStrategyGraph['nodes'][number]>,
+    nodes: Array<SemanticLegacyStrategyGraph['nodes'][number]>,
   ): { hasLongEntry: boolean; hasShortEntry: boolean; hasMiddleExit: boolean; hasOutsideRisk: boolean } {
     const timeframe = this.extractTimeframe(text) ?? fallbackTimeframe
     const hasUpperShort = /布林带?[^。；;\n]{0,24}上轨[^。；;\n]{0,16}(?:做空|开空)/u.test(text)

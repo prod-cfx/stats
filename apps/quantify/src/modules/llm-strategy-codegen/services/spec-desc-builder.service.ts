@@ -47,6 +47,7 @@ export class SpecDescBuilderService {
       exit: 0,
       risk: 0,
       rebalance: 0,
+      gate: 0,
     }
 
     for (const rule of rules) {

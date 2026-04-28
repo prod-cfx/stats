@@ -122,6 +122,140 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function buildCloseOpenExpressionSemanticState(): SemanticState {
+    return {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-close-gt-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-close-lt-open',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-28T00:00:00.000Z',
+    }
+  }
+
+  function buildLogicalExpressionSemanticState(): SemanticState {
+    const state = buildCloseOpenExpressionSemanticState()
+    return {
+      ...state,
+      triggers: state.triggers.map(trigger =>
+        trigger.id === 'entry-close-gt-open'
+          ? {
+              ...trigger,
+              params: {
+                expression: {
+                  kind: 'AND',
+                  children: [
+                    {
+                      kind: 'predicate',
+                      op: 'GT',
+                      left: { kind: 'series', source: 'bar', field: 'close' },
+                      right: { kind: 'series', source: 'bar', field: 'open' },
+                    },
+                    {
+                      kind: 'predicate',
+                      op: 'LT',
+                      left: { kind: 'series', source: 'bar', field: 'close' },
+                      right: { kind: 'series', source: 'bar', field: 'high' },
+                    },
+                  ],
+                },
+              },
+            }
+          : trigger,
+      ),
+    }
+  }
+
+  function buildOrNotExpressionSemanticState(): SemanticState {
+    const state = buildCloseOpenExpressionSemanticState()
+    return {
+      ...state,
+      triggers: state.triggers.map(trigger =>
+        trigger.id === 'entry-close-gt-open'
+          ? {
+              ...trigger,
+              params: {
+                expression: {
+                  kind: 'OR',
+                  children: [
+                    {
+                      kind: 'predicate',
+                      op: 'GT',
+                      left: { kind: 'series', source: 'bar', field: 'close' },
+                      right: { kind: 'series', source: 'bar', field: 'open' },
+                    },
+                    {
+                      kind: 'NOT',
+                      children: [
+                        {
+                          kind: 'predicate',
+                          op: 'LT',
+                          left: { kind: 'series', source: 'bar', field: 'close' },
+                          right: { kind: 'series', source: 'bar', field: 'low' },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            }
+          : trigger,
+      ),
+    }
+  }
+
   function compile(state: SemanticState) {
     const builder = new CanonicalSpecBuilderService()
     const canonicalSpec = builder.buildFromNormalizedIntent(
@@ -138,6 +272,75 @@ describe('SemanticAtomInvariantService', () => {
     })
     const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
     return { canonicalSpec, ir: compiled.ir, ast }
+  }
+
+  function compileFromSemanticState(state: SemanticState) {
+    const builder = new CanonicalSpecBuilderService()
+    const canonicalSpec = builder.buildFromSemanticState(state)
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    return { canonicalSpec, ir: compiled.ir, ast }
+  }
+
+  function driftCloseOpenExpressionAst(ast: StrategyAstV1): StrategyAstV1 {
+    const entryProgram = ast.decisionPrograms.find(program =>
+      program.phase === 'entry'
+      && program.actions.some(action => action.kind === 'OPEN_LONG')
+    )
+    const predicate = ast.exprPool.find(expr => expr.id === entryProgram?.when)
+
+    return {
+      ...ast,
+      exprPool: ast.exprPool.map((expr): ExprNode => {
+        if (expr.id === predicate?.id && expr.nodeType === 'predicate') {
+          return { ...expr, payload: { ...(expr.payload as PredicateDef), kind: 'LT' as const } }
+        }
+        return expr
+      }),
+    }
+  }
+
+  function driftLogicalExpressionLeafAst(ast: StrategyAstV1): StrategyAstV1 {
+    const entryProgram = ast.decisionPrograms.find(program =>
+      program.phase === 'entry'
+      && program.actions.some(action => action.kind === 'OPEN_LONG')
+    )
+    const rootPredicate = ast.exprPool.find(expr => expr.id === entryProgram?.when)
+    const leafPredicate = ast.exprPool.find(expr =>
+      rootPredicate?.deps.includes(expr.id)
+      && expr.nodeType === 'predicate'
+      && (expr.payload as PredicateDef).kind === 'LT'
+    )
+
+    return {
+      ...ast,
+      exprPool: ast.exprPool.map((expr): ExprNode => {
+        if (expr.id === leafPredicate?.id && expr.nodeType === 'predicate') {
+          return { ...expr, payload: { ...(expr.payload as PredicateDef), kind: 'GT' as const } }
+        }
+        return expr
+      }),
+    }
+  }
+
+  function driftFirstLtExpressionLeafAst(ast: StrategyAstV1): StrategyAstV1 {
+    const leafPredicate = ast.exprPool.find(expr =>
+      expr.nodeType === 'predicate'
+      && (expr.payload as PredicateDef).kind === 'LT'
+    )
+
+    return {
+      ...ast,
+      exprPool: ast.exprPool.map((expr): ExprNode => {
+        if (expr.id === leafPredicate?.id && expr.nodeType === 'predicate') {
+          return { ...expr, payload: { ...(expr.payload as PredicateDef), kind: 'GT' as const } }
+        }
+        return expr
+      }),
+    }
   }
 
   function driftPriceChangePredicate(ast: StrategyAstV1): StrategyAstV1 {
@@ -462,6 +665,121 @@ describe('SemanticAtomInvariantService', () => {
         key: 'semantic_atom.price_percent_change',
         status: 'passed',
         level: 'critical',
+      }),
+    ]))
+  })
+
+  it('detects generic expression drift', () => {
+    const state = buildCloseOpenExpressionSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const passingChecks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+    const driftChecks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: driftCloseOpenExpressionAst(ast),
+    })
+
+    expect(passingChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+    expect(driftChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'failed',
+        level: 'critical',
+        message: expect.stringMatching(/semantic expression drift/i),
+      }),
+    ]))
+  })
+
+  it('detects inferred generic expression drift once the trigger is locked', () => {
+    const state = buildCloseOpenExpressionSemanticState()
+    state.triggers = state.triggers.map(trigger => ({
+      ...trigger,
+      source: 'inferred',
+    }))
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const driftChecks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: driftCloseOpenExpressionAst(ast),
+    })
+
+    expect(driftChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'failed',
+        level: 'critical',
+        message: expect.stringMatching(/semantic expression drift/i),
+      }),
+    ]))
+  })
+
+  it('detects logical generic expression leaf drift', () => {
+    const state = buildLogicalExpressionSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const passingChecks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+    const driftChecks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: driftLogicalExpressionLeafAst(ast),
+    })
+
+    expect(passingChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+    expect(driftChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'failed',
+        level: 'critical',
+        message: expect.stringMatching(/semantic expression drift/i),
+      }),
+    ]))
+  })
+
+  it('passes legal OR/NOT logical generic expression and still detects leaf drift', () => {
+    const state = buildOrNotExpressionSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const passingChecks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+    const driftChecks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: driftFirstLtExpressionLeafAst(ast),
+    })
+
+    expect(passingChecks.filter(check => check.key === 'semantic_atom.expression')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'passed', level: 'critical' }),
+      ]),
+    )
+    expect(passingChecks.filter(check => check.key === 'semantic_atom.expression')).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'failed' }),
+      ]),
+    )
+    expect(driftChecks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.expression',
+        status: 'failed',
+        level: 'critical',
+        message: expect.stringMatching(/semantic expression drift/i),
       }),
     ]))
   })

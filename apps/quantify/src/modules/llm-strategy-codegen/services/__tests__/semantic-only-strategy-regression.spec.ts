@@ -1,5 +1,6 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticState } from '../../types/semantic-state'
+import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../../types/strategy-normalized-intent'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
@@ -141,6 +142,9 @@ describe('semantic-only strategy regression verification', () => {
         keys.push(condition.key)
         return
       }
+      if (condition.kind === 'expression') {
+        return
+      }
       for (const child of condition.children) {
         visit(child)
       }
@@ -153,6 +157,47 @@ describe('semantic-only strategy regression verification', () => {
 
   function ruleActionTypes(canonicalSpec: CanonicalStrategySpecV2): string[] {
     return canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))
+  }
+
+  const legacyAdapterForbiddenCalls = [
+    'new StrategyIntentNormalizerService',
+    'buildNormalizedIntentFromSemanticState(',
+    'buildFromNormalizedIntent(',
+    'semanticGraphBuilder.build(',
+    'buildLegacyLogicSnapshotFromSemanticState(',
+    'buildLegacyLogicSnapshotProjectionForCompatibility(',
+  ]
+
+  function extractNamedMethodBody(source: string, className: string, methodName: string): string | null {
+    const classIndex = source.indexOf(`class ${className}`)
+    if (classIndex < 0) return null
+
+    const methodIndex = source.indexOf(`${methodName}(`, classIndex)
+    if (methodIndex < 0) return null
+
+    const openBraceIndex = source.indexOf('{', methodIndex)
+    if (openBraceIndex < 0) return null
+
+    const closeBraceIndex = findMatchingBrace(source, openBraceIndex)
+    if (closeBraceIndex < 0) return null
+
+    return source.slice(openBraceIndex + 1, closeBraceIndex)
+  }
+
+  function findMatchingBrace(source: string, openBraceIndex: number): number {
+    let depth = 0
+    for (let index = openBraceIndex; index < source.length; index += 1) {
+      const char = source[index]
+      if (char === '{') depth += 1
+      if (char === '}') depth -= 1
+      if (depth === 0) return index
+    }
+
+    return -1
+  }
+
+  function findLegacyAdapterCallsInMethodBody(methodBody: string): string[] {
+    return legacyAdapterForbiddenCalls.filter(call => methodBody.includes(call))
   }
 
   async function generateAndPublish(sessionId: string, semanticState: SemanticState): Promise<PublishedCaseResult> {
@@ -522,6 +567,66 @@ describe('semantic-only strategy regression verification', () => {
       'OPEN_LONG',
       'FORCE_EXIT',
     ]))
+  })
+
+  it('guards Task 6 semantic expression mainline from normalized trigger atom backfill', () => {
+    const root = findRepoRoot(resolve(__dirname))
+    expect(NORMALIZED_TRIGGER_ATOM_KEYS).toEqual([
+      'execution.on_start',
+      'price.percent_change',
+      'price.range_position_lte',
+      'price.range_position_gte',
+      'price.breakout_up',
+      'price.breakout_down',
+      'indicator.cross_over',
+      'indicator.cross_under',
+      'indicator.above',
+      'indicator.below',
+      'bollinger.touch_upper',
+      'bollinger.touch_lower',
+      'bollinger.touch_middle',
+      'oscillator.rsi_gte',
+      'oscillator.rsi_lte',
+      'trend.direction',
+      'market.regime',
+      'volatility.state',
+      'grid.range_rebalance',
+    ])
+    expect(NORMALIZED_TRIGGER_ATOM_KEYS).not.toEqual(expect.arrayContaining([
+      'bar.close_gt_open',
+      'bar.close_lt_open',
+      'candle.green',
+    ]))
+    expect(NORMALIZED_TRIGGER_ATOM_KEYS.some(key =>
+      /(?:^|\.)(?:bar|candle)(?:\.|$)|close.*open|open.*close|green|red/u.test(key),
+    )).toBe(false)
+
+    const scanTargets = [
+      {
+        file: 'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts',
+        className: 'CodegenConversationService',
+        methodName: 'buildCanonicalSpecForConversation',
+      },
+      {
+        file: 'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
+        className: 'CodegenPublicationGenerationStage',
+        methodName: 'generate',
+      },
+    ]
+    for (const target of scanTargets) {
+      const source = readFileSync(join(root, target.file), 'utf8')
+      const methodBody = extractNamedMethodBody(source, target.className, target.methodName)
+      expect(methodBody).not.toBeNull()
+      expect(findLegacyAdapterCallsInMethodBody(methodBody ?? '')).toEqual([])
+    }
+
+    const legacyAdapterFiles = [
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-normalizer.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts',
+    ]
+    for (const file of legacyAdapterFiles) {
+      expect(readFileSync(join(root, file), 'utf8')).toMatch(/legacy adapter/i)
+    }
   })
 
   it('keeps production conversation main path free of legacy checklist authority', () => {

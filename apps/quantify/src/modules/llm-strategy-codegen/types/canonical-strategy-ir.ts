@@ -107,7 +107,6 @@ export interface PredicateDef {
   kind:
     | 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ'
     | 'CROSS_OVER' | 'CROSS_UNDER'
-    | 'BETWEEN'
     | 'TOUCH_LEVEL_UP' | 'TOUCH_LEVEL_DOWN'
     | 'AND' | 'OR' | 'NOT'
   args: string[]
@@ -168,7 +167,7 @@ export interface RiskGuard {
     | 'TRAILING_STOP_PCT'
     | 'HARD_PRICE_STOP'
   scope: 'position' | 'strategy' | 'order_program'
-  appliesTo?: string
+  appliesTo?: 'long' | 'short' | 'both'
   value?: number
   referenceRef?: string
   onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'

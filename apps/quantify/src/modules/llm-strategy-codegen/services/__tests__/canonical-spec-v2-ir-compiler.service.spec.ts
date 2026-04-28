@@ -1,6 +1,11 @@
 import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec-v2'
+import type { SemanticExpressionOperand, SemanticState } from '../../types/semantic-state'
+import { evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
+import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
+import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
 function findSeries(
   series: CanonicalStrategyIrV1['signalCatalog']['series'],
@@ -21,6 +26,345 @@ function findPredicate(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it('compiles generic close-open expressions', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '1m',
+        },
+        indicators: [],
+        sizing: { mode: 'QUOTE', value: 10 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1m'],
+        },
+        rules: [
+          {
+            id: 'entry-close-above-open',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'expression',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'exit-close-below-open',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'expression',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'close_1m', kind: 'PRICE', field: 'close', timeframe: '1m' }),
+      expect.objectContaining({ id: 'open_1m', kind: 'PRICE', field: 'open', timeframe: '1m' }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GT', args: ['close_1m', 'open_1m'] }),
+      expect.objectContaining({ kind: 'LT', args: ['close_1m', 'open_1m'] }),
+    ]))
+    expect(result.ir.portfolio.sizing).toEqual({ mode: 'fixed_quote', value: 10 })
+  })
+
+  it('compiles semantic expression indicator-vs-constant predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '5m',
+        },
+        indicators: [{ kind: 'rsi', params: { period: 14 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['5m'],
+        },
+        rules: [
+          {
+            id: 'entry-rsi-gte',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'expression',
+              op: 'GTE',
+              left: { kind: 'indicator', name: 'rsi', params: { period: 14 } },
+              right: { kind: 'constant', value: 55 },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '5m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'rsi_14_5m', kind: 'RSI', params: { period: 14 } }),
+      expect.objectContaining({ id: 'const_55', kind: 'CONST', value: 55 }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GTE', args: ['rsi_14_5m', 'const_55'] }),
+    ]))
+  })
+
+  it('compiles MACD expression operand params without relying on spec indicator defaults', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '5m',
+        },
+        indicators: [{ kind: 'macd', params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['5m'],
+        },
+        rules: [
+          {
+            id: 'entry-macd-gte',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'expression',
+              op: 'GTE',
+              left: {
+                kind: 'indicator',
+                name: 'macd',
+                output: 'line',
+                params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
+              },
+              right: { kind: 'constant', value: 0 },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '5m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'macd_line_16_34_12_5m',
+        kind: 'MACD_LINE',
+        params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
+      }),
+    ]))
+    expect(result.ir.signalCatalog.series).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'macd_line_12_26_9_5m' }),
+    ]))
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operator: 'GTE(MACD_LINE(CLOSE,16,34,12),0)' }),
+    ]))
+  })
+
+  it('rejects semantic expression has_position operands with a specific error', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '1m',
+        },
+        indicators: [],
+        sizing: { mode: 'QUOTE', value: 10 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1m'],
+        },
+        rules: [
+          {
+            id: 'entry-has-position',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'expression',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: 1 },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    expect(() => compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })).toThrow('codegen.semantic_expression_operand_unsupported:position:has_position')
+  })
+
+  it('rejects semantic expression boolean constants with a specific error', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '1m',
+        },
+        indicators: [],
+        sizing: { mode: 'QUOTE', value: 10 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1m'],
+        },
+        rules: [
+          {
+            id: 'entry-boolean-constant',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'expression',
+              op: 'EQ',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'constant', value: true },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    expect(() => compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })).toThrow('codegen.semantic_expression_operand_unsupported:constant:boolean')
+  })
+
+  it('rejects unsupported semantic expression operands with a specific error', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const unsupportedOperand = { kind: 'wallet', field: 'balance' } as unknown as SemanticExpressionOperand
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '1m',
+        },
+        indicators: [],
+        sizing: { mode: 'QUOTE', value: 10 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1m'],
+        },
+        rules: [
+          {
+            id: 'entry-unsupported',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'expression',
+              op: 'GT',
+              left: unsupportedOperand,
+              right: { kind: 'constant', value: 1 },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    expect(() => compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })).toThrow('codegen.semantic_expression_operand_unsupported:wallet')
+  })
+
   it('compiles moving-average fastPeriod and slowPeriod without falling back to defaults', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -1330,6 +1674,166 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles no-position gate into executable MAX_POSITION runtime guard', () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg', 'state-gated'],
+      triggers: [
+        {
+          id: 'entry-close-gt-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'gate-no-position',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-28T00:00:00.000Z',
+    }
+    const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+    const result = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: {
+        positionMode: 'long_only',
+        marginMode: 'isolated',
+        tickSize: 0.01,
+        pricePrecision: 2,
+        quantityPrecision: 6,
+        fillAssumption: 'strict',
+      },
+    })
+
+    expect(canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'gate',
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      }),
+    ]))
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'MAX_POSITION_PCT',
+        value: 0,
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }),
+    ]))
+    expect(ast.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: 'MAX_POSITION_PCT',
+          value: 0,
+          onBreach: 'BLOCK_NEW_ENTRY',
+        }),
+      }),
+    ]))
+    expect(script).toContain('"MAX_POSITION_PCT"')
+    expect(script).toContain('"BLOCK_NEW_ENTRY"')
+
+    const entryProgram = ast.decisionPrograms.find(program => program.phase === 'entry')
+    expect(entryProgram).toBeDefined()
+    const occupiedCtx = {
+      position: { qty: 1, avgEntryPrice: 100 },
+      currentPrice: 101,
+      baseTimeframeBar: { close: 101 },
+    }
+    const occupiedGuardState = evaluateGuards(
+      occupiedCtx as any,
+      ast.guards as any,
+      {},
+      ast.topology.guardOrder,
+    )
+    const occupiedDecision = runDecisionPrograms(
+      occupiedCtx as any,
+      ast.decisionPrograms as any,
+      { [entryProgram!.when]: true },
+      occupiedGuardState,
+      ast.topology.decisionOrder,
+    )
+
+    expect(occupiedGuardState.blockNewEntry).toBe(true)
+    expect(occupiedDecision).toEqual(expect.objectContaining({
+      action: 'NOOP',
+      reason: 'compiled.noop',
+    }))
+
+    const flatCtx = {
+      position: { qty: 0 },
+      currentPrice: 101,
+      baseTimeframeBar: { close: 101 },
+    }
+    const flatGuardState = evaluateGuards(
+      flatCtx as any,
+      ast.guards as any,
+      {},
+      ast.topology.guardOrder,
+    )
+    const flatDecision = runDecisionPrograms(
+      flatCtx as any,
+      ast.decisionPrograms as any,
+      { [entryProgram!.when]: true },
+      flatGuardState,
+      ast.topology.decisionOrder,
+    )
+
+    expect(flatGuardState.blockNewEntry).toBe(false)
+    expect(flatDecision).toEqual(expect.objectContaining({
+      action: 'OPEN_LONG',
+    }))
+  })
+
   it('compiles breakout and risk guards into deterministic IR', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -1521,6 +2025,60 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect.objectContaining({
         phase: 'exit',
         actions: [expect.objectContaining({ kind: 'CLOSE_SHORT' })],
+      }),
+    ]))
+  })
+
+  it('normalizes flat risk side scope before emitting IR guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'risk-flat-stop-loss',
+            phase: 'risk',
+            sideScope: 'flat',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.05,
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'STOP_LOSS_PCT',
+        appliesTo: 'both',
       }),
     ]))
   })

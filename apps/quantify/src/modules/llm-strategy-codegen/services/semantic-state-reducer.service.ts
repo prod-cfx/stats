@@ -99,19 +99,20 @@ export class SemanticStateReducerService {
         && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
     })
     if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
-      const percentValue = this.parsePercentAnswer(answerText)
-      if (percentValue !== null) {
+      const sizing = this.parsePositionSizingAnswer(answerText)
+      if (sizing) {
         const evidence = {
           text: answerText,
           messageIndex: input.messageIndex,
           source: 'user_explicit' as const,
         }
 
-        nextState.position.value = percentValue / 100
+        nextState.position.mode = sizing.mode
+        nextState.position.value = sizing.value
         nextState.position.status = 'locked'
         nextState.position.source = 'user_explicit'
         nextState.position.evidence = evidence
-        positionSlot.value = percentValue
+        positionSlot.value = sizing.slotValue
         positionSlot.status = 'locked'
         positionSlot.evidence = evidence
       }
@@ -343,6 +344,35 @@ export class SemanticStateReducerService {
 
     const value = Number(normalized)
     return this.isValidPercentValue(value) ? value : null
+  }
+
+  private parsePositionSizingAnswer(answerText: string): { mode: 'fixed_ratio' | 'fixed_quote', value: number, slotValue: number } | null {
+    const fixedQuote = this.parseFixedQuoteAnswer(answerText)
+    if (fixedQuote !== null) {
+      return { mode: 'fixed_quote', value: fixedQuote, slotValue: fixedQuote }
+    }
+
+    const percentValue = this.parsePercentAnswer(answerText)
+    if (percentValue === null) {
+      return null
+    }
+
+    return { mode: 'fixed_ratio', value: percentValue / 100, slotValue: percentValue }
+  }
+
+  private parseFixedQuoteAnswer(answerText: string): number | null {
+    const normalized = answerText.trim()
+    if (!normalized || /(?:不是|并非|不要|别|not)/iu.test(normalized)) {
+      return null
+    }
+
+    const match = normalized.match(/(?:固定(?:使用|用|投入)?|单笔(?:使用|用|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|投入)?|仓位)?[^\d]{0,8}(\d+(?:\.\d+)?)\s*(?:USDT|USDC|USD)\b/iu)
+    if (!match?.[1]) {
+      return null
+    }
+
+    const value = Number(match[1])
+    return Number.isFinite(value) && value > 0 ? value : null
   }
 
   private isValidPercentValue(value: number): boolean {

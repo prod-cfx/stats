@@ -1,6 +1,7 @@
 import type { StrategyNormalizedIntent } from './strategy-normalized-intent'
+import type { SemanticExpressionOperand, SemanticExpressionOperator } from './semantic-state'
 
-export type CanonicalRulePhase = 'entry' | 'exit' | 'risk' | 'rebalance'
+export type CanonicalRulePhase = 'entry' | 'exit' | 'risk' | 'rebalance' | 'gate'
 export type CanonicalRuleSideScope = 'long' | 'short' | 'both' | 'flat'
 export type CanonicalRiskRuleSideScope = Exclude<CanonicalRuleSideScope, 'flat'>
 
@@ -18,7 +19,14 @@ export interface CanonicalConditionGroup {
   children: CanonicalConditionNode[]
 }
 
-export type CanonicalConditionNode = CanonicalConditionAtom | CanonicalConditionGroup
+export interface CanonicalExpressionCondition {
+  kind: 'expression'
+  op: SemanticExpressionOperator
+  left: SemanticExpressionOperand
+  right: SemanticExpressionOperand
+}
+
+export type CanonicalConditionNode = CanonicalConditionAtom | CanonicalConditionGroup | CanonicalExpressionCondition
 
 export type CanonicalRuleActionType =
   | 'OPEN_LONG'
@@ -69,9 +77,9 @@ export interface CanonicalRuleV2 {
 export interface CanonicalStrategySpecV2 {
   version: 2
   market: {
-    exchange: 'binance' | 'okx' | 'hyperliquid'
+    exchange: 'binance' | 'okx' | 'hyperliquid' | null
     symbol: string | null
-    marketType: 'spot' | 'perp'
+    marketType: 'spot' | 'perp' | null
     defaultTimeframe?: string | null
     timeframe?: string | null
   }
