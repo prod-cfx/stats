@@ -87,6 +87,8 @@ if [[ "$TARGET" == "all" || "$TARGET" == "front" ]]; then
     run_build_command_with_app_env production vercel.front.json apps/front
 
   assert_failure run_build_command_without_app_env vercel.front.json apps/front
+  assert_failure run_build_command_with_app_env prod vercel.front.json apps/front
+  assert_failure run_build_command_with_app_env development vercel.front.json apps/front
 fi
 
 if [[ "$TARGET" == "all" || "$TARGET" == "admin" ]]; then
@@ -99,6 +101,8 @@ if [[ "$TARGET" == "all" || "$TARGET" == "admin" ]]; then
     run_build_command_with_app_env production vercel.admin.json apps/admin-front
 
   assert_failure run_build_command_without_app_env vercel.admin.json apps/admin-front
+  assert_failure run_build_command_with_app_env prod vercel.admin.json apps/admin-front
+  assert_failure run_build_command_with_app_env development vercel.admin.json apps/admin-front
 fi
 
 echo "Vercel build env smoke tests passed"
