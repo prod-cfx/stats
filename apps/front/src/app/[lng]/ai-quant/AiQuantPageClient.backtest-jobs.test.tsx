@@ -221,6 +221,8 @@ function createLocalizedBacktestTranslator(lng: 'zh' | 'en') {
 
     const translations = {
       zh: {
+        'aiQuant.messages.backtestSnapshotRequired':
+          '当前已发布快照缺少回测所需配置，暂时无法回测。请重新发布策略后再试。',
         'aiQuant.messages.backtestSnapshotMarketTypeMissing':
           '当前已发布快照缺少市场类型真相，暂时无法回测。请重新发布策略后再试。',
         'aiQuant.messages.backtestSnapshotTimeframeMissing':
@@ -233,6 +235,8 @@ function createLocalizedBacktestTranslator(lng: 'zh' | 'en') {
           '回测服务暂时不可用，请稍后重试。',
       },
       en: {
+        'aiQuant.messages.backtestSnapshotRequired':
+          'The published snapshot is missing required backtest configuration. Please republish the strategy and try again.',
         'aiQuant.messages.backtestSnapshotMarketTypeMissing':
           'The published snapshot is missing the market type truth required for backtesting. Please republish the strategy and try again.',
         'aiQuant.messages.backtestSnapshotTimeframeMissing':
@@ -1704,7 +1708,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('allows published snapshot backtest without snapshot defaults when AI-Quant page execution params are valid', async () => {
+  it('blocks published snapshot backtest without truthful snapshot defaults even when AI-Quant page execution params are valid', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].backtestExecutionConfigExplicit = false
     seeded[0].paramValues = {
@@ -1739,20 +1743,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
-    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
-    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
-      expect.objectContaining({
-        stateTimeframes: ['15m'],
-        initialCash: 18000,
-        leverage: 2,
-        execution: expect.objectContaining({
-          slippageBps: 3,
-          feeBps: 1,
-          priceSource: 'open',
-        }),
-      }),
-    )
-    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').toContain(
       '重新发布',
     )
   })
@@ -2315,6 +2307,60 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
 
     expect(currentConversation.messages.at(-1)?.content).toContain('当前已发布快照缺少市场类型真相')
+  })
+
+  it('renders a republish message for BAD_REQUEST create-job failures when snapshot execution config is missing', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+    } as ConversationState
+
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({
+      status: 'supported',
+    })
+    mockCreateBacktestJob.mockRejectedValueOnce(
+      new ApiError('Bad Request', 'BAD_REQUEST', 400, {
+        error: {
+          code: 'BAD_REQUEST',
+          args: {
+            snapshotId: 'snapshot-1',
+            missingFields: ['strategyConfig', 'backtestConfigDefaults'],
+            requiresRepublish: true,
+          },
+        },
+      }),
+    )
+
+    let currentConversation = activeConversation
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: createLocalizedBacktestTranslator('zh'),
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(currentConversation.messages.at(-1)?.content).toContain('当前已发布快照缺少回测所需配置')
   })
 
   it('renders a user-readable en message for BACKTEST_SNAPSHOT_TIMEFRAME_MISSING from create-job failures', async () => {
