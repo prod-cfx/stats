@@ -51,6 +51,8 @@ describe('PositionSizingContractService', () => {
     '资金费率达到 0.1% 开多',
     'BTC 跌到 60000 USDT 开多',
     '价格达到 30000 USDT 买入',
+    'ETHBTC 跌到 0.001 BTC 买入',
+    '价格到 0.001 BTC 买入',
   ])('does not parse risk text as position sizing: %s', (text) => {
     expect(service.parse(text)).toBeNull()
   })

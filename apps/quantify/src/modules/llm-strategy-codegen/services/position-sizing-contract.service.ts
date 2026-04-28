@@ -47,10 +47,13 @@ export class PositionSizingContractService {
 
     const basePattern = /(?:固定(?:使用|用|买|投入)?|单笔(?:使用|用|买|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|买|投入)?|买入|买|用)?[^\d.]{0,8}(?<![\d.])(\d+(?:\.\d+)?)\s*([A-Za-z][A-Za-z0-9]{1,15})\b/gu
     for (const match of text.matchAll(basePattern)) {
-      if (!match[1] || !match[2]) continue
+      if (match.index === undefined || !match[1] || !match[2]) continue
 
       const asset = match[2].toUpperCase()
       if (asset === 'USDT' || asset === 'USDC' || asset === 'USD') continue
+      const valueIndex = match.index + match[0].indexOf(match[1])
+      const valueLength = `${match[1]} ${match[2]}`.length
+      if (!this.hasLocalBaseSizingContext(text, valueIndex, valueLength)) continue
 
       const value = Number(match[1])
       if (!Number.isFinite(value) || value <= 0) continue
@@ -168,5 +171,18 @@ export class PositionSizingContractService {
 
   private hasBaseSizingContext(text: string): boolean {
     return /(?:仓位|资金|固定|单笔|每次|每笔|每单|使用|投入|用|买)/u.test(text)
+  }
+
+  private hasLocalBaseSizingContext(text: string, index: number, length: number): boolean {
+    const prefix = text.slice(Math.max(0, index - 12), index)
+    if (/(?:跌到|涨到|达到|价格到|价格|高于|低于|突破|跌破|站上|回落到)\s*$/u.test(prefix)) {
+      return false
+    }
+    if (/(?:仓位|资金(?!费率)|固定(?:使用|用|买|投入)?|单笔(?:使用|用|买|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|买|投入)?|买入|买|用)\s*$/u.test(prefix)) {
+      return true
+    }
+
+    const suffix = text.slice(index + length, index + length + 12)
+    return /^\s*(?:仓位|数量|开仓|下单|买入|开多|开空)/u.test(suffix)
   }
 }
