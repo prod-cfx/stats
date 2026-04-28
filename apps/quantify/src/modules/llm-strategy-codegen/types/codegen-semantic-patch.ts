@@ -22,8 +22,8 @@ export interface CodegenSemanticPatch {
   }>
   position?: {
     sizing?: SemanticPositionSizingContract | null
-    mode?: string
-    value?: number
+    mode: string
+    value: number
     positionMode: string
   } | null
 }
