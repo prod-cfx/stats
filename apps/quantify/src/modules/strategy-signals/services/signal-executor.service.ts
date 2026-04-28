@@ -333,6 +333,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const positionSide = this.mapPositionSide(direction)
       if (!tradeSide || !positionSide) return 'skipped'
       const runtimeProvenance = this.readSignalRuntimeProvenance(resolvedSignal)
+      const expectedMarketType = this.readExpectedRuntimeMarketType(resolvedSignal)
 
       const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide)
       if (preparation.type === 'duplicate') {
@@ -441,6 +442,18 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
             effectiveExchangeId = accountExchangeId
           }
         }
+      }
+
+      const marketTypeValidation = this.validateOrderMarketTypeConsistency({
+        expectedMarketType,
+        symbolInstrumentType: resolvedSignal.symbol.instrumentType,
+        orderMarketType: effectiveOrderParams.marketType,
+      })
+
+      if (!marketTypeValidation.ok) {
+        await this.executionRepository.markSkipped(execution.id, marketTypeValidation.reason)
+        await this.releaseReservation(account.id, reservedQuote, reserveReference)
+        return 'skipped'
       }
 
       try {
@@ -1097,6 +1110,20 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return null
   }
 
+  private validateOrderMarketTypeConsistency(input: {
+    expectedMarketType: MarketType | null
+    symbolInstrumentType: PrismaSymbol['instrumentType']
+    orderMarketType: MarketType
+  }): { ok: true } | { ok: false; reason: 'MARKET_TYPE_MISMATCH' } {
+    const symbolMarketType = this.normalizeMarketType(input.symbolInstrumentType)
+    if (!symbolMarketType) return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    if (symbolMarketType !== input.orderMarketType) return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    if (input.expectedMarketType && input.expectedMarketType !== input.orderMarketType) {
+      return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    }
+    return { ok: true }
+  }
+
   private buildUnifiedSymbol(symbol: PrismaSymbol): string {
     const base = symbol.baseAsset?.toUpperCase() ?? ''
     const quote = symbol.quoteAsset?.toUpperCase() ?? ''
@@ -1274,5 +1301,12 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     }
 
     return runtimeProvenance as Prisma.JsonObject
+  }
+
+  private readExpectedRuntimeMarketType(signal: LoadedSignal): MarketType | null {
+    const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
+    const raw = runtimeProvenance?.marketType
+    if (raw === 'spot' || raw === 'perp') return raw
+    return null
   }
 }

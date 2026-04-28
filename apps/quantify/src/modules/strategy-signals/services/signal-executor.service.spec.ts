@@ -257,6 +257,57 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('builds OKX perpetual order params with perp market type', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'ENTRY',
+        direction: 'SELL',
+        entryPrice: '50000',
+        positionSizeQuote: '100',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 6,
+          lotSize: '0.000001',
+        },
+      },
+      {
+        id: 'account-perp-1',
+        userId: 'user-perp-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(1000),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      params: {
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        side: 'sell',
+        reduceOnly: false,
+      },
+    })
+  })
+
+  it('rejects inconsistent execution market type', () => {
+    const service = createService()
+
+    const result = (service as any).validateOrderMarketTypeConsistency({
+      expectedMarketType: 'perp',
+      symbolInstrumentType: 'SPOT',
+      orderMarketType: 'spot',
+    })
+
+    expect(result).toEqual({ ok: false, reason: 'MARKET_TYPE_MISMATCH' })
+  })
+
   it('sizes ratio orders from execution capital and caps budget by buying power', () => {
     const service = createService()
 
@@ -410,7 +461,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(openOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-1', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-1', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-1', userId: 'user-1' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -493,7 +544,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(partialOpenOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-1b', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-1b', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-1b', userId: 'user-1' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -579,7 +630,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(canceledOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-2', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-2', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-2', userId: 'user-2' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -665,7 +716,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(submittedOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-3', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-3', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-3', userId: 'user-3' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -1177,6 +1228,7 @@ describe('signalExecutorService', () => {
         direction: 'BUY',
         signalType: 'ENTRY',
         symbol: {
+          instrumentType: 'SPOT',
           quoteAsset: 'USDT',
         },
         metadata: {
