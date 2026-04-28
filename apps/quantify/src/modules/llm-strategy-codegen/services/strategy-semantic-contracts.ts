@@ -28,10 +28,7 @@ export interface SemanticEditableSlotContract {
 export type SemanticContractValidationResult = { ok: true } | { ok: false, reason: string }
 
 export type SemanticActionContractInput = Pick<SemanticActionState, 'key'> & Partial<Omit<SemanticActionState, 'key'>>
-export type SemanticPositionContractInput = (
-  | { sizing: SemanticPositionSizingContract | null }
-  | Pick<SemanticPositionState, 'mode' | 'value'>
-) & Pick<SemanticPositionState, 'positionMode'> & Partial<Omit<SemanticPositionState, 'sizing' | 'mode' | 'value' | 'positionMode'>>
+export type SemanticPositionContractInput = Pick<SemanticPositionState, 'mode' | 'value' | 'positionMode'> & Partial<Omit<SemanticPositionState, 'mode' | 'value' | 'positionMode'>>
 export type SemanticRiskContractInput = Pick<SemanticRiskState, 'key' | 'params'> & Partial<Omit<SemanticRiskState, 'key' | 'params'>>
 
 const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
@@ -153,6 +150,7 @@ const SUPPORTED_QUOTE_ASSETS = ['USDT', 'USDC', 'USD'] as const
 const SUPPORTED_QUOTE_ASSET_SET = new Set<string>(SUPPORTED_QUOTE_ASSETS)
 const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only', 'long_short'])
 const SUPPORTED_RISK_KEYS = new Set<string>(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+const POSITION_SIZING_VALUE_EPSILON = 1e-9
 
 const FALLBACK_EDITABLE_SLOTS: SemanticEditableSlotContract[] = [
   {
@@ -220,8 +218,17 @@ export function validateSemanticPositionContract(position: unknown): SemanticCon
     return invalid('invalid_position_contract')
   }
 
-  const sizingResult = validatePositionSizingContract(resolvePositionSizingCandidate(position))
-  if (!sizingResult.ok) return sizingResult
+  const legacySizing = normalizeLegacyModeValuePositionSizing(position)
+  const legacySizingResult = validatePositionSizingContract(legacySizing)
+  if (!legacySizingResult.ok) return legacySizingResult
+
+  if (position.sizing !== undefined && position.sizing !== null) {
+    const sizingResult = validatePositionSizingContract(position.sizing)
+    if (!sizingResult.ok) return sizingResult
+    if (!isEquivalentPositionSizing(position.sizing, legacySizing)) {
+      return invalid('position_sizing_legacy_mismatch')
+    }
+  }
 
   if (typeof position.positionMode !== 'string' || !SUPPORTED_POSITION_SIDE_MODES.has(position.positionMode)) {
     return invalid('unsupported_position_side_mode')
@@ -235,6 +242,11 @@ export function normalizeLegacyPositionSizing(position: unknown): SemanticPositi
   if (isRecord(position.sizing)) {
     return isSemanticPositionSizingContract(position.sizing) ? position.sizing : null
   }
+  return normalizeLegacyModeValuePositionSizing(position)
+}
+
+function normalizeLegacyModeValuePositionSizing(position: unknown): SemanticPositionSizingContract | null {
+  if (!isRecord(position)) return null
   if (typeof position.mode !== 'string' || typeof position.value !== 'number' || !Number.isFinite(position.value)) return null
 
   if (position.mode === 'fixed_ratio') {
@@ -247,10 +259,6 @@ export function normalizeLegacyPositionSizing(position: unknown): SemanticPositi
     return { kind: 'base', value: position.value, asset: 'BASE' }
   }
   return null
-}
-
-function resolvePositionSizingCandidate(position: Record<string, unknown>): unknown {
-  return isRecord(position.sizing) ? position.sizing : normalizeLegacyPositionSizing(position)
 }
 
 function validatePositionSizingContract(sizing: unknown): SemanticContractValidationResult {
@@ -275,6 +283,17 @@ function validatePositionSizingContract(sizing: unknown): SemanticContractValida
 
 function isSemanticPositionSizingContract(sizing: unknown): sizing is SemanticPositionSizingContract {
   return validatePositionSizingContract(sizing).ok
+}
+
+function isEquivalentPositionSizing(
+  sizing: SemanticPositionSizingContract,
+  legacySizing: SemanticPositionSizingContract,
+): boolean {
+  return sizing.kind === legacySizing.kind && isEquivalentPositionSizingValue(sizing.value, legacySizing.value)
+}
+
+function isEquivalentPositionSizingValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= POSITION_SIZING_VALUE_EPSILON
 }
 
 export function validateSemanticRiskContract(risk: SemanticRiskContractInput): SemanticContractValidationResult
