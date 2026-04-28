@@ -1,3 +1,5 @@
+export type QuantEditSessionSource = 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
+
 export type QuantReturnIntent =
   | { type: 'run', strategyId: string, ts?: number }
   | { type: 'edit', strategyId: string, ts?: number }
@@ -5,6 +7,15 @@ export type QuantReturnIntent =
   | { type: 'plaza-edit', templateId: string, ts?: number }
   | { type: 'plaza-chat-session', sessionId: string, ts?: number }
   | { type: 'chat', draft: string, ts?: number }
+  | {
+      type: 'strategy-edit-session'
+      strategyInstanceId: string
+      publishedSnapshotId?: string
+      conversationId?: string
+      sessionId?: string
+      source?: QuantEditSessionSource
+      ts?: number
+    }
 
 export type QuantReturnIntentInput =
   | { type: 'run', strategyId: string }
@@ -13,6 +24,14 @@ export type QuantReturnIntentInput =
   | { type: 'plaza-edit', templateId: string }
   | { type: 'plaza-chat-session', sessionId: string }
   | { type: 'chat', draft: string }
+  | {
+      type: 'strategy-edit-session'
+      strategyInstanceId: string
+      publishedSnapshotId?: string
+      conversationId?: string
+      sessionId?: string
+      source?: QuantEditSessionSource
+    }
 
 const INTENT_STORAGE_KEY = 'ai_quant_return_intent_v1'
 

@@ -210,13 +210,15 @@ function formatBollingerCondition(condition: DisplayLogicGraphCondition): string
 }
 
 function formatRsiCondition(condition: DisplayLogicGraphCondition): string {
-  const threshold = formatNumber(condition.value)
+  const threshold = formatNumber(condition.value ?? condition.params?.threshold ?? condition.params?.thresholdValue)
   const period = formatNumber(condition.params?.period)
   const label = period ? `RSI${period}` : 'RSI'
   switch (condition.key) {
     case 'rsi.threshold_lte':
+    case 'rsi.lte':
       return threshold ? `${label} 低于或等于 ${threshold}` : `${label} 低于阈值`
     case 'rsi.threshold_gte':
+    case 'rsi.gte':
       return threshold ? `${label} 高于或等于 ${threshold}` : `${label} 高于阈值`
     case 'rsi.cross_over':
       return threshold ? `${label} 上穿 ${threshold}` : `${label} 上穿阈值`
@@ -313,6 +315,7 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
     case 'position_gain_pct':
       return formatPositionGainCondition(condition)
     case 'risk.take_profit_pct':
+    case 'position_profit_pct':
       return formatTakeProfitCondition(condition)
     case 'position_loss_pct':
       return formatPositionLossCondition(condition)
@@ -326,6 +329,8 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
       return formatMovingAverageCondition(condition)
     case 'rsi.threshold_lte':
     case 'rsi.threshold_gte':
+    case 'rsi.lte':
+    case 'rsi.gte':
     case 'rsi.cross_over':
     case 'rsi.cross_under':
       return formatRsiCondition(condition)

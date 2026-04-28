@@ -460,6 +460,77 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(displayText).not.toContain('仓位: 35%')
   })
 
+  it('rebuilds draft display logic graph from DRAFTING specDesc semantic edits', () => {
+    const conversation = {
+      ...createConversation((key: string) => key, 1),
+      id: 'conv-drafting-edit',
+      llmCodegenSessionId: 'session-1',
+      backtestResult: {
+        id: 'bt-old',
+        startAt: '2026-03-01T00:00:00.000Z',
+        endAt: '2026-03-08T00:00:00.000Z',
+        maxDrawdownPct: 5,
+        totalReturnPct: 12,
+        winRatePct: 60,
+        tradeCount: 8,
+      },
+      publishedSnapshotId: 'snapshot-old',
+      publishedScriptCode: 'export default function oldStrategy() { return true }',
+      displayLogicGraph: {
+        blocks: [
+          {
+            type: 'IF',
+            items: [{ id: 'old-ma', kind: 'condition', text: 'SMA6 上穿 SMA48' }],
+          },
+        ],
+      },
+    } as any
+
+    const next = applyCodegenResponseToConversationState({
+      conversation,
+      response: {
+        id: 'session-1',
+        status: 'DRAFTING',
+        specDesc: {
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [
+            {
+              id: 'risk-stop-loss',
+              phase: 'risk',
+              condition: {
+                key: 'position_loss_pct',
+                value: 0.03,
+              },
+              actions: [{ type: 'FORCE_EXIT' }],
+            },
+          ],
+        },
+      } as any,
+      confirmGenerate: false,
+      targetParams: {
+        ...DEFAULT_PARAMS,
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+      },
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '把止损改成3%',
+      t: (key: string) => key,
+      loadingMessageId: null,
+    })
+
+    const displayText = JSON.stringify(next.displayLogicGraph)
+    expect(displayText).toContain('亏损达到 3%')
+    expect(displayText).not.toContain('SMA6 上穿 SMA48')
+    expect(next.logicGraph?.status).toBe('draft')
+    expect(next.publishedSnapshotId).toBeNull()
+    expect(next.publishedScriptCode).toBeNull()
+    expect(next.backtestResult).toBeNull()
+  })
+
   it('appends rejectReason when terminal failure snapshot only returns historical conversationMessages', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {
@@ -510,6 +581,7 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.messages).toHaveLength(3)
     expect(next.messages.at(-1)?.role).toBe('assistant')
     expect(next.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+    expect(next.llmCodegenSessionId).toBe('session-1')
   })
 
   it('appends generated code reply when published snapshot returns only historical conversationMessages', () => {
@@ -565,6 +637,64 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
     expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
     expect(next.publishedScriptCode).toBe('export default function strategy() { return true }')
+    expect(next.llmCodegenSessionId).toBe('session-1')
+  })
+
+  it('keeps generated code visible when refreshed published session reconciliation reapplies server messages', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [
+          { id: 'm-1', role: 'assistant', content: 'Strategy code generated, ready to backtest.\n\nGenerated strategy code:\n```javascript\nexport default function strategy() { return true }\n```' },
+        ],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'export default function strategy() { return true }',
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        conversationMessages: [
+          { role: 'assistant', content: '请确认逻辑图' },
+          { role: 'user', content: 'Confirm code generation' },
+        ],
+      } as any,
+      confirmGenerate: false,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: null,
+    })
+
+    expect(next.messages).toHaveLength(3)
+    expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
+    expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
+    expect(next.publishedScriptCode).toBe('export default function strategy() { return true }')
+    expect(next.llmCodegenSessionId).toBe('session-1')
   })
 
   it('hydrates published snapshot backtest params into the live conversation state', () => {
@@ -648,6 +778,75 @@ describe('AiQuantPageClient codegen P1 guards', () => {
       baseTimeframe: '1h',
       positionPct: 25,
     })
+  })
+
+  it('keeps restored published script code when reconciliation returns the same snapshot without scriptCode', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-live',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'msg-1', role: 'assistant', content: 'Strategy code generated.' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: 'sha256:canonical-1',
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'export default function strategy() { return true }',
+        publishedScriptGraphVersion: 1,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: null,
+        publishedSnapshotId: 'snapshot-1',
+        specDesc: {
+          canonicalDigest: 'sha256:canonical-1',
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [],
+        },
+      } as any,
+      confirmGenerate: false,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+    })
+
+    expect(next.publishedSnapshotId).toBe('snapshot-1')
+    expect(next.publishedScriptCode).toBe('export default function strategy() { return true }')
+    expect(next.publishedScriptGraphVersion).not.toBeNull()
   })
 
   it('prefers authoritative publishedSnapshotParamValues over strategyConfig-derived subsets on publish response', () => {

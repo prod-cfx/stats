@@ -33,6 +33,25 @@ export interface CreatePublishedStrategySnapshotInput {
   dataRequirements?: Record<string, unknown> | null
 }
 
+export interface EditablePublishedStrategySnapshotRecord {
+  id: string
+  sessionId: string
+  strategyTemplateId: string | null
+  strategyInstanceId: string | null
+  specSnapshot: Prisma.JsonValue
+  semanticGraph: Prisma.JsonValue | null
+  paramsSnapshot: Prisma.JsonValue | null
+  strategyConfig: Prisma.JsonValue | null
+  backtestConfigDefaults: Prisma.JsonValue | null
+  deploymentExecutionDefaults: Prisma.JsonValue | null
+  deploymentExecutionConstraints: Prisma.JsonValue | null
+  lockedParams: Prisma.JsonValue
+  executionPolicy: Prisma.JsonValue | null
+  originalSessionSemanticState: Prisma.JsonValue | null
+  originalSessionLatestSpecDesc: Prisma.JsonValue | null
+  createdAt: Date
+}
+
 function stableJsonStringify(value: unknown): string {
   if (value === null || value === undefined) return 'null'
   if (typeof value !== 'object') return JSON.stringify(value)
@@ -186,10 +205,97 @@ export class PublishedStrategySnapshotsRepository {
     })
   }
 
+  async findEditableSnapshotForUser(input: {
+    userId: string
+    strategyInstanceId: string
+    publishedSnapshotId?: string | null
+  }): Promise<EditablePublishedStrategySnapshotRecord | null> {
+    const strategyInstanceId = input.strategyInstanceId.trim()
+    const publishedSnapshotId = input.publishedSnapshotId?.trim()
+
+    const snapshot = await this.txHost.tx.publishedStrategySnapshot.findFirst({
+      where: {
+        ...(publishedSnapshotId ? { id: publishedSnapshotId, strategyInstanceId } : { strategyInstanceId }),
+        session: {
+          userId: input.userId,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: this.editableSnapshotSelect(),
+    })
+
+    return snapshot ? this.mapEditableSnapshotRecord(snapshot) : null
+  }
+
   async findById(id: string): Promise<PublishedStrategySnapshot | null> {
     return this.txHost.tx.publishedStrategySnapshot.findUnique({
       where: { id },
     })
+  }
+
+  private editableSnapshotSelect() {
+    return {
+      id: true,
+      sessionId: true,
+      strategyTemplateId: true,
+      strategyInstanceId: true,
+      specSnapshot: true,
+      semanticGraph: true,
+      paramsSnapshot: true,
+      strategyConfig: true,
+      backtestConfigDefaults: true,
+      deploymentExecutionDefaults: true,
+      deploymentExecutionConstraints: true,
+      lockedParams: true,
+      executionPolicy: true,
+      createdAt: true,
+      session: {
+        select: {
+          semanticState: true,
+          latestSpecDesc: true,
+        },
+      },
+    } satisfies Prisma.PublishedStrategySnapshotSelect
+  }
+
+  private mapEditableSnapshotRecord(snapshot: {
+    id: string
+    sessionId: string
+    strategyTemplateId: string | null
+    strategyInstanceId: string | null
+    specSnapshot: Prisma.JsonValue
+    semanticGraph: Prisma.JsonValue | null
+    paramsSnapshot: Prisma.JsonValue | null
+    strategyConfig: Prisma.JsonValue | null
+    backtestConfigDefaults: Prisma.JsonValue | null
+    deploymentExecutionDefaults: Prisma.JsonValue | null
+    deploymentExecutionConstraints: Prisma.JsonValue | null
+    lockedParams: Prisma.JsonValue
+    executionPolicy: Prisma.JsonValue | null
+    createdAt: Date
+    session: {
+      semanticState: Prisma.JsonValue | null
+      latestSpecDesc: Prisma.JsonValue | null
+    }
+  }): EditablePublishedStrategySnapshotRecord {
+    return {
+      id: snapshot.id,
+      sessionId: snapshot.sessionId,
+      strategyTemplateId: snapshot.strategyTemplateId,
+      strategyInstanceId: snapshot.strategyInstanceId,
+      specSnapshot: snapshot.specSnapshot,
+      semanticGraph: snapshot.semanticGraph,
+      paramsSnapshot: snapshot.paramsSnapshot,
+      strategyConfig: snapshot.strategyConfig,
+      backtestConfigDefaults: snapshot.backtestConfigDefaults,
+      deploymentExecutionDefaults: snapshot.deploymentExecutionDefaults,
+      deploymentExecutionConstraints: snapshot.deploymentExecutionConstraints,
+      lockedParams: snapshot.lockedParams,
+      executionPolicy: snapshot.executionPolicy,
+      originalSessionSemanticState: snapshot.session.semanticState,
+      originalSessionLatestSpecDesc: snapshot.session.latestSpecDesc,
+      createdAt: snapshot.createdAt,
+    }
   }
 }
 
