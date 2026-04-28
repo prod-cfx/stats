@@ -40,6 +40,12 @@ assert_output \
   "pnpm exec dx build front --staging" \
   env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
 
+env \
+  APP_ENV=staging \
+  NEXT_PUBLIC_APP_ENV=staging \
+  NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api/v1 \
+  node apps/front/scripts/check-env.js >/dev/null
+
 assert_output \
   "pnpm exec dx build front --prod" \
   env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
