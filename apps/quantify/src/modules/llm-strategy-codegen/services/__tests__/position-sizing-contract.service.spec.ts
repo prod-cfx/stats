@@ -36,6 +36,7 @@ describe('PositionSizingContractService', () => {
     ['单笔 2 SOL', { kind: 'base', value: 2, asset: 'SOL' }],
     ['每次买 10 UNI', { kind: 'base', value: 10, asset: 'UNI' }],
     ['每次买 0.001 BTC 止损 5%', { kind: 'base', value: 0.001, asset: 'BTC' }],
+    ['BTC 跌到 60000 USDT 买入 0.001 BTC', { kind: 'base', value: 0.001, asset: 'BTC' }],
   ])('parses base sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })

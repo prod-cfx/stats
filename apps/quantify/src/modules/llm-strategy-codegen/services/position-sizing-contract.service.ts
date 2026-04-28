@@ -45,19 +45,23 @@ export class PositionSizingContractService {
   private parseBase(text: string, messageIndex?: number): ParsedPositionSizingContract | null {
     if (!this.hasBaseSizingContext(text)) return null
 
-    const match = text.match(/(?:固定(?:使用|用|买|投入)?|单笔(?:使用|用|买|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|买|投入)?|买入|买|用)?[^\d.]{0,8}(?<![\d.])(\d+(?:\.\d+)?)\s*([A-Za-z][A-Za-z0-9]{1,15})\b/u)
-    if (!match?.[1] || !match[2]) return null
+    const basePattern = /(?:固定(?:使用|用|买|投入)?|单笔(?:使用|用|买|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|买|投入)?|买入|买|用)?[^\d.]{0,8}(?<![\d.])(\d+(?:\.\d+)?)\s*([A-Za-z][A-Za-z0-9]{1,15})\b/gu
+    for (const match of text.matchAll(basePattern)) {
+      if (!match[1] || !match[2]) continue
 
-    const asset = match[2].toUpperCase()
-    if (asset === 'USDT' || asset === 'USDC' || asset === 'USD') return null
+      const asset = match[2].toUpperCase()
+      if (asset === 'USDT' || asset === 'USDC' || asset === 'USD') continue
 
-    const value = Number(match[1])
-    if (!Number.isFinite(value) || value <= 0) return null
+      const value = Number(match[1])
+      if (!Number.isFinite(value) || value <= 0) continue
 
-    return {
-      sizing: { kind: 'base', value, asset },
-      evidence: { text, messageIndex, source: 'user_explicit' },
+      return {
+        sizing: { kind: 'base', value, asset },
+        evidence: { text, messageIndex, source: 'user_explicit' },
+      }
     }
+
+    return null
   }
 
   private parseRatio(text: string, messageIndex?: number): ParsedPositionSizingContract | null {
