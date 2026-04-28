@@ -1092,7 +1092,7 @@ describe('SemanticStateReducerService', () => {
       position: null,
     }
 
-    for (const answer of ['看情况', '0', '0%', '150', '150%', '-10', '-10%', '不是10%', '5% 或 10%']) {
+    for (const answer of ['看情况', '0', '0%', '150', '150%', '-10', '-10%', '不是10%', '5% 或 10%', '仓位 5% 或 10%', '用 5% 或 10% 仓位']) {
       const afterPositionAnswer = service.applyClarificationAnswer({
         currentState: positionState,
         targetSlotKey: 'position.sizing',

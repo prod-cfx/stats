@@ -356,6 +356,10 @@ export class SemanticStateReducerService {
       return null
     }
 
+    if (this.hasAmbiguousPositionSizingPercentChoice(answerText)) {
+      return null
+    }
+
     const parsed = this.positionSizingContracts.parse(answerText, messageIndex)
     if (parsed) {
       return {
@@ -415,6 +419,32 @@ export class SemanticStateReducerService {
     return percentCandidates.length > 1
   }
 
+  private hasAmbiguousPositionSizingPercentChoice(answerText: string): boolean {
+    const percentText = answerText.replace(/％/gu, '%')
+    const percentPattern = /(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*%)/gu
+    const candidates = [...percentText.matchAll(percentPattern)]
+      .map(match => ({
+        index: match.index ?? -1,
+        text: match[0],
+        hasSizingContext: match.index === undefined
+          ? false
+          : this.hasLocalPositionSizingContextAt(percentText, match.index, match[0].length),
+      }))
+      .filter(candidate => candidate.index >= 0)
+
+    for (let index = 0; index < candidates.length - 1; index += 1) {
+      const current = candidates[index]
+      const next = candidates[index + 1]
+      if (!current || !next) continue
+
+      const between = percentText.slice(current.index + current.text.length, next.index)
+      if (!/(?:或|或者|还是|\/|／)/u.test(between)) continue
+      if (current.hasSizingContext || next.hasSizingContext) return true
+    }
+
+    return false
+  }
+
   private looksLikeNonSizingPercentAnswer(answerText: string): boolean {
     if (!/(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*[%％])/u.test(answerText)) {
       return false
@@ -433,18 +463,22 @@ export class SemanticStateReducerService {
     for (const match of percentText.matchAll(percentPattern)) {
       if (match.index === undefined) continue
 
-      const prefix = percentText.slice(Math.max(0, match.index - 8), match.index)
-      if (/(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)\s*$/u.test(prefix)) {
-        return true
-      }
-
-      const suffix = percentText.slice(match.index + match[0].length, match.index + match[0].length + 8)
-      if (/^\s*(?:仓位|资金(?!费率)|比例)/u.test(suffix)) {
+      if (this.hasLocalPositionSizingContextAt(percentText, match.index, match[0].length)) {
         return true
       }
     }
 
     return false
+  }
+
+  private hasLocalPositionSizingContextAt(text: string, index: number, length: number): boolean {
+    const prefix = text.slice(Math.max(0, index - 8), index)
+    if (/(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)\s*$/u.test(prefix)) {
+      return true
+    }
+
+    const suffix = text.slice(index + length, index + length + 8)
+    return /^\s*(?:仓位|资金(?!费率)|比例)/u.test(suffix)
   }
 
   private parsePercentNumberText(valueText: string | undefined): number {
