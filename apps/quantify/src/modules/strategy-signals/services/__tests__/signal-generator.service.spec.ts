@@ -341,7 +341,9 @@ describe('signalGeneratorService coordinator behavior', () => {
       expect.objectContaining({
         symbol: expect.objectContaining({
           id: 'symbol-perp-1',
-          code: 'BTCUSDT:PERP',
+          code: 'BTCUSDT',
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
         }),
       }),
       expect.anything(),

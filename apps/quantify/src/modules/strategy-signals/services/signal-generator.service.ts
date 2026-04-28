@@ -1489,7 +1489,10 @@ export class SignalGeneratorService {
         instance,
         strategy,
         {
-          symbol,
+          symbol: {
+            ...symbol,
+            code: symbolCode,
+          },
           timeframe: prismaTimeframe,
           fields: new Map(),
         },
