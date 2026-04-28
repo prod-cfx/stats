@@ -1393,7 +1393,7 @@ export class SignalGeneratorService {
     if (activationFailure) {
       if (activationFailure.failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING') {
         this.logger.warn(
-          `Reference bar unavailable for published snapshot runtime on instance ${instance.id} (${symbol.code}/${timeframe})`,
+          `Reference bar unavailable for published snapshot runtime on instance ${instance.id} (${symbolCode}/${timeframe})`,
         )
       }
       await this.markRuntimeExecutionStateRetryable(activeRuntimeState, config, {
