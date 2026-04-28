@@ -170,8 +170,9 @@ export class CompiledPublicationGateService {
   ): Record<string, unknown> {
     const semanticGraphDigest = input.semanticPredicateGraph
       ? this.hashCanonicalJson(input.semanticPredicateGraph)
-      : input.ir.source.graphDigest
-    const graphVsIrPassed = input.ir.source.graphDigest === semanticGraphDigest
+      : null
+    const graphVsIrPassed = semanticGraphDigest !== null
+      && input.ir.source.graphDigest === semanticGraphDigest
     const irVsScriptPassed = parsed.compiledManifest.irHash === input.ast.manifest.irHash
     const manifestSelfCheckPassed = parsed.compiledManifest.specHash === input.ast.manifest.specHash
 

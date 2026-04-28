@@ -1,4 +1,6 @@
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
+import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
@@ -110,6 +112,7 @@ describe('compiledPublicationGateService', () => {
       strategyInstanceId: 'instance-1',
       canonicalSnapshot,
       semanticView,
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot,
       ir,
       ast,
@@ -128,7 +131,7 @@ describe('compiledPublicationGateService', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
       specSnapshot: canonicalSnapshot,
-      semanticGraph: semanticView,
+      semanticGraph: createSemanticPredicateGraphFixture(),
       irSnapshot: expect.objectContaining({ irVersion: 'csi.v1' }),
       astSnapshot: expect.objectContaining({ astVersion: 'csa.v1' }),
       compiledManifest: expect.objectContaining({ compileVersion: 'compiler.v1' }),
@@ -266,6 +269,77 @@ describe('compiledPublicationGateService', () => {
     }))
   })
 
+  it('fails compiler graph consistency when semantic predicate graph is missing', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-missing-graph' }),
+    }
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      undefined,
+    )
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-missing-graph',
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '1h' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1' },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'missing-graph' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      consistencyReport: expect.objectContaining({
+        status: 'FAILED',
+        compilerConsistency: expect.objectContaining({
+          status: 'FAILED',
+          graphVsIr: expect.objectContaining({
+            passed: false,
+            graphDigest: ir.source.graphDigest,
+            semanticGraphDigest: null,
+          }),
+        }),
+      }),
+    }))
+  })
+
   it('persists explicit on_start runtime execution semantics when ast source refs carry on_start markers', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-on-start-1' }),
@@ -298,6 +372,7 @@ describe('compiledPublicationGateService', () => {
         rules: [],
       },
       semanticView: { viewType: 'canonical-semantic-view.v1' },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -370,6 +445,7 @@ describe('compiledPublicationGateService', () => {
         rules: [],
       },
       semanticView: { viewType: 'canonical-semantic-view.v1' },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -440,6 +516,7 @@ describe('compiledPublicationGateService', () => {
         rules: [],
       },
       semanticView: { viewType: 'canonical-semantic-view.v1' },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -523,6 +600,7 @@ describe('compiledPublicationGateService', () => {
         viewType: 'canonical-semantic-view.v1',
         canonicalDigest: 'sha256:non-long-only',
       },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -908,6 +986,7 @@ describe('compiledPublicationGateService', () => {
           digest: 'sha256:canonical-short-only',
         },
       },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -1108,6 +1187,7 @@ describe('compiledPublicationGateService', () => {
         viewType: 'canonical-semantic-view.v1',
         canonicalDigest: 'sha256:outside-band-present',
       },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -1236,6 +1316,7 @@ describe('compiledPublicationGateService', () => {
         viewType: 'canonical-semantic-view.v1',
         canonicalDigest: 'sha256:bollinger',
       },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -1312,6 +1393,7 @@ describe('compiledPublicationGateService', () => {
         viewType: 'canonical-semantic-view.v1',
         canonicalDigest: 'sha256:failed',
       },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: {
         version: 3,
         status: 'confirmed' as const,
@@ -1360,7 +1442,7 @@ function createIrFixture(): CanonicalStrategyIrV1 {
     irVersion: 'csi.v1',
     source: {
       graphVersion: 18,
-      graphDigest: 'sha256:11aa',
+      graphDigest: hashFixtureSemanticPredicateGraph(),
       specHash: 'sha256:11aa',
     },
     market: {
@@ -1429,6 +1511,20 @@ function createIrFixture(): CanonicalStrategyIrV1 {
       allowPartialFill: false,
     },
   }
+}
+
+function createSemanticPredicateGraphFixture(): Record<string, unknown> {
+  return {
+    version: 2,
+    nodes: [],
+    edges: [],
+  }
+}
+
+function hashFixtureSemanticPredicateGraph(): `sha256:${string}` {
+  return `sha256:${createHash('sha256')
+    .update(canonicalSerialize(createSemanticPredicateGraphFixture()))
+    .digest('hex')}`
 }
 
 function createShortOnlyIrFixture(): CanonicalStrategyIrV1 {
