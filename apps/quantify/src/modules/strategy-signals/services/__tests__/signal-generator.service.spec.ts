@@ -738,6 +738,47 @@ describe('signalGeneratorService coordinator behavior', () => {
     expect(loadMultiLegDataBatch).not.toHaveBeenCalled()
   })
 
+  it('fails multi-leg generation when primary symbol conflicts with effective market type', async () => {
+    const { service, generatorRepository } = createService({
+      generatorRepository: {
+        findSymbolByCode: jest.fn(),
+        findSymbolByCodeForMarket: jest.fn().mockImplementation(() => {
+          throw new DomainException('market.symbol_unknown_suffix', {
+            code: ErrorCode.MARKET_INVALID_SYMBOL,
+            args: { symbol: 'BTC-USDT-SWAP' },
+          })
+        }),
+      },
+    })
+    const handleStrategyFailure = jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+    const loadMultiLegDataBatch = jest.spyOn(service as any, 'loadMultiLegDataBatch')
+
+    await (service as any).generateSignalForMultiLegStrategy(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {
+          marketType: 'spot',
+        },
+      },
+      {
+        id: 'template-1',
+        promptTemplate: 'Analyze market context',
+        script: 'return {}',
+        defaultParams: {},
+      },
+      { timeframe: '15m', cooldownMinutes: 15 },
+      { primary: ['15m'] },
+      [{ id: 'primary', symbol: 'BTC-USDT-SWAP', role: 'primary' }],
+      { id: 'primary', symbol: 'BTC-USDT-SWAP', role: 'primary' },
+      config,
+    )
+
+    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTC-USDT-SWAP', 'spot')
+    expect(handleStrategyFailure).toHaveBeenCalledWith('instance-1', config)
+    expect(loadMultiLegDataBatch).not.toHaveBeenCalled()
+  })
+
   it('keeps legacy multi-leg symbol lookup when effective params omit market type', async () => {
     const { service, generatorRepository } = createService({
       generatorRepository: {
