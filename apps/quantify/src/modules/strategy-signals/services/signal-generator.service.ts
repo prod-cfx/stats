@@ -1362,7 +1362,8 @@ export class SignalGeneratorService {
       return
     }
 
-    const symbol = await this.generatorRepository.findSymbolByCode(symbolCode)
+    const marketType = this.readRuntimeMarketType(params.marketType)
+    const symbol = await this.findRuntimeSymbol(symbolCode, marketType)
     if (!symbol) {
       this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
       await this.handleStrategyFailure(instance.id, config)
@@ -1498,6 +1499,7 @@ export class SignalGeneratorService {
         runtimeSignalOutcome.payload,
         {
           ...runtimeProvenance,
+          ...(marketType ? { marketType } : {}),
           ...(activeRuntimeState
             ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
             : {}),
@@ -1745,6 +1747,13 @@ export class SignalGeneratorService {
     return normalized.length > 0 ? normalized : null
   }
 
+  private readRuntimeMarketType(value: unknown): 'spot' | 'perp' | null {
+    const raw = this.readString(value)?.trim().toLowerCase()
+    if (raw === 'spot') return 'spot'
+    if (raw === 'perp' || raw === 'swap' || raw === 'perpetual' || raw === 'future') return 'perp'
+    return null
+  }
+
   private readRuntimeExecutionSemantics(snapshot: unknown): RuntimeExecutionSemantic[] {
     const root = this.asRecord(snapshot)
     const astSnapshot = this.asRecord(root?.astSnapshot)
@@ -1847,6 +1856,12 @@ export class SignalGeneratorService {
     instance: StrategyInstance | StrategyInstanceWithTemplate,
   ): Record<string, unknown> | null {
     return this.decisionStage.buildEffectiveParams(strategy, instance)
+  }
+
+  private findRuntimeSymbol(symbolCode: string, marketType: 'spot' | 'perp' | null) {
+    return marketType
+      ? this.generatorRepository.findSymbolByCodeForMarket(symbolCode, marketType)
+      : this.generatorRepository.findSymbolByCode(symbolCode)
   }
 
   private async loadMultiLegDataBatch(

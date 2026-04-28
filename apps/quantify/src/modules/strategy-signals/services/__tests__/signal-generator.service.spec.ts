@@ -262,6 +262,102 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
   })
 
+  it('uses market-aware symbol lookup for perp published snapshot runtime execution', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
+        strategyConfig: { symbol: 'BTCUSDT', baseTimeframe: '15m', marketType: 'perp' },
+        lockedParams: {},
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-spot-1', code: 'BTCUSDT' }),
+        findSymbolByCodeForMarket: jest.fn().mockResolvedValue({
+          id: 'symbol-perp-1',
+          code: 'BTCUSDT:PERP',
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        }),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest.spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome').mockResolvedValue({
+      kind: 'signal',
+      payload: {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 88,
+        entryPrice: 100,
+        stopLoss: 90,
+        takeProfit: 110,
+        rawResponse: '{"direction":"BUY"}',
+      },
+    })
+    const createSignal = jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue({
+      created: true,
+      signalId: 'signal-1',
+    })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTCUSDT', 'perp')
+    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalledWith('BTCUSDT')
+    expect(createSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'instance-1' }),
+      expect.anything(),
+      expect.objectContaining({
+        symbol: expect.objectContaining({
+          id: 'symbol-perp-1',
+          code: 'BTCUSDT:PERP',
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Date),
+      expect.anything(),
+      expect.objectContaining({
+        executionContentSource: 'PUBLISHED_SNAPSHOT',
+        marketType: 'perp',
+      }),
+      false,
+      undefined,
+      undefined,
+    )
+  })
+
   it('marks a ready on_start snapshot semantic as running then consumed after a published snapshot signal is created', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
