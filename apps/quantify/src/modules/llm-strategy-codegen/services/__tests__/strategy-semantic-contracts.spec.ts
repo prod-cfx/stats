@@ -152,7 +152,7 @@ describe('strategySemanticContracts', () => {
     }).ok).toBe(true)
 
     expect(validateSemanticPositionContract({
-      sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+      sizing: { kind: 'base', value: 0.001, asset: 'BASE' },
       mode: 'fixed_qty',
       value: 0.001,
       positionMode: 'long_only',
@@ -202,6 +202,24 @@ describe('strategySemanticContracts', () => {
       value: -10,
       positionMode: 'long_only',
     })).toEqual({ ok: false, reason: 'invalid_position_value' })
+  })
+
+  it('rejects position contracts whose quote asset conflicts with legacy fixed quote', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'quote', value: 10, asset: 'USDC' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })).toEqual({ ok: false, reason: 'position_sizing_legacy_mismatch' })
+  })
+
+  it('rejects position contracts whose base asset conflicts with legacy fixed quantity placeholder', () => {
+    expect(validateSemanticPositionContract({
+      sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+      mode: 'fixed_qty',
+      value: 0.001,
+      positionMode: 'long_only',
+    })).toEqual({ ok: false, reason: 'position_sizing_legacy_mismatch' })
   })
 
   it('rejects malformed top-level semantic position contracts without throwing', () => {

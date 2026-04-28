@@ -223,9 +223,9 @@ export function validateSemanticPositionContract(position: unknown): SemanticCon
   if (!legacySizingResult.ok) return legacySizingResult
 
   if (position.sizing !== undefined && position.sizing !== null) {
-    const sizingResult = validatePositionSizingContract(position.sizing)
-    if (!sizingResult.ok) return sizingResult
-    if (!isEquivalentPositionSizing(position.sizing, legacySizing)) {
+    const explicitSizing = isSemanticPositionSizingContract(position.sizing) ? position.sizing : null
+    if (!explicitSizing) return validatePositionSizingContract(position.sizing)
+    if (!isEquivalentPositionSizing(explicitSizing, legacySizing)) {
       return invalid('position_sizing_legacy_mismatch')
     }
   }
@@ -289,7 +289,20 @@ function isEquivalentPositionSizing(
   sizing: SemanticPositionSizingContract,
   legacySizing: SemanticPositionSizingContract,
 ): boolean {
-  return sizing.kind === legacySizing.kind && isEquivalentPositionSizingValue(sizing.value, legacySizing.value)
+  if (sizing.kind !== legacySizing.kind) return false
+  if (!isEquivalentPositionSizingValue(sizing.value, legacySizing.value)) return false
+
+  if (sizing.kind === 'ratio') {
+    return legacySizing.kind === 'ratio' && sizing.unit === legacySizing.unit
+  }
+  if (sizing.kind === 'quote') {
+    return legacySizing.kind === 'quote' && sizing.asset === legacySizing.asset
+  }
+  if (sizing.kind === 'base') {
+    return legacySizing.kind === 'base' && sizing.asset === legacySizing.asset
+  }
+
+  return false
 }
 
 function isEquivalentPositionSizingValue(left: number, right: number): boolean {
