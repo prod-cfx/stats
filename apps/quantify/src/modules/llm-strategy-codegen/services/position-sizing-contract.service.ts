@@ -62,11 +62,11 @@ export class PositionSizingContractService {
 
   private parseRatio(text: string, messageIndex?: number): ParsedPositionSizingContract | null {
     const normalizedPercentText = text.replace(/％/gu, '%')
-    const percentPattern = /(?:百分之?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)/gu
+    const percentPattern = /(?:百分之?\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)|(\d+(?:\.\d+)?)\s*%)/gu
     for (const percentMatch of normalizedPercentText.matchAll(percentPattern)) {
       if (!this.hasLocalRatioSizingContext(normalizedPercentText, percentMatch.index, percentMatch[0].length)) continue
 
-      const percent = Number(percentMatch[1] ?? percentMatch[2])
+      const percent = this.parsePercentNumber(percentMatch[1] ?? percentMatch[2])
       if (!Number.isFinite(percent) || percent <= 0 || percent > 100) continue
 
       return {
@@ -93,6 +93,23 @@ export class PositionSizingContractService {
     if (upper === 'USDT' || upper === 'U') return 'USDT'
     if (upper === 'USDC') return 'USDC'
     return 'USD'
+  }
+
+  private parsePercentNumber(valueText: string | undefined): number {
+    if (!valueText) {
+      return Number.NaN
+    }
+
+    const numericValue = Number(valueText)
+    if (Number.isFinite(numericValue)) {
+      return numericValue
+    }
+
+    if (valueText === '十') {
+      return 10
+    }
+
+    return Number.NaN
   }
 
   private splitClauses(text: string): string[] {
