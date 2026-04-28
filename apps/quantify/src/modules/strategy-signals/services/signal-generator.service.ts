@@ -1359,8 +1359,49 @@ export class SignalGeneratorService {
       return
     }
 
+    const hasRuntimeMarketTypeParam = Object.hasOwn(params, 'marketType')
     const marketType = this.readRuntimeMarketType(params.marketType)
-    const symbol = await this.findRuntimeSymbol(symbolCode, marketType)
+    if (hasRuntimeMarketTypeParam && !marketType) {
+      this.logger.warn(
+        `Published snapshot runtime marketType invalid for instance ${instance.id}: ${String(params.marketType)}`,
+      )
+      await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_RUNTIME_MARKET_TYPE_INVALID',
+        failureCode: 'SNAPSHOT_RUNTIME_MARKET_TYPE_INVALID',
+      })
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode,
+        success: false,
+        reason: 'SNAPSHOT_RUNTIME_MARKET_TYPE_INVALID',
+        runtimePhase: 'binding',
+      })
+      return
+    }
+
+    let symbol: Symbol | null
+    try {
+      symbol = await this.findRuntimeSymbol(symbolCode, marketType)
+    } catch (error) {
+      if (!this.isMarketInvalidSymbolError(error)) throw error
+      this.logger.warn(
+        `Published snapshot runtime symbol market mismatch for instance ${instance.id}: ${symbolCode}`,
+      )
+      await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+        failureReason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+        failureCode: 'SYMBOL_MARKET_TYPE_MISMATCH',
+      })
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode,
+        success: false,
+        reason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+        runtimePhase: 'binding',
+      })
+      return
+    }
     if (!symbol) {
       this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
       await this.handleStrategyFailure(instance.id, config)
@@ -1759,6 +1800,10 @@ export class SignalGeneratorService {
     return 'spot'
   }
 
+  private isMarketInvalidSymbolError(error: unknown): boolean {
+    return error instanceof DomainException && error.code === ErrorCode.MARKET_INVALID_SYMBOL
+  }
+
   private readRuntimeExecutionSemantics(snapshot: unknown): RuntimeExecutionSemantic[] {
     const root = this.asRecord(snapshot)
     const astSnapshot = this.asRecord(root?.astSnapshot)
@@ -1892,13 +1937,38 @@ export class SignalGeneratorService {
     const runtimeMarketType = this.readRuntimeMarketType(
       effectiveParams?.marketType,
     )
+    if (effectiveParams && Object.hasOwn(effectiveParams, 'marketType') && !runtimeMarketType) {
+      this.logger.warn(`Invalid marketType for multi-leg strategy ${strategy.id}: ${String(effectiveParams.marketType)}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'RUNTIME_MARKET_TYPE_INVALID',
+      })
+      return
+    }
     const effectiveRuntimeProvenance: Prisma.JsonObject = {
       ...runtimeProvenance,
       ...(runtimeMarketType ? { marketType: runtimeMarketType } : {}),
     }
 
     // 1. 查找 primary leg 的 symbol
-    const primarySymbol = await this.findRuntimeSymbol(primaryLeg.symbol, runtimeMarketType)
+    let primarySymbol: Symbol | null
+    try {
+      primarySymbol = await this.findRuntimeSymbol(primaryLeg.symbol, runtimeMarketType)
+    } catch (error) {
+      if (!this.isMarketInvalidSymbolError(error)) throw error
+      this.logger.warn(`Symbol ${primaryLeg.symbol} market type mismatch for strategy ${strategy.id}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+      })
+      return
+    }
 
     if (!primarySymbol) {
       this.logger.warn(`Symbol ${primaryLeg.symbol} not found for strategy ${strategy.id}`)
@@ -1912,7 +1982,21 @@ export class SignalGeneratorService {
     }
 
     // 2. 批量加载所有 leg 的数据（性能优化）
-    const multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements, runtimeMarketType)
+    let multiLegData: Record<string, Record<string, any>>
+    try {
+      multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements, runtimeMarketType)
+    } catch (error) {
+      if (!this.isMarketInvalidSymbolError(error)) throw error
+      this.logger.warn(`One or more leg symbols have market type mismatch for strategy ${strategy.id}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+      })
+      return
+    }
 
     // 2.1 校验数据完整性：确保所有 dataRequirements 中定义的数据都已加载
     for (const leg of legs) {

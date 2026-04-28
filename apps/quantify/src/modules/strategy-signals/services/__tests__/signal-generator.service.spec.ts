@@ -1,5 +1,7 @@
 import type { StrategySignalsRuntimeConfig } from '../../types/strategy-signals-config.type'
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import { ErrorCode } from '@ai/shared'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { SignalGeneratorService } from '../signal-generator.service'
@@ -360,6 +362,104 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
   })
 
+  it('fails published snapshot binding when runtime market type is invalid', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'banana' },
+        lockedParams: {},
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn(),
+        findSymbolByCodeForMarket: jest.fn(),
+      },
+    })
+    const handleStrategyFailure = jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(handleStrategyFailure).toHaveBeenCalledWith('instance-1', config)
+    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalled()
+    expect(generatorRepository.findSymbolByCodeForMarket).not.toHaveBeenCalled()
+  })
+
+  it('fails published snapshot binding when symbol conflicts with runtime market type', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        paramsSnapshot: { symbol: 'BTC-USDT-SWAP', timeframe: '15m', marketType: 'spot' },
+        lockedParams: {},
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn(),
+        findSymbolByCodeForMarket: jest.fn().mockImplementation(() => {
+          throw new DomainException('market.symbol_unknown_suffix', {
+            code: ErrorCode.MARKET_INVALID_SYMBOL,
+            args: { symbol: 'BTC-USDT-SWAP' },
+          })
+        }),
+      },
+    })
+    const handleStrategyFailure = jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+    const loadLatestBar = jest.spyOn(service as any, 'loadLatestBar')
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTC-USDT-SWAP', 'spot')
+    expect(handleStrategyFailure).toHaveBeenCalledWith('instance-1', config)
+    expect(loadLatestBar).not.toHaveBeenCalled()
+  })
+
   it('passes perp market type into published runtime decision context from symbol instrument type', async () => {
     const { service } = createService()
     jest.spyOn(service as any, 'loadRecentBars').mockResolvedValue([{
@@ -599,6 +699,43 @@ describe('signalGeneratorService coordinator behavior', () => {
       expect.objectContaining({ marketType: 'perp' }),
       true,
     )
+  })
+
+  it('fails multi-leg generation when effective market type is invalid', async () => {
+    const { service, generatorRepository } = createService({
+      generatorRepository: {
+        findSymbolByCode: jest.fn(),
+        findSymbolByCodeForMarket: jest.fn(),
+      },
+    })
+    const handleStrategyFailure = jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+    const loadMultiLegDataBatch = jest.spyOn(service as any, 'loadMultiLegDataBatch')
+
+    await (service as any).generateSignalForMultiLegStrategy(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {
+          marketType: 'banana',
+        },
+      },
+      {
+        id: 'template-1',
+        promptTemplate: 'Analyze market context',
+        script: 'return {}',
+        defaultParams: {},
+      },
+      { timeframe: '15m', cooldownMinutes: 15 },
+      { primary: ['15m'] },
+      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      { id: 'primary', symbol: 'BTCUSDT', role: 'primary' },
+      config,
+    )
+
+    expect(handleStrategyFailure).toHaveBeenCalledWith('instance-1', config)
+    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalled()
+    expect(generatorRepository.findSymbolByCodeForMarket).not.toHaveBeenCalled()
+    expect(loadMultiLegDataBatch).not.toHaveBeenCalled()
   })
 
   it('keeps legacy multi-leg symbol lookup when effective params omit market type', async () => {
