@@ -22,6 +22,17 @@ export class CanonicalStrategyIrValidatorService {
         throw new Error('codegen.ir_rule_predicate_missing')
       }
     }
+
+    for (const guard of ir.riskPolicy.guards) {
+      if (
+        guard.appliesTo !== undefined
+        && guard.appliesTo !== 'long'
+        && guard.appliesTo !== 'short'
+        && guard.appliesTo !== 'both'
+      ) {
+        throw new Error('codegen.ir_guard_applies_to_invalid')
+      }
+    }
   }
 
   private assertPredicateTimeframes(
