@@ -1171,6 +1171,11 @@ describe('codegenPublicationGenerationStage', () => {
       exchange: 'okx',
       positionPct: 10,
     }))
+    expect(artifacts.strategySummary.market).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+    }))
   })
 
   it('ignores non-locked semantic context values when reading publication context', () => {

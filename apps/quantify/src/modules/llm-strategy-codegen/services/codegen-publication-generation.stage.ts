@@ -145,7 +145,10 @@ export class CodegenPublicationGenerationStage {
       profile: semanticConsistency.specProfile,
       market: {
         symbol: canonicalSpec.market.symbol ?? undefined,
-        timeframe: canonicalSpec.market.timeframe ?? undefined,
+        timeframe: canonicalSpec.market.defaultTimeframe
+          ?? canonicalSpec.market.timeframe
+          ?? canonicalSpec.dataRequirements?.requiredTimeframes?.[0]
+          ?? undefined,
         marketType: canonicalSpec.market.marketType,
       },
     })
