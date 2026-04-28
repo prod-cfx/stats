@@ -14,6 +14,17 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('does not treat trigger quote prices as position sizing in seed text', () => {
+    const patch = service.extract('BTC 跌到 60000 USDT 用 10u 开多')
+
+    expect(patch.position).toEqual({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })
+  })
+
   it('extracts position sizing base contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，每次买 0.001 BTC')
 

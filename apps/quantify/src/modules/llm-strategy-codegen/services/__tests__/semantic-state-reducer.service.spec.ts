@@ -787,6 +787,62 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it.each(['止损 5%', '资金费率达到 0.1% 开多', '价格上涨 1% 时开多'])(
+    'keeps position sizing open when clarification answer is semantic trigger/risk percentage: %s',
+    (answer) => {
+      const next = service.applyClarificationAnswer({
+        currentState: {
+          version: 1,
+          families: ['single-leg'],
+          triggers: [],
+          actions: [],
+          risk: [],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0,
+            positionMode: 'long_only',
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'position.sizing',
+                fieldPath: 'position.value',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认每次使用多少仓位。',
+                affectsExecution: true,
+              },
+            ],
+          },
+          contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+          normalizationNotes: [],
+          updatedAt: '2026-04-16T10:00:00.000Z',
+        },
+        targetSlotKey: 'position.sizing',
+        targetSlotId: buildSemanticSlotId({
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+        }),
+        answer,
+        messageIndex: 20,
+      })
+
+      expect(next.position).toEqual(expect.objectContaining({
+        mode: 'fixed_ratio',
+        value: 0,
+        status: 'open',
+        source: 'derived',
+      }))
+      expect(next.position).not.toHaveProperty('sizing')
+      expect(next.position).not.toHaveProperty('evidence')
+      expect(next.position?.openSlots?.[0]).toEqual(expect.objectContaining({
+        status: 'open',
+      }))
+      expect(next.position?.openSlots?.[0]).not.toHaveProperty('value')
+      expect(next.position?.openSlots?.[0]).not.toHaveProperty('evidence')
+    },
+  )
+
   it('turns a protective risk clarification answer into a locked stop-loss risk atom', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

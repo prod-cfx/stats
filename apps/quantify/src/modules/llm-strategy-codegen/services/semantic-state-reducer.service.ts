@@ -369,6 +369,10 @@ export class SemanticStateReducerService {
       }
     }
 
+    if (this.looksLikeNonSizingPercentAnswer(answerText)) {
+      return null
+    }
+
     const percentValue = this.parsePercentAnswer(answerText)
     if (percentValue === null) {
       return null
@@ -402,6 +406,18 @@ export class SemanticStateReducerService {
     const percentText = answerText.replace(/％/gu, '%')
     const percentCandidates = percentText.match(/(?:百分之?\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*%)/gu) ?? []
     return percentCandidates.length > 1
+  }
+
+  private looksLikeNonSizingPercentAnswer(answerText: string): boolean {
+    if (!/(?:百分之?\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*[%％])/u.test(answerText)) {
+      return false
+    }
+
+    if (/(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)/u.test(answerText)) {
+      return false
+    }
+
+    return /(?:止盈|止损|盈利|亏损|收益|损失|风险|回撤|资金费率|funding|价格|收盘价|开盘价|最高价|最低价|上涨|下跌|涨|跌|突破|跌破|高于|低于|站上)/iu.test(answerText)
   }
 
   private isValidPercentValue(value: number): boolean {

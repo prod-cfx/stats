@@ -23,6 +23,7 @@ describe('PositionSizingContractService', () => {
     ['投入 10 美元', { kind: 'quote', value: 10, asset: 'USD' }],
     ['每次 10 USDC', { kind: 'quote', value: 10, asset: 'USDC' }],
     ['每次 10 usdc', { kind: 'quote', value: 10, asset: 'USDC' }],
+    ['BTC 跌到 60000 USDT 用 10u 开多', { kind: 'quote', value: 10, asset: 'USDT' }],
   ])('parses quote sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })
