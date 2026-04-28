@@ -8,8 +8,13 @@ export const normalizeExactCode = (input: string): string => input.trim().toUppe
 
 export const extractRawSymbol = (input: string): string => normalizeExactCode(input).split(':')[0] ?? ''
 
+const normalizeSymbolRoot = (input: string): string =>
+  normalizeExactCode(input)
+    .replace(/-SWAP$/, '')
+    .replace(/[-/_]/g, '')
+
 export const toSymbolCode = (raw: string, market: SymbolMarketType): string =>
-  `${extractRawSymbol(raw)}:${market}`
+  `${normalizeSymbolRoot(extractRawSymbol(raw))}:${market}`
 
 export const normalizeRequestedCode = (input: string): string => {
   const normalized = normalizeExactCode(input)
@@ -50,7 +55,8 @@ export const normalizeRequestedCodeForMarket = (input: string, marketType: Runti
     })
   }
 
-  return normalized
+  const [rawSymbol] = parts
+  return `${normalizeSymbolRoot(rawSymbol ?? '')}:${actualMarket}`
 }
 
 export const instrumentTypeToMarket = (instrumentType?: string): SymbolMarketType => {

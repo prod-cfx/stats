@@ -894,10 +894,7 @@ export class SignalGeneratorService {
         resolved.decision,
         {
           exchange: ((symbol as unknown as { exchange?: string }).exchange ?? 'unknown'),
-          marketType:
-            ((symbol as unknown as { marketType?: string }).marketType === 'perp')
-              ? 'perp'
-              : 'spot',
+          marketType: this.readSymbolRuntimeMarketType(symbol),
           symbol: symbol.code,
           timeframe,
           referencePrice,
@@ -1757,6 +1754,11 @@ export class SignalGeneratorService {
     return null
   }
 
+  private readSymbolRuntimeMarketType(symbol: Pick<Symbol, 'instrumentType'>): 'spot' | 'perp' {
+    if (symbol.instrumentType === 'PERPETUAL' || symbol.instrumentType === 'FUTURE') return 'perp'
+    return 'spot'
+  }
+
   private readRuntimeExecutionSemantics(snapshot: unknown): RuntimeExecutionSemantic[] {
     const root = this.asRecord(snapshot)
     const astSnapshot = this.asRecord(root?.astSnapshot)
@@ -1890,6 +1892,10 @@ export class SignalGeneratorService {
     const runtimeMarketType = this.readRuntimeMarketType(
       effectiveParams?.marketType,
     )
+    const effectiveRuntimeProvenance: Prisma.JsonObject = {
+      ...runtimeProvenance,
+      ...(runtimeMarketType ? { marketType: runtimeMarketType } : {}),
+    }
 
     // 1. 查找 primary leg 的 symbol
     const primarySymbol = await this.findRuntimeSymbol(primaryLeg.symbol, runtimeMarketType)
@@ -2069,7 +2075,7 @@ export class SignalGeneratorService {
         promptData,
         directSignal.payload,
         config,
-        runtimeProvenance,
+        effectiveRuntimeProvenance,
         options.skipCooldown ?? false,
       )
 
@@ -2176,7 +2182,7 @@ export class SignalGeneratorService {
         promptData,
         aiPayload,
         config,
-        runtimeProvenance,
+        effectiveRuntimeProvenance,
         options.skipCooldown ?? false,
       )
 
@@ -2222,7 +2228,7 @@ export class SignalGeneratorService {
           promptData,
           fallback,
           config,
-          runtimeProvenance,
+          effectiveRuntimeProvenance,
           options.skipCooldown ?? false,
         )
         if (signalResult.created && signalResult.signalId) {

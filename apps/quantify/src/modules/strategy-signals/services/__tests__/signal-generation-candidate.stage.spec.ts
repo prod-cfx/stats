@@ -67,12 +67,12 @@ describe('signalGenerationCandidateStage', () => {
     )
 
     await stage.loadMultiLegDataBatch(
-      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      [{ id: 'primary', symbol: 'BTC-USDT-SWAP', role: 'primary' }],
       { primary: ['15m'] },
       'perp',
     )
 
-    expect(repository.findSymbolsByCodeForMarket).toHaveBeenCalledWith(['BTCUSDT'], 'perp')
+    expect(repository.findSymbolsByCodeForMarket).toHaveBeenCalledWith(['BTC-USDT-SWAP'], 'perp')
     expect(repository.findSymbolsByCode).not.toHaveBeenCalled()
     expect(marketDataReadGateway.getRecentBarsBySymbolId).toHaveBeenCalledWith(
       'symbol-perp-1',

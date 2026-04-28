@@ -270,8 +270,8 @@ describe('signalGeneratorService coordinator behavior', () => {
         strategyInstanceId: 'source-instance-1',
         strategyTemplateId: 'template-1',
         scriptSnapshot: 'return "snapshot-script"',
-        paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
-        strategyConfig: { symbol: 'BTCUSDT', baseTimeframe: '15m', marketType: 'perp' },
+        paramsSnapshot: { symbol: 'BTC-USDT-SWAP', timeframe: '15m', marketType: 'perp' },
+        strategyConfig: { symbol: 'BTC-USDT-SWAP', baseTimeframe: '15m', marketType: 'perp' },
         lockedParams: {},
       }),
     }
@@ -333,15 +333,15 @@ describe('signalGeneratorService coordinator behavior', () => {
       config,
     )
 
-    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTCUSDT', 'perp')
-    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalledWith('BTCUSDT')
+    expect(generatorRepository.findSymbolByCodeForMarket).toHaveBeenCalledWith('BTC-USDT-SWAP', 'perp')
+    expect(generatorRepository.findSymbolByCode).not.toHaveBeenCalledWith('BTC-USDT-SWAP')
     expect(createSignal).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'instance-1' }),
       expect.anything(),
       expect.objectContaining({
         symbol: expect.objectContaining({
           id: 'symbol-perp-1',
-          code: 'BTCUSDT',
+          code: 'BTC-USDT-SWAP',
           exchange: 'OKX',
           instrumentType: 'PERPETUAL',
         }),
@@ -357,6 +357,71 @@ describe('signalGeneratorService coordinator behavior', () => {
       false,
       undefined,
       undefined,
+    )
+  })
+
+  it('passes perp market type into published runtime decision context from symbol instrument type', async () => {
+    const { service } = createService()
+    jest.spyOn(service as any, 'loadRecentBars').mockResolvedValue([{
+      open: 99,
+      high: 101,
+      low: 98,
+      close: 100,
+      volume: 10,
+      timestamp: 1_775_000_000_000,
+      isFinal: true,
+    }])
+    jest.spyOn(service as any, 'buildCompiledRuntimeAdapter').mockReturnValue({
+      adapter: {
+        onBar: jest.fn().mockReturnValue({
+          action: 'OPEN_SHORT',
+          size: { mode: 'RATIO', value: 0.1 },
+          reason: 'compiled.short',
+        }),
+      },
+      parseError: null,
+    })
+    const buildOutcome = jest
+      .spyOn((service as any).decisionStage, 'buildPublishedRuntimeSignalOutcomeFromDecision')
+      .mockReturnValue({
+        kind: 'noop',
+        reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+        reason: 'test',
+      })
+
+    await (service as any).generatePublishedSnapshotRuntimeSignalOutcome(
+      {
+        id: 'instance-1',
+        params: { marketType: 'perp' },
+      },
+      {
+        id: 'template-1',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'compiled strategy script',
+      },
+      {
+        id: 'symbol-perp-1',
+        code: 'BTCUSDT:PERP',
+        exchange: 'OKX',
+        instrumentType: 'PERPETUAL',
+      },
+      '15m',
+      config,
+      100,
+    )
+
+    expect(buildOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'OPEN_SHORT',
+      }),
+      expect.objectContaining({
+        exchange: 'OKX',
+        marketType: 'perp',
+        symbol: 'BTCUSDT:PERP',
+        timeframe: '15m',
+        referencePrice: 100,
+      }),
+      config,
     )
   })
 
@@ -448,8 +513,91 @@ describe('signalGeneratorService coordinator behavior', () => {
       expect.anything(),
       expect.anything(),
       expect.anything(),
-      expect.anything(),
+      expect.objectContaining({ marketType: 'spot' }),
       false,
+    )
+  })
+
+  it('preserves effective market type on multi-leg manual fallback signals', async () => {
+    const { service } = createService({
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-legacy-1', code: 'BTCUSDT' }),
+        findSymbolByCodeForMarket: jest.fn().mockResolvedValue({
+          id: 'symbol-perp-1',
+          code: 'BTCUSDT:PERP',
+        }),
+      },
+    })
+    jest.spyOn(service as any, 'loadMultiLegDataBatch').mockResolvedValue({
+      primary: {
+        '15m': {
+          bars: [
+            {
+              open: 100,
+              high: 105,
+              low: 95,
+              close: 102,
+              volume: 10,
+              timestamp: 1776675600000,
+            },
+          ],
+          indicators: {},
+          currentPrice: 102,
+        },
+      },
+    })
+    jest.spyOn((service as any).decisionStage, 'resolveMultiLegScriptPromptData').mockResolvedValue({
+      ok: true,
+      promptData: {},
+    })
+    jest.spyOn(service as any, 'buildPublishedCodegenSignalPayload').mockReturnValue(null)
+    jest.spyOn(service as any, 'generateSignalWithAi').mockResolvedValue(null)
+    jest.spyOn(service as any, 'buildManualFallbackSignal').mockReturnValue({
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      confidence: 50,
+      entryPrice: 102,
+      rawResponse: '{"direction":"BUY"}',
+    })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+    const createMultiLegSignal = jest.spyOn(service as any, 'createMultiLegSignal').mockResolvedValue({
+      created: true,
+      signalId: 'signal-1',
+    })
+
+    await (service as any).generateSignalForMultiLegStrategy(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {
+          marketType: 'perp',
+        },
+      },
+      {
+        id: 'template-1',
+        name: 'fallback template',
+        promptTemplate: 'Analyze market context',
+        script: 'return {}',
+        defaultParams: {},
+      },
+      { timeframe: '15m', cooldownMinutes: 15 },
+      { primary: ['15m'] },
+      [{ id: 'primary', symbol: 'BTCUSDT', role: 'primary' }],
+      { id: 'primary', symbol: 'BTCUSDT', role: 'primary' },
+      config,
+      { skipCooldown: true },
+    )
+
+    expect(createMultiLegSignal).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ id: 'symbol-perp-1' }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ marketType: 'perp' }),
+      true,
     )
   })
 

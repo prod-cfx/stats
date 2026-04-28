@@ -89,6 +89,30 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     })
   })
 
+  it('normalizes OKX native instrument ids to canonical codes for market-aware lookup', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    await repo.findSymbolByCodeForMarket('BTC-USDT-SWAP', 'perp')
+    await repo.findSymbolByCodeForMarket('BTC-USDT', 'spot')
+
+    expect(findUnique).toHaveBeenNthCalledWith(1, {
+      where: { code: 'BTCUSDT:PERP' },
+    })
+    expect(findUnique).toHaveBeenNthCalledWith(2, {
+      where: { code: 'BTCUSDT:SPOT' },
+    })
+  })
+
   it('normalizes raw symbol codes by explicit market type when querying multiple symbols', async () => {
     const findMany = jest.fn().mockResolvedValue([])
     const findUnique = jest.fn().mockResolvedValue(null)
@@ -123,6 +147,7 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     } as any)
 
     expect(() => repo.findSymbolByCodeForMarket('BTCUSDT:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
+    expect(() => repo.findSymbolByCodeForMarket('BTC-USDT-SWAP:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
     expect(() => repo.findSymbolsByCodeForMarket(['BTCUSDT:PERP'], 'spot')).toThrow('market.symbol_unknown_suffix')
     expect(findUnique).not.toHaveBeenCalled()
     expect(findMany).not.toHaveBeenCalled()
