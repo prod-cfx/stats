@@ -18,6 +18,7 @@ describe('PositionSizingContractService', () => {
   it.each([
     ['固定使用 10 USDT', { kind: 'quote', value: 10, asset: 'USDT' }],
     ['固定使用 10 USDT，止损 5%', { kind: 'quote', value: 10, asset: 'USDT' }],
+    ['固定使用 10 USDT 止损 5%', { kind: 'quote', value: 10, asset: 'USDT' }],
     ['每次 10u', { kind: 'quote', value: 10, asset: 'USDT' }],
     ['单笔 10 刀', { kind: 'quote', value: 10, asset: 'USD' }],
     ['投入 10 美元', { kind: 'quote', value: 10, asset: 'USD' }],
@@ -33,6 +34,7 @@ describe('PositionSizingContractService', () => {
     ['固定 0.01 ETH', { kind: 'base', value: 0.01, asset: 'ETH' }],
     ['单笔 2 SOL', { kind: 'base', value: 2, asset: 'SOL' }],
     ['每次买 10 UNI', { kind: 'base', value: 10, asset: 'UNI' }],
+    ['每次买 0.001 BTC 止损 5%', { kind: 'base', value: 0.001, asset: 'BTC' }],
   ])('parses base sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })

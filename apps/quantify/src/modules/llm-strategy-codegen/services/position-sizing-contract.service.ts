@@ -14,8 +14,6 @@ export class PositionSizingContractService {
     if (!normalized) return null
 
     for (const clause of this.splitClauses(normalized)) {
-      if (this.looksLikeRiskSizing(clause)) continue
-
       const parsed = this.parseRatio(clause, messageIndex)
         ?? this.parseQuote(clause, messageIndex)
         ?? this.parseBase(clause, messageIndex)
@@ -124,9 +122,5 @@ export class PositionSizingContractService {
 
   private hasBaseSizingContext(text: string): boolean {
     return /(?:仓位|资金|固定|单笔|每次|每笔|每单|使用|投入|用|买)/u.test(text)
-  }
-
-  private looksLikeRiskSizing(text: string): boolean {
-    return /(?:止盈|止损|盈利|亏损|收益|损失|风险|风险额|最大风险|单笔风险|max\s*risk|stop\s*loss|take\s*profit)/iu.test(text)
   }
 }
