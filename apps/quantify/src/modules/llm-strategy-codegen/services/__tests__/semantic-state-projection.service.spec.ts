@@ -528,10 +528,10 @@ describe('SemanticStateProjectionService', () => {
         openSlots: [
           {
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
             status: 'open',
             priority: 'risk',
-            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             affectsExecution: true,
           },
         ],
@@ -553,7 +553,7 @@ describe('SemanticStateProjectionService', () => {
       updatedAt: '2026-04-21T00:00:00.000Z',
     })
 
-    expect(result.nextQuestion).toBe('请确认单笔仓位百分比（例如 10%）。')
+    expect(result.nextQuestion).toBe('请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。')
   })
 
   it('surfaces an open position sizing slot before an open risk slot', () => {
@@ -600,10 +600,10 @@ describe('SemanticStateProjectionService', () => {
         openSlots: [
           {
             slotKey: 'position.sizing',
-            fieldPath: 'position.value',
+            fieldPath: 'position.sizing',
             status: 'open',
             priority: 'risk',
-            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
             affectsExecution: true,
           },
         ],
@@ -625,7 +625,7 @@ describe('SemanticStateProjectionService', () => {
       updatedAt: '2026-04-21T00:00:00.000Z',
     })
 
-    expect(result.nextQuestion).toBe('请确认单笔仓位百分比（例如 10%）。')
+    expect(result.nextQuestion).toBe('请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。')
   })
 
   it('builds deterministic MA conversation view with execution context and inferred stop-loss basis', () => {
@@ -1320,5 +1320,69 @@ describe('SemanticStateProjectionService', () => {
 
     expect(view.positionSummary).toBe('仓位：10 USDT')
     expect(view.hasDeterministicSemantics).toBe(true)
+  })
+
+  describe('position sizing contract', () => {
+    const buildView = (position: SemanticState['position']) => service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-28T00:00:00.000Z',
+    })
+
+    it('formats locked ratio sizing contract deterministically', () => {
+      const view = buildView({
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+
+      expect(view.positionSummary).toBe('仓位：10%')
+      expect(view.hasDeterministicSemantics).toBe(true)
+    })
+
+    it('formats locked quote sizing contract deterministically', () => {
+      const view = buildView({
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+
+      expect(view.positionSummary).toBe('仓位：10 USDT')
+      expect(view.hasDeterministicSemantics).toBe(true)
+    })
+
+    it('formats locked base sizing contract deterministically', () => {
+      const view = buildView({
+        sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+        mode: 'fixed_qty',
+        value: 0.001,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+
+      expect(view.positionSummary).toBe('仓位：0.001 BTC')
+      expect(view.hasDeterministicSemantics).toBe(true)
+    })
   })
 })

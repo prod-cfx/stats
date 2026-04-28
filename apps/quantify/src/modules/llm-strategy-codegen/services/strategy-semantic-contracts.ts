@@ -256,9 +256,21 @@ function normalizeLegacyModeValuePositionSizing(position: unknown): SemanticPosi
     return { kind: 'quote', value: position.value, asset: 'USDT' }
   }
   if (position.mode === 'fixed_qty') {
-    return { kind: 'base', value: position.value, asset: 'BASE' }
+    return {
+      kind: 'base',
+      value: position.value,
+      asset: readExplicitPositionSizingAsset(position.sizing, 'base') ?? 'BASE',
+    }
   }
   return null
+}
+
+function readExplicitPositionSizingAsset(sizing: unknown, kind: 'quote' | 'base'): string | null {
+  if (!isRecord(sizing) || sizing.kind !== kind || typeof sizing.asset !== 'string') {
+    return null
+  }
+
+  return sizing.asset
 }
 
 function validatePositionSizingContract(sizing: unknown): SemanticContractValidationResult {

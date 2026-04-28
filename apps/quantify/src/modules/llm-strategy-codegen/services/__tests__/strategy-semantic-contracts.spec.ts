@@ -213,13 +213,13 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: false, reason: 'position_sizing_legacy_mismatch' })
   })
 
-  it('rejects position contracts whose base asset conflicts with legacy fixed quantity placeholder', () => {
+  it('accepts explicit base asset sizing over the legacy fixed quantity placeholder', () => {
     expect(validateSemanticPositionContract({
       sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
       mode: 'fixed_qty',
       value: 0.001,
       positionMode: 'long_only',
-    })).toEqual({ ok: false, reason: 'position_sizing_legacy_mismatch' })
+    })).toEqual({ ok: true })
   })
 
   it('rejects malformed top-level semantic position contracts without throwing', () => {
