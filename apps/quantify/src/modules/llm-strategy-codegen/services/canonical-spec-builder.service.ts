@@ -27,7 +27,7 @@ import {
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
-import { validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
+import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 interface StrategyLogicSnapshotInput {
   symbols?: unknown
@@ -528,17 +528,19 @@ export class CanonicalSpecBuilderService {
       return null
     }
 
-    if (position.mode === 'fixed_quote') {
-      return { mode: 'QUOTE', value: position.value }
-    }
-    if (position.mode === 'fixed_qty') {
-      return { mode: 'QTY', value: position.value }
-    }
-    if (position.mode === 'fixed_ratio') {
-      return { mode: 'RATIO', value: position.value }
+    const sizing = normalizeLegacyPositionSizing(position)
+    if (!sizing) {
+      return null
     }
 
-    return null
+    if (sizing.kind === 'quote') {
+      return { mode: 'QUOTE', value: sizing.value }
+    }
+    if (sizing.kind === 'base') {
+      return { mode: 'QTY', value: sizing.value }
+    }
+
+    return { mode: 'RATIO', value: sizing.value }
   }
 
   private buildRulesFromSemanticState(

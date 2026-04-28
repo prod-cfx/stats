@@ -2,7 +2,9 @@ import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2ValidatorService } from '../canonical-spec-v2-validator.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
-import type { SemanticExpression, SemanticExpressionOperator, SemanticState } from '../../types/semantic-state'
+import type { SemanticExpression, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState } from '../../types/semantic-state'
+
+type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY', value: number }
 
 function closeOpenPredicate(op: SemanticExpressionOperator): SemanticExpression {
   return {
@@ -17,6 +19,7 @@ function createSemanticState(input: {
   triggers?: SemanticState['triggers']
   actions?: SemanticState['actions']
   risk?: SemanticState['risk']
+  position?: SemanticState['position']
   positionMode?: string
 }): SemanticState {
   return {
@@ -44,7 +47,7 @@ function createSemanticState(input: {
         affectsExecution: true,
       },
     },
-    position: {
+    position: input.position ?? {
       mode: 'fixed_quote',
       value: 10,
       positionMode: input.positionMode ?? 'long_only',
@@ -60,7 +63,70 @@ function createSemanticState(input: {
   }
 }
 
+function createLockedPositionWithSizing(sizing: SemanticPositionSizingContract): NonNullable<SemanticState['position']> {
+  if (sizing.kind === 'ratio') {
+    return {
+      sizing,
+      mode: 'fixed_ratio',
+      value: sizing.value,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }
+  }
+
+  if (sizing.kind === 'quote') {
+    return {
+      sizing,
+      mode: 'fixed_quote',
+      value: sizing.value,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }
+  }
+
+  return {
+    sizing,
+    mode: 'fixed_qty',
+    value: sizing.value,
+    positionMode: 'long_only',
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+  }
+}
+
 describe('canonicalSpecBuilderService', () => {
+  it.each([
+    [
+      { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      { mode: 'RATIO', value: 0.1 },
+    ],
+    [
+      { kind: 'quote', value: 10, asset: 'USDT' },
+      { mode: 'QUOTE', value: 10 },
+    ],
+    [
+      { kind: 'base', value: 0.001, asset: 'BTC' },
+      { mode: 'QTY', value: 0.001 },
+    ],
+  ] satisfies Array<[SemanticPositionSizingContract, ExpectedCanonicalSizing]>)(
+    'maps semantic position contract %o into canonical sizing %o',
+    (semanticSizing, canonicalSizing) => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({
+        position: createLockedPositionWithSizing(semanticSizing),
+      })
+
+      const spec = service.buildFromSemanticState(state)
+
+      expect(spec.sizing).toEqual(canonicalSizing)
+    },
+  )
+
   it('builds canonical spec from SemanticState expression', () => {
     const service = new CanonicalSpecBuilderService()
     const state: SemanticState = {
@@ -754,6 +820,7 @@ describe('canonicalSpecBuilderService', () => {
     expect(semanticPatch.position).toEqual({
       mode: 'fixed_ratio',
       value: 0.1,
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       positionMode: 'long_only',
     })
   })
