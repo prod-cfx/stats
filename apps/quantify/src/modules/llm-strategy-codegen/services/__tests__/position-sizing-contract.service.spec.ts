@@ -7,6 +7,8 @@ describe('PositionSizingContractService', () => {
     ['用 10% 仓位', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['单笔百分之10资金', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['单笔百分之十资金', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
+    ['单笔百分之十五资金', { kind: 'ratio', value: 0.15, unit: 'ratio' }],
+    ['单笔百分之二十资金', { kind: 'ratio', value: 0.2, unit: 'ratio' }],
     ['每次使用 0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['BTC 跌到 60000 USDT 用 10% 仓位开多', { kind: 'ratio', value: 0.1, unit: 'ratio' }],

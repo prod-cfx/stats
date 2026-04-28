@@ -491,11 +491,36 @@ export class SemanticStateReducerService {
       return numericValue
     }
 
+    return this.parseChinesePercentNumberText(valueText)
+  }
+
+  private parseChinesePercentNumberText(valueText: string): number {
+    const digitMap: Record<string, number> = {
+      一: 1,
+      二: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9,
+    }
+
     if (valueText === '十') {
       return 10
     }
 
-    return Number.NaN
+    const tenIndex = valueText.indexOf('十')
+    if (tenIndex >= 0) {
+      const leadingText = valueText.slice(0, tenIndex)
+      const trailingText = valueText.slice(tenIndex + 1)
+      const leading = leadingText === '' ? 1 : digitMap[leadingText]
+      const trailing = trailingText === '' ? 0 : digitMap[trailingText]
+      return leading !== undefined && trailing !== undefined ? leading * 10 + trailing : Number.NaN
+    }
+
+    return digitMap[valueText] ?? Number.NaN
   }
 
   private isValidPercentValue(value: number): boolean {
