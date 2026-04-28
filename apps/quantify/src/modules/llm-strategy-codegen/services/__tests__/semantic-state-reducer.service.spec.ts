@@ -149,16 +149,85 @@ describe('SemanticStateReducerService', () => {
     })
 
     expect(next.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
       mode: 'fixed_quote',
       value: 10,
       status: 'locked',
       source: 'user_explicit',
     }))
     expect(next.position?.openSlots?.[0]).toEqual(expect.objectContaining({
-      value: 10,
+      value: '10 USDT',
       status: 'locked',
     }))
   })
+
+  it.each([
+    ['10u', { kind: 'quote', value: 10, asset: 'USDT' }, 'fixed_quote', 10, '10 USDT'],
+    ['10刀', { kind: 'quote', value: 10, asset: 'USD' }, 'fixed_quote', 10, '10 USD'],
+    ['0.001 BTC', { kind: 'base', value: 0.001, asset: 'BTC' }, 'fixed_qty', 0.001, '0.001 BTC'],
+  ] as const)(
+    'locks position sizing contract answers from clarification reduction: %s',
+    (answer, sizing, mode, value, slotValue) => {
+      const next = service.applyClarificationAnswer({
+        currentState: {
+          version: 1,
+          families: ['single-leg'],
+          triggers: [],
+          actions: [],
+          risk: [],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0,
+            positionMode: 'long_only',
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'position.sizing',
+                fieldPath: 'position.value',
+                status: 'open',
+                priority: 'risk',
+                questionHint: '请确认单笔仓位大小（例如 10% 或 10 USDT）。',
+                affectsExecution: true,
+              },
+            ],
+          },
+          contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+          normalizationNotes: [],
+          updatedAt: '2026-04-15T10:00:00.000Z',
+        },
+        targetSlotKey: 'position.sizing',
+        targetSlotId: buildSemanticSlotId({
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+        }),
+        answer,
+        messageIndex: 19,
+      })
+
+      expect(next.position).toEqual(expect.objectContaining({
+        sizing,
+        mode,
+        value,
+        status: 'locked',
+        source: 'user_explicit',
+        evidence: {
+          text: answer,
+          messageIndex: 19,
+          source: 'user_explicit',
+        },
+      }))
+      expect(next.position?.openSlots?.[0]).toEqual(expect.objectContaining({
+        value: slotValue,
+        status: 'locked',
+        evidence: {
+          text: answer,
+          messageIndex: 19,
+          source: 'user_explicit',
+        },
+      }))
+    },
+  )
 
   it('keeps a confirmation slot open when the answer does not normalize to a canonical confirmation mode', () => {
     const next = service.applyClarificationAnswer({
@@ -642,13 +711,15 @@ describe('SemanticStateReducerService', () => {
     })
 
     expect(next.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
       value: 0.1,
       status: 'locked',
       source: 'user_explicit',
     }))
     expect(next.position?.openSlots?.[0]).toEqual(expect.objectContaining({
       status: 'locked',
-      value: 10,
+      value: '10%',
       evidence: {
         text: answer,
         messageIndex: 14,
@@ -699,13 +770,15 @@ describe('SemanticStateReducerService', () => {
     })
 
     expect(next.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
       value: 0.1,
       status: 'locked',
       source: 'user_explicit',
     }))
     expect(next.position?.openSlots?.[0]).toEqual(expect.objectContaining({
       status: 'locked',
-      value: 10,
+      value: '10%',
       evidence: {
         text: answer,
         messageIndex: 18,

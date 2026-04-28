@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
-import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticEvidence, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { PositionSizingContractService } from './position-sizing-contract.service'
 
 interface SupportedSlotReduction {
   paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode'
@@ -14,6 +15,10 @@ interface SupportedContextReduction {
 
 @Injectable()
 export class SemanticStateReducerService {
+  constructor(
+    private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+  ) {}
+
   applyClarificationAnswer(input: {
     currentState: SemanticState
     targetSlotKey: string
@@ -99,20 +104,17 @@ export class SemanticStateReducerService {
         && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
     })
     if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
-      const sizing = this.parsePositionSizingAnswer(answerText)
-      if (sizing) {
-        const evidence = {
-          text: answerText,
-          messageIndex: input.messageIndex,
-          source: 'user_explicit' as const,
-        }
+      const parsed = this.parsePositionSizingContractAnswer(answerText, input.messageIndex)
+      if (parsed) {
+        const evidence = parsed.evidence
 
-        nextState.position.mode = sizing.mode
-        nextState.position.value = sizing.value
+        nextState.position.sizing = parsed.sizing
+        nextState.position.mode = this.resolveLegacySizingMode(parsed.sizing)
+        nextState.position.value = parsed.sizing.value
         nextState.position.status = 'locked'
         nextState.position.source = 'user_explicit'
         nextState.position.evidence = evidence
-        positionSlot.value = sizing.slotValue
+        positionSlot.value = this.formatPositionSizingValue(parsed.sizing)
         positionSlot.status = 'locked'
         positionSlot.evidence = evidence
       }
@@ -346,10 +348,25 @@ export class SemanticStateReducerService {
     return this.isValidPercentValue(value) ? value : null
   }
 
-  private parsePositionSizingAnswer(answerText: string): { mode: 'fixed_ratio' | 'fixed_quote', value: number, slotValue: number } | null {
-    const fixedQuote = this.parseFixedQuoteAnswer(answerText)
-    if (fixedQuote !== null) {
-      return { mode: 'fixed_quote', value: fixedQuote, slotValue: fixedQuote }
+  private parsePositionSizingContractAnswer(
+    answerText: string,
+    messageIndex?: number,
+  ): { sizing: SemanticPositionSizingContract, evidence: SemanticEvidence } | null {
+    if (/(?:不是|并非|不要|别|not)/iu.test(answerText)) {
+      return null
+    }
+
+    if (this.hasMultiplePercentCandidates(answerText)) {
+      return null
+    }
+
+    const parsed = this.positionSizingContracts.parse(answerText, messageIndex)
+      ?? this.positionSizingContracts.parse(`仓位 ${answerText}`, messageIndex)
+    if (parsed) {
+      return {
+        sizing: parsed.sizing,
+        evidence: { text: answerText, messageIndex, source: 'user_explicit' },
+      }
     }
 
     const percentValue = this.parsePercentAnswer(answerText)
@@ -357,22 +374,34 @@ export class SemanticStateReducerService {
       return null
     }
 
-    return { mode: 'fixed_ratio', value: percentValue / 100, slotValue: percentValue }
+    return {
+      sizing: { kind: 'ratio', value: percentValue / 100, unit: 'ratio' },
+      evidence: { text: answerText, messageIndex, source: 'user_explicit' },
+    }
   }
 
-  private parseFixedQuoteAnswer(answerText: string): number | null {
-    const normalized = answerText.trim()
-    if (!normalized || /(?:不是|并非|不要|别|not)/iu.test(normalized)) {
-      return null
+  private resolveLegacySizingMode(sizing: SemanticPositionSizingContract): 'fixed_ratio' | 'fixed_quote' | 'fixed_qty' {
+    if (sizing.kind === 'quote') return 'fixed_quote'
+    if (sizing.kind === 'base') return 'fixed_qty'
+    return 'fixed_ratio'
+  }
+
+  private formatPositionSizingValue(sizing: SemanticPositionSizingContract): string {
+    if (sizing.kind === 'ratio') {
+      return `${this.formatFiniteNumber(sizing.value * 100)}%`
     }
 
-    const match = normalized.match(/(?:固定(?:使用|用|投入)?|单笔(?:使用|用|投入)?|每(?:次|笔|单)(?:开仓|下单|买入|开多|开空)?(?:使用|用|投入)?|仓位)?[^\d]{0,8}(\d+(?:\.\d+)?)\s*(?:USDT|USDC|USD)\b/iu)
-    if (!match?.[1]) {
-      return null
-    }
+    return `${this.formatFiniteNumber(sizing.value)} ${sizing.asset}`
+  }
 
-    const value = Number(match[1])
-    return Number.isFinite(value) && value > 0 ? value : null
+  private formatFiniteNumber(value: number): string {
+    return Number(value.toFixed(8)).toString()
+  }
+
+  private hasMultiplePercentCandidates(answerText: string): boolean {
+    const percentText = answerText.replace(/％/gu, '%')
+    const percentCandidates = percentText.match(/(?:百分之?\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*%)/gu) ?? []
+    return percentCandidates.length > 1
   }
 
   private isValidPercentValue(value: number): boolean {
