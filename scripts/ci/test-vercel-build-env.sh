@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+TARGET="${1:-all}"
+
+case "$TARGET" in
+  all | front | admin)
+    ;;
+  *)
+    echo "Usage: test-vercel-build-env.sh [all|front|admin]" >&2
+    exit 64
+    ;;
+esac
+
 assert_output() {
   local expected="$1"
   shift
@@ -36,29 +47,34 @@ assert_failure() {
   fi
 }
 
-assert_output \
-  "pnpm exec dx build front --staging" \
-  env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
+if [[ "$TARGET" == "all" || "$TARGET" == "front" ]]; then
+  assert_output \
+    "pnpm exec dx build front --staging" \
+    env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
 
-env \
-  APP_ENV=staging \
-  NEXT_PUBLIC_APP_ENV=staging \
-  NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api/v1 \
-  node apps/front/scripts/check-env.js >/dev/null
+  env \
+    APP_ENV=staging \
+    NEXT_PUBLIC_APP_ENV=staging \
+    NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api/v1 \
+    node apps/front/scripts/check-env.js >/dev/null
 
-assert_output \
-  "pnpm exec dx build front --prod" \
-  env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
+  assert_output \
+    "pnpm exec dx build front --prod" \
+    env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
 
-assert_output \
-  $'APP_ENV=staging pnpm exec dx build shared\nAPP_ENV=staging pnpm exec dx build admin --staging' \
-  env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
+  assert_failure env -u APP_ENV VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
+fi
 
-assert_output \
-  $'APP_ENV=production pnpm exec dx build shared\nAPP_ENV=production pnpm exec dx build admin --prod' \
-  env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
+if [[ "$TARGET" == "all" || "$TARGET" == "admin" ]]; then
+  assert_output \
+    $'APP_ENV=staging pnpm exec dx build shared\nAPP_ENV=staging pnpm exec dx build admin --staging' \
+    env APP_ENV=staging VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
 
-assert_failure env -u APP_ENV VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-front.sh
-assert_failure env -u APP_ENV VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
+  assert_output \
+    $'APP_ENV=production pnpm exec dx build shared\nAPP_ENV=production pnpm exec dx build admin --prod' \
+    env APP_ENV=production VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
+
+  assert_failure env -u APP_ENV VERCEL_BUILD_DRY_RUN=1 bash scripts/ci/vercel-build-admin.sh
+fi
 
 echo "Vercel build env smoke tests passed"

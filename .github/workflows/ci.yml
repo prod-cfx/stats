@@ -90,7 +90,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 校验 Vercel 构建环境映射
-        run: bash scripts/ci/test-vercel-build-env.sh
+        run: bash scripts/ci/test-vercel-build-env.sh front
 
       - name: 部署 front 到 Vercel
         run: |
@@ -157,7 +157,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: 校验 Vercel 构建环境映射
-        run: bash scripts/ci/test-vercel-build-env.sh
+        run: bash scripts/ci/test-vercel-build-env.sh admin
 
       - name: 部署 admin 到 Vercel
         run: |
