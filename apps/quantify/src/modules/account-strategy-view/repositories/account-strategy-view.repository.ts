@@ -819,6 +819,47 @@ export class AccountStrategyViewRepository {
     })
   }
 
+  async refreshPristineStrategyAccountFunding(input: {
+    accountId: string
+    baseCurrency: string
+    initialBalance: number
+    balance: number
+    equity: number
+  }): Promise<void> {
+    const client = this.txHost.tx
+    const account = await client.userStrategyAccount.findUnique({
+      where: { id: input.accountId },
+      select: {
+        id: true,
+        initialBalance: true,
+        balance: true,
+        equity: true,
+        totalRealizedPnl: true,
+        totalUnrealizedPnl: true,
+        _count: {
+          select: {
+            positions: true,
+            trades: true,
+            ledger: true,
+            signalExecutions: true,
+          },
+        },
+      },
+    })
+
+    if (!account || !this.isPristineStrategyAccount(account)) return
+
+    await client.userStrategyAccount.update({
+      where: { id: input.accountId },
+      data: {
+        baseCurrency: input.baseCurrency,
+        initialBalance: new Prisma.Decimal(input.initialBalance),
+        balance: new Prisma.Decimal(input.balance),
+        equity: new Prisma.Decimal(input.equity),
+      },
+    })
+  }
+
   async findLatestExecutedAccountByUserAndSymbol(userId: string, symbol: string) {
     const client = this.txHost.tx
     const normalizedSymbol = symbol.trim().toUpperCase()

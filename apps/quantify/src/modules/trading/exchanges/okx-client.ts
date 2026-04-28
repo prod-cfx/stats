@@ -34,14 +34,18 @@ interface OkxOrderResponse {
 
 interface OkxBalanceItem {
   ccy: string
-  availEq: string
+  availBal?: string
+  availEq?: string
+  cashBal?: string
   eq: string
 }
 
 interface OkxBalanceSnapshot {
   details?: OkxBalanceItem[]
+  availBal?: string
   ccy?: string
   availEq?: string
+  cashBal?: string
   eq?: string
 }
 
@@ -339,7 +343,9 @@ export class OkxClient extends BaseCexClient {
         return [
           {
             ccy: snapshot.ccy,
+            availBal: snapshot.availBal,
             availEq: snapshot.availEq ?? '0',
+            cashBal: snapshot.cashBal,
             eq: snapshot.eq ?? '0',
           },
         ]
@@ -351,7 +357,7 @@ export class OkxClient extends BaseCexClient {
       .filter(b => b.ccy) // 过滤掉无效币种
       .map((b) => {
         const total = Number.parseFloat(b.eq) || 0
-        const free = Number.parseFloat(b.availEq) || 0
+        const free = this.resolveAvailableBalance(b)
         const locked = total - free
         return {
           asset: b.ccy,
@@ -360,6 +366,21 @@ export class OkxClient extends BaseCexClient {
           total,
         }
       })
+  }
+
+  private resolveAvailableBalance(balance: OkxBalanceItem): number {
+    const candidates = this.marketType === 'spot'
+      ? [balance.availBal, balance.availEq, balance.cashBal]
+      : [balance.availEq, balance.availBal, balance.cashBal]
+
+    for (const candidate of candidates) {
+      const parsed = candidate === undefined || candidate === ''
+        ? Number.NaN
+        : Number.parseFloat(candidate)
+      if (Number.isFinite(parsed)) return parsed
+    }
+
+    return 0
   }
 
   async fetchTicker(symbol: string): Promise<UnifiedTicker> {

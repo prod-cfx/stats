@@ -264,17 +264,43 @@ export class AccountStrategyViewService {
       ? this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials)
       : null
     const paramsFundingSnapshot = this.readFundingSnapshot((row as Record<string, unknown>).params)
+    const exchangeBalanceSnapshot = account && !hasLocalActivity && (this.toFiniteNumber(account.balance) ?? 0) <= 0 && exchangeId
+      ? await this.resolveExchangeBalanceSnapshot({
+          userId,
+          exchangeId,
+          marketType,
+          exchangeAccountId: sub?.exchangeAccount?.id ?? null,
+          preferredAsset: this.readAccountBaseCurrency(account),
+        })
+      : null
+    const exchangeFundingSnapshot = exchangeBalanceSnapshot && exchangeBalanceSnapshot.free > 0
+      ? resolveStrategyFundingFromExchangeBalance({
+          balance: exchangeBalanceSnapshot,
+          marketType,
+          mode: (row as Record<string, unknown>).mode === 'LIVE' ? 'LIVE' : 'TESTNET',
+          reservedQuote: 0,
+        })
+      : null
+    if (account && exchangeFundingSnapshot) {
+      await this.repo.refreshPristineStrategyAccountFunding({
+        accountId: account.id,
+        baseCurrency: exchangeFundingSnapshot.asset,
+        initialBalance: exchangeFundingSnapshot.totalEquity,
+        balance: exchangeFundingSnapshot.buyingPower,
+        equity: exchangeFundingSnapshot.totalEquity,
+      })
+    }
     const overviewInitialBalance = account
-      ? this.toFiniteNumber(account.initialBalance)
+      ? exchangeFundingSnapshot?.totalEquity ?? this.toFiniteNumber(account.initialBalance)
       : paramsFundingSnapshot?.totalEquity ?? null
     const overviewTotalEquity = account
-      ? resolvedTotalEquity
+      ? exchangeFundingSnapshot?.totalEquity ?? resolvedTotalEquity
       : paramsFundingSnapshot?.totalEquity ?? null
     const overviewAvailableBalance = account
-      ? this.toFiniteNumber(account.balance)
+      ? exchangeFundingSnapshot?.buyingPower ?? this.toFiniteNumber(account.balance)
       : paramsFundingSnapshot?.buyingPower ?? null
     const overviewBaseCurrency = account
-      ? this.readAccountBaseCurrency(account)
+      ? exchangeFundingSnapshot?.asset ?? this.readAccountBaseCurrency(account)
       : paramsFundingSnapshot?.asset ?? null
     const localFundingSnapshot = account
       ? resolveStrategyFundingFromStrategyAccount({
@@ -290,7 +316,7 @@ export class AccountStrategyViewService {
       : null
     const overviewFundingSnapshot = hasLocalActivity
       ? localFundingSnapshot
-      : paramsFundingSnapshot ?? localFundingSnapshot
+      : exchangeFundingSnapshot ?? paramsFundingSnapshot ?? localFundingSnapshot
     const totalPnl = account
       ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
@@ -2031,12 +2057,20 @@ export class AccountStrategyViewService {
   }
 
   private async withBestEffortTimeout<T>(promise: Promise<T>): Promise<T> {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        setTimeout(() => reject(new Error('best effort timeout')), AccountStrategyViewService.BEST_EFFORT_EXTERNAL_TIMEOUT_MS)
-      }),
-    ])
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('best effort timeout')),
+            AccountStrategyViewService.BEST_EFFORT_EXTERNAL_TIMEOUT_MS,
+          )
+        }),
+      ])
+    } finally {
+      if (timeout) clearTimeout(timeout)
+    }
   }
 
   private pickExchangeBalance(
