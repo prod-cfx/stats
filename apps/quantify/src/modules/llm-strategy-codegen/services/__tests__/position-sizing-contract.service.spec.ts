@@ -9,6 +9,8 @@ describe('PositionSizingContractService', () => {
     ['每次使用 0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['0.1 资金比例', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
     ['BTC 跌到 60000 USDT 用 10% 仓位开多', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
+    ['资金费率达到 0.1% 用 10% 仓位开多', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
+    ['价格下跌 1% 时用 10% 仓位开多', { kind: 'ratio', value: 0.1, unit: 'ratio' }],
   ])('parses ratio sizing: %s', (text, expected) => {
     expect(service.parse(text)?.sizing).toEqual(expected)
   })

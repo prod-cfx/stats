@@ -60,14 +60,17 @@ export class PositionSizingContractService {
   }
 
   private parseRatio(text: string, messageIndex?: number): ParsedPositionSizingContract | null {
-    const percentMatch = text.replace(/％/gu, '%').match(/(?:百分之?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)/u)
-    if (percentMatch && this.hasRatioSizingContext(text, percentMatch.index ?? 0)) {
+    const normalizedPercentText = text.replace(/％/gu, '%')
+    const percentPattern = /(?:百分之?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)/gu
+    for (const percentMatch of normalizedPercentText.matchAll(percentPattern)) {
+      if (!this.hasLocalRatioSizingContext(normalizedPercentText, percentMatch.index, percentMatch[0].length)) continue
+
       const percent = Number(percentMatch[1] ?? percentMatch[2])
-      if (Number.isFinite(percent) && percent > 0 && percent <= 100) {
-        return {
-          sizing: { kind: 'ratio', value: percent / 100, unit: 'ratio' },
-          evidence: { text, messageIndex, source: 'user_explicit' },
-        }
+      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) continue
+
+      return {
+        sizing: { kind: 'ratio', value: percent / 100, unit: 'ratio' },
+        evidence: { text, messageIndex, source: 'user_explicit' },
       }
     }
 
@@ -98,9 +101,12 @@ export class PositionSizingContractService {
       .filter(Boolean)
   }
 
-  private hasRatioSizingContext(text: string, index: number): boolean {
-    const context = text.slice(Math.max(0, index - 12), index + 20)
-    return /(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)/u.test(context)
+  private hasLocalRatioSizingContext(text: string, index: number, length: number): boolean {
+    const prefix = text.slice(Math.max(0, index - 8), index)
+    if (/(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)\s*$/u.test(prefix)) return true
+
+    const suffix = text.slice(index + length, index + length + 8)
+    return /^\s*(?:仓位|资金(?!费率)|比例)/u.test(suffix)
   }
 
   private hasQuoteSizingContext(text: string): boolean {
