@@ -1,3 +1,9 @@
+import {
+  formatSizing,
+  normalizeSizingFromCanonicalValue,
+  type QuantSizing,
+} from '@/app/[lng]/ai-quant/semantic-sizing'
+
 type DisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECUTE'
 
 interface DisplayBaseItem {
@@ -40,6 +46,7 @@ interface DisplayLogicGraphAction {
   sizing?: {
     mode?: string
     value?: unknown
+    asset?: unknown
   }
 }
 
@@ -68,6 +75,7 @@ interface DisplayLogicGraphSpecDesc {
   lockedParams?: Record<string, unknown>
   canonicalSpec?: {
     market?: DisplayLogicGraphMarket
+    sizing?: unknown
   }
   market?: DisplayLogicGraphMarket
 }
@@ -80,6 +88,7 @@ export interface BuildDisplayLogicGraphInput {
     timeframe?: string
     baseTimeframe?: string
     positionPct?: number
+    sizing?: QuantSizing
     marketType?: string
     executionTags?: string[]
   }
@@ -350,7 +359,7 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
   }
 }
 
-function formatActionText(action: DisplayLogicGraphAction): string {
+function formatActionVerb(action: DisplayLogicGraphAction): string {
   switch (action.type) {
     case 'OPEN_LONG':
       return '开多'
@@ -368,6 +377,12 @@ function formatActionText(action: DisplayLogicGraphAction): string {
   }
 }
 
+function formatActionText(action: DisplayLogicGraphAction, fallbackSymbol?: string): string {
+  const verb = formatActionVerb(action)
+  if (!action.sizing) return verb
+  return `${verb} ${formatSizing(normalizeSizingFromCanonicalValue(action.sizing, fallbackSymbol ?? '', 10), fallbackSymbol)}`
+}
+
 function toPositionPct(value: unknown): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   const pct = value <= 1 ? value * 100 : value
@@ -378,10 +393,10 @@ function extractRules(specDesc: DisplayLogicGraphSpecDesc | null): DisplayLogicG
   return Array.isArray(specDesc?.rules) ? specDesc.rules : []
 }
 
-function buildRiskSummaryText(rule: DisplayLogicGraphRule): string | null {
+function buildRiskSummaryText(rule: DisplayLogicGraphRule, fallbackSymbol?: string): string | null {
   const conditionText = formatConditionText(rule.condition)
   const actionText = (rule.actions ?? [])
-    .map(action => formatActionText(action))
+    .map(action => formatActionText(action, fallbackSymbol))
     .filter(Boolean)
     .join(' / ')
   if (!conditionText) return null
@@ -451,6 +466,23 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
       ?? lockedParams.position
       ?? fallbackMeta?.positionPct,
   )
+  const sizingInput = specDesc?.canonicalSpec?.sizing
+    ?? lockedParams.sizing
+    ?? extractRules(specDesc)
+      .flatMap(rule => rule.actions ?? [])
+      .map(action => action.sizing)
+      .find(sizing => sizing && typeof sizing === 'object')
+    ?? fallbackMeta?.sizing
+  const sizing = sizingInput
+    ? formatSizing(
+        normalizeSizingFromCanonicalValue(
+          sizingInput,
+          symbol ?? '',
+          typeof fallbackMeta?.positionPct === 'number' ? fallbackMeta.positionPct : 10,
+        ),
+        symbol ?? undefined,
+      )
+    : null
   const marketType = humanizeMarketType(
     pickString(lockedParams.marketType, market.marketType, fallbackMeta?.marketType),
   )
@@ -463,13 +495,13 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
     exchange,
     symbol,
     timeframe,
-    positionPct,
+    positionPct: sizing ?? positionPct,
     marketType,
     executionTags,
   }
 }
 
-function buildConditionBlock(rule: DisplayLogicGraphRule, index: number): DisplayBlock {
+function buildConditionBlock(rule: DisplayLogicGraphRule, index: number, fallbackSymbol?: string): DisplayBlock {
   const blockType: DisplayBlockType = index === 0
     ? 'IF'
     : rule.join === 'OR'
@@ -484,7 +516,7 @@ function buildConditionBlock(rule: DisplayLogicGraphRule, index: number): Displa
 
   const actionItems: DisplayActionItem[] = (rule.actions ?? [])
     .map((action, actionIndex) => {
-      const text = formatActionText(action)
+      const text = formatActionText(action, fallbackSymbol)
       return {
         kind: 'action',
         id: rule.id ? `action-${rule.id}-${actionIndex}` : `action-${index}-${actionIndex}`,
@@ -581,15 +613,16 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
   const specDesc = isRecord(nextInput.specDesc) ? nextInput.specDesc as DisplayLogicGraphSpecDesc : null
   const rules = extractRules(specDesc)
   const nonRiskRules = rules.filter(rule => rule.phase !== 'risk')
-  const blocks = nonRiskRules.length > 0
-    ? nonRiskRules.map((rule, index) => buildConditionBlock(rule, index))
-    : buildLegacyRuleBlocks(specDesc)
   const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
   const executeBlock = buildExecuteBlock(executeMeta)
+  const fallbackSymbol = executeMeta.symbol ?? nextInput.fallbackMeta?.symbol
+  const blocks = nonRiskRules.length > 0
+    ? nonRiskRules.map((rule, index) => buildConditionBlock(rule, index, fallbackSymbol ?? undefined))
+    : buildLegacyRuleBlocks(specDesc)
   const riskSummaries = [
     ...rules
       .filter(rule => rule.phase === 'risk')
-      .map(buildRiskSummaryText)
+      .map(rule => buildRiskSummaryText(rule, fallbackSymbol ?? undefined))
       .filter((item): item is string => Boolean(item)),
     ...buildLegacyRiskSummaryTexts(specDesc),
   ]

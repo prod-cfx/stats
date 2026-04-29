@@ -1,3 +1,5 @@
+import type { QuantSizing } from '@/app/[lng]/ai-quant/semantic-sizing'
+
 export type LogicNodeJoin = 'AND' | 'OR'
 
 export interface LogicConditionNode {
@@ -26,6 +28,7 @@ export interface StrategyLogicGraph {
     symbol: string
     timeframe: string
     positionPct: number
+    sizing?: QuantSizing
     executionTags?: string[]
   }
 }
