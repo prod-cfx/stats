@@ -4,6 +4,52 @@ import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 describe('SemanticStateReducerService', () => {
   const service = new SemanticStateReducerService()
 
+  it('locks action open slots from clarification answers', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [{
+          id: 'action-open-long',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'action.order_type',
+            fieldPath: 'actions[0].params.orderType',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请确认开仓订单类型。',
+            affectsExecution: true,
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'action.order_type',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'action.order_type',
+        fieldPath: 'actions[0].params.orderType',
+      }),
+      answer: '市价单',
+      messageIndex: 3,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: { orderType: '市价单' },
+      openSlots: [expect.objectContaining({
+        slotKey: 'action.order_type',
+        status: 'locked',
+        value: '市价单',
+      })],
+    }))
+  })
+
   it('normalizes english contract clarification answers into perp market type', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

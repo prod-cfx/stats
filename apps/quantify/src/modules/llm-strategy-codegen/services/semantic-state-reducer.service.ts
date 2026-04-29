@@ -38,6 +38,7 @@ export class SemanticStateReducerService {
       actions: input.currentState.actions.map(action => ({
         ...action,
         ...(action.params ? { params: { ...action.params } } : {}),
+        openSlots: action.openSlots?.map(slot => ({ ...slot })),
       })),
       risk: input.currentState.risk.map(risk => ({
         ...risk,
@@ -96,6 +97,32 @@ export class SemanticStateReducerService {
       }
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
+    }
+
+    for (const action of nextState.actions) {
+      const slot = action.openSlots?.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+      })
+      if (!slot || slot.status !== 'open') continue
+
+      action.params = {
+        ...(action.params ?? {}),
+        [this.resolveActionParamKey(slot)]: answerText,
+      }
+      slot.value = answerText
+      slot.status = 'locked'
+      slot.evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit',
+      }
+      action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
       break
     }
 
@@ -193,6 +220,20 @@ export class SemanticStateReducerService {
     }
 
     return nextState
+  }
+
+  private resolveActionParamKey(slot: SemanticSlotState): string {
+    const paramsPath = slot.fieldPath.match(/\.params\.([A-Za-z0-9_]+)$/u)
+    if (paramsPath?.[1]) {
+      return paramsPath[1]
+    }
+
+    const slotKeyPath = slot.slotKey.match(/^action\.([A-Za-z0-9_]+)$/u)
+    if (slotKeyPath?.[1]) {
+      return slotKeyPath[1]
+    }
+
+    return slot.slotKey
   }
 
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {
