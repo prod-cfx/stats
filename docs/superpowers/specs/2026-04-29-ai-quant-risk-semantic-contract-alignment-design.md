@@ -362,6 +362,116 @@ normalize risk defaults before deriving clarification prompts
 
 This prevents defaultable fields from leaking into `openSlots`.
 
+## Required Data Flow Touchpoints
+
+The fix must cover the whole main data flow. Updating only extraction or only
+clarification is not sufficient, because persisted state, planner patches,
+legacy risk rules, inferred confirmation, and publication projection can all
+reintroduce the same basis question.
+
+The implementation should introduce one source-of-truth normalization step,
+for example `normalizeRiskSemantics`, and use it anywhere a
+`SemanticRiskState` can be created, merged, reduced, recovered, or projected
+for clarification. The invariant is:
+
+```text
+after any stage creates or merges SemanticRiskState:
+  defaultable risk fields are filled
+  basisSource is preserved
+  defaultable internal fields are removed from user-facing openSlots
+```
+
+Concrete touchpoints:
+
+1. Semantic seed extraction:
+   `SemanticSeedExtractorService.extractRisk()` should emit normalized
+   stop-loss/take-profit params, including `basis`, `basisSource`, `direction`,
+   `effect`, and `scope` where applicable. User-explicit basis wording should
+   still become `basisSource: 'user_explicit'`.
+
+2. Planner patch ingestion:
+   `SemanticSeedStateBuilderService.toRiskState()` must normalize planner risk
+   updates before status is resolved. If the planner returns
+   `risk[*].params.basis` or `risk[*].params.stopLossBasis` as an open slot for
+   a plain percent stop loss, this layer should drop that slot and lock the
+   node when all execution-relevant fields are present.
+
+3. Semantic state merge:
+   `SemanticStateMergeService.mergeRisk()` must normalize the merged result.
+   This prevents stale persisted `openSlots` from overriding the corrected
+   derived state and asking for basis again in later turns.
+
+4. Conversation state recovery and required-slot pass:
+   `CodegenConversationService` paths that recover state from canonical spec,
+   merge planner patches, or call `withRequiredSemanticOpenSlots()` must run
+   risk normalization before deriving the next clarification. The existing
+   deterministic helper for stop-loss defaults should become a compatibility
+   wrapper around the same risk semantic normalization, not a separate source
+   of truth.
+
+5. Clarification selection and prompt building:
+   `buildClarificationFromSemanticState()`,
+   `buildSemanticClarificationPrompt()`, `findNextOpenSemanticSlot()`, and
+   legacy `StrategyClarificationRulesService.detectBasisItems()` must treat
+   stop-loss/take-profit basis defaults as non-blocking metadata. They may
+   display an inferred assumption, but they must not ask the user to answer
+   `entry_avg_price` or any equivalent internal enum.
+
+6. Clarification answer reducer:
+   `SemanticStateReducerService.applyClarificationAnswer()` must normalize risk
+   after applying answers, including the `risk.protective_exit` path. If a user
+   answers with natural text such as `亏损 5% 止损`, the reducer should create
+   the locked stop-loss contract with default basis; if the user explicitly
+   says `按持仓收益率`, it should preserve that as `user_explicit`.
+
+7. Inferred assumption and confirmation flow:
+   `SemanticStateProjectionService.buildInferredDefaults()`,
+   `CodegenConversationService.collectInferredAssumptions()`,
+   `withConfirmedInferredDecisionKeys()`, and
+   `InferredConfirmationClassifierService` currently know about
+   `risk.stopLossBasis` and `risk.takeProfitBasis`. The new contract should keep
+   these keys available for audit/display/backward compatibility, but plain
+   basis defaults must not become a blocking confirmation round. Confirmation
+   should only be required when changing the default would materially change
+   execution and the user has actually expressed that intent.
+
+8. Legacy snapshot and canonical projection:
+   `buildLegacyLogicSnapshotFromSemanticState()` and
+   `CanonicalSpecBuilderService.buildRiskRulesFromSemanticState()` must keep
+   projecting `riskRules.stopLossBasis` and `riskRules.takeProfitBasis` for
+   current downstream consumers. Projection must be one-way compatibility
+   output; it must not create new clarification requirements.
+
+9. IR, script profile, consistency, and backtest consumers:
+   `strategy-ir-canonical-adapter`, `canonical-spec-v2-ir-compiler`,
+   `script-profile-extractor`, `strategy-consistency`, and backtest snapshot
+   loading should continue to receive the same basis values they expect today.
+   The behavioral change is upstream: the value arrives as a normalized
+   semantic default instead of a user-facing missing slot.
+
+10. Publication locked params:
+    `CodegenPublicationGenerationStage.collectLockedSemanticParams()` must keep
+    carrying locked stop-loss/take-profit basis into publication metadata, while
+    preserving `basisSource` where the metadata model supports it.
+
+11. Frontend display:
+    `display-logic-graph` and other AI Quant semantic displays can show the
+    resolved risk basis as an inferred/defaulted detail, but should not render
+    it as a missing user action.
+
+12. Regression tests:
+    The test update must span unit and conversation-level flows:
+    semantic extraction, planner patch builder, merge, reducer, projection,
+    clarification rules, inferred confirmation classifier, canonical builder,
+    publication generation, semantic-only regression, and at least one E2E or
+    conversation regression for the exact loop:
+    `止损 5%` -> no basis question -> user never has to answer
+    `entry_avg_price`.
+
+These touchpoints should be treated as one change boundary. If any layer still
+treats default basis as a required user-facing slot, the system can regress to
+the original behavior.
+
 ## Testing Strategy
 
 Add focused tests for:
