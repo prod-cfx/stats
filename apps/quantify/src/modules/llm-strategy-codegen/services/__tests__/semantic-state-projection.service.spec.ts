@@ -4,6 +4,549 @@ import { SemanticStateProjectionService } from '../semantic-state-projection.ser
 describe('SemanticStateProjectionService', () => {
   const service = new SemanticStateProjectionService()
 
+  it('builds display logic graph from locked semantic atoms for previous candle breakout strategy', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'semantic-entry-1',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'semantic-exit-1',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'low', offsetBars: 1 },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'semantic-gate-1',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 1, basis: 'entry_avg_price' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.03,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择交易所',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'BTCUSDT',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择交易标的',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'perp',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择市场类型',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '1m',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择周期',
+          affectsExecution: true,
+        },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.map(item => item.text)).toEqual([
+      '收盘价高于前 1 根最高价，且持有多仓等于false',
+      '开多 3%',
+    ])
+    expect(graph.blocks[1]?.items.map(item => item.text)).toEqual([
+      '收盘价低于前 1 根最低价',
+      '平多',
+    ])
+    expect(text).toContain('交易所: OKX')
+    expect(text).toContain('标的: BTCUSDT')
+    expect(text).toContain('周期: 1m')
+    expect(text).toContain('仓位: 3%')
+    expect(text).toContain('市场: 永续')
+    expect(text).toContain('风控: 止损：价格相对入场均价下跌1% 强制平仓 -> 平仓')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
+  it('skips malformed expression operands instead of throwing while building display graph', () => {
+    const state = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'malformed-entry',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'indicator', name: 'rsi' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.03,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    } as unknown as SemanticState
+
+    expect(() => service.buildDisplayLogicGraph(state)).not.toThrow()
+    expect(service.buildDisplayLogicGraph(state).blocks).toEqual([
+      {
+        type: 'EXECUTE',
+        items: [
+          {
+            kind: 'execute',
+            id: 'execute-position',
+            key: 'positionSizing',
+            value: '3%',
+            text: '仓位: 3%',
+          },
+        ],
+      },
+    ])
+  })
+
+  it('selects entry action by trigger side for bidirectional display logic graph', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-long',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-short',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'short',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        sizing: { kind: 'ratio', value: 0.05, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.05,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const shortEntryTexts = graph.blocks[1]?.items.map(item => item.text) ?? []
+
+    expect(shortEntryTexts).toContain('开空 5%')
+    expect(shortEntryTexts).not.toContain('开多 5%')
+  })
+
+  it('selects short exit action by trigger side for display logic graph', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'exit-long',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-short',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'short',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-short', key: 'close_short', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        sizing: { kind: 'ratio', value: 0.05, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.05,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const shortExitTexts = graph.blocks[1]?.items.map(item => item.text) ?? []
+
+    expect(shortExitTexts).toContain('平空')
+    expect(shortExitTexts).not.toContain('平多')
+  })
+
+  it('filters entry gates by side compatibility in display logic graph', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-long',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-short',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'short',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'gate-long',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'gate-short',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'short',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'short' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        sizing: { kind: 'ratio', value: 0.05, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.05,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const longCondition = graph.blocks[0]?.items[0]?.text ?? ''
+    const shortCondition = graph.blocks[1]?.items[0]?.text ?? ''
+
+    expect(longCondition).toContain('持有多仓等于false')
+    expect(longCondition).not.toContain('持有空仓等于false')
+    expect(shortCondition).toContain('持有空仓等于false')
+    expect(shortCondition).not.toContain('持有多仓等于false')
+  })
+
+  it('infers omitted gate side from position expression operand in display logic graph', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-long',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-short',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'short',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'open' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'gate-long',
+          key: 'condition.expression',
+          phase: 'gate',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'gate-short',
+          key: 'condition.expression',
+          phase: 'gate',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'short' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        sizing: { kind: 'ratio', value: 0.05, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.05,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const longCondition = graph.blocks[0]?.items[0]?.text ?? ''
+    const shortCondition = graph.blocks[1]?.items[0]?.text ?? ''
+
+    expect(longCondition).toContain('持有多仓等于false')
+    expect(longCondition).not.toContain('持有空仓等于false')
+    expect(shortCondition).toContain('持有空仓等于false')
+    expect(shortCondition).not.toContain('持有多仓等于false')
+  })
+
   const closeOpenExpressionState = (): SemanticState => ({
     version: 1,
     families: ['single-leg'],

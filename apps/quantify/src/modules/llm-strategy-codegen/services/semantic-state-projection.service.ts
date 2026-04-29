@@ -28,6 +28,43 @@ export interface SemanticConversationView {
   }
 }
 
+export type SemanticDisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECUTE'
+
+export interface SemanticDisplayGraphBaseItem {
+  id: string
+  text: string
+}
+
+export interface SemanticDisplayConditionItem extends SemanticDisplayGraphBaseItem {
+  kind: 'condition'
+}
+
+export interface SemanticDisplayActionItem extends SemanticDisplayGraphBaseItem {
+  kind: 'action'
+}
+
+export interface SemanticDisplayExecuteItem extends SemanticDisplayGraphBaseItem {
+  kind: 'execute'
+  key: string
+  value?: string
+}
+
+export type SemanticDisplayLogicGraphItem =
+  | SemanticDisplayConditionItem
+  | SemanticDisplayActionItem
+  | SemanticDisplayExecuteItem
+
+export interface SemanticDisplayLogicGraphBlock {
+  type: SemanticDisplayBlockType
+  items: SemanticDisplayLogicGraphItem[]
+}
+
+export interface SemanticDisplayLogicGraph {
+  blocks: SemanticDisplayLogicGraphBlock[]
+}
+
+type SemanticDisplaySideScope = 'long' | 'short' | 'both'
+
 @Injectable()
 export class SemanticStateProjectionService {
   buildConversationView(state: SemanticState): SemanticConversationView {
@@ -71,6 +108,28 @@ export class SemanticStateProjectionService {
     }
   }
 
+  buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
+    const triggers = this.filterDeterministicTriggers(state.triggers)
+    const actions = this.filterDeterministicActions(state.actions)
+    const ruleBlocks = triggers
+      .filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit')
+      .map((trigger, index) => this.buildDisplayRuleBlock({
+        trigger,
+        blockType: index === 0 ? 'IF' : 'AND_AT_THEN',
+        gateText: trigger.phase === 'entry' ? this.buildDisplayGateText(triggers, trigger) : null,
+        actions,
+        position: state.position,
+      }))
+      .filter((block): block is SemanticDisplayLogicGraphBlock => Boolean(block))
+
+    return {
+      blocks: [
+        ...ruleBlocks,
+        this.buildDisplayExecuteBlock(state),
+      ],
+    }
+  }
+
   buildClarificationView(state: SemanticState): {
     summary: string
     nextQuestion: string | null
@@ -83,6 +142,283 @@ export class SemanticStateProjectionService {
       summary: triggerSummary || '已识别部分条件，但仍未完整。',
       nextQuestion: nextSlot?.questionHint ?? null,
     }
+  }
+
+  private buildDisplayRuleBlock(input: {
+    trigger: SemanticState['triggers'][number]
+    blockType: SemanticDisplayBlockType
+    gateText: string | null
+    actions: SemanticState['actions']
+    position: SemanticState['position']
+  }): SemanticDisplayLogicGraphBlock | null {
+    const conditionText = this.buildDisplayConditionText(input.trigger, input.gateText)
+    if (!conditionText) {
+      return null
+    }
+
+    return {
+      type: input.blockType,
+      items: [
+        {
+          kind: 'condition',
+          id: `condition-${input.trigger.id}`,
+          text: conditionText,
+        },
+        ...this.buildDisplayActionItems(input.trigger, input.actions, input.position),
+      ],
+    }
+  }
+
+  private buildDisplayConditionText(
+    trigger: SemanticState['triggers'][number],
+    gateText: string | null,
+  ): string {
+    const conditionText = trigger.key === 'condition.expression'
+      ? this.formatSemanticExpression(trigger.params.expression)
+      : this.formatDisplayTriggerCondition(trigger)
+    if (!conditionText) {
+      return ''
+    }
+
+    return gateText ? `${conditionText}，且${gateText}` : conditionText
+  }
+
+  private formatDisplayTriggerCondition(trigger: SemanticState['triggers'][number]): string {
+    const summary = this.buildTriggerSummary([trigger], true)
+    return summary.replace(/^(入场|出场|条件)：/u, '').replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
+  }
+
+  private buildDisplayGateText(
+    triggers: SemanticState['triggers'],
+    entryTrigger: SemanticState['triggers'][number],
+  ): string | null {
+    const gateTexts = triggers
+      .filter(trigger => trigger.phase === 'gate')
+      .filter(trigger => this.isDisplayGateCompatibleWithEntry(entryTrigger, trigger))
+      .map(trigger => this.buildDisplayConditionText(trigger, null))
+      .filter(text => text.length > 0)
+    return gateTexts.length > 0 ? gateTexts.join('，且') : null
+  }
+
+  private isDisplayGateCompatibleWithEntry(
+    entryTrigger: SemanticState['triggers'][number],
+    gateTrigger: SemanticState['triggers'][number],
+  ): boolean {
+    const gateSide = this.resolveDisplayGateSideScope(gateTrigger)
+    if (!gateSide || gateSide === 'both') {
+      return true
+    }
+
+    if (entryTrigger.sideScope === 'both') {
+      return true
+    }
+
+    const entrySide = entryTrigger.sideScope ?? 'long'
+    return entrySide === gateSide
+  }
+
+  private resolveDisplayGateSideScope(
+    gateTrigger: SemanticState['triggers'][number],
+  ): SemanticDisplaySideScope | null {
+    if (gateTrigger.sideScope) {
+      return gateTrigger.sideScope
+    }
+
+    const expression = gateTrigger.params.expression
+    if (!this.isSemanticExpression(expression)) {
+      return null
+    }
+
+    const sides = this.collectDisplayExpressionPositionSides(expression)
+    if (sides.has('both') || (sides.has('long') && sides.has('short'))) {
+      return 'both'
+    }
+    if (sides.has('short')) {
+      return 'short'
+    }
+    if (sides.has('long')) {
+      return 'long'
+    }
+    return null
+  }
+
+  private collectDisplayExpressionPositionSides(expression: SemanticExpression): Set<SemanticDisplaySideScope> {
+    const sides = new Set<SemanticDisplaySideScope>()
+    if (expression.kind === 'predicate') {
+      this.addDisplayOperandPositionSide(sides, expression.left)
+      this.addDisplayOperandPositionSide(sides, expression.right)
+      return sides
+    }
+
+    expression.children.forEach((child) => {
+      this.collectDisplayExpressionPositionSides(child).forEach(side => sides.add(side))
+    })
+    return sides
+  }
+
+  private addDisplayOperandPositionSide(
+    sides: Set<SemanticDisplaySideScope>,
+    operand: SemanticExpressionOperand,
+  ): void {
+    if (operand.kind === 'position' && operand.field === 'has_position' && operand.side) {
+      sides.add(operand.side)
+    }
+  }
+
+  private buildDisplayActionItems(
+    trigger: SemanticState['triggers'][number],
+    actions: SemanticState['actions'],
+    position: SemanticState['position'],
+  ): SemanticDisplayActionItem[] {
+    const actionKey = this.pickDisplayActionKey(trigger, actions)
+    if (!actionKey) {
+      return []
+    }
+
+    const text = this.formatDisplayActionText(actionKey, position)
+    return text
+      ? [{
+          kind: 'action',
+          id: `action-${trigger.id}-${actionKey}`,
+          text,
+        }]
+      : []
+  }
+
+  private pickDisplayActionKey(
+    trigger: SemanticState['triggers'][number],
+    actions: SemanticState['actions'],
+  ): string | null {
+    const hasAction = (key: string) => actions.some(action => action.key === key)
+    const pickFirstExisting = (keys: string[]): string | null => keys.find(hasAction) ?? null
+
+    if (trigger.phase === 'entry') {
+      if (trigger.sideScope === 'short') return hasAction('open_short') ? 'open_short' : null
+      if (trigger.sideScope === 'both') return pickFirstExisting(['open_long', 'open_short']) ? 'open_both' : null
+      return hasAction('open_long') ? 'open_long' : null
+    }
+
+    if (trigger.phase === 'exit') {
+      if (trigger.sideScope === 'short') return pickFirstExisting(['close_short', 'reduce_short'])
+      if (trigger.sideScope === 'both') return pickFirstExisting(['close_long', 'close_short', 'reduce_long', 'reduce_short']) ? 'close_both' : null
+      return pickFirstExisting(['close_long', 'reduce_long'])
+    }
+
+    return null
+  }
+
+  private formatDisplayActionText(
+    actionKey: string,
+    position: SemanticState['position'],
+  ): string {
+    const sizingText = this.buildDisplayPositionSizingValue(position)
+
+    if (actionKey === 'open_long') return sizingText ? `开多 ${sizingText}` : '开多'
+    if (actionKey === 'open_short') return sizingText ? `开空 ${sizingText}` : '开空'
+    if (actionKey === 'open_both') return sizingText ? `开仓 ${sizingText}` : '开仓'
+    if (actionKey === 'close_long' || actionKey === 'reduce_long') return '平多'
+    if (actionKey === 'close_short' || actionKey === 'reduce_short') return '平空'
+    if (actionKey === 'close_both') return '平仓'
+    return ''
+  }
+
+  private buildDisplayExecuteBlock(state: SemanticState): SemanticDisplayLogicGraphBlock {
+    const executionContext = this.buildExecutionContext(state.contextSlots)
+    const positionSizing = this.buildDisplayPositionSizingValue(state.position)
+    const marketType = this.formatDisplayMarketType(executionContext.marketType)
+    const riskTexts = this.buildRiskSummary(this.filterDeterministicRisk(state.risk))
+      .split('；')
+      .filter(text => text.length > 0)
+    const items: SemanticDisplayExecuteItem[] = []
+
+    if (executionContext.exchange) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-exchange',
+        key: 'exchange',
+        value: executionContext.exchange,
+        text: `交易所: ${executionContext.exchange.toUpperCase()}`,
+      })
+    }
+
+    if (executionContext.symbol) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-symbol',
+        key: 'symbol',
+        value: executionContext.symbol,
+        text: `标的: ${executionContext.symbol}`,
+      })
+    }
+
+    if (executionContext.timeframe) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-timeframe',
+        key: 'timeframe',
+        value: executionContext.timeframe,
+        text: `周期: ${executionContext.timeframe}`,
+      })
+    }
+
+    if (positionSizing) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-position',
+        key: 'positionSizing',
+        value: positionSizing,
+        text: `仓位: ${positionSizing}`,
+      })
+    }
+
+    if (marketType) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-market-type',
+        key: 'marketType',
+        value: marketType,
+        text: `市场: ${marketType}`,
+      })
+    }
+
+    riskTexts.forEach((riskText, index) => {
+      const text = `风控: ${riskText} -> 平仓`
+      items.push({
+        kind: 'execute',
+        id: `execute-risk-${index}`,
+        key: 'risk',
+        value: riskText,
+        text,
+      })
+    })
+
+    return {
+      type: 'EXECUTE',
+      items,
+    }
+  }
+
+  private buildDisplayPositionSizingValue(position: SemanticState['position']): string | null {
+    const summary = this.buildPositionSummary(position)
+    return summary ? summary.replace(/^仓位：/u, '') : null
+  }
+
+  private formatDisplayMarketType(marketType: string | null): string | null {
+    if (!marketType) {
+      return null
+    }
+
+    const normalized = marketType.toLowerCase()
+    if (normalized === 'perp' || normalized === 'perpetual' || normalized === 'swap') {
+      return '永续'
+    }
+    if (normalized === 'spot') {
+      return '现货'
+    }
+    if (normalized === 'futures' || normalized === 'future') {
+      return '交割'
+    }
+    return marketType
   }
 
   private buildExecutionContext(slots: {
@@ -416,9 +752,44 @@ export class SemanticStateProjectionService {
   }
 
   private isSemanticExpressionOperand(operand: unknown): operand is SemanticExpressionOperand {
-    return !!operand
-      && typeof operand === 'object'
-      && typeof (operand as { kind?: unknown }).kind === 'string'
+    if (!operand || typeof operand !== 'object') {
+      return false
+    }
+
+    const candidate = operand as Record<string, unknown>
+    if (candidate.kind === 'series') {
+      return candidate.source === 'bar'
+        && (candidate.field === 'open'
+          || candidate.field === 'high'
+          || candidate.field === 'low'
+          || candidate.field === 'close')
+        && (candidate.offsetBars === undefined || typeof candidate.offsetBars === 'number')
+    }
+
+    if (candidate.kind === 'indicator') {
+      return typeof candidate.name === 'string'
+        && !!candidate.params
+        && typeof candidate.params === 'object'
+        && (candidate.output === undefined || typeof candidate.output === 'string')
+    }
+
+    if (candidate.kind === 'position') {
+      return (candidate.field === 'avg_price'
+          || candidate.field === 'pnl_pct'
+          || candidate.field === 'bars_held'
+          || candidate.field === 'has_position')
+        && (candidate.side === undefined
+          || candidate.side === 'long'
+          || candidate.side === 'short'
+          || candidate.side === 'both')
+    }
+
+    if (candidate.kind === 'constant') {
+      return (typeof candidate.value === 'number' || typeof candidate.value === 'string' || typeof candidate.value === 'boolean')
+        && (candidate.unit === undefined || typeof candidate.unit === 'string')
+    }
+
+    return false
   }
 
   private buildRiskSummary(riskItems: SemanticState['risk']): string {

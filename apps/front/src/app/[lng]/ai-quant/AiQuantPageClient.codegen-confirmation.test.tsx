@@ -548,6 +548,14 @@ async function waitForAssertion(
   }
 }
 
+function readPreviewStatus(container: HTMLElement): string | undefined {
+  return container.querySelector('[data-testid="display-graph-status"], [data-testid="graph-status"]')?.textContent ?? undefined
+}
+
+function queryConfirmButton(container: HTMLElement): HTMLButtonElement | null {
+  return container.querySelector('[data-testid="display-confirm-graph"], [data-testid="confirm-graph"]')
+}
+
 describe('AiQuantPageClient codegen confirmation flow', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -972,7 +980,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await waitForAssertion(() => {
       expect(mockGetLlmCodegenSession).toHaveBeenCalledWith('session-1')
-      expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('confirmed')
+      expect(readPreviewStatus(container)).toBe('confirmed')
       expect(
         (container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null)?.disabled,
       ).toBe(false)
@@ -1771,10 +1779,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     await waitForAssertion(() => {
-      expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
-      expect(
-        (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
-      ).toBe(false)
+      expect(readPreviewStatus(container)).toBe('draft')
+      expect(queryConfirmButton(container)?.disabled).toBe(false)
     })
     const runButtonAfterRevise = container.querySelector(
       '[data-testid="run-backtest"]',
@@ -1782,17 +1788,13 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(runButtonAfterRevise?.disabled).toBe(true)
 
     await act(async () => {
-      container
-        .querySelector('[data-testid="confirm-graph"]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      queryConfirmButton(container)?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
       await Promise.resolve()
     })
 
-    expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('confirmed')
-    const confirmButtonAfterReconfirm = container.querySelector(
-      '[data-testid="confirm-graph"]',
-    ) as HTMLButtonElement | null
+    expect(readPreviewStatus(container)).toBe('confirmed')
+    const confirmButtonAfterReconfirm = queryConfirmButton(container)
     const runButtonAfterReconfirm = container.querySelector(
       '[data-testid="run-backtest"]',
     ) as HTMLButtonElement | null

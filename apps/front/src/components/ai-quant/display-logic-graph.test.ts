@@ -683,4 +683,89 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).toContain('价格向下突破布林带下轨（30, 0.9）')
     expect(text).not.toContain('不支持的条件，待补充')
   })
+
+  it('prefers server-provided displayLogicGraph over legacy condition-key parsing', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-entry', text: '收盘价高于前 1 根最高价，且持有多仓等于false' },
+                { kind: 'action', id: 'action-entry', text: '开多 3%' },
+              ],
+            },
+            {
+              type: 'EXECUTE',
+              items: [
+                { kind: 'execute', id: 'execute-exchange', key: 'exchange', value: 'okx', text: '交易所: OKX' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'legacy-unsupported',
+            phase: 'entry',
+            condition: { key: 'condition.expression' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks).toHaveLength(2)
+    expect(text).toContain('收盘价高于前 1 根最高价')
+    expect(text).toContain('开多 3%')
+    expect(text).not.toContain('不支持的条件，待补充')
+  })
+
+  it('falls back to legacy parsing when server displayLogicGraph has no rule blocks', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'EXECUTE',
+              items: [
+                { kind: 'execute', id: 'execute-exchange', key: 'exchange', value: 'okx', text: '交易所: OKX' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'legacy-price-drop',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+              params: {
+                timeframe: '3m',
+                basis: 'prev_close',
+              },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(text).toContain('3m 内相对前收盘下跌 1%')
+    expect(text).toContain('开多')
+    expect(text).toContain('标的: BTCUSDT')
+  })
 })
