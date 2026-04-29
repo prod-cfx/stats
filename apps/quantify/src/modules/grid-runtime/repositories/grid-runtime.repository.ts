@@ -82,6 +82,21 @@ export interface AppendGridRuntimeEventInput {
   payload?: GridRuntimeJsonValue
 }
 
+export interface UpdateGridRuntimeStatusInput {
+  id: string
+  status: string
+  stopReason?: string | null
+}
+
+export interface UpdateGridOrderFromExchangeInput {
+  id: string
+  exchangeOrderId?: string | null
+  status: string
+  filledQuantity: string
+  avgFillPrice?: string | null
+  rawPayload?: GridRuntimeJsonValue
+}
+
 @Injectable()
 export class GridRuntimeRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -131,6 +146,38 @@ export class GridRuntimeRepository {
     })
   }
 
+  findInstanceForSync(instanceId: string) {
+    return this.txHost.tx.gridRuntimeInstance.findUnique({
+      where: { id: instanceId },
+      include: { levels: { orderBy: { levelIndex: 'asc' } } },
+    })
+  }
+
+  listActiveInstances(limit: number) {
+    return this.txHost.tx.gridRuntimeInstance.findMany({
+      where: { status: { in: ['INITIALIZING', 'RUNNING'] } },
+      orderBy: [{ lastSyncAt: 'asc' }, { createdAt: 'asc' }],
+      take: limit,
+    })
+  }
+
+  updateInstanceStatus(input: UpdateGridRuntimeStatusInput) {
+    return this.txHost.tx.gridRuntimeInstance.update({
+      where: { id: input.id },
+      data: {
+        status: input.status as never,
+        stopReason: input.stopReason,
+      },
+    })
+  }
+
+  updateInstanceLastSyncAt(instanceId: string, syncedAt = new Date()) {
+    return this.txHost.tx.gridRuntimeInstance.update({
+      where: { id: instanceId },
+      data: { lastSyncAt: syncedAt },
+    })
+  }
+
   createPlannedOrder(input: CreatePlannedGridOrderInput) {
     return this.txHost.tx.gridOrder.create({
       data: {
@@ -167,6 +214,30 @@ export class GridRuntimeRepository {
         exchangeOrderId: input.exchangeOrderId,
         status: 'OPEN',
         rawPayload: input.rawPayload,
+      },
+    })
+  }
+
+  updateOrderFromExchange(input: UpdateGridOrderFromExchangeInput) {
+    return this.txHost.tx.gridOrder.update({
+      where: { id: input.id },
+      data: {
+        exchangeOrderId: input.exchangeOrderId ?? undefined,
+        status: input.status as never,
+        filledQuantity: this.decimal(input.filledQuantity),
+        avgFillPrice: input.avgFillPrice == null ? null : this.decimal(input.avgFillPrice),
+        rawPayload: input.rawPayload,
+      },
+    })
+  }
+
+  findFillByExchangeId(gridRuntimeInstanceId: string, exchangeFillId: string) {
+    return this.txHost.tx.gridFill.findUnique({
+      where: {
+        gridRuntimeInstanceId_exchangeFillId: {
+          gridRuntimeInstanceId,
+          exchangeFillId,
+        },
       },
     })
   }
