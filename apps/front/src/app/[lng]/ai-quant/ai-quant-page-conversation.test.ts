@@ -68,6 +68,14 @@ describe('ai-quant-page-conversation', () => {
       tradeCount: 0,
       openTradeCount: 1,
     })).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-config-changed',
+      maxDrawdownPct: 5,
+      totalReturnPct: 8,
+      winRatePct: 55,
+      tradeCount: 3,
+      recoveryStatus: 'config_changed',
+    })).toBe(false)
   })
 
   it('preserves open-trade summary fields when building a backtest summary result', () => {

@@ -1250,6 +1250,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('config_changed')
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('blocked')
   })
 
   it.each([
