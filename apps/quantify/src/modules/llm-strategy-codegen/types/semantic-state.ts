@@ -80,6 +80,37 @@ export interface SemanticActionState {
   supersedes?: string[]
 }
 
+export type SemanticRiskBasis = 'entry_avg_price' | 'position_pnl'
+export type SemanticRiskBasisSource = 'user_explicit' | 'system_default' | 'derived'
+export type SemanticRiskEffectType = 'close_position' | 'reduce_position' | 'notify_only' | 'pause_strategy'
+export type SemanticRiskScope = 'current_position' | 'long' | 'short' | 'both' | 'strategy' | 'account'
+
+export interface SemanticPercentRiskParams extends Record<string, unknown> {
+  valuePct: number
+  direction: 'loss' | 'profit'
+  basis: SemanticRiskBasis
+  basisSource: SemanticRiskBasisSource
+  effect: Exclude<SemanticRiskEffectType, 'pause_strategy'>
+  scope: Exclude<SemanticRiskScope, 'strategy' | 'account'> | 'strategy' | 'account'
+  reducePct?: number
+}
+
+export interface SemanticRiskConditionExpressionParams extends Record<string, unknown> {
+  condition: SemanticExpression
+  effect: {
+    type: SemanticRiskEffectType
+    reducePct?: number
+  }
+  scope: SemanticRiskScope
+  capabilityStatus: 'supported' | 'recognized_unsupported'
+  unsupportedReason?: string
+}
+
+export type SemanticRiskParams =
+  | SemanticPercentRiskParams
+  | SemanticRiskConditionExpressionParams
+  | Record<string, unknown>
+
 export interface SemanticRiskState {
   id: string
   key: string

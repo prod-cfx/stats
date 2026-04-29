@@ -287,6 +287,36 @@ describe('strategySemanticContracts', () => {
     }))
   })
 
+  it('accepts structured risk condition expression params as recognized unsupported', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+        unsupportedReason: 'risk_expression_compiler_not_available',
+      },
+    })).toEqual({ ok: true })
+  })
+
+  it('rejects risk condition expression params without a valid expression', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: null,
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+      },
+    })).toEqual(expect.objectContaining({ ok: false }))
+  })
+
   it('rejects malformed top-level semantic risk contracts without throwing', () => {
     expect(validateSemanticRiskContract(null as never)).toEqual(expect.objectContaining({ ok: false }))
     expect(validateSemanticRiskContract('risk.stop_loss_pct' as never)).toEqual(expect.objectContaining({ ok: false }))

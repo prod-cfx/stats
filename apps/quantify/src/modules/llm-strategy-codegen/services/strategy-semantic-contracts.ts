@@ -139,6 +139,12 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
       { slotKey: 'risk.take_profit', valueShape: 'scalar', unit: 'percent', paramPaths: ['valuePct', 'takeProfitPct', 'pct'] },
     ],
   },
+  'risk.condition_expression': {
+    semanticKey: 'risk.condition_expression',
+    family: 'risk',
+    requiredParams: ['condition', 'effect', 'scope', 'capabilityStatus'],
+    editableSlots: [],
+  },
 }
 
 const SUPPORTED_EXPRESSION_OPERATORS = new Set<string>(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'CROSS_OVER', 'CROSS_UNDER'])
@@ -149,7 +155,13 @@ const SUPPORTED_ACTION_KEYS = new Set<string>(['open_long', 'close_long', 'open_
 const SUPPORTED_QUOTE_ASSETS = ['USDT', 'USDC', 'USD'] as const
 const SUPPORTED_QUOTE_ASSET_SET = new Set<string>(SUPPORTED_QUOTE_ASSETS)
 const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only', 'long_short'])
-const SUPPORTED_RISK_KEYS = new Set<string>(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+const SUPPORTED_RISK_KEYS = new Set<string>([
+  'risk.stop_loss_pct',
+  'risk.take_profit_pct',
+  'risk.condition_expression',
+])
+const SUPPORTED_RISK_BASES = new Set<string>(['entry_avg_price', 'position_pnl'])
+const SUPPORTED_RISK_BASIS_SOURCES = new Set<string>(['user_explicit', 'system_default', 'derived'])
 const POSITION_SIZING_VALUE_EPSILON = 1e-9
 
 const FALLBACK_EDITABLE_SLOTS: SemanticEditableSlotContract[] = [
@@ -333,12 +345,46 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
   if (!isRecord(risk.params)) {
     return invalid('invalid_risk_params')
   }
+  if (risk.key === 'risk.condition_expression') {
+    const expressionResult = validateSemanticExpressionContract(risk.params.condition)
+    if (!expressionResult.ok) {
+      return invalid('invalid_risk_condition_expression')
+    }
+    if (!isRecord(risk.params.effect) || typeof risk.params.effect.type !== 'string') {
+      return invalid('invalid_risk_effect')
+    }
+    if (typeof risk.params.scope !== 'string') {
+      return invalid('invalid_risk_scope')
+    }
+    if (
+      risk.params.capabilityStatus !== 'supported'
+      && risk.params.capabilityStatus !== 'recognized_unsupported'
+    ) {
+      return invalid('invalid_risk_capability_status')
+    }
+    return valid()
+  }
   if (
     typeof risk.params.valuePct !== 'number'
     || !Number.isFinite(risk.params.valuePct)
     || risk.params.valuePct <= 0
   ) {
     return invalid('invalid_risk_value_pct')
+  }
+  if (
+    risk.params.basis !== undefined
+    && (typeof risk.params.basis !== 'string' || !SUPPORTED_RISK_BASES.has(risk.params.basis))
+  ) {
+    return invalid('invalid_risk_basis')
+  }
+  if (
+    risk.params.basisSource !== undefined
+    && (
+      typeof risk.params.basisSource !== 'string'
+      || !SUPPORTED_RISK_BASIS_SOURCES.has(risk.params.basisSource)
+    )
+  ) {
+    return invalid('invalid_risk_basis_source')
   }
 
   return valid()
