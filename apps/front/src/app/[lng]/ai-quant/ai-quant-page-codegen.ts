@@ -2,7 +2,8 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import type { LlmCodegenSessionResponse } from '@/lib/api'
+import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
+import type { AiQuantBacktestDraftConfig, LlmCodegenSessionResponse } from '@/lib/api'
 import {
   buildAiQuantErrorMessage,
   buildAiQuantStageFallbackMessage,
@@ -25,6 +26,7 @@ import { ApiError } from '@/lib/errors'
 import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
 import {
   BACKTEST_EXECUTION_PARAM_KEYS,
+  buildBacktestDraftConfigFromValues,
   hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
   normalizeClarificationGate,
@@ -100,6 +102,88 @@ function mergeSnapshotBoundParamValues(input: {
   return {
     paramValues: nextValues,
     explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
+  }
+}
+
+function hasCompleteBacktestDraftConfigValues(values: Record<string, unknown>): boolean {
+  const preset = typeof values.backtestRangePreset === 'string' ? values.backtestRangePreset.trim() : ''
+  if (!preset) {
+    return false
+  }
+  if (
+    preset === 'CUSTOM'
+    && (
+      typeof values.backtestStart !== 'string'
+      || !values.backtestStart.trim()
+      || typeof values.backtestEnd !== 'string'
+      || !values.backtestEnd.trim()
+    )
+  ) {
+    return false
+  }
+  return BACKTEST_EXECUTION_PARAM_KEYS.every(key => key in values)
+}
+
+function buildExplicitBacktestDraftConfigFromValues(
+  values: Record<string, unknown>,
+): AiQuantBacktestDraftConfig | null {
+  if (!hasCompleteBacktestDraftConfigValues(values)) {
+    return null
+  }
+  return buildBacktestDraftConfigFromValues(values)
+}
+
+function areBacktestDraftConfigsEqual(
+  left: AiQuantBacktestDraftConfig | null,
+  right: AiQuantBacktestDraftConfig | null,
+): boolean {
+  if (!left || !right) {
+    return false
+  }
+  if (left.range.preset !== right.range.preset) {
+    return false
+  }
+  if (
+    left.range.preset === 'CUSTOM'
+    && (
+      left.range.startAt !== right.range.startAt
+      || left.range.endAt !== right.range.endAt
+    )
+  ) {
+    return false
+  }
+  return (
+    left.execution.initialCash === right.execution.initialCash
+    && left.execution.leverage === right.execution.leverage
+    && left.execution.slippageBps === right.execution.slippageBps
+    && left.execution.feeBps === right.execution.feeBps
+    && left.execution.priceSource === right.execution.priceSource
+    && left.execution.allowPartial === right.execution.allowPartial
+  )
+}
+
+function resolvePreservedBacktestResult(input: {
+  shouldPreserve: boolean
+  result: BacktestResult | null
+  currentConfig: AiQuantBacktestDraftConfig | null
+  nextConfig: AiQuantBacktestDraftConfig | null
+}): BacktestResult | null {
+  const {
+    shouldPreserve,
+    result,
+    currentConfig,
+    nextConfig,
+  } = input
+
+  if (!shouldPreserve || !result) {
+    return null
+  }
+  if (areBacktestDraftConfigsEqual(currentConfig, nextConfig)) {
+    return result
+  }
+  return {
+    ...result,
+    recoveryStatus: 'config_changed',
   }
 }
 
@@ -539,6 +623,13 @@ export function applyCodegenResponseToConversationState(args: {
     && Boolean(conversation.backtestResult)
     && normalizePublishedSnapshotId(conversation.publishedSnapshotId) !== null
     && normalizePublishedSnapshotId(conversation.publishedSnapshotId) === nextPublishedSnapshotId
+  const nextBacktestDraftConfig = buildExplicitBacktestDraftConfigFromValues(normalizedParamValues)
+  const nextBacktestResult = resolvePreservedBacktestResult({
+    shouldPreserve: shouldPreserveBacktestResult,
+    result: conversation.backtestResult,
+    currentConfig: conversation.backtestDraftConfig,
+    nextConfig: nextBacktestDraftConfig,
+  })
   const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
     ? (response.semanticGraph ?? null)
     : conversation.semanticGraph
@@ -656,7 +747,7 @@ export function applyCodegenResponseToConversationState(args: {
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
     backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
-    backtestResult: shouldPreserveBacktestResult ? conversation.backtestResult : null,
+    backtestResult: nextBacktestResult,
     latestSignalMessage: null,
     messages: nextMessages,
     updatedAt: response.updatedAt ? Date.parse(response.updatedAt) : Date.now(),

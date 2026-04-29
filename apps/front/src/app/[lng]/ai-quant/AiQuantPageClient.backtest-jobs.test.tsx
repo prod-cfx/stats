@@ -1040,6 +1040,140 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
   })
 
+  it('marks same-snapshot restored backtests stale when codegen reconciliation changes the effective backtest config', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    const getLlmCodegenSession = jest.requireMock('@/lib/api')
+      .getLlmCodegenSession as jest.Mock
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        activeCodegenSessionId: 'session-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        scriptCode: 'return { ok: true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+    getLlmCodegenSession.mockResolvedValue({
+      id: 'session-1',
+      conversationId: 'conv-1',
+      conversationTitle: 'server conv',
+      conversationMessages: [],
+      status: 'PUBLISHED',
+      scriptCode: 'return { ok: true }',
+      publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        backtestRangePreset: '30D',
+        backtestInitialCash: 20000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 20000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      updatedAt: '2026-04-23T00:04:00.000Z',
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const summary = container.querySelector('[data-testid="backtest-summary"]')?.textContent
+    expect(summary).toContain('btjob-1')
+    expect(summary).toContain('config_changed')
+    expect(summary).toContain('blocked')
+  })
+
   it('allows rerunning backtest immediately after server-owned recovery by backfilling snapshot execution defaults', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock
