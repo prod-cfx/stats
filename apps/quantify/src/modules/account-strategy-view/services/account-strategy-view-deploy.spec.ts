@@ -145,7 +145,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       exchangeAccountId: 'acct-grid-1',
       exchangeId: 'okx',
       marketType: 'spot',
-      symbol: 'BTCUSDT',
+      symbol: 'BTC/USDT',
       astSnapshot: expect.objectContaining({ orderPrograms: expect.any(Array) }),
     }))
     expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).not.toHaveBeenCalled()

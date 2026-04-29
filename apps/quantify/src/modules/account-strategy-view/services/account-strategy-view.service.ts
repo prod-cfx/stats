@@ -1246,6 +1246,7 @@ export class AccountStrategyViewService {
         ...riskProfile,
       })
       if (this.hasExclusiveAstOrderPrograms(resolvedDeploy.snapshot)) {
+        const gridExecutionSymbol = normalizeExecutionSymbol(resolvedDeploy.symbol, resolvedDeploy.marketType, resolvedDeploy.exchange)
         await this.requireGridRuntimeService().createFromDeployment({
           strategyInstanceId: deployResult.strategyInstanceId,
           publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
@@ -1253,9 +1254,9 @@ export class AccountStrategyViewService {
           exchangeAccountId: resolvedDeploy.exchangeAccountId!,
           exchangeId: resolvedDeploy.exchange,
           marketType: resolvedDeploy.marketType,
-          symbol: resolvedDeploy.symbol,
+          symbol: gridExecutionSymbol,
           astSnapshot: this.readRecord(this.readRecord(resolvedDeploy.snapshot)?.astSnapshot),
-          currentPrice: await this.resolveGridDeploymentCurrentPrice(resolvedDeploy.symbol),
+          currentPrice: await this.resolveGridDeploymentCurrentPrice(gridExecutionSymbol),
         })
       } else {
         await this.requireRuntimeExecutionStateService().initializeStatesForDeploy({
