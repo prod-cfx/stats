@@ -365,7 +365,7 @@ export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
 
 export function hasExplicitBacktestExecutionOverrides(values: Record<string, unknown>): boolean {
   return BACKTEST_EXECUTION_PARAM_KEYS.some(
-    key => values[key] !== DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
+    key => key in values && values[key] !== DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
   )
 }
 
@@ -536,9 +536,13 @@ function normalizeBacktestConfigDefaults(
     : null
   if (
     !Number.isFinite(initialCash)
+    || initialCash <= 0
     || !Number.isFinite(slippageBps)
+    || slippageBps < 0
     || !Number.isFinite(feeBps)
-    || !priceSource
+    || feeBps < 0
+    || (candidate.leverage !== undefined && candidate.leverage !== null && (!Number.isFinite(leverage) || leverage <= 0))
+    || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
     || allowPartial === null
   ) {
     return null

@@ -84,6 +84,55 @@ function normalizePublishedSnapshotParamValues(
   return normalized
 }
 
+function normalizeSnapshotBacktestConfigDefaults(
+  value: AccountAiQuantBacktestConfigDefaults | null | undefined,
+): AccountAiQuantBacktestConfigDefaults | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const candidate = value as Record<string, unknown>
+  const initialCash = typeof candidate.initialCash === 'number' ? candidate.initialCash : Number(candidate.initialCash)
+  const leverage =
+    candidate.leverage === null
+      ? null
+      : (typeof candidate.leverage === 'number' ? candidate.leverage : Number(candidate.leverage))
+  const slippageBps = typeof candidate.slippageBps === 'number' ? candidate.slippageBps : Number(candidate.slippageBps)
+  const feeBps = typeof candidate.feeBps === 'number' ? candidate.feeBps : Number(candidate.feeBps)
+  const priceSource = typeof candidate.priceSource === 'string' ? candidate.priceSource.trim() : ''
+  const allowPartial = candidate.allowPartial
+
+  if (
+    !Number.isFinite(initialCash)
+    || initialCash <= 0
+    || (leverage !== null && (!Number.isFinite(leverage) || leverage <= 0))
+    || !Number.isFinite(slippageBps)
+    || slippageBps < 0
+    || !Number.isFinite(feeBps)
+    || feeBps < 0
+    || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+    || typeof allowPartial !== 'boolean'
+  ) {
+    return null
+  }
+
+  return {
+    initialCash,
+    leverage,
+    slippageBps,
+    feeBps,
+    priceSource,
+    allowPartial,
+    ...(Array.isArray(candidate.stateTimeframes)
+      ? {
+          stateTimeframes: candidate.stateTimeframes
+            .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+            .map(item => item.trim()),
+        }
+      : {}),
+  }
+}
+
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
@@ -501,6 +550,10 @@ export function applyCodegenResponseToConversationState(args: {
   const shouldUpdateGraph =
     (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
+  const responseSnapshotBacktestConfigDefaults =
+    response.status === 'PUBLISHED'
+      ? normalizeSnapshotBacktestConfigDefaults(response.publishedSnapshotBacktestConfigDefaults)
+      : null
   const syncFallback = {
     exchange: targetParams.exchange,
     symbol: targetParams.symbol,
@@ -528,7 +581,7 @@ export function applyCodegenResponseToConversationState(args: {
         : null,
     snapshotBacktestConfigDefaults:
       response.status === 'PUBLISHED'
-        ? (response.publishedSnapshotBacktestConfigDefaults ?? null)
+        ? responseSnapshotBacktestConfigDefaults
         : null,
   })
   const nextPublishedSnapshotParamValues =
@@ -545,7 +598,7 @@ export function applyCodegenResponseToConversationState(args: {
         : conversation.publishedSnapshotStrategyConfig
   const nextPublishedSnapshotBacktestConfigDefaults =
     response.status === 'PUBLISHED'
-      ? (response.publishedSnapshotBacktestConfigDefaults ?? null)
+      ? responseSnapshotBacktestConfigDefaults
       : shouldUpdateGraph
         ? null
         : conversation.publishedSnapshotBacktestConfigDefaults
