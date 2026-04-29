@@ -169,7 +169,17 @@ export class GridRuntimeService {
       baseAsset: this.resolveBaseAsset(symbol, quoteAsset),
       orderType: 'limit',
       timeInForce: 'gtc',
+      spacingMode: levelSet?.kind === 'GEOMETRIC_LEVEL_SET' ? 'geometric' : 'arithmetic',
+      spacingValue: this.readSpacingValue(levelSet),
+      pairingPolicy: this.readString(program, 'pairingPolicy') === 'adjacent_level' ? 'adjacent_level' : undefined,
+      activeWhen: this.readString(program, 'activeWhen'),
     }
+  }
+
+  private readSpacingValue(levelSet: Record<string, unknown> | null): string | null {
+    const spacing = this.readRecord(levelSet?.spacing)
+    const value = this.readNumber(spacing, 'value')
+    return value === null ? null : this.formatNumber(value)
   }
 
   private findLevelSet(ast: Record<string, unknown> | null, levelSetRef: string | null): Record<string, unknown> | null {

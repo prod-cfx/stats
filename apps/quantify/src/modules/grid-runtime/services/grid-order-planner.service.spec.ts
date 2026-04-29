@@ -90,6 +90,23 @@ describe('GridOrderPlannerService', () => {
     expect(plan.orders.map(order => order.quantity)).toEqual(['10', '5'])
   })
 
+  it('derives geometric grid prices when spacing mode is geometric', () => {
+    const plan = service.planInitialOrders({
+      config: {
+        ...baseConfig,
+        mode: 'spot',
+        lowerPrice: '100',
+        upperPrice: '400',
+        gridCount: 3,
+        spacingMode: 'geometric',
+      },
+      currentPrice: '300',
+    })
+
+    expect(plan.levels.map(level => level.price)).toEqual(['100', '200', '400'])
+    expect(plan.orders.map(order => order.price)).toEqual(['100', '200'])
+  })
+
   it('rejects invalid price bounds and grid counts', () => {
     expect(() => service.planInitialOrders({
       config: { ...baseConfig, mode: 'spot', upperPrice: '90' },

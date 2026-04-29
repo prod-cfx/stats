@@ -269,12 +269,12 @@ describe('GridOrderSyncService', () => {
     }))
     expect(repository.createPlannedOrder).toHaveBeenCalledWith(expect.objectContaining({
       gridRuntimeInstanceId: 'grid-1',
-      gridLevelId: 'level-1',
+      gridLevelId: 'level-2',
       side: 'sell',
       role: 'spot_sell',
       orderType: 'limit',
       timeInForce: 'gtc',
-      price: '95',
+      price: '100',
       quantity: '1.0526315789473684',
     }))
     expect(txEvents.withAfterCommit).toHaveBeenCalled()

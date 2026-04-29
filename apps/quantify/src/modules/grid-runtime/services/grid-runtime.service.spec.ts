@@ -56,6 +56,8 @@ function createAstSnapshot() {
       id: 'grid_levels',
       payload: {
         id: 'grid_levels',
+        kind: 'ARITHMETIC_LEVEL_SET',
+        spacing: { mode: 'absolute', value: 5 },
         hardBounds: { lowerRef: 'grid_lower', upperRef: 'grid_upper' },
       },
     }, {
@@ -96,6 +98,9 @@ describe('GridRuntimeService', () => {
         baseAsset: 'BTC',
         orderType: 'limit',
         timeInForce: 'gtc',
+        spacingMode: 'arithmetic',
+        spacingValue: '5',
+        activeWhen: null,
       },
       currentPrice: '100',
     })

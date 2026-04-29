@@ -120,6 +120,10 @@ export class GridOrderPlannerService {
   private derivePrice(config: GridRuntimeConfigSnapshot, levelIndex: number): Prisma.Decimal {
     const lower = this.decimal(config.lowerPrice)
     const upper = this.decimal(config.upperPrice)
+    if (config.spacingMode === 'geometric') {
+      const ratio = upper.div(lower).pow(new Prisma.Decimal(levelIndex).div(config.gridCount - 1))
+      return lower.times(ratio)
+    }
     const step = upper.minus(lower).div(config.gridCount - 1)
 
     return lower.plus(step.times(levelIndex))

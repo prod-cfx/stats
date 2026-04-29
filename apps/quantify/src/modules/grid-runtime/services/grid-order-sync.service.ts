@@ -301,7 +301,7 @@ export class GridOrderSyncService {
     })
     if (!recorded.newlyRecorded) return
 
-    const level = instance.levels.find(item => item.id === order.gridLevelId)
+    const level = this.findInverseLevel(instance, order)
     if (!level) {
       await this.stateMachine.markReconcileRequired(instance.id, 'exchange_mismatch')
       return
@@ -319,6 +319,15 @@ export class GridOrderSyncService {
       quantity: String(exchangeOrder.filled),
       rawPayload: { source: 'grid_order_sync', pairedFromOrderId: order.id },
     })
+  }
+
+  private findInverseLevel(instance: RuntimeInstance, order: RuntimeOrder): RuntimeLevel | null {
+    const currentLevel = instance.levels.find(item => item.id === order.gridLevelId)
+    if (!currentLevel) return null
+    const targetIndex = order.side === 'buy'
+      ? currentLevel.levelIndex + 1
+      : currentLevel.levelIndex - 1
+    return instance.levels.find(item => item.levelIndex === targetIndex) ?? null
   }
 
   private shouldRecordTerminalFill(exchangeOrder: UnifiedOrder): boolean {

@@ -1245,7 +1245,7 @@ export class AccountStrategyViewService {
         strategyInstanceId: deployResult.strategyInstanceId,
         ...riskProfile,
       })
-      if (this.hasAstOrderPrograms(resolvedDeploy.snapshot)) {
+      if (this.hasExclusiveAstOrderPrograms(resolvedDeploy.snapshot)) {
         await this.requireGridRuntimeService().createFromDeployment({
           strategyInstanceId: deployResult.strategyInstanceId,
           publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
@@ -2553,14 +2553,17 @@ export class AccountStrategyViewService {
     if (!record || !astSnapshot) return false
     if (this.readString(astSnapshot, ['astVersion']) !== 'csa.v1') return false
     if (!this.isCompilerV1Snapshot(record, astSnapshot)) return false
-    return this.hasAstOrderPrograms(record)
+    return this.hasExclusiveAstOrderPrograms(record)
   }
 
-  private hasAstOrderPrograms(snapshot: unknown): boolean {
+  private hasExclusiveAstOrderPrograms(snapshot: unknown): boolean {
     const record = this.readRecord(snapshot)
     const astSnapshot = this.readRecord(record?.astSnapshot)
     const orderPrograms = astSnapshot?.orderPrograms
-    return Array.isArray(orderPrograms) && orderPrograms.length > 0
+    const decisionPrograms = astSnapshot?.decisionPrograms
+    return Array.isArray(orderPrograms)
+      && orderPrograms.length > 0
+      && (!Array.isArray(decisionPrograms) || decisionPrograms.length === 0)
   }
 
   private readSnapshotMarketType(source: Record<string, unknown> | null | undefined): MarketType | null {

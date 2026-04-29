@@ -16,6 +16,10 @@ export interface GridRuntimeConfigSnapshot {
   baseAsset: string
   orderType: 'limit'
   timeInForce: 'gtc'
+  spacingMode?: 'arithmetic' | 'geometric'
+  spacingValue?: string | null
+  pairingPolicy?: 'adjacent_level'
+  activeWhen?: string | null
 }
 
 export interface GridLevelPlan {
