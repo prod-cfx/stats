@@ -374,6 +374,58 @@ describe('okxClient', () => {
     expect(order.status).toBe('closed')
   })
 
+  it('uses OKX accumulated fill size for perp filled base size', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-order-1',
+            instId: 'BTC-USDT-SWAP',
+            state: 'filled',
+            side: 'buy',
+            ordType: 'market',
+            sz: '1',
+            fillSz: '0.39',
+            accFillSz: '1',
+            avgPx: '77693.641',
+            uTime: '1773829253570',
+            cTime: '1773829253522',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).fetchOrder('perp-order-1', 'BTC/USDT:PERP')
+
+    expect(order.amount).toBeCloseTo(0.01)
+    expect(order.filled).toBeCloseTo(0.01)
+  })
+
   it('converts perp contract size back to base size when canceling orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)

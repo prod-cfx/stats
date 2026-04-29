@@ -460,6 +460,86 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('keeps OKX perp reduce-only close quantity before contract-size conversion', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        entryPrice: '94500',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 6,
+          lotSize: '0.001',
+        },
+      },
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal(4901.58222),
+        initialBalance: new Prisma.Decimal(4901.58222),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      new Prisma.Decimal('0.0359'),
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      params: expect.objectContaining({
+        reduceOnly: true,
+        amount: 0.0359,
+      }),
+    })
+  })
+
+  it('keeps OKX perp reduce-only close quantity when recalculating for target exchange', () => {
+    const service = createService()
+
+    const result = (service as any).recalculateOrderParamsForTargetExchange(
+      {
+        exchangeId: 'binance',
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        side: 'sell',
+        amount: 0.0359,
+        price: 94500,
+        reduceOnly: true,
+      },
+      {
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
+      },
+      {
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
+        precisionPrice: 2,
+        precisionQuantity: 6,
+        lotSize: '0.001',
+      },
+      'okx',
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      params: expect.objectContaining({
+        exchangeId: 'okx',
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        reduceOnly: true,
+        amount: 0.0359,
+      }),
+    })
+  })
+
   it('uses runtime market identity when locating close positions', async () => {
     const service = createService()
     const executorRepository = (service as any).executorRepository

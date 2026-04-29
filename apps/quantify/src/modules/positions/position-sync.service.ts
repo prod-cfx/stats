@@ -3,6 +3,7 @@ import { PositionSide, PositionStatus, TradeSide } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
+import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionsService } from './positions.service'
@@ -335,7 +336,7 @@ export class PositionSyncService {
   }
 
   private getPositionKey(symbol: string, side: PositionSide): string {
-    return `${symbol.toUpperCase()}:${side}`
+    return `${normalizeLedgerSymbol(symbol)}:${side}`
   }
 
   /**
@@ -353,7 +354,7 @@ export class PositionSyncService {
 
     await this.positionsService.recordTrade({
       userStrategyAccountId: accountId,
-      symbol: this.normalizeSymbol(exchangePos.symbol),
+      symbol: normalizeLedgerSymbol(exchangePos.symbol),
       market: `${exchangeId}:${marketType}`,
       side: tradeSide,
       positionSide,
@@ -433,15 +434,6 @@ export class PositionSyncService {
         reason: 'position-not-found-on-exchange',
       },
     })
-  }
-
-  private normalizeSymbol(symbol: string): string {
-    // 将 BTC/USDT:PERP 格式转换为 BTCUSDT
-    return symbol
-      .replace('/', '')
-      .replace(':PERP', '')
-      .replace(':SWAP', '')
-      .toUpperCase()
   }
 
   private delay(ms: number): Promise<void> {

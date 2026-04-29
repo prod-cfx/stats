@@ -332,6 +332,7 @@ export function buildAccountStrategyRuntimeSemanticSummary(input: {
     .map((trade) => ({
       orderId: trade.orderId ?? null,
       executedAt: trade.executedAt.toISOString(),
+      isSyncOrder: trade.orderId?.startsWith('sync-') ?? false,
       ...classifyTradeSemantic({
         side: trade.side,
         marketType: input.marketType,
@@ -339,17 +340,18 @@ export function buildAccountStrategyRuntimeSemanticSummary(input: {
         exitActions,
       }),
     }))
-  const latestEntry = semanticTrades.find(trade => trade.semanticRole === 'entry') ?? null
-  const latestExit = semanticTrades.find(trade => trade.semanticRole === 'exit') ?? null
-  const latestSync = semanticTrades.find(trade => trade.orderId?.startsWith('sync-')) ?? null
+  const exchangeSemanticTrades = semanticTrades.filter(trade => !trade.isSyncOrder)
+  const latestEntry = exchangeSemanticTrades.find(trade => trade.semanticRole === 'entry') ?? null
+  const latestExit = exchangeSemanticTrades.find(trade => trade.semanticRole === 'exit') ?? null
+  const latestSync = semanticTrades.find(trade => trade.isSyncOrder) ?? null
   const entryOrders = semanticTrades
-    .filter(trade => trade.semanticRole === 'entry')
+    .filter(trade => !trade.isSyncOrder && trade.semanticRole === 'entry')
     .map(trade => ({ orderId: trade.orderId, executedAt: trade.executedAt }))
   const exitOrders = semanticTrades
-    .filter(trade => trade.semanticRole === 'exit')
+    .filter(trade => !trade.isSyncOrder && trade.semanticRole === 'exit')
     .map(trade => ({ orderId: trade.orderId, executedAt: trade.executedAt }))
   const syncOrders = semanticTrades
-    .filter(trade => trade.orderId?.startsWith('sync-'))
+    .filter(trade => trade.isSyncOrder)
     .map(trade => ({ orderId: trade.orderId, executedAt: trade.executedAt }))
   const latestSemanticAction = semanticTrades[0]?.semanticAction ?? null
 

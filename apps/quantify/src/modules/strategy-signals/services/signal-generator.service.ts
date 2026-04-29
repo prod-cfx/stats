@@ -56,6 +56,7 @@ import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/serv
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import {
@@ -761,6 +762,7 @@ export class SignalGeneratorService {
       })
       const bars = this.normalizeRuntimeBars(marketBars ?? [], {
         requireFinalLatestBar: true,
+        timeframe,
       })
       const scriptContext = {
         ...buildStrategyContext({
@@ -935,6 +937,7 @@ export class SignalGeneratorService {
         })
         const bars = this.normalizeRuntimeBars(marketBars ?? [], {
           requireFinalLatestBar,
+          timeframe,
         })
         const scriptContext = {
           ...buildStrategyContext({
@@ -1194,11 +1197,12 @@ export class SignalGeneratorService {
     },
   ): Promise<GatewayBar[] | null> {
     const bars = await this.candidateStage.loadRecentBars(symbolId, timeframe, limit)
-    return this.filterLatestGatewayBar(bars ?? [], options)
+    return this.filterLatestGatewayBar(bars ?? [], timeframe, options)
   }
 
   private filterLatestGatewayBar(
     bars: readonly GatewayBar[],
+    timeframe: AppMarketTimeframe,
     options: {
       requireFinalLatestBar?: boolean
     } = {},
@@ -1208,7 +1212,7 @@ export class SignalGeneratorService {
     }
 
     const latestBar = bars[bars.length - 1]
-    if (latestBar.isFinal ?? true) {
+    if (this.isClosedRuntimeBar(latestBar, timeframe)) {
       return [...bars]
     }
 
@@ -1219,6 +1223,7 @@ export class SignalGeneratorService {
     bars: readonly GatewayBar[],
     options: {
       requireFinalLatestBar?: boolean
+      timeframe?: AppMarketTimeframe
     } = {},
   ) {
     const normalizedBars = normalizeGatewayBars(bars)
@@ -1227,11 +1232,23 @@ export class SignalGeneratorService {
     }
 
     const latestBar = normalizedBars[normalizedBars.length - 1]
-    if (latestBar.isFinal) {
+    if (!options.timeframe || this.isClosedRuntimeBar(latestBar, options.timeframe)) {
       return normalizedBars
     }
 
     return normalizedBars.slice(0, -1)
+  }
+
+  private isClosedRuntimeBar(
+    bar: Pick<GatewayBar, 'timestamp' | 'isFinal'> | { timestamp: number; isFinal?: boolean },
+    timeframe: AppMarketTimeframe,
+  ): boolean {
+    if (bar.isFinal === false) {
+      return false
+    }
+
+    const timeframeMs = getMarketTimeframeMs(timeframe)
+    return bar.timestamp + timeframeMs <= Date.now()
   }
 
   private buildPublishedCodegenSignalPayload(
