@@ -81,6 +81,42 @@ describe('strategy-param-sync', () => {
     ]))
   })
 
+  it('prefers canonical quote sizing over legacy positionPct', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        canonicalSpec: {
+          market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '15m' },
+          sizing: { mode: 'QUOTE', value: 1000 },
+          rules: [{
+            id: 'entry-1',
+            phase: 'entry',
+            condition: { kind: 'atom', key: 'price.direction', value: 'up' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'QUOTE', value: 1000 } }],
+          }],
+        },
+        riskRules: { positionPct: 10 },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '5m',
+        positionPct: 10,
+        sizing: { mode: 'RATIO', value: 10 },
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(result.normalized.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(result.normalized.positionPct).toBe(10)
+    expect(result.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(result.paramValues.positionPct).toBeUndefined()
+    expect((result.paramSchema.properties as Record<string, any>).positionAmount).toMatchObject({
+      title: 'Position Amount',
+      minimum: 0,
+    })
+  })
+
   it('refreshes symbol and timeframe enums from capabilities without dropping dynamic fields', () => {
     const nextSchema = applyCapabilitiesToParamSchema(
       {
