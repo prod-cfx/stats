@@ -185,7 +185,7 @@ describe('GridRuntimeRepository', () => {
       }),
     })
     expect(tx.gridOrder.updateMany).toHaveBeenCalledWith({
-      where: { id: 'order-1', status: 'PLANNED' },
+      where: { id: 'order-1', status: 'PLANNED', instance: { status: { in: ['INITIALIZING', 'RUNNING'] } } },
       data: { clientOrderId: 'client-1', status: 'SUBMITTING', rawPayload: { requestId: 'req-1' } },
     })
     expect(tx.gridOrder.update).toHaveBeenCalledWith({

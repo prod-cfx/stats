@@ -88,7 +88,7 @@ describe('GridRuntimeStateMachineService', () => {
     })
     expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(3, {
       id: 'grid-1',
-      fromStatuses: ['INITIALIZING', 'RUNNING', 'PAUSED'],
+      fromStatuses: ['INITIALIZING', 'RUNNING', 'PAUSED', 'STOPPING'],
       toStatus: 'RECONCILE_REQUIRED',
       stopReason: 'exchange_mismatch',
       event: {

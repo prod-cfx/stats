@@ -277,6 +277,9 @@ export class GridRuntimeRepository {
       where: {
         id: input.id,
         status: 'PLANNED',
+        instance: {
+          status: { in: ['INITIALIZING', 'RUNNING'] },
+        },
       },
       data: {
         clientOrderId: input.clientOrderId,

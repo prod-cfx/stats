@@ -67,16 +67,7 @@ export class GridOrderSyncService {
   ) {}
 
   async syncInstance(instanceId: string): Promise<void> {
-    const snapshot = await this.txEvents.withAfterCommit(async () => {
-      const instance = await this.repository.findInstanceForSync(instanceId) as RuntimeInstance | null
-      if (!instance) return null
-
-      return {
-        instance,
-        config: this.parseConfig(instance.configSnapshot),
-        orders: await this.repository.listOrders(instanceId) as RuntimeOrder[],
-      }
-    })
+    const snapshot = await this.loadSyncSnapshot(instanceId)
     if (!snapshot) return
 
     const { instance, config, orders } = snapshot
@@ -84,14 +75,21 @@ export class GridOrderSyncService {
 
     const exchangeId = instance.exchangeId as ExchangeId
     const marketType = instance.marketType as MarketType
-    await this.submitPlannedOrders(instance, orders, exchangeId, marketType)
+    const openOrdersBeforeSubmit = await this.tradingService.getOpenOrders(
+      instance.userId,
+      exchangeId,
+      marketType,
+      instance.symbol,
+      instance.exchangeAccountId,
+    )
+    if (await this.stopForBoundaryBreak(instance, config, orders, openOrdersBeforeSubmit)) return
 
     const [openOrders, closedOrders] = await Promise.all([
-      this.tradingService.getOpenOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
+      this.submitPlannedOrders(instance, orders, exchangeId, marketType).then(() =>
+        this.tradingService.getOpenOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
+      ),
       this.tradingService.getClosedOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
     ])
-
-    if (await this.stopForBoundaryBreak(instance, config, orders, openOrders)) return
 
     await this.txEvents.withAfterCommit(async () => {
       const exchangeOrdersByClientId = this.indexExchangeOrders([...openOrders, ...closedOrders])
