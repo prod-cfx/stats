@@ -152,6 +152,19 @@
     "edit": "Edit",
     "strategyPlazaSubtitle": "Start with a preset strategy or customize via chat above.",
     "myStrategies": "My Strategies",
+    "strategyPlazaCard": {
+      "pairTimeframe": "Pair / Timeframe",
+      "environment": "Environment",
+      "okxDemo": "OKX Demo",
+      "market": "Market",
+      "marketType": {
+        "spot": "Spot",
+        "perp": "Perp"
+      },
+      "positionLeverage": "Position / Leverage",
+      "running": "Running",
+      "processing": "Processing"
+    },
     "noStrategies": "No Running Strategies",
     "noStrategiesDesc": "You haven't created any AI quant strategies yet. Start chatting to generate your first automated trading strategy.",
     "createStrategy": "Create New Strategy",
@@ -439,11 +452,14 @@
         }
       },
       "grid-range": {
-        "name": "Grid (Range Bound)",
-        "desc": "Range 60000-80000, grid 0.5%, 10% position per order",
+        "name": "Range Buy/Sell",
+        "desc": "Buy near the lower range and sell near the upper range in sideways markets.",
         "tags": {
           "oscillation": "Oscillation",
-          "grid": "Grid"
+          "grid": "Grid",
+          "range": "Range",
+          "buyLowSellHigh": "Buy Low/Sell High",
+          "okxDemo": "OKX Demo"
         }
       },
       "bollinger-reversion": {
