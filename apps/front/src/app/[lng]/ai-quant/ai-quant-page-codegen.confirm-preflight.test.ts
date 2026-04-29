@@ -23,6 +23,38 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     jest.clearAllMocks()
   })
 
+  const buildConversation = (id: string) => ({
+    id,
+    title: id,
+    messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+    params: DEFAULT_PARAMS,
+    paramSchema: DEFAULT_PARAM_SCHEMA,
+    paramValues: DEFAULT_PARAM_VALUES,
+    backtestResult: null,
+    logicGraph: null,
+    displayLogicGraph: null,
+    codegenSpecDesc: null,
+    semanticGraph: null,
+    validationReport: null,
+    clarificationGate: null,
+    publicationGate: null,
+    pendingCanonicalDigest: null,
+    llmCodegenSessionId: null,
+    publishedStrategyInstanceId: null,
+    publishedSnapshotId: null,
+    publishedSnapshotParamValues: null,
+    publishedSnapshotStrategyConfig: null,
+    publishedSnapshotBacktestConfigDefaults: null,
+    publishedSnapshotDeploymentExecutionDefaults: null,
+    publishedSnapshotDeploymentExecutionConstraints: null,
+    publishedSnapshotCompatibilityMetadata: null,
+    publishedScriptCode: null,
+    publishedScriptGraphVersion: null,
+    latestSignalMessage: null,
+    backtestExecutionState: 'idle',
+    updatedAt: 1,
+  } as any)
+
   it('starts a new session with semantic-only payload', async () => {
     mockStartLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-new',
@@ -178,6 +210,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
         exchange: 'okx',
         symbol: 'ETHUSDT',
         baseTimeframe: '1h',
+        sizing: { mode: 'RATIO', value: 25 },
         positionPct: 25,
       },
       sessionId: null,
@@ -195,8 +228,76 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     const payload = mockStartLlmCodegenSession.mock.calls.at(-1)?.[0] as { initialMessage?: string }
     expect(payload.initialMessage).toContain('symbol=ETHUSDT')
     expect(payload.initialMessage).toContain('timeframe=1h')
+    expect(payload.initialMessage).toContain('sizing.mode=RATIO')
+    expect(payload.initialMessage).toContain('sizing.value=25')
     expect(payload.initialMessage).toContain('positionPct=25')
     expect(payload.initialMessage).toContain('网格策略模板, generate logic graph')
+  })
+
+  it('allows fixed quote sizing and omits legacy positionPct from preset context', async () => {
+    mockStartLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-quote',
+      status: 'DRAFTING',
+    })
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-quote',
+      conversations: [buildConversation('conv-quote')],
+      message: '固定金额策略',
+      params: {
+        ...DEFAULT_PARAMS,
+        sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+        positionPct: 10,
+      },
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+      usePresetRules: true,
+    })
+
+    expect(mockStartLlmCodegenSession).toHaveBeenCalledTimes(1)
+    const payload = mockStartLlmCodegenSession.mock.calls.at(-1)?.[0] as { initialMessage?: string }
+    expect(payload.initialMessage).toContain('sizing.mode=QUOTE')
+    expect(payload.initialMessage).toContain('sizing.value=1000')
+    expect(payload.initialMessage).toContain('sizing.asset=USDT')
+    expect(payload.initialMessage).not.toContain('positionPct=1000')
+    expect(payload.initialMessage).not.toMatch(/^positionPct=/m)
+  })
+
+  it('blocks invalid ratio sizing with the percentage validation message', async () => {
+    const setConversations = jest.fn()
+    const conversation = buildConversation('conv-invalid-ratio')
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-invalid-ratio',
+      conversations: [conversation],
+      message: '生成策略',
+      params: {
+        ...DEFAULT_PARAMS,
+        sizing: { mode: 'RATIO', value: 120 },
+        positionPct: 120,
+      },
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: setConversations as any,
+      t: (key: string) => key,
+    })
+
+    expect(mockStartLlmCodegenSession).not.toHaveBeenCalled()
+    expect(mockContinueLlmCodegenSession).not.toHaveBeenCalled()
+    expect(mockGetLlmCodegenSession).not.toHaveBeenCalled()
+    const updater = setConversations.mock.calls.at(-1)?.[0] as (items: typeof conversation[]) => typeof conversation[]
+    const next = updater([conversation])
+    expect(next[0].messages.at(-1)?.content).toBe('请求前校验失败：仓位比例需要在 0 到 100 之间。')
   })
 
   it('continues the active session after a terminal preflight reconciliation fetch', async () => {

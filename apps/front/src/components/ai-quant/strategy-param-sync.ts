@@ -1,16 +1,22 @@
 import type { BacktestCapabilities } from './backtest-capability-client'
+import {
+  derivePositionPctFromSizing,
+  normalizeSizingFromCanonicalValue,
+  type QuantSizing,
+} from '@/app/[lng]/ai-quant/semantic-sizing'
 
 export interface StrategyParamSyncFallback {
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   baseTimeframe: string
   positionPct: number
+  sizing?: QuantSizing
 }
 
 export interface StrategyParamSyncResult {
   paramSchema: Record<string, unknown>
   paramValues: Record<string, unknown>
-  normalized: StrategyParamSyncFallback
+  normalized: StrategyParamSyncFallback & { sizing: QuantSizing }
   executionTags: string[]
 }
 
@@ -24,6 +30,7 @@ interface CanonicalRuleAction {
   sizing?: {
     mode?: string
     value?: unknown
+    asset?: unknown
   }
 }
 
@@ -59,11 +66,14 @@ const STRATEGY_PARAM_KEYS = new Set([
   'marketType',
   'symbol',
   'baseTimeframe',
+  'sizing',
   'buyWindowMin',
   'buyDropPct',
   'sellWindowMin',
   'sellRisePct',
   'positionPct',
+  'positionAmount',
+  'sizingAsset',
   'entryPrice',
   'exitPrice',
   'stopLossPct',
@@ -111,6 +121,12 @@ function parseString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
+function parseExchange(value: unknown): StrategyParamSyncFallback['exchange'] | null {
+  const normalized = parseString(value)?.toLowerCase()
+  if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') return normalized
+  return null
+}
+
 function normalizeSymbol(raw: string): string {
   return raw.replace('/', '').replace(/\s+/g, '').toUpperCase()
 }
@@ -139,6 +155,40 @@ function inferBaseTimeframe(specTimeframes: string[], fallback: string, allowedB
   const candidate = specTimeframes[0] ?? fallback
   if (allowedBaseTimeframes.length === 0) return candidate
   return allowedBaseTimeframes.includes(candidate) ? candidate : (allowedBaseTimeframes[0] ?? candidate)
+}
+
+function readMarketStrings(market: Record<string, unknown>, pluralKey: string, singularKey: string): string[] {
+  const pluralValues = asStringArray(market[pluralKey])
+  if (pluralValues.length > 0) return pluralValues
+  const singularValue = parseString(market[singularKey])
+  return singularValue ? [singularValue] : []
+}
+
+function hasSizingShape(value: unknown): value is Record<string, unknown> {
+  const raw = normalizeLegacySizingInput(value)
+  const mode = parseString(raw?.mode)?.toUpperCase()
+  return Boolean(
+    raw
+    && (mode === 'RATIO' || mode === 'QUOTE' || mode === 'QTY')
+    && parseNumber(raw.value) !== null,
+  )
+}
+
+function normalizeLegacySizingInput(value: unknown): Record<string, unknown> | null {
+  const raw = asObject(value)
+  if (!raw) return null
+  const rawMode = parseString(raw.mode)?.toLowerCase().replace(/[\s-]+/g, '_')
+  switch (rawMode) {
+    case 'fixed_ratio':
+      return { ...raw, mode: 'RATIO' }
+    case 'fixed_quote':
+      return { ...raw, mode: 'QUOTE' }
+    case 'fixed_qty':
+    case 'fixed_quantity':
+      return { ...raw, mode: 'QTY' }
+    default:
+      return raw
+  }
 }
 
 function setNumberField(
@@ -211,20 +261,24 @@ export function syncStrategyParamsFromCodegen(args: {
   const typed = asObject(args.spec) ?? {}
   const canonicalSpec = asObject(typed.canonicalSpec) ?? {}
   const canonicalMarket = asObject(canonicalSpec.market) ?? {}
-  const topLevelRules = Array.isArray(typed.rules) ? typed.rules as CanonicalRule[] : []
+  const topLevelRules = Array.isArray(typed.rules)
+    ? typed.rules as CanonicalRule[]
+    : (Array.isArray(canonicalSpec.rules) ? canonicalSpec.rules as CanonicalRule[] : [])
   const market = asObject(typed.market) ?? canonicalMarket
   const derivedRiskRules = (() => {
     if (topLevelRules.length === 0) return {}
     const next: Record<string, unknown> = {}
     const lockedParams = asObject(typed.lockedParams)
-    const exchange = parseString(lockedParams?.exchange) ?? parseString(canonicalMarket.exchange)
+    const exchange = parseExchange(lockedParams?.exchange) ?? parseExchange(canonicalMarket.exchange)
     if (exchange) next.exchange = exchange
     const marketType = parseString(canonicalMarket.marketType)
     if (marketType) next.marketType = marketType
     const positionPct = parseNumber(lockedParams?.positionPct)
       ?? (() => {
         const openAction = topLevelRules.flatMap(rule => rule.actions ?? []).find(action => action.sizing)
-        const sizingValue = parseNumber(openAction?.sizing?.value)
+        const openSizing = normalizeLegacySizingInput(openAction?.sizing)
+        if (parseString(openSizing?.mode)?.toUpperCase() !== 'RATIO') return null
+        const sizingValue = parseNumber(openSizing?.value)
         if (sizingValue === null) return null
         return sizingValue <= 1 ? sizingValue * 100 : sizingValue
       })()
@@ -255,20 +309,42 @@ export function syncStrategyParamsFromCodegen(args: {
   const exitRules = topLevelRules.length > 0
     ? deriveExitRulesFromCanonicalRules(topLevelRules)
     : asStringArray(typed.exitRules)
-  const marketSymbols = asStringArray(market.symbols)
-  const marketTimeframes = asStringArray(market.timeframes)
+  const marketSymbols = readMarketStrings(market, 'symbols', 'symbol')
+  const marketTimeframes = readMarketStrings(market, 'timeframes', 'timeframe')
   const allowedBaseTimeframes = args.capabilities?.allowedBaseTimeframes ?? []
   const contextText = `${args.contextText ?? ''} ${entryRules.join(' ')} ${exitRules.join(' ')}`.trim()
 
-  const nextExchange = inferExchange(contextText, args.fallback.exchange)
   const currentValues = args.currentValues ?? {}
+  const nextExchange = parseExchange(riskRules.exchange)
+    ?? parseExchange(canonicalMarket.exchange)
+    ?? inferExchange(contextText, args.fallback.exchange)
   const symbolFromMarket = inferSymbol(marketSymbols[0] ?? '', args.fallback.symbol)
   const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
   const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
   const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
-  const parsedPositionPct = parseNumber(riskRules.positionPct)
+  const canonicalSizing = normalizeLegacySizingInput(canonicalSpec.sizing)
+    ?? normalizeLegacySizingInput(typed.sizing)
+  const actionSizing = topLevelRules
+    .flatMap(rule => rule.actions ?? [])
+    .map(action => action.sizing)
+    .map(normalizeLegacySizingInput)
+    .find((value): value is Record<string, unknown> => Boolean(value))
+  const legacyPositionPct = parseNumber(riskRules.positionPct)
     ?? parseNumber(contextText.match(/(\d+(?:\.\d+)?)%\s*(?:总仓位|仓位)/)?.[1])
     ?? args.fallback.positionPct
+  const hasCanonicalOrActionSizing = Boolean(canonicalSizing || actionSizing)
+  const parsedSizing = normalizeSizingFromCanonicalValue(
+    canonicalSizing ?? actionSizing ?? null,
+    nextSymbol,
+    legacyPositionPct,
+  )
+  const retainedSizing = hasSizingShape(currentValues.sizing)
+    ? normalizeSizingFromCanonicalValue(normalizeLegacySizingInput(currentValues.sizing), nextSymbol, legacyPositionPct)
+    : args.fallback.sizing
+  const nextSizing = hasCanonicalOrActionSizing
+    ? parsedSizing
+    : (retainedSizing ?? { mode: 'RATIO', value: legacyPositionPct })
+  const parsedPositionPct = derivePositionPctFromSizing(nextSizing) ?? legacyPositionPct
   const nextMarketType = (() => {
     const fromRiskRules = parseString(riskRules.marketType)?.toLowerCase()
     if (fromRiskRules === 'spot' || fromRiskRules === 'perp') return fromRiskRules
@@ -292,7 +368,14 @@ export function syncStrategyParamsFromCodegen(args: {
     exchange: nextExchange,
     symbol: nextSymbol,
     baseTimeframe: nextBaseTimeframe,
-    positionPct: parsedPositionPct,
+    sizing: nextSizing,
+  }
+  if (nextSizing.mode === 'RATIO') {
+    values.positionPct = parsedPositionPct
+  }
+  else {
+    values.positionAmount = nextSizing.value
+    if ('asset' in nextSizing && nextSizing.asset) values.sizingAsset = nextSizing.asset
   }
   if (nextMarketType) {
     values.marketType = nextMarketType
@@ -314,14 +397,29 @@ export function syncStrategyParamsFromCodegen(args: {
       title: 'Base Timeframe',
       enum: allowedBaseTimeframes.length > 0 ? allowedBaseTimeframes : [nextBaseTimeframe],
     },
-    positionPct: {
+  }
+  const required = ['exchange', 'symbol', 'baseTimeframe']
+  if (nextSizing.mode === 'RATIO') {
+    properties.positionPct = {
       type: Number.isInteger(parsedPositionPct) ? 'integer' : 'number',
       title: 'Position %',
       minimum: 1,
       maximum: 100,
-    },
+    }
+    required.push('positionPct')
   }
-  const required = ['exchange', 'symbol', 'baseTimeframe', 'positionPct']
+  else {
+    properties.positionAmount = {
+      type: Number.isInteger(nextSizing.value) ? 'integer' : 'number',
+      title: nextSizing.mode === 'QUOTE' ? 'Position Amount' : 'Position Quantity',
+      minimum: 0,
+    }
+    properties.sizingAsset = {
+      type: 'string',
+      title: 'Sizing Asset',
+    }
+    required.push('positionAmount')
+  }
   if (nextMarketType) {
     properties.marketType = {
       type: 'string',
@@ -367,6 +465,7 @@ export function syncStrategyParamsFromCodegen(args: {
       symbol: nextSymbol,
       baseTimeframe: nextBaseTimeframe,
       positionPct: parsedPositionPct,
+      sizing: nextSizing,
     },
     executionTags,
   }

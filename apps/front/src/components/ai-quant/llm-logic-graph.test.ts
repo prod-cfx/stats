@@ -304,4 +304,92 @@ describe('buildLogicGraphFromCodegenSpec', () => {
       expect.objectContaining({ id: 'action-exit-price-change-1-0', action: 'CLOSE' }),
     ]))
   })
+
+  it('renders quote semantic sizing without converting it to a percentage', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        rules: [
+          {
+            id: 'entry-fixed-quote',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [
+              {
+                type: 'OPEN_LONG',
+                sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+              },
+            ],
+          },
+        ],
+        canonicalSpec: {
+          market: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      15,
+    )
+
+    expect(graph.actions).toEqual([
+      expect.objectContaining({
+        action: 'BUY',
+        amount: '1000 USDT',
+      }),
+    ])
+    expect(graph.meta.positionPct).toBe(10)
+    expect(graph.meta.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(graph.actions.map(action => action.amount).join(' ')).not.toContain('1000%')
+  })
+
+  it('maps legacy fixed_ratio sizing to semantic ratio instead of stale fallback positionPct', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        rules: [
+          {
+            id: 'entry-legacy-fixed-ratio',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [
+              {
+                type: 'OPEN_LONG',
+                sizing: { mode: 'fixed_ratio', value: 0.2 },
+              },
+            ],
+          },
+        ],
+        canonicalSpec: {
+          market: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 35,
+      },
+      16,
+    )
+
+    expect(graph.actions).toEqual([
+      expect.objectContaining({
+        action: 'BUY',
+        amount: '20%',
+      }),
+    ])
+    expect(graph.meta.positionPct).toBe(20)
+    expect(graph.meta.sizing).toEqual({ mode: 'RATIO', value: 20 })
+    expect(graph.actions.map(action => action.amount).join(' ')).not.toContain('35%')
+  })
 })
