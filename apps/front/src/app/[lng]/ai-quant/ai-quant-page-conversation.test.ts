@@ -2177,6 +2177,24 @@ describe('semantic sizing helpers', () => {
     })
   })
 
+  it('infers quantity asset from canonical sizing symbols', () => {
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSDT', 10)).toEqual({
+      mode: 'QTY',
+      value: 0.01,
+      asset: 'BTC',
+    })
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSDC', 10)).toEqual({
+      mode: 'QTY',
+      value: 0.01,
+      asset: 'BTC',
+    })
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSD', 10)).toEqual({
+      mode: 'QTY',
+      value: 0.01,
+      asset: 'BTC',
+    })
+  })
+
   it('builds request context without legacy positionPct for quote sizing', () => {
     expect(buildSizingRequestContext({ mode: 'QUOTE', value: 1000, asset: 'USDT' })).toEqual([
       'sizing.mode=QUOTE',
@@ -2187,6 +2205,22 @@ describe('semantic sizing helpers', () => {
       'sizing.mode=RATIO',
       'sizing.value=10',
       'positionPct=10',
+    ])
+  })
+
+  it('defaults quote request context asset to USDT when missing', () => {
+    expect(buildSizingRequestContext({ mode: 'QUOTE', value: 1000 })).toEqual([
+      'sizing.mode=QUOTE',
+      'sizing.value=1000',
+      'sizing.asset=USDT',
+    ])
+  })
+
+  it('builds quantity request context without legacy positionPct', () => {
+    expect(buildSizingRequestContext({ mode: 'QTY', value: 0.01, asset: 'BTC' })).toEqual([
+      'sizing.mode=QTY',
+      'sizing.value=0.01',
+      'sizing.asset=BTC',
     ])
   })
 })

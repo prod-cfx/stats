@@ -95,7 +95,7 @@ export function formatSizing(sizing: QuantSizing, fallbackSymbol?: string): stri
 
 export function buildSizingRequestContext(sizing: QuantSizing): string[] {
   const lines = [`sizing.mode=${sizing.mode}`, `sizing.value=${normalizeDisplayNumber(sizing.value)}`]
-  if (sizing.mode === 'QUOTE' && sizing.asset) lines.push(`sizing.asset=${sizing.asset}`)
+  if (sizing.mode === 'QUOTE') lines.push(`sizing.asset=${sizing.asset ?? 'USDT'}`)
   if (sizing.mode === 'QTY' && sizing.asset) lines.push(`sizing.asset=${sizing.asset}`)
   if (sizing.mode === 'RATIO') lines.push(`positionPct=${normalizeDisplayNumber(sizing.value)}`)
   return lines
