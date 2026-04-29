@@ -186,9 +186,9 @@ export class GridRuntimeService {
     if (!ast || !levelSetRef || !Array.isArray(ast.exprPool)) return null
     for (const expr of ast.exprPool) {
       const record = this.readRecord(expr)
-      if (record?.id !== levelSetRef) continue
       const payload = this.readRecord(record.payload)
-      if (payload?.id === levelSetRef) return payload
+      if (!this.exprMatchesRef(record, payload, levelSetRef)) continue
+      return payload
     }
     return null
   }
@@ -197,11 +197,19 @@ export class GridRuntimeService {
     if (!ast || !seriesRef || !Array.isArray(ast.exprPool)) return null
     for (const expr of ast.exprPool) {
       const record = this.readRecord(expr)
-      if (record?.id !== seriesRef) continue
       const payload = this.readRecord(record.payload)
+      if (!this.exprMatchesRef(record, payload, seriesRef)) continue
       return payload?.kind === 'CONST' ? this.readNumber(payload, 'value') : null
     }
     return null
+  }
+
+  private exprMatchesRef(
+    record: Record<string, unknown> | null,
+    payload: Record<string, unknown> | null,
+    ref: string,
+  ): boolean {
+    return record?.id === ref || record?.sourceRef === ref || payload?.id === ref
   }
 
   private mapMode(sidePolicy: string | null): GridRuntimeMode {

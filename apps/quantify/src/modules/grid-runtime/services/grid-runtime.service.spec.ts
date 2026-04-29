@@ -53,7 +53,8 @@ function createAstSnapshot() {
       },
     }],
     exprPool: [{
-      id: 'grid_levels',
+      id: 'expr_01_grid_levels',
+      sourceRef: 'grid_levels',
       payload: {
         id: 'grid_levels',
         kind: 'ARITHMETIC_LEVEL_SET',
@@ -61,10 +62,12 @@ function createAstSnapshot() {
         hardBounds: { lowerRef: 'grid_lower', upperRef: 'grid_upper' },
       },
     }, {
-      id: 'grid_lower',
+      id: 'expr_02_grid_lower',
+      sourceRef: 'grid_lower',
       payload: { kind: 'CONST', value: 90 },
     }, {
-      id: 'grid_upper',
+      id: 'expr_03_grid_upper',
+      sourceRef: 'grid_upper',
       payload: { kind: 'CONST', value: 110 },
     }],
   }
