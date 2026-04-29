@@ -417,6 +417,8 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
       return formatBreakoutCondition(condition)
     case 'grid.range_rebalance':
       return formatGridCondition(condition)
+    case 'risk.condition_expression':
+      return '风险表达式已识别，暂不支持自动执行'
     default:
       return '不支持的条件，待补充'
   }
@@ -721,18 +723,21 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
   const riskSummaries = [
     ...rules
       .filter(rule => rule.phase === 'risk')
-      .map(rule => buildRiskSummaryText(rule, fallbackSymbol ?? undefined))
-      .filter((item): item is string => Boolean(item)),
-    ...buildLegacyRiskSummaryTexts(specDesc),
+      .map(rule => ({
+        key: rule.condition?.key ?? 'risk',
+        text: buildRiskSummaryText(rule, fallbackSymbol ?? undefined),
+      }))
+      .filter((item): item is { key: string, text: string } => Boolean(item.text)),
+    ...buildLegacyRiskSummaryTexts(specDesc).map(text => ({ key: 'risk', text })),
   ]
 
-  riskSummaries.forEach((text, index) => {
+  riskSummaries.forEach((summary, index) => {
     executeBlock.items.push({
       kind: 'execute',
       id: `execute-risk-${index}`,
-      key: 'risk',
-      value: text,
-      text,
+      key: summary.key,
+      value: summary.text,
+      text: summary.text,
     })
   })
 

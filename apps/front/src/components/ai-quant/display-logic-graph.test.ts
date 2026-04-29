@@ -408,6 +408,43 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('future_basis')
   })
 
+  it('renders recognized unsupported risk expression as risk semantic node', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'risk-expression',
+            phase: 'risk',
+            condition: {
+              key: 'risk.condition_expression',
+              params: {
+                condition: {
+                  kind: 'predicate',
+                  left: { kind: 'position', field: 'pnl_pct' },
+                  op: 'LTE',
+                  right: { kind: 'constant', value: -5 },
+                },
+                effect: { type: 'close_position' },
+                scope: 'current_position',
+                capabilityStatus: 'recognized_unsupported',
+              },
+            },
+            actions: [],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(JSON.stringify(graph)).toContain('risk.condition_expression')
+    expect(JSON.stringify(graph)).not.toContain('缺少计算基准')
+  })
+
   it('renders the first exit path as AND_AT_THEN instead of OR_THEN', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
