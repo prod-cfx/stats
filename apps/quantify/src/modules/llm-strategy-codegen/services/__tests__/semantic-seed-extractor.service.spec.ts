@@ -36,6 +36,17 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('normalizes english contract market wording into perp context', () => {
+    const patch = service.extract('OKX BTCUSDT contract 1m，收盘价突破上一根 K 线最高价开多，单笔 3%。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '1m',
+    }))
+  })
+
   it('extracts close-open candle expressions and fixed quote sizing without new normalized atom keys', () => {
     const patch = service.extract('用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多，固定使用 10 USDT。如果已有持仓则不再开仓。收盘价低于开盘价时平多。')
 

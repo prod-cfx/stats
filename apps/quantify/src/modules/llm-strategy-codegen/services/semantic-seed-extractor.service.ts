@@ -1330,7 +1330,7 @@ export class SemanticSeedExtractorService {
 
   private extractMarketType(text: string): string | null {
     if (/现货|spot/u.test(text)) return 'spot'
-    if (/合约|永续|perp|swap/u.test(text)) return 'perp'
+    if (/合约|永续|perp|swap|contract/iu.test(text)) return 'perp'
     return null
   }
 
