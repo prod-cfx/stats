@@ -892,6 +892,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     const unifiedSymbol = this.buildUnifiedSymbol(symbolMeta, marketType)
     const side = this.mapOrderSide(signal.direction)
     if (!side) return { ok: false, reason: 'Unsupported signal direction' }
+    const reduceOnly = signal.direction === 'CLOSE_LONG' || signal.direction === 'CLOSE_SHORT'
 
     // 根据是开仓还是平仓决定预算与原始数量来源
     const isCloseSignal =
@@ -995,7 +996,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     let quantity = rawAmount.mul(amountScale).floor().div(amountScale)
 
     // 再按最小手数（lotSize）向下取整到最近的整数倍
-    if (lotSize) {
+    if (lotSize && this.shouldApplyBaseAssetLotSize({ exchangeId, marketType, reduceOnly })) {
       const lots = quantity.div(lotSize).floor()
       quantity = lots.mul(lotSize)
     }
@@ -1034,13 +1035,13 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return {
       ok: true,
       params: {
-      exchangeId,
-      marketType,
-      symbol: unifiedSymbol,
-      side,
+        exchangeId,
+        marketType,
+        symbol: unifiedSymbol,
+        side,
         amount: finalAmount,
         price: finalPrice,
-        reduceOnly: signal.direction === 'CLOSE_LONG' || signal.direction === 'CLOSE_SHORT',
+        reduceOnly,
       },
       quoteBudget,
     }
@@ -1316,7 +1317,14 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     let quantity = rawAmount.mul(amountScale).floor().div(amountScale)
 
     // 按最小手数（lotSize）向下取整到最近的整数倍
-    if (targetLotSize) {
+    if (
+      targetLotSize &&
+      this.shouldApplyBaseAssetLotSize({
+        exchangeId: targetExchangeId,
+        marketType: targetMarketType,
+        reduceOnly: originalParams.reduceOnly ?? false,
+      })
+    ) {
       const lots = quantity.div(targetLotSize).floor()
       quantity = lots.mul(targetLotSize)
     }
@@ -1359,6 +1367,18 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         reduceOnly: originalParams.reduceOnly,
       },
     }
+  }
+
+  private shouldApplyBaseAssetLotSize(input: {
+    exchangeId: ExchangeId
+    marketType: MarketType
+    reduceOnly: boolean
+  }): boolean {
+    // OKX perp order size is converted from base asset to contract count in the exchange client.
+    if (input.exchangeId === 'okx' && input.marketType === 'perp' && input.reduceOnly) {
+      return false
+    }
+    return true
   }
 
   private extractOrderFee(order: UnifiedOrder): { amount: number; currency: string | null } {
