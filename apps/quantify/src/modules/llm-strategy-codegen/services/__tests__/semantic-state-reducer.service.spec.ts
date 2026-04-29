@@ -1280,4 +1280,47 @@ describe('SemanticStateReducerService', () => {
       source: 'user_explicit',
     }))
   })
+
+  it('locks trigger reference definition slots from clarification answers', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: [],
+        triggers: [{
+          id: 'trigger-open-breakout',
+          key: 'price.breakout_up',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { reference: 'unknown' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'trigger.reference_definition',
+            fieldPath: 'triggers[0].params.reference',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认关键位置如何定义。',
+            affectsExecution: true,
+          }],
+        }],
+        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-29T00:00:00.000Z',
+      },
+      targetSlotKey: 'trigger.reference_definition',
+      targetFieldPath: 'triggers[0].params.reference',
+      answer: '最近 20 根 K 线高点',
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({
+        reference: 'channel_high',
+        period: 20,
+      }),
+    }))
+  })
 })

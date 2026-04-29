@@ -4,9 +4,10 @@ import type { SemanticEvidence, SemanticPositionSizingContract, SemanticSlotStat
 import { PositionSizingContractService } from './position-sizing-contract.service'
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference'
   paramValue: number | string
   slotValue: number | string
+  extraParams?: Record<string, number | string>
 }
 
 interface SupportedContextReduction {
@@ -81,6 +82,9 @@ export class SemanticStateReducerService {
         trigger.params.confirmationMode = reduction.paramValue
       } else {
         trigger.params[reduction.paramKey] = reduction.paramValue
+      }
+      if (reduction.extraParams) {
+        Object.assign(trigger.params, reduction.extraParams)
       }
 
       slot.value = reduction.slotValue
@@ -193,6 +197,26 @@ export class SemanticStateReducerService {
 
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {
     const normalizedGridSlotKey = this.normalizeGridSlotKey(slot.slotKey)
+
+    if (slot.slotKey === 'trigger.reference_definition') {
+      const periodMatch = answerText.match(/最近\s*(\d{1,4})\s*根\s*K?\s*线/u)
+      const period = periodMatch?.[1] ? Number(periodMatch[1]) : null
+      const reference = /低点|最低|支撑/u.test(answerText)
+        ? 'channel_low'
+        : /高点|最高|压力|阻力/u.test(answerText)
+          ? 'channel_high'
+          : null
+      if (!reference || !period || !Number.isFinite(period)) {
+        return null
+      }
+
+      return {
+        paramKey: 'reference',
+        paramValue: reference,
+        slotValue: answerText,
+        extraParams: { period },
+      }
+    }
 
     if (slot.slotKey.includes('reference.period')) {
       const periodMatch = answerText.match(/(?:ma|ema|sma)?\s*(\d{1,4})/iu)

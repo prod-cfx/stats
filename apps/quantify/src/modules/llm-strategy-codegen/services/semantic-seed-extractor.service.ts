@@ -100,6 +100,7 @@ export class SemanticSeedExtractorService {
       this.pushBollingerTriggers(segment, triggers, seen, aliasContext)
       this.pushRsiTriggers(segment, triggers, seen, aliasContext)
       this.pushMacdTriggers(segment, triggers, seen, text)
+      this.pushPartialBreakoutTriggers(segment, triggers, seen)
       this.pushBreakoutTriggers(segment, triggers, seen)
       this.pushRangePositionTriggers(segment, triggers, seen, text)
       this.pushGridTrigger(segment, triggers, seen)
@@ -772,6 +773,42 @@ export class SemanticSeedExtractorService {
           },
         })
       }
+    }
+  }
+
+  private pushPartialBreakoutTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(segment)) return
+
+    for (const clause of this.splitLogicClauses(segment)) {
+      if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(clause)) continue
+
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      const isDown = /跌破|下破|失守|支撑/u.test(clause)
+      const referenceText = /支撑/u.test(clause)
+        ? '支撑'
+        : /压力|阻力/u.test(clause)
+          ? '压力'
+          : '关键位置'
+
+      this.pushTrigger(triggers, seen, {
+        key: isDown ? 'price.breakout_down' : 'price.breakout_up',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        status: 'open',
+        params: { reference: 'unknown', referenceText },
+        evidence: { text: clause, source: 'user_explicit' },
+        openSlots: [{
+          slotKey: 'trigger.reference_definition',
+          fieldPath: `triggers[${triggers.length}].params.reference`,
+          status: 'open',
+          priority: 'core',
+          questionHint: `请确认${referenceText}如何定义。`,
+          affectsExecution: true,
+          evidence: { text: referenceText, source: 'user_explicit' },
+        }],
+      })
     }
   }
 

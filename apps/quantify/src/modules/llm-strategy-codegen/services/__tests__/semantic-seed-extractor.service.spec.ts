@@ -154,6 +154,42 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('emits an open breakout trigger for undefined key reference phrases', () => {
+    const patch = service.extract('突破关键位置开多，单笔 3%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.breakout_up',
+        phase: 'entry',
+        sideScope: 'long',
+        status: 'open',
+        params: expect.objectContaining({ reference: 'unknown' }),
+        openSlots: [expect.objectContaining({
+          slotKey: 'trigger.reference_definition',
+          fieldPath: 'triggers[0].params.reference',
+          status: 'open',
+          priority: 'core',
+          affectsExecution: true,
+        })],
+      }),
+    ]))
+  })
+
+  it('does not emit partial breakout triggers for unrelated clauses in the same segment', () => {
+    const patch = service.extract('突破关键位置开多，收盘价低于开盘价平多。')
+
+    const openBreakoutTriggers = (patch.triggers ?? []).filter(trigger => trigger.key === 'price.breakout_up')
+    expect(openBreakoutTriggers).toHaveLength(1)
+    expect(openBreakoutTriggers[0]).toEqual(expect.objectContaining({
+      phase: 'entry',
+      sideScope: 'long',
+      status: 'open',
+    }))
+    expect(openBreakoutTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
+  })
+
   it('keeps fixed quote profit targets from overriding explicit percent sizing', () => {
     const patch = service.extract('每次盈利 10 USDT 止盈；单笔 10% 仓位')
 
