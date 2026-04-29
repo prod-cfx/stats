@@ -19,6 +19,13 @@ import {
   resolveBacktestExecutionConfig,
   serializePersistedConversations,
 } from './ai-quant-page-conversation'
+import {
+  buildSizingRequestContext,
+  derivePositionPctFromSizing,
+  formatSizing,
+  normalizeSizing,
+  normalizeSizingFromCanonicalValue,
+} from './semantic-sizing'
 
 describe('ai-quant-page-conversation', () => {
   it('requires at least one trade before a backtest result is considered deployable', () => {
@@ -2145,4 +2152,41 @@ describe('ai-quant-page-conversation', () => {
     })
   })
 
+})
+
+describe('semantic sizing helpers', () => {
+  it('migrates legacy positionPct into ratio sizing', () => {
+    expect(normalizeSizing(null, 12)).toEqual({ mode: 'RATIO', value: 12 })
+    expect(derivePositionPctFromSizing({ mode: 'RATIO', value: 12 })).toBe(12)
+  })
+
+  it('formats quote and quantity sizing without a percent suffix', () => {
+    expect(formatSizing({ mode: 'QUOTE', value: 1000, asset: 'USDT' }, 'BTCUSDT')).toBe('1000 USDT')
+    expect(formatSizing({ mode: 'QTY', value: 0.01 }, 'BTCUSDT')).toBe('0.01 BTC')
+  })
+
+  it('normalizes canonical ratio decimals into frontend percent values', () => {
+    expect(normalizeSizingFromCanonicalValue({ mode: 'RATIO', value: 0.1 }, 'BTCUSDT', 10)).toEqual({
+      mode: 'RATIO',
+      value: 10,
+    })
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QUOTE', value: 1000 }, 'BTCUSDT', 10)).toEqual({
+      mode: 'QUOTE',
+      value: 1000,
+      asset: 'USDT',
+    })
+  })
+
+  it('builds request context without legacy positionPct for quote sizing', () => {
+    expect(buildSizingRequestContext({ mode: 'QUOTE', value: 1000, asset: 'USDT' })).toEqual([
+      'sizing.mode=QUOTE',
+      'sizing.value=1000',
+      'sizing.asset=USDT',
+    ])
+    expect(buildSizingRequestContext({ mode: 'RATIO', value: 10 })).toEqual([
+      'sizing.mode=RATIO',
+      'sizing.value=10',
+      'positionPct=10',
+    ])
+  })
 })
