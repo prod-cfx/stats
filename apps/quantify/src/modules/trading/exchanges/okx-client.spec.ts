@@ -214,6 +214,23 @@ describe('okxClient', () => {
     expect(order.status).toBe('closed')
   })
 
+  it('throws exchange error when fetching an order from empty OKX data', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(JSON.stringify({
+        data: [],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    await expect(createClient().fetchOrder('missing-order', 'BTC/USDT'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX fetchOrder returned empty response',
+      })
+  })
+
   it('uses spot available balance when OKX omits available equity', async () => {
     globalThis.fetch = jest.fn(async () => {
       return new Response(JSON.stringify({
@@ -553,6 +570,23 @@ describe('okxClient', () => {
     expect(order.status).toBe('canceled')
   })
 
+  it('throws exchange error when canceling an order from empty OKX data', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(JSON.stringify({
+        data: [],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    await expect(createClient().cancelOrder('missing-order', 'BTC/USDT'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX cancelOrder returned empty response',
+      })
+  })
+
   it('converts perp contract sizes back to base sizes when listing open orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
@@ -695,14 +729,18 @@ describe('okxClient', () => {
       side: 'sell',
       ordType: 'limit',
       sz: '0.002',
-      fillSz: '0.0015',
+      accFillSz: '0.0015',
+      fillSz: '0.0004',
       px: '71000',
       avgPx: '70950',
       uTime: '1773829253570',
       cTime: '1773829253522',
     }
 
-    globalThis.fetch = jest.fn(async () => {
+    let historyUrl: URL | undefined
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      historyUrl = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
       return new Response(JSON.stringify({
         data: [rawOrder],
       }), {
@@ -713,6 +751,9 @@ describe('okxClient', () => {
 
     const orders = await createClient().fetchClosedOrders('BTC/USDT')
 
+    expect(historyUrl?.pathname).toBe('/api/v5/trade/orders-history')
+    expect(historyUrl?.searchParams.get('instType')).toBe('SPOT')
+    expect(historyUrl?.searchParams.get('instId')).toBe('BTC-USDT')
     expect(orders).toEqual([
       expect.objectContaining({
         id: 'closed-order-1',

@@ -25,6 +25,7 @@ interface OkxOrderResponse {
   state: string
   side: string
   ordType: string
+  accFillSz?: string
   fillSz: string
   sz: string
   px?: string
@@ -174,7 +175,7 @@ export class OkxClient extends BaseCexClient {
       // 以交易所实际接收的价格和数量为准，保证与后续查询/取消路径一致
       price: this.resolveOrderPrice(order, input.price),
       amount: order.sz ? this.fromExchangeSize(order.sz, instrumentSpec) : input.amount,
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.fromExchangeSize(this.resolveFilledSize(order), instrumentSpec),
       // OKX create-order ACK 通常不返回完整 state，最终状态由后续 fetchOrder 收敛。
       status: order.state ? this.mapOrderStatus(order.state) : 'open',
       createdAt,
@@ -196,7 +197,7 @@ export class OkxClient extends BaseCexClient {
       body,
     )
 
-    const order = res.data[0]
+    const order = this.requireOrderResponse(res, 'cancelOrder')
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -209,7 +210,7 @@ export class OkxClient extends BaseCexClient {
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
       amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.fromExchangeSize(this.resolveFilledSize(order), instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -229,7 +230,7 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    const order = res.data[0]
+    const order = this.requireOrderResponse(res, 'fetchOrder')
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -242,7 +243,7 @@ export class OkxClient extends BaseCexClient {
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
       amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.fromExchangeSize(this.resolveFilledSize(order), instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -274,7 +275,9 @@ export class OkxClient extends BaseCexClient {
   }
 
   async fetchClosedOrders(symbol?: string): Promise<UnifiedOrder[]> {
-    const params: Record<string, unknown> = {}
+    const params: Record<string, unknown> = {
+      instType: this.marketType === 'spot' ? 'SPOT' : 'SWAP',
+    }
 
     if (symbol) {
       params.instId = this.toInstrumentId(symbol, this.marketType)
@@ -618,6 +621,21 @@ export class OkxClient extends BaseCexClient {
     }
   }
 
+  private requireOrderResponse(
+    response: { data: OkxOrderResponse[] },
+    operation: 'cancelOrder' | 'fetchOrder',
+  ): OkxOrderResponse {
+    const order = response.data[0]
+    if (!order) {
+      throw new ExchangeError(`OKX ${operation} returned empty response`, undefined, response)
+    }
+    return order
+  }
+
+  private resolveFilledSize(order: OkxOrderResponse): string {
+    return order.accFillSz ?? order.fillSz ?? '0'
+  }
+
   private resolveOrderPrice(order: OkxOrderResponse, fallback?: number): number | undefined {
     const candidates = [order.px, order.avgPx, order.fillPx]
     for (const candidate of candidates) {
@@ -675,7 +693,7 @@ export class OkxClient extends BaseCexClient {
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
       amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.fromExchangeSize(this.resolveFilledSize(order), instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,

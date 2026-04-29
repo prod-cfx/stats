@@ -183,7 +183,10 @@ export class TradingService {
 
     try {
       if (client.fetchOrderByClientOrderId) {
-        return await client.fetchOrderByClientOrderId({ clientOrderId, symbol })
+        const directOrder = await client.fetchOrderByClientOrderId({ clientOrderId, symbol })
+        if (directOrder !== null && directOrder !== undefined) {
+          return directOrder
+        }
       }
 
       const openOrder = (await client.fetchOpenOrders(symbol))
