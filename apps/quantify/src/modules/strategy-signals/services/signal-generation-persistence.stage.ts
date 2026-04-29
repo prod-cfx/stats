@@ -77,7 +77,7 @@ export class SignalGenerationPersistenceStage {
     const result = await this.txHost.withTransaction(async () => {
       await this.generatorRepository.lockStrategyInstance(instance.id)
 
-      if (!skipCooldown) {
+      if (!skipCooldown && this.shouldApplyCooldown(aiPayload)) {
         const existingCount = await this.generatorRepository.countRecentSignals({
           strategyId: strategy.id,
           symbolId: group.symbol.id,
@@ -179,7 +179,7 @@ export class SignalGenerationPersistenceStage {
     const result = await this.txHost.withTransaction(async () => {
       await this.generatorRepository.lockStrategyInstance(instance.id)
 
-      if (!skipCooldown) {
+      if (!skipCooldown && this.shouldApplyCooldown(aiPayload)) {
         const recentSignal = await this.generatorRepository.findRecentSignalForCooldown({
           strategyId: strategy.id,
           symbolId: primarySymbol.id,
@@ -232,6 +232,10 @@ export class SignalGenerationPersistenceStage {
     }
 
     return result
+  }
+
+  private shouldApplyCooldown(payload: Pick<AiSignalPayload, 'signalType'>): boolean {
+    return payload.signalType !== 'EXIT'
   }
 
   private toJsonSafe(value: any): any {

@@ -152,6 +152,88 @@ describe('signalGenerationPersistenceStage', () => {
     expect(onCreatedInTransaction).toHaveBeenCalledWith('signal-atomic-1')
   })
 
+  it('does not apply cooldown checks to exit signals', async () => {
+    const tradingSignalRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'exit-signal-1' }),
+    }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      countRecentSignals: jest.fn().mockResolvedValue(1),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    const result = await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT' }, timeframe: 'm15' } as any,
+      config,
+      {},
+      new Date('2026-04-10T10:00:00.000Z'),
+      {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        confidence: 90,
+        entryPrice: 100,
+        reasoning: 'close long',
+        rawResponse: '{"action":"close"}',
+      } as any,
+      {},
+      false,
+    )
+
+    expect(result).toEqual({ created: true, signalId: 'exit-signal-1' })
+    expect(generatorRepository.countRecentSignals).not.toHaveBeenCalled()
+  })
+
+  it('does not apply cooldown checks to multi-leg exit signals', async () => {
+    const tradingSignalRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'multi-exit-signal-1' }),
+    }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      findRecentSignalForCooldown: jest.fn().mockResolvedValue({ id: 'recent-exit-signal' }),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    const result = await stage.createMultiLegSignal(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { id: 'symbol-1', code: 'BTCUSDT' } as any,
+      { timeframe: '1m', cooldownMinutes: 15 },
+      {},
+      {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        confidence: 90,
+        entryPrice: 100,
+        reasoning: 'close long',
+        rawResponse: '{"action":"close"}',
+      } as any,
+      config,
+      {},
+      false,
+    )
+
+    expect(result).toEqual({ created: true, signalId: 'multi-exit-signal-1' })
+    expect(generatorRepository.findRecentSignalForCooldown).not.toHaveBeenCalled()
+  })
+
   it('records consumed runtime telemetry when cooldown prevents a duplicate published-snapshot signal', async () => {
     const telemetry = { recordGeneration: jest.fn() }
     const generatorRepository = {
