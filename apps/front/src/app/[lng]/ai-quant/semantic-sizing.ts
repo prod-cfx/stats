@@ -1,9 +1,10 @@
-export type QuantSizingMode = 'RATIO' | 'QUOTE' | 'QTY'
+export type QuantSizingMode = 'RATIO' | 'QUOTE' | 'QTY' | 'INVALID'
 
 export type QuantSizing =
   | { mode: 'RATIO', value: number }
   | { mode: 'QUOTE', value: number, asset?: 'USDT' | 'USDC' | 'USD' }
   | { mode: 'QTY', value: number, asset?: string }
+  | { mode: 'INVALID', value: number }
 
 type RawSizing = {
   mode?: unknown
@@ -69,6 +70,22 @@ export function normalizeSizing(value: unknown, fallbackPositionPct: number, fal
       asset: normalizeQtyAsset(raw?.asset, fallbackSymbol),
     }
   }
+  if (mode === 'RATIO') return { mode: 'RATIO', value: Number.NaN }
+  if (mode === 'QUOTE') {
+    return {
+      mode: 'QUOTE',
+      value: Number.NaN,
+      asset: normalizeQuoteAsset(raw?.asset) ?? 'USDT',
+    }
+  }
+  if (mode === 'QTY') {
+    return {
+      mode: 'QTY',
+      value: Number.NaN,
+      asset: normalizeQtyAsset(raw?.asset, fallbackSymbol),
+    }
+  }
+  if (raw && raw.mode !== undefined) return { mode: 'INVALID', value: Number.NaN }
 
   const fallback = Number.isFinite(fallbackPositionPct) && fallbackPositionPct > 0 ? fallbackPositionPct : 10
   return { mode: 'RATIO', value: normalizeRatioValue(fallback) }
@@ -89,6 +106,7 @@ export function derivePositionPctFromSizing(sizing: QuantSizing): number | null 
 export function formatSizing(sizing: QuantSizing, fallbackSymbol?: string): string {
   if (sizing.mode === 'RATIO') return `${normalizeDisplayNumber(sizing.value)}%`
   if (sizing.mode === 'QUOTE') return `${normalizeDisplayNumber(sizing.value)} ${sizing.asset ?? 'USDT'}`
+  if (sizing.mode === 'INVALID') return '无效仓位'
   const asset = sizing.asset ?? normalizeQtyAsset(undefined, fallbackSymbol)
   return asset ? `${normalizeDisplayNumber(sizing.value)} ${asset}` : normalizeDisplayNumber(sizing.value)
 }

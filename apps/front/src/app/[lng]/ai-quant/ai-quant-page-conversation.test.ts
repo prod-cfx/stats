@@ -2434,6 +2434,16 @@ describe('semantic sizing helpers', () => {
     })
   })
 
+  it('preserves explicit invalid sizing so request validation can block it', () => {
+    const quoteSizing = normalizeSizing({ mode: 'QUOTE', value: '' }, 12, 'BTCUSDT')
+    expect(quoteSizing.mode).toBe('QUOTE')
+    expect(Number.isNaN(quoteSizing.value)).toBe(true)
+
+    const unknownSizing = normalizeSizing({ mode: 'mystery', value: 1000 }, 12, 'BTCUSDT')
+    expect(unknownSizing.mode).toBe('INVALID')
+    expect(Number.isNaN(unknownSizing.value)).toBe(true)
+  })
+
   it('infers quantity asset from canonical sizing symbols', () => {
     expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSDT', 10)).toEqual({
       mode: 'QTY',
