@@ -3,7 +3,11 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
-import type { AiQuantBacktestDraftConfig, LlmCodegenSessionResponse } from '@/lib/api'
+import type {
+  AccountAiQuantBacktestConfigDefaults,
+  AiQuantBacktestDraftConfig,
+  LlmCodegenSessionResponse,
+} from '@/lib/api'
 import {
   buildAiQuantErrorMessage,
   buildAiQuantStageFallbackMessage,
@@ -82,12 +86,24 @@ function normalizePublishedSnapshotParamValues(
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
+  snapshotBacktestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  const { currentValues, snapshotParamValues } = input
-  if (!snapshotParamValues) {
+  const { currentValues, snapshotParamValues, snapshotBacktestConfigDefaults } = input
+  const snapshotBacktestExecutionParamValues = snapshotBacktestConfigDefaults
+    ? {
+        backtestInitialCash: snapshotBacktestConfigDefaults.initialCash,
+        backtestLeverage: snapshotBacktestConfigDefaults.leverage,
+        backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
+        backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
+        backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
+        backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
+      }
+    : null
+
+  if (!snapshotParamValues && !snapshotBacktestExecutionParamValues) {
     return {
       paramValues: currentValues,
       explicit: hasExplicitBacktestExecutionOverrides(currentValues),
@@ -96,7 +112,8 @@ function mergeSnapshotBoundParamValues(input: {
 
   const nextValues = {
     ...currentValues,
-    ...snapshotParamValues,
+    ...(snapshotBacktestExecutionParamValues ?? {}),
+    ...(snapshotParamValues ?? {}),
   }
 
   return {
@@ -507,6 +524,10 @@ export function applyCodegenResponseToConversationState(args: {
     snapshotParamValues:
       response.status === 'PUBLISHED'
         ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+        : null,
+    snapshotBacktestConfigDefaults:
+      response.status === 'PUBLISHED'
+        ? (response.publishedSnapshotBacktestConfigDefaults ?? null)
         : null,
   })
   const nextPublishedSnapshotParamValues =

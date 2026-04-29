@@ -1040,7 +1040,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
   })
 
-  it('marks same-snapshot restored backtests stale when codegen reconciliation changes the effective backtest config', async () => {
+  it('marks same-snapshot restored backtests stale when codegen reconciliation changes backtest defaults', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock
     const getLlmCodegenSession = jest.requireMock('@/lib/api')
@@ -1126,20 +1126,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         },
         rules: [],
       },
-      publishedSnapshotParamValues: {
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        marketType: 'spot',
-        baseTimeframe: '15m',
-        positionPct: 10,
-        backtestRangePreset: '30D',
-        backtestInitialCash: 20000,
-        backtestLeverage: 1,
-        backtestSlippageBps: 10,
-        backtestFeeBps: 5,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
-      },
+      publishedSnapshotParamValues: null,
       publishedSnapshotStrategyConfig: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
