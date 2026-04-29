@@ -1,3 +1,4 @@
+import type { AiSignalPayload } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { RuntimeMarketType } from '@/modules/market-data/utils/market-symbol-code.util'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
@@ -19,6 +20,8 @@ export interface CountRecentSignalsInput {
   strategyId: string
   symbolId: string
   since: Date
+  signalType?: AiSignalPayload['signalType']
+  direction?: AiSignalPayload['direction']
   runtimeScope?: RuntimeCooldownScope
 }
 
@@ -27,6 +30,8 @@ export interface FindRecentSignalForCooldownInput {
   symbolId: string
   instanceId: string
   cooldownSince: Date
+  signalType?: AiSignalPayload['signalType']
+  direction?: AiSignalPayload['direction']
   runtimeScope?: RuntimeCooldownScope
 }
 
@@ -123,6 +128,8 @@ export class SignalGeneratorRepository {
     symbolId: string
     cooldownSince: Date
     skipCooldown: boolean
+    signalType?: AiSignalPayload['signalType']
+    direction?: AiSignalPayload['direction']
     data: Prisma.TradingSignalCreateInput
   }): Promise<{ created: boolean; signalId: string | null }> {
     return this.txHost.withTransaction(async () => {
@@ -141,6 +148,8 @@ export class SignalGeneratorRepository {
             symbolId: params.symbolId,
             createdAt: { gte: params.cooldownSince },
             status: { in: [...COOLDOWN_SIGNAL_STATUSES] },
+            ...(params.signalType ? { signalType: params.signalType } : {}),
+            ...(params.direction ? { direction: params.direction } : {}),
             OR: [{ strategyInstanceId: params.instanceId }, { strategyInstanceId: null }],
           },
         })
@@ -162,6 +171,8 @@ export class SignalGeneratorRepository {
         symbolId: input.symbolId,
         since: input.cooldownSince,
         instanceId: input.instanceId,
+        signalType: input.signalType,
+        direction: input.direction,
         runtimeScope: input.runtimeScope,
       }),
       orderBy: { createdAt: 'desc' },
@@ -174,6 +185,8 @@ export class SignalGeneratorRepository {
         strategyId: input.strategyId,
         symbolId: input.symbolId,
         since: input.since,
+        signalType: input.signalType,
+        direction: input.direction,
         runtimeScope: input.runtimeScope,
       }),
     })
@@ -184,6 +197,8 @@ export class SignalGeneratorRepository {
     symbolId: string
     since: Date
     instanceId?: string
+    signalType?: AiSignalPayload['signalType']
+    direction?: AiSignalPayload['direction']
     runtimeScope?: RuntimeCooldownScope
   }): Prisma.TradingSignalWhereInput {
     if (input.runtimeScope) {
@@ -192,6 +207,8 @@ export class SignalGeneratorRepository {
         symbolId: input.symbolId,
         createdAt: { gte: input.since },
         status: { in: [...COOLDOWN_SIGNAL_STATUSES] },
+        ...(input.signalType ? { signalType: input.signalType } : {}),
+        ...(input.direction ? { direction: input.direction } : {}),
         strategyInstanceId: input.runtimeScope.strategyInstanceId,
         AND: [{
           metadata: {
@@ -212,6 +229,8 @@ export class SignalGeneratorRepository {
       symbolId: input.symbolId,
       createdAt: { gte: input.since },
       status: { in: [...COOLDOWN_SIGNAL_STATUSES] },
+      ...(input.signalType ? { signalType: input.signalType } : {}),
+      ...(input.direction ? { direction: input.direction } : {}),
       ...(input.instanceId
         ? {
             OR: [{ strategyInstanceId: input.instanceId }, { strategyInstanceId: null }],

@@ -82,6 +82,8 @@ export class SignalGenerationPersistenceStage {
           strategyId: strategy.id,
           symbolId: group.symbol.id,
           since: cooldownSince,
+          signalType: aiPayload.signalType,
+          direction: aiPayload.direction,
           runtimeScope: this.resolveRuntimeCooldownScope(instance.id, runtimeProvenance),
         })
 
@@ -183,6 +185,8 @@ export class SignalGenerationPersistenceStage {
           symbolId: primarySymbol.id,
           instanceId: instance.id,
           cooldownSince,
+          signalType: aiPayload.signalType,
+          direction: aiPayload.direction,
         })
 
         if (recentSignal) {
