@@ -1,4 +1,4 @@
-import type { SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type {
   NormalizedTriggerAtom,
   StrategyNormalizedIntent,
@@ -102,4 +102,82 @@ function toUnresolvedSlot(slot: SemanticSlotState): NormalizedTriggerAtom['unres
     affectsExecution: slot.affectsExecution,
     ...(slot.evidence?.text ? { evidenceText: slot.evidence.text } : {}),
   }
+}
+
+const RISK_BASIS_OPEN_SLOT_PATTERN = /(?:^|\.)(?:basis|stopLossBasis|takeProfitBasis)$/u
+const RISK_BASIS_SLOT_KEYS = new Set([
+  'risk.stopLossBasis',
+  'risk.takeProfitBasis',
+  'risk.stop_loss_pct.basis',
+  'risk.take_profit_pct.basis',
+])
+
+export function normalizeRiskSemantics(risks: SemanticRiskState[]): SemanticRiskState[] {
+  return risks.map((risk, index) => normalizeRiskSemantic(risk, index))
+}
+
+export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): SemanticRiskState {
+  const params = { ...risk.params }
+  const isStopLoss = risk.key === 'risk.stop_loss_pct'
+  const isTakeProfit = risk.key === 'risk.take_profit_pct'
+
+  if (!isStopLoss && !isTakeProfit) {
+    if (risk.key === 'risk.condition_expression') {
+      return {
+        ...risk,
+        params: {
+          capabilityStatus: 'recognized_unsupported',
+          ...params,
+        },
+        openSlots: risk.openSlots.filter(slot => !isRiskBasisOpenSlot(slot.slotKey, slot.fieldPath)),
+      }
+    }
+
+    return {
+      ...risk,
+      params,
+      openSlots: [...risk.openSlots],
+    }
+  }
+
+  if (typeof params.direction !== 'string') {
+    params.direction = isStopLoss ? 'loss' : 'profit'
+  }
+
+  if (typeof params.basis !== 'string') {
+    params.basis = 'entry_avg_price'
+  }
+
+  if (params.basis === 'position_pnl' && params.basisSource == null) {
+    params.basisSource = 'user_explicit'
+  }
+
+  if (params.basis === 'entry_avg_price' && params.basisSource == null) {
+    params.basisSource = 'system_default'
+  }
+
+  if (typeof params.effect !== 'string') {
+    params.effect = 'close_position'
+  }
+
+  if (typeof params.scope !== 'string') {
+    params.scope = 'current_position'
+  }
+
+  const openSlots = risk.openSlots.filter(slot => !isRiskBasisOpenSlot(slot.slotKey, slot.fieldPath))
+  const status = typeof params.valuePct === 'number' && Number.isFinite(params.valuePct) && params.valuePct > 0 && openSlots.length === 0
+    ? 'locked'
+    : risk.status
+
+  return {
+    ...risk,
+    id: risk.id || `normalized-risk-${index + 1}`,
+    params,
+    status,
+    openSlots,
+  }
+}
+
+function isRiskBasisOpenSlot(slotKey: string, fieldPath: string): boolean {
+  return RISK_BASIS_SLOT_KEYS.has(slotKey) || RISK_BASIS_OPEN_SLOT_PATTERN.test(fieldPath)
 }
