@@ -70,6 +70,16 @@ function createRepository() {
 function createTradingService() {
   return {
     getOpenOrders: jest.fn().mockResolvedValue([]),
+    getTicker: jest.fn().mockResolvedValue({
+      symbol: 'BTC/USDT',
+      last: 100,
+      bid: 99,
+      ask: 101,
+      high: 110,
+      low: 90,
+      volume: 1000,
+      raw: {},
+    }),
     getClosedOrders: jest.fn().mockResolvedValue([
       {
         id: 'exchange-order-1',
@@ -108,6 +118,7 @@ function createTradingService() {
 function createStateMachine() {
   return {
     stop: jest.fn().mockResolvedValue(undefined),
+    markStopped: jest.fn().mockResolvedValue(undefined),
     markReconcileRequired: jest.fn().mockResolvedValue(undefined),
   }
 }
@@ -473,6 +484,7 @@ describe('GridOrderSyncService', () => {
       createOrder({ id: 'planned', clientOrderId: null, exchangeOrderId: null, status: 'PLANNED' }),
     ])
     const tradingService = createTradingService()
+    tradingService.getTicker.mockResolvedValue({ symbol: 'BTC/USDT', last: 120, bid: 119, ask: 121, high: 125, low: 90, volume: 1000, raw: {} })
     tradingService.getOpenOrders.mockResolvedValue([
       { id: 'own-exchange', clientOrderId: 'grid-1-95-buy', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 120, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
       { id: 'foreign-exchange', clientOrderId: 'manual-order', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 120, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
@@ -484,6 +496,7 @@ describe('GridOrderSyncService', () => {
     await service.syncInstance('grid-1')
 
     expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'boundary_break')
+    expect(stateMachine.markStopped).toHaveBeenCalledWith('grid-1', 'boundary_break')
     expect(tradingService.cancelOrder).toHaveBeenCalledTimes(1)
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'own-exchange', 'BTC/USDT', 'exchange-account-1')
   })
@@ -499,6 +512,7 @@ describe('GridOrderSyncService', () => {
       }),
     ])
     const tradingService = createTradingService()
+    tradingService.getTicker.mockResolvedValue({ symbol: 'BTC/USDT', last: 80, bid: 79, ask: 81, high: 110, low: 75, volume: 1000, raw: {} })
     tradingService.getOpenOrders.mockResolvedValue([
       { id: 'exchange-submitting', clientOrderId: 'grid-1-95-buy', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 120, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
     ])
@@ -509,6 +523,28 @@ describe('GridOrderSyncService', () => {
     await service.syncInstance('grid-1')
 
     expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'boundary_break')
+    expect(stateMachine.markStopped).toHaveBeenCalledWith('grid-1', 'boundary_break')
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-submitting', 'BTC/USDT', 'exchange-account-1')
+  })
+
+  it('stops and cancels own live orders on explicit user stop', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({ id: 'own-open', clientOrderId: 'grid-1-95-buy', exchangeOrderId: 'own-exchange', status: 'OPEN' }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([
+      { id: 'own-exchange', clientOrderId: 'grid-1-95-buy', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 95, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
+      { id: 'foreign-exchange', clientOrderId: 'manual-order', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 95, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
+    ])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.stopAndCancelInstance('grid-1', 'user_stop')
+
+    expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'user_stop')
+    expect(tradingService.cancelOrder).toHaveBeenCalledTimes(1)
+    expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'own-exchange', 'BTC/USDT', 'exchange-account-1')
+    expect(stateMachine.markStopped).toHaveBeenCalledWith('grid-1', 'user_stop')
   })
 })

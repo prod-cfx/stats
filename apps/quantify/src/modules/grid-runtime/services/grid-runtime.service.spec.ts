@@ -23,13 +23,15 @@ function createService(repository: { createInstanceWithPlan: jest.Mock }) {
     resume: jest.fn(),
     stop: jest.fn(),
   }
+  const orderSync = { syncInstance: jest.fn(), stopAndCancelInstance: jest.fn().mockResolvedValue(undefined) }
   return {
     planner,
+    orderSync,
     stateMachine,
     service: new GridRuntimeService(
       asDependency<ConstructorParameters<typeof GridRuntimeService>[0]>(repository),
       asDependency<ConstructorParameters<typeof GridRuntimeService>[1]>(planner),
-      asDependency<ConstructorParameters<typeof GridRuntimeService>[2]>({ syncInstance: jest.fn() }),
+      asDependency<ConstructorParameters<typeof GridRuntimeService>[2]>(orderSync),
       asDependency<ConstructorParameters<typeof GridRuntimeService>[3]>(stateMachine),
     ),
   }
@@ -119,5 +121,15 @@ describe('GridRuntimeService', () => {
     expect(stateMachine.initialize.mock.invocationCallOrder[0]).toBeLessThan(
       stateMachine.markRunning.mock.invocationCallOrder[0],
     )
+  })
+
+  it('stops through order sync so exchange orders are canceled before terminal state', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-1' }) }
+    const { service, orderSync, stateMachine } = createService(repository)
+
+    await service.stop('grid-runtime-1', 'user_stop')
+
+    expect(orderSync.stopAndCancelInstance).toHaveBeenCalledWith('grid-runtime-1', 'user_stop')
+    expect(stateMachine.stop).not.toHaveBeenCalled()
   })
 })

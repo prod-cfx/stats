@@ -10,6 +10,7 @@ describe('tradingService', () => {
       fetchOrderByClientOrderId: jest.fn(),
       fetchOpenOrders: jest.fn(),
       fetchClosedOrders: jest.fn(),
+      fetchTicker: jest.fn(),
       fetchPositions: jest.fn(),
       fetchBalance: jest.fn(),
     }
@@ -88,6 +89,27 @@ describe('tradingService', () => {
 
     expect(client.fetchClosedOrders).toHaveBeenCalledWith('DOGE/USDT')
     expect(result).toEqual([{ id: 'order-2', status: 'closed' }])
+  })
+
+  it('fetches ticker through the selected exchange account', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchTicker.mockResolvedValue({ symbol: 'DOGE/USDT', last: 0.1 })
+
+    const result = await service.getTicker(
+      'user-1',
+      'okx',
+      'spot',
+      'DOGE/USDT',
+      'exchange-account-1',
+    )
+
+    expect(client.fetchTicker).toHaveBeenCalledWith('DOGE/USDT')
+    expect(result).toEqual({ symbol: 'DOGE/USDT', last: 0.1 })
   })
 
   it('finds orders by client order id from open orders before closed orders', async () => {

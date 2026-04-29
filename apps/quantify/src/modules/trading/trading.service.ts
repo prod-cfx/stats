@@ -5,6 +5,7 @@ import type {
   UnifiedBalance,
   UnifiedOrder,
   UnifiedPosition,
+  UnifiedTicker,
 } from './core/types'
 import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './factory/account-store'
 import { Inject, Injectable } from '@nestjs/common'
@@ -157,6 +158,38 @@ export class TradingService {
       }
       throw new ExchangeOperationFailedException({
         operation: 'fetch closed orders',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async getTicker(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    symbol: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedTicker> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      return await client.fetchTicker(symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch ticker', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch ticker',
         exchangeId,
         reason: (error as Error).message,
       })

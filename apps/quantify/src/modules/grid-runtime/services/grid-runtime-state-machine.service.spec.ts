@@ -55,6 +55,7 @@ describe('GridRuntimeStateMachineService', () => {
     const service = createService(repository)
 
     await service.stop('grid-1', 'boundary_break')
+    await service.markStopped('grid-1', 'boundary_break')
     await service.markReconcileRequired('grid-1', 'exchange_mismatch')
 
     expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(1, {
@@ -72,6 +73,20 @@ describe('GridRuntimeStateMachineService', () => {
       },
     })
     expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(2, {
+      id: 'grid-1',
+      fromStatuses: ['STOPPING', 'STOPPED'],
+      toStatus: 'STOPPED',
+      stopReason: 'boundary_break',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_stopped',
+        severity: 'warn',
+        status: 'STOPPED',
+        message: 'boundary_break',
+        payload: undefined,
+      },
+    })
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(3, {
       id: 'grid-1',
       fromStatuses: ['INITIALIZING', 'RUNNING', 'PAUSED'],
       toStatus: 'RECONCILE_REQUIRED',

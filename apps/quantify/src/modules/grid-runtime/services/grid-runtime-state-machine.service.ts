@@ -67,6 +67,17 @@ export class GridRuntimeStateMachineService {
     })
   }
 
+  markStopped(instanceId: string, reason: string) {
+    return this.transition({
+      instanceId,
+      fromStatuses: ['STOPPING', 'STOPPED'],
+      status: 'STOPPED',
+      eventType: 'runtime_stopped',
+      severity: 'warn',
+      reason,
+    })
+  }
+
   markReconcileRequired(instanceId: string, reason: string) {
     return this.transition({
       instanceId,

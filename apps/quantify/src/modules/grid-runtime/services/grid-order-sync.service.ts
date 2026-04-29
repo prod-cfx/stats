@@ -124,6 +124,56 @@ export class GridOrderSyncService {
     })
   }
 
+  async stopAndCancelInstance(instanceId: string, reason: string): Promise<void> {
+    const snapshot = await this.loadSyncSnapshot(instanceId)
+    if (!snapshot) return
+    const { instance, orders } = snapshot
+    const exchangeId = instance.exchangeId as ExchangeId
+    const marketType = instance.marketType as MarketType
+    const openOrders = await this.tradingService.getOpenOrders(
+      instance.userId,
+      exchangeId,
+      marketType,
+      instance.symbol,
+      instance.exchangeAccountId,
+    )
+    const ownOpenOrders = this.filterOwnOpenOrders(orders, openOrders)
+
+    await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, reason))
+    try {
+      for (const order of ownOpenOrders) {
+        await this.tradingService.cancelOrder(
+          instance.userId,
+          exchangeId,
+          marketType,
+          order.id,
+          instance.symbol,
+          instance.exchangeAccountId,
+        )
+      }
+      await this.txEvents.withAfterCommit(async () => this.stateMachine.markStopped(instance.id, reason))
+    } catch {
+      await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'stop_cancel_failed'))
+    }
+  }
+
+  private async loadSyncSnapshot(instanceId: string): Promise<{
+    instance: RuntimeInstance
+    config: GridRuntimeConfigSnapshot
+    orders: RuntimeOrder[]
+  } | null> {
+    return this.txEvents.withAfterCommit(async () => {
+      const instance = await this.repository.findInstanceForSync(instanceId) as RuntimeInstance | null
+      if (!instance) return null
+
+      return {
+        instance,
+        config: this.parseConfig(instance.configSnapshot),
+        orders: await this.repository.listOrders(instanceId) as RuntimeOrder[],
+      }
+    })
+  }
+
   private async submitPlannedOrders(
     instance: RuntimeInstance,
     orders: RuntimeOrder[],
@@ -205,15 +255,17 @@ export class GridOrderSyncService {
   ): Promise<boolean> {
     const lower = this.decimal(config.lowerPrice)
     const upper = this.decimal(config.upperPrice)
+    const ticker = await this.tradingService.getTicker(
+      instance.userId,
+      instance.exchangeId as ExchangeId,
+      instance.marketType as MarketType,
+      instance.symbol,
+      instance.exchangeAccountId,
+    )
+    const marketPrice = this.decimal(String(ticker.last))
+    if (marketPrice.gte(lower) && marketPrice.lte(upper)) return false
+
     const ownOpenOrders = this.filterOwnOpenOrders(orders, openOrders)
-    const outsideBoundary = ownOpenOrders.some((order) => {
-      if (order.price == null) return false
-      const price = this.decimal(String(order.price))
-      return price.lt(lower) || price.gt(upper)
-    })
-
-    if (!outsideBoundary) return false
-
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, 'boundary_break'))
 
     for (const order of ownOpenOrders) {
@@ -226,6 +278,7 @@ export class GridOrderSyncService {
         instance.exchangeAccountId,
       )
     }
+    await this.txEvents.withAfterCommit(async () => this.stateMachine.markStopped(instance.id, 'boundary_break'))
     return true
   }
 

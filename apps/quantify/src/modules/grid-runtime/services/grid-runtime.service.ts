@@ -135,7 +135,7 @@ export class GridRuntimeService {
   }
 
   stop(instanceId: string, reason: string) {
-    return this.stateMachine.stop(instanceId, reason)
+    return this.orderSync.stopAndCancelInstance(instanceId, reason)
   }
 
   private buildConfigFromAst(astSnapshot: unknown, symbol: string): GridRuntimeConfigSnapshot {
