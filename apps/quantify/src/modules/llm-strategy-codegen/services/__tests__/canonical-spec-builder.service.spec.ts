@@ -459,7 +459,14 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(JSON.stringify(spec)).toContain('entry_avg_price')
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      phase: 'risk',
+      condition: expect.objectContaining({
+        kind: 'atom',
+        key: 'position_loss_pct',
+        params: { basis: 'entry_avg_price' },
+      }),
+    }))
   })
 
   it('builds SemanticState canonical condition groups from logical expressions', () => {

@@ -310,6 +310,44 @@ describe('strategyIntentNormalizerService', () => {
     }))
   })
 
+  it('keeps inferred legacy stop loss basis provenance as system generated', () => {
+    const result = service.normalize({
+      riskRules: {
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        _inferredAssumptions: ['risk.stopLossBasis'],
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+    }))
+  })
+
+  it('keeps inferred legacy take profit basis provenance as system generated', () => {
+    const result = service.normalize({
+      riskRules: {
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+        _inferredAssumptions: ['risk.takeProfitBasis'],
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({
+        valuePct: 10,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+    }))
+  })
+
   it('emits a closed grid trigger atom from checklist.grid even without explicit grid wording in rules', () => {
     const result = service.normalize({
       market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },

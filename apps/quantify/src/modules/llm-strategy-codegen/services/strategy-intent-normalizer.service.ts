@@ -810,6 +810,7 @@ export class StrategyIntentNormalizerService {
     if (!riskRules) return []
 
     const risk: NormalizedRiskAtom[] = []
+    const inferredAssumptions = this.resolveLegacyRiskInferredAssumptions(riskRules._inferredAssumptions)
     if (typeof riskRules.stopLossPct === 'number' && Number.isFinite(riskRules.stopLossPct)) {
       const basis = this.resolveLegacyRiskBasis(riskRules.stopLossBasis)
       risk.push({
@@ -818,7 +819,7 @@ export class StrategyIntentNormalizerService {
           valuePct: riskRules.stopLossPct,
           direction: 'loss',
           basis,
-          basisSource: this.resolveLegacyRiskBasisSource(riskRules.stopLossBasis),
+          basisSource: this.resolveLegacyRiskBasisSource(riskRules.stopLossBasis, inferredAssumptions.has('risk.stopLossBasis')),
           effect: 'close_position',
           scope: 'current_position',
         },
@@ -832,7 +833,7 @@ export class StrategyIntentNormalizerService {
           valuePct: riskRules.takeProfitPct,
           direction: 'profit',
           basis,
-          basisSource: this.resolveLegacyRiskBasisSource(riskRules.takeProfitBasis),
+          basisSource: this.resolveLegacyRiskBasisSource(riskRules.takeProfitBasis, inferredAssumptions.has('risk.takeProfitBasis')),
           effect: 'close_position',
           scope: 'current_position',
         },
@@ -854,13 +855,25 @@ export class StrategyIntentNormalizerService {
     return risk
   }
 
+  private resolveLegacyRiskInferredAssumptions(rawInferredAssumptions: unknown): Set<string> {
+    if (!Array.isArray(rawInferredAssumptions)) {
+      return new Set()
+    }
+
+    return new Set(rawInferredAssumptions.filter((item): item is string => typeof item === 'string'))
+  }
+
   private resolveLegacyRiskBasis(rawBasis: unknown): string {
     return typeof rawBasis === 'string' && rawBasis.trim()
       ? rawBasis
       : 'entry_avg_price'
   }
 
-  private resolveLegacyRiskBasisSource(rawBasis: unknown): 'system_default' | 'user_explicit' {
+  private resolveLegacyRiskBasisSource(rawBasis: unknown, isInferred: boolean): 'system_default' | 'user_explicit' {
+    if (isInferred) {
+      return 'system_default'
+    }
+
     return typeof rawBasis === 'string' && rawBasis.trim()
       ? 'user_explicit'
       : 'system_default'
