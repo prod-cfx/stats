@@ -13,7 +13,7 @@ const ACTION_PATTERN = /action\s*:\s*['"]([A-Z_]+)['"]/g
 const GUARD_BREACH_ACTION_PATTERN = /onBreach\s*:\s*['"]([A-Z_]+)['"]/g
 const PARAM_PATTERN = /ctx\.params(?:Normalized)?\??\.([A-Za-z_]\w*)/g
 const DECISION_SIZE_PATTERN = /size\s*:\s*\{[^}]*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"][^}]*value\s*:\s*([^,\n}]+)/
-const COMPILED_QUANTITY_PATTERN = /quantity\s*:\s*\{[^}]*mode\s*:\s*['"]([a-z_]+)['"][^}]*value\s*:\s*([^,\n}]+)/
+const COMPILED_QUANTITY_PATTERN = /["']?quantity["']?\s*:\s*\{[\s\S]{0,120}?["']?mode["']?\s*:\s*['"]([a-z_]+)['"][\s\S]{0,120}?["']?value["']?\s*:\s*([^,\n}]+)/
 const LEGACY_RATIO_SIZE_PATTERN = /positionSizeRatio\s*:\s*([^,\n}]+)/
 const LEGACY_QUOTE_SIZE_PATTERN = /positionSizeQuote\s*:\s*([^,\n}]+)/
 const GUARD_PROGRAM_PATTERN = /kind\s*:\s*['"]([A-Z_]+)['"][^}]*onBreach\s*:\s*['"]([A-Z_]+)['"]/g
@@ -251,6 +251,15 @@ export class ScriptProfileExtractorService {
   }
 
   private extractSizing(scriptCode: string): StrategySemanticProfile['sizing'] {
+    const compiledOpenQuantity = this.findCompiledOpenQuantity(scriptCode)
+    if (compiledOpenQuantity) {
+      return this.resolveCompiledQuantityExpression({
+        scriptCode,
+        mode: compiledOpenQuantity.mode,
+        expression: compiledOpenQuantity.expression,
+      })
+    }
+
     const compiledQuantityMatch = scriptCode.match(COMPILED_QUANTITY_PATTERN)
     if (compiledQuantityMatch?.[1] && compiledQuantityMatch[2]) {
       return this.resolveCompiledQuantityExpression({
@@ -285,6 +294,29 @@ export class ScriptProfileExtractorService {
         mode: 'QUOTE',
         expression: legacyQuoteMatch[1],
       })
+    }
+
+    return null
+  }
+
+  private findCompiledOpenQuantity(scriptCode: string): { mode: string, expression: string } | null {
+    const openKindPattern = /["']?kind["']?\s*:\s*['"]OPEN_(?:LONG|SHORT)['"]/g
+    for (const match of scriptCode.matchAll(openKindPattern)) {
+      if (typeof match.index !== 'number') continue
+      const afterOpenWindow = scriptCode.slice(match.index, match.index + 240)
+      const beforeOpenWindow = scriptCode.slice(Math.max(0, match.index - 160), match.index + 120)
+      const actionWindow = /["']?quantity["']?\s*:/.test(afterOpenWindow)
+        ? afterOpenWindow
+        : beforeOpenWindow
+      const quantityIndex = actionWindow.search(/["']?quantity["']?\s*:/)
+      if (quantityIndex < 0) continue
+
+      const quantityWindow = actionWindow.slice(quantityIndex, quantityIndex + 240)
+      const mode = quantityWindow.match(/["']?mode["']?\s*:\s*['"]([a-z_]+)['"]/)?.[1]
+      const expression = quantityWindow.match(/["']?value["']?\s*:\s*([^,\n}]+)/)?.[1]
+      if (mode && expression) {
+        return { mode, expression }
+      }
     }
 
     return null
@@ -328,7 +360,7 @@ export class ScriptProfileExtractorService {
   }
 
   private normalizeCompiledQuantityValue(mode: string, value: number): number {
-    if ((mode === 'pct_equity' || mode === 'position_pct') && value > 1) {
+    if (mode === 'pct_equity' || mode === 'position_pct') {
       return Number((value / 100).toFixed(4))
     }
     return value

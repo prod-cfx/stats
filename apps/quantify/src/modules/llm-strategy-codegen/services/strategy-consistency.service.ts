@@ -1352,7 +1352,7 @@ export class StrategyConsistencyService {
     value: number,
   ): number {
     if (mode === 'pct_equity' || mode === 'position_pct') {
-      return value > 1 ? Number((value / 100).toFixed(4)) : value
+      return Number((value / 100).toFixed(4))
     }
 
     return value
