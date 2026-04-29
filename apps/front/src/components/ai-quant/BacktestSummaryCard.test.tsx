@@ -173,6 +173,34 @@ describe('BacktestSummaryCard', () => {
     expect(container.textContent).toContain('建议重新回测刷新')
   })
 
+  it('shows stale-configuration as the deploy block reason instead of drawdown failure', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-config-changed-deploy-blocked',
+            symbol: 'BTCUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 5,
+            totalReturnPct: 12,
+            winRatePct: 55,
+            tradeCount: 21,
+            recoveryStatus: 'config_changed',
+          }}
+          marketType="perp"
+          canDeploy={false}
+          onOpenFullScreen={() => undefined}
+          onDeploy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('回测参数已变化')
+    expect(container.textContent).toContain('请重新回测后再部署')
+    expect(container.textContent).not.toContain('回撤超标，暂不允许部署')
+  })
+
   it('shows running deployment state with a locked primary action and view entry', async () => {
     const onDeploy = jest.fn()
     const onViewRunningStrategy = jest.fn()

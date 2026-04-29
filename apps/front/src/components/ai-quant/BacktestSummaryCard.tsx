@@ -137,15 +137,21 @@ export function BacktestSummaryCard({
             }]
           : []),
       ]
-  const deployBlockMessage = result.maxDrawdownPct > 20
-    ? t('aiQuant.messages.backtestDrawdownFail')
-    : result.tradeCount === 0
-      ? normalizedMarketType === 'spot'
-        ? isEn
-          ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
-          : '本次回测未形成已完成交易，暂不允许部署。请调整现货策略条件后重试。'
-        : t('aiQuant.messages.backtestNoTrades')
-      : t('aiQuant.messages.backtestDrawdownFail')
+  const deployBlockMessage = result.recoveryStatus === 'config_changed'
+    ? t('aiQuant.messages.backtestConfigChangedDeployBlocked', {
+        defaultValue: isEn
+          ? 'Backtest parameters changed. Rerun backtest before deploying.'
+          : '回测参数已变化，请重新回测后再部署。',
+      })
+    : result.maxDrawdownPct > 20
+      ? t('aiQuant.messages.backtestDrawdownFail')
+      : result.tradeCount === 0
+        ? normalizedMarketType === 'spot'
+          ? isEn
+            ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
+            : '本次回测未形成已完成交易，暂不允许部署。请调整现货策略条件后重试。'
+          : t('aiQuant.messages.backtestNoTrades')
+        : t('aiQuant.messages.backtestDrawdownFail')
   const effectiveDeployLabel = deployLabel
     ?? (deploymentState === 'running'
       ? t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
