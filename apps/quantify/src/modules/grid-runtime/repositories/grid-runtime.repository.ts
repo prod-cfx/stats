@@ -291,15 +291,23 @@ export class GridRuntimeRepository {
     return result.count === 1
   }
 
-  markOrderOpen(input: MarkGridOrderOpenInput) {
-    return this.txHost.tx.gridOrder.update({
-      where: { id: input.id },
+  async markOrderOpen(input: MarkGridOrderOpenInput): Promise<boolean> {
+    const result = await this.txHost.tx.gridOrder.updateMany({
+      where: {
+        id: input.id,
+        status: 'SUBMITTING',
+        instance: {
+          status: { in: ['INITIALIZING', 'RUNNING'] },
+        },
+      },
       data: {
         exchangeOrderId: input.exchangeOrderId,
         status: 'OPEN',
         rawPayload: input.rawPayload,
       },
     })
+
+    return result.count === 1
   }
 
   updateOrderFromExchange(input: UpdateGridOrderFromExchangeInput) {

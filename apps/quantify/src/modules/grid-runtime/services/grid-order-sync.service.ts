@@ -136,6 +136,7 @@ export class GridOrderSyncService {
       instance.exchangeAccountId,
     )
     const ownOpenOrders = this.filterOwnOpenOrders(orders, openOrders)
+    const hasPendingLocalSubmission = this.hasPendingLocalSubmission(orders, ownOpenOrders)
 
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, reason))
     try {
@@ -148,6 +149,10 @@ export class GridOrderSyncService {
           instance.symbol,
           instance.exchangeAccountId,
         )
+      }
+      if (hasPendingLocalSubmission) {
+        await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'stop_pending_submit'))
+        return
       }
       await this.txEvents.withAfterCommit(async () => this.stateMachine.markStopped(instance.id, reason))
     } catch {
@@ -204,13 +209,30 @@ export class GridOrderSyncService {
         return
       }
 
-      await this.txEvents.withAfterCommit(async () => {
-        await this.repository.markOrderOpen({
+      const markedOpen = await this.txEvents.withAfterCommit(async () => {
+        return this.repository.markOrderOpen({
           id: order.id,
           exchangeOrderId: exchangeOrder.id,
           rawPayload: this.toJsonValue(exchangeOrder.raw),
         })
       })
+      if (markedOpen) continue
+
+      try {
+        await this.tradingService.cancelOrder(
+          instance.userId,
+          exchangeId,
+          marketType,
+          exchangeOrder.id,
+          instance.symbol,
+          instance.exchangeAccountId,
+        )
+      } catch {
+        await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'order_submit_race_cancel_failed'))
+        return
+      }
+      await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'order_submit_race'))
+      return
     }
   }
 
@@ -264,20 +286,42 @@ export class GridOrderSyncService {
     if (marketPrice.gte(lower) && marketPrice.lte(upper)) return false
 
     const ownOpenOrders = this.filterOwnOpenOrders(orders, openOrders)
+    const hasPendingLocalSubmission = this.hasPendingLocalSubmission(orders, ownOpenOrders)
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, 'boundary_break'))
 
-    for (const order of ownOpenOrders) {
-      await this.tradingService.cancelOrder(
-        instance.userId,
-        instance.exchangeId as ExchangeId,
-        instance.marketType as MarketType,
-        order.id,
-        instance.symbol,
-        instance.exchangeAccountId,
-      )
+    try {
+      for (const order of ownOpenOrders) {
+        await this.tradingService.cancelOrder(
+          instance.userId,
+          instance.exchangeId as ExchangeId,
+          instance.marketType as MarketType,
+          order.id,
+          instance.symbol,
+          instance.exchangeAccountId,
+        )
+      }
+    } catch {
+      await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'boundary_cancel_failed'))
+      return true
     }
+    if (hasPendingLocalSubmission) {
+      await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'boundary_pending_submit'))
+      return true
+    }
+
     await this.txEvents.withAfterCommit(async () => this.stateMachine.markStopped(instance.id, 'boundary_break'))
     return true
+  }
+
+  private hasPendingLocalSubmission(orders: RuntimeOrder[], openOrders: UnifiedOrder[]): boolean {
+    const openOrderIds = new Set(openOrders.map(order => order.id))
+    const openClientOrderIds = new Set(openOrders.map(order => order.clientOrderId).filter(Boolean))
+    return orders.some((order) => {
+      if (order.status !== 'SUBMITTING') return false
+      if (order.exchangeOrderId && openOrderIds.has(order.exchangeOrderId)) return false
+      if (order.clientOrderId && openClientOrderIds.has(order.clientOrderId)) return false
+      return true
+    })
   }
 
   private async recordFillAndPlanInverse(

@@ -242,6 +242,35 @@ describe('GridOrderSyncService', () => {
     expect(repository.markOrderOpen).not.toHaveBeenCalled()
   })
 
+  it('cancels a just-created exchange order when local open CAS loses to stop', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    repository.markOrderOpen.mockResolvedValue(false)
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+    expect(repository.markOrderOpen).toHaveBeenCalledWith({
+      id: 'planned-order-1',
+      exchangeOrderId: 'exchange-order-created',
+      rawPayload: { orderId: 'exchange-order-created' },
+    })
+    expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-order-created', 'BTC/USDT', 'exchange-account-1')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_submit_race')
+  })
+
   it('records a completed fill once and creates a paired inverse planned order', async () => {
     const repository = createRepository()
     const tradingService = createTradingService()
@@ -528,6 +557,52 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-submitting', 'BTC/USDT', 'exchange-account-1')
   })
 
+  it('marks reconcile required when boundary break sees a pending local submission without exchange order yet', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'own-submitting',
+        clientOrderId: 'grid-1-95-buy',
+        exchangeOrderId: null,
+        status: 'SUBMITTING',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getTicker.mockResolvedValue({ symbol: 'BTC/USDT', last: 80, bid: 79, ask: 81, high: 110, low: 75, volume: 1000, raw: {} })
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'boundary_break')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'boundary_pending_submit')
+    expect(stateMachine.markStopped).not.toHaveBeenCalled()
+  })
+
+  it('marks reconcile required when boundary break cannot cancel an own live order', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({ id: 'own-open', clientOrderId: 'grid-1-95-buy', exchangeOrderId: 'own-exchange', status: 'OPEN' }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getTicker.mockResolvedValue({ symbol: 'BTC/USDT', last: 120, bid: 119, ask: 121, high: 125, low: 90, volume: 1000, raw: {} })
+    tradingService.getOpenOrders.mockResolvedValue([
+      { id: 'own-exchange', clientOrderId: 'grid-1-95-buy', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 120, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
+    ])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.cancelOrder.mockRejectedValue(new Error('exchange down'))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'boundary_break')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'boundary_cancel_failed')
+    expect(stateMachine.markStopped).not.toHaveBeenCalled()
+  })
+
   it('stops and cancels own live orders on explicit user stop', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([
@@ -547,6 +622,28 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.cancelOrder).toHaveBeenCalledTimes(1)
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'own-exchange', 'BTC/USDT', 'exchange-account-1')
     expect(stateMachine.markStopped).toHaveBeenCalledWith('grid-1', 'user_stop')
+  })
+
+  it('marks reconcile required when explicit stop sees a pending local submission without exchange order yet', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'own-submitting',
+        clientOrderId: 'grid-1-95-buy',
+        exchangeOrderId: null,
+        status: 'SUBMITTING',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.stopAndCancelInstance('grid-1', 'user_stop')
+
+    expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'user_stop')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'stop_pending_submit')
+    expect(stateMachine.markStopped).not.toHaveBeenCalled()
   })
 
   it('marks reconcile required when explicit stop cannot cancel an own live order', async () => {
