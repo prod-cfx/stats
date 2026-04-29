@@ -126,7 +126,10 @@ export class OkxClient extends BaseCexClient {
     // OKX 所有产品都需要 tdMode：现货使用 'cash'，永续默认 'cross'（可通过 extra 覆盖）
     if (this.marketType === 'perp') {
       body.tdMode = (input.extra?.tdMode as string | undefined) ?? 'cross'
-      body.posSide = (input.extra?.posSide as string | undefined) ?? this.inferPerpPosSide(input)
+      const posSide = input.extra?.posSide as string | undefined
+      if (posSide) {
+        body.posSide = posSide
+      }
       if (input.reduceOnly) {
         body.reduceOnly = true
       }
@@ -622,14 +625,6 @@ export class OkxClient extends BaseCexClient {
     }
 
     return fallback
-  }
-
-  private inferPerpPosSide(input: CreateOrderInput): 'long' | 'short' {
-    if (input.side === 'buy') {
-      return input.reduceOnly ? 'short' : 'long'
-    }
-
-    return input.reduceOnly ? 'long' : 'short'
   }
 
   private toSize(value: number, instrumentSpec?: OkxInstrumentSpecItem | null): string {

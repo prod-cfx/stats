@@ -219,11 +219,11 @@ describe('okxClient', () => {
         instId: 'BTC-USDT-SWAP',
         instType: 'SWAP',
         side: 'buy',
-        posSide: 'long',
         ordType: 'market',
         sz: '0.13',
         tdMode: 'cross',
       })
+      expect(rawBody).not.toHaveProperty('posSide')
 
       return new Response(JSON.stringify({
         data: [
@@ -261,7 +261,7 @@ describe('okxClient', () => {
     expect(order.price).toBeCloseTo(74147.2)
   })
 
-  it('sets posSide and reduceOnly for perp close-long market sell orders', async () => {
+  it('omits posSide by default for OKX perp net mode close orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
 
@@ -284,10 +284,10 @@ describe('okxClient', () => {
       expect(rawBody).toMatchObject({
         instId: 'BTC-USDT-SWAP',
         side: 'sell',
-        posSide: 'long',
         reduceOnly: true,
         sz: '0.13',
       })
+      expect(rawBody).not.toHaveProperty('posSide')
 
       return new Response(JSON.stringify({
         data: [
