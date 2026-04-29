@@ -886,10 +886,23 @@ export function syncNormalizedSizingParamValues(
   values: Record<string, unknown>,
   params: QuantParams,
 ): Record<string, unknown> {
-  return {
-    ...values,
+  const { positionPct: _positionPct, positionAmount: _positionAmount, sizingAsset: _sizingAsset, ...rest } = values
+  if (params.sizing.mode === 'RATIO') {
+    return {
+      ...rest,
+      sizing: params.sizing,
+      positionPct: params.positionPct,
+    }
+  }
+
+  const nextValues: Record<string, unknown> = {
+    ...rest,
     sizing: params.sizing,
-    positionPct: params.positionPct,
+    positionAmount: params.sizing.value,
+  }
+  if ('asset' in params.sizing && params.sizing.asset) nextValues.sizingAsset = params.sizing.asset
+  return {
+    ...nextValues,
   }
 }
 

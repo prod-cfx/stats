@@ -18,6 +18,7 @@ import {
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
   serializePersistedConversations,
+  syncNormalizedSizingParamValues,
 } from './ai-quant-page-conversation'
 import {
   buildSizingRequestContext,
@@ -2334,5 +2335,64 @@ describe('semantic sizing helpers', () => {
       'sizing.value=0.01',
       'sizing.asset=BTC',
     ])
+  })
+
+  it('syncs quote sizing param values without restoring legacy positionPct', () => {
+    const values = syncNormalizedSizingParamValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 1000,
+      positionAmount: 10,
+      sizingAsset: 'USDC',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      positionPct: 10,
+    })
+
+    expect(values.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(values.positionAmount).toBe(1000)
+    expect(values.sizingAsset).toBe('USDT')
+    expect(values).not.toHaveProperty('positionPct')
+  })
+
+  it('syncs quantity sizing param values without restoring legacy positionPct', () => {
+    const values = syncNormalizedSizingParamValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 50,
+      positionAmount: 1000,
+      sizingAsset: 'USDT',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'QTY', value: 0.25, asset: 'BTC' },
+      positionPct: 10,
+    })
+
+    expect(values.sizing).toEqual({ mode: 'QTY', value: 0.25, asset: 'BTC' })
+    expect(values.positionAmount).toBe(0.25)
+    expect(values.sizingAsset).toBe('BTC')
+    expect(values).not.toHaveProperty('positionPct')
+  })
+
+  it('syncs ratio sizing param values without stale fixed amount fields', () => {
+    const values = syncNormalizedSizingParamValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionAmount: 1000,
+      sizingAsset: 'USDT',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'RATIO', value: 25 },
+      positionPct: 25,
+    })
+
+    expect(values.sizing).toEqual({ mode: 'RATIO', value: 25 })
+    expect(values.positionPct).toBe(25)
+    expect(values).not.toHaveProperty('positionAmount')
+    expect(values).not.toHaveProperty('sizingAsset')
   })
 })
