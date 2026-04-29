@@ -658,6 +658,26 @@ function normalizeComparableParamValue(value: unknown): unknown {
   return value
 }
 
+function normalizeComparableParamValueForKey(key: string, value: unknown): unknown {
+  if (key === 'sizing') {
+    const sizing = normalizeComparableParamValue(value)
+    if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
+      return sizing
+    }
+    const record = sizing as Record<string, unknown>
+    if (record.mode !== 'RATIO' || typeof record.value !== 'number' || !Number.isFinite(record.value)) {
+      return sizing
+    }
+    return {
+      ...record,
+      value: record.value > 0 && record.value < 1
+        ? Number((record.value * 100).toFixed(8))
+        : Number(record.value.toFixed(8)),
+    }
+  }
+  return normalizeComparableParamValue(value)
+}
+
 export function requiresRepublishForPublishedSnapshot(input: {
   publishedSnapshotId: string | null
   publishedSnapshotParamValues: Record<string, unknown> | null
@@ -689,8 +709,8 @@ export function requiresRepublishForPublishedSnapshot(input: {
       continue
     }
 
-    const snapshotValue = normalizeComparableParamValue(publishedSnapshotParamValues[key])
-    const editableValue = normalizeComparableParamValue(editableParamValues[key])
+    const snapshotValue = normalizeComparableParamValueForKey(key, publishedSnapshotParamValues[key])
+    const editableValue = normalizeComparableParamValueForKey(key, editableParamValues[key])
     if (JSON.stringify(snapshotValue ?? null) !== JSON.stringify(editableValue ?? null)) {
       return true
     }

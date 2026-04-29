@@ -1932,6 +1932,26 @@ describe('ai-quant-page-conversation', () => {
     })).toBe(false)
   })
 
+  it('does not require republish when published ratio sizing uses canonical decimal semantics', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '1m',
+        sizing: { mode: 'RATIO', value: 0.01 },
+      },
+      editableParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '1m',
+        sizing: { mode: 'RATIO', value: 1 },
+      },
+    })).toBe(false)
+  })
+
   it('requires republish when compatibility metadata says published backtest truth is incomplete', () => {
     expect(requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: 'snapshot-1',
