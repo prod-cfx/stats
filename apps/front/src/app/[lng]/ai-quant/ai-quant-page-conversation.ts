@@ -863,7 +863,23 @@ export function normalizeParamsFromValues(
   const rawSizing = isDefaultSeededRatioSizing(values.sizing, legacyPositionPct)
     ? undefined
     : values.sizing
-  const sizing = normalizeSizing(rawSizing, legacyPositionPct, nextSymbol)
+  const sizingBase = normalizeSizing(rawSizing, legacyPositionPct, nextSymbol)
+  const amount = normalizeNumber(values.positionAmount, sizingBase.value)
+  const sizing = (() => {
+    if (sizingBase.mode === 'QUOTE') {
+      const asset = typeof values.sizingAsset === 'string' && values.sizingAsset.trim()
+        ? values.sizingAsset.trim().toUpperCase()
+        : sizingBase.asset
+      return normalizeSizing({ mode: 'QUOTE', value: amount, asset }, legacyPositionPct, nextSymbol)
+    }
+    if (sizingBase.mode === 'QTY') {
+      const asset = typeof values.sizingAsset === 'string' && values.sizingAsset.trim()
+        ? values.sizingAsset.trim().toUpperCase()
+        : sizingBase.asset
+      return normalizeSizing({ mode: 'QTY', value: amount, asset }, legacyPositionPct, nextSymbol)
+    }
+    return sizingBase
+  })()
   const derivedPositionPct = derivePositionPctFromSizing(sizing) ?? fallback.positionPct
 
   return {

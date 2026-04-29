@@ -13,6 +13,7 @@ import {
   hydrateConversations,
   invalidateConversationPublication,
   isDeployableBacktestResult,
+  normalizeParamsFromValues,
   readPersistedConversations,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
@@ -2498,6 +2499,24 @@ describe('semantic sizing helpers', () => {
     expect(values.positionAmount).toBe(1000)
     expect(values.sizingAsset).toBe('USDT')
     expect(values).not.toHaveProperty('positionPct')
+  })
+
+  it('normalizes quote sizing from dynamic position amount fields', () => {
+    const params = normalizeParamsFromValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      positionAmount: 750,
+      sizingAsset: 'USDC',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      positionPct: 10,
+    })
+
+    expect(params.sizing).toEqual({ mode: 'QUOTE', value: 750, asset: 'USDC' })
+    expect(params.positionPct).toBe(10)
   })
 
   it('syncs quantity sizing param values without restoring legacy positionPct', () => {
