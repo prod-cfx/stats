@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 
 const mockGetToken = jest.fn()
 const mockClient = {
+  AccountExchangeAccountsController_delete: jest.fn(),
   AccountExchangeAccountsController_list: jest.fn(),
 }
+const originalFetch = globalThis.fetch
 
 jest.mock('@ai/api-contracts', () => ({
   createApiClient: jest.fn(() => mockClient),
@@ -48,10 +50,16 @@ describe('exchange account transport', () => {
     jest.resetModules()
     mockGetToken.mockReset()
     mockGetToken.mockReturnValue('a.b.c')
+    mockClient.AccountExchangeAccountsController_delete.mockReset()
     mockClient.AccountExchangeAccountsController_list.mockReset()
   })
 
   afterEach(() => {
+    if (originalFetch) {
+      globalThis.fetch = originalFetch
+    } else {
+      delete (globalThis as { fetch?: typeof fetch }).fetch
+    }
     jest.restoreAllMocks()
   })
 
@@ -96,5 +104,24 @@ describe('exchange account transport', () => {
       statusCode: 401,
     })
     expect(mockClient.AccountExchangeAccountsController_list).not.toHaveBeenCalled()
+  })
+
+  it('deletes exchange accounts through a concrete authenticated DELETE URL', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({ data: { success: true } }),
+    })) as jest.MockedFunction<typeof fetch>
+    globalThis.fetch = fetchMock
+
+    const { deleteUserExchangeAccount } = await import('./api')
+    await deleteUserExchangeAccount('binance')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/account/exchange-accounts/binance', {
+      method: 'DELETE',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer a.b.c',
+      }),
+    })
+    expect(mockClient.AccountExchangeAccountsController_delete).not.toHaveBeenCalled()
   })
 })
