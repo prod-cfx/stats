@@ -27,6 +27,12 @@ describe('marketScopeEquivalence', () => {
     expect(canonicalizeStrategySymbolInput('ORDI')).toBeNull()
   })
 
+  it('rejects quote sizing answers that look like pure numeric symbols', () => {
+    expect(canonicalizeStrategySymbolInput('1000USDT')).toBeNull()
+    expect(canonicalizeStrategySymbolInput('1000-USDT')).toBeNull()
+    expect(canonicalizeStrategySymbolInput('1INCHUSDT')).toBe('1INCHUSDT')
+  })
+
   it('treats whitespace and casing drift as equivalent', () => {
     expect(isEquivalentMarketScopeValue('exchange', 'OKX', ' okx ')).toBe(true)
     expect(isEquivalentMarketScopeValue('marketType', 'PERP', 'perp')).toBe(true)

@@ -32,6 +32,9 @@ export function canonicalizeStrategySymbolInput(
     if (!/^[A-Z0-9]{2,20}$/u.test(base)) {
       continue
     }
+    if (!/[A-Z]/u.test(base)) {
+      continue
+    }
     return `${base}${quote}`
   }
 

@@ -72,7 +72,7 @@ import { CodegenConversationStateMachine } from './codegen-conversation-state-ma
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { ConversationSemanticEditService } from './conversation-semantic-edit.service'
-import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
@@ -7272,6 +7272,12 @@ export class CodegenConversationService {
     if (typeof value !== 'string' || !value.trim()) {
       return null
     }
+    const normalizedValue = field === 'symbol'
+      ? canonicalizeStrategySymbolInput(value)
+      : value.trim()
+    if (!normalizedValue) {
+      return null
+    }
 
     const questionHints: Record<typeof field, string> = {
       exchange: '请确认交易所（binance / okx / hyperliquid）。',
@@ -7283,7 +7289,7 @@ export class CodegenConversationService {
     return {
       slotKey: field,
       fieldPath: `contextSlots.${field}`,
-      value: value.trim(),
+      value: normalizedValue,
       status: 'locked',
       priority: 'context',
       questionHint: questionHints[field],
