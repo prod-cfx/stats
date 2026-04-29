@@ -1948,14 +1948,23 @@ export function createConversationFromServerConversation(
     snapshotParamValues,
     snapshotBacktestConfigDefaults,
   })
+  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const backtestDraftConfig = normalizeBacktestDraftConfig(response.backtestDraftConfig)
+  const backtestDraftConfigRestoredFromLastRef =
+    !backtestDraftConfig
+    && lastBacktestRef !== null
+    && publishedSnapshotId !== null
+    && lastBacktestRef.publishedSnapshotId === publishedSnapshotId
+  const effectiveBacktestDraftConfig = backtestDraftConfigRestoredFromLastRef
+    ? lastBacktestRef.config
+    : backtestDraftConfig
   const nextParamValues = applyBacktestDraftConfigToValues({
     currentValues: mergedSnapshotParamValues.paramValues,
-    backtestDraftConfig,
+    backtestDraftConfig: effectiveBacktestDraftConfig,
   })
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
   const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
-  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
   const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId,
     publishedSnapshotStrategyConfig: snapshotStrategyConfig,
@@ -1964,11 +1973,10 @@ export function createConversationFromServerConversation(
     ?? (typeof snapshotStrategyConfig?.symbol === 'string' && snapshotStrategyConfig.symbol.trim()
       ? snapshotStrategyConfig.symbol.trim()
       : nextParams.symbol)
-  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
     conversationPublishedSnapshotId: publishedSnapshotId,
     lastBacktestRef,
-    currentBacktestConfig: backtestDraftConfig,
+    currentBacktestConfig: effectiveBacktestDraftConfig,
     symbol: restoredBacktestSymbol,
   })
   const graphVersion =
@@ -2055,14 +2063,17 @@ export function createConversationFromServerConversation(
     publishedSnapshotDeploymentExecutionDefaults: snapshotDeploymentExecutionDefaults,
     publishedSnapshotDeploymentExecutionConstraints: snapshotDeploymentExecutionConstraints,
     publishedSnapshotCompatibilityMetadata: snapshotCompatibilityMetadata,
-    backtestDraftConfig,
+    backtestDraftConfig: effectiveBacktestDraftConfig,
     publishedScriptCode: response.scriptCode ?? null,
     publishedScriptGraphVersion:
       response.scriptCode && logicGraph?.status === 'confirmed'
         ? logicGraph.version
         : null,
     backtestResult: restoredBacktestResult,
-    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
+    backtestExecutionConfigExplicit:
+      backtestDraftConfigRestoredFromLastRef
+        ? true
+        : mergedSnapshotParamValues.explicit,
     updatedAt,
   }
 }

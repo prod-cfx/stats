@@ -825,7 +825,7 @@ describe('ai-quant-page-conversation', () => {
     }))
   })
 
-  it('restores lastBacktestRef as config changed when explicit backtestDraftConfig is missing', () => {
+  it('backfills missing server backtestDraftConfig from lastBacktestRef before restoring the result', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-draft-missing',
       conversationTitle: 'remote',
@@ -889,7 +889,29 @@ describe('ai-quant-page-conversation', () => {
       winRatePct: 100,
       tradeCount: 1,
       marketType: 'spot',
-      recoveryStatus: 'config_changed',
+    }))
+    expect(conversation.backtestResult?.recoveryStatus).toBeUndefined()
+    expect(conversation.backtestDraftConfig).toEqual({
+      range: {
+        preset: '7D',
+      },
+      execution: {
+        initialCash: 10000,
+        leverage: null,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+    })
+    expect(conversation.paramValues).toEqual(expect.objectContaining({
+      backtestRangePreset: '7D',
+      backtestInitialCash: 10000,
+      backtestLeverage: null,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: false,
     }))
   })
 
