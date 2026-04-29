@@ -1,4 +1,4 @@
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { CreateOrderInput, ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TradingService } from '@/modules/trading/trading.service'
 import { Injectable } from '@nestjs/common'
@@ -115,7 +115,7 @@ export class GridOrderSyncService {
           rawPayload: this.toJsonValue(exchangeOrder.raw),
         })
 
-        if (exchangeOrder.status === 'closed' && exchangeOrder.filled > 0) {
+        if (this.shouldRecordTerminalFill(exchangeOrder)) {
           await this.recordFillAndPlanInverse(instance, config, order, exchangeOrder)
         }
       }
@@ -133,13 +133,14 @@ export class GridOrderSyncService {
     const plannedOrders = orders.filter(order => order.status === 'PLANNED')
     for (const order of plannedOrders) {
       const clientOrderId = this.buildClientOrderId(instance.id, order)
-      await this.txEvents.withAfterCommit(async () => {
-        await this.repository.markOrderSubmitting({
+      const markedSubmitting = await this.txEvents.withAfterCommit(async () => {
+        return this.repository.markOrderSubmitting({
           id: order.id,
           clientOrderId,
           rawPayload: { source: 'grid_order_sync' },
         })
       })
+      if (!markedSubmitting) continue
 
       let exchangeOrder: UnifiedOrder
       try {
@@ -147,16 +148,7 @@ export class GridOrderSyncService {
           instance.userId,
           exchangeId,
           marketType,
-          {
-            symbol: instance.symbol,
-            marketType,
-            side: order.side as GridOrderSide,
-            type: 'limit',
-            amount: Number(this.decimalToString(order.quantity)),
-            price: Number(this.decimalToString(order.price)),
-            timeInForce: 'GTC',
-            clientOrderId,
-          },
+          this.buildCreateOrderInput(instance, marketType, order, clientOrderId),
           instance.exchangeAccountId,
         )
       } catch {
@@ -176,6 +168,33 @@ export class GridOrderSyncService {
 
   private buildClientOrderId(_instanceId: string, order: RuntimeOrder): string {
     return `g-${order.id}`
+  }
+
+  private buildCreateOrderInput(
+    instance: RuntimeInstance,
+    marketType: MarketType,
+    order: RuntimeOrder,
+    clientOrderId: string,
+  ): CreateOrderInput {
+    const input: CreateOrderInput = {
+      symbol: instance.symbol,
+      marketType,
+      side: order.side as GridOrderSide,
+      type: 'limit',
+      amount: Number(this.decimalToString(order.quantity)),
+      price: Number(this.decimalToString(order.price)),
+      timeInForce: 'GTC',
+      clientOrderId,
+    }
+
+    if (marketType === 'perp') {
+      input.tdMode = 'cross'
+      if (order.role === 'close_long' || order.role === 'close_short') {
+        input.reduceOnly = true
+      }
+    }
+
+    return input
   }
 
   private async stopForBoundaryBreak(
@@ -244,9 +263,13 @@ export class GridOrderSyncService {
       orderType: config.orderType,
       timeInForce: config.timeInForce,
       price: this.decimalToString(level.price),
-      quantity: this.decimalToString(order.quantity),
+      quantity: String(exchangeOrder.filled),
       rawPayload: { source: 'grid_order_sync', pairedFromOrderId: order.id },
     })
+  }
+
+  private shouldRecordTerminalFill(exchangeOrder: UnifiedOrder): boolean {
+    return exchangeOrder.filled > 0 && (exchangeOrder.status === 'closed' || exchangeOrder.status === 'canceled')
   }
 
   private indexExchangeOrders(orders: UnifiedOrder[]): Map<string, UnifiedOrder> {

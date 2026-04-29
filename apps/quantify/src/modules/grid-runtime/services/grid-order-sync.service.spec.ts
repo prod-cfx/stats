@@ -61,7 +61,7 @@ function createRepository() {
     recordFillOnce: jest.fn().mockResolvedValue({ fill: { id: 'fill-1' }, newlyRecorded: true }),
     findFillByExchangeId: jest.fn().mockResolvedValue(null),
     createPlannedOrder: jest.fn().mockResolvedValue({ id: 'inverse-order-1' }),
-    markOrderSubmitting: jest.fn().mockResolvedValue({ id: 'order-1' }),
+    markOrderSubmitting: jest.fn().mockResolvedValue(true),
     markOrderOpen: jest.fn().mockResolvedValue({ id: 'order-1' }),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
   }
@@ -177,6 +177,60 @@ describe('GridOrderSyncService', () => {
     expect(repository.updateInstanceLastSyncAt).toHaveBeenCalledWith('grid-1')
   })
 
+  it('submits perp close orders as reduce-only limit orders', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      configSnapshot: { ...baseConfig, mode: 'perp_long' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-close-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'sell',
+        role: 'close_long',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'perp', expect.objectContaining({
+      marketType: 'perp',
+      side: 'sell',
+      tdMode: 'cross',
+      reduceOnly: true,
+    }), 'exchange-account-1')
+  })
+
+  it('does not submit a planned order when another sync worker already claimed it', async () => {
+    const repository = createRepository()
+    repository.markOrderSubmitting.mockResolvedValue(false)
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect(repository.markOrderOpen).not.toHaveBeenCalled()
+  })
+
   it('records a completed fill once and creates a paired inverse planned order', async () => {
     const repository = createRepository()
     const tradingService = createTradingService()
@@ -210,8 +264,42 @@ describe('GridOrderSyncService', () => {
       orderType: 'limit',
       timeInForce: 'gtc',
       price: '95',
+      quantity: '1.0526315789473684',
     }))
     expect(txEvents.withAfterCommit).toHaveBeenCalled()
+  })
+
+  it('records canceled partial fills and plans the inverse with filled quantity only', async () => {
+    const repository = createRepository()
+    const tradingService = createTradingService()
+    tradingService.getClosedOrders.mockResolvedValue([
+      {
+        id: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'limit',
+        price: 95,
+        amount: 1.0526315789473684,
+        filled: 0.25,
+        status: 'canceled',
+        createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { fillId: 'partial-fill-1' },
+      },
+    ])
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.recordFillOnce).toHaveBeenCalledWith(expect.objectContaining({
+      exchangeFillId: 'partial-fill-1',
+      quantity: '0.25',
+    }))
+    expect(repository.createPlannedOrder).toHaveBeenCalledWith(expect.objectContaining({
+      quantity: '0.25',
+    }))
   })
 
   it('does not create another inverse order when duplicate fill was already recorded', async () => {

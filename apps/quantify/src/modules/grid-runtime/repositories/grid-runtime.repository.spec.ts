@@ -148,6 +148,7 @@ describe('GridRuntimeRepository', () => {
     const tx = {
       gridOrder: {
         create: jest.fn().mockResolvedValue({ id: 'order-1', status: 'PLANNED' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         update: jest.fn().mockResolvedValue({ id: 'order-1', status: 'OPEN' }),
       },
     }
@@ -183,11 +184,11 @@ describe('GridRuntimeRepository', () => {
         rawPayload: { source: 'planner' },
       }),
     })
-    expect(tx.gridOrder.update).toHaveBeenNthCalledWith(1, {
-      where: { id: 'order-1' },
+    expect(tx.gridOrder.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', status: 'PLANNED' },
       data: { clientOrderId: 'client-1', status: 'SUBMITTING', rawPayload: { requestId: 'req-1' } },
     })
-    expect(tx.gridOrder.update).toHaveBeenNthCalledWith(2, {
+    expect(tx.gridOrder.update).toHaveBeenCalledWith({
       where: { id: 'order-1' },
       data: { exchangeOrderId: 'exchange-1', status: 'OPEN', rawPayload: { state: 'live' } },
     })

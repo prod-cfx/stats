@@ -272,15 +272,20 @@ export class GridRuntimeRepository {
     })
   }
 
-  markOrderSubmitting(input: MarkGridOrderSubmittingInput) {
-    return this.txHost.tx.gridOrder.update({
-      where: { id: input.id },
+  async markOrderSubmitting(input: MarkGridOrderSubmittingInput): Promise<boolean> {
+    const result = await this.txHost.tx.gridOrder.updateMany({
+      where: {
+        id: input.id,
+        status: 'PLANNED',
+      },
       data: {
         clientOrderId: input.clientOrderId,
         status: 'SUBMITTING',
         rawPayload: input.rawPayload,
       },
     })
+
+    return result.count === 1
   }
 
   markOrderOpen(input: MarkGridOrderOpenInput) {
