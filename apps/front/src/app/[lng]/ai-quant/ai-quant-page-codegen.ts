@@ -30,6 +30,7 @@ import { ApiError } from '@/lib/errors'
 import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
 import {
   BACKTEST_EXECUTION_PARAM_KEYS,
+  applyBacktestDraftConfigToValues,
   buildBacktestDraftConfigFromValues,
   hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
@@ -566,7 +567,13 @@ export function applyCodegenResponseToConversationState(args: {
       : shouldUpdateGraph
         ? null
         : conversation.publishedSnapshotCompatibilityMetadata
-  const nextParamValues = mergedSnapshotParamValues.paramValues
+  const nextParamValues =
+    preserveBacktestResultOnSameSnapshot && conversation.backtestDraftConfig
+      ? applyBacktestDraftConfigToValues({
+          currentValues: mergedSnapshotParamValues.paramValues,
+          backtestDraftConfig: conversation.backtestDraftConfig,
+        })
+      : mergedSnapshotParamValues.paramValues
   const nextParamSchema = shouldUpdateGraph
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
     : conversation.paramSchema
@@ -767,7 +774,10 @@ export function applyCodegenResponseToConversationState(args: {
       nextPendingCanonicalDigest !== undefined
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
-    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
+    backtestExecutionConfigExplicit:
+      preserveBacktestResultOnSameSnapshot && conversation.backtestDraftConfig
+        ? true
+        : mergedSnapshotParamValues.explicit,
     backtestResult: nextBacktestResult,
     latestSignalMessage: null,
     messages: nextMessages,

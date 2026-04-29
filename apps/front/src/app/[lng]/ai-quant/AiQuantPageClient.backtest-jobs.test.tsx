@@ -1040,7 +1040,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
   })
 
-  it('marks same-snapshot restored backtests stale when codegen reconciliation changes backtest defaults', async () => {
+  it('keeps server-owned restored backtests fresh when only codegen snapshot defaults differ from current backtest draft', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock
     const getLlmCodegenSession = jest.requireMock('@/lib/api')
@@ -1075,12 +1075,12 @@ describe('AiQuantPageClient backtest jobs integration', () => {
             preset: '30D',
           },
           execution: {
-            initialCash: 10000,
-            leverage: 1,
-            slippageBps: 10,
-            feeBps: 5,
+            initialCash: 25000,
+            leverage: 5,
+            slippageBps: 1,
+            feeBps: 1,
             priceSource: 'close',
-            allowPartial: true,
+            allowPartial: false,
           },
         },
         lastBacktestRef: {
@@ -1091,12 +1091,12 @@ describe('AiQuantPageClient backtest jobs integration', () => {
               preset: '30D',
             },
             execution: {
-              initialCash: 10000,
-              leverage: 1,
-              slippageBps: 10,
-              feeBps: 5,
+              initialCash: 25000,
+              leverage: 5,
+              slippageBps: 1,
+              feeBps: 1,
               priceSource: 'close',
-              allowPartial: true,
+              allowPartial: false,
             },
           },
           summary: {
@@ -1135,7 +1135,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         positionPct: 10,
       },
       publishedSnapshotBacktestConfigDefaults: {
-        initialCash: 20000,
+        initialCash: 10000,
         leverage: 1,
         slippageBps: 10,
         feeBps: 5,
@@ -1157,8 +1157,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     const summary = container.querySelector('[data-testid="backtest-summary"]')?.textContent
     expect(summary).toContain('btjob-1')
-    expect(summary).toContain('config_changed')
-    expect(summary).toContain('blocked')
+    expect(summary).not.toContain('config_changed')
+    expect(summary).toContain('deployable')
   })
 
   it('allows rerunning backtest immediately after server-owned recovery by backfilling snapshot execution defaults', async () => {
