@@ -132,27 +132,16 @@ describe('GridRuntimeRepository', () => {
     })
   })
 
-  it('records each exchange fill once by instance and fill id', async () => {
-    const existingFill = { id: 'fill-1', exchangeFillId: 'exchange-fill-1' }
+  it('records a new exchange fill with createMany skipDuplicates', async () => {
+    const newFill = { id: 'fill-2', exchangeFillId: 'exchange-fill-2' }
     const tx = {
       gridFill: {
-        findUnique: jest.fn()
-          .mockResolvedValueOnce(existingFill)
-          .mockResolvedValueOnce(null),
-        create: jest.fn().mockResolvedValue({ id: 'fill-2', exchangeFillId: 'exchange-fill-2' }),
+        createMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findUnique: jest.fn().mockResolvedValue(newFill),
       },
     }
     const repo = new GridRuntimeRepository(createTxHost(tx))
 
-    const duplicate = await repo.recordFillOnce({
-      gridRuntimeInstanceId: 'grid-1',
-      gridOrderId: 'order-1',
-      exchangeFillId: 'exchange-fill-1',
-      side: 'buy',
-      price: '90',
-      quantity: '1',
-      filledAt: new Date('2026-04-29T00:00:00.000Z'),
-    })
     const created = await repo.recordFillOnce({
       gridRuntimeInstanceId: 'grid-1',
       gridOrderId: 'order-1',
@@ -167,28 +156,39 @@ describe('GridRuntimeRepository', () => {
       rawPayload: { okx: true },
     })
 
-    expect(duplicate).toEqual({ fill: existingFill, newlyRecorded: false })
-    expect(created).toEqual({ fill: expect.objectContaining({ exchangeFillId: 'exchange-fill-2' }), newlyRecorded: true })
-    expect(tx.gridFill.create).toHaveBeenCalledTimes(1)
+    expect(created).toEqual({ fill: newFill, newlyRecorded: true })
+    expect(tx.gridFill.createMany).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        gridRuntimeInstanceId: 'grid-1',
+        gridOrderId: 'order-1',
+        exchangeFillId: 'exchange-fill-2',
+        tradeId: 'trade-2',
+        side: 'buy',
+        price: expect.anything(),
+        quantity: expect.anything(),
+        fee: expect.anything(),
+        feeCurrency: 'USDT',
+        filledAt: new Date('2026-04-29T00:01:00.000Z'),
+        rawPayload: { okx: true },
+      }),
+      skipDuplicates: true,
+    })
     expect(tx.gridFill.findUnique).toHaveBeenCalledWith({
       where: {
         gridRuntimeInstanceId_exchangeFillId: {
           gridRuntimeInstanceId: 'grid-1',
-          exchangeFillId: 'exchange-fill-1',
+          exchangeFillId: 'exchange-fill-2',
         },
       },
     })
   })
 
-  it('returns the raced existing fill when concurrent create hits the fill id unique constraint', async () => {
+  it('returns the existing fill when createMany skips a duplicate fill id', async () => {
     const existingFill = { id: 'fill-existing', exchangeFillId: 'exchange-fill-1' }
-    const uniqueConstraintError = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' })
     const tx = {
       gridFill: {
-        findUnique: jest.fn()
-          .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce(existingFill),
-        create: jest.fn().mockRejectedValue(uniqueConstraintError),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn().mockResolvedValue(existingFill),
       },
     }
     const repo = new GridRuntimeRepository(createTxHost(tx))
@@ -204,8 +204,8 @@ describe('GridRuntimeRepository', () => {
     })
 
     expect(result).toEqual({ fill: existingFill, newlyRecorded: false })
-    expect(tx.gridFill.create).toHaveBeenCalledTimes(1)
-    expect(tx.gridFill.findUnique).toHaveBeenNthCalledWith(2, {
+    expect(tx.gridFill.createMany).toHaveBeenCalledTimes(1)
+    expect(tx.gridFill.findUnique).toHaveBeenCalledWith({
       where: {
         gridRuntimeInstanceId_exchangeFillId: {
           gridRuntimeInstanceId: 'grid-1',

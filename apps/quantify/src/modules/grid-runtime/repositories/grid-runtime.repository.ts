@@ -266,7 +266,24 @@ export class GridRuntimeRepository {
   }
 
   async recordFillOnce(input: RecordGridFillOnceInput) {
-    const existing = await this.txHost.tx.gridFill.findUnique({
+    const created = await this.txHost.tx.gridFill.createMany({
+      data: {
+        gridRuntimeInstanceId: input.gridRuntimeInstanceId,
+        gridOrderId: input.gridOrderId,
+        exchangeFillId: input.exchangeFillId,
+        tradeId: input.tradeId ?? null,
+        side: input.side,
+        price: this.decimal(input.price),
+        quantity: this.decimal(input.quantity),
+        fee: input.fee == null ? null : this.decimal(input.fee),
+        feeCurrency: input.feeCurrency ?? null,
+        filledAt: input.filledAt,
+        rawPayload: input.rawPayload,
+      },
+      skipDuplicates: true,
+    })
+
+    const fill = await this.txHost.tx.gridFill.findUnique({
       where: {
         gridRuntimeInstanceId_exchangeFillId: {
           gridRuntimeInstanceId: input.gridRuntimeInstanceId,
@@ -275,41 +292,8 @@ export class GridRuntimeRepository {
       },
     })
 
-    if (existing) return { fill: existing, newlyRecorded: false }
-
-    try {
-      const fill = await this.txHost.tx.gridFill.create({
-        data: {
-          gridRuntimeInstanceId: input.gridRuntimeInstanceId,
-          gridOrderId: input.gridOrderId,
-          exchangeFillId: input.exchangeFillId,
-          tradeId: input.tradeId ?? null,
-          side: input.side,
-          price: this.decimal(input.price),
-          quantity: this.decimal(input.quantity),
-          fee: input.fee == null ? null : this.decimal(input.fee),
-          feeCurrency: input.feeCurrency ?? null,
-          filledAt: input.filledAt,
-          rawPayload: input.rawPayload,
-        },
-      })
-      return { fill, newlyRecorded: true }
-    }
-    catch (error) {
-      if (!this.isUniqueConstraintError(error)) throw error
-
-      const racedExisting = await this.txHost.tx.gridFill.findUnique({
-        where: {
-          gridRuntimeInstanceId_exchangeFillId: {
-            gridRuntimeInstanceId: input.gridRuntimeInstanceId,
-            exchangeFillId: input.exchangeFillId,
-          },
-        },
-      })
-
-      if (racedExisting) return { fill: racedExisting, newlyRecorded: false }
-      throw error
-    }
+    if (!fill) throw new Error('grid_fill_missing_after_idempotent_record')
+    return { fill, newlyRecorded: created.count === 1 }
   }
 
   appendEvent(input: AppendGridRuntimeEventInput) {
@@ -327,13 +311,5 @@ export class GridRuntimeRepository {
 
   private decimal(value: string): Prisma.Decimal {
     return new Prisma.Decimal(value)
-  }
-
-  private isUniqueConstraintError(error: unknown): boolean {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError
-      || (typeof error === 'object' && error !== null && 'code' in error)
-    )
-      && (error as { code?: unknown }).code === 'P2002'
   }
 }

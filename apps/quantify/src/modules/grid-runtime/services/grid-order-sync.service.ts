@@ -50,6 +50,13 @@ interface RuntimeOrder {
 
 type JsonLike = string | number | boolean | null | JsonLike[] | { [key: string]: JsonLike }
 
+const LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER = new Set<string>([
+  'OPEN',
+  'SUBMITTING',
+  'PARTIALLY_FILLED',
+  'CANCELING',
+])
+
 @Injectable()
 export class GridOrderSyncService {
   constructor(
@@ -247,12 +254,12 @@ export class GridOrderSyncService {
   private filterOwnOpenOrders(localOrders: RuntimeOrder[], openOrders: UnifiedOrder[]): UnifiedOrder[] {
     const ownExchangeOrderIds = new Set(
       localOrders
-        .filter(order => order.status === 'OPEN' && order.exchangeOrderId)
+        .filter(order => LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER.has(order.status) && order.exchangeOrderId)
         .map(order => order.exchangeOrderId as string),
     )
     const ownClientOrderIds = new Set(
       localOrders
-        .filter(order => order.status === 'OPEN' && order.clientOrderId)
+        .filter(order => LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER.has(order.status) && order.clientOrderId)
         .map(order => order.clientOrderId as string),
     )
 
@@ -282,8 +289,18 @@ export class GridOrderSyncService {
 
   private decimalEquals(left: number | undefined, right: DecimalLike | string): boolean {
     if (left == null) return false
-    const delta = this.decimal(String(left)).minus(this.decimal(this.decimalToString(right))).abs()
-    return delta.lte('0.000000000001')
+    const actual = this.decimal(String(left))
+    const expected = this.decimal(this.decimalToString(right))
+    if (actual.eq(expected)) return true
+
+    const relativeTolerance = this.decimal('0.0000000001')
+    const absoluteFloor = this.decimal('0.000000000001')
+    const actualTolerance = actual.abs().mul(relativeTolerance)
+    const expectedTolerance = expected.abs().mul(relativeTolerance)
+    let tolerance = actualTolerance.gt(expectedTolerance) ? actualTolerance : expectedTolerance
+    if (absoluteFloor.gt(tolerance)) tolerance = absoluteFloor
+
+    return actual.minus(expected).abs().lte(tolerance)
   }
 
   private toJsonValue(value: unknown): GridRuntimeJsonValue {
