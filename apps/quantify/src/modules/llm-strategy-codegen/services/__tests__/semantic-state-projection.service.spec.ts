@@ -148,6 +148,69 @@ describe('SemanticStateProjectionService', () => {
     expect(text).not.toContain('待补充')
   })
 
+  it('skips malformed expression operands instead of throwing while building display graph', () => {
+    const state = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'malformed-entry',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'indicator', name: 'rsi' },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.03,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    } as unknown as SemanticState
+
+    expect(() => service.buildDisplayLogicGraph(state)).not.toThrow()
+    expect(service.buildDisplayLogicGraph(state).blocks).toEqual([
+      {
+        type: 'EXECUTE',
+        items: [
+          {
+            kind: 'execute',
+            id: 'execute-position',
+            key: 'positionSizing',
+            value: '3%',
+            text: '仓位: 3%',
+          },
+        ],
+      },
+    ])
+  })
+
   it('selects entry action by trigger side for bidirectional display logic graph', () => {
     const state: SemanticState = {
       version: 1,

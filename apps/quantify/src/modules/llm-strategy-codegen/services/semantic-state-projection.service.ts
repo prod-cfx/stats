@@ -752,9 +752,44 @@ export class SemanticStateProjectionService {
   }
 
   private isSemanticExpressionOperand(operand: unknown): operand is SemanticExpressionOperand {
-    return !!operand
-      && typeof operand === 'object'
-      && typeof (operand as { kind?: unknown }).kind === 'string'
+    if (!operand || typeof operand !== 'object') {
+      return false
+    }
+
+    const candidate = operand as Record<string, unknown>
+    if (candidate.kind === 'series') {
+      return candidate.source === 'bar'
+        && (candidate.field === 'open'
+          || candidate.field === 'high'
+          || candidate.field === 'low'
+          || candidate.field === 'close')
+        && (candidate.offsetBars === undefined || typeof candidate.offsetBars === 'number')
+    }
+
+    if (candidate.kind === 'indicator') {
+      return typeof candidate.name === 'string'
+        && !!candidate.params
+        && typeof candidate.params === 'object'
+        && (candidate.output === undefined || typeof candidate.output === 'string')
+    }
+
+    if (candidate.kind === 'position') {
+      return (candidate.field === 'avg_price'
+          || candidate.field === 'pnl_pct'
+          || candidate.field === 'bars_held'
+          || candidate.field === 'has_position')
+        && (candidate.side === undefined
+          || candidate.side === 'long'
+          || candidate.side === 'short'
+          || candidate.side === 'both')
+    }
+
+    if (candidate.kind === 'constant') {
+      return (typeof candidate.value === 'number' || typeof candidate.value === 'string' || typeof candidate.value === 'boolean')
+        && (candidate.unit === undefined || typeof candidate.unit === 'string')
+    }
+
+    return false
   }
 
   private buildRiskSummary(riskItems: SemanticState['risk']): string {
