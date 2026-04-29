@@ -167,6 +167,45 @@ export class SignalExecutorRepository {
     })
   }
 
+  findOpenPositionsForAdmission(input: {
+    accountId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+  }) {
+    return this.txHost.tx.position.findMany({
+      where: {
+        userStrategyAccountId: input.accountId,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        symbol: input.symbol,
+        status: 'OPEN',
+      },
+      select: {
+        positionSide: true,
+        quantity: true,
+      },
+    })
+  }
+
+  async hasPendingReconcileRequiredEntryExecution(accountId: string): Promise<boolean> {
+    const count = await this.txHost.tx.userSignalExecution.count({
+      where: {
+        userStrategyAccountId: accountId,
+        status: 'FAILED',
+        orderSide: { in: ['BUY', 'SELL'] },
+        signal: {
+          signalType: 'ENTRY',
+        },
+        metadata: {
+          path: ['reconcileRequired'],
+          equals: true,
+        },
+      },
+    })
+    return count > 0
+  }
+
   lockAccount(accountId: string) {
     return this.txHost.tx.$queryRaw<
       Array<{

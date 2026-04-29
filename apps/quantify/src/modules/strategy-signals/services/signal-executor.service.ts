@@ -42,6 +42,7 @@ import { SignalExecutorRepository } from '../repositories/signal-executor.reposi
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
+import { PositionAdmissionService, type PortfolioAdmissionConstraints } from './position-admission.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
 
@@ -90,6 +91,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     private readonly executionRepository: SignalExecutionRepository,
     private readonly telemetry: SignalTelemetryService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    private readonly positionAdmissionService: PositionAdmissionService = new PositionAdmissionService(),
   ) {}
 
   async onModuleInit() {
@@ -686,13 +688,29 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return { type: 'skip', reason: 'Account not found' }
       }
 
-      // 如果是平仓/退出信号，先查找当前持仓规模，用于构建正确的平仓数量
-      let closePositionQuantity: Decimal | undefined
       const isCloseSignal =
         signal.direction === 'CLOSE_LONG' ||
         signal.direction === 'CLOSE_SHORT' ||
         signal.signalType === 'EXIT'
 
+      if (!isCloseSignal) {
+        const entryAdmission = await this.evaluateEntryAdmission(signal, account)
+        if (entryAdmission.ok === false) {
+          const execution = await this.executionRepository.create({
+            signal: { connect: { id: signal!.id } },
+            user: { connect: { id: account.userId } },
+            account: { connect: { id: account.id } },
+            orderSide,
+            positionSide,
+            status: 'SKIPPED',
+            errorMessage: entryAdmission.reason,
+          })
+          return { type: 'skip', reason: entryAdmission.reason, executionId: execution.id }
+        }
+      }
+
+      // 如果是平仓/退出信号，先查找当前持仓规模，用于构建正确的平仓数量
+      let closePositionQuantity: Decimal | undefined
       if (isCloseSignal) {
         const positionSideForClose = this.mapPositionSide(signal.direction)
         const closeIdentity = this.resolveClosePositionIdentity(signal, positionSideForClose)
@@ -806,6 +824,33 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         reservedQuote: reservedQuoteForExecution,
         reserveReference,
       }
+    })
+  }
+
+  private async evaluateEntryAdmission(
+    signal: LoadedSignal,
+    account: UserStrategyAccount,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const identity = this.resolvePositionAdmissionIdentity(signal)
+    if (!identity) {
+      return { ok: true }
+    }
+
+    const [openPositions, hasPendingReconciliation] = await Promise.all([
+      this.executorRepository.findOpenPositionsForAdmission({
+        accountId: account.id,
+        exchangeId: identity.exchangeId,
+        marketType: identity.marketType,
+        symbol: identity.symbol,
+      }),
+      this.executorRepository.hasPendingReconcileRequiredEntryExecution(account.id),
+    ])
+
+    return this.positionAdmissionService.evaluateEntry({
+      direction: signal.direction,
+      constraints: this.readPortfolioAdmissionConstraints(signal),
+      openPositions,
+      hasPendingReconciliation,
     })
   }
 
@@ -1124,6 +1169,59 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       symbol: normalizeLedgerSymbol(symbolCode),
       positionSide,
     }
+  }
+
+  private resolvePositionAdmissionIdentity(
+    signal: LoadedSignal,
+  ): {
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+  } | null {
+    const symbolMeta = signal.symbol
+    const symbolCode = symbolMeta?.code
+    const exchangeId = this.normalizeExchangeId(symbolMeta?.exchange)
+    const marketType = this.readExpectedRuntimeMarketType(signal)
+      ?? (symbolMeta ? this.normalizeMarketType(symbolMeta.instrumentType) : null)
+
+    if (!symbolCode || !exchangeId || !marketType) {
+      return null
+    }
+
+    return {
+      exchangeId,
+      marketType,
+      symbol: normalizeLedgerSymbol(symbolCode),
+    }
+  }
+
+  private readPortfolioAdmissionConstraints(signal: LoadedSignal): PortfolioAdmissionConstraints | null {
+    const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
+    const raw = runtimeProvenance?.portfolio ?? runtimeProvenance?.portfolioConstraints
+    if (!raw || Array.isArray(raw) || typeof raw !== 'object') {
+      return null
+    }
+
+    const value = raw as Prisma.JsonObject
+    return {
+      positionMode: this.readPortfolioPositionMode(value.positionMode),
+      maxConcurrentPositions: this.readPositiveInteger(value.maxConcurrentPositions),
+      allowPyramiding: typeof value.allowPyramiding === 'boolean' ? value.allowPyramiding : null,
+    }
+  }
+
+  private readPortfolioPositionMode(value: Prisma.JsonValue | undefined) {
+    if (value === 'long_only' || value === 'short_only' || value === 'long_short') {
+      return value
+    }
+    return null
+  }
+
+  private readPositiveInteger(value: Prisma.JsonValue | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      return null
+    }
+    return value
   }
 
   private normalizeExchangeId(exchange?: string) {

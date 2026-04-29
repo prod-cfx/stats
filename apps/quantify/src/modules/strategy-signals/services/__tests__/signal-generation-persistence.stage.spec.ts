@@ -234,6 +234,78 @@ describe('signalGenerationPersistenceStage', () => {
     expect(generatorRepository.findRecentSignalForCooldown).not.toHaveBeenCalled()
   })
 
+  it('blocks duplicate entry signal generation when an active subscribed account already has an open position', async () => {
+    const tradingSignalRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'entry-signal-1' }),
+    }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      findOpenPositionsForAdmission: jest.fn().mockResolvedValue([
+        { positionSide: 'LONG', quantity: '0.0359' },
+      ]),
+      hasPendingReconcileRequiredEntryExecution: jest.fn().mockResolvedValue(false),
+      countRecentSignals: jest.fn().mockResolvedValue(0),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    const result = await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      {
+        symbol: {
+          id: 'symbol-1',
+          code: 'BTCUSDT:PERP',
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+        },
+        timeframe: 'm1',
+      } as any,
+      config,
+      {},
+      new Date('2026-04-10T10:00:00.000Z'),
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 80,
+        entryPrice: 100,
+        reasoning: 'duplicate long',
+        rawResponse: '{"action":"buy"}',
+      } as any,
+      {
+        marketType: 'perp',
+        portfolio: {
+          positionMode: 'long_only',
+          maxConcurrentPositions: 1,
+          allowPyramiding: false,
+        },
+      },
+      false,
+    )
+
+    expect(result).toEqual({
+      created: false,
+      signalId: null,
+      reason: 'ENTRY_BLOCKED_BY_MAX_CONCURRENT_POSITIONS',
+    })
+    expect(generatorRepository.findOpenPositionsForAdmission).toHaveBeenCalledWith({
+      strategyId: 'strategy-1',
+      strategyInstanceId: 'instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+    })
+    expect(generatorRepository.countRecentSignals).not.toHaveBeenCalled()
+    expect(tradingSignalRepository.create).not.toHaveBeenCalled()
+  })
+
   it('records consumed runtime telemetry when cooldown prevents a duplicate published-snapshot signal', async () => {
     const telemetry = { recordGeneration: jest.fn() }
     const generatorRepository = {
@@ -276,7 +348,7 @@ describe('signalGenerationPersistenceStage', () => {
       },
     )
 
-    expect(result).toEqual({ created: false, signalId: null })
+    expect(result).toEqual({ created: false, signalId: null, reason: 'COOLDOWN' })
     expect(telemetry.recordGeneration).toHaveBeenCalledWith({
       strategyId: 'strategy-1',
       symbolCode: 'BTCUSDT',

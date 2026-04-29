@@ -1,5 +1,6 @@
 import { Prisma } from '@/prisma/prisma.types'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
+import { PositionAdmissionService } from './position-admission.service'
 import { SignalExecutorService } from './signal-executor.service'
 
 describe('signalExecutorService', () => {
@@ -21,6 +22,7 @@ describe('signalExecutorService', () => {
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
+    const positionAdmissionService = new PositionAdmissionService()
     const executorRepository = {
       findRecoverableSignals: jest.fn().mockResolvedValue([]),
     }
@@ -38,6 +40,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       txHost as any,
+      positionAdmissionService,
     )
   }
 
@@ -524,6 +527,76 @@ describe('signalExecutorService', () => {
       marketType: 'perp',
       symbol: 'BTCUSDT',
       positionSide: 'LONG',
+    })
+    expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
+  })
+
+  it('blocks entry execution when portfolio constraints disallow adding to an open position', async () => {
+    const service = createService()
+    const executorRepository = (service as any).executorRepository
+    const executionRepository = (service as any).executionRepository
+    const accountsService = (service as any).accountsService
+
+    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
+    executorRepository.lockAccount = jest.fn().mockResolvedValue([
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(1000),
+        equity: new Prisma.Decimal(1000),
+        initialBalance: new Prisma.Decimal(1000),
+      },
+    ])
+    executorRepository.findOpenPositionsForAdmission = jest.fn().mockResolvedValue([
+      { positionSide: 'LONG', quantity: new Prisma.Decimal('0.0359') },
+    ])
+    executorRepository.hasPendingReconcileRequiredEntryExecution = jest.fn().mockResolvedValue(false)
+    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-entry-blocked-1' })
+
+    const result = await (service as any).prepareExecution(
+      {
+        id: 'sig-entry-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        entryPrice: '100',
+        metadata: {
+          runtimeProvenance: {
+            marketType: 'perp',
+            portfolio: {
+              positionMode: 'long_only',
+              maxConcurrentPositions: 1,
+              allowPyramiding: false,
+            },
+          },
+        },
+        symbol: {
+          code: 'BTCUSDT:PERP',
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      } as any,
+      { id: 'account-1', userId: 'user-1' } as any,
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      'BUY',
+      'LONG',
+    )
+
+    expect(result).toEqual({
+      type: 'skip',
+      reason: 'ENTRY_BLOCKED_BY_MAX_CONCURRENT_POSITIONS',
+      executionId: 'exec-entry-blocked-1',
+    })
+    expect(executorRepository.findOpenPositionsForAdmission).toHaveBeenCalledWith({
+      accountId: 'account-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
     })
     expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
   })

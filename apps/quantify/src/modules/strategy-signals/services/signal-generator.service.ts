@@ -1623,6 +1623,7 @@ export class SignalGeneratorService {
       return null
     }
 
+    const portfolio = this.readPortfolioSnapshot(snapshot.compiledIr)
     return {
       strategy: {
         ...strategy,
@@ -1640,6 +1641,7 @@ export class SignalGeneratorService {
         sourceStrategyInstanceId: snapshot.strategyInstanceId ?? binding.sourceStrategyInstanceId,
         sourceStrategyTemplateId: snapshot.strategyTemplateId ?? binding.sourceStrategyTemplateId ?? strategy.id,
         executionContentSource: 'PUBLISHED_SNAPSHOT',
+        ...(portfolio ? { portfolio: portfolio as Prisma.JsonObject } : {}),
       },
       executionSemanticKeys: this.runtimeExecutionStateService?.buildExecutionSemanticKeysFromSnapshot(snapshot) ?? [],
       executionSemantics: this.readRuntimeExecutionSemantics(snapshot),
@@ -1903,6 +1905,18 @@ export class SignalGeneratorService {
       return null
     }
     return value as Record<string, unknown>
+  }
+
+  private readPortfolioSnapshot(value: unknown): Record<string, unknown> | null {
+    const root = this.readJsonRecord(value)
+    const portfolio = this.readJsonRecord(root?.portfolio)
+    if (!portfolio) return null
+
+    return {
+      positionMode: portfolio.positionMode,
+      maxConcurrentPositions: portfolio.maxConcurrentPositions,
+      allowPyramiding: portfolio.allowPyramiding,
+    }
   }
 
   private buildEffectiveParams(

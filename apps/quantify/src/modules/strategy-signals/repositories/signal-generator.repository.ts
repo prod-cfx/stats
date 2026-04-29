@@ -1,6 +1,7 @@
 import type { AiSignalPayload } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { RuntimeMarketType } from '@/modules/market-data/utils/market-symbol-code.util'
+import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -190,6 +191,69 @@ export class SignalGeneratorRepository {
         runtimeScope: input.runtimeScope,
       }),
     })
+  }
+
+  findOpenPositionsForAdmission(input: {
+    strategyId: string
+    strategyInstanceId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+  }) {
+    return this.txHost.tx.position.findMany({
+      where: {
+        symbol: input.symbol,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        status: 'OPEN',
+        account: {
+          strategyId: input.strategyId,
+          user: {
+            strategySubscriptions: {
+              some: {
+                strategyInstanceId: input.strategyInstanceId,
+                status: 'active',
+              },
+            },
+          },
+        },
+      },
+      select: {
+        positionSide: true,
+        quantity: true,
+      },
+    })
+  }
+
+  async hasPendingReconcileRequiredEntryExecution(input: {
+    strategyId: string
+    strategyInstanceId: string
+  }): Promise<boolean> {
+    const count = await this.txHost.tx.userSignalExecution.count({
+      where: {
+        status: 'FAILED',
+        orderSide: { in: ['BUY', 'SELL'] },
+        signal: {
+          signalType: 'ENTRY',
+        },
+        metadata: {
+          path: ['reconcileRequired'],
+          equals: true,
+        },
+        account: {
+          strategyId: input.strategyId,
+          user: {
+            strategySubscriptions: {
+              some: {
+                strategyInstanceId: input.strategyInstanceId,
+                status: 'active',
+              },
+            },
+          },
+        },
+      },
+    })
+    return count > 0
   }
 
   private buildCooldownWhere(input: {

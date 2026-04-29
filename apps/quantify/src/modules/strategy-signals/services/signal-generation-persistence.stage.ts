@@ -9,12 +9,15 @@ import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-con
 import type { IndicatorGroup } from './signal-generation-candidate.stage'
 import type { SignalTelemetryService } from './signal-telemetry.service'
 import type { StrategyExecutionConfig } from '@/modules/strategy-templates/types/strategy-template.types'
+import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { PrismaClient, StrategyInstance, StrategyTemplate, Symbol, Prisma } from '@/prisma/prisma.types'
 import { Logger } from '@nestjs/common'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
+import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
+import { PositionAdmissionService, type PortfolioAdmissionConstraints } from './position-admission.service'
 
 type StrategyInstanceWithTemplate = StrategyInstance & { strategyTemplate?: StrategyTemplate | null }
 
@@ -29,6 +32,7 @@ export class SignalGenerationPersistenceStage {
     private readonly telemetry: SignalTelemetryService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     logger?: Logger,
+    private readonly positionAdmissionService: PositionAdmissionService = new PositionAdmissionService(),
   ) {
     this.logger = logger ?? new Logger(SignalGenerationPersistenceStage.name)
   }
@@ -77,6 +81,13 @@ export class SignalGenerationPersistenceStage {
     const result = await this.txHost.withTransaction(async () => {
       await this.generatorRepository.lockStrategyInstance(instance.id)
 
+      if (this.shouldApplyEntryAdmission(aiPayload)) {
+        const admission = await this.evaluateEntryAdmission(instance, strategy, group.symbol, aiPayload.direction, runtimeProvenance)
+        if (admission.ok === false) {
+          return { created: false as const, signalId: null as string | null, reason: admission.reason }
+        }
+      }
+
       if (!skipCooldown && this.shouldApplyCooldown(aiPayload)) {
         const existingCount = await this.generatorRepository.countRecentSignals({
           strategyId: strategy.id,
@@ -88,7 +99,7 @@ export class SignalGenerationPersistenceStage {
         })
 
         if (existingCount > 0) {
-          return { created: false as const, signalId: null as string | null }
+          return { created: false as const, signalId: null as string | null, reason: 'COOLDOWN' }
         }
       }
 
@@ -129,13 +140,15 @@ export class SignalGenerationPersistenceStage {
 
     if (!result.created || !result.signalId) {
       this.logger.debug(
-        `Recent signal already exists for strategy ${strategy.id} on ${group.symbol.code}, skipping due to cooldown`,
+        `Signal generation skipped for strategy ${strategy.id} on ${group.symbol.code}: ${result.reason ?? 'UNKNOWN'}`,
       )
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode: group.symbol.code,
         success: telemetryMeta?.cooldownConsumesRuntimeState === true,
-        reason: telemetryMeta?.cooldownConsumesRuntimeState === true ? 'COOLDOWN_CONSUMED' : 'COOLDOWN',
+        reason: telemetryMeta?.cooldownConsumesRuntimeState === true
+          ? 'COOLDOWN_CONSUMED'
+          : (result.reason ?? 'UNKNOWN'),
         runtimePhase: telemetryMeta?.cooldownConsumesRuntimeState === true
           ? (telemetryMeta.runtimePhase ?? 'consumed')
           : undefined,
@@ -236,6 +249,110 @@ export class SignalGenerationPersistenceStage {
 
   private shouldApplyCooldown(payload: Pick<AiSignalPayload, 'signalType'>): boolean {
     return payload.signalType !== 'EXIT'
+  }
+
+  private shouldApplyEntryAdmission(payload: Pick<AiSignalPayload, 'signalType' | 'direction'>): boolean {
+    return payload.signalType === 'ENTRY' && (payload.direction === 'BUY' || payload.direction === 'SELL')
+  }
+
+  private async evaluateEntryAdmission(
+    instance: StrategyInstanceWithTemplate,
+    strategy: StrategyTemplate,
+    symbol: Symbol,
+    direction: AiSignalPayload['direction'],
+    runtimeProvenance: Prisma.JsonObject,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const identity = this.resolvePositionAdmissionIdentity(symbol, runtimeProvenance)
+    if (!identity) {
+      return { ok: true }
+    }
+
+    const [openPositions, hasPendingReconciliation] = await Promise.all([
+      this.generatorRepository.findOpenPositionsForAdmission({
+        strategyId: strategy.id,
+        strategyInstanceId: instance.id,
+        exchangeId: identity.exchangeId,
+        marketType: identity.marketType,
+        symbol: identity.symbol,
+      }),
+      this.generatorRepository.hasPendingReconcileRequiredEntryExecution({
+        strategyId: strategy.id,
+        strategyInstanceId: instance.id,
+      }),
+    ])
+
+    return this.positionAdmissionService.evaluateEntry({
+      direction,
+      constraints: this.readPortfolioAdmissionConstraints(runtimeProvenance),
+      openPositions,
+      hasPendingReconciliation,
+    })
+  }
+
+  private resolvePositionAdmissionIdentity(
+    symbol: Symbol,
+    runtimeProvenance: Prisma.JsonObject,
+  ): { exchangeId: ExchangeId; marketType: MarketType; symbol: string } | null {
+    const exchangeId = this.normalizeExchangeId(symbol.exchange)
+    const marketType = this.readRuntimeMarketType(runtimeProvenance) ?? this.normalizeMarketType(symbol.instrumentType)
+    if (!exchangeId || !marketType || !symbol.code) {
+      return null
+    }
+
+    return {
+      exchangeId,
+      marketType,
+      symbol: normalizeLedgerSymbol(symbol.code),
+    }
+  }
+
+  private readPortfolioAdmissionConstraints(runtimeProvenance: Prisma.JsonObject): PortfolioAdmissionConstraints | null {
+    const raw = runtimeProvenance.portfolio ?? runtimeProvenance.portfolioConstraints
+    if (!raw || Array.isArray(raw) || typeof raw !== 'object') {
+      return null
+    }
+
+    const value = raw as Prisma.JsonObject
+    return {
+      positionMode: this.readPortfolioPositionMode(value.positionMode),
+      maxConcurrentPositions: this.readPositiveInteger(value.maxConcurrentPositions),
+      allowPyramiding: typeof value.allowPyramiding === 'boolean' ? value.allowPyramiding : null,
+    }
+  }
+
+  private readPortfolioPositionMode(value: Prisma.JsonValue | undefined) {
+    if (value === 'long_only' || value === 'short_only' || value === 'long_short') {
+      return value
+    }
+    return null
+  }
+
+  private readPositiveInteger(value: Prisma.JsonValue | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      return null
+    }
+    return value
+  }
+
+  private readRuntimeMarketType(runtimeProvenance: Prisma.JsonObject): MarketType | null {
+    const raw = runtimeProvenance.marketType
+    if (raw === 'spot' || raw === 'perp') return raw
+    return null
+  }
+
+  private normalizeExchangeId(exchange?: string | null): ExchangeId | null {
+    if (!exchange) return null
+    const normalized = exchange.trim().toLowerCase()
+    if (normalized.includes('binance')) return 'binance'
+    if (normalized.includes('okx')) return 'okx'
+    if (normalized.includes('hyperliquid')) return 'hyperliquid'
+    return null
+  }
+
+  private normalizeMarketType(instrumentType: Symbol['instrumentType']): MarketType | null {
+    if (instrumentType === 'SPOT') return 'spot'
+    if (instrumentType === 'PERPETUAL' || instrumentType === 'FUTURE') return 'perp'
+    return null
   }
 
   private toJsonSafe(value: any): any {
