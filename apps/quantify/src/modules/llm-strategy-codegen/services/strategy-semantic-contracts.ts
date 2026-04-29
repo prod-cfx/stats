@@ -1,6 +1,5 @@
 import type {
   SemanticActionState,
-  SemanticExpression,
   SemanticPositionSizingContract,
   SemanticPositionState,
   SemanticRiskState,
@@ -160,6 +159,8 @@ const SUPPORTED_RISK_KEYS = new Set<string>([
   'risk.take_profit_pct',
   'risk.condition_expression',
 ])
+const SUPPORTED_RISK_EFFECT_TYPES = new Set<string>(['close_position', 'reduce_position', 'notify_only', 'pause_strategy'])
+const SUPPORTED_RISK_SCOPES = new Set<string>(['current_position', 'long', 'short', 'both', 'strategy', 'account'])
 const SUPPORTED_RISK_BASES = new Set<string>(['entry_avg_price', 'position_pnl'])
 const SUPPORTED_RISK_BASIS_SOURCES = new Set<string>(['user_explicit', 'system_default', 'derived'])
 const POSITION_SIZING_VALUE_EPSILON = 1e-9
@@ -206,7 +207,7 @@ export function resolveSemanticContract(semanticKey: string): SemanticContract {
   return contract
 }
 
-export function validateSemanticExpressionContract(expression: SemanticExpression): SemanticContractValidationResult {
+export function validateSemanticExpressionContract(expression: unknown): SemanticContractValidationResult {
   return validateExpressionNode(expression)
 }
 
@@ -350,10 +351,14 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
     if (!expressionResult.ok) {
       return invalid('invalid_risk_condition_expression')
     }
-    if (!isRecord(risk.params.effect) || typeof risk.params.effect.type !== 'string') {
+    if (
+      !isRecord(risk.params.effect)
+      || typeof risk.params.effect.type !== 'string'
+      || !SUPPORTED_RISK_EFFECT_TYPES.has(risk.params.effect.type)
+    ) {
       return invalid('invalid_risk_effect')
     }
-    if (typeof risk.params.scope !== 'string') {
+    if (typeof risk.params.scope !== 'string' || !SUPPORTED_RISK_SCOPES.has(risk.params.scope)) {
       return invalid('invalid_risk_scope')
     }
     if (

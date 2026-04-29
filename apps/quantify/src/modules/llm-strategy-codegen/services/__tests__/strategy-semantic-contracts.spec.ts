@@ -317,6 +317,46 @@ describe('strategySemanticContracts', () => {
     })).toEqual(expect.objectContaining({ ok: false }))
   })
 
+  it('rejects risk condition expression params with invalid effect type', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'liquidate_account' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_effect',
+    }))
+  })
+
+  it('rejects risk condition expression params with invalid scope', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'portfolio',
+        capabilityStatus: 'recognized_unsupported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_scope',
+    }))
+  })
+
   it('rejects malformed top-level semantic risk contracts without throwing', () => {
     expect(validateSemanticRiskContract(null as never)).toEqual(expect.objectContaining({ ok: false }))
     expect(validateSemanticRiskContract('risk.stop_loss_pct' as never)).toEqual(expect.objectContaining({ ok: false }))

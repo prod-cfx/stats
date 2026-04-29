@@ -91,7 +91,7 @@ export interface SemanticPercentRiskParams extends Record<string, unknown> {
   basis: SemanticRiskBasis
   basisSource: SemanticRiskBasisSource
   effect: Exclude<SemanticRiskEffectType, 'pause_strategy'>
-  scope: Exclude<SemanticRiskScope, 'strategy' | 'account'> | 'strategy' | 'account'
+  scope: SemanticRiskScope
   reducePct?: number
 }
 
