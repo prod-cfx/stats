@@ -722,4 +722,50 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).toContain('开多 3%')
     expect(text).not.toContain('不支持的条件，待补充')
   })
+
+  it('falls back to legacy parsing when server displayLogicGraph has no rule blocks', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'EXECUTE',
+              items: [
+                { kind: 'execute', id: 'execute-exchange', key: 'exchange', value: 'okx', text: '交易所: OKX' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'legacy-price-drop',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+              params: {
+                timeframe: '3m',
+                basis: 'prev_close',
+              },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(text).toContain('3m 内相对前收盘下跌 1%')
+    expect(text).toContain('开多')
+    expect(text).toContain('标的: BTCUSDT')
+  })
 })

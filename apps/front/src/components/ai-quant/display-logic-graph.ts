@@ -133,6 +133,7 @@ function isDisplayBlockType(value: unknown): value is DisplayBlockType {
 function normalizeServerDisplayLogicGraph(value: unknown): DisplayLogicGraph | null {
   if (!isRecord(value) || !Array.isArray(value.blocks)) return null
   const blocks: DisplayBlock[] = []
+  let hasRuleBlock = false
   for (const block of value.blocks) {
     if (!isRecord(block) || !isDisplayBlockType(block.type) || !Array.isArray(block.items)) return null
     const items: DisplayBlock['items'] = []
@@ -158,9 +159,12 @@ function normalizeServerDisplayLogicGraph(value: unknown): DisplayLogicGraph | n
       }
       return null
     }
+    if (block.type !== 'EXECUTE' && items.some(item => item.kind === 'condition' || item.kind === 'action')) {
+      hasRuleBlock = true
+    }
     blocks.push({ type: block.type, items })
   }
-  return blocks.length > 0 ? { blocks } : null
+  return blocks.length > 0 && hasRuleBlock ? { blocks } : null
 }
 
 function asStringList(value: unknown): string[] {
