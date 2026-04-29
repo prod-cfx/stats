@@ -98,6 +98,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+function normalizeGraphSizingInput(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  const rawMode = typeof value.mode === 'string' ? value.mode.trim().toLowerCase().replace(/[\s-]+/g, '_') : ''
+  const mode = (() => {
+    switch (rawMode) {
+      case 'fixed_ratio':
+        return 'RATIO'
+      case 'fixed_quote':
+        return 'QUOTE'
+      case 'fixed_qty':
+      case 'fixed_quantity':
+        return 'QTY'
+      default:
+        return null
+    }
+  })()
+
+  return mode ? { ...value, mode } : value
+}
+
 function asString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
@@ -380,7 +400,10 @@ function formatActionVerb(action: DisplayLogicGraphAction): string {
 function formatActionText(action: DisplayLogicGraphAction, fallbackSymbol?: string): string {
   const verb = formatActionVerb(action)
   if (!action.sizing) return verb
-  return `${verb} ${formatSizing(normalizeSizingFromCanonicalValue(action.sizing, fallbackSymbol ?? '', 10), fallbackSymbol)}`
+  return `${verb} ${formatSizing(
+    normalizeSizingFromCanonicalValue(normalizeGraphSizingInput(action.sizing), fallbackSymbol ?? '', 10),
+    fallbackSymbol,
+  )}`
 }
 
 function toPositionPct(value: unknown): string | null {
@@ -476,7 +499,7 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
   const sizing = sizingInput
     ? formatSizing(
         normalizeSizingFromCanonicalValue(
-          sizingInput,
+          normalizeGraphSizingInput(sizingInput),
           symbol ?? '',
           typeof fallbackMeta?.positionPct === 'number' ? fallbackMeta.positionPct : 10,
         ),

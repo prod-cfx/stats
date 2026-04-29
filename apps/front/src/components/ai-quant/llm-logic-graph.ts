@@ -70,6 +70,30 @@ function asStringList(input: unknown): string[] {
   return input.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeGraphSizingInput(value: unknown): unknown {
+  if (!isRecord(value)) return value
+  const rawMode = typeof value.mode === 'string' ? value.mode.trim().toLowerCase().replace(/[\s-]+/g, '_') : ''
+  const mode = (() => {
+    switch (rawMode) {
+      case 'fixed_ratio':
+        return 'RATIO'
+      case 'fixed_quote':
+        return 'QUOTE'
+      case 'fixed_qty':
+      case 'fixed_quantity':
+        return 'QTY'
+      default:
+        return null
+    }
+  })()
+
+  return mode ? { ...value, mode } : value
+}
+
 function stringifyRiskRule(key: string, value: unknown): string {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return `${key}: ${String(value)}`
@@ -153,7 +177,10 @@ function mapRuleAction(action: CodegenSpecRuleAction | undefined): StrategyLogic
 function formatRiskActionText(action: CodegenSpecRuleAction, symbol: string, fallbackPositionPct: number): string | null {
   if (!action.type) return null
   if (!action.sizing) return action.type
-  return `${action.type} ${formatSizing(normalizeSizingFromCanonicalValue(action.sizing, symbol, fallbackPositionPct), symbol)}`
+  return `${action.type} ${formatSizing(
+    normalizeSizingFromCanonicalValue(normalizeGraphSizingInput(action.sizing), symbol, fallbackPositionPct),
+    symbol,
+  )}`
 }
 
 function extractFirstActionSizing(spec: CodegenSpec): unknown {
@@ -165,11 +192,13 @@ function extractFirstActionSizing(spec: CodegenSpec): unknown {
 
 function extractSizing(spec: CodegenSpec, fallback: GraphFallbackMeta, symbol: string): QuantSizing {
   return normalizeSizingFromCanonicalValue(
-    spec.canonicalSpec?.sizing
-      ?? spec.lockedParams?.sizing
-      ?? extractFirstActionSizing(spec)
-      ?? fallback.sizing
-      ?? null,
+    normalizeGraphSizingInput(
+      spec.canonicalSpec?.sizing
+        ?? spec.lockedParams?.sizing
+        ?? extractFirstActionSizing(spec)
+        ?? fallback.sizing
+        ?? null,
+    ),
     symbol,
     fallback.positionPct,
   )
@@ -278,7 +307,11 @@ export function buildLogicGraphFromCodegenSpec(
               target: symbol,
               amount: formatSizing(
                 action.sizing
-                  ? normalizeSizingFromCanonicalValue(action.sizing, symbol, positionPct)
+                  ? normalizeSizingFromCanonicalValue(
+                      normalizeGraphSizingInput(action.sizing),
+                      symbol,
+                      positionPct,
+                    )
                   : sizing,
                 symbol,
               ),
