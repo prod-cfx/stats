@@ -68,6 +68,7 @@ interface DisplayLogicGraphMarket {
 }
 
 interface DisplayLogicGraphSpecDesc {
+  displayLogicGraph?: unknown
   rules?: DisplayLogicGraphRule[]
   entryRules?: unknown
   exitRules?: unknown
@@ -123,6 +124,43 @@ function asString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed || null
+}
+
+function isDisplayBlockType(value: unknown): value is DisplayBlockType {
+  return value === 'IF' || value === 'AND_AT_THEN' || value === 'OR_THEN' || value === 'EXECUTE'
+}
+
+function normalizeServerDisplayLogicGraph(value: unknown): DisplayLogicGraph | null {
+  if (!isRecord(value) || !Array.isArray(value.blocks)) return null
+  const blocks: DisplayBlock[] = []
+  for (const block of value.blocks) {
+    if (!isRecord(block) || !isDisplayBlockType(block.type) || !Array.isArray(block.items)) return null
+    const items: DisplayBlock['items'] = []
+    for (const item of block.items) {
+      if (!isRecord(item)) return null
+      const id = asString(item.id)
+      const text = asString(item.text)
+      if (!id || !text) return null
+      if (item.kind === 'condition') {
+        items.push({ kind: 'condition', id, text })
+        continue
+      }
+      if (item.kind === 'action') {
+        items.push({ kind: 'action', id, text })
+        continue
+      }
+      if (item.kind === 'execute') {
+        const key = asString(item.key)
+        if (!key) return null
+        const valueText = asString(item.value)
+        items.push(valueText ? { kind: 'execute', id, key, value: valueText, text } : { kind: 'execute', id, key, text })
+        continue
+      }
+      return null
+    }
+    blocks.push({ type: block.type, items })
+  }
+  return blocks.length > 0 ? { blocks } : null
 }
 
 function asStringList(value: unknown): string[] {
@@ -666,6 +704,8 @@ function buildExecuteBlock(meta: ReturnType<typeof extractExecuteMeta>): Display
 export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGraphInput | null | undefined): DisplayLogicGraph {
   const nextInput = input ?? {}
   const specDesc = isRecord(nextInput.specDesc) ? nextInput.specDesc as DisplayLogicGraphSpecDesc : null
+  const serverDisplayGraph = normalizeServerDisplayLogicGraph(specDesc?.displayLogicGraph)
+  if (serverDisplayGraph) return serverDisplayGraph
   const rules = extractRules(specDesc)
   const nonRiskRules = rules.filter(rule => rule.phase !== 'risk')
   const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
