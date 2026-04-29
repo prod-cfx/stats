@@ -8,6 +8,7 @@ describe('tradingService', () => {
       cancelOrder: jest.fn(),
       fetchOrder: jest.fn(),
       fetchOpenOrders: jest.fn(),
+      fetchClosedOrders: jest.fn(),
       fetchPositions: jest.fn(),
       fetchBalance: jest.fn(),
     }
@@ -65,6 +66,83 @@ describe('tradingService', () => {
 
     expect(client.fetchOpenOrders).toHaveBeenCalledWith('DOGE/USDT')
     expect(result).toEqual([{ id: 'order-1', status: 'open' }])
+  })
+
+  it('fetches closed orders through the selected exchange account', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchClosedOrders.mockResolvedValue([{ id: 'order-2', status: 'closed' }])
+
+    const result = await service.getClosedOrders(
+      'user-1',
+      'okx',
+      'spot',
+      'DOGE/USDT',
+      'exchange-account-1',
+    )
+
+    expect(client.fetchClosedOrders).toHaveBeenCalledWith('DOGE/USDT')
+    expect(result).toEqual([{ id: 'order-2', status: 'closed' }])
+  })
+
+  it('finds orders by client order id from open orders before closed orders', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchOpenOrders.mockResolvedValue([
+      { id: 'open-1', clientOrderId: 'grid-client-1', status: 'open' },
+    ])
+    client.fetchClosedOrders.mockResolvedValue([
+      { id: 'closed-1', clientOrderId: 'grid-client-1', status: 'closed' },
+    ])
+
+    const result = await service.getOrderByClientOrderId(
+      'user-1',
+      'okx',
+      'perp',
+      'grid-client-1',
+      'BTC/USDT:PERP',
+      'exchange-account-1',
+    )
+
+    expect(client.fetchOpenOrders).toHaveBeenCalledWith('BTC/USDT:PERP')
+    expect(client.fetchClosedOrders).not.toHaveBeenCalled()
+    expect(result).toEqual({ id: 'open-1', clientOrderId: 'grid-client-1', status: 'open' })
+  })
+
+  it('falls back to recent closed orders when client order id is not open', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchOpenOrders.mockResolvedValue([
+      { id: 'open-1', clientOrderId: 'other-client', status: 'open' },
+    ])
+    client.fetchClosedOrders.mockResolvedValue([
+      { id: 'closed-1', clientOrderId: 'grid-client-1', status: 'closed' },
+    ])
+
+    const result = await service.getOrderByClientOrderId(
+      'user-1',
+      'okx',
+      'perp',
+      'grid-client-1',
+      'BTC/USDT:PERP',
+      'exchange-account-1',
+    )
+
+    expect(client.fetchOpenOrders).toHaveBeenCalledWith('BTC/USDT:PERP')
+    expect(client.fetchClosedOrders).toHaveBeenCalledWith('BTC/USDT:PERP')
+    expect(result).toEqual({ id: 'closed-1', clientOrderId: 'grid-client-1', status: 'closed' })
   })
 
   it('cancels orders through the selected exchange account', async () => {

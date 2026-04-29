@@ -2,6 +2,8 @@ import type {
   CreateOrderInput,
   MarketType,
   OrderType,
+  PositionSide,
+  TradeMode,
   UnifiedBalance,
   UnifiedOrder,
   UnifiedPosition,
@@ -125,13 +127,14 @@ export class OkxClient extends BaseCexClient {
 
     // OKX 所有产品都需要 tdMode：现货使用 'cash'，永续默认 'cross'（可通过 extra 覆盖）
     if (this.marketType === 'perp') {
-      body.tdMode = (input.extra?.tdMode as string | undefined) ?? 'cross'
-      const posSide = input.extra?.posSide as string | undefined
+      body.tdMode = input.tdMode ?? this.readExtraTradeMode(input.extra, 'tdMode') ?? 'cross'
+      const posSide = input.posSide ?? this.readExtraPositionSide(input.extra, 'posSide')
       if (posSide) {
         body.posSide = posSide
       }
-      if (input.reduceOnly) {
-        body.reduceOnly = true
+      const reduceOnly = input.reduceOnly ?? this.readExtraBoolean(input.extra, 'reduceOnly')
+      if (reduceOnly !== undefined) {
+        body.reduceOnly = reduceOnly
       }
     }
     else {
@@ -678,6 +681,21 @@ export class OkxClient extends BaseCexClient {
       updatedAt,
       raw: order,
     }
+  }
+
+  private readExtraTradeMode(extra: Record<string, unknown> | undefined, key: string): TradeMode | undefined {
+    const value = extra?.[key]
+    return value === 'cash' || value === 'cross' || value === 'isolated' ? value : undefined
+  }
+
+  private readExtraPositionSide(extra: Record<string, unknown> | undefined, key: string): PositionSide | undefined {
+    const value = extra?.[key]
+    return value === 'long' || value === 'short' || value === 'net' ? value : undefined
+  }
+
+  private readExtraBoolean(extra: Record<string, unknown> | undefined, key: string): boolean | undefined {
+    const value = extra?.[key]
+    return typeof value === 'boolean' ? value : undefined
   }
 
   private fromExchangeSize(size: string, instrumentSpec?: OkxInstrumentSpecItem | null): number {
