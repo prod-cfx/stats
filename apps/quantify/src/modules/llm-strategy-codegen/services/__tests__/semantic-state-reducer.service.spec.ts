@@ -90,6 +90,45 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('keeps market type open when contract only appears as an english substring', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: {
+            slotKey: 'marketType',
+            fieldPath: 'context.marketType',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请确认市场类型（现货或合约/perp）。',
+            affectsExecution: true,
+          },
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'marketType',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'marketType',
+        fieldPath: 'context.marketType',
+      }),
+      answer: 'contractAddress',
+      messageIndex: 2,
+    })
+
+    expect(next.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'open',
+    }))
+  })
+
   it('locks the clarified MA period slot without reopening unrelated slots', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

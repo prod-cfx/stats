@@ -334,7 +334,7 @@ export class SemanticStateReducerService {
       if (/现货|spot/iu.test(normalized)) {
         return { slotValue: 'spot' }
       }
-      if (/合约|perp|永续|contract/iu.test(normalized)) {
+      if (/合约|perp|永续|\bcontract\b/iu.test(normalized)) {
         return { slotValue: 'perp' }
       }
       return null

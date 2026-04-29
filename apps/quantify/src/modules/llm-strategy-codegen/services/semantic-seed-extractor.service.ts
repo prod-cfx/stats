@@ -272,6 +272,7 @@ export class SemanticSeedExtractorService {
     const hasNoPositionEntryGate = this.hasNoPositionContext(segment)
       && /(?:开仓|开多|开空|买入|做多|做空|入场)/u.test(segment)
     const hasInheritedNoPositionEntryGate = !hasNoPositionEntryGate
+      && !this.hasExistingPositionContext(segment)
       && this.hasNoPositionContext(contextText)
       && /(?:开仓|开多|开空|买入|做多|做空|入场)/u.test(segment)
     if (!hasExistingPositionOpenBlock && !hasNoPositionEntryGate && !hasInheritedNoPositionEntryGate) return
@@ -1333,7 +1334,7 @@ export class SemanticSeedExtractorService {
 
   private extractMarketType(text: string): string | null {
     if (/现货|spot/u.test(text)) return 'spot'
-    if (/合约|永续|perp|swap|contract/iu.test(text)) return 'perp'
+    if (/合约|永续|perp|swap|\bcontract\b/iu.test(text)) return 'perp'
     return null
   }
 

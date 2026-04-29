@@ -47,6 +47,12 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('does not normalize contract as a substring inside unrelated english words', () => {
+    const patch = service.extract('OKX BTCUSDT contractAddress 1m，收盘价突破上一根 K 线最高价开多，单笔 3%。')
+
+    expect(patch.contextSlots).not.toHaveProperty('marketType')
+  })
+
   it('extracts close-open candle expressions and fixed quote sizing without new normalized atom keys', () => {
     const patch = service.extract('用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多，固定使用 10 USDT。如果已有持仓则不再开仓。收盘价低于开盘价时平多。')
 
@@ -180,6 +186,23 @@ describe('SemanticSeedExtractorService', () => {
             left: { kind: 'position', field: 'has_position', side: 'long' },
             right: { kind: 'constant', value: false },
           },
+        },
+      }),
+    ]))
+  })
+
+  it('does not inherit standalone no-position context into explicit existing-position entry clauses', () => {
+    const patch = service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果已有持仓则开多加仓，单笔 3%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+        params: {
+          expression: expect.objectContaining({
+            left: { kind: 'position', field: 'has_position', side: 'long' },
+            right: { kind: 'constant', value: false },
+          }),
         },
       }),
     ]))

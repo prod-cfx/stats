@@ -4398,7 +4398,7 @@ export class CodegenConversationService {
 
   private normalizeMarketTypeClarificationAnswer(answer: string): 'spot' | 'perp' | null {
     if (/现货|spot/i.test(answer)) return 'spot'
-    if (/永续|合约|perp|swap/i.test(answer)) return 'perp'
+    if (/永续|合约|perp|swap|\bcontract\b/i.test(answer)) return 'perp'
     return null
   }
 
