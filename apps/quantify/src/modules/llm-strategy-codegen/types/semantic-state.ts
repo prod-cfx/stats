@@ -76,6 +76,7 @@ export interface SemanticActionState {
   status: SemanticNodeStatus
   source: SemanticSource
   evidence?: SemanticEvidence
+  openSlots?: SemanticSlotState[]
   supersedes?: string[]
 }
 

@@ -4,9 +4,10 @@ import type { SemanticEvidence, SemanticPositionSizingContract, SemanticSlotStat
 import { PositionSizingContractService } from './position-sizing-contract.service'
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference'
   paramValue: number | string
   slotValue: number | string
+  extraParams?: Record<string, number | string>
 }
 
 interface SupportedContextReduction {
@@ -37,6 +38,7 @@ export class SemanticStateReducerService {
       actions: input.currentState.actions.map(action => ({
         ...action,
         ...(action.params ? { params: { ...action.params } } : {}),
+        openSlots: action.openSlots?.map(slot => ({ ...slot })),
       })),
       risk: input.currentState.risk.map(risk => ({
         ...risk,
@@ -82,6 +84,9 @@ export class SemanticStateReducerService {
       } else {
         trigger.params[reduction.paramKey] = reduction.paramValue
       }
+      if (reduction.extraParams) {
+        Object.assign(trigger.params, reduction.extraParams)
+      }
 
       slot.value = reduction.slotValue
       slot.status = 'locked'
@@ -92,6 +97,32 @@ export class SemanticStateReducerService {
       }
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
+    }
+
+    for (const action of nextState.actions) {
+      const slot = action.openSlots?.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+      })
+      if (!slot || slot.status !== 'open') continue
+
+      action.params = {
+        ...(action.params ?? {}),
+        [this.resolveActionParamKey(slot)]: answerText,
+      }
+      slot.value = answerText
+      slot.status = 'locked'
+      slot.evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit',
+      }
+      action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
       break
     }
 
@@ -191,8 +222,42 @@ export class SemanticStateReducerService {
     return nextState
   }
 
+  private resolveActionParamKey(slot: SemanticSlotState): string {
+    const paramsPath = slot.fieldPath.match(/\.params\.([A-Za-z0-9_]+)$/u)
+    if (paramsPath?.[1]) {
+      return paramsPath[1]
+    }
+
+    const slotKeyPath = slot.slotKey.match(/^action\.([A-Za-z0-9_]+)$/u)
+    if (slotKeyPath?.[1]) {
+      return slotKeyPath[1]
+    }
+
+    return slot.slotKey
+  }
+
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {
     const normalizedGridSlotKey = this.normalizeGridSlotKey(slot.slotKey)
+
+    if (slot.slotKey === 'trigger.reference_definition') {
+      const periodMatch = answerText.match(/最近\s*(\d{1,4})\s*根\s*K?\s*线/u)
+      const period = periodMatch?.[1] ? Number(periodMatch[1]) : null
+      const reference = /低点|最低|支撑/u.test(answerText)
+        ? 'channel_low'
+        : /高点|最高|压力|阻力/u.test(answerText)
+          ? 'channel_high'
+          : null
+      if (!reference || !period || !Number.isFinite(period)) {
+        return null
+      }
+
+      return {
+        paramKey: 'reference',
+        paramValue: reference,
+        slotValue: answerText,
+        extraParams: { period },
+      }
+    }
 
     if (slot.slotKey.includes('reference.period')) {
       const periodMatch = answerText.match(/(?:ma|ema|sma)?\s*(\d{1,4})/iu)
@@ -269,7 +334,7 @@ export class SemanticStateReducerService {
       if (/现货|spot/iu.test(normalized)) {
         return { slotValue: 'spot' }
       }
-      if (/合约|perp|永续/iu.test(normalized)) {
+      if (/合约|perp|永续|\bcontract\b/iu.test(normalized)) {
         return { slotValue: 'perp' }
       }
       return null

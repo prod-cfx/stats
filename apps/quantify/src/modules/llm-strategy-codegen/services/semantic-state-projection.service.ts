@@ -720,6 +720,13 @@ export class SemanticStateProjectionService {
       return positionSlot
     }
 
+    const actionSlot = state.actions
+      .flatMap(action => action.openSlots ?? [])
+      .find(slot => slot.status === 'open')
+    if (actionSlot) {
+      return actionSlot
+    }
+
     const riskSlot = state.risk
       .flatMap(risk => risk.openSlots)
       .find(slot => slot.status === 'open')
