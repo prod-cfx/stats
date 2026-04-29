@@ -97,6 +97,7 @@ describe('GridRuntimeRepository', () => {
       gridLevelId: 'level-1',
       clientOrderId: 'client-1',
       side: 'buy',
+      role: 'open_long',
       orderType: 'limit',
       timeInForce: 'gtc',
       price: '90',
@@ -112,6 +113,7 @@ describe('GridRuntimeRepository', () => {
         gridLevelId: 'level-1',
         clientOrderId: 'client-1',
         side: 'buy',
+        role: 'open_long',
         orderType: 'limit',
         timeInForce: 'gtc',
         price: expect.anything(),
@@ -169,6 +171,41 @@ describe('GridRuntimeRepository', () => {
     expect(created.exchangeFillId).toBe('exchange-fill-2')
     expect(tx.gridFill.create).toHaveBeenCalledTimes(1)
     expect(tx.gridFill.findUnique).toHaveBeenCalledWith({
+      where: {
+        gridRuntimeInstanceId_exchangeFillId: {
+          gridRuntimeInstanceId: 'grid-1',
+          exchangeFillId: 'exchange-fill-1',
+        },
+      },
+    })
+  })
+
+  it('returns the existing fill when concurrent create hits the fill id unique constraint', async () => {
+    const existingFill = { id: 'fill-existing', exchangeFillId: 'exchange-fill-1' }
+    const uniqueConstraintError = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' })
+    const tx = {
+      gridFill: {
+        findUnique: jest.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce(existingFill),
+        create: jest.fn().mockRejectedValue(uniqueConstraintError),
+      },
+    }
+    const repo = new GridRuntimeRepository(createTxHost(tx))
+
+    const result = await repo.recordFillOnce({
+      gridRuntimeInstanceId: 'grid-1',
+      gridOrderId: 'order-1',
+      exchangeFillId: 'exchange-fill-1',
+      side: 'buy',
+      price: '90',
+      quantity: '1',
+      filledAt: new Date('2026-04-29T00:00:00.000Z'),
+    })
+
+    expect(result).toBe(existingFill)
+    expect(tx.gridFill.create).toHaveBeenCalledTimes(1)
+    expect(tx.gridFill.findUnique).toHaveBeenNthCalledWith(2, {
       where: {
         gridRuntimeInstanceId_exchangeFillId: {
           gridRuntimeInstanceId: 'grid-1',

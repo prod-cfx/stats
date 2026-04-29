@@ -81,6 +81,7 @@ model GridOrder {
   clientOrderId         String?         @map("client_order_id")
   exchangeOrderId       String?         @map("exchange_order_id")
   side                  String
+  role                  String?
   orderType             String          @map("order_type")
   timeInForce           String          @map("time_in_force")
   price                 Decimal         @db.Decimal(48, 18)

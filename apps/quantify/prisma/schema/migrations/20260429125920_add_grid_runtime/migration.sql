@@ -53,6 +53,7 @@ CREATE TABLE "grid_orders" (
     "client_order_id" TEXT,
     "exchange_order_id" TEXT,
     "side" TEXT NOT NULL,
+    "role" TEXT,
     "order_type" TEXT NOT NULL,
     "time_in_force" TEXT NOT NULL,
     "price" DECIMAL(48,18) NOT NULL,
