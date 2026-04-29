@@ -975,6 +975,61 @@ const ClosePositionResponseDto = z
     message: z.string(),
   })
   .passthrough()
+const GridRuntimeLevelDto = z
+  .object({
+    id: z.string(),
+    levelIndex: z.number(),
+    price: z.string(),
+    side: z.string(),
+    role: z.string().nullish(),
+    status: z.string(),
+  })
+  .passthrough()
+const GridRuntimeInstanceDto = z
+  .object({
+    id: z.string(),
+    strategyInstanceId: z.string(),
+    publishedSnapshotId: z.string(),
+    userId: z.string(),
+    exchangeAccountId: z.string(),
+    exchangeId: z.string(),
+    marketType: z.string(),
+    symbol: z.string(),
+    mode: z.string(),
+    status: z.string(),
+    stopReason: z.string().nullish(),
+    levels: z.array(GridRuntimeLevelDto),
+  })
+  .passthrough()
+const GridRuntimeOrderDto = z
+  .object({
+    id: z.string(),
+    gridRuntimeInstanceId: z.string(),
+    gridLevelId: z.string(),
+    clientOrderId: z.string().nullish(),
+    exchangeOrderId: z.string().nullish(),
+    side: z.string(),
+    role: z.string().nullish(),
+    orderType: z.string(),
+    timeInForce: z.string(),
+    price: z.string(),
+    quantity: z.string(),
+    filledQuantity: z.string(),
+    status: z.string(),
+  })
+  .passthrough()
+const GridRuntimeFillDto = z
+  .object({
+    id: z.string(),
+    gridRuntimeInstanceId: z.string(),
+    gridOrderId: z.string(),
+    exchangeFillId: z.string(),
+    side: z.string(),
+    price: z.string(),
+    quantity: z.string(),
+    filledAt: z.string(),
+  })
+  .passthrough()
 const GridRuntimeActionDto = z.object({ reason: z.string() }).partial().passthrough()
 const TradingSignalResponseDto = z
   .object({
@@ -1711,6 +1766,10 @@ export const schemas = {
   PositionSyncResultDto,
   ClosePositionDto,
   ClosePositionResponseDto,
+  GridRuntimeLevelDto,
+  GridRuntimeInstanceDto,
+  GridRuntimeOrderDto,
+  GridRuntimeFillDto,
   GridRuntimeActionDto,
   TradingSignalResponseDto,
   StrategyLegDefinitionDto,
@@ -2555,7 +2614,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: GridRuntimeInstanceDto,
   },
   {
     method: 'get',
@@ -2579,7 +2638,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: z.array(GridRuntimeFillDto),
   },
   {
     method: 'get',
@@ -2603,7 +2662,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: z.array(GridRuntimeOrderDto),
   },
   {
     method: 'post',
@@ -2627,7 +2686,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: GridRuntimeInstanceDto,
   },
   {
     method: 'post',
@@ -2656,7 +2715,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: GridRuntimeInstanceDto,
   },
   {
     method: 'post',
@@ -2680,7 +2739,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: GridRuntimeInstanceDto,
   },
   {
     method: 'post',
@@ -2709,7 +2768,7 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: GridRuntimeInstanceDto,
   },
   {
     method: 'get',
