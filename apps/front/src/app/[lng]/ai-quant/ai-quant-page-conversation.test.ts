@@ -2,6 +2,7 @@ import type { ConversationState } from './ai-quant-page-conversation'
 import { describe, expect, it } from '@jest/globals'
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  buildBacktestDraftConfigFromValues,
   buildBacktestSummaryResult,
   buildStrategyRevisionPromptMessage,
   createConversation,
@@ -76,6 +77,28 @@ describe('ai-quant-page-conversation', () => {
       tradeCount: 3,
       recoveryStatus: 'config_changed',
     })).toBe(false)
+  })
+
+  it('does not build a backtest draft config from invalid execution values', () => {
+    expect(buildBacktestDraftConfigFromValues({
+      backtestRangePreset: '30D',
+      backtestInitialCash: 'not-a-number',
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: false,
+    })).toBeNull()
+
+    expect(buildBacktestDraftConfigFromValues({
+      backtestRangePreset: '30D',
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: 'maybe',
+    })).toBeNull()
   })
 
   it('preserves open-trade summary fields when building a backtest summary result', () => {

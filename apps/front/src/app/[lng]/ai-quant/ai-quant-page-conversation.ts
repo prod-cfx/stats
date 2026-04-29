@@ -1159,9 +1159,19 @@ export function buildBacktestDraftConfigFromValues(
   const range = resolveBacktestRangeInput(values)
   const execution = resolveBacktestExecutionConfig(values)
   if (
+    !Number.isFinite(execution.initialCash)
+    || execution.initialCash <= 0
+    || (execution.leverage !== null && (!Number.isFinite(execution.leverage) || execution.leverage <= 0))
+    || !Number.isFinite(execution.slippageBps)
+    || execution.slippageBps < 0
+    || !Number.isFinite(execution.feeBps)
+    || execution.feeBps < 0
+    || !execution.allowPartialValid
+    || (
     execution.priceSource !== 'open'
     && execution.priceSource !== 'close'
     && execution.priceSource !== 'mid'
+    )
   ) {
     return null
   }
