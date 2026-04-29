@@ -1,7 +1,7 @@
 import type { ExprNode, StrategyAstV1 } from '../../types/canonical-strategy-ast'
 import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpec } from '../../types/canonical-strategy-spec'
-import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticAtomContract, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
@@ -256,6 +256,104 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function buildContractOrderProgramSemanticState(): SemanticState {
+    const levelSetContract: SemanticAtomContract = {
+      id: 'trigger-grid-range',
+      kind: 'trigger',
+      capabilities: [
+        {
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
+        },
+      ],
+      requires: [],
+      params: {},
+    }
+    const orderProgramContract: SemanticAtomContract = {
+      id: 'action-maintain-limit-ladder',
+      kind: 'action',
+      capabilities: [
+        {
+          domain: 'order_program',
+          verb: 'maintain',
+          object: 'limit_ladder',
+          shape: { recycleOnFill: true, cancelOnStop: true },
+        },
+      ],
+      requires: [
+        { domain: 'price', verb: 'define', object: 'level_set' },
+        { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+      ],
+      params: {},
+    }
+    const budgetContract: SemanticAtomContract = {
+      id: 'position-per-order-budget',
+      kind: 'position',
+      capabilities: [
+        {
+          domain: 'capital',
+          verb: 'allocate',
+          object: 'per_order_budget',
+          shape: { value: 20, asset: 'USDT' },
+        },
+        {
+          domain: 'exposure',
+          verb: 'set',
+          object: 'position_mode',
+          shape: { mode: 'neutral' },
+        },
+      ],
+      requires: [],
+      params: {},
+    }
+
+    return {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'grid-range',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'both',
+          params: {},
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [levelSetContract],
+        },
+      ],
+      actions: [
+        {
+          id: 'maintain-grid',
+          key: 'maintain_grid',
+          status: 'locked',
+          source: 'user_explicit',
+          contracts: [orderProgramContract],
+        },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 20,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        contracts: [budgetContract],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTC-USDT-SWAP', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '15m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+  }
+
   function compile(state: SemanticState) {
     const builder = new CanonicalSpecBuilderService()
     const canonicalSpec = builder.buildFromNormalizedIntent(
@@ -283,6 +381,24 @@ describe('SemanticAtomInvariantService', () => {
     })
     const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
     return { canonicalSpec, ir: compiled.ir, ast }
+  }
+
+  function replaceOrderProgramWithOpenLong(ir: CanonicalStrategyIrV1): CanonicalStrategyIrV1 {
+    const activeWhen = ir.orderPrograms[0]?.activeWhen ?? ir.signalCatalog.predicates[0]?.id ?? 'always'
+    return {
+      ...ir,
+      orderPrograms: [],
+      ruleBlocks: [
+        ...ir.ruleBlocks,
+        {
+          id: 'contract_order_program_downgraded_to_open_long',
+          phase: 'entry',
+          when: activeWhen,
+          priority: 100,
+          actions: [{ kind: 'OPEN_LONG', quantity: ir.portfolio.sizing }],
+        },
+      ],
+    }
   }
 
   function driftCloseOpenExpressionAst(ast: StrategyAstV1): StrategyAstV1 {
@@ -667,6 +783,64 @@ describe('SemanticAtomInvariantService', () => {
         level: 'critical',
       }),
     ]))
+  })
+
+  it('passes when contract order program semantics survive canonicalSpec, IR, and AST', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms : []).toHaveLength(1)
+    expect(ir.orderPrograms).toHaveLength(1)
+    expect(ast.orderPrograms).toHaveLength(1)
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when contract order program AST loses orderPrograms', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: { ...ast, orderPrograms: [] },
+    })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when contract order program IR is downgraded to ordinary OPEN_LONG', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const { canonicalSpec, ir } = compileFromSemanticState(state)
+    const driftedIr = replaceOrderProgramWithOpenLong(ir)
+    const driftedAst = new CanonicalStrategyAstCompilerService().compile(driftedIr)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir: driftedIr, ast: driftedAst })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+    expect(checks.some(check =>
+      check.status === 'failed' && check.key === 'semantic_contract.order_program',
+    )).toBe(true)
   })
 
   it('detects generic expression drift', () => {

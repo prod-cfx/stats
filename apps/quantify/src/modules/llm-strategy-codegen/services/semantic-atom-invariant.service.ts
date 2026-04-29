@@ -1,9 +1,10 @@
 import type { ExprNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
-import type { CanonicalConditionAtom, CanonicalConditionNode, CanonicalExpressionCondition, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
-import type { SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { CanonicalStrategyIrV1, OrderProgram, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
+import type { CanonicalConditionAtom, CanonicalConditionNode, CanonicalExpressionCondition, CanonicalOrderProgramIntent, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { SemanticAtomContract, SemanticCapability, SemanticCapabilityShape, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type { StrategyConsistencyCheck } from '../types/strategy-consistency-report'
 import { Injectable } from '@nestjs/common'
+import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 type PriceChangeDirection = 'up' | 'down'
@@ -65,8 +66,41 @@ interface PositionSizingSnapshot {
   asset?: string
 }
 
+interface CapabilityCandidateResolution {
+  status: 'ok' | 'conflict'
+  capability?: SemanticCapability | null
+}
+
+interface ExpectedOrderProgramContract {
+  id: string
+  kind: 'contract_order_program'
+  mode: CanonicalOrderProgramIntent['mode']
+  lower: number
+  upper: number
+  gridCount?: number
+  spacingPct?: number
+  spacingMode: CanonicalOrderProgramIntent['levelSet']['spacingMode']
+  budgetMode: CanonicalOrderProgramIntent['budget']['mode']
+  budgetValue: number
+  budgetAsset: string
+  orderType: 'limit'
+  timeInForce: 'gtc'
+  recycleOnFill: boolean
+  cancelOnStop: boolean
+  irId: string
+  activeWhen: string
+  side: OrderProgram['side']
+  sidePolicy: OrderProgram['sidePolicy']
+  quantity: PositionSizingSnapshot
+  maxWorkingOrders: number
+}
+
 @Injectable()
 export class SemanticAtomInvariantService {
+  constructor(
+    private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
+  ) {}
+
   validate(input: {
     semanticState: SemanticState
     canonicalSpec: CanonicalStrategySpec
@@ -76,8 +110,344 @@ export class SemanticAtomInvariantService {
     return [
       ...this.validatePricePercentChange(input),
       ...this.validateGenericExpressions(input),
+      ...this.validateOrderProgramContract(input),
       ...this.validatePositionSizingContract(input),
     ]
+  }
+
+  private validateOrderProgramContract(input: {
+    semanticState: SemanticState
+    canonicalSpec: CanonicalStrategySpec
+    ir: CanonicalStrategyIrV1
+    ast: StrategyAstV1
+  }): StrategyConsistencyCheck[] {
+    return this.expectedOrderProgramContracts(input.semanticState).map((expected) => {
+      const canonicalCandidates = input.canonicalSpec.version === 2
+        ? input.canonicalSpec.orderPrograms ?? []
+        : []
+      const irFallbackActions = this.findIrOrderProgramFallbackActions(input.ir, expected)
+      const astFallbackActions = this.findAstOrderProgramFallbackActions(input.ast, expected)
+      const canonical = {
+        passed: canonicalCandidates.some(candidate => this.matchesCanonicalOrderProgram(candidate, expected)),
+        expected,
+        candidates: canonicalCandidates,
+      }
+      const ir = {
+        passed: input.ir.orderPrograms.some(candidate => this.matchesIrOrderProgram(candidate, expected)),
+        expected,
+        candidates: input.ir.orderPrograms,
+        fallbackActions: irFallbackActions,
+      }
+      const ast = {
+        passed: input.ast.orderPrograms.some(candidate => this.matchesIrOrderProgram(candidate.payload, expected)),
+        expected,
+        candidates: input.ast.orderPrograms.map(candidate => candidate.payload),
+        fallbackActions: astFallbackActions,
+      }
+      const passed = canonical.passed
+        && ir.passed
+        && ast.passed
+        && irFallbackActions.length === 0
+        && astFallbackActions.length === 0
+
+      return {
+        key: 'semantic_contract.order_program',
+        level: 'critical',
+        status: passed ? 'passed' : 'failed',
+        expected,
+        actual: { canonical, ir, ast },
+        message: passed
+          ? 'contract order program matches canonicalSpec, IR, and AST without signal-action downgrade.'
+          : 'contract order program drift: expected SemanticState contract order program to survive canonicalSpec, IR, and AST without ordinary signal-action downgrade.',
+      }
+    })
+  }
+
+  private expectedOrderProgramContracts(semanticState: SemanticState): ExpectedOrderProgramContract[] {
+    const contracts = this.collectContracts(semanticState)
+    const resolution = this.contracts.resolve(contracts)
+    const expected = resolution.canCompileOrderProgram
+      ? this.toExpectedOrderProgramContract(resolution.capabilities, semanticState)
+      : null
+
+    return expected ? [expected] : []
+  }
+
+  private collectContracts(state: SemanticState): SemanticAtomContract[] {
+    return [
+      ...state.triggers.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...state.actions.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...state.risk.filter(atom => atom.status === 'locked').flatMap(atom => atom.contracts ?? []),
+      ...(state.position?.status === 'locked' ? state.position.contracts ?? [] : []),
+    ]
+  }
+
+  private toExpectedOrderProgramContract(
+    capabilities: readonly SemanticCapability[],
+    state: SemanticState,
+  ): ExpectedOrderProgramContract | null {
+    const levelSet = this.resolveUniqueCapability(
+      capabilities,
+      'price',
+      'define',
+      ['level_set'],
+      capability => this.projectLevelSetCapabilityKey(capability),
+    )
+    const orderProgram = this.resolveUniqueCapability(
+      capabilities,
+      'order_program',
+      'maintain',
+      ['limit_ladder'],
+      capability => this.projectLimitLadderCapabilityKey(capability),
+    )
+    const budget = this.resolveUniqueCapability(
+      capabilities,
+      'capital',
+      'allocate',
+      ['per_order_budget', 'total_budget'],
+      capability => this.projectBudgetCapabilityKey(capability),
+    )
+    const exposure = this.resolveUniqueCapability(
+      capabilities,
+      'exposure',
+      'set',
+      ['position_mode'],
+      capability => this.projectExposureCapabilityKey(capability),
+    )
+
+    if (
+      levelSet.status === 'conflict'
+      || orderProgram.status === 'conflict'
+      || budget.status === 'conflict'
+      || exposure.status === 'conflict'
+      || !levelSet.capability
+      || !orderProgram.capability
+      || !budget.capability
+    ) {
+      return null
+    }
+
+    const lower = this.readShapeNumber(levelSet.capability.shape, 'lower')
+    const upper = this.readShapeNumber(levelSet.capability.shape, 'upper')
+    const budgetValue = this.readShapeNumber(budget.capability.shape, 'value')
+    const budgetAsset = this.readShapeString(budget.capability.shape, 'asset')
+    if (
+      lower === null
+      || upper === null
+      || upper <= lower
+      || budgetValue === null
+      || budgetValue <= 0
+      || !budgetAsset
+    ) {
+      return null
+    }
+
+    const id = `contract-order-program-${orderProgram.capability.object}`
+    const gridCount = this.readShapeNumber(levelSet.capability.shape, 'gridCount') ?? undefined
+    const spacingPct = this.readShapeNumber(levelSet.capability.shape, 'spacingPct') ?? undefined
+    const budgetMode = budget.capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote'
+    const maxWorkingOrders = Math.max(2, Math.floor(gridCount ?? 2))
+    const mode = this.resolveContractOrderProgramMode(exposure.capability ?? null, state)
+    const budgetPerOrder = budgetMode === 'total_quote'
+      ? Number((budgetValue / maxWorkingOrders).toFixed(8))
+      : budgetValue
+
+    return {
+      id,
+      kind: 'contract_order_program',
+      mode,
+      lower,
+      upper,
+      ...(gridCount !== undefined ? { gridCount } : {}),
+      ...(spacingPct !== undefined ? { spacingPct } : {}),
+      spacingMode: this.readShapeString(levelSet.capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+      budgetMode,
+      budgetValue,
+      budgetAsset,
+      orderType: 'limit',
+      timeInForce: 'gtc',
+      recycleOnFill: this.readShapeBoolean(orderProgram.capability.shape, 'recycleOnFill') ?? true,
+      cancelOnStop: this.readShapeBoolean(orderProgram.capability.shape, 'cancelOnStop') ?? true,
+      irId: id.replace(/\W+/g, '_'),
+      activeWhen: `${id.replace(/\W+/g, '_')}_active_range`,
+      side: mode === 'perp_short' ? 'sell' : 'buy',
+      sidePolicy: mode === 'spot' ? 'spot_grid' : mode,
+      quantity: {
+        mode: 'fixed_quote',
+        value: budgetPerOrder,
+        asset: budgetAsset,
+      },
+      maxWorkingOrders,
+    }
+  }
+
+  private matchesCanonicalOrderProgram(
+    candidate: CanonicalOrderProgramIntent,
+    expected: ExpectedOrderProgramContract,
+  ): boolean {
+    return candidate.id === expected.id
+      && candidate.kind === expected.kind
+      && candidate.mode === expected.mode
+      && candidate.levelSet.lower === expected.lower
+      && candidate.levelSet.upper === expected.upper
+      && candidate.levelSet.gridCount === expected.gridCount
+      && candidate.levelSet.spacingPct === expected.spacingPct
+      && candidate.levelSet.spacingMode === expected.spacingMode
+      && candidate.budget.mode === expected.budgetMode
+      && candidate.budget.value === expected.budgetValue
+      && candidate.budget.asset === expected.budgetAsset
+      && candidate.orderType === expected.orderType
+      && candidate.timeInForce === expected.timeInForce
+      && candidate.recycleOnFill === expected.recycleOnFill
+      && candidate.cancelOnStop === expected.cancelOnStop
+  }
+
+  private matchesIrOrderProgram(
+    candidate: OrderProgram,
+    expected: ExpectedOrderProgramContract,
+  ): boolean {
+    return candidate.id === expected.irId
+      && candidate.kind === 'LIMIT_LADDER'
+      && candidate.activeWhen === expected.activeWhen
+      && candidate.side === expected.side
+      && candidate.sidePolicy === expected.sidePolicy
+      && candidate.priceSource === 'level_set'
+      && candidate.orderType === expected.orderType
+      && candidate.timeInForce === expected.timeInForce
+      && candidate.recycleOnFill === expected.recycleOnFill
+      && candidate.cancelScope === 'program_orders'
+      && candidate.maxWorkingOrders === expected.maxWorkingOrders
+      && candidate.group === expected.id
+      && this.matchesPositionSizingSnapshot(candidate.quantity, expected.quantity)
+  }
+
+  private findIrOrderProgramFallbackActions(
+    ir: CanonicalStrategyIrV1,
+    expected: ExpectedOrderProgramContract,
+  ): Array<{ ruleId: string; action: PositionAction }> {
+    return ir.ruleBlocks.flatMap((rule) => {
+      if (rule.when !== expected.activeWhen) {
+        return []
+      }
+
+      return rule.actions.flatMap((action) => {
+        if (!this.isOrdinaryPositionAction(action.kind)) {
+          return []
+        }
+
+        return [{ ruleId: rule.id, action: action.kind }]
+      })
+    })
+  }
+
+  private findAstOrderProgramFallbackActions(
+    ast: StrategyAstV1,
+    expected: ExpectedOrderProgramContract,
+  ): Array<{ programId: string; action: PositionAction }> {
+    const exprById = new Map(ast.exprPool.map(expr => [expr.id, expr]))
+    return ast.decisionPrograms.flatMap((program) => {
+      const sourceRef = exprById.get(program.when)?.sourceRef
+      if (sourceRef !== expected.activeWhen) {
+        return []
+      }
+
+      return program.actions.flatMap((action) => {
+        if (!this.isOrdinaryPositionAction(action.kind)) {
+          return []
+        }
+
+        return [{ programId: program.id, action: action.kind }]
+      })
+    })
+  }
+
+  private isOrdinaryPositionAction(action: string): action is PositionAction {
+    return action === 'OPEN_LONG'
+      || action === 'OPEN_SHORT'
+      || action === 'CLOSE_LONG'
+      || action === 'CLOSE_SHORT'
+  }
+
+  private resolveUniqueCapability(
+    capabilities: readonly SemanticCapability[],
+    domain: SemanticCapability['domain'],
+    verb: string,
+    objects: readonly string[],
+    projectionKey: (capability: SemanticCapability) => string,
+  ): CapabilityCandidateResolution {
+    const candidates = capabilities.filter(capability =>
+      capability.domain === domain
+      && capability.verb === verb
+      && objects.includes(capability.object),
+    )
+    if (candidates.length === 0) {
+      return { status: 'ok', capability: null }
+    }
+
+    const first = candidates[0]
+    const firstKey = projectionKey(first)
+    const hasConflict = candidates.some(candidate => projectionKey(candidate) !== firstKey)
+    if (hasConflict) {
+      return { status: 'conflict' }
+    }
+
+    return { status: 'ok', capability: first }
+  }
+
+  private projectLevelSetCapabilityKey(capability: SemanticCapability): string {
+    return this.stableProjectionKey({
+      lower: this.readShapeNumber(capability.shape, 'lower'),
+      upper: this.readShapeNumber(capability.shape, 'upper'),
+      gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+      spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
+      spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+    })
+  }
+
+  private projectLimitLadderCapabilityKey(capability: SemanticCapability): string {
+    return this.stableProjectionKey({
+      orderType: 'limit',
+      timeInForce: 'gtc',
+      recycleOnFill: this.readShapeBoolean(capability.shape, 'recycleOnFill') ?? true,
+      cancelOnStop: this.readShapeBoolean(capability.shape, 'cancelOnStop') ?? true,
+    })
+  }
+
+  private projectBudgetCapabilityKey(capability: SemanticCapability): string {
+    return this.stableProjectionKey({
+      object: capability.object,
+      value: this.readShapeNumber(capability.shape, 'value'),
+      asset: this.readShapeString(capability.shape, 'asset'),
+    })
+  }
+
+  private projectExposureCapabilityKey(capability: SemanticCapability): string {
+    return this.stableProjectionKey({
+      mode: this.readShapeString(capability.shape, 'mode'),
+    })
+  }
+
+  private stableProjectionKey(value: Record<string, unknown>): string {
+    return JSON.stringify(this.stableRecord(value))
+  }
+
+  private resolveContractOrderProgramMode(
+    exposure: SemanticCapability | null,
+    state: SemanticState,
+  ): CanonicalOrderProgramIntent['mode'] {
+    const marketType = this.readLockedContextSlotString(state.contextSlots.marketType)
+    if (marketType !== 'perp') {
+      return 'spot'
+    }
+
+    const exposureMode = exposure ? this.readShapeString(exposure.shape, 'mode') : null
+    if (exposureMode === 'long' || state.position?.positionMode === 'long_only') {
+      return 'perp_long'
+    }
+    if (exposureMode === 'short' || state.position?.positionMode === 'short_only') {
+      return 'perp_short'
+    }
+    return 'perp_neutral'
   }
 
   private validatePositionSizingContract(input: {
@@ -1075,6 +1445,26 @@ export class SemanticAtomInvariantService {
 
   private readString(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readShapeNumber(shape: SemanticCapabilityShape, key: string): number | null {
+    const value = shape[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readShapeString(shape: SemanticCapabilityShape, key: string): string | null {
+    const value = shape[key]
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readShapeBoolean(shape: SemanticCapabilityShape, key: string): boolean | null {
+    const value = shape[key]
+    return typeof value === 'boolean' ? value : null
+  }
+
+  private readLockedContextSlotString(slot: SemanticState['contextSlots']['marketType']): string | null {
+    if (!slot || slot.status !== 'locked') return null
+    return this.readString(slot.value)
   }
 
   private readLockedContextTimeframe(semanticState: SemanticState): string | null {
