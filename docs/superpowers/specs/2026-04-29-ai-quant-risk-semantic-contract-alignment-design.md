@@ -180,6 +180,40 @@ The existing `key` can stay for compatibility and coarse capability routing, but
 it must not be the only contract. The structured params decide clarification,
 defaults, projection, and display.
 
+This upgrade has two layers:
+
+1. Percent risk contracts:
+   `risk.stop_loss_pct` and `risk.take_profit_pct` become structured percent
+   risk contracts with explicit `direction`, `basis`, `basisSource`, `effect`,
+   and `scope`. This fixes the current basis clarification regression.
+
+2. Risk expression contracts:
+   advanced risk rules can be represented as structured risk contracts that
+   embed the existing `SemanticExpression` shape. The first implementation does
+   not need to compile every advanced risk rule, but it must be able to
+   recognize and preserve a structured risk expression instead of degrading it
+   into unrelated percent-basis clarification.
+
+Example:
+
+```ts
+interface RiskConditionExpressionParams {
+  condition: SemanticExpression
+  effect: {
+    type: 'close_position' | 'reduce_position' | 'notify_only' | 'pause_strategy'
+    reducePct?: number
+  }
+  scope: 'current_position' | 'long' | 'short' | 'both' | 'strategy' | 'account'
+  capabilityStatus: 'supported' | 'recognized_unsupported'
+  unsupportedReason?: string
+}
+```
+
+The minimum complete upgrade is therefore not only adding default `basis`. It
+must also add a contract/validation boundary where risk params are structured,
+validated, and either compiled or explicitly marked as recognized but
+unsupported.
+
 ## Default Semantics
 
 Plain stop-loss and take-profit expressions have safe product defaults.
@@ -396,6 +430,11 @@ Concrete touchpoints:
    a plain percent stop loss, this layer should drop that slot and lock the
    node when all execution-relevant fields are present.
 
+   Planner-ingested risk expressions must also be validated as structured
+   `risk.condition_expression` params when present. If the expression is valid
+   but not yet compilable, the node should remain recognized with a capability
+   blocker instead of being converted into a basis question.
+
 3. Semantic state merge:
    `SemanticStateMergeService.mergeRisk()` must normalize the merged result.
    This prevents stale persisted `openSlots` from overriding the corrected
@@ -442,6 +481,10 @@ Concrete touchpoints:
    current downstream consumers. Projection must be one-way compatibility
    output; it must not create new clarification requirements.
 
+   `StrategyIntentNormalizerService` and other legacy-to-semantic adapters must
+   also project legacy percent risk into the same structured percent contract,
+   not a thinner key-only shape.
+
 9. IR, script profile, consistency, and backtest consumers:
    `strategy-ir-canonical-adapter`, `canonical-spec-v2-ir-compiler`,
    `script-profile-extractor`, `strategy-consistency`, and backtest snapshot
@@ -459,6 +502,10 @@ Concrete touchpoints:
     resolved risk basis as an inferred/defaulted detail, but should not render
     it as a missing user action.
 
+    For recognized-but-unsupported risk expressions, display should show the
+    risk semantic as recognized and blocked by capability, not as an incomplete
+    user answer.
+
 12. Regression tests:
     The test update must span unit and conversation-level flows:
     semantic extraction, planner patch builder, merge, reducer, projection,
@@ -467,6 +514,11 @@ Concrete touchpoints:
     conversation regression for the exact loop:
     `止损 5%` -> no basis question -> user never has to answer
     `entry_avg_price`.
+
+    It must also include at least one advanced risk expression regression:
+    natural language risk input -> structured `risk.condition_expression` or
+    other structured risk params -> recognized unsupported when compilation is
+    not available -> no unrelated basis clarification.
 
 These touchpoints should be treated as one change boundary. If any layer still
 treats default basis as a required user-facing slot, the system can regress to

@@ -4,7 +4,7 @@
 
 **Goal:** Make stop-loss/take-profit basis a normalized internal risk semantic default instead of a user-facing clarification slot, across the whole AI Quant semantic data flow.
 
-**Architecture:** Add one shared risk normalization boundary and route every `SemanticRiskState` creation/merge/reduction path through it. Keep the current `triggers / actions / risk / position / contextSlots` model; keep legacy `riskRules.*Basis` projection as downstream compatibility output only.
+**Architecture:** Add one shared risk normalization boundary and route every `SemanticRiskState` creation/merge/reduction path through it. Upgrade risk from thin keyed params to structured semantic contracts: percent risk contracts for stop-loss/take-profit and expression risk contracts for recognized advanced risk rules. Keep the current `triggers / actions / risk / position / contextSlots` model; keep legacy `riskRules.*Basis` projection as downstream compatibility output only.
 
 **Tech Stack:** TypeScript, NestJS service layer, Jest/Vitest-style specs through `dx test unit quantify`, existing AI Quant semantic-state contracts.
 
@@ -15,6 +15,8 @@
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-normalization.ts`
   - Add the single source-of-truth risk normalization helpers.
   - Keep existing normalized-intent projection exports intact.
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/types/semantic-state.ts`
+  - Add explicit risk param contract aliases while preserving runtime compatibility with existing `Record<string, unknown>` consumers.
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-extractor.service.ts`
   - Emit richer normalized risk params at extraction time.
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-state-builder.service.ts`
@@ -30,7 +32,11 @@
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-state-projection.service.ts`
   - Keep basis defaults visible as metadata, not blocking confirmation.
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts`
-  - Validate normalized basis/source fields without making them user-required.
+  - Validate normalized percent risk params and structured `risk.condition_expression` params without making defaults user-required.
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-normalizer.service.ts`
+  - Project legacy risk rules into the same structured percent risk contract.
+- Modify: `apps/front/src/components/ai-quant/display-logic-graph.ts`
+  - Render recognized unsupported risk expressions as capability-blocked risk semantics, not missing user answers.
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-normalization.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-state-builder.service.spec.ts`
@@ -40,6 +46,161 @@
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-rules.service.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts`
+- Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-intent-normalizer.service.spec.ts`
+- Test: `apps/front/src/components/ai-quant/display-logic-graph.test.ts`
+
+## Task 0: Risk Contract Type Boundary
+
+**Files:**
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/types/semantic-state.ts`
+- Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts`
+
+- [ ] **Step 1: Write failing type-oriented contract tests**
+
+Add these tests to `strategy-semantic-contracts.spec.ts`:
+
+```ts
+it('accepts structured risk condition expression params as recognized unsupported', () => {
+  expect(validateSemanticRiskContract({
+    key: 'risk.condition_expression',
+    params: {
+      condition: {
+        kind: 'predicate',
+        left: { kind: 'position', field: 'pnl_pct' },
+        op: 'LTE',
+        right: { kind: 'constant', value: -5 },
+      },
+      effect: { type: 'close_position' },
+      scope: 'current_position',
+      capabilityStatus: 'recognized_unsupported',
+      unsupportedReason: 'risk_expression_compiler_not_available',
+    },
+  })).toEqual({ ok: true })
+})
+
+it('rejects risk condition expression params without a valid expression', () => {
+  expect(validateSemanticRiskContract({
+    key: 'risk.condition_expression',
+    params: {
+      condition: null,
+      effect: { type: 'close_position' },
+      scope: 'current_position',
+      capabilityStatus: 'recognized_unsupported',
+    },
+  })).toEqual(expect.objectContaining({ ok: false }))
+})
+```
+
+- [ ] **Step 2: Run the contract test and verify it fails**
+
+Run:
+
+```bash
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
+```
+
+Expected: FAIL because `risk.condition_expression` is not a supported risk contract yet.
+
+- [ ] **Step 3: Add explicit risk param aliases**
+
+In `semantic-state.ts`, add these exported types near `SemanticRiskState`:
+
+```ts
+export type SemanticRiskBasis = 'entry_avg_price' | 'position_pnl'
+export type SemanticRiskBasisSource = 'user_explicit' | 'system_default' | 'derived'
+export type SemanticRiskEffectType = 'close_position' | 'reduce_position' | 'notify_only' | 'pause_strategy'
+export type SemanticRiskScope = 'current_position' | 'long' | 'short' | 'both' | 'strategy' | 'account'
+
+export interface SemanticPercentRiskParams extends Record<string, unknown> {
+  valuePct: number
+  direction: 'loss' | 'profit'
+  basis: SemanticRiskBasis
+  basisSource: SemanticRiskBasisSource
+  effect: Exclude<SemanticRiskEffectType, 'pause_strategy'>
+  scope: Exclude<SemanticRiskScope, 'strategy' | 'account'> | 'strategy' | 'account'
+  reducePct?: number
+}
+
+export interface SemanticRiskConditionExpressionParams extends Record<string, unknown> {
+  condition: SemanticExpression
+  effect: {
+    type: SemanticRiskEffectType
+    reducePct?: number
+  }
+  scope: SemanticRiskScope
+  capabilityStatus: 'supported' | 'recognized_unsupported'
+  unsupportedReason?: string
+}
+
+export type SemanticRiskParams =
+  | SemanticPercentRiskParams
+  | SemanticRiskConditionExpressionParams
+  | Record<string, unknown>
+```
+
+Keep `SemanticRiskState.params` as `Record<string, unknown>` in this implementation pass if changing it would ripple too widely. The exported aliases define the contract boundary for validators and normalizers without forcing a broad type migration in the same change.
+
+- [ ] **Step 4: Extend risk contract support**
+
+In `strategy-semantic-contracts.ts`, add `risk.condition_expression` to the risk contract registry and supported key set:
+
+```ts
+'risk.condition_expression': {
+  semanticKey: 'risk.condition_expression',
+  editableSlots: [],
+},
+```
+
+Update `SUPPORTED_RISK_KEYS`:
+
+```ts
+const SUPPORTED_RISK_KEYS = new Set<string>([
+  'risk.stop_loss_pct',
+  'risk.take_profit_pct',
+  'risk.condition_expression',
+])
+```
+
+In `validateSemanticRiskContract`, branch before percent `valuePct` validation:
+
+```ts
+if (risk.key === 'risk.condition_expression') {
+  const expressionResult = validateSemanticExpressionContract(risk.params.condition)
+  if (!expressionResult.ok) {
+    return invalid('invalid_risk_condition_expression')
+  }
+  if (!isRecord(risk.params.effect) || typeof risk.params.effect.type !== 'string') {
+    return invalid('invalid_risk_effect')
+  }
+  if (typeof risk.params.scope !== 'string') {
+    return invalid('invalid_risk_scope')
+  }
+  if (
+    risk.params.capabilityStatus !== 'supported'
+    && risk.params.capabilityStatus !== 'recognized_unsupported'
+  ) {
+    return invalid('invalid_risk_capability_status')
+  }
+  return valid()
+}
+```
+
+- [ ] **Step 5: Run the contract test and verify it passes**
+
+Run:
+
+```bash
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Commit Task 0**
+
+```bash
+git add apps/quantify/src/modules/llm-strategy-codegen/types/semantic-state.ts apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
+git commit -m "feat: define structured risk semantic contracts" -m "Refs: #945"
+```
 
 ## Task 1: Shared Risk Normalization Contract
 
@@ -62,12 +223,13 @@ describe('normalizeRiskSemantics', () => {
       key: 'risk.stop_loss_pct',
       params: { valuePct: 5 },
       status: 'open',
-      source: 'planner',
+      source: 'derived',
       openSlots: [{
         slotKey: 'risk.stopLossBasis',
         fieldPath: 'risk[0].params.stopLossBasis',
         questionHint: '请确认止损 5% 的计算基准',
-        priority: 1,
+        status: 'open',
+        priority: 'risk',
         affectsExecution: true,
       }],
     }]
@@ -112,7 +274,7 @@ describe('normalizeRiskSemantics', () => {
       key: 'risk.stop_loss_pct',
       params: {},
       status: 'open',
-      source: 'planner',
+      source: 'derived',
       openSlots: [],
     }]
 
@@ -123,6 +285,36 @@ describe('normalizeRiskSemantics', () => {
         basis: 'entry_avg_price',
         basisSource: 'system_default',
       }),
+    }))
+  })
+
+  it('preserves valid risk condition expressions as recognized unsupported', () => {
+    const risks: SemanticRiskState[] = [{
+      id: 'risk-expression',
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+        unsupportedReason: 'risk_expression_compiler_not_available',
+      },
+      status: 'locked',
+      source: 'derived',
+      openSlots: [],
+    }]
+
+    expect(normalizeRiskSemantics(risks)[0]).toEqual(expect.objectContaining({
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        capabilityStatus: 'recognized_unsupported',
+      }),
+      openSlots: [],
     }))
   })
 })
@@ -167,6 +359,17 @@ export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): Seman
   const isTakeProfit = risk.key === 'risk.take_profit_pct'
 
   if (!isStopLoss && !isTakeProfit) {
+    if (risk.key === 'risk.condition_expression') {
+      return {
+        ...risk,
+        params: {
+          capabilityStatus: 'recognized_unsupported',
+          ...params,
+        },
+        openSlots: risk.openSlots.filter(slot => !isRiskBasisOpenSlot(slot.slotKey, slot.fieldPath)),
+      }
+    }
+
     return {
       ...risk,
       params,
@@ -276,6 +479,25 @@ it('extracts user-explicit position pnl basis metadata', () => {
     }),
   }))
 })
+
+it('extracts advanced pnl risk as recognized unsupported condition expression', () => {
+  const result = service.extract('如果持仓亏损超过 5%，暂停策略并平仓')
+
+  expect(result.risk).toContainEqual(expect.objectContaining({
+    key: 'risk.condition_expression',
+    params: expect.objectContaining({
+      condition: {
+        kind: 'predicate',
+        left: { kind: 'position', field: 'pnl_pct' },
+        op: 'LTE',
+        right: { kind: 'constant', value: -5, unit: 'percent' },
+      },
+      effect: { type: 'pause_strategy' },
+      scope: 'strategy',
+      capabilityStatus: 'recognized_unsupported',
+    }),
+  }))
+})
 ```
 
 Add this builder test:
@@ -290,7 +512,8 @@ it('normalizes planner basis open slot before resolving risk status', () => {
         slotKey: 'risk.stopLossBasis',
         fieldPath: 'risk[0].params.stopLossBasis',
         questionHint: '请确认止损基准',
-        priority: 1,
+        status: 'open',
+        priority: 'risk',
         affectsExecution: true,
       }],
     }],
@@ -301,6 +524,44 @@ it('normalizes planner basis open slot before resolving risk status', () => {
     params: expect.objectContaining({
       basis: 'entry_avg_price',
       basisSource: 'system_default',
+    }),
+    openSlots: [],
+  }))
+})
+```
+
+Add this planner expression ingestion test:
+
+```ts
+it('preserves planner risk expression as structured recognized unsupported risk', () => {
+  const state = service.build({
+    risk: [{
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+      },
+      openSlots: [{
+        slotKey: 'risk.stopLossBasis',
+        fieldPath: 'risk[0].params.basis',
+        questionHint: '请确认计算基准',
+        status: 'open',
+        priority: 'risk',
+        affectsExecution: true,
+      }],
+    }],
+  })
+
+  expect(state.risk[0]).toEqual(expect.objectContaining({
+    key: 'risk.condition_expression',
+    params: expect.objectContaining({
+      capabilityStatus: 'recognized_unsupported',
     }),
     openSlots: [],
   }))
@@ -350,6 +611,32 @@ If repeated `this.resolveRiskBasis(text)` reads poorly, use a local const before
 
 ```ts
 const basis = this.resolveRiskBasis(text)
+```
+
+Still in `extractRisk()`, before returning `risk`, add a deterministic extractor for advanced pnl strategy halt risk:
+
+```ts
+const strategyHaltLoss = this.extractPercent(text, [
+  /持仓亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+  /亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+])
+if (strategyHaltLoss !== null) {
+  risk.push({
+    key: 'risk.condition_expression',
+    params: {
+      condition: {
+        kind: 'predicate',
+        left: { kind: 'position', field: 'pnl_pct' },
+        op: 'LTE',
+        right: { kind: 'constant', value: -strategyHaltLoss, unit: 'percent' },
+      },
+      effect: { type: /平仓|全平/u.test(text) ? 'pause_strategy' : 'notify_only' },
+      scope: 'strategy',
+      capabilityStatus: 'recognized_unsupported',
+      unsupportedReason: 'risk_expression_compiler_not_available',
+    },
+  })
+}
 ```
 
 - [ ] **Step 4: Normalize builder risk states**
@@ -419,12 +706,13 @@ it('drops stale persisted risk basis slots after merge', () => {
         key: 'risk.stop_loss_pct',
         params: { valuePct: 5 },
         status: 'open',
-        source: 'planner',
+        source: 'derived',
         openSlots: [{
           slotKey: 'risk.stopLossBasis',
           fieldPath: 'risk[0].params.stopLossBasis',
           questionHint: '请确认止损基准',
-          priority: 1,
+          status: 'open',
+        priority: 'risk',
           affectsExecution: true,
         }],
       }],
@@ -470,12 +758,13 @@ it('normalizes protective exit answer into locked stop loss without basis slot',
       key: 'risk.protective_exit',
       params: {},
       status: 'open',
-      source: 'planner',
+      source: 'derived',
       openSlots: [{
         slotKey: 'risk.protective_exit',
         fieldPath: 'risk[0].params.rule',
         questionHint: '请确认出场保护规则',
-        priority: 1,
+        status: 'open',
+        priority: 'risk',
         affectsExecution: true,
       }],
     }],
@@ -793,9 +1082,11 @@ git commit -m "fix: suppress risk basis clarification prompts" -m "Refs: #945"
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts`
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-builder.service.ts`
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts`
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-normalizer.service.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-builder.service.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts`
+- Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-intent-normalizer.service.spec.ts`
 
 - [ ] **Step 1: Write failing compatibility tests**
 
@@ -872,6 +1163,42 @@ it('carries normalized locked stop loss basis into publication metadata', () => 
 })
 ```
 
+Add legacy intent normalizer coverage:
+
+```ts
+it('normalizes legacy riskRules into structured percent risk params', () => {
+  const result = service.normalize({
+    riskRules: {
+      stopLossPct: 5,
+      stopLossBasis: 'entry_avg_price',
+      takeProfitPct: 10,
+      takeProfitBasis: 'position_pnl',
+    },
+  } as never)
+
+  expect(result.risk).toContainEqual(expect.objectContaining({
+    key: 'risk.stop_loss_pct',
+    params: expect.objectContaining({
+      valuePct: 5,
+      direction: 'loss',
+      basis: 'entry_avg_price',
+      basisSource: 'system_default',
+      effect: 'close_position',
+      scope: 'current_position',
+    }),
+  }))
+  expect(result.risk).toContainEqual(expect.objectContaining({
+    key: 'risk.take_profit_pct',
+    params: expect.objectContaining({
+      valuePct: 10,
+      direction: 'profit',
+      basis: 'position_pnl',
+      basisSource: 'user_explicit',
+    }),
+  }))
+})
+```
+
 - [ ] **Step 2: Run targeted tests and verify they fail if compatibility is incomplete**
 
 Run:
@@ -880,6 +1207,7 @@ Run:
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-builder.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-intent-normalizer.service.spec.ts
 ```
 
 Expected: PASS for paths already compatible, FAIL for any path that rejects normalized metadata.
@@ -941,7 +1269,26 @@ for (const risk of normalizeRiskSemantics(state.risk)) {
 }
 ```
 
-- [ ] **Step 6: Run targeted tests and verify they pass**
+- [ ] **Step 6: Normalize legacy intent risk output**
+
+In `strategy-intent-normalizer.service.ts`, for both stop-loss and take-profit risk objects, include the structured percent fields:
+
+```ts
+params: {
+  valuePct: riskRules.stopLossPct,
+  direction: 'loss',
+  basis: typeof riskRules.stopLossBasis === 'string' ? riskRules.stopLossBasis : 'entry_avg_price',
+  basisSource: typeof riskRules.stopLossBasis === 'string' && riskRules.stopLossBasis !== 'entry_avg_price'
+    ? 'user_explicit'
+    : 'system_default',
+  effect: 'close_position',
+  scope: 'current_position',
+},
+```
+
+Use `direction: 'profit'` and `riskRules.takeProfitBasis` for take-profit.
+
+- [ ] **Step 7: Run targeted tests and verify they pass**
 
 Run:
 
@@ -949,14 +1296,15 @@ Run:
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-builder.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-intent-normalizer.service.spec.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 5**
+- [ ] **Step 8: Commit Task 5**
 
 ```bash
-git add apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-builder.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-builder.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
+git add apps/quantify/src/modules/llm-strategy-codegen/services/strategy-semantic-contracts.ts apps/quantify/src/modules/llm-strategy-codegen/services/canonical-spec-builder.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts apps/quantify/src/modules/llm-strategy-codegen/services/strategy-intent-normalizer.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-builder.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-intent-normalizer.service.spec.ts
 git commit -m "fix: preserve normalized risk projection compatibility" -m "Refs: #945"
 ```
 
@@ -967,6 +1315,7 @@ git commit -m "fix: preserve normalized risk projection compatibility" -m "Refs:
   - `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts`
   - `apps/quantify/e2e/llm-strategy-codegen/llm-strategy-codegen.e2e-spec.ts`
   - `apps/front/src/components/ai-quant/display-logic-graph.test.ts`
+- Modify: `apps/front/src/components/ai-quant/display-logic-graph.ts`
 
 - [ ] **Step 1: Add one semantic-only regression if missing**
 
@@ -990,11 +1339,68 @@ it('keeps default stop loss basis out of semantic open slots', async () => {
 
 Use the existing runner/helper name in `semantic-only-strategy-regression.spec.ts`; keep the assertion shape unchanged.
 
-- [ ] **Step 2: Run the focused unit suite**
+- [ ] **Step 2: Add one advanced risk expression regression**
+
+Add a semantic-only or conversation regression for a risk expression that is recognized but not compiled:
+
+```ts
+it('recognizes advanced risk expression without asking an unrelated basis question', async () => {
+  const result = await runSemanticOnlyCase('如果连续 3 根 K 线都在布林带外，暂停策略并平仓')
+
+  expect(result.semanticState.risk).toContainEqual(expect.objectContaining({
+    key: 'risk.condition_expression',
+    params: expect.objectContaining({
+      capabilityStatus: 'recognized_unsupported',
+    }),
+  }))
+  expect(JSON.stringify(result.semanticState.risk)).not.toContain('stopLossBasis')
+  expect(JSON.stringify(result.semanticState.risk)).not.toContain('takeProfitBasis')
+})
+```
+
+Use the existing helper name in the file. This case depends on the deterministic extractor added in Task 2 for `如果持仓亏损超过 5%，暂停策略并平仓`.
+
+- [ ] **Step 3: Update frontend display coverage**
+
+In `display-logic-graph.test.ts`, add a risk expression node case:
+
+```ts
+it('renders recognized unsupported risk expression as risk semantic node', () => {
+  const graph = buildDisplayLogicGraph({
+    triggers: [],
+    actions: [],
+    risk: [{
+      id: 'risk-expression',
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+      },
+      status: 'locked',
+      source: 'derived',
+      openSlots: [],
+    }],
+    position: null,
+  } as never)
+
+  expect(JSON.stringify(graph)).toContain('risk.condition_expression')
+  expect(JSON.stringify(graph)).not.toContain('缺少计算基准')
+})
+```
+
+- [ ] **Step 4: Run the focused unit suite**
 
 Run:
 
 ```bash
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-normalization.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-state-builder.service.spec.ts
@@ -1003,14 +1409,15 @@ dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-rules.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts
-dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-semantic-contracts.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-builder.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-intent-normalizer.service.spec.ts
+dx test unit front apps/front/src/components/ai-quant/display-logic-graph.test.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 3: Run broader affected checks**
+- [ ] **Step 5: Run broader affected checks**
 
 Run:
 
@@ -1022,12 +1429,12 @@ dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen/llm-strategy-codegen
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit final regression adjustments**
+- [ ] **Step 6: Commit final regression adjustments**
 
 If Step 1 or stale expectations changed tests, commit them:
 
 ```bash
-git add apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts apps/quantify/e2e/llm-strategy-codegen/llm-strategy-codegen.e2e-spec.ts apps/front/src/components/ai-quant/display-logic-graph.test.ts
+git add apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts apps/quantify/e2e/llm-strategy-codegen/llm-strategy-codegen.e2e-spec.ts apps/front/src/components/ai-quant/display-logic-graph.ts apps/front/src/components/ai-quant/display-logic-graph.test.ts
 git commit -m "test: cover ai quant risk basis default flow" -m "Refs: #945"
 ```
 
@@ -1038,7 +1445,10 @@ If no files changed after the sweep, do not create an empty commit.
 - Spec coverage:
   - Four-atom architecture stays unchanged.
   - Risk normalization is a single source of truth.
+  - Risk has explicit structured contract aliases.
+  - Percent risk and risk expression contracts are both covered.
   - Seed, planner builder, merge, reducer, conversation, clarification, inferred confirmation, canonical projection, publication, and regression tests are covered.
+  - Legacy intent normalization, frontend display, and recognized-unsupported risk expression behavior are covered.
   - Legacy basis projection remains available.
   - `entry_avg_price` is not user-facing.
 - Placeholder scan:
