@@ -1751,6 +1751,45 @@ describe('ai-quant-page-conversation', () => {
     expect(restored.conversations[0]?.paramValues.positionPct).toBe(25)
   })
 
+  it('restores server snapshot quote sizing into params, param values, and display graph text', () => {
+    const restored = createConversationFromServerConversation({
+      id: 'server-conv-quote',
+      conversationTitle: 'quote sizing',
+      status: 'PUBLISHED',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+      activeCodegenSessionId: 'session-quote',
+      publishedSnapshotId: 'snapshot-quote',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+        positionAmount: 1000,
+        sizingAsset: 'USDT',
+      },
+      specDesc: {
+        canonicalDigest: 'sha256:quote-restore',
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        entryRules: ['启动时执行'],
+        rules: [],
+      },
+      conversationMessages: [],
+    } as any, (key: string) => key)
+
+    const displayTexts = restored.displayLogicGraph?.blocks.flatMap(block => block.items.map(item => item.text)) ?? []
+
+    expect(restored.params.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(restored.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(restored.paramValues.positionAmount).toBe(1000)
+    expect(restored.paramValues).not.toHaveProperty('positionPct')
+    expect(restored.logicGraph?.meta.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(displayTexts).toContain('仓位: 1000 USDT')
+    expect(displayTexts.join('\n')).not.toContain('1000%')
+  })
+
   it('does not require republish when only backtest range changes', () => {
     expect(requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: 'snapshot-1',

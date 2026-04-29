@@ -1666,6 +1666,7 @@ function buildRevisionGraphFromCodegenSpec(
       timeframe: conversation.params.baseTimeframe,
       baseTimeframe: conversation.params.baseTimeframe,
       positionPct: conversation.params.positionPct,
+      sizing: conversation.params.sizing,
     },
   }))
 
@@ -1887,6 +1888,7 @@ export function createConversationFromServerConversation(
           symbol: seed.params.symbol,
           baseTimeframe: seed.params.baseTimeframe,
           positionPct: seed.params.positionPct,
+          sizing: seed.params.sizing,
         },
         currentValues: seed.paramValues,
         capabilities: null,
@@ -1926,10 +1928,11 @@ export function createConversationFromServerConversation(
       ? response.semanticGraph.version
       : 1
   const graphFallbackMeta = {
-    exchange: syncResult?.normalized.exchange ?? nextParams.exchange,
-    symbol: syncResult?.normalized.symbol ?? nextParams.symbol,
-    baseTimeframe: syncResult?.normalized.baseTimeframe ?? nextParams.baseTimeframe,
-    positionPct: syncResult?.normalized.positionPct ?? nextParams.positionPct,
+    exchange: nextParams.exchange,
+    symbol: nextParams.symbol,
+    baseTimeframe: nextParams.baseTimeframe,
+    positionPct: nextParams.positionPct,
+    sizing: nextParams.sizing,
     executionTags: syncResult?.executionTags ?? [],
   }
   const logicGraph = response.specDesc

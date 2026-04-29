@@ -397,16 +397,19 @@ export function applyCodegenResponseToConversationState(args: {
   const shouldUpdateGraph =
     (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
+  const syncFallback = {
+    exchange: targetParams.exchange,
+    symbol: targetParams.symbol,
+    baseTimeframe: targetParams.baseTimeframe,
+    positionPct: targetParams.positionPct,
+    sizing: targetParams.sizing,
+  }
+  const syncCurrentValues = syncNormalizedSizingParamValues(conversation.paramValues, targetParams)
   const syncResult = shouldUpdateGraph
     ? syncStrategyParamsFromCodegen({
         spec: response.specDesc,
-        fallback: {
-          exchange: targetParams.exchange,
-          symbol: targetParams.symbol,
-          baseTimeframe: targetParams.baseTimeframe,
-          positionPct: targetParams.positionPct,
-        },
-        currentValues: conversation.paramValues,
+        fallback: syncFallback,
+        currentValues: syncCurrentValues,
         capabilities: backtestCapabilities,
         contextText: [trimmedMessage, response.assistantPrompt]
           .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -464,16 +467,18 @@ export function applyCodegenResponseToConversationState(args: {
   const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
   const nextGraphStatus =
     response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
+  const graphFallbackMeta = {
+    exchange: nextParams.exchange,
+    symbol: nextParams.symbol,
+    baseTimeframe: nextParams.baseTimeframe,
+    positionPct: nextParams.positionPct,
+    sizing: nextParams.sizing,
+    executionTags: syncResult?.executionTags ?? [],
+  }
   const nextGraph = shouldUpdateGraph
     ? buildLogicGraphFromCodegenSpec(
         response.specDesc,
-        {
-          exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
-          symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
-          baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
-          positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
-          executionTags: syncResult?.executionTags ?? [],
-        },
+        graphFallbackMeta,
         nextVersion,
         nextGraphStatus,
       )
@@ -481,13 +486,7 @@ export function applyCodegenResponseToConversationState(args: {
   const nextDisplayLogicGraph = shouldUpdateGraph
     ? buildDisplayLogicGraphFromCodegenSpec({
         specDesc: response.specDesc,
-        fallbackMeta: {
-          exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
-          symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
-          baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
-          positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
-          executionTags: syncResult?.executionTags ?? [],
-        },
+        fallbackMeta: graphFallbackMeta,
       })
     : conversation.displayLogicGraph
   const nextPublishedScriptCode = (() => {
