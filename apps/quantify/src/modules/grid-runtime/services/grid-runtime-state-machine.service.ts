@@ -1,22 +1,17 @@
 import { Injectable } from '@nestjs/common'
+import type { GridRuntimeStatus } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { GridRuntimeRepository } from '../repositories/grid-runtime.repository'
 import type { GridRuntimeJsonValue } from '../types/grid-runtime.types'
 
-type GridRuntimeTransitionStatus =
-  | 'INITIALIZING'
-  | 'RUNNING'
-  | 'PAUSED'
-  | 'STOPPING'
-  | 'RECONCILE_REQUIRED'
-  | 'ERROR'
-
 interface TransitionInput {
   instanceId: string
-  status: GridRuntimeTransitionStatus
+  fromStatuses: GridRuntimeStatus[]
+  status: GridRuntimeStatus
   eventType: string
   severity?: 'info' | 'warn' | 'error'
   reason?: string
+  clearStopReason?: boolean
   payload?: GridRuntimeJsonValue
 }
 
@@ -27,6 +22,7 @@ export class GridRuntimeStateMachineService {
   initialize(instanceId: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['CREATED'],
       status: 'INITIALIZING',
       eventType: 'runtime_initializing',
     })
@@ -35,6 +31,7 @@ export class GridRuntimeStateMachineService {
   markRunning(instanceId: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['INITIALIZING', 'RUNNING'],
       status: 'RUNNING',
       eventType: 'runtime_running',
     })
@@ -43,6 +40,7 @@ export class GridRuntimeStateMachineService {
   pause(instanceId: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['RUNNING'],
       status: 'PAUSED',
       eventType: 'runtime_paused',
     })
@@ -51,14 +49,17 @@ export class GridRuntimeStateMachineService {
   resume(instanceId: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['PAUSED'],
       status: 'RUNNING',
       eventType: 'runtime_resumed',
+      clearStopReason: true,
     })
   }
 
   stop(instanceId: string, reason: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['CREATED', 'INITIALIZING', 'RUNNING', 'PAUSED', 'RECONCILE_REQUIRED', 'ERROR'],
       status: 'STOPPING',
       eventType: 'runtime_stopping',
       severity: 'warn',
@@ -69,6 +70,7 @@ export class GridRuntimeStateMachineService {
   markReconcileRequired(instanceId: string, reason: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['INITIALIZING', 'RUNNING', 'PAUSED'],
       status: 'RECONCILE_REQUIRED',
       eventType: 'runtime_reconcile_required',
       severity: 'warn',
@@ -79,6 +81,7 @@ export class GridRuntimeStateMachineService {
   markError(instanceId: string, reason: string) {
     return this.transition({
       instanceId,
+      fromStatuses: ['CREATED', 'INITIALIZING', 'RUNNING', 'PAUSED', 'RECONCILE_REQUIRED', 'STOPPING'],
       status: 'ERROR',
       eventType: 'runtime_error',
       severity: 'error',
@@ -87,11 +90,15 @@ export class GridRuntimeStateMachineService {
   }
 
   private async transition(input: TransitionInput) {
-    await this.repository.updateInstanceStatus({
+    const transitioned = await this.repository.transitionInstanceStatus({
       id: input.instanceId,
-      status: input.status,
-      stopReason: input.reason ?? null,
+      fromStatuses: input.fromStatuses,
+      toStatus: input.status,
+      ...this.stopReasonPatch(input),
     })
+    if (!transitioned) {
+      throw new Error(`grid_runtime_invalid_status_transition:${input.eventType}`)
+    }
 
     return this.repository.appendEvent({
       gridRuntimeInstanceId: input.instanceId,
@@ -101,5 +108,11 @@ export class GridRuntimeStateMachineService {
       message: input.reason ?? null,
       payload: input.payload,
     })
+  }
+
+  private stopReasonPatch(input: TransitionInput): { stopReason?: string | null } {
+    if (input.reason !== undefined) return { stopReason: input.reason }
+    if (input.clearStopReason) return { stopReason: null }
+    return {}
   }
 }

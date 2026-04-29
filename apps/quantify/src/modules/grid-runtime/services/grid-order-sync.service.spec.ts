@@ -1,5 +1,9 @@
 import { GridOrderSyncService } from './grid-order-sync.service'
 
+function asDependency<T>(value: Partial<T>): T {
+  return value as T
+}
+
 const baseConfig = {
   mode: 'spot',
   lowerPrice: '90',
@@ -54,7 +58,7 @@ function createRepository() {
     findInstanceForSync: jest.fn().mockResolvedValue(createInstance()),
     listOrders: jest.fn().mockResolvedValue([createOrder()]),
     updateOrderFromExchange: jest.fn().mockResolvedValue({ id: 'order-1' }),
-    recordFillOnce: jest.fn().mockResolvedValue({ id: 'fill-1' }),
+    recordFillOnce: jest.fn().mockResolvedValue({ fill: { id: 'fill-1' }, newlyRecorded: true }),
     findFillByExchangeId: jest.fn().mockResolvedValue(null),
     createPlannedOrder: jest.fn().mockResolvedValue({ id: 'inverse-order-1' }),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
@@ -92,12 +96,37 @@ function createStateMachine() {
   }
 }
 
+function createTxEvents() {
+  const txEvents = {
+    withAfterCommit<T>(callback: () => Promise<T>): Promise<T> {
+      return callback()
+    },
+  }
+  jest.spyOn(txEvents, 'withAfterCommit')
+  return txEvents
+}
+
+function createService(
+  repository: ReturnType<typeof createRepository>,
+  tradingService = createTradingService(),
+  stateMachine = createStateMachine(),
+  txEvents = createTxEvents(),
+) {
+  return new GridOrderSyncService(
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[0]>(repository),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[1]>(tradingService),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[2]>(stateMachine),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[3]>(txEvents),
+  )
+}
+
 describe('GridOrderSyncService', () => {
   it('records a completed fill once and creates a paired inverse planned order', async () => {
     const repository = createRepository()
     const tradingService = createTradingService()
     const stateMachine = createStateMachine()
-    const service = new GridOrderSyncService(repository as never, tradingService as never, stateMachine as never)
+    const txEvents = createTxEvents()
+    const service = createService(repository, tradingService, stateMachine, txEvents)
 
     await service.syncInstance('grid-1')
 
@@ -121,21 +150,33 @@ describe('GridOrderSyncService', () => {
       gridRuntimeInstanceId: 'grid-1',
       gridLevelId: 'level-1',
       side: 'sell',
-      role: 'spot_buy',
+      role: 'spot_sell',
       orderType: 'limit',
       timeInForce: 'gtc',
       price: '95',
     }))
+    expect(txEvents.withAfterCommit).toHaveBeenCalled()
   })
 
   it('does not create another inverse order when duplicate fill was already recorded', async () => {
     const repository = createRepository()
-    repository.findFillByExchangeId.mockResolvedValue({ id: 'fill-existing' })
-    const service = new GridOrderSyncService(repository as never, createTradingService() as never, createStateMachine() as never)
+    repository.recordFillOnce.mockResolvedValue({ fill: { id: 'fill-existing' }, newlyRecorded: false })
+    const service = createService(repository)
 
     await service.syncInstance('grid-1')
 
-    expect(repository.recordFillOnce).not.toHaveBeenCalled()
+    expect(repository.recordFillOnce).toHaveBeenCalled()
+    expect(repository.createPlannedOrder).not.toHaveBeenCalled()
+  })
+
+  it('does not create inverse order when recordFillOnce returns an existing fill', async () => {
+    const repository = createRepository()
+    repository.recordFillOnce.mockResolvedValue({ fill: { id: 'fill-existing' }, newlyRecorded: false })
+    const service = createService(repository)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.recordFillOnce).toHaveBeenCalled()
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
   })
 
@@ -160,12 +201,90 @@ describe('GridOrderSyncService', () => {
       },
     ])
     const stateMachine = createStateMachine()
-    const service = new GridOrderSyncService(repository as never, tradingService as never, stateMachine as never)
+    const service = createService(repository, tradingService, stateMachine)
 
     await service.syncInstance('grid-1')
 
     expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch')
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
+  })
+
+  it('moves to RECONCILE_REQUIRED when exchange price mismatches local order', async () => {
+    const repository = createRepository()
+    const tradingService = createTradingService()
+    tradingService.getClosedOrders.mockResolvedValue([
+      {
+        id: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'limit',
+        price: 96,
+        amount: 1.0526315789473684,
+        filled: 1.0526315789473684,
+        status: 'closed',
+        createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { fillId: 'fill-1' },
+      },
+    ])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch')
+    expect(repository.createPlannedOrder).not.toHaveBeenCalled()
+  })
+
+  it('moves to RECONCILE_REQUIRED when exchange quantity mismatches local order', async () => {
+    const repository = createRepository()
+    const tradingService = createTradingService()
+    tradingService.getClosedOrders.mockResolvedValue([
+      {
+        id: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'limit',
+        price: 95,
+        amount: 2,
+        filled: 2,
+        status: 'closed',
+        createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { fillId: 'fill-1' },
+      },
+    ])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch')
+    expect(repository.createPlannedOrder).not.toHaveBeenCalled()
+  })
+
+  it('ignores foreign out-of-range open orders for boundary break', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({ id: 'own-open', clientOrderId: 'grid-1-95-buy', exchangeOrderId: 'own-exchange', status: 'OPEN' }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([
+      { id: 'foreign-exchange', clientOrderId: 'manual-order', symbol: 'BTC/USDT', marketType: 'spot', side: 'buy', type: 'limit', price: 120, amount: 1, filled: 0, status: 'open', createdAt: 1, raw: {} },
+    ])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.stop).not.toHaveBeenCalled()
+    expect(tradingService.cancelOrder).not.toHaveBeenCalled()
+    expect(repository.updateInstanceLastSyncAt).toHaveBeenCalledWith('grid-1')
   })
 
   it('moves to STOPPING and cancels only own open orders on boundary break', async () => {
@@ -181,7 +300,7 @@ describe('GridOrderSyncService', () => {
     ])
     tradingService.getClosedOrders.mockResolvedValue([])
     const stateMachine = createStateMachine()
-    const service = new GridOrderSyncService(repository as never, tradingService as never, stateMachine as never)
+    const service = createService(repository, tradingService, stateMachine)
 
     await service.syncInstance('grid-1')
 

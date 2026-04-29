@@ -4,6 +4,7 @@ import type { PrismaClient } from '@/prisma/prisma.types'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
+import type { GridOrderStatus, GridRuntimeStatus } from '@/prisma/prisma.types'
 import type { GridRuntimeJsonValue, GridRuntimeMode, GridOrderSide } from '../types/grid-runtime.types'
 
 export interface CreateGridRuntimeLevelInput {
@@ -84,14 +85,21 @@ export interface AppendGridRuntimeEventInput {
 
 export interface UpdateGridRuntimeStatusInput {
   id: string
-  status: string
+  status: GridRuntimeStatus
+  stopReason?: string | null
+}
+
+export interface TransitionGridRuntimeStatusInput {
+  id: string
+  fromStatuses: GridRuntimeStatus[]
+  toStatus: GridRuntimeStatus
   stopReason?: string | null
 }
 
 export interface UpdateGridOrderFromExchangeInput {
   id: string
   exchangeOrderId?: string | null
-  status: string
+  status: GridOrderStatus
   filledQuantity: string
   avgFillPrice?: string | null
   rawPayload?: GridRuntimeJsonValue
@@ -165,10 +173,25 @@ export class GridRuntimeRepository {
     return this.txHost.tx.gridRuntimeInstance.update({
       where: { id: input.id },
       data: {
-        status: input.status as never,
+        status: input.status,
         stopReason: input.stopReason,
       },
     })
+  }
+
+  async transitionInstanceStatus(input: TransitionGridRuntimeStatusInput): Promise<boolean> {
+    const data: { status: GridRuntimeStatus, stopReason?: string | null } = { status: input.toStatus }
+    if ('stopReason' in input) data.stopReason = input.stopReason
+
+    const result = await this.txHost.tx.gridRuntimeInstance.updateMany({
+      where: {
+        id: input.id,
+        status: { in: input.fromStatuses },
+      },
+      data,
+    })
+
+    return result.count === 1
   }
 
   updateInstanceLastSyncAt(instanceId: string, syncedAt = new Date()) {
@@ -223,7 +246,7 @@ export class GridRuntimeRepository {
       where: { id: input.id },
       data: {
         exchangeOrderId: input.exchangeOrderId ?? undefined,
-        status: input.status as never,
+        status: input.status,
         filledQuantity: this.decimal(input.filledQuantity),
         avgFillPrice: input.avgFillPrice == null ? null : this.decimal(input.avgFillPrice),
         rawPayload: input.rawPayload,
@@ -252,10 +275,10 @@ export class GridRuntimeRepository {
       },
     })
 
-    if (existing) return existing
+    if (existing) return { fill: existing, newlyRecorded: false }
 
     try {
-      return await this.txHost.tx.gridFill.create({
+      const fill = await this.txHost.tx.gridFill.create({
         data: {
           gridRuntimeInstanceId: input.gridRuntimeInstanceId,
           gridOrderId: input.gridOrderId,
@@ -270,6 +293,7 @@ export class GridRuntimeRepository {
           rawPayload: input.rawPayload,
         },
       })
+      return { fill, newlyRecorded: true }
     }
     catch (error) {
       if (!this.isUniqueConstraintError(error)) throw error
@@ -283,7 +307,7 @@ export class GridRuntimeRepository {
         },
       })
 
-      if (racedExisting) return racedExisting
+      if (racedExisting) return { fill: racedExisting, newlyRecorded: false }
       throw error
     }
   }

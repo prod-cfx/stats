@@ -4,7 +4,7 @@ export type GridRuntimeMode = 'spot' | 'perp_long' | 'perp_short' | 'perp_neutra
 
 export type GridOrderSide = 'buy' | 'sell'
 
-export type GridOrderRole = 'spot_buy' | 'open_long' | 'close_long' | 'open_short' | 'close_short'
+export type GridOrderRole = 'spot_buy' | 'spot_sell' | 'open_long' | 'close_long' | 'open_short' | 'close_short'
 
 export interface GridRuntimeConfigSnapshot {
   mode: GridRuntimeMode

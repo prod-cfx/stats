@@ -167,8 +167,8 @@ describe('GridRuntimeRepository', () => {
       rawPayload: { okx: true },
     })
 
-    expect(duplicate).toBe(existingFill)
-    expect(created.exchangeFillId).toBe('exchange-fill-2')
+    expect(duplicate).toEqual({ fill: existingFill, newlyRecorded: false })
+    expect(created).toEqual({ fill: expect.objectContaining({ exchangeFillId: 'exchange-fill-2' }), newlyRecorded: true })
     expect(tx.gridFill.create).toHaveBeenCalledTimes(1)
     expect(tx.gridFill.findUnique).toHaveBeenCalledWith({
       where: {
@@ -180,7 +180,7 @@ describe('GridRuntimeRepository', () => {
     })
   })
 
-  it('returns the existing fill when concurrent create hits the fill id unique constraint', async () => {
+  it('returns the raced existing fill when concurrent create hits the fill id unique constraint', async () => {
     const existingFill = { id: 'fill-existing', exchangeFillId: 'exchange-fill-1' }
     const uniqueConstraintError = Object.assign(new Error('Unique constraint failed'), { code: 'P2002' })
     const tx = {
@@ -203,7 +203,7 @@ describe('GridRuntimeRepository', () => {
       filledAt: new Date('2026-04-29T00:00:00.000Z'),
     })
 
-    expect(result).toBe(existingFill)
+    expect(result).toEqual({ fill: existingFill, newlyRecorded: false })
     expect(tx.gridFill.create).toHaveBeenCalledTimes(1)
     expect(tx.gridFill.findUnique).toHaveBeenNthCalledWith(2, {
       where: {
@@ -212,6 +212,48 @@ describe('GridRuntimeRepository', () => {
           exchangeFillId: 'exchange-fill-1',
         },
       },
+    })
+  })
+
+  it('updates instance status only when current status is allowed', async () => {
+    const tx = {
+      gridRuntimeInstance: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const repo = new GridRuntimeRepository(createTxHost(tx))
+
+    const transitioned = await repo.transitionInstanceStatus({
+      id: 'grid-1',
+      fromStatuses: ['CREATED'],
+      toStatus: 'INITIALIZING',
+    })
+
+    expect(transitioned).toBe(true)
+    expect(tx.gridRuntimeInstance.updateMany).toHaveBeenCalledWith({
+      where: { id: 'grid-1', status: { in: ['CREATED'] } },
+      data: { status: 'INITIALIZING' },
+    })
+  })
+
+  it('preserves stop reason unless a transition explicitly supplies one', async () => {
+    const tx = {
+      gridRuntimeInstance: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const repo = new GridRuntimeRepository(createTxHost(tx))
+
+    await repo.transitionInstanceStatus({
+      id: 'grid-1',
+      fromStatuses: ['PAUSED'],
+      toStatus: 'RUNNING',
+      stopReason: null,
+    })
+
+    expect(tx.gridRuntimeInstance.updateMany).toHaveBeenCalledWith({
+      where: { id: 'grid-1', status: { in: ['PAUSED'] } },
+      data: { status: 'RUNNING', stopReason: null },
     })
   })
 

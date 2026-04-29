@@ -6,6 +6,8 @@ export type {
   BacktestJob,
   DeployRequest,
   ExchangeAccount,
+  GridOrderStatus,
+  GridRuntimeStatus,
   IndicatorConfig,
   IndicatorValue,
   LlmStrategy,
