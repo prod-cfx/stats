@@ -98,6 +98,62 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('extracts previous bar high breakout and previous bar low breakdown expressions', () => {
+    const patch = service.extract('用 BTCUSDT 1m K 线。如果最新收盘价突破上一根 K 线最高价，且当前没有持仓，则开多，使用可用余额的 3%。如果最新收盘价跌破上一根 K 线最低价，则平多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+          },
+        },
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'EQ',
+            left: { kind: 'position', field: 'has_position', side: 'long' },
+            right: { kind: 'constant', value: false },
+          },
+        },
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'low', offsetBars: 1 },
+          },
+        },
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.03,
+      positionMode: 'long_only',
+      sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
+    })
+  })
+
   it('keeps fixed quote profit targets from overriding explicit percent sizing', () => {
     const patch = service.extract('每次盈利 10 USDT 止盈；单笔 10% 仓位')
 
