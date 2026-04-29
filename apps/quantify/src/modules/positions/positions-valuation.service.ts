@@ -49,7 +49,8 @@ export class PositionsValuationService {
       }
 
       const affectedAccounts = new Set<string>()
-      for (const position of positions) {
+      const orderedPositions = [...positions].sort((left, right) => left.id.localeCompare(right.id))
+      for (const position of orderedPositions) {
         const markPrice = symbolMap.get(position.symbol)
         if (!markPrice) continue
         const unrealized = this.calculateUnrealizedPnl(
@@ -62,7 +63,7 @@ export class PositionsValuationService {
         await this.positionsRepository.updatePositionUnrealizedPnl(position.id, unrealized)
       }
 
-      for (const accountId of affectedAccounts) {
+      for (const accountId of Array.from(affectedAccounts).sort()) {
         const totalUnrealized = await this.positionsRepository.aggregateOpenPositionUnrealizedPnl(accountId) ?? new Decimal(0)
         const balance = await this.positionsRepository.findAccountBalance(accountId)
         if (!balance) continue

@@ -60,6 +60,7 @@ export class PositionSyncService {
     marketType: MarketType,
     syncType: 'manual' | 'scheduled' | 'auto' = 'manual',
     triggeredBy?: string,
+    exchangeAccountId?: string,
   ): Promise<PositionSyncResult> {
     const syncedAt = new Date()
     const startTime = Date.now()
@@ -68,7 +69,7 @@ export class PositionSyncService {
 
     try {
       // 1. 从交易所获取实际仓位
-      const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType)
+      const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType, exchangeAccountId)
 
       // 2. 获取本地记录的开放仓位
       const localPositions = await this.positionsRepository.findOpenByAccount(accountId)
@@ -250,6 +251,8 @@ export class PositionSyncService {
           task.exchangeId,
           marketType,
           'scheduled',
+          undefined,
+          task.exchangeAccountId,
         )
 
         results.push(result)
@@ -273,34 +276,48 @@ export class PositionSyncService {
     return results
   }
 
-  private async collectBatchSyncTasks(): Promise<Array<{ userId: string; strategyId: string; exchangeId: ExchangeId }>> {
+  private async collectBatchSyncTasks(): Promise<Array<{
+    userId: string
+    strategyId: string
+    exchangeId: ExchangeId
+    exchangeAccountId: string
+  }>> {
     const [strategySubs, llmSubs] = await this.positionsRepository.findActiveSubscriptionsForBatchSync(200)
 
-    const taskMap = new Map<string, { userId: string; strategyId: string; exchangeId: ExchangeId }>()
+    const taskMap = new Map<string, {
+      userId: string
+      strategyId: string
+      exchangeId: ExchangeId
+      exchangeAccountId: string
+    }>()
 
     for (const sub of strategySubs) {
       const strategyId = sub.strategyInstance?.strategyTemplateId
       const exchangeId = sub.exchangeAccount?.exchangeId as ExchangeId | undefined
-      if (!strategyId || !exchangeId) continue
+      const exchangeAccountId = sub.exchangeAccount?.id
+      if (!strategyId || !exchangeId || !exchangeAccountId) continue
 
-      const key = `${sub.userId}:${strategyId}:${exchangeId}`
+      const key = `${sub.userId}:${strategyId}:${exchangeId}:${exchangeAccountId}`
       taskMap.set(key, {
         userId: sub.userId,
         strategyId,
         exchangeId,
+        exchangeAccountId,
       })
     }
 
     for (const sub of llmSubs) {
       const strategyId = sub.llmStrategyInstance?.strategyId
       const exchangeId = sub.exchangeAccount?.exchangeId as ExchangeId | undefined
-      if (!strategyId || !exchangeId) continue
+      const exchangeAccountId = sub.exchangeAccount?.id
+      if (!strategyId || !exchangeId || !exchangeAccountId) continue
 
-      const key = `${sub.userId}:${strategyId}:${exchangeId}`
+      const key = `${sub.userId}:${strategyId}:${exchangeId}:${exchangeAccountId}`
       taskMap.set(key, {
         userId: sub.userId,
         strategyId,
         exchangeId,
+        exchangeAccountId,
       })
     }
 

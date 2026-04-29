@@ -894,10 +894,7 @@ export class SignalGeneratorService {
         resolved.decision,
         {
           exchange: ((symbol as unknown as { exchange?: string }).exchange ?? 'unknown'),
-          marketType:
-            ((symbol as unknown as { marketType?: string }).marketType === 'perp')
-              ? 'perp'
-              : 'spot',
+          marketType: this.readSymbolRuntimeMarketType(symbol),
           symbol: symbol.code,
           timeframe,
           referencePrice,
@@ -1362,7 +1359,49 @@ export class SignalGeneratorService {
       return
     }
 
-    const symbol = await this.generatorRepository.findSymbolByCode(symbolCode)
+    const hasRuntimeMarketTypeParam = this.hasOwnProperty(params, 'marketType')
+    const marketType = this.readRuntimeMarketType(params.marketType)
+    if (hasRuntimeMarketTypeParam && !marketType) {
+      this.logger.warn(
+        `Published snapshot runtime marketType invalid for instance ${instance.id}: ${String(params.marketType)}`,
+      )
+      await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_RUNTIME_MARKET_TYPE_INVALID',
+        failureCode: 'SNAPSHOT_RUNTIME_MARKET_TYPE_INVALID',
+      })
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode,
+        success: false,
+        reason: 'SNAPSHOT_RUNTIME_MARKET_TYPE_INVALID',
+        runtimePhase: 'binding',
+      })
+      return
+    }
+
+    let symbol: Symbol | null
+    try {
+      symbol = await this.findRuntimeSymbol(symbolCode, marketType)
+    } catch (error) {
+      if (!this.isMarketInvalidSymbolError(error)) throw error
+      this.logger.warn(
+        `Published snapshot runtime symbol market mismatch for instance ${instance.id}: ${symbolCode}`,
+      )
+      await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+        failureReason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+        failureCode: 'SYMBOL_MARKET_TYPE_MISMATCH',
+      })
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode,
+        success: false,
+        reason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+        runtimePhase: 'binding',
+      })
+      return
+    }
     if (!symbol) {
       this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
       await this.handleStrategyFailure(instance.id, config)
@@ -1392,7 +1431,7 @@ export class SignalGeneratorService {
     if (activationFailure) {
       if (activationFailure.failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING') {
         this.logger.warn(
-          `Reference bar unavailable for published snapshot runtime on instance ${instance.id} (${symbol.code}/${timeframe})`,
+          `Reference bar unavailable for published snapshot runtime on instance ${instance.id} (${symbolCode}/${timeframe})`,
         )
       }
       await this.markRuntimeExecutionStateRetryable(activeRuntimeState, config, {
@@ -1488,7 +1527,10 @@ export class SignalGeneratorService {
         instance,
         strategy,
         {
-          symbol,
+          symbol: {
+            ...symbol,
+            code: symbolCode,
+          },
           timeframe: prismaTimeframe,
           fields: new Map(),
         },
@@ -1498,6 +1540,7 @@ export class SignalGeneratorService {
         runtimeSignalOutcome.payload,
         {
           ...runtimeProvenance,
+          ...(marketType ? { marketType } : {}),
           ...(activeRuntimeState
             ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
             : {}),
@@ -1580,6 +1623,7 @@ export class SignalGeneratorService {
       return null
     }
 
+    const portfolio = this.readPortfolioSnapshot(snapshot.compiledIr)
     return {
       strategy: {
         ...strategy,
@@ -1597,6 +1641,7 @@ export class SignalGeneratorService {
         sourceStrategyInstanceId: snapshot.strategyInstanceId ?? binding.sourceStrategyInstanceId,
         sourceStrategyTemplateId: snapshot.strategyTemplateId ?? binding.sourceStrategyTemplateId ?? strategy.id,
         executionContentSource: 'PUBLISHED_SNAPSHOT',
+        ...(portfolio ? { portfolio: portfolio as Prisma.JsonObject } : {}),
       },
       executionSemanticKeys: this.runtimeExecutionStateService?.buildExecutionSemanticKeysFromSnapshot(snapshot) ?? [],
       executionSemantics: this.readRuntimeExecutionSemantics(snapshot),
@@ -1745,6 +1790,26 @@ export class SignalGeneratorService {
     return normalized.length > 0 ? normalized : null
   }
 
+  private readRuntimeMarketType(value: unknown): 'spot' | 'perp' | null {
+    const raw = this.readString(value)?.trim().toLowerCase()
+    if (raw === 'spot') return 'spot'
+    if (raw === 'perp' || raw === 'swap' || raw === 'perpetual' || raw === 'future') return 'perp'
+    return null
+  }
+
+  private readSymbolRuntimeMarketType(symbol: Pick<Symbol, 'instrumentType'>): 'spot' | 'perp' {
+    if (symbol.instrumentType === 'PERPETUAL' || symbol.instrumentType === 'FUTURE') return 'perp'
+    return 'spot'
+  }
+
+  private hasOwnProperty(record: Record<string, unknown>, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(record, key)
+  }
+
+  private isMarketInvalidSymbolError(error: unknown): boolean {
+    return error instanceof DomainException && error.code === ErrorCode.MARKET_INVALID_SYMBOL
+  }
+
   private readRuntimeExecutionSemantics(snapshot: unknown): RuntimeExecutionSemantic[] {
     const root = this.asRecord(snapshot)
     const astSnapshot = this.asRecord(root?.astSnapshot)
@@ -1842,6 +1907,18 @@ export class SignalGeneratorService {
     return value as Record<string, unknown>
   }
 
+  private readPortfolioSnapshot(value: unknown): Record<string, unknown> | null {
+    const root = this.readJsonRecord(value)
+    const portfolio = this.readJsonRecord(root?.portfolio)
+    if (!portfolio) return null
+
+    return {
+      positionMode: portfolio.positionMode,
+      maxConcurrentPositions: portfolio.maxConcurrentPositions,
+      allowPyramiding: portfolio.allowPyramiding,
+    }
+  }
+
   private buildEffectiveParams(
     strategy: StrategyTemplate,
     instance: StrategyInstance | StrategyInstanceWithTemplate,
@@ -1849,11 +1926,18 @@ export class SignalGeneratorService {
     return this.decisionStage.buildEffectiveParams(strategy, instance)
   }
 
+  private findRuntimeSymbol(symbolCode: string, marketType: 'spot' | 'perp' | null) {
+    return marketType
+      ? this.generatorRepository.findSymbolByCodeForMarket(symbolCode, marketType)
+      : this.generatorRepository.findSymbolByCode(symbolCode)
+  }
+
   private async loadMultiLegDataBatch(
     legs: StrategyLegDefinition[],
     dataRequirements: StrategyDataRequirements,
+    marketType: 'spot' | 'perp' | null = null,
   ): Promise<Record<string, Record<string, any>>> {
-    return this.candidateStage.loadMultiLegDataBatch(legs, dataRequirements)
+    return this.candidateStage.loadMultiLegDataBatch(legs, dataRequirements, marketType)
   }
 
   private async generateSignalForMultiLegStrategy(
@@ -1867,8 +1951,42 @@ export class SignalGeneratorService {
     options: { skipCooldown?: boolean } = {},
     runtimeProvenance: Prisma.JsonObject = {},
   ) {
+    const effectiveParams = this.buildEffectiveParams(strategy, instance)
+    const runtimeMarketType = this.readRuntimeMarketType(
+      effectiveParams?.marketType,
+    )
+    if (effectiveParams && this.hasOwnProperty(effectiveParams, 'marketType') && !runtimeMarketType) {
+      this.logger.warn(`Invalid marketType for multi-leg strategy ${strategy.id}: ${String(effectiveParams.marketType)}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'RUNTIME_MARKET_TYPE_INVALID',
+      })
+      return
+    }
+    const effectiveRuntimeProvenance: Prisma.JsonObject = {
+      ...runtimeProvenance,
+      ...(runtimeMarketType ? { marketType: runtimeMarketType } : {}),
+    }
+
     // 1. 查找 primary leg 的 symbol
-    const primarySymbol = await this.generatorRepository.findSymbolByCode(primaryLeg.symbol)
+    let primarySymbol: Symbol | null
+    try {
+      primarySymbol = await this.findRuntimeSymbol(primaryLeg.symbol, runtimeMarketType)
+    } catch (error) {
+      if (!this.isMarketInvalidSymbolError(error)) throw error
+      this.logger.warn(`Symbol ${primaryLeg.symbol} market type mismatch for strategy ${strategy.id}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+      })
+      return
+    }
 
     if (!primarySymbol) {
       this.logger.warn(`Symbol ${primaryLeg.symbol} not found for strategy ${strategy.id}`)
@@ -1882,7 +2000,21 @@ export class SignalGeneratorService {
     }
 
     // 2. 批量加载所有 leg 的数据（性能优化）
-    const multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements)
+    let multiLegData: Record<string, Record<string, any>>
+    try {
+      multiLegData = await this.loadMultiLegDataBatch(legs, dataRequirements, runtimeMarketType)
+    } catch (error) {
+      if (!this.isMarketInvalidSymbolError(error)) throw error
+      this.logger.warn(`One or more leg symbols have market type mismatch for strategy ${strategy.id}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'SYMBOL_MARKET_TYPE_MISMATCH',
+      })
+      return
+    }
 
     // 2.1 校验数据完整性：确保所有 dataRequirements 中定义的数据都已加载
     for (const leg of legs) {
@@ -1943,7 +2075,7 @@ export class SignalGeneratorService {
       })),
       dataRequirements,
       timestamp: Date.now(),
-      params: this.buildEffectiveParams(strategy, instance),
+      params: effectiveParams,
     }
 
     // 4. 执行脚本准备数据
@@ -2045,7 +2177,7 @@ export class SignalGeneratorService {
         promptData,
         directSignal.payload,
         config,
-        runtimeProvenance,
+        effectiveRuntimeProvenance,
         options.skipCooldown ?? false,
       )
 
@@ -2152,7 +2284,7 @@ export class SignalGeneratorService {
         promptData,
         aiPayload,
         config,
-        runtimeProvenance,
+        effectiveRuntimeProvenance,
         options.skipCooldown ?? false,
       )
 
@@ -2198,7 +2330,7 @@ export class SignalGeneratorService {
           promptData,
           fallback,
           config,
-          runtimeProvenance,
+          effectiveRuntimeProvenance,
           options.skipCooldown ?? false,
         )
         if (signalResult.created && signalResult.signalId) {

@@ -65,6 +65,26 @@ export class DbExchangeAccountStore implements ExchangeAccountStore {
       return { exchangeId: 'hyperliquid', config }
     }
 
+    if (exchangeId === 'binance' && this.isBinanceConfig(decrypted)) {
+      return {
+        exchangeId: 'binance',
+        config: {
+          ...decrypted,
+          isTestnet: decrypted.isTestnet ?? account.isTestnet,
+        },
+      }
+    }
+
+    if (exchangeId === 'okx' && this.isOkxConfig(decrypted)) {
+      return {
+        exchangeId: 'okx',
+        config: {
+          ...decrypted,
+          isTestnet: decrypted.isTestnet ?? account.isTestnet,
+        },
+      }
+    }
+
     return this.toExchangeAccountConfig(exchangeId, decrypted)
   }
 

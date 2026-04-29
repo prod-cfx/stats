@@ -160,6 +160,10 @@ export interface AiQuantStrategyRecord {
     fee: number | null
     feeCurrency: string | null
     orderId: string | null
+    source?: 'ledger' | 'execution_reconcile_required'
+    ledgerApplied?: boolean
+    reconcileRequired?: boolean
+    executionStatus?: string | null
   }>
   openOrdersCount?: number | null
   runtimeSemanticSummary?: AiQuantRuntimeSemanticSummary

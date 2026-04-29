@@ -145,6 +145,22 @@ describe('tradingService', () => {
     expect(result).toEqual([{ asset: 'USDT', free: 60000, locked: 0, total: 60000 }])
   })
 
+  it('fetches positions through the selected exchange account when exchangeAccountId is provided', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchPositions.mockResolvedValue([{ symbol: 'BTC/USDT:PERP', side: 'long', size: 0.001 }])
+
+    const result = await service.getPositions('user-1', 'okx', 'perp', 'exchange-account-1')
+
+    expect(accountStore.getAccountConfigById).toHaveBeenCalledWith('exchange-account-1', 'user-1')
+    expect(accountStore.getAccountConfig).not.toHaveBeenCalled()
+    expect(result).toEqual([{ symbol: 'BTC/USDT:PERP', side: 'long', size: 0.001 }])
+  })
+
   it('rejects binance spot orders when the account only has futures capability', async () => {
     const { service, accountStore } = createService()
 

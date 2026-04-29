@@ -9,12 +9,13 @@ import { TradingModule } from "@/modules/trading/trading.module"
 import { PrismaModule } from "@/prisma/prisma.module"
 import { SignalExecutionRepository } from './repositories/signal-execution.repository'
 import { SignalExecutorRepository } from './repositories/signal-executor.repository'
+import { PositionAdmissionService } from './services/position-admission.service'
 import { SignalExecutorService } from "./services/signal-executor.service"
 import { StrategySignalsGenerationModule } from "./strategy-signals-generation.module"
 
 @Module({
   imports: [PrismaModule, AccountsModule, PositionsModule, TradingModule, StrategyInstancesModule, StrategySignalsGenerationModule, ConfigModule.forFeature(strategySignalsConfig)],
-  providers: [SignalExecutorService, SignalExecutionRepository, SignalExecutorRepository],
+  providers: [SignalExecutorService, SignalExecutionRepository, SignalExecutorRepository, PositionAdmissionService],
   exports: [SignalExecutorService],
 })
 export class StrategySignalsExecutionModule {}

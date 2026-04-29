@@ -973,4 +973,34 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('平仓并停止')
     expect(container.textContent).toContain('当前未成交挂单 1 条')
   })
+
+  it('shows latest order quantity with asset unit and notional value', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            symbol: 'BTC-USDT-SWAP',
+            latestOrders: [{
+              executedAt: '2026-04-29 14:25',
+              side: 'BUY',
+              semanticAction: '开多',
+              semanticRole: 'entry',
+              symbol: 'BTCUSDT',
+              price: 77093,
+              quantity: 0.0359,
+              fee: 1.38381935,
+              feeCurrency: 'USDT',
+              orderId: 'okx-order-1',
+            }],
+          })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('数量 / 名义价值')
+    expect(container.textContent).toContain('0.0359 BTC')
+    expect(container.textContent).toContain('约 2,767.64 USDT')
+    expect(container.textContent).not.toContain('0.04')
+  })
 })

@@ -69,6 +69,51 @@ describe('positionsValuationService', () => {
     applyQuotesSpy.mockRestore()
   })
 
+  it('updates positions and accounts in deterministic order to reduce valuation deadlocks', async () => {
+    const positionsRepository = {
+      findOpenPositionsBySymbols: jest.fn().mockResolvedValue([
+        {
+          id: 'pos-b',
+          userStrategyAccountId: 'acc-b',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          avgEntryPrice: new Prisma.Decimal('68000'),
+          quantity: new Prisma.Decimal('0.1'),
+          status: PositionStatus.OPEN,
+        },
+        {
+          id: 'pos-a',
+          userStrategyAccountId: 'acc-a',
+          symbol: 'ETHUSDT',
+          positionSide: PositionSide.LONG,
+          avgEntryPrice: new Prisma.Decimal('3000'),
+          quantity: new Prisma.Decimal('1'),
+          status: PositionStatus.OPEN,
+        },
+      ]),
+      updatePositionUnrealizedPnl: jest.fn().mockResolvedValue(undefined),
+      aggregateOpenPositionUnrealizedPnl: jest.fn().mockResolvedValue(new Prisma.Decimal('10')),
+      findAccountBalance: jest.fn().mockResolvedValue(new Prisma.Decimal('100')),
+      updateAccountValuation: jest.fn().mockResolvedValue(undefined),
+    }
+
+    const txHost = {
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+
+    const service = new PositionsValuationService(txHost as any, positionsRepository as any)
+
+    await service.applyQuotes({
+      quotes: [
+        { symbol: 'BTCUSDT', price: '68100' },
+        { symbol: 'ETHUSDT', price: '3010' },
+      ],
+    })
+
+    expect(positionsRepository.updatePositionUnrealizedPnl.mock.calls.map(call => call[0])).toEqual(['pos-a', 'pos-b'])
+    expect(positionsRepository.updateAccountValuation.mock.calls.map(call => call[0])).toEqual(['acc-a', 'acc-b'])
+  })
+
   it('ignores empty lastPrice in market quote events', async () => {
     const txHost = {
       tx: {},

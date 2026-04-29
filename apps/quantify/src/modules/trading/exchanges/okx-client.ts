@@ -126,7 +126,10 @@ export class OkxClient extends BaseCexClient {
     // OKX 所有产品都需要 tdMode：现货使用 'cash'，永续默认 'cross'（可通过 extra 覆盖）
     if (this.marketType === 'perp') {
       body.tdMode = (input.extra?.tdMode as string | undefined) ?? 'cross'
-      body.posSide = (input.extra?.posSide as string | undefined) ?? this.inferPerpPosSide(input)
+      const posSide = input.extra?.posSide as string | undefined
+      if (posSide) {
+        body.posSide = posSide
+      }
       if (input.reduceOnly) {
         body.reduceOnly = true
       }
@@ -304,11 +307,12 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    return res.data
+    return Promise.all(res.data
       .filter(p => p.instType === 'SWAP' && p.pos !== '0')
-      .map(p => {
+      .map(async (p) => {
         const symbol = this.fromInstrumentId(p.instId)
-        const size = Number.parseFloat(p.pos)
+        const instrumentSpec = await this.getInstrumentSpec(p.instId)
+        const size = this.fromExchangeSize(p.pos, instrumentSpec)
         const side: UnifiedPosition['side'] =
           p.posSide === 'long' ? 'long' : p.posSide === 'short' ? 'short' : size >= 0 ? 'long' : 'short'
 
@@ -323,7 +327,7 @@ export class OkxClient extends BaseCexClient {
           liquidationPrice: Number.parseFloat(p.liqPx),
           raw: p,
         }
-      })
+      }))
   }
 
   async fetchBalance(): Promise<UnifiedBalance[]> {
@@ -622,14 +626,6 @@ export class OkxClient extends BaseCexClient {
     }
 
     return fallback
-  }
-
-  private inferPerpPosSide(input: CreateOrderInput): 'long' | 'short' {
-    if (input.side === 'buy') {
-      return input.reduceOnly ? 'short' : 'long'
-    }
-
-    return input.reduceOnly ? 'long' : 'short'
   }
 
   private toSize(value: number, instrumentSpec?: OkxInstrumentSpecItem | null): string {
