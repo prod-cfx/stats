@@ -4000,6 +4000,77 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('returns semantic display logic graph for completed previous candle breakout strategy', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-previous-candle-breakout-display-graph' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'condition.expression',
+              phase: 'entry',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'GT',
+                  left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+                  right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+                },
+              },
+            },
+            {
+              key: 'condition.expression',
+              phase: 'exit',
+              sideScope: 'long',
+              params: {
+                expression: {
+                  kind: 'predicate',
+                  op: 'LT',
+                  left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+                  right: { kind: 'series', source: 'bar', field: 'low', offsetBars: 1 },
+                },
+              },
+            },
+          ],
+          actions: [{ key: 'open_long' }, { key: 'close_long' }],
+          risk: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          position: { mode: 'fixed_ratio', value: 0.03, positionMode: 'long_only' },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '1m',
+          },
+        },
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 合约 BTCUSDT 1m，收盘价高于前一根最高价开多 3%，收盘价低于前一根最低价平多。',
+    })
+    const specDesc = result.specDesc
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(specDesc).toEqual(expect.objectContaining({
+      displayLogicGraph: expect.objectContaining({
+        blocks: expect.arrayContaining([
+          expect.objectContaining({ type: 'IF' }),
+          expect.objectContaining({ type: 'EXECUTE' }),
+        ]),
+      }),
+    }))
+    expect(JSON.stringify(specDesc?.displayLogicGraph)).toContain('收盘价高于前 1 根最高价')
+    expect(JSON.stringify(specDesc?.displayLogicGraph)).not.toContain('不支持的条件')
+  })
+
   it('starts in checklist gate for the exact raw price-change path without falling back to legacy entry and exit missing reasons', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's2-raw-price-change-exact' })
     mockAi.chat.mockResolvedValue({

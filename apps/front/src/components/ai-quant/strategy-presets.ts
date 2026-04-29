@@ -38,8 +38,8 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
   },
   {
     id: 'grid-range',
-    name: '网格（区间震荡）',
-    desc: '区间 60000-80000，网格 0.5%，单笔 10% 仓位',
+    name: '区间低买高卖',
+    desc: '区间下沿买入，回到区间上沿卖出，单笔 10% 仓位',
     params: {
       exchange: 'okx',
       symbol: 'BTC-USDT-SWAP',

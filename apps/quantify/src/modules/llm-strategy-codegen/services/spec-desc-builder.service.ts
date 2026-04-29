@@ -1,18 +1,22 @@
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { SemanticState } from '../types/semantic-state'
 import type { StrategyExecutionContext } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
+import { SemanticStateProjectionService } from './semantic-state-projection.service'
 
 interface SpecDescBuildExtras {
   normalizedIntent?: StrategyNormalizedIntent | null
   executionContext?: StrategyExecutionContext | null
+  semanticState?: SemanticState | null
 }
 
 @Injectable()
 export class SpecDescBuilderService {
   constructor(
     private readonly digest: CanonicalSpecV2DigestService = new CanonicalSpecV2DigestService(),
+    private readonly semanticProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
   ) {}
 
   buildFromCanonicalSpec(
@@ -41,6 +45,9 @@ export class SpecDescBuilderService {
     const features = this.buildScriptFeatures(scriptCode)
     const styleTags = this.buildStyleTags(features)
     const stateHints = normalizedIntent?.stateHints ?? []
+    const displayLogicGraph = extras?.semanticState
+      ? this.semanticProjection.buildDisplayLogicGraph(extras.semanticState)
+      : null
 
     const phaseCounts = {
       entry: 0,
@@ -85,6 +92,7 @@ export class SpecDescBuilderService {
       embedding: null,
       normalizedIntent,
       ...(stateHints.length > 0 ? { stateHints } : {}),
+      ...(displayLogicGraph ? { displayLogicGraph } : {}),
       semanticSource: this.resolveSemanticSource(canonicalSpec, normalizedIntent),
     }
   }

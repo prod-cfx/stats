@@ -34,7 +34,7 @@ const PRESET_DISPLAY_DATA: Record<string, {
     icon: Zap,
   },
   'grid-range': {
-    tags: ['oscillation', 'grid'],
+    tags: ['range', 'buyLowSellHigh'],
     returnRate: '+8.3%',
     winRate: '95%',
     risk: 'Low',

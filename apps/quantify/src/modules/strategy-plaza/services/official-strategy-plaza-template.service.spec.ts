@@ -59,6 +59,17 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     ]))
   })
 
+  it('describes the range buy/sell template without promising a grid bot', () => {
+    const template = service.getRequired('grid-range')
+
+    expect(template.name).toBe('区间低买高卖')
+    expect(template.tags).toEqual(['区间', '低买高卖', 'OKX 模拟盘'])
+    expect(template.description).toContain('低买高卖')
+    expect(template.description).not.toContain('网格')
+    expect(template.editSeed.initialMessage).toContain('区间低买高卖策略')
+    expect(template.editSeed.initialMessage).not.toContain('网格区间策略')
+  })
+
   it('throws when template id is not found', () => {
     expect(() => service.getRequired('missing-template')).toThrow(StrategyPlazaTemplateNotFoundException)
   })

@@ -95,6 +95,7 @@ export class CodegenPublicationGenerationStage {
     const normalizedIntent = this.buildLegacyNormalizedIntentSnapshot(input.semanticState)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent,
+      semanticState: input.semanticState,
     })
     const userIntentSummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildSemanticLockedParams({

@@ -283,6 +283,7 @@ export class CodegenConversationService {
       ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '', {
           normalizedIntent: normalization?.normalizedIntent ?? null,
           executionContext: semanticArtifacts.executionContext.context,
+          semanticState: initialSemanticState,
         })
       : null
     const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
@@ -595,6 +596,7 @@ export class CodegenConversationService {
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: this.resolveSemanticClarificationArtifacts(semanticState).executionContext.context,
+      semanticState,
     })
     const recoveredSpecDesc = {
       ...specDesc,
@@ -1248,6 +1250,7 @@ export class CodegenConversationService {
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
@@ -1634,6 +1637,7 @@ export class CodegenConversationService {
       const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
         normalizedIntent: normalization.normalizedIntent,
         executionContext: semanticArtifacts.executionContext.context,
+        semanticState: replacementState,
       })
       const canonicalDigest = this.readCanonicalDigest(specDesc)
       const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
@@ -1781,6 +1785,7 @@ export class CodegenConversationService {
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
@@ -1945,6 +1950,7 @@ export class CodegenConversationService {
       {
         normalizedIntent: confirmationViewNormalization.normalizedIntent,
         executionContext: confirmationViewArtifacts.executionContext.context,
+        semanticState: semanticStateAfterAnswers,
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
@@ -1993,6 +1999,7 @@ export class CodegenConversationService {
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
@@ -4151,6 +4158,7 @@ export class CodegenConversationService {
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
