@@ -31,6 +31,7 @@ import {
   normalizeParamsFromValues,
   syncNormalizedSizingParamValues,
 } from './ai-quant-page-conversation'
+import { buildSizingRequestContext } from './semantic-sizing'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -823,11 +824,33 @@ function getSemanticRequestValidationError(params: QuantParams): string | null {
     return '请求前校验失败：请先确认策略周期。'
   }
 
-  if (!Number.isFinite(params.positionPct) || params.positionPct <= 0 || params.positionPct > 100) {
-    return '请求前校验失败：仓位比例需要在 0 到 100 之间。'
+  const sizing = params.sizing
+  if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
+    return '请求前校验失败：仓位配置无效。'
   }
 
-  return null
+  if (sizing.mode === 'RATIO') {
+    if (!Number.isFinite(sizing.value) || sizing.value <= 0 || sizing.value > 100) {
+      return '请求前校验失败：仓位比例需要在 0 到 100 之间。'
+    }
+    return null
+  }
+
+  if (sizing.mode === 'QUOTE') {
+    if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
+      return '请求前校验失败：固定金额需要大于 0。'
+    }
+    return null
+  }
+
+  if (sizing.mode === 'QTY') {
+    if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
+      return '请求前校验失败：固定数量需要大于 0。'
+    }
+    return null
+  }
+
+  return '请求前校验失败：仓位配置无效。'
 }
 
 function buildSemanticRequestMessage(args: {
@@ -848,7 +871,7 @@ function buildSemanticRequestMessage(args: {
     `exchange=${params.exchange}`,
     `symbol=${params.symbol.trim()}`,
     `timeframe=${params.baseTimeframe.trim()}`,
-    `positionPct=${params.positionPct}`,
+    ...buildSizingRequestContext(params.sizing),
   ].join('\n')
 }
 
