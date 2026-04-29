@@ -152,6 +152,7 @@ export class SemanticStateReducerService {
       }
     }
 
+    let riskChanged = false
     for (const risk of nextState.risk) {
       if (risk.key !== 'risk.protective_exit') continue
 
@@ -193,6 +194,7 @@ export class SemanticStateReducerService {
       slot.status = 'locked'
       slot.evidence = evidence
       risk.openSlots = []
+      riskChanged = true
       break
     }
 
@@ -223,7 +225,7 @@ export class SemanticStateReducerService {
 
     return {
       ...nextState,
-      risk: normalizeRiskSemantics(nextState.risk),
+      risk: riskChanged ? normalizeRiskSemantics(nextState.risk) : nextState.risk,
     }
   }
 
