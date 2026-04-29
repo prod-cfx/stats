@@ -304,7 +304,7 @@ export function syncStrategyParamsFromCodegen(args: {
   const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
   const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
   const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
-  const canonicalSizing = asObject(canonicalSpec.sizing)
+  const canonicalSizing = asObject(canonicalSpec.sizing) ?? asObject(typed.sizing)
   const actionSizing = topLevelRules
     .flatMap(rule => rule.actions ?? [])
     .map(action => action.sizing)
