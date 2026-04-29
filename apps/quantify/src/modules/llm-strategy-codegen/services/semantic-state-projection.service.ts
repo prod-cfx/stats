@@ -109,13 +109,12 @@ export class SemanticStateProjectionService {
   buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
     const triggers = this.filterDeterministicTriggers(state.triggers)
     const actions = this.filterDeterministicActions(state.actions)
-    const entryGateText = this.buildDisplayGateText(triggers)
     const ruleBlocks = triggers
       .filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit')
       .map((trigger, index) => this.buildDisplayRuleBlock({
         trigger,
         blockType: index === 0 ? 'IF' : 'AND_AT_THEN',
-        gateText: trigger.phase === 'entry' ? entryGateText : null,
+        gateText: trigger.phase === 'entry' ? this.buildDisplayGateText(triggers, trigger) : null,
         actions,
         position: state.position,
       }))
@@ -187,12 +186,32 @@ export class SemanticStateProjectionService {
     return summary.replace(/^(入场|出场|条件)：/u, '').replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
   }
 
-  private buildDisplayGateText(triggers: SemanticState['triggers']): string | null {
+  private buildDisplayGateText(
+    triggers: SemanticState['triggers'],
+    entryTrigger: SemanticState['triggers'][number],
+  ): string | null {
     const gateTexts = triggers
       .filter(trigger => trigger.phase === 'gate')
+      .filter(trigger => this.isDisplayGateCompatibleWithEntry(entryTrigger, trigger))
       .map(trigger => this.buildDisplayConditionText(trigger, null))
       .filter(text => text.length > 0)
     return gateTexts.length > 0 ? gateTexts.join('，且') : null
+  }
+
+  private isDisplayGateCompatibleWithEntry(
+    entryTrigger: SemanticState['triggers'][number],
+    gateTrigger: SemanticState['triggers'][number],
+  ): boolean {
+    if (!gateTrigger.sideScope || gateTrigger.sideScope === 'both') {
+      return true
+    }
+
+    if (entryTrigger.sideScope === 'both') {
+      return true
+    }
+
+    const entrySide = entryTrigger.sideScope ?? 'long'
+    return entrySide === gateTrigger.sideScope
   }
 
   private buildDisplayActionItems(
@@ -200,9 +219,7 @@ export class SemanticStateProjectionService {
     actions: SemanticState['actions'],
     position: SemanticState['position'],
   ): SemanticDisplayActionItem[] {
-    const actionKey = trigger.phase === 'entry'
-      ? this.pickDisplayActionKey(actions, ['open_long', 'open_short'])
-      : this.pickDisplayActionKey(actions, ['close_long', 'close_short', 'reduce_long', 'reduce_short'])
+    const actionKey = this.pickDisplayActionKey(trigger, actions)
     if (!actionKey) {
       return []
     }
@@ -218,10 +235,25 @@ export class SemanticStateProjectionService {
   }
 
   private pickDisplayActionKey(
+    trigger: SemanticState['triggers'][number],
     actions: SemanticState['actions'],
-    keys: string[],
   ): string | null {
-    return actions.find(action => keys.includes(action.key))?.key ?? null
+    const hasAction = (key: string) => actions.some(action => action.key === key)
+    const pickFirstExisting = (keys: string[]): string | null => keys.find(hasAction) ?? null
+
+    if (trigger.phase === 'entry') {
+      if (trigger.sideScope === 'short') return hasAction('open_short') ? 'open_short' : null
+      if (trigger.sideScope === 'both') return pickFirstExisting(['open_long', 'open_short']) ? 'open_both' : null
+      return hasAction('open_long') ? 'open_long' : null
+    }
+
+    if (trigger.phase === 'exit') {
+      if (trigger.sideScope === 'short') return pickFirstExisting(['close_short', 'reduce_short'])
+      if (trigger.sideScope === 'both') return pickFirstExisting(['close_long', 'close_short', 'reduce_long', 'reduce_short']) ? 'close_both' : null
+      return pickFirstExisting(['close_long', 'reduce_long'])
+    }
+
+    return null
   }
 
   private formatDisplayActionText(
@@ -232,8 +264,10 @@ export class SemanticStateProjectionService {
 
     if (actionKey === 'open_long') return sizingText ? `开多 ${sizingText}` : '开多'
     if (actionKey === 'open_short') return sizingText ? `开空 ${sizingText}` : '开空'
+    if (actionKey === 'open_both') return sizingText ? `开仓 ${sizingText}` : '开仓'
     if (actionKey === 'close_long' || actionKey === 'reduce_long') return '平多'
     if (actionKey === 'close_short' || actionKey === 'reduce_short') return '平空'
+    if (actionKey === 'close_both') return '平仓'
     return ''
   }
 
