@@ -131,4 +131,3 @@ interface SemanticDisplayLogicGraph {
 
 - 最大风险是展示投影和执行语义再次漂移。缓解方式是投影只从 `SemanticState` 读取，不从前端推断。
 - 另一个风险是已有 `SemanticStateProjectionService` 继续膨胀。实现时优先提取小的 formatter/helper，保持摘要投影和逻辑图投影边界清楚。
-
