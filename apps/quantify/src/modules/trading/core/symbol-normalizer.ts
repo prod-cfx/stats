@@ -45,9 +45,7 @@ export function normalizeExecutionSymbol(
 
 export function normalizeLedgerSymbol(raw: string): string {
   const upper = raw.toUpperCase()
-  const withoutPerp = upper.endsWith(':PERP')
-    ? upper.slice(0, -':PERP'.length)
-    : upper
+  const withoutMarketSuffix = upper.replace(/:(PERP|SPOT)$/, '')
 
-  return withoutPerp.replace('/', '')
+  return withoutMarketSuffix.replace('/', '')
 }
