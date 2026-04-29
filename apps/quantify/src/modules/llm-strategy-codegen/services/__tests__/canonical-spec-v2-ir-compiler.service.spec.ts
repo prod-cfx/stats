@@ -1,5 +1,5 @@
 import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
-import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec-v2'
+import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticExpressionOperand, SemanticState } from '../../types/semantic-state'
 import { evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
@@ -64,6 +64,80 @@ function createSizingCanonicalSpec(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it('compiles contract order program intents into level sets and order programs', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'perp_neutral',
+          levelSet: {
+            lower: 60000,
+            upper: 80000,
+            gridCount: 100,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 20,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        kind: 'ARITHMETIC_LEVEL_SET',
+        hardBounds: expect.any(Object),
+      }),
+    ])
+    expect(result.ir.orderPrograms).toEqual([
+      expect.objectContaining({
+        kind: 'LIMIT_LADDER',
+        orderType: 'limit',
+        recycleOnFill: true,
+      }),
+    ])
+    expect(result.ir.executionPolicy.orderTypeDefault).toBe('limit')
+    expect(result.ir.executionPolicy.timeInForce).toBe('gtc')
+    expect(result.ir.portfolio.maxConcurrentPositions).toBeGreaterThan(1)
+    expect(result.ir.portfolio.allowPyramiding).toBe(true)
+  })
+
   it.each([
     [
       { mode: 'QUOTE', value: 10 },

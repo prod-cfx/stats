@@ -3,6 +3,70 @@ import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compil
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 
 describe('canonicalStrategyAstCompilerService', () => {
+  it('preserves order programs without expanding them into decision programs', () => {
+    const irCompiler = new CanonicalSpecV2IrCompilerService()
+    const astCompiler = new CanonicalStrategyAstCompilerService()
+
+    const compiled = irCompiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+        },
+        indicators: [],
+        sizing: null,
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [],
+        orderPrograms: [
+          {
+            id: 'contract-order-program-grid',
+            kind: 'contract_order_program',
+            mode: 'perp_neutral',
+            levelSet: {
+              lower: 60000,
+              upper: 80000,
+              gridCount: 100,
+              spacingMode: 'arithmetic',
+            },
+            budget: {
+              mode: 'per_order_quote',
+              value: 20,
+              asset: 'USDT',
+            },
+            orderType: 'limit',
+            timeInForce: 'gtc',
+            recycleOnFill: true,
+            cancelOnStop: true,
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    const ast = astCompiler.compile(compiled.ir)
+
+    expect(ast.orderPrograms).toHaveLength(1)
+    expect(ast.orderPrograms[0].payload).toEqual(expect.objectContaining({
+      kind: 'LIMIT_LADDER',
+      recycleOnFill: true,
+    }))
+    expect(ast.decisionPrograms.flatMap(program => program.actions)).toEqual([])
+  })
+
   it('compiles canonical IR into deterministic AST topology', () => {
     const compiler = new CanonicalStrategyAstCompilerService()
 

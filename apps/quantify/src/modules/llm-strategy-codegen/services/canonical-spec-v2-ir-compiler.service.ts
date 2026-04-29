@@ -1,6 +1,7 @@
 import type {
   ActionDef,
   CanonicalStrategyIrV1,
+  OrderProgram,
   PredicateDef,
   RiskGuard,
   RuleBlock,
@@ -11,6 +12,7 @@ import type {
   CanonicalConditionAtom,
   CanonicalConditionNode,
   CanonicalExpressionCondition,
+  CanonicalOrderProgramIntent,
   CanonicalRuleAction,
   CanonicalRuleSideScope,
   CanonicalRuleV2,
@@ -151,7 +153,12 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
-    const positionMode = this.resolvePositionMode(input.canonicalSpec.rules)
+    const orderPrograms = this.compileOrderPrograms(input.canonicalSpec.orderPrograms ?? [], context)
+    const orderProgramLevelCount = this.resolveOrderProgramLevelCount(input.canonicalSpec.orderPrograms ?? [])
+    const hasOrderPrograms = orderPrograms.length > 0
+    const positionMode = hasOrderPrograms
+      ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
+      : this.resolvePositionMode(input.canonicalSpec.rules)
 
     return {
       irVersion: 'csi.v1',
@@ -170,9 +177,9 @@ export class CanonicalSpecV2IrCompilerService {
       portfolio: {
         positionMode,
         sizing: this.resolvePortfolioSizing(input.canonicalSpec, input.fallback.positionPct),
-        maxConcurrentPositions: 1,
-        allowPyramiding: false,
-        maxPyramidingLayers: 1,
+        maxConcurrentPositions: hasOrderPrograms ? orderProgramLevelCount : 1,
+        allowPyramiding: hasOrderPrograms,
+        maxPyramidingLayers: hasOrderPrograms ? orderProgramLevelCount : 1,
       },
       dataRequirements: {
         warmupBars: maxLookback,
@@ -185,23 +192,173 @@ export class CanonicalSpecV2IrCompilerService {
         predicates: [...predicateMap.values()],
       },
       ruleBlocks,
-      orderPrograms: [],
+      orderPrograms,
       riskPolicy: {
         guards,
       },
       executionPolicy: {
         signalEvaluation: 'bar_close',
-        fillPolicy: 'next_bar_open',
+        fillPolicy: hasOrderPrograms ? 'exchange_order_update' : 'next_bar_open',
         timeframeAlignment: 'strict',
-        orderTypeDefault: 'market',
+        orderTypeDefault: hasOrderPrograms ? 'limit' : 'market',
         timeInForce: 'gtc',
-        allowPartialFill: false,
+        allowPartialFill: hasOrderPrograms,
       },
     }
   }
 
   private hashCanonicalJson(value: unknown): `sha256:${string}` {
     return `sha256:${createHash('sha256').update(canonicalSerialize(value)).digest('hex')}`
+  }
+
+  private compileOrderPrograms(
+    intents: readonly CanonicalOrderProgramIntent[],
+    context: CompileContext,
+  ): OrderProgram[] {
+    return intents.map(intent => {
+      const levelCount = this.resolveIntentLevelCount(intent)
+      const lowerRef = this.ensureConstSeries(context, intent.levelSet.lower)
+      const upperRef = this.ensureConstSeries(context, intent.levelSet.upper)
+      const levelSetRef = this.ensureContractLevelSet(context, intent, levelCount, lowerRef, upperRef)
+      const activeWhen = this.ensureOrderProgramActiveRangePredicate(context, intent, lowerRef, upperRef)
+
+      return {
+        id: intent.id.replace(/\W+/g, '_'),
+        kind: 'LIMIT_LADDER',
+        activeWhen,
+        side: this.resolveOrderProgramSide(intent.mode),
+        sidePolicy: this.resolveOrderProgramSidePolicy(intent.mode),
+        priceSource: 'level_set',
+        levelSetRef,
+        tickPolicy: 'round',
+        quantity: this.resolveOrderProgramQuantity(intent, levelCount),
+        orderType: 'limit',
+        timeInForce: 'gtc',
+        recycleOnFill: intent.recycleOnFill,
+        pairingPolicy: 'adjacent_level',
+        cancelScope: 'program_orders',
+        maxWorkingOrders: levelCount,
+        group: intent.id,
+      }
+    })
+  }
+
+  private ensureContractLevelSet(
+    context: CompileContext,
+    intent: CanonicalOrderProgramIntent,
+    levelCount: number,
+    lowerRef: string,
+    upperRef: string,
+  ): string {
+    const spacingMode = intent.levelSet.spacingMode === 'geometric' ? 'GEOMETRIC_LEVEL_SET' : 'ARITHMETIC_LEVEL_SET'
+    const spacing = this.resolveOrderProgramSpacing(intent, levelCount)
+    const id = [
+      intent.id,
+      intent.levelSet.spacingMode,
+      this.normalizeNumberToken(intent.levelSet.lower),
+      this.normalizeNumberToken(intent.levelSet.upper),
+      levelCount,
+      this.normalizeNumberToken(spacing.value),
+    ].join('_').replace(/\W+/g, '_')
+
+    if (!context.levelSetMap.has(id)) {
+      context.levelSetMap.set(id, {
+        id,
+        kind: spacingMode,
+        anchorRef: lowerRef,
+        spacing,
+        levelsPerSide: {
+          down: 0,
+          up: Math.max(0, levelCount - 1),
+        },
+        hardBounds: {
+          lowerRef,
+          upperRef,
+        },
+      })
+    }
+
+    return id
+  }
+
+  private ensureOrderProgramActiveRangePredicate(
+    context: CompileContext,
+    intent: CanonicalOrderProgramIntent,
+    lowerRef: string,
+    upperRef: string,
+  ): string {
+    const closeRef = this.ensurePriceSeries(context, 'close')
+    const seed = intent.id.replace(/\W+/g, '_')
+    const aboveLower = this.upsertPredicate(context.predicateMap, `${seed}_active_lower`, 'GTE', [closeRef, lowerRef])
+    const belowUpper = this.upsertPredicate(context.predicateMap, `${seed}_active_upper`, 'LTE', [closeRef, upperRef])
+    return this.upsertPredicate(context.predicateMap, `${seed}_active_range`, 'AND', [aboveLower, belowUpper])
+  }
+
+  private resolveOrderProgramSpacing(
+    intent: CanonicalOrderProgramIntent,
+    levelCount: number,
+  ): LevelSetDef['spacing'] {
+    if (typeof intent.levelSet.spacingPct === 'number' && Number.isFinite(intent.levelSet.spacingPct)) {
+      return {
+        mode: 'pct',
+        value: intent.levelSet.spacingPct,
+      }
+    }
+
+    if (intent.levelSet.spacingMode === 'geometric') {
+      const ratio = Math.pow(intent.levelSet.upper / intent.levelSet.lower, 1 / Math.max(1, levelCount - 1)) - 1
+      return {
+        mode: 'pct',
+        value: Number((ratio * 100).toFixed(8)),
+      }
+    }
+
+    return {
+      mode: 'absolute',
+      value: Number(((intent.levelSet.upper - intent.levelSet.lower) / Math.max(1, levelCount - 1)).toFixed(8)),
+    }
+  }
+
+  private resolveOrderProgramQuantity(
+    intent: CanonicalOrderProgramIntent,
+    levelCount: number,
+  ): OrderProgram['quantity'] {
+    const value = intent.budget.mode === 'total_quote'
+      ? Number((intent.budget.value / levelCount).toFixed(8))
+      : intent.budget.value
+
+    return {
+      mode: 'fixed_quote',
+      value,
+      asset: intent.budget.asset,
+    }
+  }
+
+  private resolveOrderProgramSide(mode: CanonicalOrderProgramIntent['mode']): OrderProgram['side'] {
+    return mode === 'perp_short' ? 'sell' : 'buy'
+  }
+
+  private resolveOrderProgramSidePolicy(mode: CanonicalOrderProgramIntent['mode']): OrderProgram['sidePolicy'] {
+    if (mode === 'spot') return 'spot_grid'
+    return mode
+  }
+
+  private resolveOrderProgramLevelCount(intents: readonly CanonicalOrderProgramIntent[]): number {
+    return Math.max(1, ...intents.map(intent => this.resolveIntentLevelCount(intent)))
+  }
+
+  private resolveIntentLevelCount(intent: CanonicalOrderProgramIntent): number {
+    return Math.max(2, Math.floor(intent.levelSet.gridCount ?? 2))
+  }
+
+  private resolveOrderProgramPositionMode(
+    intents: readonly CanonicalOrderProgramIntent[],
+  ): CanonicalStrategyIrV1['portfolio']['positionMode'] {
+    const modes = new Set(intents.map(intent => intent.mode))
+    if (modes.has('perp_neutral')) return 'long_short'
+    if (modes.has('perp_long')) return 'long_only'
+    if (modes.has('perp_short')) return 'short_only'
+    return 'long_only'
   }
 
   private buildGraphSnapshot(input: CompileCanonicalSpecV2ToIrInput): StrategyLogicGraphSnapshot {

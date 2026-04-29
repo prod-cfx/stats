@@ -1372,7 +1372,7 @@ export class StrategyConsistencyService {
     primaryTimeframe: string
     timeframeAlignment: 'strict'
     signalEvaluation: 'bar_close'
-    fillPolicy: 'next_bar_open' | 'same_bar_close' | 'intra_bar_limit_match'
+    fillPolicy: 'next_bar_open' | 'same_bar_close' | 'intra_bar_limit_match' | 'exchange_order_update'
     defaultOrderType: 'market' | 'limit'
     allowPartialFill: boolean
   } {
