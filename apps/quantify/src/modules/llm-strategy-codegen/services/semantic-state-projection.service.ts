@@ -63,6 +63,8 @@ export interface SemanticDisplayLogicGraph {
   blocks: SemanticDisplayLogicGraphBlock[]
 }
 
+type SemanticDisplaySideScope = 'long' | 'short' | 'both'
+
 @Injectable()
 export class SemanticStateProjectionService {
   buildConversationView(state: SemanticState): SemanticConversationView {
@@ -202,7 +204,8 @@ export class SemanticStateProjectionService {
     entryTrigger: SemanticState['triggers'][number],
     gateTrigger: SemanticState['triggers'][number],
   ): boolean {
-    if (!gateTrigger.sideScope || gateTrigger.sideScope === 'both') {
+    const gateSide = this.resolveDisplayGateSideScope(gateTrigger)
+    if (!gateSide || gateSide === 'both') {
       return true
     }
 
@@ -211,7 +214,55 @@ export class SemanticStateProjectionService {
     }
 
     const entrySide = entryTrigger.sideScope ?? 'long'
-    return entrySide === gateTrigger.sideScope
+    return entrySide === gateSide
+  }
+
+  private resolveDisplayGateSideScope(
+    gateTrigger: SemanticState['triggers'][number],
+  ): SemanticDisplaySideScope | null {
+    if (gateTrigger.sideScope) {
+      return gateTrigger.sideScope
+    }
+
+    const expression = gateTrigger.params.expression
+    if (!this.isSemanticExpression(expression)) {
+      return null
+    }
+
+    const sides = this.collectDisplayExpressionPositionSides(expression)
+    if (sides.has('both') || (sides.has('long') && sides.has('short'))) {
+      return 'both'
+    }
+    if (sides.has('short')) {
+      return 'short'
+    }
+    if (sides.has('long')) {
+      return 'long'
+    }
+    return null
+  }
+
+  private collectDisplayExpressionPositionSides(expression: SemanticExpression): Set<SemanticDisplaySideScope> {
+    const sides = new Set<SemanticDisplaySideScope>()
+    if (expression.kind === 'predicate') {
+      this.addDisplayOperandPositionSide(sides, expression.left)
+      this.addDisplayOperandPositionSide(sides, expression.right)
+      return sides
+    }
+
+    expression.children.forEach((child) => {
+      this.collectDisplayExpressionPositionSides(child).forEach(side => sides.add(side))
+    })
+    return sides
+  }
+
+  private addDisplayOperandPositionSide(
+    sides: Set<SemanticDisplaySideScope>,
+    operand: SemanticExpressionOperand,
+  ): void {
+    if (operand.kind === 'position' && operand.field === 'has_position' && operand.side) {
+      sides.add(operand.side)
+    }
   }
 
   private buildDisplayActionItems(
