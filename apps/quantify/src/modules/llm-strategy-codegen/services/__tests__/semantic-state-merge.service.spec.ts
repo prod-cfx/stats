@@ -614,6 +614,69 @@ describe('SemanticStateMergeService', () => {
     ]))
   })
 
+  it('drops stale persisted risk basis slots after merge', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: [],
+        triggers: [],
+        actions: [],
+        risk: [
+          {
+            id: 'risk-1',
+            key: 'risk.stop_loss_pct',
+            params: { valuePct: 5 },
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'risk.stopLossBasis',
+                fieldPath: 'risk[0].params.stopLossBasis',
+                questionHint: '请确认止损基准',
+                status: 'open',
+                priority: 'risk',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-29T00:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: [],
+        triggers: [],
+        actions: [],
+        risk: [
+          {
+            id: 'risk-1',
+            key: 'risk.stop_loss_pct',
+            params: { valuePct: 5, basis: 'entry_avg_price', basisSource: 'system_default' },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-29T00:00:00.000Z',
+      },
+    })
+
+    expect(merged.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+      params: expect.objectContaining({
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+    }))
+  })
+
   it('matches each derived trigger at most once so persisted sibling atoms stay distinct', () => {
     const merged = service.merge({
       persisted: {

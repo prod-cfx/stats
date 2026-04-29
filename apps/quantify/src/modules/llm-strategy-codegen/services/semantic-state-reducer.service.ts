@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import type { SemanticEvidence, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import { PositionSizingContractService } from './position-sizing-contract.service'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 
 interface SupportedSlotReduction {
   paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference'
@@ -191,6 +192,7 @@ export class SemanticStateReducerService {
       slot.value = percentValue
       slot.status = 'locked'
       slot.evidence = evidence
+      risk.openSlots = []
       break
     }
 
@@ -219,7 +221,10 @@ export class SemanticStateReducerService {
       break
     }
 
-    return nextState
+    return {
+      ...nextState,
+      risk: normalizeRiskSemantics(nextState.risk),
+    }
   }
 
   private resolveActionParamKey(slot: SemanticSlotState): string {
