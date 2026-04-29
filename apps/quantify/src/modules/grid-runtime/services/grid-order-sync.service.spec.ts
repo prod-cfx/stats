@@ -61,6 +61,8 @@ function createRepository() {
     recordFillOnce: jest.fn().mockResolvedValue({ fill: { id: 'fill-1' }, newlyRecorded: true }),
     findFillByExchangeId: jest.fn().mockResolvedValue(null),
     createPlannedOrder: jest.fn().mockResolvedValue({ id: 'inverse-order-1' }),
+    markOrderSubmitting: jest.fn().mockResolvedValue({ id: 'order-1' }),
+    markOrderOpen: jest.fn().mockResolvedValue({ id: 'order-1' }),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
   }
 }
@@ -86,6 +88,20 @@ function createTradingService() {
       },
     ]),
     cancelOrder: jest.fn().mockResolvedValue({ id: 'exchange-order-1', status: 'canceled' }),
+    placeOrder: jest.fn().mockResolvedValue({
+      id: 'exchange-order-created',
+      clientOrderId: 'grid-grid-1-level-1-buy',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'limit',
+      price: 95,
+      amount: 1.0526315789473684,
+      filled: 0,
+      status: 'open',
+      createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+      raw: { orderId: 'exchange-order-created' },
+    }),
   }
 }
 
@@ -121,6 +137,46 @@ function createService(
 }
 
 describe('GridOrderSyncService', () => {
+  it('submits planned limit orders to the exchange before sync matching', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.markOrderSubmitting).toHaveBeenCalledWith({
+      id: 'planned-order-1',
+      clientOrderId: 'grid-grid-1-level-1-buy',
+      rawPayload: { source: 'grid_order_sync' },
+    })
+    expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', {
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'limit',
+      amount: 1.0526315789473684,
+      price: 95,
+      timeInForce: 'GTC',
+      clientOrderId: 'grid-grid-1-level-1-buy',
+    }, 'exchange-account-1')
+    expect(repository.markOrderOpen).toHaveBeenCalledWith({
+      id: 'planned-order-1',
+      exchangeOrderId: 'exchange-order-created',
+      rawPayload: { orderId: 'exchange-order-created' },
+    })
+    expect(repository.updateInstanceLastSyncAt).toHaveBeenCalledWith('grid-1')
+  })
+
   it('records a completed fill once and creates a paired inverse planned order', async () => {
     const repository = createRepository()
     const tradingService = createTradingService()

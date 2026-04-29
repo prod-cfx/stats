@@ -84,6 +84,8 @@ export class GridOrderSyncService {
 
     const exchangeId = instance.exchangeId as ExchangeId
     const marketType = instance.marketType as MarketType
+    await this.submitPlannedOrders(instance, orders, exchangeId, marketType)
+
     const [openOrders, closedOrders] = await Promise.all([
       this.tradingService.getOpenOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
       this.tradingService.getClosedOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
@@ -120,6 +122,60 @@ export class GridOrderSyncService {
 
       await this.repository.updateInstanceLastSyncAt(instance.id)
     })
+  }
+
+  private async submitPlannedOrders(
+    instance: RuntimeInstance,
+    orders: RuntimeOrder[],
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+  ): Promise<void> {
+    const plannedOrders = orders.filter(order => order.status === 'PLANNED')
+    for (const order of plannedOrders) {
+      const clientOrderId = this.buildClientOrderId(instance.id, order)
+      await this.txEvents.withAfterCommit(async () => {
+        await this.repository.markOrderSubmitting({
+          id: order.id,
+          clientOrderId,
+          rawPayload: { source: 'grid_order_sync' },
+        })
+      })
+
+      let exchangeOrder: UnifiedOrder
+      try {
+        exchangeOrder = await this.tradingService.placeOrder(
+          instance.userId,
+          exchangeId,
+          marketType,
+          {
+            symbol: instance.symbol,
+            marketType,
+            side: order.side as GridOrderSide,
+            type: 'limit',
+            amount: Number(this.decimalToString(order.quantity)),
+            price: Number(this.decimalToString(order.price)),
+            timeInForce: 'GTC',
+            clientOrderId,
+          },
+          instance.exchangeAccountId,
+        )
+      } catch {
+        await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed'))
+        return
+      }
+
+      await this.txEvents.withAfterCommit(async () => {
+        await this.repository.markOrderOpen({
+          id: order.id,
+          exchangeOrderId: exchangeOrder.id,
+          rawPayload: this.toJsonValue(exchangeOrder.raw),
+        })
+      })
+    }
+  }
+
+  private buildClientOrderId(instanceId: string, order: RuntimeOrder): string {
+    return `grid-${instanceId}-${order.gridLevelId}-${order.side}`
   }
 
   private async stopForBoundaryBreak(
