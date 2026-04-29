@@ -105,6 +105,7 @@ const RunBacktestDto = z
     leverage: z.number().optional(),
     allowPartial: z.boolean().optional(),
     conversationId: z.string().optional(),
+    sessionId: z.string().optional(),
     execution: BacktestExecutionConfigDto,
     strategy: BacktestStrategyInputDto,
     dataRange: BacktestDataRangeDto,
@@ -576,6 +577,10 @@ const AccountStrategyLatestOrderDto = z
     fee: z.number().nullish(),
     feeCurrency: z.string().nullish(),
     orderId: z.string().nullish(),
+    source: z.enum(['ledger', 'execution_reconcile_required']),
+    ledgerApplied: z.boolean(),
+    reconcileRequired: z.boolean(),
+    executionStatus: z.string().nullish(),
   })
   .passthrough()
 const RuntimeExecutionStateDto = z
@@ -970,6 +975,7 @@ const ClosePositionResponseDto = z
     message: z.string(),
   })
   .passthrough()
+const GridRuntimeActionDto = z.object({ reason: z.string() }).partial().passthrough()
 const TradingSignalResponseDto = z
   .object({
     id: z.string(),
@@ -1215,6 +1221,15 @@ const AiQuantConversationResponseDto = z
     publishedSnapshotCompatibilityMetadata: z.object({}).partial().passthrough().nullish(),
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
+  })
+  .passthrough()
+const RecoverAiQuantEditConversationRequestDto = z
+  .object({
+    strategyInstanceId: z.string(),
+    publishedSnapshotId: z.string().optional(),
+    conversationId: z.string().optional(),
+    sessionId: z.string().optional(),
+    source: z.enum(['account-detail', 'backtest', 'plaza', 'ai-quant']).optional(),
   })
   .passthrough()
 const AiQuantConversationBacktestDraftConfigRequestDto = z
@@ -1696,6 +1711,7 @@ export const schemas = {
   PositionSyncResultDto,
   ClosePositionDto,
   ClosePositionResponseDto,
+  GridRuntimeActionDto,
   TradingSignalResponseDto,
   StrategyLegDefinitionDto,
   StrategyExecutionConfigDto,
@@ -1714,6 +1730,7 @@ export const schemas = {
   AiQuantConversationLastBacktestSummaryDto,
   AiQuantConversationLastBacktestRefDto,
   AiQuantConversationResponseDto,
+  RecoverAiQuantEditConversationRequestDto,
   AiQuantConversationBacktestDraftConfigRequestDto,
   CodegenGuideConfigDto,
   StartCodegenSessionDto,
@@ -1829,6 +1846,30 @@ const endpoints = makeApi([
       },
     ],
     response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/account/ai-quant/conversations/edit-session',
+    alias: 'AccountAiQuantConversationsController_recoverEditSession',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: RecoverAiQuantEditConversationRequestDto,
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: AiQuantConversationResponseDto,
   },
   {
     method: 'get',
@@ -2491,6 +2532,184 @@ const endpoints = makeApi([
       },
     ],
     response: z.object({ data: z.null(), message: z.string().optional() }).passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/grid-runtime/instances/:id',
+    alias: 'GridRuntimeController_getInstance',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/grid-runtime/instances/:id/fills',
+    alias: 'GridRuntimeController_listFills',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/grid-runtime/instances/:id/orders',
+    alias: 'GridRuntimeController_listOrders',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/grid-runtime/instances/:id/pause',
+    alias: 'GridRuntimeController_pause',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/grid-runtime/instances/:id/reconcile',
+    alias: 'GridRuntimeController_reconcile',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ reason: z.string() }).partial().passthrough(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/grid-runtime/instances/:id/resume',
+    alias: 'GridRuntimeController_resume',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/grid-runtime/instances/:id/stop',
+    alias: 'GridRuntimeController_stop',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ reason: z.string() }).partial().passthrough(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z.void(),
   },
   {
     method: 'get',
