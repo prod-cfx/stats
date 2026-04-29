@@ -326,8 +326,9 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1,
     expected: ExpectedOrderProgramContract,
   ): Array<{ ruleId: string; action: OrdinaryFallbackAction }> {
+    const predicateById = new Map(ir.signalCatalog.predicates.map(predicate => [predicate.id, predicate]))
     return ir.ruleBlocks.flatMap((rule) => {
-      if (rule.when !== expected.activeWhen) {
+      if (!this.irPredicateDependsOnSourceRef(rule.when, expected.activeWhen, predicateById, new Set())) {
         return []
       }
 
@@ -341,14 +342,38 @@ export class SemanticAtomInvariantService {
     })
   }
 
+  private irPredicateDependsOnSourceRef(
+    predicateId: string,
+    sourceRef: string,
+    predicateById: Map<string, PredicateDef>,
+    seen: Set<string>,
+  ): boolean {
+    if (predicateId === sourceRef) {
+      return true
+    }
+    if (seen.has(predicateId)) {
+      return false
+    }
+    seen.add(predicateId)
+
+    const predicate = predicateById.get(predicateId)
+    if (!predicate) {
+      return false
+    }
+
+    return predicate.args.some(arg =>
+      arg === sourceRef
+      || this.irPredicateDependsOnSourceRef(arg, sourceRef, predicateById, seen),
+    )
+  }
+
   private findAstOrderProgramFallbackActions(
     ast: StrategyAstV1,
     expected: ExpectedOrderProgramContract,
   ): Array<{ programId: string; action: OrdinaryFallbackAction }> {
     const exprById = new Map(ast.exprPool.map(expr => [expr.id, expr]))
     return ast.decisionPrograms.flatMap((program) => {
-      const sourceRef = exprById.get(program.when)?.sourceRef
-      if (sourceRef !== expected.activeWhen) {
+      if (!this.astExprDependsOnSourceRef(program.when, expected.activeWhen, exprById, new Set())) {
         return []
       }
 
@@ -360,6 +385,28 @@ export class SemanticAtomInvariantService {
         return [{ programId: program.id, action: action.kind }]
       })
     })
+  }
+
+  private astExprDependsOnSourceRef(
+    exprId: string,
+    sourceRef: string,
+    exprById: Map<string, ExprNode>,
+    seen: Set<string>,
+  ): boolean {
+    if (seen.has(exprId)) {
+      return false
+    }
+    seen.add(exprId)
+
+    const expr = exprById.get(exprId)
+    if (!expr) {
+      return false
+    }
+    if (expr.sourceRef === sourceRef) {
+      return true
+    }
+
+    return expr.deps.some(dep => this.astExprDependsOnSourceRef(dep, sourceRef, exprById, seen))
   }
 
   private isOrdinaryPositionAction(action: string): action is OrdinaryFallbackAction {

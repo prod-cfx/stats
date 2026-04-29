@@ -401,6 +401,69 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function addWrappedOpenLongFallback(
+    ir: CanonicalStrategyIrV1,
+    join: 'AND' | 'OR' | 'NOT',
+  ): CanonicalStrategyIrV1 {
+    const activeWhen = ir.orderPrograms[0]?.activeWhen ?? ir.signalCatalog.predicates[0]?.id ?? 'always'
+    const wrappedWhen = `test_wrapped_${join.toLowerCase()}_contract_order_program_active`
+    return {
+      ...ir,
+      signalCatalog: {
+        ...ir.signalCatalog,
+        predicates: [
+          ...ir.signalCatalog.predicates,
+          {
+            id: wrappedWhen,
+            kind: join,
+            args: [activeWhen],
+          },
+        ],
+      },
+      ruleBlocks: [
+        ...ir.ruleBlocks,
+        {
+          id: `contract_order_program_downgraded_to_wrapped_${join.toLowerCase()}_open_long`,
+          phase: 'entry',
+          when: wrappedWhen,
+          priority: 100,
+          actions: [{ kind: 'OPEN_LONG', quantity: ir.portfolio.sizing }],
+        },
+      ],
+    }
+  }
+
+  function addUnrelatedWrappedOpenLongFallback(ir: CanonicalStrategyIrV1): CanonicalStrategyIrV1 {
+    const unrelatedWhen = ir.signalCatalog.predicates.find(predicate =>
+      predicate.id !== ir.orderPrograms[0]?.activeWhen,
+    )?.id ?? 'test_unrelated_active'
+    const wrappedWhen = 'test_wrapped_unrelated_open_long'
+    return {
+      ...ir,
+      signalCatalog: {
+        ...ir.signalCatalog,
+        predicates: [
+          ...ir.signalCatalog.predicates,
+          {
+            id: wrappedWhen,
+            kind: 'AND',
+            args: [unrelatedWhen],
+          },
+        ],
+      },
+      ruleBlocks: [
+        ...ir.ruleBlocks,
+        {
+          id: 'unrelated_wrapped_open_long',
+          phase: 'entry',
+          when: wrappedWhen,
+          priority: 100,
+          actions: [{ kind: 'OPEN_LONG', quantity: ir.portfolio.sizing }],
+        },
+      ],
+    }
+  }
+
   function addBuyFallbackDecisionToAst(ast: StrategyAstV1, ir: CanonicalStrategyIrV1): StrategyAstV1 {
     const activeWhen = ir.orderPrograms[0]?.activeWhen
     const whenExpr = ast.exprPool.find(expr => expr.sourceRef === activeWhen)
@@ -417,6 +480,89 @@ describe('SemanticAtomInvariantService', () => {
           sourceRef: 'contract_order_program_buy_fallback',
           phase: 'entry',
           when: whenExpr.id,
+          priority: 100,
+          actions: [
+            { kind: 'BUY', quantity: ir.portfolio.sizing } as unknown as ActionDef,
+          ],
+        },
+      ],
+    }
+  }
+
+  function addWrappedBuyFallbackDecisionToAst(
+    ast: StrategyAstV1,
+    ir: CanonicalStrategyIrV1,
+    join: 'AND' | 'OR' | 'NOT',
+  ): StrategyAstV1 {
+    const activeWhen = ir.orderPrograms[0]?.activeWhen
+    const whenExpr = ast.exprPool.find(expr => expr.sourceRef === activeWhen)
+    if (!whenExpr) {
+      throw new Error('expected order program active predicate in AST exprPool')
+    }
+
+    const wrappedExpr: ExprNode = {
+      id: `expr_test_wrapped_${join.toLowerCase()}_contract_order_program_active`,
+      sourceRef: `test_wrapped_${join.toLowerCase()}_contract_order_program_active`,
+      nodeType: 'predicate',
+      payload: {
+        id: `test_wrapped_${join.toLowerCase()}_contract_order_program_active`,
+        kind: join,
+        args: [whenExpr.sourceRef],
+      },
+      deps: [whenExpr.id],
+    }
+
+    return {
+      ...ast,
+      exprPool: [...ast.exprPool, wrappedExpr],
+      decisionPrograms: [
+        ...ast.decisionPrograms,
+        {
+          id: `decision_test_contract_order_program_wrapped_${join.toLowerCase()}_buy_fallback`,
+          sourceRef: `contract_order_program_wrapped_${join.toLowerCase()}_buy_fallback`,
+          phase: 'entry',
+          when: wrappedExpr.id,
+          priority: 100,
+          actions: [
+            { kind: 'BUY', quantity: ir.portfolio.sizing } as unknown as ActionDef,
+          ],
+        },
+      ],
+    }
+  }
+
+  function addUnrelatedWrappedBuyFallbackDecisionToAst(ast: StrategyAstV1, ir: CanonicalStrategyIrV1): StrategyAstV1 {
+    const activeWhen = ir.orderPrograms[0]?.activeWhen
+    const unrelatedExpr = ast.exprPool.find(expr =>
+      expr.nodeType === 'predicate'
+      && expr.sourceRef !== activeWhen,
+    )
+    if (!unrelatedExpr) {
+      throw new Error('expected unrelated predicate in AST exprPool')
+    }
+
+    const wrappedExpr: ExprNode = {
+      id: 'expr_test_wrapped_unrelated_buy_fallback',
+      sourceRef: 'test_wrapped_unrelated_buy_fallback',
+      nodeType: 'predicate',
+      payload: {
+        id: 'test_wrapped_unrelated_buy_fallback',
+        kind: 'AND',
+        args: [unrelatedExpr.sourceRef],
+      },
+      deps: [unrelatedExpr.id],
+    }
+
+    return {
+      ...ast,
+      exprPool: [...ast.exprPool, wrappedExpr],
+      decisionPrograms: [
+        ...ast.decisionPrograms,
+        {
+          id: 'decision_test_unrelated_wrapped_buy_fallback',
+          sourceRef: 'unrelated_wrapped_buy_fallback',
+          phase: 'entry',
+          when: wrappedExpr.id,
           priority: 100,
           actions: [
             { kind: 'BUY', quantity: ir.portfolio.sizing } as unknown as ActionDef,
@@ -868,6 +1014,25 @@ describe('SemanticAtomInvariantService', () => {
     )).toBe(true)
   })
 
+  it.each(['AND', 'OR', 'NOT'] as const)(
+    'fails when contract order program IR is downgraded to ordinary OPEN_LONG behind %s',
+    (join) => {
+      const state = buildContractOrderProgramSemanticState()
+      const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+      const driftedIr = addWrappedOpenLongFallback(ir, join)
+
+      const checks = service.validate({ semanticState: state, canonicalSpec, ir: driftedIr, ast })
+
+      expect(checks).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'semantic_contract.order_program',
+          status: 'failed',
+          level: 'critical',
+        }),
+      ]))
+    },
+  )
+
   it('fails when contract order program AST also contains ordinary BUY fallback action', () => {
     const state = buildContractOrderProgramSemanticState()
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
@@ -889,6 +1054,49 @@ describe('SemanticAtomInvariantService', () => {
     expect(checks.some(check =>
       check.status === 'failed' && check.key === 'semantic_contract.order_program',
     )).toBe(true)
+  })
+
+  it.each(['AND', 'OR', 'NOT'] as const)(
+    'fails when contract order program AST also contains ordinary BUY fallback action behind %s',
+    (join) => {
+      const state = buildContractOrderProgramSemanticState()
+      const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+      const checks = service.validate({
+        semanticState: state,
+        canonicalSpec,
+        ir,
+        ast: addWrappedBuyFallbackDecisionToAst(ast, ir, join),
+      })
+
+      expect(checks).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'semantic_contract.order_program',
+          status: 'failed',
+          level: 'critical',
+        }),
+      ]))
+    },
+  )
+
+  it('passes when ordinary fallback actions depend on a different activeWhen', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir: addUnrelatedWrappedOpenLongFallback(ir),
+      ast: addUnrelatedWrappedBuyFallbackDecisionToAst(ast, ir),
+    })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
   })
 
   it('detects generic expression drift', () => {
