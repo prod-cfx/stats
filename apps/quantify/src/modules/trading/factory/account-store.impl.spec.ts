@@ -26,7 +26,7 @@ describe('DbExchangeAccountStore', () => {
     }
 
     const store = new DbExchangeAccountStore(
-      txHost as ConstructorParameters<typeof DbExchangeAccountStore>[0],
+      txHost as unknown as ConstructorParameters<typeof DbExchangeAccountStore>[0],
       crypto as unknown as ConfigCryptoService,
     )
 
