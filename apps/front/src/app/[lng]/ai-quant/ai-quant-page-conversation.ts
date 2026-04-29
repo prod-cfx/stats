@@ -828,6 +828,24 @@ function normalizeNumber(value: unknown, fallback: number): number {
   return fallback
 }
 
+function isDefaultSeededRatioSizing(
+  value: unknown,
+  legacyPositionPct: number,
+  fallback: QuantParams,
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const candidate = value as Record<string, unknown>
+  const fallbackSizing = fallback.sizing
+  return (
+    fallbackSizing.mode === 'RATIO'
+    && candidate.mode === 'RATIO'
+    && candidate.value === fallbackSizing.value
+    && legacyPositionPct !== fallbackSizing.value
+  )
+}
+
 export function normalizeParamsFromValues(
   values: Record<string, unknown>,
   fallback: QuantParams,
@@ -843,7 +861,10 @@ export function normalizeParamsFromValues(
       ? values.symbol.trim()
       : fallback.symbol
   const legacyPositionPct = normalizeNumber(values.positionPct, fallback.positionPct)
-  const sizing = normalizeSizing(values.sizing, legacyPositionPct, nextSymbol)
+  const rawSizing = isDefaultSeededRatioSizing(values.sizing, legacyPositionPct, fallback)
+    ? undefined
+    : values.sizing
+  const sizing = normalizeSizing(rawSizing, legacyPositionPct, nextSymbol)
   const derivedPositionPct = derivePositionPctFromSizing(sizing) ?? fallback.positionPct
 
   return {

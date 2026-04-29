@@ -720,6 +720,7 @@ describe('AiQuantPageClient codegen P1 guards', () => {
       symbol: 'ETHUSDT',
       baseTimeframe: '1h',
       positionPct: 25,
+      sizing: { mode: 'RATIO', value: 25 },
     })
   })
 
