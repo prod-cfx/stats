@@ -5,7 +5,7 @@ describe('marketDataService symbol code compatibility', () => {
     findSymbolsByCodeIn: jest.fn(),
     upsertSymbol: jest.fn(),
     findBars: jest.fn(),
-    upsertBar: jest.fn(),
+    upsertBarByUnique: jest.fn(),
     findLatestQuoteBySymbolId: jest.fn(),
     createQuote: jest.fn(),
   }
@@ -115,7 +115,7 @@ describe('marketDataService symbol code compatibility', () => {
 
   it('keeps recent bar snapshot in ascending timestamp order when gapfill arrives after realtime bars', async () => {
     repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
-    repoMock.upsertBar.mockResolvedValue(undefined)
+    repoMock.upsertBarByUnique.mockResolvedValue(undefined)
 
     await service.saveBarFromProvider({
       symbol: 'BTCUSDT',
@@ -173,7 +173,7 @@ describe('marketDataService symbol code compatibility', () => {
 
   it('treats duplicate market bar upsert as idempotent and still updates snapshots', async () => {
     repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
-    repoMock.upsertBar.mockRejectedValue({ code: 'P2002' })
+    repoMock.upsertBarByUnique.mockRejectedValue({ code: 'P2002' })
 
     await expect(service.saveBarFromProvider({
       symbol: 'BTCUSDT',
@@ -196,5 +196,40 @@ describe('marketDataService symbol code compatibility', () => {
       timeframe: '1m',
     })
     expect(service.getLatestBarSnapshot('BTCUSDT', '1m')?.timestamp).toBe(1_710_000_180_000)
+  })
+
+  it('persists provider bars through the repository symbol/timeframe unique writer', async () => {
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+    repoMock.upsertBarByUnique.mockResolvedValue(undefined)
+
+    await service.saveBarFromProvider({
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '1m',
+      timestamp: 1_710_000_240_000,
+      open: '104',
+      high: '114',
+      low: '94',
+      close: '109',
+      volume: '14',
+      quoteVolume: '1400',
+      trades: 2,
+      source: 'OKX_WS',
+      isFinal: true,
+    })
+
+    expect(repoMock.upsertBarByUnique).toHaveBeenCalledWith({
+      symbolId: 'perp-id',
+      timeframe: 'm1',
+      time: new Date(1_710_000_240_000),
+      open: '104',
+      high: '114',
+      low: '94',
+      close: '109',
+      volume: '14',
+      quoteVolume: '1400',
+      trades: 2,
+      source: 'OKX_WS',
+      isFinal: true,
+    })
   })
 })

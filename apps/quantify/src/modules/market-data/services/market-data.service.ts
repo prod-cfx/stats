@@ -291,40 +291,20 @@ export class MarketDataService {
     const prismaTimeframe = mapTimeframe(payload.timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
     try {
-      await this.repo.upsertBar(
-        {
-          symbolId_timeframe_time: {
-            symbolId: symbol.id,
-            timeframe: prismaTimeframe,
-            time: new Date(payload.timestamp),
-          },
-        },
-        {
-          symbol: { connect: { id: symbol.id } },
-          timeframe: prismaTimeframe,
-          time: new Date(payload.timestamp),
-          open: payload.open,
-          high: payload.high,
-          low: payload.low,
-          close: payload.close,
-          volume: payload.volume,
-          quoteVolume: payload.quoteVolume,
-          trades: payload.trades,
-          source: payload.source,
-          isFinal: payload.isFinal ?? true,
-        },
-        {
-          open: payload.open,
-          high: payload.high,
-          low: payload.low,
-          close: payload.close,
-          volume: payload.volume,
-          quoteVolume: payload.quoteVolume,
-          trades: payload.trades,
-          source: payload.source,
-          isFinal: payload.isFinal ?? true,
-        },
-      )
+      await this.repo.upsertBarByUnique({
+        symbolId: symbol.id,
+        timeframe: prismaTimeframe,
+        time: new Date(payload.timestamp),
+        open: payload.open,
+        high: payload.high,
+        low: payload.low,
+        close: payload.close,
+        volume: payload.volume,
+        quoteVolume: payload.quoteVolume,
+        trades: payload.trades,
+        source: payload.source,
+        isFinal: payload.isFinal ?? true,
+      })
     } catch (error) {
       if (!this.isUniqueConflict(error)) {
         throw error
