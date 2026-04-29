@@ -1,4 +1,4 @@
-import { buildAccountStrategyLatestOrders, buildAccountStrategyMixedTimeline } from './account-strategy-view-detail-projection'
+import { buildAccountStrategyLatestOrders, buildAccountStrategyMixedTimeline, buildAccountStrategyRuntimeSemanticSummary } from './account-strategy-view-detail-projection'
 
 describe('buildAccountStrategyMixedTimeline', () => {
   it('keeps the newest 30 events while preserving chronological display order', () => {
@@ -126,5 +126,64 @@ describe('buildAccountStrategyLatestOrders', () => {
       ledgerApplied: true,
       reconcileRequired: false,
     }))
+  })
+})
+
+describe('buildAccountStrategyRuntimeSemanticSummary', () => {
+  it('keeps reconciliation sync close trades out of exit order evidence', () => {
+    const summary = buildAccountStrategyRuntimeSemanticSummary({
+      status: 'running',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      openPositionsCount: 0,
+      ruleSummary: {
+        rules: [
+          {
+            phase: 'entry',
+            label: '入场',
+            conditions: ['close_1m > high_1m_1'],
+            actions: ['OPEN_LONG'],
+          },
+          {
+            phase: 'exit',
+            label: '出场',
+            conditions: ['close_1m < low_1m_1'],
+            actions: ['CLOSE_LONG'],
+          },
+        ],
+      },
+      trades: [
+        {
+          executedAt: new Date(Date.UTC(2026, 3, 29, 10, 25)),
+          side: 'SELL',
+          symbol: 'BTCUSDT',
+          price: 95000,
+          quantity: 0.01,
+          fee: 0,
+          feeCurrency: 'USDT',
+          orderId: 'sync-close-1777458341703',
+        },
+        {
+          executedAt: new Date(Date.UTC(2026, 3, 29, 10, 20)),
+          side: 'BUY',
+          symbol: 'BTCUSDT',
+          price: 94000,
+          quantity: 0.01,
+          fee: 0,
+          feeCurrency: 'USDT',
+          orderId: 'okx-entry-1',
+        },
+      ],
+    })
+
+    expect(summary.evidence.entryOrders).toEqual([
+      { orderId: 'okx-entry-1', executedAt: '2026-04-29T10:20:00.000Z' },
+    ])
+    expect(summary.evidence.exitOrders).toEqual([])
+    expect(summary.evidence.syncOrders).toEqual([
+      { orderId: 'sync-close-1777458341703', executedAt: '2026-04-29T10:25:00.000Z' },
+    ])
+    expect(summary.evidence.latestExitOrderId).toBeNull()
+    expect(summary.evidence.latestSyncOrderId).toBe('sync-close-1777458341703')
   })
 })
