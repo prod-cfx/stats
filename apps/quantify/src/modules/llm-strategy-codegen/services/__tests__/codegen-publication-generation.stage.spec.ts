@@ -1254,6 +1254,32 @@ describe('codegenPublicationGenerationStage', () => {
       stopLossPct: 5,
       stopLossBasis: 'entry_avg_price',
     }))
+    expect(artifacts.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
+    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expect.objectContaining({
+      risk: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'risk.stop_loss_pct',
+          params: expect.objectContaining({
+            valuePct: 5,
+            direction: 'loss',
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+            effect: 'close_position',
+            scope: 'current_position',
+          }),
+        }),
+      ]),
+    }))
   })
 
   it('ignores non-locked semantic context values when reading publication context', () => {

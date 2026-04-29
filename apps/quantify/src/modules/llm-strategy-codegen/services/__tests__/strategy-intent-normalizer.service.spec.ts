@@ -275,7 +275,7 @@ describe('strategyIntentNormalizerService', () => {
         valuePct: 5,
         direction: 'loss',
         basis: 'entry_avg_price',
-        basisSource: 'system_default',
+        basisSource: 'user_explicit',
         effect: 'close_position',
         scope: 'current_position',
       }),
@@ -289,6 +289,23 @@ describe('strategyIntentNormalizerService', () => {
         basisSource: 'user_explicit',
         effect: 'close_position',
         scope: 'current_position',
+      }),
+    }))
+  })
+
+  it('marks absent legacy stop loss basis defaults as system generated', () => {
+    const result = service.normalize({
+      riskRules: {
+        stopLossPct: 5,
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
       }),
     }))
   })

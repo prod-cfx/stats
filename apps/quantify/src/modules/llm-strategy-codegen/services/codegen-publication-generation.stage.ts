@@ -401,7 +401,7 @@ export class CodegenPublicationGenerationStage {
         key: action.key,
         ...(action.params ? { params: { ...action.params } } : {}),
       })),
-      risk: semanticState.risk.map(risk => ({
+      risk: normalizeRiskSemantics(semanticState.risk).map(risk => ({
         key: risk.key,
         params: { ...risk.params },
       })),

@@ -818,7 +818,7 @@ export class StrategyIntentNormalizerService {
           valuePct: riskRules.stopLossPct,
           direction: 'loss',
           basis,
-          basisSource: this.resolveLegacyRiskBasisSource(basis, riskRules.stopLossBasis),
+          basisSource: this.resolveLegacyRiskBasisSource(riskRules.stopLossBasis),
           effect: 'close_position',
           scope: 'current_position',
         },
@@ -832,7 +832,7 @@ export class StrategyIntentNormalizerService {
           valuePct: riskRules.takeProfitPct,
           direction: 'profit',
           basis,
-          basisSource: this.resolveLegacyRiskBasisSource(basis, riskRules.takeProfitBasis),
+          basisSource: this.resolveLegacyRiskBasisSource(riskRules.takeProfitBasis),
           effect: 'close_position',
           scope: 'current_position',
         },
@@ -860,8 +860,8 @@ export class StrategyIntentNormalizerService {
       : 'entry_avg_price'
   }
 
-  private resolveLegacyRiskBasisSource(basis: string, rawBasis: unknown): 'system_default' | 'user_explicit' {
-    return typeof rawBasis === 'string' && rawBasis.trim() && basis !== 'entry_avg_price'
+  private resolveLegacyRiskBasisSource(rawBasis: unknown): 'system_default' | 'user_explicit' {
+    return typeof rawBasis === 'string' && rawBasis.trim()
       ? 'user_explicit'
       : 'system_default'
   }
