@@ -7099,6 +7099,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('applies hidden default risk basis override replies without re-prompting for basis confirmation', async () => {
+    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
+      id: 's-hidden-default-risk-basis-override',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    }), ['risk.takeProfitBasis'])
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-hidden-default-risk-basis-override', {
+      userId: 'u1',
+      message: '止盈按持仓收益率',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls
+      .map(call => call[1] as Record<string, any>)
+      .reverse()
+      .find(payload => Array.isArray(payload.semanticState?.risk)) as Record<string, any>
+    const takeProfitRisk = updatePayload.semanticState.risk.find((risk: Record<string, any>) =>
+      risk.key === 'risk.take_profit_pct',
+    )
+
+    expect(takeProfitRisk).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        basis: 'position_pnl',
+        basisSource: 'user_explicit',
+      }),
+    }))
+    expect(result.assistantPrompt).not.toContain('entry_avg_price')
+    expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+  })
+
   it.each(['这样可以', '可以了', '就这样', '没问题'])(
     'records confirmed inferred risk basis keys for natural confirmation variant %s',
     async (message) => {

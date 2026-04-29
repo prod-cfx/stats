@@ -6084,22 +6084,72 @@ export class CodegenConversationService {
       constraintPack: ConstraintPackSnapshot
       consumed: boolean
     }> {
-    const clarification = this.resolveSemanticClarificationArtifacts(semanticState)
-    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticState, {})
+    const normalizedSemanticState = this.normalizeRiskState(semanticState)
+    const clarification = this.resolveSemanticClarificationArtifacts(normalizedSemanticState)
+    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(normalizedSemanticState, {})
     const compileability = this.evaluateCanonicalCompileability(
-      this.buildCanonicalSpecForConversation(semanticState, clarification.normalization),
+      this.buildCanonicalSpecForConversation(normalizedSemanticState, clarification.normalization),
     )
     const decision = this.buildStrategyDecision({
       checklist,
-      semanticState,
+      semanticState: normalizedSemanticState,
       clarification,
       compileability,
       constraintPack,
     })
+    const consumedInferredKeys = new Set([
+      ...(Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+        ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+      ...(Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+        ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+    ])
+    const nonBlockingRiskBasisDefaultKeys = [
+      ...this.collectInferredAssumptions(checklist, constraintPack).map(item => item.key),
+      ...(this.buildInferredConfirmationSemanticDefaults(normalizedSemanticState).inferredKeys ?? []),
+    ]
+      .filter((key, index, keys) => keys.indexOf(key) === index && !consumedInferredKeys.has(key))
+      .filter(key => this.isNonBlockingRiskBasisDefault(normalizedSemanticState, key))
 
     if (decision.kind !== 'CONFIRM_INFERRED') {
+      if (nonBlockingRiskBasisDefaultKeys.length > 0) {
+        const explicitResponse = await this.consumeExplicitInferredDecisionResponse(
+          normalizedSemanticState,
+          nonBlockingRiskBasisDefaultKeys,
+          message,
+          undefined,
+          undefined,
+          options,
+        )
+
+        if (explicitResponse.overriddenKeys.length > 0) {
+          const existingConfirmedKeys = Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+            ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+            : []
+          const existingOverriddenKeys = Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+            ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+            : []
+
+          return {
+            semanticState: explicitResponse.semanticState,
+            constraintPack: {
+              ...constraintPack,
+              inferredConfirmation: {
+                confirmedKeys: existingConfirmedKeys.filter(key => !explicitResponse.overriddenKeys.includes(key)),
+                overriddenKeys: Array.from(new Set([
+                  ...existingOverriddenKeys,
+                  ...explicitResponse.overriddenKeys,
+                ])),
+              },
+            },
+            consumed: true,
+          }
+        }
+      }
+
       return {
-        semanticState,
+        semanticState: normalizedSemanticState,
         constraintPack,
         consumed: false,
       }
@@ -6107,7 +6157,7 @@ export class CodegenConversationService {
     const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
 
     const explicitResponse = await this.consumeExplicitInferredDecisionResponse(
-      semanticState,
+      normalizedSemanticState,
       decision.inferredAssumptions.map(item => item.key),
       message,
       assistantPrompt,
