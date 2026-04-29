@@ -38,4 +38,33 @@ describe('buildAccountStrategyLatestOrders', () => {
     expect(orders[0]?.orderId).toBe('ord-11')
     expect(orders[9]?.orderId).toBe('ord-2')
   })
+
+  it('excludes reconciliation sync trades from latest exchange order evidence', () => {
+    const orders = buildAccountStrategyLatestOrders([
+      {
+        executedAt: new Date(Date.UTC(2026, 3, 29, 4, 30)),
+        side: 'BUY',
+        symbol: 'BTCUSDT',
+        price: 76891.8,
+        quantity: 4,
+        fee: 0,
+        feeCurrency: 'USDT',
+        orderId: 'sync-adjust-position-1',
+      },
+      {
+        executedAt: new Date(Date.UTC(2026, 3, 29, 4, 10)),
+        side: 'BUY',
+        symbol: 'BTCUSDT',
+        price: 76891.8,
+        quantity: 0.04,
+        fee: 1.5,
+        feeCurrency: 'USDT',
+        orderId: 'okx-order-1',
+      },
+    ])
+
+    expect(orders).toHaveLength(1)
+    expect(orders[0]?.orderId).toBe('okx-order-1')
+    expect(orders[0]?.quantity).toBe(0.04)
+  })
 })

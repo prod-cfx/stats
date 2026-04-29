@@ -307,11 +307,12 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    return res.data
+    return Promise.all(res.data
       .filter(p => p.instType === 'SWAP' && p.pos !== '0')
-      .map(p => {
+      .map(async (p) => {
         const symbol = this.fromInstrumentId(p.instId)
-        const size = Number.parseFloat(p.pos)
+        const instrumentSpec = await this.getInstrumentSpec(p.instId)
+        const size = this.fromExchangeSize(p.pos, instrumentSpec)
         const side: UnifiedPosition['side'] =
           p.posSide === 'long' ? 'long' : p.posSide === 'short' ? 'short' : size >= 0 ? 'long' : 'short'
 
@@ -326,7 +327,7 @@ export class OkxClient extends BaseCexClient {
           liquidationPrice: Number.parseFloat(p.liqPx),
           raw: p,
         }
-      })
+      }))
   }
 
   async fetchBalance(): Promise<UnifiedBalance[]> {

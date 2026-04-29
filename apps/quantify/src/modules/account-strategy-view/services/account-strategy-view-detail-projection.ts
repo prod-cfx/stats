@@ -37,6 +37,11 @@ interface TimelineTrade {
   orderId?: string | null
 }
 
+function isExchangeOrderTrade(trade: TimelineTrade): boolean {
+  const orderId = typeof trade.orderId === 'string' ? trade.orderId.trim() : ''
+  return !orderId.startsWith('sync-')
+}
+
 export interface AccountStrategyTimelineSource {
   instance: TimelineInstance | null
   subscription: TimelineSubscription | null
@@ -156,6 +161,7 @@ export function buildAccountStrategyLatestOrders(
 
   return trades
     .filter(trade => trade.executedAt instanceof Date && typeof trade.symbol === 'string' && typeof trade.side === 'string')
+    .filter(isExchangeOrderTrade)
     .sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime())
     .slice(0, 10)
     .map((trade) => {
