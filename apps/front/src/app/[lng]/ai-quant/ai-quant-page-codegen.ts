@@ -371,6 +371,7 @@ export function applyCodegenResponseToConversationState(args: {
   trimmedMessage: string
   t: (key: string, options?: Record<string, unknown>) => string
   loadingMessageId?: string | null
+  preserveBacktestResultOnSameSnapshot?: boolean
 }): ConversationState {
   const {
     conversation,
@@ -382,6 +383,7 @@ export function applyCodegenResponseToConversationState(args: {
     trimmedMessage,
     t,
     loadingMessageId = null,
+    preserveBacktestResultOnSameSnapshot = false,
   } = args
 
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
@@ -532,6 +534,11 @@ export function applyCodegenResponseToConversationState(args: {
   const nextPublishedScriptGraphVersion = nextPublishedScriptCode
     ? (nextGraph?.version ?? conversation.publishedScriptGraphVersion)
     : null
+  const shouldPreserveBacktestResult =
+    preserveBacktestResultOnSameSnapshot
+    && Boolean(conversation.backtestResult)
+    && normalizePublishedSnapshotId(conversation.publishedSnapshotId) !== null
+    && normalizePublishedSnapshotId(conversation.publishedSnapshotId) === nextPublishedSnapshotId
   const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
     ? (response.semanticGraph ?? null)
     : conversation.semanticGraph
@@ -649,7 +656,7 @@ export function applyCodegenResponseToConversationState(args: {
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
     backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
-    backtestResult: null,
+    backtestResult: shouldPreserveBacktestResult ? conversation.backtestResult : null,
     latestSignalMessage: null,
     messages: nextMessages,
     updatedAt: response.updatedAt ? Date.parse(response.updatedAt) : Date.now(),
@@ -707,6 +714,7 @@ export async function reconcilePersistedActiveCodegenSession(args: {
         backtestCapabilities,
         activeSessionId,
         trimmedMessage: '',
+        preserveBacktestResultOnSameSnapshot: true,
         t,
       })
     }),
