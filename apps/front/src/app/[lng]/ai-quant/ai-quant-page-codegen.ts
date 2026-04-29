@@ -85,7 +85,7 @@ function normalizePublishedSnapshotParamValues(
 }
 
 function normalizeSnapshotBacktestConfigDefaults(
-  value: AccountAiQuantBacktestConfigDefaults | null | undefined,
+  value: unknown,
 ): AccountAiQuantBacktestConfigDefaults | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
