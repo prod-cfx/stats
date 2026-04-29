@@ -6109,6 +6109,7 @@ export class CodegenConversationService {
       ...this.collectInferredAssumptions(checklist, constraintPack).map(item => item.key),
       ...(this.buildInferredConfirmationSemanticDefaults(normalizedSemanticState).inferredKeys ?? []),
     ]
+      .filter((key): key is string => typeof key === 'string')
       .filter((key, index, keys) => keys.indexOf(key) === index && !consumedInferredKeys.has(key))
       .filter(key => this.isNonBlockingRiskBasisDefault(normalizedSemanticState, key))
 
