@@ -22,7 +22,7 @@ import type { StrategyBlockingReason, StrategyInferredAssumption } from '../type
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
-import { buildSemanticSlotId, type SemanticActionState, type SemanticPositionSizingContract, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
+import { buildSemanticSlotId, type SemanticActionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
 import type { Prisma } from '@/prisma/prisma.types'
@@ -76,6 +76,8 @@ import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { SemanticSeedStateBuilderService } from './semantic-seed-state-builder.service'
 import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
@@ -199,6 +201,7 @@ export class CodegenConversationService {
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
     private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
+    private readonly semanticSeedStateBuilder: SemanticSeedStateBuilderService = new SemanticSeedStateBuilderService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
@@ -7066,262 +7069,7 @@ export class CodegenConversationService {
   private buildSemanticStateFromPlannerPatch(
     semanticPatch: unknown,
   ): SemanticState | null {
-    if (!semanticPatch || typeof semanticPatch !== 'object' || Array.isArray(semanticPatch)) {
-      return null
-    }
-
-    const record = semanticPatch as Record<string, unknown>
-    const triggerItems = Array.isArray(record.triggers)
-      ? record.triggers
-      : (Array.isArray(record.triggerUpdates) ? record.triggerUpdates : [])
-    const actionItems = Array.isArray(record.actions)
-      ? record.actions
-      : (Array.isArray(record.actionUpdates) ? record.actionUpdates : [])
-    const riskItems = Array.isArray(record.risk)
-      ? record.risk
-      : (Array.isArray(record.riskUpdates) ? record.riskUpdates : [])
-    const positionUpdate = this.toPlannerPositionState(record.position ?? record.positionUpdate)
-    const contextSlots = this.toPlannerContextSlots(record.contextSlots ?? record.contextUpdates ?? record.context)
-
-    const triggerUpdates = triggerItems
-      .map((item, index) => this.toPlannerTriggerState(item, index))
-      .filter((item): item is SemanticTriggerState => item !== null)
-    const actionUpdates = actionItems
-      .map((item, index) => this.toPlannerActionState(item, index))
-      .filter((item): item is SemanticState['actions'][number] => item !== null)
-    const riskUpdates = riskItems
-      .map((item, index) => this.toPlannerRiskState(item, index))
-      .filter((item): item is SemanticState['risk'][number] => item !== null)
-
-    if (
-      triggerUpdates.length === 0
-      && actionUpdates.length === 0
-      && riskUpdates.length === 0
-      && !positionUpdate
-      && !Object.values(contextSlots).some(Boolean)
-    ) {
-      return null
-    }
-
-    return {
-      version: 1,
-      families: [],
-      triggers: triggerUpdates,
-      actions: actionUpdates,
-      risk: riskUpdates,
-      position: positionUpdate,
-      contextSlots,
-      normalizationNotes: [],
-      updatedAt: new Date().toISOString(),
-    }
-  }
-
-  private toPlannerTriggerState(update: unknown, index: number): SemanticTriggerState | null {
-    if (!update || typeof update !== 'object' || Array.isArray(update)) {
-      return null
-    }
-
-    const record = update as Record<string, unknown>
-    const key = typeof record.key === 'string' ? record.key.trim() : ''
-    const phase = record.phase
-    if (!key || (phase !== 'entry' && phase !== 'exit' && phase !== 'risk' && phase !== 'gate')) {
-      return null
-    }
-
-    return {
-      id: typeof record.id === 'string' && record.id.trim() ? record.id.trim() : `planner-trigger-${index + 1}`,
-      key,
-      phase,
-      params: this.normalizePlannerTriggerParams(key, this.readPlannerParams(record.params)),
-      ...(record.sideScope === 'long' || record.sideScope === 'short' || record.sideScope === 'both'
-        ? { sideScope: record.sideScope }
-        : {}),
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    }
-  }
-
-  private toPlannerActionState(update: unknown, index: number): SemanticState['actions'][number] | null {
-    if (!update || typeof update !== 'object' || Array.isArray(update)) {
-      return null
-    }
-
-    const record = update as Record<string, unknown>
-    const key = typeof record.key === 'string' ? record.key.trim() : ''
-    if (!key) {
-      return null
-    }
-
-    return {
-      id: typeof record.id === 'string' && record.id.trim() ? record.id.trim() : `planner-action-${index + 1}`,
-      key,
-      ...(record.params && typeof record.params === 'object' && !Array.isArray(record.params)
-        ? { params: { ...(record.params as Record<string, unknown>) } }
-        : {}),
-      status: 'locked',
-      source: 'user_explicit',
-    }
-  }
-
-  private toPlannerRiskState(update: unknown, index: number): SemanticState['risk'][number] | null {
-    if (!update || typeof update !== 'object' || Array.isArray(update)) {
-      return null
-    }
-
-    const record = update as Record<string, unknown>
-    const key = typeof record.key === 'string' ? record.key.trim() : ''
-    if (!key) {
-      return null
-    }
-
-    return {
-      id: typeof record.id === 'string' && record.id.trim() ? record.id.trim() : `planner-risk-${index + 1}`,
-      key,
-      params: this.readPlannerParams(record.params),
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    }
-  }
-
-  private toPlannerPositionState(update: unknown): SemanticState['position'] {
-    if (!update || typeof update !== 'object' || Array.isArray(update)) {
-      return null
-    }
-
-    const record = update as Record<string, unknown>
-    const sizing = this.readPlannerPositionSizing(record.sizing)
-    if (
-      typeof record.mode !== 'string'
-      || typeof record.positionMode !== 'string'
-      || typeof record.value !== 'number'
-      || !Number.isFinite(record.value)
-    ) {
-      return null
-    }
-
-    const positionMode = record.positionMode === 'both' ? 'long_short' : record.positionMode
-
-    return {
-      ...(sizing ? { sizing } : {}),
-      mode: record.mode,
-      value: record.value,
-      positionMode,
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    }
-  }
-
-  private readPlannerPositionSizing(sizing: unknown): SemanticPositionSizingContract | null {
-    if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
-      return null
-    }
-
-    const record = sizing as Record<string, unknown>
-    if (typeof record.value !== 'number' || !Number.isFinite(record.value) || record.value <= 0) {
-      return null
-    }
-
-    if (record.kind === 'ratio' && (record.unit === 'ratio' || record.unit === 'percent')) {
-      return { kind: 'ratio', value: record.value, unit: record.unit }
-    }
-
-    if (
-      record.kind === 'quote'
-      && (record.asset === 'USDT' || record.asset === 'USDC' || record.asset === 'USD')
-    ) {
-      return { kind: 'quote', value: record.value, asset: record.asset }
-    }
-
-    if (
-      record.kind === 'base'
-      && typeof record.asset === 'string'
-      && /^[A-Z][A-Z0-9]{1,15}$/u.test(record.asset)
-    ) {
-      return { kind: 'base', value: record.value, asset: record.asset }
-    }
-
-    return null
-  }
-
-  private toPlannerContextSlots(update: unknown): SemanticState['contextSlots'] {
-    if (!update || typeof update !== 'object' || Array.isArray(update)) {
-      return {
-        exchange: null,
-        symbol: null,
-        marketType: null,
-        timeframe: null,
-      }
-    }
-
-    const record = update as Record<string, unknown>
-    return {
-      exchange: this.toPlannerContextSlot('exchange', record.exchange),
-      symbol: this.toPlannerContextSlot('symbol', record.symbol),
-      marketType: this.toPlannerContextSlot('marketType', record.marketType),
-      timeframe: this.toPlannerContextSlot('timeframe', record.timeframe),
-    }
-  }
-
-  private toPlannerContextSlot(
-    field: 'exchange' | 'symbol' | 'marketType' | 'timeframe',
-    value: unknown,
-  ): SemanticState['contextSlots'][typeof field] {
-    if (typeof value !== 'string' || !value.trim()) {
-      return null
-    }
-
-    const questionHints: Record<typeof field, string> = {
-      exchange: '请确认交易所（binance / okx / hyperliquid）。',
-      symbol: '请确认策略交易标的（例如 BTCUSDT）。',
-      marketType: '请确认市场类型（现货或合约/perp）。',
-      timeframe: '请确认策略主周期（例如 15m 或 1h）。',
-    }
-
-    return {
-      slotKey: field,
-      fieldPath: `contextSlots.${field}`,
-      value: value.trim(),
-      status: 'locked',
-      priority: 'context',
-      questionHint: questionHints[field],
-      affectsExecution: true,
-    }
-  }
-
-  private readPlannerParams(value: unknown): Record<string, unknown> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return {}
-    }
-
-    return { ...(value as Record<string, unknown>) }
-  }
-
-  private normalizePlannerTriggerParams(
-    key: string,
-    params: Record<string, unknown>,
-  ): Record<string, unknown> {
-    if (key !== 'price.percent_change' || typeof params.valuePct !== 'number' || !Number.isFinite(params.valuePct)) {
-      return params
-    }
-
-    if (params.direction === 'down' || params.direction === '跌' || params.direction === '下跌') {
-      return {
-        ...params,
-        valuePct: -Math.abs(params.valuePct),
-      }
-    }
-
-    if (params.direction === 'up' || params.direction === '涨' || params.direction === '上涨') {
-      return {
-        ...params,
-        valuePct: Math.abs(params.valuePct),
-      }
-    }
-
-    return params
+    return this.semanticSeedStateBuilder.build(semanticPatch)
   }
 
   private mergeRuleArrays(
