@@ -126,6 +126,26 @@ describe('SemanticStateProjectionService', () => {
     expect(result.nextQuestion).toBe('请选择交易所')
   })
 
+  it('asks action open slot questions after trigger and position slots are closed', () => {
+    const state = closeOpenExpressionState()
+    state.contextSlots.exchange = null
+    state.contextSlots.marketType = null
+    state.actions[0] = {
+      ...state.actions[0]!,
+      status: 'open',
+      openSlots: [{
+        slotKey: 'action.order_type',
+        fieldPath: 'actions[0].params.orderType',
+        status: 'open',
+        priority: 'behavior',
+        questionHint: '请确认开仓订单类型。',
+        affectsExecution: true,
+      }],
+    }
+
+    expect(service.buildClarificationView(state).nextQuestion).toBe('请确认开仓订单类型。')
+  })
+
   it('builds summary and next question from semanticState instead of checklist text', () => {
     const result = service.buildClarificationView({
       version: 1,

@@ -2800,6 +2800,13 @@ export class CodegenConversationService {
       return positionSlot
     }
 
+    const actionSlot = state.actions
+      .flatMap(action => action.openSlots ?? [])
+      .find(slot => slot.status === 'open')
+    if (actionSlot) {
+      return actionSlot
+    }
+
     const riskSlot = state.risk.flatMap(risk => risk.openSlots).find(slot => slot.status === 'open')
     if (riskSlot) {
       return riskSlot
@@ -2874,11 +2881,14 @@ export class CodegenConversationService {
     const openRiskSlots = state.risk
       .flatMap(risk => risk.openSlots)
       .filter(slot => slot.status === 'open')
+    const openActionSlots = state.actions
+      .flatMap(action => action.openSlots ?? [])
+      .filter(slot => slot.status === 'open')
     const openPositionSlots = state.position?.openSlots?.filter(slot => slot.status === 'open') ?? []
     const openContextSlots = Object.values(state.contextSlots)
       .filter((slot): slot is SemanticSlotState => Boolean(slot) && slot.status === 'open')
 
-    return [...openTriggerSlots, ...openPositionSlots, ...openRiskSlots, ...openContextSlots]
+    return [...openTriggerSlots, ...openPositionSlots, ...openActionSlots, ...openRiskSlots, ...openContextSlots]
   }
 
   private buildClarificationFromSemanticState(

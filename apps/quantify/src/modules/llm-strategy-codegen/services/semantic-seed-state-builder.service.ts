@@ -133,6 +133,7 @@ export class SemanticSeedStateBuilderService {
       status: this.resolveNodeStatus(update.status, openSlots),
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
+      openSlots,
       ...(supersedes ? { supersedes } : {}),
     }
   }

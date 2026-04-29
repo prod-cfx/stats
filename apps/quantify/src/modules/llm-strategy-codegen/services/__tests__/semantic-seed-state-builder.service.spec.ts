@@ -70,17 +70,17 @@ describe('SemanticSeedStateBuilderService', () => {
     }))
   })
 
-  it('uses action open slots to keep action state open without storing unsupported slots', () => {
+  it('preserves action open slots from semantic seed patch', () => {
     const state = service.build({
       actions: [{
         key: 'open_long',
         openSlots: [{
           slotKey: 'action.order_type',
           fieldPath: 'actions[0].params.orderType',
-          status: 'open',
-          priority: 'behavior',
-          questionHint: '请确认开仓订单类型。',
-          affectsExecution: true,
+        status: 'open',
+        priority: 'behavior',
+        questionHint: '请确认开仓订单类型。',
+        affectsExecution: true,
         }],
       }],
     })
@@ -90,6 +90,10 @@ describe('SemanticSeedStateBuilderService', () => {
       status: 'open',
       source: 'user_explicit',
     }))
-    expect(state?.actions[0]).not.toHaveProperty('openSlots')
+    expect(state?.actions[0]?.openSlots).toEqual([expect.objectContaining({
+      slotKey: 'action.order_type',
+      status: 'open',
+      questionHint: '请确认开仓订单类型。',
+    })])
   })
 })
