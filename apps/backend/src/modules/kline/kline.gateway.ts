@@ -26,6 +26,7 @@ import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports
 import { CacheService } from '@/common/services/cache.service'
+import { buildValidatedCorsOrigins } from '@/common/utils/cors-origins'
 // eslint-disable-next-line ts/consistent-type-imports
 import { RedisService } from '@/common/services/redis.service'
 // eslint-disable-next-line ts/consistent-type-imports
@@ -45,51 +46,27 @@ const SOCKET_PING_INTERVAL_MS = 25000
 const SOCKET_PING_TIMEOUT_MS = 5000
 const STALE_CONNECTION_THRESHOLD_MS = 120000
 
-// 允许的 CORS origin 正则模式
-const ALLOWED_ORIGIN_PATTERNS = [
-  ...(defaultEnvAccessor.nodeEnv() === 'development'
-    ? [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]
-    : []),
-  /^https:\/\/(www|app|admin)\.coinflux\.com$/,
-]
-
-/**
- * 验证 CORS origin 是否合法
- */
-function isValidOrigin(origin: string | undefined): boolean {
-  if (!origin) {
-    return false
-  }
-  // 检查是否为有效 URL 格式
-  try {
-    const url = new URL(origin)
-    if (defaultEnvAccessor.nodeEnv() === 'production' && url.protocol !== 'https:') {
-      return false
-    }
-  } catch {
-    return false
-  }
-  return ALLOWED_ORIGIN_PATTERNS.some(pattern => pattern.test(origin))
-}
-
 /**
  * 解析并验证 ALLOWED_ORIGINS 环境变量
  */
-function parseAllowedOrigins(): string[] {
-  const envOrigins =
-    defaultEnvAccessor.str('ALLOWED_ORIGINS')?.split(',')
-      .map(o => o.trim())
-      .filter(Boolean) || []
-  const validOrigins = envOrigins.filter(isValidOrigin)
+function splitOrigins(value: string | undefined): string[] {
+  return value?.split(',').map(origin => origin.trim()).filter(Boolean) ?? []
+}
 
-  // 如果没有有效的 origin，使用默认值
-  if (validOrigins.length === 0) {
-    if (defaultEnvAccessor.nodeEnv() === 'development') {
-      return ['http://localhost:3001']
-    }
-    return ['https://app.coinflux.com']
-  }
-  return validOrigins
+export function parseAllowedOrigins(): string[] {
+  const appEnv = defaultEnvAccessor.appEnv()
+  return buildValidatedCorsOrigins(
+    splitOrigins(defaultEnvAccessor.str('FRONTEND_REDIRECT_ORIGINS')),
+    splitOrigins(defaultEnvAccessor.str('ALLOWED_ORIGINS')),
+    appEnv,
+    appEnv === 'development'
+      ? ['http://localhost:3001']
+      : ['https://www.coinflux.ai', 'https://admin.coinflux.ai'],
+  )
+}
+
+function isCorsOriginAllowed(origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void): void {
+  callback(null, origin ? parseAllowedOrigins().includes(origin) : false)
 }
 
 // Trades 订阅信息接口
@@ -154,7 +131,7 @@ type OrderbookPayload = AggregatedOrderbookResult | VenueOrderbookSnapshot
 
 @WebSocketGateway({
   cors: {
-    origin: parseAllowedOrigins(),
+    origin: isCorsOriginAllowed,
     credentials: true,
   },
   namespace: '/kline',

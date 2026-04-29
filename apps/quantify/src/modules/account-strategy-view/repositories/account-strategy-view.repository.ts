@@ -1,5 +1,6 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import type { StrategyFundingSnapshot } from '@/modules/trading/core/strategy-buying-power.resolver'
 import { ErrorCode, PositionStatus, SubscriptionStatus  } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -30,7 +31,12 @@ interface DeployStrategyInput {
   symbol: string
   marketType: 'spot' | 'perp'
   timeframe: string
-  positionPct: number
+  positionPct: number | null
+  positionSizing?: {
+    mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
+    value: number
+    asset?: string
+  }
   deploymentExecutionConfig?: {
     leverage?: number | null
     priceSource?: string | null
@@ -47,6 +53,7 @@ interface DeployStrategyInput {
   }
   initialBalanceQuote?: number
   accountBalanceQuote?: number
+  fundingSnapshot?: StrategyFundingSnapshot | null
   mode?: 'TESTNET' | 'LIVE'
   exchangeAccountId?: string
   exchangeAccountName?: string
@@ -58,12 +65,72 @@ interface ExistingInstanceSnapshotBinding {
   snapshotHash?: unknown
 }
 
+interface ResolvedDeployExchangeAccount {
+  id: string
+  isTestnet: boolean | null
+  exchangeId: 'binance' | 'okx' | 'hyperliquid'
+}
+
 @Injectable()
 export class AccountStrategyViewRepository {
   constructor(
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     private readonly prisma: PrismaService,
   ) {}
+
+  async resolveDeployExchangeAccount(input: {
+    userId: string
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    exchangeAccountId?: string | null
+  }): Promise<ResolvedDeployExchangeAccount> {
+    if (input.exchangeAccountId) {
+      const matchedAccount = await this.prisma.exchangeAccount.findFirst({
+        where: {
+          id: input.exchangeAccountId,
+          userId: input.userId,
+        },
+        select: { id: true, isTestnet: true, exchangeId: true },
+      })
+      if (!matchedAccount) {
+        throw new ExchangeAccountNotFoundException({ accountId: input.exchangeAccountId })
+      }
+      if (matchedAccount.exchangeId !== input.exchange) {
+        throw new DomainException('account_strategy.deploy_exchange_account_mismatch', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: {
+            exchangeAccountId: input.exchangeAccountId,
+            expectedExchange: input.exchange,
+            actualExchange: matchedAccount.exchangeId,
+          },
+        })
+      }
+      return {
+        id: matchedAccount.id,
+        isTestnet: matchedAccount.isTestnet,
+        exchangeId: matchedAccount.exchangeId as 'binance' | 'okx' | 'hyperliquid',
+      }
+    }
+
+    const existingAccount = await this.prisma.exchangeAccount.findFirst({
+      where: {
+        userId: input.userId,
+        exchangeId: input.exchange,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, isTestnet: true, exchangeId: true },
+    })
+    if (!existingAccount) {
+      throw new ExchangeAccountNotFoundException({
+        accountId: `${input.exchange}-account`,
+      })
+    }
+    return {
+      id: existingAccount.id,
+      isTestnet: existingAccount.isTestnet,
+      exchangeId: existingAccount.exchangeId as 'binance' | 'okx' | 'hyperliquid',
+    }
+  }
 
   async deployStrategyForUser(input: DeployStrategyInput): Promise<{ strategyInstanceId: string; mode: 'TESTNET' | 'LIVE' }> {
     const normalizedName = this.normalizeStrategyName(input.name)
@@ -136,6 +203,7 @@ export class AccountStrategyViewRepository {
           exchangeAccountId: resolvedExchangeAccountId,
         })
       }
+      const fundingSnapshot = this.normalizeFundingSnapshotForDeployMode(input.fundingSnapshot, resolvedMode)
 
       const reusableStrategyInstanceId = input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? null
 
@@ -173,7 +241,8 @@ export class AccountStrategyViewRepository {
           symbol: input.symbol,
           marketType: input.marketType,
           timeframe: input.timeframe,
-          positionPct: input.positionPct,
+          ...(input.positionPct !== null ? { positionPct: input.positionPct } : {}),
+          ...(input.positionSizing ? { positionSizing: input.positionSizing } : {}),
           ...(input.deploymentExecutionConfig
             ? {
                 deploymentExecutionConfig: input.deploymentExecutionConfig,
@@ -185,6 +254,9 @@ export class AccountStrategyViewRepository {
             : {}),
           ...(typeof input.accountBalanceQuote === 'number' && Number.isFinite(input.accountBalanceQuote)
             ? { accountBalanceQuote: input.accountBalanceQuote }
+            : {}),
+          ...(fundingSnapshot
+            ? { fundingSnapshot: fundingSnapshot as unknown as Prisma.InputJsonValue }
             : {}),
         }
 
@@ -248,18 +320,49 @@ export class AccountStrategyViewRepository {
               strategyId: existingInstance.strategyTemplateId,
             },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            initialBalance: true,
+            balance: true,
+            equity: true,
+            totalRealizedPnl: true,
+            totalUnrealizedPnl: true,
+            _count: {
+              select: {
+                positions: true,
+                trades: true,
+                ledger: true,
+                signalExecutions: true,
+              },
+            },
+          },
         })
 
         if (!existingStrategyAccount) {
           const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
           const accountBalance = this.resolveAccountBalanceQuote(mergedParams, initialBalance)
+          const baseCurrency = this.resolveStrategyAccountBaseCurrency(mergedParams, fundingSnapshot)
           await tx.userStrategyAccount.create({
             data: {
               userId: input.userId,
               strategyId: existingInstance.strategyTemplateId,
               strategyName: normalizedName,
-              baseCurrency: 'USDT',
+              baseCurrency,
+              initialBalance,
+              balance: accountBalance,
+              equity: initialBalance,
+            },
+          })
+        }
+        else if (this.isPristineStrategyAccount(existingStrategyAccount)) {
+          const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
+          const accountBalance = this.resolveAccountBalanceQuote(mergedParams, initialBalance)
+          const baseCurrency = this.resolveStrategyAccountBaseCurrency(mergedParams, fundingSnapshot)
+          await tx.userStrategyAccount.update({
+            where: { id: existingStrategyAccount.id },
+            data: {
+              strategyName: normalizedName,
+              baseCurrency,
               initialBalance,
               balance: accountBalance,
               equity: initialBalance,
@@ -288,6 +391,62 @@ export class AccountStrategyViewRepository {
       publishedSnapshotId: record.publishedSnapshotId,
       snapshotHash: record.snapshotHash,
     }
+  }
+
+  private normalizeFundingSnapshotForDeployMode(
+    fundingSnapshot: StrategyFundingSnapshot | null | undefined,
+    mode: 'TESTNET' | 'LIVE',
+  ): StrategyFundingSnapshot | null {
+    if (!fundingSnapshot) return null
+    return {
+      ...fundingSnapshot,
+      fundingSource: mode === 'LIVE' ? 'exchange_live' : 'exchange_testnet',
+    }
+  }
+
+  private resolveStrategyAccountBaseCurrency(
+    params: Record<string, unknown>,
+    fundingSnapshot: StrategyFundingSnapshot | null,
+  ): string {
+    const snapshotAsset = fundingSnapshot?.asset?.trim().toUpperCase()
+    if (snapshotAsset) return snapshotAsset
+
+    const rawSymbol = params.symbol
+    if (typeof rawSymbol !== 'string') return 'USDT'
+    const normalized = rawSymbol.trim().toUpperCase()
+    if (normalized.endsWith('USDT')) return 'USDT'
+    if (normalized.endsWith('USDC')) return 'USDC'
+    const parts = normalized.split(/[/:-]/).filter(Boolean)
+    return parts[1] ?? 'USDT'
+  }
+
+  private isPristineStrategyAccount(account: {
+    initialBalance: unknown
+    balance: unknown
+    equity: unknown
+    totalRealizedPnl: unknown
+    totalUnrealizedPnl: unknown
+    _count?: {
+      positions?: number
+      trades?: number
+      ledger?: number
+      signalExecutions?: number
+    }
+  }): boolean {
+    const hasActivity =
+      (account._count?.positions ?? 0) > 0
+      || (account._count?.trades ?? 0) > 0
+      || (account._count?.ledger ?? 0) > 0
+      || (account._count?.signalExecutions ?? 0) > 0
+    if (hasActivity) return false
+
+    return this.toFiniteNumber(account.totalRealizedPnl) === 0
+      && this.toFiniteNumber(account.totalUnrealizedPnl) === 0
+  }
+
+  private toFiniteNumber(value: unknown): number | null {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : null
   }
 
   private assertSnapshotBindingMatchesExistingInstance(input: {
@@ -662,6 +821,47 @@ export class AccountStrategyViewRepository {
           userId,
           strategyId,
         },
+      },
+    })
+  }
+
+  async refreshPristineStrategyAccountFunding(input: {
+    accountId: string
+    baseCurrency: string
+    initialBalance: number
+    balance: number
+    equity: number
+  }): Promise<void> {
+    const client = this.txHost.tx
+    const account = await client.userStrategyAccount.findUnique({
+      where: { id: input.accountId },
+      select: {
+        id: true,
+        initialBalance: true,
+        balance: true,
+        equity: true,
+        totalRealizedPnl: true,
+        totalUnrealizedPnl: true,
+        _count: {
+          select: {
+            positions: true,
+            trades: true,
+            ledger: true,
+            signalExecutions: true,
+          },
+        },
+      },
+    })
+
+    if (!account || !this.isPristineStrategyAccount(account)) return
+
+    await client.userStrategyAccount.update({
+      where: { id: input.accountId },
+      data: {
+        baseCurrency: input.baseCurrency,
+        initialBalance: new Prisma.Decimal(input.initialBalance),
+        balance: new Prisma.Decimal(input.balance),
+        equity: new Prisma.Decimal(input.equity),
       },
     })
   }

@@ -1,8 +1,496 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalSpecV2ValidatorService } from '../canonical-spec-v2-validator.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
+import type { SemanticExpression, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState } from '../../types/semantic-state'
+
+type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY', value: number, asset?: string }
+
+function closeOpenPredicate(op: SemanticExpressionOperator): SemanticExpression {
+  return {
+    kind: 'predicate',
+    op,
+    left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+    right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+  }
+}
+
+function createSemanticState(input: {
+  triggers?: SemanticState['triggers']
+  actions?: SemanticState['actions']
+  risk?: SemanticState['risk']
+  position?: SemanticState['position']
+  positionMode?: string
+}): SemanticState {
+  return {
+    version: 1,
+    families: ['single-leg'],
+    contextSlots: {
+      exchange: null,
+      symbol: {
+        slotKey: 'context.symbol',
+        fieldPath: 'symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '交易标的',
+        affectsExecution: true,
+      },
+      marketType: null,
+      timeframe: {
+        slotKey: 'context.timeframe',
+        fieldPath: 'timeframe',
+        value: '1m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: 'K 线周期',
+        affectsExecution: true,
+      },
+    },
+    position: input.position ?? {
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: input.positionMode ?? 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    },
+    triggers: input.triggers ?? [],
+    actions: input.actions ?? [],
+    risk: input.risk ?? [],
+    normalizationNotes: [],
+    updatedAt: '2026-04-28T00:00:00.000Z',
+  }
+}
+
+function createLockedPositionWithSizing(sizing: SemanticPositionSizingContract): NonNullable<SemanticState['position']> {
+  if (sizing.kind === 'ratio') {
+    return {
+      sizing,
+      mode: 'fixed_ratio',
+      value: sizing.value,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }
+  }
+
+  if (sizing.kind === 'quote') {
+    return {
+      sizing,
+      mode: 'fixed_quote',
+      value: sizing.value,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }
+  }
+
+  return {
+    sizing,
+    mode: 'fixed_qty',
+    value: sizing.value,
+    positionMode: 'long_only',
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+  }
+}
 
 describe('canonicalSpecBuilderService', () => {
+  it.each([
+    [
+      { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      { mode: 'RATIO', value: 0.1 },
+    ],
+    [
+      { kind: 'quote', value: 10, asset: 'USDT' },
+      { mode: 'QUOTE', value: 10, asset: 'USDT' },
+    ],
+    [
+      { kind: 'base', value: 0.001, asset: 'BTC' },
+      { mode: 'QTY', value: 0.001, asset: 'BTC' },
+    ],
+  ] satisfies Array<[SemanticPositionSizingContract, ExpectedCanonicalSizing]>)(
+    'maps semantic position contract %o into canonical sizing %o',
+    (semanticSizing, canonicalSizing) => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({
+        position: createLockedPositionWithSizing(semanticSizing),
+      })
+
+      const spec = service.buildFromSemanticState(state)
+
+      expect(spec.sizing).toEqual(canonicalSizing)
+    },
+  )
+
+  it('builds canonical spec from SemanticState expression', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg', 'state-gated'],
+      contextSlots: {
+        exchange: null,
+        symbol: {
+          slotKey: 'context.symbol',
+          fieldPath: 'symbol',
+          value: 'BTCUSDT',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '交易标的',
+          affectsExecution: true,
+        },
+        marketType: null,
+        timeframe: {
+          slotKey: 'context.timeframe',
+          fieldPath: 'timeframe',
+          value: '1m',
+          status: 'locked',
+          priority: 'context',
+          questionHint: 'K 线周期',
+          affectsExecution: true,
+        },
+      },
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      triggers: [
+        {
+          id: 'entry-close-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+              right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+            },
+          },
+        },
+        {
+          id: 'gate-no-position',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+        },
+        {
+          id: 'exit-close-open',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+              right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+            },
+          },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      risk: [],
+      normalizationNotes: [],
+      updatedAt: '2026-04-28T00:00:00.000Z',
+    }
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.market).toEqual({
+      exchange: null,
+      symbol: 'BTCUSDT',
+      marketType: null,
+      defaultTimeframe: '1m',
+    })
+    expect(spec.sizing).toEqual({ mode: 'QUOTE', value: 10, asset: 'USDT' })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'semantic-entry-1',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+          right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+        }),
+        actions: [expect.objectContaining({
+          type: 'OPEN_LONG',
+          sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
+        })],
+      }),
+      expect.objectContaining({
+        id: 'semantic-exit-1',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'LT',
+          left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+          right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'gate',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'position.has_position',
+          op: 'EQ',
+          value: false,
+        }),
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      }),
+    ]))
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
+      status: 'VALID',
+    }))
+  })
+
+  it('attaches generic semantic gates to entry rules without blocking exits', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'entry-close-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('GT') },
+        },
+        {
+          id: 'exit-close-open',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('LT') },
+        },
+        {
+          id: 'regime-gate',
+          key: 'market.regime',
+          phase: 'gate',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { value: 'range', mode: 'hard_gate' },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const entryRule = spec.rules.find(rule => rule.phase === 'entry')
+    const exitRule = spec.rules.find(rule => rule.phase === 'exit')
+
+    expect(entryRule?.condition).toEqual(expect.objectContaining({
+      kind: 'AND',
+      children: expect.arrayContaining([
+        expect.objectContaining({ kind: 'expression', op: 'GT' }),
+        expect.objectContaining({ key: 'market.regime', value: 'range' }),
+      ]),
+    }))
+    expect(exitRule?.condition).toEqual(expect.objectContaining({
+      kind: 'expression',
+      op: 'LT',
+    }))
+    expect(JSON.stringify(exitRule?.condition)).not.toContain('market.regime')
+  })
+
+  it('builds valid SemanticState entry rules when sideScope both opens long and short', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      positionMode: 'long_short',
+      triggers: [
+        {
+          id: 'entry-both-close-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'both',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            expression: closeOpenPredicate('GT'),
+          },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+
+    expect(entryRules).toEqual([
+      expect.objectContaining({
+        sideScope: 'long',
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+    ])
+    expect(entryRules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        actions: expect.arrayContaining([
+          expect.objectContaining({ type: 'OPEN_LONG' }),
+          expect.objectContaining({ type: 'OPEN_SHORT' }),
+        ]),
+      }),
+    ]))
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
+      status: 'VALID',
+    }))
+  })
+
+  it('builds SemanticState canonical risk rules from locked stop loss and take profit', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 5 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'take-profit',
+          key: 'risk.take_profit_pct',
+          params: { valuePct: 10 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'risk',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'position_loss_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: 0.05,
+        }),
+        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+      }),
+      expect.objectContaining({
+        phase: 'risk',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'risk.take_profit_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: 0.1,
+        }),
+        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+      }),
+    ]))
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
+      status: 'VALID',
+    }))
+  })
+
+  it('builds SemanticState canonical condition groups from logical expressions', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'entry-logical-close-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            expression: {
+              kind: 'AND',
+              children: [
+                closeOpenPredicate('GT'),
+                {
+                  kind: 'predicate',
+                  op: 'LT',
+                  left: { kind: 'series', source: 'bar', field: 'low', offsetBars: 0 },
+                  right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+                },
+              ],
+            },
+          },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'semantic-entry-1',
+        condition: {
+          kind: 'AND',
+          children: [
+            expect.objectContaining({ kind: 'expression', op: 'GT' }),
+            expect.objectContaining({ kind: 'expression', op: 'LT' }),
+          ],
+        },
+      }),
+    ]))
+  })
+
   it('bridges StrategyIR back into canonical spec v2 through the migration entry point', () => {
     const service = new CanonicalSpecBuilderService()
 
@@ -332,6 +820,7 @@ describe('canonicalSpecBuilderService', () => {
     expect(semanticPatch.position).toEqual({
       mode: 'fixed_ratio',
       value: 0.1,
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       positionMode: 'long_only',
     })
   })

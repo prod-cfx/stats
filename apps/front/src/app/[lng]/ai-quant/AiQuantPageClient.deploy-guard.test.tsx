@@ -544,6 +544,61 @@ describe('AiQuantPageClient deploy guard', () => {
     )
   })
 
+  it('continues deploy with the latest available account when refreshed accounts replace the selected account', async () => {
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses
+      .mockResolvedValueOnce([
+        {
+          id: 'acct-binance-old',
+          exchangeId: 'binance',
+          isBound: true,
+          name: 'Binance Old',
+          maskedCredential: 'BIN****OLD',
+          isTestnet: false,
+          lastValidatedAt: null,
+          createdAt: null,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'acct-binance-new',
+          exchangeId: 'binance',
+          isBound: true,
+          name: 'Binance New',
+          maskedCredential: 'BIN****NEW',
+          isTestnet: false,
+          lastValidatedAt: null,
+          createdAt: null,
+        },
+      ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="confirm-deploy"]')).not.toBeNull()
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exchangeAccountId: 'acct-binance-new',
+        exchangeAccountName: 'Binance New',
+      }),
+    )
+  })
+
   it('submits selected deployment leverage with the deploy request', async () => {
     mockFetchUserExchangeAccountStatuses.mockReset()
     mockDeployAccountAiQuantStrategy.mockReset()

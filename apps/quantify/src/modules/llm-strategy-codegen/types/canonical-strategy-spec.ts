@@ -61,6 +61,7 @@ export type CanonicalStrategySpecAnyVersion = CanonicalStrategySpec
 
 export type {
   CanonicalConditionAtom,
+  CanonicalExpressionCondition,
   CanonicalConditionGroup,
   CanonicalConditionNode,
   CanonicalRiskRuleSideScope,

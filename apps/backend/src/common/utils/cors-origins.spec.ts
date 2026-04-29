@@ -36,3 +36,44 @@ describe('buildCorsOrigins', () => {
     ])
   })
 })
+
+describe('buildValidatedCorsOrigins', () => {
+  it('drops non-https origins in production', async () => {
+    const { buildValidatedCorsOrigins } = await import('./cors-origins')
+
+    expect(
+      buildValidatedCorsOrigins(
+        ['http://www.coinflux.ai'],
+        ['https://admin.coinflux.ai'],
+        'production',
+        ['https://www.coinflux.ai'],
+      ),
+    ).toEqual(['https://admin.coinflux.ai'])
+  })
+
+  it('returns the fallback origins when all configured origins are invalid', async () => {
+    const { buildValidatedCorsOrigins } = await import('./cors-origins')
+
+    expect(
+      buildValidatedCorsOrigins(
+        ['not-a-url'],
+        ['ftp://admin.coinflux.ai'],
+        'production',
+        ['https://www.coinflux.ai', 'https://admin.coinflux.ai'],
+      ),
+    ).toEqual(['https://www.coinflux.ai', 'https://admin.coinflux.ai'])
+  })
+
+  it('keeps local http origins in development', async () => {
+    const { buildValidatedCorsOrigins } = await import('./cors-origins')
+
+    expect(
+      buildValidatedCorsOrigins(
+        ['http://localhost:3001'],
+        [],
+        'development',
+        [],
+      ),
+    ).toEqual(['http://localhost:3001'])
+  })
+})

@@ -161,6 +161,40 @@ describe('okxClient', () => {
     expect(order.status).toBe('closed')
   })
 
+  it('uses spot available balance when OKX omits available equity', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(JSON.stringify({
+        data: [
+          {
+            details: [
+              {
+                ccy: 'USDT',
+                eq: '4901.58222',
+                availEq: '',
+                availBal: '4901.58222',
+                cashBal: '4901.58222',
+              },
+            ],
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const balances = await createClient().fetchBalance()
+
+    expect(balances).toEqual([
+      {
+        asset: 'USDT',
+        free: 4901.58222,
+        locked: 0,
+        total: 4901.58222,
+      },
+    ])
+  })
+
   it('converts perp base size to contract size when creating orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)

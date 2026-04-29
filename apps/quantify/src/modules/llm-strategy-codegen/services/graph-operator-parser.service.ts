@@ -26,7 +26,6 @@ const ALLOWED_FUNCTIONS = new Set([
   'AND',
   'OR',
   'NOT',
-  'BETWEEN',
   'TOUCH_LEVEL_UP',
   'TOUCH_LEVEL_DOWN',
   'STOP_LOSS_PCT',

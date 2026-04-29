@@ -130,6 +130,7 @@ describe('backtestSnapshotLoaderService', () => {
           marketType: 'spot',
           timeframe: '3m',
           positionPct: 25,
+          positionSizing: { mode: 'pct_equity', value: 25 },
         },
     })
     expect(strategy).toMatchObject({
@@ -142,6 +143,7 @@ describe('backtestSnapshotLoaderService', () => {
         marketType: 'spot',
         timeframe: '3m',
         positionPct: 25,
+        positionSizing: { mode: 'pct_equity', value: 25 },
       },
       stateTimeframes: ['15m'],
       snapshotId: 'snapshot-1',
@@ -546,6 +548,127 @@ describe('backtestSnapshotLoaderService', () => {
       specHash: compiledManifest.specHash,
     })
     expect(strategyAdapter.build).toHaveBeenCalled()
+  })
+
+  it('loads fixed quote sizing snapshots without requiring legacy positionPct', async () => {
+    const baseIr = createIrFixture()
+    const ir: CanonicalStrategyIrV1 = {
+      ...baseIr,
+      portfolio: {
+        ...baseIr.portfolio,
+        sizing: { mode: 'fixed_quote', value: 10 },
+      },
+      ruleBlocks: baseIr.ruleBlocks.map(rule => rule.phase === 'entry'
+        ? {
+            ...rule,
+            actions: rule.actions.map(action => action.kind === 'OPEN_LONG'
+              ? { ...action, quantity: { mode: 'fixed_quote' as const, value: 10 } }
+              : action),
+          }
+        : rule),
+    }
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = createExecutionEnvelope()
+    const emitter = new CompiledScriptEmitterService()
+    const scriptSnapshot = emitter.emit({ ast, executionEnvelope })
+    const compiledManifest = emitter.buildProjection({ ast, executionEnvelope }).compiledManifest
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-fixed-quote',
+        strategyInstanceId: 'instance-fixed-quote',
+        strategyTemplateId: 'template-fixed-quote',
+        snapshotHash: 'snapshot-hash',
+        scriptHash: 'script-hash',
+        specHash: compiledManifest.specHash,
+        irHash: compiledManifest.irHash,
+        astDigest: compiledManifest.astDigest,
+        structuralDigest: compiledManifest.structuralDigest,
+        scriptSnapshot,
+        paramsSnapshot: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          marketType: 'perp',
+          positionPct: null,
+        },
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          baseTimeframe: '1h',
+          stateTimeframes: [],
+          positionPct: null,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+        },
+        lockedParams: {},
+        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        dataRequirements: { primary: ['1h'] },
+        irSnapshot: ir,
+        astSnapshot: ast,
+        compiledManifest,
+        executionEnvelope,
+        specSnapshot: {
+          market: { exchange: 'okx' },
+          indicators: [],
+          riskRules: [],
+        },
+      }),
+    }
+    const strategyAdapter = {
+      build: jest.fn().mockResolvedValue({
+        id: 'strategy-fixed-quote',
+        params: { exchange: 'okx' },
+        fn: jest.fn(),
+      }),
+    }
+    const service = new BacktestSnapshotLoaderService(snapshotsRepository as never, strategyAdapter as never)
+
+    await expect(service.load({
+      id: 'strategy-fixed-quote',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-fixed-quote',
+      userId: 'user-1',
+    })).resolves.toMatchObject({
+      id: 'instance-fixed-quote',
+      params: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '1h',
+      },
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+    })
+    expect(strategyAdapter.build).toHaveBeenCalledWith(expect.objectContaining({
+      params: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '1h',
+      },
+    }))
   })
 })
 

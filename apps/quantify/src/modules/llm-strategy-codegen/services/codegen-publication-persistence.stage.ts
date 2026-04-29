@@ -60,6 +60,7 @@ export class CodegenPublicationPersistenceStage {
     strategyInstanceId?: string | null
     canonicalSnapshot: Record<string, unknown>
     semanticView: Record<string, unknown>
+    semanticPredicateGraph?: Record<string, unknown>
     graphSnapshot: Record<string, unknown>
     ir: Record<string, unknown>
     ast: Record<string, unknown>

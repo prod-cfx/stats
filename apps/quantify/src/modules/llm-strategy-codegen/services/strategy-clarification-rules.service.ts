@@ -399,7 +399,7 @@ export class StrategyClarificationRulesService {
       reason: 'missing_position_pct',
       field: 'riskRules.positionPct',
       blocking: true,
-      question: '请确认单笔仓位百分比（例如 10%）。',
+      question: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
       status: 'pending',
     }]
   }

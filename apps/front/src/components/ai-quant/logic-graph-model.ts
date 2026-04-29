@@ -29,6 +29,7 @@ export interface StrategyLogicGraph {
     timeframe: string
     positionPct: number
     sizing?: QuantSizing
+    positionSizing?: string
     executionTags?: string[]
   }
 }

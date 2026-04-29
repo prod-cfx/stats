@@ -3,6 +3,142 @@ import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service
 describe('SemanticSeedExtractorService', () => {
   const service = new SemanticSeedExtractorService()
 
+  it('extracts position sizing quote contracts from seed text', () => {
+    const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，固定使用 10 USDT')
+
+    expect(patch.position).toEqual({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })
+  })
+
+  it('does not treat trigger quote prices as position sizing in seed text', () => {
+    const patch = service.extract('BTC 跌到 60000 USDT 用 10u 开多')
+
+    expect(patch.position).toEqual({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })
+  })
+
+  it('extracts position sizing base contracts from seed text', () => {
+    const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，每次买 0.001 BTC')
+
+    expect(patch.position).toEqual({
+      sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
+      mode: 'fixed_qty',
+      value: 0.001,
+      positionMode: 'long_only',
+    })
+  })
+
+  it('extracts close-open candle expressions and fixed quote sizing without new normalized atom keys', () => {
+    const patch = service.extract('用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多，固定使用 10 USDT。如果已有持仓则不再开仓。收盘价低于开盘价时平多。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      timeframe: '1m',
+    }))
+    expect(patch.contextSlots).not.toHaveProperty('exchange')
+    expect(patch.contextSlots).not.toHaveProperty('marketType')
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'EQ',
+            left: { kind: 'position', field: 'has_position', side: 'long' },
+            right: { kind: 'constant', value: false },
+          },
+        },
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.position).toEqual({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      positionMode: 'long_only',
+    })
+  })
+
+  it('keeps fixed quote profit targets from overriding explicit percent sizing', () => {
+    const patch = service.extract('每次盈利 10 USDT 止盈；单笔 10% 仓位')
+
+    expect(patch.position).toEqual({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })
+  })
+
+  it('keeps fixed quote risk amounts from overriding explicit percent sizing', () => {
+    const patch = service.extract('单笔风险 10 USDT；单笔 10% 仓位')
+
+    expect(patch.position).toEqual({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })
+  })
+
+  it('does not emit a no-position gate for ordinary open prohibitions', () => {
+    const patch = service.extract('波动过大不要开仓。BTCUSDT 1m 收盘价高于开盘价时开多。')
+
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'gate',
+        key: 'condition.expression',
+      }),
+    ]))
+  })
+
+  it('does not turn shared 收盘价 and 开盘价 indicator comparisons into close-open expressions', () => {
+    const patch = service.extract('收盘价和开盘价都高于 MA20 时买入。')
+
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'condition.expression' }),
+    ]))
+  })
+
   it('extracts MA price-vs-reference semantics into a semantic patch', () => {
     const patch = service.extract('OKX 现货 BTCUSDT 15m；15m 收盘确认当价格突破 MA50 时买入；15m 收盘确认当价格跌破 MA10 时卖出；亏损 5% 止损，盈利 10% 止盈；单笔 10%。')
 
@@ -52,6 +188,7 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
@@ -100,6 +237,7 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'close_long' }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
@@ -113,6 +251,7 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金')
 
     expect(patch.position).toEqual({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
@@ -172,6 +311,7 @@ describe('SemanticSeedExtractorService', () => {
       }),
     ]))
     expect(patch.position).toEqual({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
@@ -205,6 +345,7 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'close_long' }),
     ]))
     expect(patch.position).toEqual({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
@@ -284,6 +425,7 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'close_long' }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
@@ -693,6 +835,7 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ],
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
@@ -774,6 +917,7 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
@@ -1040,6 +1184,7 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'close_short' }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
@@ -1108,6 +1253,7 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.45 }) }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.25, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.25,
         positionMode: 'long_only',
@@ -1268,6 +1414,7 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'open_short' }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
@@ -1404,6 +1551,7 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'open_short' }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
@@ -1552,6 +1700,7 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
@@ -1593,6 +1742,7 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]),
       position: {
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
@@ -1674,6 +1824,7 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'close_long' }),
     ]))
     expect(patch.position).toEqual({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',

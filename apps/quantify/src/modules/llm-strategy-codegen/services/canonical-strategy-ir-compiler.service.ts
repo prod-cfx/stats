@@ -313,7 +313,6 @@ export class CanonicalStrategyIrCompilerService {
       case 'LT':
       case 'LTE':
       case 'EQ':
-      case 'BETWEEN':
       case 'TOUCH_LEVEL_UP':
       case 'TOUCH_LEVEL_DOWN':
       case 'AND':

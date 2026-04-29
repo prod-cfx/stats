@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
-import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticEvidence, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { PositionSizingContractService } from './position-sizing-contract.service'
 
 interface SupportedSlotReduction {
   paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode'
@@ -14,6 +15,10 @@ interface SupportedContextReduction {
 
 @Injectable()
 export class SemanticStateReducerService {
+  constructor(
+    private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+  ) {}
+
   applyClarificationAnswer(input: {
     currentState: SemanticState
     targetSlotKey: string
@@ -99,19 +104,17 @@ export class SemanticStateReducerService {
         && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
     })
     if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
-      const percentValue = this.parsePercentAnswer(answerText)
-      if (percentValue !== null) {
-        const evidence = {
-          text: answerText,
-          messageIndex: input.messageIndex,
-          source: 'user_explicit' as const,
-        }
+      const parsed = this.parsePositionSizingContractAnswer(answerText, input.messageIndex)
+      if (parsed) {
+        const evidence = parsed.evidence
 
-        nextState.position.value = percentValue / 100
+        nextState.position.sizing = parsed.sizing
+        nextState.position.mode = this.resolveLegacySizingMode(parsed.sizing)
+        nextState.position.value = parsed.sizing.value
         nextState.position.status = 'locked'
         nextState.position.source = 'user_explicit'
         nextState.position.evidence = evidence
-        positionSlot.value = percentValue
+        positionSlot.value = this.formatPositionSizingValue(parsed.sizing)
         positionSlot.status = 'locked'
         positionSlot.evidence = evidence
       }
@@ -328,12 +331,12 @@ export class SemanticStateReducerService {
     }
 
     const percentText = normalized.replace(/％/gu, '%')
-    const percentCandidates = [...percentText.matchAll(/(?:百分之?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)/gu)]
+    const percentCandidates = [...percentText.matchAll(/(?:百分之?\s*(\d+(?:\.\d+)?|[一二三四五六七八九十]+)|(\d+(?:\.\d+)?)\s*%)/gu)]
     if (percentCandidates.length > 1) {
       return null
     }
     if (percentCandidates.length === 1) {
-      const value = Number(percentCandidates[0]?.[1] ?? percentCandidates[0]?.[2])
+      const value = this.parsePercentNumberText(percentCandidates[0]?.[1] ?? percentCandidates[0]?.[2])
       return this.isValidPercentValue(value) ? value : null
     }
 
@@ -343,6 +346,181 @@ export class SemanticStateReducerService {
 
     const value = Number(normalized)
     return this.isValidPercentValue(value) ? value : null
+  }
+
+  private parsePositionSizingContractAnswer(
+    answerText: string,
+    messageIndex?: number,
+  ): { sizing: SemanticPositionSizingContract, evidence: SemanticEvidence } | null {
+    if (/(?:不是|并非|不要|别|not)/iu.test(answerText)) {
+      return null
+    }
+
+    if (this.hasAmbiguousPositionSizingPercentChoice(answerText)) {
+      return null
+    }
+
+    const parsed = this.positionSizingContracts.parse(answerText, messageIndex)
+    if (parsed) {
+      return {
+        sizing: parsed.sizing,
+        evidence: { text: answerText, messageIndex, source: 'user_explicit' },
+      }
+    }
+
+    if (this.hasMultiplePercentCandidates(answerText)) {
+      return null
+    }
+
+    const contextualParsed = this.positionSizingContracts.parse(`仓位 ${answerText}`, messageIndex)
+    if (contextualParsed) {
+      return {
+        sizing: contextualParsed.sizing,
+        evidence: { text: answerText, messageIndex, source: 'user_explicit' },
+      }
+    }
+
+    if (this.looksLikeNonSizingPercentAnswer(answerText)) {
+      return null
+    }
+
+    const percentValue = this.parsePercentAnswer(answerText)
+    if (percentValue === null) {
+      return null
+    }
+
+    return {
+      sizing: { kind: 'ratio', value: percentValue / 100, unit: 'ratio' },
+      evidence: { text: answerText, messageIndex, source: 'user_explicit' },
+    }
+  }
+
+  private resolveLegacySizingMode(sizing: SemanticPositionSizingContract): 'fixed_ratio' | 'fixed_quote' | 'fixed_qty' {
+    if (sizing.kind === 'quote') return 'fixed_quote'
+    if (sizing.kind === 'base') return 'fixed_qty'
+    return 'fixed_ratio'
+  }
+
+  private formatPositionSizingValue(sizing: SemanticPositionSizingContract): string {
+    if (sizing.kind === 'ratio') {
+      return `${this.formatFiniteNumber(sizing.value * 100)}%`
+    }
+
+    return `${this.formatFiniteNumber(sizing.value)} ${sizing.asset}`
+  }
+
+  private formatFiniteNumber(value: number): string {
+    return Number(value.toFixed(8)).toString()
+  }
+
+  private hasMultiplePercentCandidates(answerText: string): boolean {
+    const percentText = answerText.replace(/％/gu, '%')
+    const percentCandidates = percentText.match(/(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*%)/gu) ?? []
+    return percentCandidates.length > 1
+  }
+
+  private hasAmbiguousPositionSizingPercentChoice(answerText: string): boolean {
+    const percentText = answerText.replace(/％/gu, '%')
+    const percentPattern = /(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*%)/gu
+    const candidates = [...percentText.matchAll(percentPattern)]
+      .map(match => ({
+        index: match.index ?? -1,
+        text: match[0],
+        hasSizingContext: match.index === undefined
+          ? false
+          : this.hasLocalPositionSizingContextAt(percentText, match.index, match[0].length),
+      }))
+      .filter(candidate => candidate.index >= 0)
+
+    for (let index = 0; index < candidates.length - 1; index += 1) {
+      const current = candidates[index]
+      const next = candidates[index + 1]
+      if (!current || !next) continue
+
+      const between = percentText.slice(current.index + current.text.length, next.index)
+      if (!/(?:或|或者|还是|\/|／)/u.test(between)) continue
+      if (current.hasSizingContext || next.hasSizingContext) return true
+    }
+
+    return false
+  }
+
+  private looksLikeNonSizingPercentAnswer(answerText: string): boolean {
+    if (!/(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*[%％])/u.test(answerText)) {
+      return false
+    }
+
+    if (this.hasLocalPositionSizingPercentContext(answerText)) {
+      return false
+    }
+
+    return /(?:止盈|止损|盈利|亏损|收益|损失|风险|回撤|资金费率|funding|价格|收盘价|开盘价|最高价|最低价|上涨|下跌|涨|跌|突破|跌破|高于|低于|站上)/iu.test(answerText)
+  }
+
+  private hasLocalPositionSizingPercentContext(answerText: string): boolean {
+    const percentText = answerText.replace(/％/gu, '%')
+    const percentPattern = /(?:百分之?\s*(?:\d+(?:\.\d+)?|[一二三四五六七八九十]+)|\d+(?:\.\d+)?\s*%)/gu
+    for (const match of percentText.matchAll(percentPattern)) {
+      if (match.index === undefined) continue
+
+      if (this.hasLocalPositionSizingContextAt(percentText, match.index, match[0].length)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private hasLocalPositionSizingContextAt(text: string, index: number, length: number): boolean {
+    const prefix = text.slice(Math.max(0, index - 8), index)
+    if (/(?:仓位|资金(?!费率)|比例|使用|投入|固定|单笔|每次|每笔|每单|用)\s*$/u.test(prefix)) {
+      return true
+    }
+
+    const suffix = text.slice(index + length, index + length + 8)
+    return /^\s*(?:仓位|资金(?!费率)|比例)/u.test(suffix)
+  }
+
+  private parsePercentNumberText(valueText: string | undefined): number {
+    if (!valueText) {
+      return Number.NaN
+    }
+
+    const numericValue = Number(valueText)
+    if (Number.isFinite(numericValue)) {
+      return numericValue
+    }
+
+    return this.parseChinesePercentNumberText(valueText)
+  }
+
+  private parseChinesePercentNumberText(valueText: string): number {
+    const digitMap: Record<string, number> = {
+      一: 1,
+      二: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9,
+    }
+
+    if (valueText === '十') {
+      return 10
+    }
+
+    const tenIndex = valueText.indexOf('十')
+    if (tenIndex >= 0) {
+      const leadingText = valueText.slice(0, tenIndex)
+      const trailingText = valueText.slice(tenIndex + 1)
+      const leading = leadingText === '' ? 1 : digitMap[leadingText]
+      const trailing = trailingText === '' ? 0 : digitMap[trailingText]
+      return leading !== undefined && trailing !== undefined ? leading * 10 + trailing : Number.NaN
+    }
+
+    return digitMap[valueText] ?? Number.NaN
   }
 
   private isValidPercentValue(value: number): boolean {

@@ -3,12 +3,13 @@ import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 
 interface GuardProgramNode {
   id: string
-  payload: {
-    kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT'
-    scope?: 'position' | 'strategy' | 'order_program'
-    value?: number
-    onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
-  }
+	payload: {
+		kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT' | 'MAX_POSITION_PCT'
+		scope?: 'position' | 'strategy' | 'order_program'
+		appliesTo?: 'long' | 'short' | 'both'
+		value?: number
+		onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
+	}
 }
 
 export interface CompiledGuardState {
@@ -68,16 +69,23 @@ function isGuardBreached(
   ctx: StrategyExecutionContextV1,
   guard: GuardProgramNode,
 ): boolean {
+  if (guard.payload.kind === 'MAX_POSITION_PCT') {
+    return isMaxPositionPctBreached(ctx, guard)
+  }
+
   const qty = readPositionQty(ctx)
   const entryPrice = readEntryPrice(ctx)
   const currentPrice = readCurrentPrice(ctx)
   const thresholdPct = readThresholdPct(guard)
 
-  if (qty === 0 || entryPrice == null || currentPrice == null || thresholdPct == null) {
-    return false
-  }
+	if (qty === 0 || entryPrice == null || currentPrice == null || thresholdPct == null) {
+		return false
+	}
+	if (!doesGuardApplyToPositionSide(guard, qty)) {
+		return false
+	}
 
-  switch (guard.payload.kind) {
+	switch (guard.payload.kind) {
     case 'STOP_LOSS_PCT':
       return thresholdPct > 0 && readPositionPnlPct(qty, entryPrice, currentPrice) <= -thresholdPct
     case 'TAKE_PROFIT_PCT':
@@ -96,7 +104,79 @@ function isGuardBreached(
     }
     default:
       return false
+	}
+}
+
+function doesGuardApplyToPositionSide(
+	guard: GuardProgramNode,
+	qty: number,
+): boolean {
+	const appliesTo = guard.payload.appliesTo ?? 'both'
+	if (appliesTo === 'both') {
+		return true
+	}
+	return appliesTo === (qty > 0 ? 'long' : 'short')
+}
+
+function isMaxPositionPctBreached(
+  ctx: StrategyExecutionContextV1,
+  guard: GuardProgramNode,
+): boolean {
+  const maxPct = guard.payload.value
+  if (typeof maxPct !== 'number' || !Number.isFinite(maxPct) || maxPct < 0) {
+    return false
   }
+
+  const absQty = Math.abs(readPositionQty(ctx))
+  if (absQty === 0) {
+    return false
+  }
+
+  if (maxPct === 0) {
+    return true
+  }
+
+  const exposurePct = readPositionExposurePct(ctx, absQty)
+  return exposurePct !== null && exposurePct > maxPct
+}
+
+function readPositionExposurePct(
+  ctx: StrategyExecutionContextV1,
+  absQty: number,
+): number | null {
+  const directPct = readFirstPositiveOrZeroNumber([
+    ctx.position?.exposurePct,
+    ctx.position?.positionPct,
+    ctx.position?.notionalPct,
+    ctx.position?.exposurePercent,
+    ctx.position?.positionPercent,
+    ctx.position?.notionalPercent,
+  ])
+  if (directPct !== null) {
+    return directPct
+  }
+
+  const equity = readEquity(ctx)
+  if (equity === null || equity <= 0) {
+    return null
+  }
+
+  const notional = readFirstPositiveOrZeroNumber([
+    ctx.position?.notional,
+    ctx.position?.notionalValue,
+    ctx.position?.marketValue,
+    ctx.position?.value,
+  ])
+  if (notional !== null) {
+    return (Math.abs(notional) / equity) * 100
+  }
+
+  const currentPrice = readCurrentPrice(ctx)
+  if (currentPrice === null || currentPrice <= 0) {
+    return null
+  }
+
+  return (absQty * currentPrice / equity) * 100
 }
 
 function readThresholdPct(guard: GuardProgramNode): number | null {
@@ -134,6 +214,27 @@ function readCurrentPrice(ctx: StrategyExecutionContextV1): number | null {
 
   for (const candidate of candidates) {
     if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function readEquity(ctx: StrategyExecutionContextV1): number | null {
+  return readFirstPositiveOrZeroNumber([
+    ctx.equity,
+    ctx.accountEquity,
+    ctx.portfolio?.equity,
+    ctx.account?.equity,
+    ctx.balance,
+    ctx.accountBalance,
+  ])
+}
+
+function readFirstPositiveOrZeroNumber(candidates: unknown[]): number | null {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
       return candidate
     }
   }

@@ -1460,6 +1460,75 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptCode).toBe('export default function strategy() { return true }')
   })
 
+  it('rebuilds the generated code block from a published server conversation after refresh', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-refresh-script',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [
+        { role: 'user', content: '确认逻辑图' },
+        { role: 'assistant', content: 'Strategy code generated, ready to backtest.' },
+      ],
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-1',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+              params: { timeframe: '15m' },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+      semanticGraph: {
+        version: 4,
+        market: {
+          symbol: 'BTCUSDT',
+          primaryTimeframe: '15m',
+        },
+        nodes: [],
+        actions: [],
+        risk: [],
+      },
+      validationReport: null,
+      publicationGate: null,
+      canonicalDigest: 'sha256:canonical-refresh',
+      activeCodegenSessionId: null,
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-refresh-script',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotStrategyConfig: null,
+      publishedSnapshotBacktestConfigDefaults: null,
+      publishedSnapshotDeploymentExecutionDefaults: null,
+      publishedSnapshotDeploymentExecutionConstraints: null,
+      publishedSnapshotCompatibilityMetadata: null,
+      scriptCode: 'export default function strategy() { return { action: "NOOP" } }',
+      updatedAt: '2026-04-27T00:00:00.000Z',
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string, options?: Record<string, unknown>) =>
+      typeof options?.defaultValue === 'string' ? options.defaultValue : key,
+    )
+
+    const renderedMessages = conversation.messages.map(message => message.content).join('\n')
+
+    expect(renderedMessages).toContain('```javascript')
+    expect(renderedMessages).toContain('export default function strategy()')
+    expect(conversation.publishedScriptCode).toBe('export default function strategy() { return { action: "NOOP" } }')
+    expect(conversation.publishedScriptGraphVersion).toBe(conversation.logicGraph?.version)
+  })
+
   it('normalizes hydrated clarification gates so server-owned conversations preserve blocked parity', () => {
     const conversation = createConversationFromServerConversation({
       id: 'server-conv-clarification',

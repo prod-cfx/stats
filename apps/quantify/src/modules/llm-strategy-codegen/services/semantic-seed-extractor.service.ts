@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { SemanticExpression, SemanticExpressionOperator, SemanticExpressionOperand, SemanticPositionSizingContract } from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
+import { PositionSizingContractService } from './position-sizing-contract.service'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -20,6 +22,10 @@ type SemanticAliasContext = {
 
 @Injectable()
 export class SemanticSeedExtractorService {
+  constructor(
+    private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+  ) {}
+
   extract(message?: string): CodegenSemanticPatch {
     const text = this.normalizeText(message)
     if (!text) {
@@ -86,6 +92,8 @@ export class SemanticSeedExtractorService {
     const segments = this.splitSegments(text)
 
     for (const segment of segments) {
+      this.pushCandleExpressionTriggers(segment, triggers, seen)
+      this.pushNoPositionGateTriggers(segment, triggers, seen, text)
       this.pushMovingAverageCrossTrigger(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen, aliasContext)
       this.pushBollingerTriggers(segment, triggers, seen, aliasContext)
@@ -201,29 +209,137 @@ export class SemanticSeedExtractorService {
     text: string,
     triggers: SeedTrigger[],
   ): NonNullable<CodegenSemanticPatch['position']> | null {
-    const percent = this.extractPercent(text, [
-      /单笔\s*(\d+(?:\.\d+)?)\s*%/u,
-      /单笔\s*(?:使用|用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:资金|仓位)?/u,
-      /单笔\s*(?:使用|用|投入)?\s*百分之?\s*(\d+(?:\.\d+)?)\s*(?:资金|仓位)?/u,
-      /仓位\s*(\d+(?:\.\d+)?)\s*%/u,
-      /仓位\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-      /(\d+(?:\.\d+)?)\s*%\s*(?:固定)?\s*仓位/u,
-      /(\d+(?:\.\d+)?)\s*%\s*仓位/u,
-      /(\d+(?:\.\d+)?)\s*%\s*资金/u,
-      /百分之?\s*(\d+(?:\.\d+)?)\s*(?:仓位|资金)/u,
-      /每笔\s*(\d+(?:\.\d+)?)\s*%/u,
-      /每笔\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-    ])
-
-    if (percent === null) {
+    const parsed = this.positionSizingContracts.parse(text)
+    if (!parsed) {
       return null
     }
 
     return {
-      mode: 'fixed_ratio',
-      value: percent / 100,
+      sizing: parsed.sizing,
+      mode: this.resolveLegacySizingMode(parsed.sizing),
+      value: parsed.sizing.value,
       positionMode: this.resolvePositionMode(text, triggers),
     }
+  }
+
+  private resolveLegacySizingMode(sizing: SemanticPositionSizingContract): 'fixed_ratio' | 'fixed_quote' | 'fixed_qty' {
+    if (sizing.kind === 'quote') return 'fixed_quote'
+    if (sizing.kind === 'base') return 'fixed_qty'
+    return 'fixed_ratio'
+  }
+
+  private pushCandleExpressionTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    for (const clause of this.splitLogicClauses(segment)) {
+      const expression = this.extractCloseOpenCandleExpression(clause)
+      if (!expression) continue
+
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      this.pushTrigger(triggers, seen, {
+        key: 'condition.expression',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        params: { expression },
+      })
+    }
+  }
+
+  private pushNoPositionGateTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    contextText: string,
+  ): void {
+    if (!this.hasExistingPositionContext(segment)) return
+    if (!/(不再|不要|不可|不能|禁止|避免|则不再).*(?:开仓|开多|开空)|(?:不开仓|不加仓)/u.test(segment)) return
+
+    const sideScope = this.resolveNoPositionGateSideScope(segment, contextText)
+    const expression: SemanticExpression = {
+      kind: 'predicate',
+      op: 'EQ',
+      left: { kind: 'position', field: 'has_position', side: sideScope },
+      right: { kind: 'constant', value: false },
+    }
+
+    this.pushTrigger(triggers, seen, {
+      key: 'condition.expression',
+      phase: 'gate',
+      sideScope,
+      params: { expression },
+    })
+  }
+
+  private extractCloseOpenCandleExpression(clause: string): SemanticExpression | null {
+    const compact = clause.replace(/\s+/gu, '')
+    const relation = this.extractCloseOpenRelation(compact)
+    if (!relation) return null
+
+    const op = relation.leftField === 'close' ? relation.operator : this.invertExpressionOperator(relation.operator)
+    const left: SemanticExpressionOperand = { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 }
+    const right: SemanticExpressionOperand = { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 }
+
+    return {
+      kind: 'predicate',
+      op,
+      left,
+      right,
+    }
+  }
+
+  private extractCloseOpenRelation(compact: string): {
+    leftField: 'open' | 'close'
+    operator: SemanticExpressionOperator
+  } | null {
+    const closeOpenMatch = compact.match(/(?:收盘价|close)(不低于|大于等于|至少|>=|不高于|小于等于|至多|<=|高于|大于|超过|>|站上|低于|小于|跌破|<|失守|等于|=|相等)(?:开盘价|open)/iu)
+    if (closeOpenMatch?.[1]) {
+      const operator = this.resolveExpressionOperatorToken(closeOpenMatch[1])
+      return operator ? { leftField: 'close', operator } : null
+    }
+
+    const openCloseMatch = compact.match(/(?:开盘价|open)(不低于|大于等于|至少|>=|不高于|小于等于|至多|<=|高于|大于|超过|>|站上|低于|小于|跌破|<|失守|等于|=|相等)(?:收盘价|close)/iu)
+    if (openCloseMatch?.[1]) {
+      const operator = this.resolveExpressionOperatorToken(openCloseMatch[1])
+      return operator ? { leftField: 'open', operator } : null
+    }
+
+    return null
+  }
+
+  private resolveExpressionOperatorToken(token: string): SemanticExpressionOperator | null {
+    if (/不低于|大于等于|至少|>=/u.test(token)) return 'GTE'
+    if (/不高于|小于等于|至多|<=/u.test(token)) return 'LTE'
+    if (/高于|大于|超过|>|站上/u.test(token)) return 'GT'
+    if (/低于|小于|跌破|<|失守/u.test(token)) return 'LT'
+    if (/等于|=|相等/u.test(token)) return 'EQ'
+    return null
+  }
+
+  private invertExpressionOperator(operator: SemanticExpressionOperator): SemanticExpressionOperator {
+    switch (operator) {
+      case 'GT':
+        return 'LT'
+      case 'GTE':
+        return 'LTE'
+      case 'LT':
+        return 'GT'
+      case 'LTE':
+        return 'GTE'
+      default:
+        return operator
+    }
+  }
+
+  private resolveNoPositionGateSideScope(segment: string, contextText: string): 'long' | 'short' | 'both' {
+    if (/做空|开空|空单|short/u.test(segment)) return 'short'
+    if (/做多|开多|多单|买入|long/u.test(segment)) return 'long'
+    if (/做空|开空|空单|short/u.test(contextText) && /做多|开多|多单|买入|long/u.test(contextText)) return 'both'
+    if (/做空|开空|空单|short/u.test(contextText)) return 'short'
+    return 'long'
+  }
+
+  private hasExistingPositionContext(segment: string): boolean {
+    return /(?:已有|已经有|当前|现有)(?:持仓|仓位)|(?:持仓|仓位)(?:已存在|存在|不为空)/u.test(segment)
   }
 
   private pushMovingAverageTrigger(

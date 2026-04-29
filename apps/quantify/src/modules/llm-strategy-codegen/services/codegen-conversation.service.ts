@@ -22,7 +22,7 @@ import type { StrategyBlockingReason, StrategyInferredAssumption } from '../type
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
-import { buildSemanticSlotId, type SemanticActionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
+import { buildSemanticSlotId, type SemanticActionState, type SemanticPositionSizingContract, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
 import type { Prisma } from '@/prisma/prisma.types'
@@ -99,6 +99,7 @@ import {
   type InferredConfirmationSemanticDefaults,
 } from './inferred-confirmation-classifier.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
+import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 interface GenerationOptions {
   providerCode?: string
@@ -977,6 +978,7 @@ export class CodegenConversationService {
     return {
       mode: 'fixed_ratio',
       value,
+      sizing: { kind: 'ratio', value, unit: 'ratio' },
       positionMode: this.readFirstString(
         strategyConfig?.positionMode,
         paramsSnapshot?.positionMode,
@@ -2341,6 +2343,7 @@ export class CodegenConversationService {
       position: {
         mode: 'fixed_ratio',
         value: positionPct / 100,
+        sizing: { kind: 'ratio', value: positionPct / 100, unit: 'ratio' },
         positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.actions, checklist),
         status: 'locked',
         source: 'user_explicit',
@@ -2407,15 +2410,16 @@ export class CodegenConversationService {
       position: {
         mode: 'fixed_ratio',
         value: 0,
+        sizing: null,
         positionMode: this.inferPositionModeFromActions(state.actions, checklist),
         status: 'open',
         source: 'derived',
         openSlots: [{
           slotKey: 'position.sizing',
-          fieldPath: 'position.value',
+          fieldPath: 'position.sizing',
           status: 'open',
           priority: 'risk',
-          questionHint: '请确认单笔仓位百分比（例如 10%）。',
+          questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
           affectsExecution: true,
         }],
       },
@@ -2981,10 +2985,7 @@ export class CodegenConversationService {
   private hasValidLockedPositionSizing(
     position: SemanticState['position'],
   ): boolean {
-    return position?.status === 'locked'
-      && position.mode === 'fixed_ratio'
-      && Number.isFinite(position.value)
-      && position.value > 0
+    return position?.status === 'locked' && validateSemanticPositionContract(position).ok
   }
 
 
@@ -5395,12 +5396,9 @@ export class CodegenConversationService {
 
   private buildCanonicalSpecForConversation(
     semanticState: SemanticState,
-    normalization: NormalizationResult = this.buildNormalizationFromSemanticState(semanticState),
+    _normalization: NormalizationResult = this.buildNormalizationFromSemanticState(semanticState),
   ) {
-    return this.canonicalSpecBuilder.buildFromNormalizedIntent(
-      this.buildSemanticCanonicalContext(semanticState),
-      normalization.normalizedIntent,
-    )
+    return this.canonicalSpecBuilder.buildFromSemanticState(semanticState)
   }
 
   /**
@@ -7193,6 +7191,7 @@ export class CodegenConversationService {
     }
 
     const record = update as Record<string, unknown>
+    const sizing = this.readPlannerPositionSizing(record.sizing)
     if (
       typeof record.mode !== 'string'
       || typeof record.positionMode !== 'string'
@@ -7202,14 +7201,49 @@ export class CodegenConversationService {
       return null
     }
 
+    const positionMode = record.positionMode === 'both' ? 'long_short' : record.positionMode
+
     return {
+      ...(sizing ? { sizing } : {}),
       mode: record.mode,
       value: record.value,
-      positionMode: record.positionMode,
+      positionMode,
       status: 'locked',
       source: 'user_explicit',
       openSlots: [],
     }
+  }
+
+  private readPlannerPositionSizing(sizing: unknown): SemanticPositionSizingContract | null {
+    if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
+      return null
+    }
+
+    const record = sizing as Record<string, unknown>
+    if (typeof record.value !== 'number' || !Number.isFinite(record.value) || record.value <= 0) {
+      return null
+    }
+
+    if (record.kind === 'ratio' && (record.unit === 'ratio' || record.unit === 'percent')) {
+      return { kind: 'ratio', value: record.value, unit: record.unit }
+    }
+
+    if (
+      record.kind === 'quote'
+      && (record.asset === 'USDT' || record.asset === 'USDC' || record.asset === 'USD')
+    ) {
+      return { kind: 'quote', value: record.value, asset: record.asset }
+    }
+
+    if (
+      record.kind === 'base'
+      && typeof record.asset === 'string'
+      && /^[A-Z][A-Z0-9]{1,15}$/u.test(record.asset)
+    ) {
+      return { kind: 'base', value: record.value, asset: record.asset }
+    }
+
+    return null
   }
 
   private toPlannerContextSlots(update: unknown): SemanticState['contextSlots'] {

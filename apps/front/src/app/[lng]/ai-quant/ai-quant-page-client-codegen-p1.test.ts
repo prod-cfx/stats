@@ -641,6 +641,63 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.llmCodegenSessionId).toBe('session-1')
   })
 
+  it('keeps generated code visible when refreshed published session reconciliation reapplies server messages', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [
+          { id: 'm-1', role: 'assistant', content: 'Strategy code generated, ready to backtest.\n\nGenerated strategy code:\n```javascript\nexport default function strategy() { return true }\n```' },
+        ],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'export default function strategy() { return true }',
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        conversationMessages: [
+          { role: 'assistant', content: '请确认逻辑图' },
+          { role: 'user', content: 'Confirm code generation' },
+        ],
+      } as any,
+      confirmGenerate: false,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: null,
+    })
+
+    expect(next.messages).toHaveLength(3)
+    expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
+    expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
+    expect(next.publishedScriptCode).toBe('export default function strategy() { return true }')
+    expect(next.llmCodegenSessionId).toBe('session-1')
+  })
+
   it('hydrates published snapshot backtest params into the live conversation state', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {

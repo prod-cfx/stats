@@ -364,6 +364,7 @@ export function buildLogicGraphFromCodegenSpec(
       timeframe,
       positionPct,
       sizing,
+      positionSizing: formatSizing(sizing, symbol),
       executionTags: fallback.executionTags ?? [],
     },
   }

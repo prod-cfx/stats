@@ -17,12 +17,14 @@ import { CanonicalStrategyAstCompilerService } from './services/canonical-strate
 import { CanonicalStrategyIrCanonicalizerService } from './services/canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './services/canonical-strategy-ir-validator.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
+import { CodegenGraphSnapshotService } from './services/codegen-graph-snapshot.service'
 import { CodegenSessionPublicationPipelineService } from './services/codegen-session-publication-pipeline.service'
 import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from './services/compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
 import { ConversationSemanticEditService } from './services/conversation-semantic-edit.service'
+import { PositionSizingContractService } from './services/position-sizing-contract.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
@@ -64,6 +66,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CanonicalSpecV2ValidatorService,
     CanonicalStrategyIrValidatorService,
     CanonicalStrategyIrCanonicalizerService,
+    CodegenGraphSnapshotService,
     CanonicalSpecV2IrCompilerService,
     CanonicalStrategyAstCompilerService,
     CompiledScriptParserService,
@@ -86,6 +89,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CodegenSessionPublicationPipelineService,
     ConversationSemanticEditService,
     CodegenConversationService,
+    PositionSizingContractService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })
