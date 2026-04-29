@@ -10,8 +10,8 @@ describe('normalizeRiskSemantics', () => {
       status: 'open',
       source: 'derived',
       openSlots: [{
-        slotKey: 'risk.stopLossBasis',
-        fieldPath: 'risk[0].params.stopLossBasis',
+        slotKey: 'risk.stopLoss.basis',
+        fieldPath: 'risk[0].params.ambiguousRiskField',
         questionHint: '请确认止损 5% 的计算基准',
         status: 'open',
         priority: 'risk',
@@ -74,17 +74,19 @@ describe('normalizeRiskSemantics', () => {
   })
 
   it('preserves valid risk condition expressions as recognized unsupported', () => {
+    const condition = {
+      kind: 'predicate',
+      left: { kind: 'position', field: 'pnl_pct' },
+      op: 'LTE',
+      right: { kind: 'constant', value: -5 },
+    }
+    const effect = { type: 'close_position' }
     const risks: SemanticRiskState[] = [{
       id: 'risk-expression',
       key: 'risk.condition_expression',
       params: {
-        condition: {
-          kind: 'predicate',
-          left: { kind: 'position', field: 'pnl_pct' },
-          op: 'LTE',
-          right: { kind: 'constant', value: -5 },
-        },
-        effect: { type: 'close_position' },
+        condition,
+        effect,
         scope: 'current_position',
         capabilityStatus: 'recognized_unsupported',
         unsupportedReason: 'risk_expression_compiler_not_available',
@@ -97,9 +99,42 @@ describe('normalizeRiskSemantics', () => {
     expect(normalizeRiskSemantics(risks)[0]).toEqual(expect.objectContaining({
       key: 'risk.condition_expression',
       params: expect.objectContaining({
+        condition,
+        effect,
+        scope: 'current_position',
         capabilityStatus: 'recognized_unsupported',
+        unsupportedReason: 'risk_expression_compiler_not_available',
       }),
       openSlots: [],
     }))
+  })
+
+  it('does not mutate input risk params or open slots', () => {
+    const basisSlot = {
+      slotKey: 'risk.takeProfit.basis',
+      fieldPath: 'risk[0].params.unrelatedField',
+      questionHint: '请确认止盈 8% 的计算基准',
+      status: 'open' as const,
+      priority: 'risk' as const,
+      affectsExecution: true,
+    }
+    const risks: SemanticRiskState[] = [{
+      id: 'risk-1',
+      key: 'risk.take_profit_pct',
+      params: { valuePct: 8 },
+      status: 'open',
+      source: 'derived',
+      openSlots: [basisSlot],
+    }]
+    const originalParams = { ...risks[0].params }
+    const originalOpenSlots = [...risks[0].openSlots]
+
+    const normalized = normalizeRiskSemantics(risks)
+
+    expect(risks[0].params).toEqual(originalParams)
+    expect(risks[0].openSlots).toEqual(originalOpenSlots)
+    expect(normalized[0].params).not.toBe(risks[0].params)
+    expect(normalized[0].openSlots).not.toBe(risks[0].openSlots)
+    expect(normalized[0].openSlots).toEqual([])
   })
 })

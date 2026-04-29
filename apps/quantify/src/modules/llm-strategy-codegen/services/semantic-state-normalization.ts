@@ -108,6 +108,8 @@ const RISK_BASIS_OPEN_SLOT_PATTERN = /(?:^|\.)(?:basis|stopLossBasis|takeProfitB
 const RISK_BASIS_SLOT_KEYS = new Set([
   'risk.stopLossBasis',
   'risk.takeProfitBasis',
+  'risk.stopLoss.basis',
+  'risk.takeProfit.basis',
   'risk.stop_loss_pct.basis',
   'risk.take_profit_pct.basis',
 ])
