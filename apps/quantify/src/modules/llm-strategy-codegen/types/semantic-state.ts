@@ -78,10 +78,10 @@ export interface SemanticEffect {
 export interface SemanticAtomContract {
   id: string
   kind: SemanticContractKind
-  capabilities: SemanticCapability[]
-  requires: SemanticRequirement[]
+  capabilities: readonly SemanticCapability[]
+  requires: readonly SemanticRequirement[]
   params: Record<string, unknown>
-  effects?: SemanticEffect[]
+  effects?: readonly SemanticEffect[]
 }
 
 export interface SemanticContextSlotState {
