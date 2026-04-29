@@ -1,5 +1,5 @@
 import type { ExprNode, StrategyAstV1 } from '../../types/canonical-strategy-ast'
-import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
+import type { ActionDef, CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpec } from '../../types/canonical-strategy-spec'
 import type { SemanticAtomContract, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
@@ -396,6 +396,31 @@ describe('SemanticAtomInvariantService', () => {
           when: activeWhen,
           priority: 100,
           actions: [{ kind: 'OPEN_LONG', quantity: ir.portfolio.sizing }],
+        },
+      ],
+    }
+  }
+
+  function addBuyFallbackDecisionToAst(ast: StrategyAstV1, ir: CanonicalStrategyIrV1): StrategyAstV1 {
+    const activeWhen = ir.orderPrograms[0]?.activeWhen
+    const whenExpr = ast.exprPool.find(expr => expr.sourceRef === activeWhen)
+    if (!whenExpr) {
+      throw new Error('expected order program active predicate in AST exprPool')
+    }
+
+    return {
+      ...ast,
+      decisionPrograms: [
+        ...ast.decisionPrograms,
+        {
+          id: 'decision_test_contract_order_program_buy_fallback',
+          sourceRef: 'contract_order_program_buy_fallback',
+          phase: 'entry',
+          when: whenExpr.id,
+          priority: 100,
+          actions: [
+            { kind: 'BUY', quantity: ir.portfolio.sizing } as unknown as ActionDef,
+          ],
         },
       ],
     }
@@ -830,6 +855,29 @@ describe('SemanticAtomInvariantService', () => {
     const driftedAst = new CanonicalStrategyAstCompilerService().compile(driftedIr)
 
     const checks = service.validate({ semanticState: state, canonicalSpec, ir: driftedIr, ast: driftedAst })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+    expect(checks.some(check =>
+      check.status === 'failed' && check.key === 'semantic_contract.order_program',
+    )).toBe(true)
+  })
+
+  it('fails when contract order program AST also contains ordinary BUY fallback action', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+
+    const checks = service.validate({
+      semanticState: state,
+      canonicalSpec,
+      ir,
+      ast: addBuyFallbackDecisionToAst(ast, ir),
+    })
 
     expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({

@@ -9,6 +9,7 @@ import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from 
 
 type PriceChangeDirection = 'up' | 'down'
 type PositionAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+type OrdinaryFallbackAction = PositionAction | 'BUY' | 'SELL'
 type PredicateKind = PredicateDef['kind']
 
 interface PriceChangeSnapshot {
@@ -324,7 +325,7 @@ export class SemanticAtomInvariantService {
   private findIrOrderProgramFallbackActions(
     ir: CanonicalStrategyIrV1,
     expected: ExpectedOrderProgramContract,
-  ): Array<{ ruleId: string; action: PositionAction }> {
+  ): Array<{ ruleId: string; action: OrdinaryFallbackAction }> {
     return ir.ruleBlocks.flatMap((rule) => {
       if (rule.when !== expected.activeWhen) {
         return []
@@ -343,7 +344,7 @@ export class SemanticAtomInvariantService {
   private findAstOrderProgramFallbackActions(
     ast: StrategyAstV1,
     expected: ExpectedOrderProgramContract,
-  ): Array<{ programId: string; action: PositionAction }> {
+  ): Array<{ programId: string; action: OrdinaryFallbackAction }> {
     const exprById = new Map(ast.exprPool.map(expr => [expr.id, expr]))
     return ast.decisionPrograms.flatMap((program) => {
       const sourceRef = exprById.get(program.when)?.sourceRef
@@ -361,11 +362,13 @@ export class SemanticAtomInvariantService {
     })
   }
 
-  private isOrdinaryPositionAction(action: string): action is PositionAction {
+  private isOrdinaryPositionAction(action: string): action is OrdinaryFallbackAction {
     return action === 'OPEN_LONG'
       || action === 'OPEN_SHORT'
       || action === 'CLOSE_LONG'
       || action === 'CLOSE_SHORT'
+      || action === 'BUY'
+      || action === 'SELL'
   }
 
   private resolveUniqueCapability(
