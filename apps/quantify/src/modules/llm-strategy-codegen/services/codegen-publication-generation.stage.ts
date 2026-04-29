@@ -17,6 +17,7 @@ import type { StrategySummaryBuilderService } from './strategy-summary-builder.s
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
 import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { CodegenGraphSnapshotService as DefaultCodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 export interface CompiledScriptValidationResult {
@@ -307,7 +308,7 @@ export class CodegenPublicationGenerationStage {
       locked.positionPct = position.value <= 1 ? position.value * 100 : position.value
     }
 
-    for (const risk of args.semanticState.risk) {
+    for (const risk of normalizeRiskSemantics(args.semanticState.risk)) {
       if (risk.status !== 'locked') {
         continue
       }

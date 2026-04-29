@@ -250,13 +250,47 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.stop_loss_pct',
-        params: { valuePct: 5, basis: 'entry_avg_price' },
+        params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
       }),
       expect.objectContaining({
         key: 'risk.take_profit_pct',
-        params: { valuePct: 8, basis: 'entry_avg_price' },
+        params: expect.objectContaining({ valuePct: 8, basis: 'entry_avg_price' }),
       }),
     ]))
+  })
+
+  it('normalizes legacy riskRules into structured percent risk params', () => {
+    const result = service.normalize({
+      riskRules: {
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'position_pnl',
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({
+        valuePct: 10,
+        direction: 'profit',
+        basis: 'position_pnl',
+        basisSource: 'user_explicit',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
   })
 
   it('emits a closed grid trigger atom from checklist.grid even without explicit grid wording in rules', () => {

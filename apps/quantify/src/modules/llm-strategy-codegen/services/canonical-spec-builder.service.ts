@@ -26,6 +26,7 @@ import {
 } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 
@@ -905,11 +906,12 @@ export class CanonicalSpecBuilderService {
     risks: SemanticRiskState[],
     position: SemanticPositionState | null,
   ): CanonicalRuleV2[] {
+    const normalizedRisks = normalizeRiskSemantics(risks)
     const sideScope = this.resolveSemanticRiskSideScope(position)
     const rules: CanonicalRuleV2[] = []
     let priority = 120
 
-    for (const risk of risks) {
+    for (const risk of normalizedRisks) {
       if (risk.status !== 'locked' || !validateSemanticRiskContract(risk).ok) {
         continue
       }

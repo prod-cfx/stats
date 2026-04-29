@@ -811,20 +811,30 @@ export class StrategyIntentNormalizerService {
 
     const risk: NormalizedRiskAtom[] = []
     if (typeof riskRules.stopLossPct === 'number' && Number.isFinite(riskRules.stopLossPct)) {
+      const basis = this.resolveLegacyRiskBasis(riskRules.stopLossBasis)
       risk.push({
         key: 'risk.stop_loss_pct',
         params: {
           valuePct: riskRules.stopLossPct,
-          basis: typeof riskRules.stopLossBasis === 'string' ? riskRules.stopLossBasis : 'entry_avg_price',
+          direction: 'loss',
+          basis,
+          basisSource: this.resolveLegacyRiskBasisSource(basis, riskRules.stopLossBasis),
+          effect: 'close_position',
+          scope: 'current_position',
         },
       })
     }
     if (typeof riskRules.takeProfitPct === 'number' && Number.isFinite(riskRules.takeProfitPct)) {
+      const basis = this.resolveLegacyRiskBasis(riskRules.takeProfitBasis)
       risk.push({
         key: 'risk.take_profit_pct',
         params: {
           valuePct: riskRules.takeProfitPct,
-          basis: typeof riskRules.takeProfitBasis === 'string' ? riskRules.takeProfitBasis : 'entry_avg_price',
+          direction: 'profit',
+          basis,
+          basisSource: this.resolveLegacyRiskBasisSource(basis, riskRules.takeProfitBasis),
+          effect: 'close_position',
+          scope: 'current_position',
         },
       })
     }
@@ -842,6 +852,18 @@ export class StrategyIntentNormalizerService {
     }
 
     return risk
+  }
+
+  private resolveLegacyRiskBasis(rawBasis: unknown): string {
+    return typeof rawBasis === 'string' && rawBasis.trim()
+      ? rawBasis
+      : 'entry_avg_price'
+  }
+
+  private resolveLegacyRiskBasisSource(basis: string, rawBasis: unknown): 'system_default' | 'user_explicit' {
+    return typeof rawBasis === 'string' && rawBasis.trim() && basis !== 'entry_avg_price'
+      ? 'user_explicit'
+      : 'system_default'
   }
 
   private normalizeActions(

@@ -241,6 +241,38 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: true })
   })
 
+  it('accepts normalized stop loss risk params with default basis metadata', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: {
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+    })).toEqual({ ok: true })
+  })
+
+  it('rejects invalid optional percent risk basis metadata', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5, basis: 'mark_price' },
+    } as never)).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_basis',
+    }))
+
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5, basisSource: 'legacy' },
+    } as never)).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_basis_source',
+    }))
+  })
+
   it('rejects percent-based risk contracts without numeric valuePct', () => {
     expect(validateSemanticRiskContract({
       key: 'risk.stop_loss_pct',

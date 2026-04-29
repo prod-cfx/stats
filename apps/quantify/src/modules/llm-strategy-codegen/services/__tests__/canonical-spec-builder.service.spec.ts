@@ -442,6 +442,26 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('projects normalized semantic risk basis to legacy riskRules compatibility output', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'risk-1',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 5 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(JSON.stringify(spec)).toContain('entry_avg_price')
+  })
+
   it('builds SemanticState canonical condition groups from logical expressions', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({
