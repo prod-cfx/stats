@@ -28,6 +28,41 @@ export interface SemanticConversationView {
   }
 }
 
+export type SemanticDisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECUTE'
+
+export interface SemanticDisplayGraphBaseItem {
+  id: string
+  text: string
+}
+
+export interface SemanticDisplayConditionItem extends SemanticDisplayGraphBaseItem {
+  kind: 'condition'
+}
+
+export interface SemanticDisplayActionItem extends SemanticDisplayGraphBaseItem {
+  kind: 'action'
+}
+
+export interface SemanticDisplayExecuteItem extends SemanticDisplayGraphBaseItem {
+  kind: 'execute'
+  key: string
+  value?: string
+}
+
+export type SemanticDisplayLogicGraphItem =
+  | SemanticDisplayConditionItem
+  | SemanticDisplayActionItem
+  | SemanticDisplayExecuteItem
+
+export interface SemanticDisplayLogicGraphBlock {
+  type: SemanticDisplayBlockType
+  items: SemanticDisplayLogicGraphItem[]
+}
+
+export interface SemanticDisplayLogicGraph {
+  blocks: SemanticDisplayLogicGraphBlock[]
+}
+
 @Injectable()
 export class SemanticStateProjectionService {
   buildConversationView(state: SemanticState): SemanticConversationView {
@@ -71,6 +106,29 @@ export class SemanticStateProjectionService {
     }
   }
 
+  buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
+    const triggers = this.filterDeterministicTriggers(state.triggers)
+    const actions = this.filterDeterministicActions(state.actions)
+    const entryGateText = this.buildDisplayGateText(triggers)
+    const ruleBlocks = triggers
+      .filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit')
+      .map((trigger, index) => this.buildDisplayRuleBlock({
+        trigger,
+        blockType: index === 0 ? 'IF' : 'AND_AT_THEN',
+        gateText: trigger.phase === 'entry' ? entryGateText : null,
+        actions,
+        position: state.position,
+      }))
+      .filter((block): block is SemanticDisplayLogicGraphBlock => Boolean(block))
+
+    return {
+      blocks: [
+        ...ruleBlocks,
+        this.buildDisplayExecuteBlock(state),
+      ],
+    }
+  }
+
   buildClarificationView(state: SemanticState): {
     summary: string
     nextQuestion: string | null
@@ -83,6 +141,199 @@ export class SemanticStateProjectionService {
       summary: triggerSummary || '已识别部分条件，但仍未完整。',
       nextQuestion: nextSlot?.questionHint ?? null,
     }
+  }
+
+  private buildDisplayRuleBlock(input: {
+    trigger: SemanticState['triggers'][number]
+    blockType: SemanticDisplayBlockType
+    gateText: string | null
+    actions: SemanticState['actions']
+    position: SemanticState['position']
+  }): SemanticDisplayLogicGraphBlock | null {
+    const conditionText = this.buildDisplayConditionText(input.trigger, input.gateText)
+    if (!conditionText) {
+      return null
+    }
+
+    return {
+      type: input.blockType,
+      items: [
+        {
+          kind: 'condition',
+          id: `condition-${input.trigger.id}`,
+          text: conditionText,
+        },
+        ...this.buildDisplayActionItems(input.trigger, input.actions, input.position),
+      ],
+    }
+  }
+
+  private buildDisplayConditionText(
+    trigger: SemanticState['triggers'][number],
+    gateText: string | null,
+  ): string {
+    const conditionText = trigger.key === 'condition.expression'
+      ? this.formatSemanticExpression(trigger.params.expression)
+      : this.formatDisplayTriggerCondition(trigger)
+    if (!conditionText) {
+      return ''
+    }
+
+    return gateText ? `${conditionText}，且${gateText}` : conditionText
+  }
+
+  private formatDisplayTriggerCondition(trigger: SemanticState['triggers'][number]): string {
+    const summary = this.buildTriggerSummary([trigger], true)
+    return summary.replace(/^(入场|出场|条件)：/u, '').replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
+  }
+
+  private buildDisplayGateText(triggers: SemanticState['triggers']): string | null {
+    const gateTexts = triggers
+      .filter(trigger => trigger.phase === 'gate')
+      .map(trigger => this.buildDisplayConditionText(trigger, null))
+      .filter(text => text.length > 0)
+    return gateTexts.length > 0 ? gateTexts.join('，且') : null
+  }
+
+  private buildDisplayActionItems(
+    trigger: SemanticState['triggers'][number],
+    actions: SemanticState['actions'],
+    position: SemanticState['position'],
+  ): SemanticDisplayActionItem[] {
+    const actionKey = trigger.phase === 'entry'
+      ? this.pickDisplayActionKey(actions, ['open_long', 'open_short'])
+      : this.pickDisplayActionKey(actions, ['close_long', 'close_short', 'reduce_long', 'reduce_short'])
+    if (!actionKey) {
+      return []
+    }
+
+    const text = this.formatDisplayActionText(actionKey, position)
+    return text
+      ? [{
+          kind: 'action',
+          id: `action-${trigger.id}-${actionKey}`,
+          text,
+        }]
+      : []
+  }
+
+  private pickDisplayActionKey(
+    actions: SemanticState['actions'],
+    keys: string[],
+  ): string | null {
+    return actions.find(action => keys.includes(action.key))?.key ?? null
+  }
+
+  private formatDisplayActionText(
+    actionKey: string,
+    position: SemanticState['position'],
+  ): string {
+    const sizingText = this.buildDisplayPositionSizingValue(position)
+
+    if (actionKey === 'open_long') return sizingText ? `开多 ${sizingText}` : '开多'
+    if (actionKey === 'open_short') return sizingText ? `开空 ${sizingText}` : '开空'
+    if (actionKey === 'close_long' || actionKey === 'reduce_long') return '平多'
+    if (actionKey === 'close_short' || actionKey === 'reduce_short') return '平空'
+    return ''
+  }
+
+  private buildDisplayExecuteBlock(state: SemanticState): SemanticDisplayLogicGraphBlock {
+    const executionContext = this.buildExecutionContext(state.contextSlots)
+    const positionSizing = this.buildDisplayPositionSizingValue(state.position)
+    const marketType = this.formatDisplayMarketType(executionContext.marketType)
+    const riskTexts = this.buildRiskSummary(this.filterDeterministicRisk(state.risk))
+      .split('；')
+      .filter(text => text.length > 0)
+    const items: SemanticDisplayExecuteItem[] = []
+
+    if (executionContext.exchange) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-exchange',
+        key: 'exchange',
+        value: executionContext.exchange,
+        text: `交易所: ${executionContext.exchange.toUpperCase()}`,
+      })
+    }
+
+    if (executionContext.symbol) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-symbol',
+        key: 'symbol',
+        value: executionContext.symbol,
+        text: `标的: ${executionContext.symbol}`,
+      })
+    }
+
+    if (executionContext.timeframe) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-timeframe',
+        key: 'timeframe',
+        value: executionContext.timeframe,
+        text: `周期: ${executionContext.timeframe}`,
+      })
+    }
+
+    if (positionSizing) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-position',
+        key: 'positionSizing',
+        value: positionSizing,
+        text: `仓位: ${positionSizing}`,
+      })
+    }
+
+    if (marketType) {
+      items.push({
+        kind: 'execute',
+        id: 'execute-market-type',
+        key: 'marketType',
+        value: marketType,
+        text: `市场: ${marketType}`,
+      })
+    }
+
+    riskTexts.forEach((riskText, index) => {
+      const text = `风控: ${riskText} -> 平仓`
+      items.push({
+        kind: 'execute',
+        id: `execute-risk-${index}`,
+        key: 'risk',
+        value: riskText,
+        text,
+      })
+    })
+
+    return {
+      type: 'EXECUTE',
+      items,
+    }
+  }
+
+  private buildDisplayPositionSizingValue(position: SemanticState['position']): string | null {
+    const summary = this.buildPositionSummary(position)
+    return summary ? summary.replace(/^仓位：/u, '') : null
+  }
+
+  private formatDisplayMarketType(marketType: string | null): string | null {
+    if (!marketType) {
+      return null
+    }
+
+    const normalized = marketType.toLowerCase()
+    if (normalized === 'perp' || normalized === 'perpetual' || normalized === 'swap') {
+      return '永续'
+    }
+    if (normalized === 'spot') {
+      return '现货'
+    }
+    if (normalized === 'futures' || normalized === 'future') {
+      return '交割'
+    }
+    return marketType
   }
 
   private buildExecutionContext(slots: {

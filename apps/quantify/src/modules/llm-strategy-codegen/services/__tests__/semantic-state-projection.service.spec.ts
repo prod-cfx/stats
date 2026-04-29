@@ -4,6 +4,150 @@ import { SemanticStateProjectionService } from '../semantic-state-projection.ser
 describe('SemanticStateProjectionService', () => {
   const service = new SemanticStateProjectionService()
 
+  it('builds display logic graph from locked semantic atoms for previous candle breakout strategy', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'semantic-entry-1',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'GT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'semantic-exit-1',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'LT',
+              left: { kind: 'series', source: 'bar', field: 'close' },
+              right: { kind: 'series', source: 'bar', field: 'low', offsetBars: 1 },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'semantic-gate-1',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 1, basis: 'entry_avg_price' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
+        mode: 'fixed_ratio',
+        value: 0.03,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择交易所',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'BTCUSDT',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择交易标的',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'perp',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择市场类型',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '1m',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请选择周期',
+          affectsExecution: true,
+        },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.map(item => item.text)).toEqual([
+      '收盘价高于前 1 根最高价，且持有多仓等于false',
+      '开多 3%',
+    ])
+    expect(graph.blocks[1]?.items.map(item => item.text)).toEqual([
+      '收盘价低于前 1 根最低价',
+      '平多',
+    ])
+    expect(text).toContain('交易所: OKX')
+    expect(text).toContain('标的: BTCUSDT')
+    expect(text).toContain('周期: 1m')
+    expect(text).toContain('仓位: 3%')
+    expect(text).toContain('市场: 永续')
+    expect(text).toContain('风控: 止损：价格相对入场均价下跌1% 强制平仓 -> 平仓')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
   const closeOpenExpressionState = (): SemanticState => ({
     version: 1,
     families: ['single-leg'],
