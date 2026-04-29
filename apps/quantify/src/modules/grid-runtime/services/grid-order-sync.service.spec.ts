@@ -90,7 +90,7 @@ function createTradingService() {
     cancelOrder: jest.fn().mockResolvedValue({ id: 'exchange-order-1', status: 'canceled' }),
     placeOrder: jest.fn().mockResolvedValue({
       id: 'exchange-order-created',
-      clientOrderId: 'grid-grid-1-level-1-buy',
+      clientOrderId: 'g-planned-order-1',
       symbol: 'BTC/USDT',
       marketType: 'spot',
       side: 'buy',
@@ -156,7 +156,7 @@ describe('GridOrderSyncService', () => {
 
     expect(repository.markOrderSubmitting).toHaveBeenCalledWith({
       id: 'planned-order-1',
-      clientOrderId: 'grid-grid-1-level-1-buy',
+      clientOrderId: 'g-planned-order-1',
       rawPayload: { source: 'grid_order_sync' },
     })
     expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', {
@@ -167,7 +167,7 @@ describe('GridOrderSyncService', () => {
       amount: 1.0526315789473684,
       price: 95,
       timeInForce: 'GTC',
-      clientOrderId: 'grid-grid-1-level-1-buy',
+      clientOrderId: 'g-planned-order-1',
     }, 'exchange-account-1')
     expect(repository.markOrderOpen).toHaveBeenCalledWith({
       id: 'planned-order-1',

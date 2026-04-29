@@ -174,8 +174,8 @@ export class GridOrderSyncService {
     }
   }
 
-  private buildClientOrderId(instanceId: string, order: RuntimeOrder): string {
-    return `grid-${instanceId}-${order.gridLevelId}-${order.side}`
+  private buildClientOrderId(_instanceId: string, order: RuntimeOrder): string {
+    return `g-${order.id}`
   }
 
   private async stopForBoundaryBreak(
