@@ -327,6 +327,27 @@ describe('semantic-only strategy regression verification', () => {
     ]))
   })
 
+  it('compiles BTCUSDT previous bar high-low breakout semantics through SemanticState mainline', async () => {
+    const semanticState = withLockedMarketContext(
+      buildSemanticStateFromMessage('用 BTCUSDT 1m K 线。如果最新收盘价突破上一根 K 线最高价，且当前没有持仓，则开多，使用可用余额的 3%。如果最新收盘价跌破上一根 K 线最低价，则平多。'),
+      { exchange: 'okx', marketType: 'perp', symbol: 'BTCUSDT', timeframe: '1m' },
+    )
+
+    const canonicalSpec = canonicalSpecBuilder.buildFromSemanticState(semanticState)
+
+    expect(canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+    ]))
+    expect(canonicalSpec.sizing).toEqual({ mode: 'RATIO', value: 0.03 })
+  })
+
   it('publishes Bollinger upper-short and middle-exit semantics without SMA checklist compatibility', async () => {
     const result = await generateAndPublish(
       'bollinger-upper-short-publish',
@@ -485,6 +506,7 @@ describe('semantic-only strategy regression verification', () => {
       mode: 'fixed_ratio',
       value: 0.01,
       positionMode: 'long_only',
+      sizing: { kind: 'ratio', value: 0.01, unit: 'ratio' },
     })
   })
 
