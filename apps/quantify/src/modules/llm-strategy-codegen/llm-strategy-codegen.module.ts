@@ -28,6 +28,7 @@ import { PositionSizingContractService } from './services/position-sizing-contra
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
+import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
@@ -92,6 +93,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     ConversationSemanticEditService,
     CodegenConversationService,
     PositionSizingContractService,
+    SemanticAtomContractService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })

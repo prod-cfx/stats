@@ -96,4 +96,101 @@ describe('SemanticSeedStateBuilderService', () => {
       questionHint: '请确认开仓订单类型。',
     })])
   })
+
+  it('preserves semantic atom contracts from semantic seed patch', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.price_levels',
+        phase: 'entry',
+        contracts: [{
+          id: 'trigger-1',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        key: 'grid.limit_ladder',
+        contracts: [{
+          id: 'action-1',
+          kind: 'action',
+          capabilities: [{
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+            shape: { timeInForce: 'gtc', recycleOnFill: true },
+          }],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+            { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+          ],
+          params: {},
+        }],
+      }],
+      risk: [{
+        key: 'grid.exposure_guard',
+        contracts: [{
+          id: 'risk-1',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'drawdown_limit',
+            shape: { value: 0.2 },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      position: {
+        mode: 'fixed',
+        value: 20,
+        positionMode: 'long',
+        contracts: [{
+          id: 'position-1',
+          kind: 'position',
+          capabilities: [{
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: { value: 20, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      },
+    })
+
+    expect(state?.triggers[0]?.contracts).toEqual([
+      expect.objectContaining({
+        id: 'trigger-1',
+        capabilities: [expect.objectContaining({ domain: 'price', verb: 'define', object: 'level_set' })],
+      }),
+    ])
+    expect(state?.actions[0]?.contracts).toEqual([
+      expect.objectContaining({
+        id: 'action-1',
+        requires: [
+          { domain: 'price', verb: 'define', object: 'level_set' },
+          { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+        ],
+      }),
+    ])
+    expect(state?.risk[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      domain: 'guard',
+      verb: 'enforce',
+      object: 'drawdown_limit',
+    }))
+    expect(state?.position?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      domain: 'capital',
+      verb: 'allocate',
+      object: 'per_order_budget',
+    }))
+  })
 })

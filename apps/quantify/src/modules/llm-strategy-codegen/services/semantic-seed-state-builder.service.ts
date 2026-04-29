@@ -2,10 +2,16 @@ import { Injectable } from '@nestjs/common'
 
 import type {
   SemanticActionState,
+  SemanticAtomContract,
+  SemanticCapability,
+  SemanticCapabilityDomain,
+  SemanticCapabilityShape,
   SemanticEvidence,
+  SemanticEffect,
   SemanticNodeStatus,
   SemanticPositionSizingContract,
   SemanticPriority,
+  SemanticRequirement,
   SemanticRiskState,
   SemanticSlotState,
   SemanticSource,
@@ -95,6 +101,7 @@ export class SemanticSeedStateBuilderService {
     const status = this.resolveNodeStatus(update.status, openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
+    const contracts = this.readContracts(update.contracts)
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-trigger-${index + 1}`,
@@ -109,6 +116,7 @@ export class SemanticSeedStateBuilderService {
       ...(evidence ? { evidence } : {}),
       openSlots,
       ...(supersedes ? { supersedes } : {}),
+      ...(contracts ? { contracts } : {}),
     }
   }
 
@@ -125,6 +133,7 @@ export class SemanticSeedStateBuilderService {
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const openSlots = this.readOpenSlots(update.openSlots)
+    const contracts = this.readContracts(update.contracts)
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-action-${index + 1}`,
@@ -135,6 +144,7 @@ export class SemanticSeedStateBuilderService {
       ...(evidence ? { evidence } : {}),
       openSlots,
       ...(supersedes ? { supersedes } : {}),
+      ...(contracts ? { contracts } : {}),
     }
   }
 
@@ -151,6 +161,7 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
+    const contracts = this.readContracts(update.contracts)
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
@@ -161,6 +172,7 @@ export class SemanticSeedStateBuilderService {
       ...(evidence ? { evidence } : {}),
       openSlots,
       ...(supersedes ? { supersedes } : {}),
+      ...(contracts ? { contracts } : {}),
     }
   }
 
@@ -182,6 +194,7 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const positionMode = update.positionMode === 'both' ? 'long_short' : update.positionMode
     const evidence = this.readEvidence(update.evidence)
+    const contracts = this.readContracts(update.contracts)
 
     return {
       ...(sizing ? { sizing } : {}),
@@ -192,6 +205,7 @@ export class SemanticSeedStateBuilderService {
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
       openSlots,
+      ...(contracts ? { contracts } : {}),
     }
   }
 
@@ -224,6 +238,142 @@ export class SemanticSeedStateBuilderService {
     }
 
     return null
+  }
+
+  private readContracts(value: unknown): SemanticAtomContract[] | null {
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    const contracts = value
+      .map(item => this.toContract(item))
+      .filter((item): item is SemanticAtomContract => item !== null)
+    return contracts.length > 0 ? contracts : null
+  }
+
+  private toContract(value: unknown): SemanticAtomContract | null {
+    if (!this.isRecord(value)) {
+      return null
+    }
+
+    const id = this.readTrimmedString(value.id)
+    const capabilities = this.readCapabilities(value.capabilities)
+    const requires = this.readRequirements(value.requires)
+    if (!id || !this.isContractKind(value.kind) || !capabilities || !requires) {
+      return null
+    }
+
+    const effects = this.readEffects(value.effects)
+
+    return {
+      id,
+      kind: value.kind,
+      capabilities,
+      requires,
+      params: this.readParams(value.params),
+      ...(effects ? { effects } : {}),
+    }
+  }
+
+  private readCapabilities(value: unknown): SemanticCapability[] | null {
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    const capabilities = value
+      .map(item => this.toCapability(item))
+      .filter((item): item is SemanticCapability => item !== null)
+    return capabilities.length > 0 ? capabilities : null
+  }
+
+  private toCapability(value: unknown): SemanticCapability | null {
+    if (!this.isRecord(value) || !this.isCapabilityDomain(value.domain)) {
+      return null
+    }
+
+    const verb = this.readTrimmedString(value.verb)
+    const object = this.readTrimmedString(value.object)
+    if (!verb || !object || !this.isCapabilityShape(value.shape)) {
+      return null
+    }
+
+    return {
+      domain: value.domain,
+      verb,
+      object,
+      shape: value.shape,
+    }
+  }
+
+  private readRequirements(value: unknown): SemanticRequirement[] | null {
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    return value
+      .map(item => this.toRequirement(item))
+      .filter((item): item is SemanticRequirement => item !== null)
+  }
+
+  private toRequirement(value: unknown): SemanticRequirement | null {
+    if (!this.isRecord(value) || !this.isCapabilityDomain(value.domain)) {
+      return null
+    }
+
+    const verb = this.readTrimmedString(value.verb)
+    const object = this.readTrimmedString(value.object)
+    if (!verb || !object) {
+      return null
+    }
+
+    return {
+      domain: value.domain,
+      verb,
+      object,
+    }
+  }
+
+  private readEffects(value: unknown): SemanticEffect[] | null {
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    const effects = value
+      .map(item => this.toEffect(item))
+      .filter((item): item is SemanticEffect => item !== null)
+    return effects.length > 0 ? effects : null
+  }
+
+  private toEffect(value: unknown): SemanticEffect | null {
+    if (!this.isRecord(value) || !this.isCapabilityDomain(value.domain)) {
+      return null
+    }
+
+    const verb = this.readTrimmedString(value.verb)
+    const object = this.readTrimmedString(value.object)
+    const shape = value.shape
+    if (!verb || !object) {
+      return null
+    }
+
+    const effect: SemanticEffect = {
+      domain: value.domain,
+      verb,
+      object,
+    }
+
+    if (shape === undefined) {
+      return effect
+    }
+
+    if (!this.isCapabilityShape(shape)) {
+      return null
+    }
+
+    return {
+      ...effect,
+      shape,
+    }
   }
 
   private toContextSlots(update: unknown): SemanticState['contextSlots'] {
@@ -407,6 +557,39 @@ export class SemanticSeedStateBuilderService {
       return value
     }
     return null
+  }
+
+  private isContractKind(value: unknown): value is SemanticAtomContract['kind'] {
+    return value === 'trigger'
+      || value === 'action'
+      || value === 'risk'
+      || value === 'position'
+      || value === 'context'
+  }
+
+  private isCapabilityDomain(value: unknown): value is SemanticCapabilityDomain {
+    return value === 'market'
+      || value === 'price'
+      || value === 'order_program'
+      || value === 'capital'
+      || value === 'exposure'
+      || value === 'margin'
+      || value === 'guard'
+  }
+
+  private isCapabilityShape(value: unknown): value is SemanticCapabilityShape {
+    if (!this.isRecord(value)) {
+      return false
+    }
+
+    return Object.values(value).every(item =>
+      item === null
+      || typeof item === 'string'
+      || typeof item === 'number'
+      || typeof item === 'boolean'
+      || this.isCapabilityShape(item)
+      || (Array.isArray(item) && item.every(nested => this.isCapabilityShape(nested))),
+    )
   }
 
   private readStringArray(value: unknown): string[] | null {
