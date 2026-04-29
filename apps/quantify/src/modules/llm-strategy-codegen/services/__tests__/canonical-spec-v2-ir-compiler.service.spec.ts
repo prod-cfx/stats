@@ -1,4 +1,4 @@
-import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
+import type { CanonicalStrategyIrV1, OrderProgram, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticExpressionOperand, SemanticState } from '../../types/semantic-state'
 import { evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
@@ -24,6 +24,54 @@ function findPredicate(
   expect(found).toBeDefined()
   return found as PredicateDef
 }
+
+const invalidOffsetOrderProgramMissingOffset = {
+  id: 'invalid-offset-order-program',
+  kind: 'LIMIT_LADDER',
+  activeWhen: 'always',
+  side: 'buy',
+  sidePolicy: 'spot_grid',
+  priceSource: 'offset_from_price',
+  tickPolicy: 'round',
+  quantity: { mode: 'fixed_quote', value: 10 },
+  orderType: 'limit',
+  timeInForce: 'gtc',
+  recycleOnFill: true,
+  pairingPolicy: 'adjacent_level',
+  cancelScope: 'program_orders',
+  maxWorkingOrders: 1,
+  group: 'invalid',
+// @ts-expect-error offset-from-price order programs require offset.
+} satisfies OrderProgram
+
+void invalidOffsetOrderProgramMissingOffset
+
+const invalidOffsetOrderProgramWithLevelSetRef = {
+  id: 'invalid-offset-order-program',
+  kind: 'LIMIT_LADDER',
+  activeWhen: 'always',
+  side: 'buy',
+  sidePolicy: 'spot_grid',
+  priceSource: 'offset_from_price',
+  levelSetRef: 'levels',
+  offset: {
+    basis: 'pct',
+    value: 1,
+    anchorRef: 'close_1m',
+  },
+  tickPolicy: 'round',
+  quantity: { mode: 'fixed_quote', value: 10 },
+  orderType: 'limit',
+  timeInForce: 'gtc',
+  recycleOnFill: true,
+  pairingPolicy: 'adjacent_level',
+  cancelScope: 'program_orders',
+  maxWorkingOrders: 1,
+  group: 'invalid',
+// @ts-expect-error offset-from-price order programs must not accept levelSetRef.
+} satisfies OrderProgram
+
+void invalidOffsetOrderProgramWithLevelSetRef
 
 function createSizingCanonicalSpec(
   sizing: NonNullable<CanonicalStrategySpecV2['sizing']>,
@@ -128,6 +176,8 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.orderPrograms).toEqual([
       expect.objectContaining({
         kind: 'LIMIT_LADDER',
+        priceSource: 'level_set',
+        levelSetRef: expect.any(String),
         orderType: 'limit',
         recycleOnFill: true,
       }),

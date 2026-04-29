@@ -137,19 +137,12 @@ export interface ActionDef {
   quantity: QuantityDef
 }
 
-export interface OrderProgramDef {
+interface OrderProgramBaseDef {
   id: string
   kind: 'LIMIT_LADDER'
   activeWhen?: string
   side: 'buy' | 'sell'
   sidePolicy: 'spot_grid' | 'perp_long' | 'perp_short' | 'perp_neutral'
-  priceSource: 'level_set' | 'offset_from_price'
-  levelSetRef: string
-  offset?: {
-    basis: 'pct' | 'absolute' | 'atr_multiple'
-    value: number
-    anchorRef: string
-  }
   tickPolicy: 'round' | 'floor' | 'ceil'
   quantity: QuantityDef
   orderType: 'limit'
@@ -160,6 +153,24 @@ export interface OrderProgramDef {
   maxWorkingOrders: number
   group: string
 }
+
+export interface LevelSetOrderProgramDef extends OrderProgramBaseDef {
+  priceSource: 'level_set'
+  levelSetRef: string
+  offset?: never
+}
+
+export interface OffsetOrderProgramDef extends OrderProgramBaseDef {
+  priceSource: 'offset_from_price'
+  levelSetRef?: never
+  offset: {
+    basis: 'pct' | 'absolute' | 'atr_multiple'
+    value: number
+    anchorRef: string
+  }
+}
+
+export type OrderProgramDef = LevelSetOrderProgramDef | OffsetOrderProgramDef
 
 export type OrderProgram = OrderProgramDef
 
