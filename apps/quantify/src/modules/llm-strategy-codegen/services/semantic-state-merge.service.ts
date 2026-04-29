@@ -105,6 +105,7 @@ export class SemanticStateMergeService {
     const next = derived.map(action => ({
       ...action,
       params: action.params ? { ...action.params } : undefined,
+      openSlots: (action.openSlots ?? []).map(slot => ({ ...slot })),
     }))
     const consumedDerivedIndexes = new Set<number>()
 
@@ -115,6 +116,7 @@ export class SemanticStateMergeService {
         next.push({
           ...persistedAction,
           params: persistedAction.params ? { ...persistedAction.params } : undefined,
+          openSlots: (persistedAction.openSlots ?? []).map(slot => ({ ...slot })),
         })
         continue
       }
@@ -129,6 +131,7 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedAction.params, ...persistedAction.params }
           : { ...persistedAction.params, ...derivedAction.params },
+        openSlots: this.mergeOpenSlots(persistedAction.openSlots ?? [], derivedAction.openSlots ?? []),
         evidence: preferPersisted
           ? persistedAction.evidence ?? derivedAction.evidence
           : derivedAction.evidence ?? persistedAction.evidence,

@@ -29,6 +29,7 @@ import { RecommendationIndexService } from './services/recommendation-index.serv
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
+import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
@@ -56,6 +57,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     StaticGuardrailService,
     RuntimeGuardrailService,
     SemanticSeedExtractorService,
+    SemanticSeedStateBuilderService,
     SemanticStateMergeService,
     SemanticStateReducerService,
     SemanticStateProjectionService,

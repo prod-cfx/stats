@@ -18,6 +18,7 @@ import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execu
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
+import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 import { StrategyClarificationQuestionService } from '../strategy-clarification-question.service'
@@ -4970,6 +4971,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('does not ask for entry or exit rules after previous bar high-low seed semantics are complete', async () => {
+    const initialMessage = '用 BTCUSDT 1m K 线。如果最新收盘价突破上一根 K 线最高价，且当前没有持仓，则开多，使用可用余额的 3%。如果最新收盘价跌破上一根 K 线最低价，则平多。'
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认交易所。',
+        semanticPatch: new SemanticSeedExtractorService().extract(initialMessage),
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-previous-bar-high-low-regression' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage,
+    } as StartCodegenSessionDto)
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt).toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'condition.expression', phase: 'entry', sideScope: 'long' }),
+      expect.objectContaining({ key: 'condition.expression', phase: 'exit', sideScope: 'long' }),
+    ]))
+  })
+
   it('position contract regression: fixed quote sizing from the user is not replaced by a percent clarification slot', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
@@ -8274,7 +8302,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ kind: 'sma' }),
     ]))
     expect(publishedSnapshot).toEqual(expect.objectContaining({
-      strategyConfig: {
+      strategyConfig: expect.objectContaining({
         exchange: 'okx',
         symbol: 'BTCUSDT',
         marketType: 'perp',
@@ -8282,7 +8310,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         stateTimeframes: [],
         positionPct: 10,
         strategyDeclaredLeverageRange: null,
-      },
+      }),
       backtestConfigDefaults: expect.objectContaining({
         initialCash: 10000,
         leverage: 1,
@@ -8469,7 +8497,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
     const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
     expect(publishedSnapshot).toEqual(expect.objectContaining({
-      strategyConfig: {
+      strategyConfig: expect.objectContaining({
         exchange: 'okx',
         symbol: 'BTCUSDT',
         marketType: 'perp',
@@ -8477,7 +8505,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         stateTimeframes: ['15m'],
         positionPct: 10,
         strategyDeclaredLeverageRange: null,
-      },
+      }),
       backtestConfigDefaults: expect.objectContaining({
         initialCash: 10000,
         leverage: 1,

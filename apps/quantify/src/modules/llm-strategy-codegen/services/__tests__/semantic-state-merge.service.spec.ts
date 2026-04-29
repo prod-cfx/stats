@@ -3,6 +3,52 @@ import { SemanticStateMergeService } from '../semantic-state-merge.service'
 describe('SemanticStateMergeService', () => {
   const service = new SemanticStateMergeService()
 
+  it('merges action open slots when the same action is derived again', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [{
+          id: 'action-open-long-old',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'action.order_type',
+            fieldPath: 'actions[0].params.orderType',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请确认开仓订单类型。',
+            affectsExecution: true,
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [{ id: 'action-open-long-new', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.actions[0]).toEqual(expect.objectContaining({
+      id: 'action-open-long-old',
+      key: 'open_long',
+      openSlots: [expect.objectContaining({ slotKey: 'action.order_type' })],
+    }))
+  })
+
   it('preserves locked grid atoms when the current round only contributes a timeframe context slot', () => {
     const merged = service.merge({
       persisted: {

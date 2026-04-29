@@ -94,11 +94,13 @@ export class SemanticSeedExtractorService {
     for (const segment of segments) {
       this.pushCandleExpressionTriggers(segment, triggers, seen)
       this.pushNoPositionGateTriggers(segment, triggers, seen, text)
+      this.pushPreviousBarExtremaExpressionTriggers(segment, triggers, seen)
       this.pushMovingAverageCrossTrigger(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen, aliasContext)
       this.pushBollingerTriggers(segment, triggers, seen, aliasContext)
       this.pushRsiTriggers(segment, triggers, seen, aliasContext)
       this.pushMacdTriggers(segment, triggers, seen, text)
+      this.pushPartialBreakoutTriggers(segment, triggers, seen)
       this.pushBreakoutTriggers(segment, triggers, seen)
       this.pushRangePositionTriggers(segment, triggers, seen, text)
       this.pushGridTrigger(segment, triggers, seen)
@@ -210,14 +212,28 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
   ): NonNullable<CodegenSemanticPatch['position']> | null {
     const parsed = this.positionSizingContracts.parse(text)
-    if (!parsed) {
+    if (parsed) {
+      return {
+        sizing: parsed.sizing,
+        mode: this.resolveLegacySizingMode(parsed.sizing),
+        value: parsed.sizing.value,
+        positionMode: this.resolvePositionMode(text, triggers),
+      }
+    }
+
+    const availableBalancePercent = this.extractPercent(text, [
+      /(?:使用|用|投入)?\s*(?:可用余额|账户余额|余额)(?:的)?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /(?:可用余额|账户余额|余额)(?:的)?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+    ])
+    if (availableBalancePercent === null || availableBalancePercent <= 0 || availableBalancePercent > 100) {
       return null
     }
 
+    const value = availableBalancePercent / 100
     return {
-      sizing: parsed.sizing,
-      mode: this.resolveLegacySizingMode(parsed.sizing),
-      value: parsed.sizing.value,
+      sizing: { kind: 'ratio', value, unit: 'ratio' },
+      mode: 'fixed_ratio',
+      value,
       positionMode: this.resolvePositionMode(text, triggers),
     }
   }
@@ -251,8 +267,15 @@ export class SemanticSeedExtractorService {
     seen: Set<string>,
     contextText: string,
   ): void {
-    if (!this.hasExistingPositionContext(segment)) return
-    if (!/(不再|不要|不可|不能|禁止|避免|则不再).*(?:开仓|开多|开空)|(?:不开仓|不加仓)/u.test(segment)) return
+    const hasExistingPositionOpenBlock = this.hasExistingPositionContext(segment)
+      && /(?:不再|不要|不可|不能|禁止|避免|则不再).*(?:开仓|开多|开空)|(?:不开仓|不加仓)/u.test(segment)
+    const hasNoPositionEntryGate = this.hasNoPositionContext(segment)
+      && /(?:开仓|开多|开空|买入|做多|做空|入场)/u.test(segment)
+    const hasInheritedNoPositionEntryGate = !hasNoPositionEntryGate
+      && !this.hasExistingPositionContext(segment)
+      && this.hasNoPositionContext(contextText)
+      && /(?:开仓|开多|开空|买入|做多|做空|入场)/u.test(segment)
+    if (!hasExistingPositionOpenBlock && !hasNoPositionEntryGate && !hasInheritedNoPositionEntryGate) return
 
     const sideScope = this.resolveNoPositionGateSideScope(segment, contextText)
     const expression: SemanticExpression = {
@@ -268,6 +291,54 @@ export class SemanticSeedExtractorService {
       sideScope,
       params: { expression },
     })
+  }
+
+  private pushPreviousBarExtremaExpressionTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+  ): void {
+    for (const clause of this.splitLogicClauses(segment)) {
+      const expression = this.extractPreviousBarExtremaExpression(clause)
+      if (!expression) continue
+
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      this.pushTrigger(triggers, seen, {
+        key: 'condition.expression',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        params: { expression },
+      })
+    }
+  }
+
+  private extractPreviousBarExtremaExpression(clause: string): SemanticExpression | null {
+    const compact = clause.replace(/\s+/gu, '')
+    const closeLatest = /(?:最新|当前)?(?:K线)?收盘价|close/iu
+    const previousHigh = /(?:上一根|前一根|上根)(?:K线)?(?:最高价|最高|高点|high)/iu
+    const previousLow = /(?:上一根|前一根|上根)(?:K线)?(?:最低价|最低|低点|low)/iu
+
+    if (closeLatest.test(compact) && previousHigh.test(compact) && /突破|升破|上破|高于|大于|超过|站上|>/u.test(compact)) {
+      return {
+        kind: 'predicate',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+        right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+      }
+    }
+
+    if (closeLatest.test(compact) && previousLow.test(compact) && /跌破|下破|跌穿|低于|小于|失守|</u.test(compact)) {
+      return {
+        kind: 'predicate',
+        op: 'LT',
+        left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+        right: { kind: 'series', source: 'bar', field: 'low', offsetBars: 1 },
+      }
+    }
+
+    return null
   }
 
   private extractCloseOpenCandleExpression(clause: string): SemanticExpression | null {
@@ -339,7 +410,11 @@ export class SemanticSeedExtractorService {
   }
 
   private hasExistingPositionContext(segment: string): boolean {
-    return /(?:已有|已经有|当前|现有)(?:持仓|仓位)|(?:持仓|仓位)(?:已存在|存在|不为空)/u.test(segment)
+    return /(?:已有|已经有|当前有|现在有|目前有|现有|持有)(?:持仓|仓位)|(?:^|[^没无未])有(?:持仓|仓位)|(?:持仓|仓位)(?:已存在|存在|不为空)/u.test(segment)
+  }
+
+  private hasNoPositionContext(segment: string): boolean {
+    return /(?:当前|现在|目前)?(?:没有|无|未持有)(?:持仓|仓位)|(?:空仓|无仓位)/u.test(segment)
   }
 
   private pushMovingAverageTrigger(
@@ -702,6 +777,42 @@ export class SemanticSeedExtractorService {
           },
         })
       }
+    }
+  }
+
+  private pushPartialBreakoutTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(segment)) return
+
+    for (const clause of this.splitLogicClauses(segment)) {
+      if (!/(突破|升破|上破|跌破|下破|失守).{0,12}(关键位置|支撑|压力|阻力)/u.test(clause)) continue
+
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      const isDown = /跌破|下破|失守|支撑/u.test(clause)
+      const referenceText = /支撑/u.test(clause)
+        ? '支撑'
+        : /压力|阻力/u.test(clause)
+          ? '压力'
+          : '关键位置'
+
+      this.pushTrigger(triggers, seen, {
+        key: isDown ? 'price.breakout_down' : 'price.breakout_up',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        status: 'open',
+        params: { reference: 'unknown', referenceText },
+        evidence: { text: clause, source: 'user_explicit' },
+        openSlots: [{
+          slotKey: 'trigger.reference_definition',
+          fieldPath: `triggers[${triggers.length}].params.reference`,
+          status: 'open',
+          priority: 'core',
+          questionHint: `请确认${referenceText}如何定义。`,
+          affectsExecution: true,
+          evidence: { text: referenceText, source: 'user_explicit' },
+        }],
+      })
     }
   }
 
@@ -1223,7 +1334,7 @@ export class SemanticSeedExtractorService {
 
   private extractMarketType(text: string): string | null {
     if (/现货|spot/u.test(text)) return 'spot'
-    if (/合约|永续|perp|swap/u.test(text)) return 'perp'
+    if (/合约|永续|perp|swap|\bcontract\b/iu.test(text)) return 'perp'
     return null
   }
 

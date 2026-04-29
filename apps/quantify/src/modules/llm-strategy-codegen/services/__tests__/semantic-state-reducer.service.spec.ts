@@ -4,6 +4,131 @@ import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 describe('SemanticStateReducerService', () => {
   const service = new SemanticStateReducerService()
 
+  it('locks action open slots from clarification answers', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [{
+          id: 'action-open-long',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'action.order_type',
+            fieldPath: 'actions[0].params.orderType',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请确认开仓订单类型。',
+            affectsExecution: true,
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'action.order_type',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'action.order_type',
+        fieldPath: 'actions[0].params.orderType',
+      }),
+      answer: '市价单',
+      messageIndex: 3,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: { orderType: '市价单' },
+      openSlots: [expect.objectContaining({
+        slotKey: 'action.order_type',
+        status: 'locked',
+        value: '市价单',
+      })],
+    }))
+  })
+
+  it('normalizes english contract clarification answers into perp market type', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: {
+            slotKey: 'marketType',
+            fieldPath: 'context.marketType',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请确认市场类型（现货或合约/perp）。',
+            affectsExecution: true,
+          },
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'marketType',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'marketType',
+        fieldPath: 'context.marketType',
+      }),
+      answer: 'contract',
+      messageIndex: 2,
+    })
+
+    expect(next.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'perp',
+    }))
+  })
+
+  it('keeps market type open when contract only appears as an english substring', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: {
+            slotKey: 'marketType',
+            fieldPath: 'context.marketType',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请确认市场类型（现货或合约/perp）。',
+            affectsExecution: true,
+          },
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'marketType',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'marketType',
+        fieldPath: 'context.marketType',
+      }),
+      answer: 'contractAddress',
+      messageIndex: 2,
+    })
+
+    expect(next.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'open',
+    }))
+  })
+
   it('locks the clarified MA period slot without reopening unrelated slots', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
@@ -1278,6 +1403,49 @@ describe('SemanticStateReducerService', () => {
       value: 0.05,
       status: 'locked',
       source: 'user_explicit',
+    }))
+  })
+
+  it('locks trigger reference definition slots from clarification answers', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: [],
+        triggers: [{
+          id: 'trigger-open-breakout',
+          key: 'price.breakout_up',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { reference: 'unknown' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'trigger.reference_definition',
+            fieldPath: 'triggers[0].params.reference',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认关键位置如何定义。',
+            affectsExecution: true,
+          }],
+        }],
+        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-29T00:00:00.000Z',
+      },
+      targetSlotKey: 'trigger.reference_definition',
+      targetFieldPath: 'triggers[0].params.reference',
+      answer: '最近 20 根 K 线高点',
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({
+        reference: 'channel_high',
+        period: 20,
+      }),
     }))
   })
 })

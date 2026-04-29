@@ -36,6 +36,23 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('normalizes english contract market wording into perp context', () => {
+    const patch = service.extract('OKX BTCUSDT contract 1m，收盘价突破上一根 K 线最高价开多，单笔 3%。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '1m',
+    }))
+  })
+
+  it('does not normalize contract as a substring inside unrelated english words', () => {
+    const patch = service.extract('OKX BTCUSDT contractAddress 1m，收盘价突破上一根 K 线最高价开多，单笔 3%。')
+
+    expect(patch.contextSlots).not.toHaveProperty('marketType')
+  })
+
   it('extracts close-open candle expressions and fixed quote sizing without new normalized atom keys', () => {
     const patch = service.extract('用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多，固定使用 10 USDT。如果已有持仓则不再开仓。收盘价低于开盘价时平多。')
 
@@ -96,6 +113,141 @@ describe('SemanticSeedExtractorService', () => {
       value: 10,
       positionMode: 'long_only',
     })
+  })
+
+  it('extracts previous bar high breakout and previous bar low breakdown expressions', () => {
+    const patch = service.extract('用 BTCUSDT 1m K 线。如果最新收盘价突破上一根 K 线最高价，且当前没有持仓，则开多，使用可用余额的 3%。如果最新收盘价跌破上一根 K 线最低价，则平多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'high', offsetBars: 1 },
+          },
+        },
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'EQ',
+            left: { kind: 'position', field: 'has_position', side: 'long' },
+            right: { kind: 'constant', value: false },
+          },
+        },
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'low', offsetBars: 1 },
+          },
+        },
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.03,
+      positionMode: 'long_only',
+      sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
+    })
+  })
+
+  it('inherits standalone no-position context into later entry gates', () => {
+    const patch = service.extract('当前没有持仓。用 BTCUSDT 1m K 线，最新收盘价突破上一根 K 线最高价则开多，使用可用余额的 3%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'EQ',
+            left: { kind: 'position', field: 'has_position', side: 'long' },
+            right: { kind: 'constant', value: false },
+          },
+        },
+      }),
+    ]))
+  })
+
+  it('does not inherit standalone no-position context into explicit existing-position entry clauses', () => {
+    const patches = [
+      service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果已有持仓则开多加仓，单笔 3%。'),
+      service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果有持仓则开多加仓，单笔 3%。'),
+      service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果持有仓位则开多加仓，单笔 3%。'),
+    ]
+
+    for (const patch of patches) {
+      expect(patch.triggers).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'condition.expression',
+          phase: 'gate',
+          params: {
+            expression: expect.objectContaining({
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            }),
+          },
+        }),
+      ]))
+    }
+  })
+
+  it('emits an open breakout trigger for undefined key reference phrases', () => {
+    const patch = service.extract('突破关键位置开多，单笔 3%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.breakout_up',
+        phase: 'entry',
+        sideScope: 'long',
+        status: 'open',
+        params: expect.objectContaining({ reference: 'unknown' }),
+        openSlots: [expect.objectContaining({
+          slotKey: 'trigger.reference_definition',
+          fieldPath: 'triggers[0].params.reference',
+          status: 'open',
+          priority: 'core',
+          affectsExecution: true,
+        })],
+      }),
+    ]))
+  })
+
+  it('does not emit partial breakout triggers for unrelated clauses in the same segment', () => {
+    const patch = service.extract('突破关键位置开多，收盘价低于开盘价平多。')
+
+    const openBreakoutTriggers = (patch.triggers ?? []).filter(trigger => trigger.key === 'price.breakout_up')
+    expect(openBreakoutTriggers).toHaveLength(1)
+    expect(openBreakoutTriggers[0]).toEqual(expect.objectContaining({
+      phase: 'entry',
+      sideScope: 'long',
+      status: 'open',
+    }))
+    expect(openBreakoutTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
   })
 
   it('keeps fixed quote profit targets from overriding explicit percent sizing', () => {
