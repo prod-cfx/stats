@@ -499,6 +499,47 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('keeps OKX perp reduce-only close quantity when recalculating for target exchange', () => {
+    const service = createService()
+
+    const result = (service as any).recalculateOrderParamsForTargetExchange(
+      {
+        exchangeId: 'binance',
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        side: 'sell',
+        amount: 0.0359,
+        price: 94500,
+        reduceOnly: true,
+      },
+      {
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
+      },
+      {
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        instrumentType: 'PERPETUAL',
+        precisionPrice: 2,
+        precisionQuantity: 6,
+        lotSize: '0.001',
+      },
+      'okx',
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      params: expect.objectContaining({
+        exchangeId: 'okx',
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        reduceOnly: true,
+        amount: 0.0359,
+      }),
+    })
+  })
+
   it('uses runtime market identity when locating close positions', async () => {
     const service = createService()
     const executorRepository = (service as any).executorRepository
