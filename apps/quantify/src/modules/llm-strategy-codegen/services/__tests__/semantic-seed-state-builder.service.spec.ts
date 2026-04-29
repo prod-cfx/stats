@@ -102,6 +102,9 @@ describe('SemanticSeedStateBuilderService', () => {
       risk: [{
         key: 'risk.stop_loss_pct',
         params: { valuePct: 5 },
+        source: 'derived',
+        evidence: { text: '按止损基准亏损 5%', source: 'user_explicit' },
+        supersedes: ['risk-old'],
         openSlots: [{
           slotKey: 'risk.stopLossBasis',
           fieldPath: 'risk[0].params.stopLossBasis',
@@ -115,6 +118,9 @@ describe('SemanticSeedStateBuilderService', () => {
 
     expect(state?.risk[0]).toEqual(expect.objectContaining({
       status: 'locked',
+      source: 'derived',
+      evidence: { text: '按止损基准亏损 5%', source: 'user_explicit' },
+      supersedes: ['risk-old'],
       params: expect.objectContaining({
         basis: 'entry_avg_price',
         basisSource: 'system_default',

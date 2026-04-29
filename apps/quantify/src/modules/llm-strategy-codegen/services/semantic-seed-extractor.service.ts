@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import type { SemanticExpression, SemanticExpressionOperator, SemanticExpressionOperand, SemanticPositionSizingContract } from '../types/semantic-state'
+import type {
+  SemanticExpression,
+  SemanticExpressionOperator,
+  SemanticExpressionOperand,
+  SemanticPositionSizingContract,
+  SemanticRiskBasis,
+  SemanticRiskBasisSource,
+} from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 
@@ -177,13 +184,14 @@ export class SemanticSeedExtractorService {
     ])
     if (stopLoss !== null) {
       const basis = this.resolveRiskBasis(text)
+      const basisSource = this.resolveRiskBasisSource(text, basis)
       risk.push({
         key: 'risk.stop_loss_pct',
         params: {
           valuePct: stopLoss,
           direction: 'loss',
           basis,
-          basisSource: basis === 'position_pnl' ? 'user_explicit' : 'system_default',
+          basisSource,
           effect: 'close_position',
           scope: 'current_position',
         },
@@ -201,13 +209,14 @@ export class SemanticSeedExtractorService {
     ])
     if (takeProfit !== null) {
       const basis = this.resolveRiskBasis(text)
+      const basisSource = this.resolveRiskBasisSource(text, basis)
       risk.push({
         key: 'risk.take_profit_pct',
         params: {
           valuePct: takeProfit,
           direction: 'profit',
           basis,
-          basisSource: basis === 'position_pnl' ? 'user_explicit' : 'system_default',
+          basisSource,
           effect: 'close_position',
           scope: 'current_position',
         },
@@ -229,7 +238,7 @@ export class SemanticSeedExtractorService {
         key: 'risk.condition_expression',
         params: {
           condition,
-          effect: { type: /平仓|全平/u.test(text) ? 'pause_strategy' : 'notify_only' },
+          effect: { type: 'pause_strategy' },
           scope: 'strategy',
           capabilityStatus: 'recognized_unsupported',
           unsupportedReason: 'risk_expression_compiler_not_available',
@@ -1002,11 +1011,21 @@ export class SemanticSeedExtractorService {
     return 'long_only'
   }
 
-  private resolveRiskBasis(text: string): 'entry_avg_price' | 'position_pnl' {
+  private resolveRiskBasis(text: string): SemanticRiskBasis {
     if (/持仓盈亏|持仓.*盈亏|持仓收益率|持仓.*收益率|浮盈|pnl/u.test(text)) {
       return 'position_pnl'
     }
     return 'entry_avg_price'
+  }
+
+  private resolveRiskBasisSource(text: string, basis: SemanticRiskBasis): SemanticRiskBasisSource {
+    if (basis === 'position_pnl') {
+      return 'user_explicit'
+    }
+    if (/开仓价|入场价|入场均价|持仓均价|成本价|均价|entry_avg_price/u.test(text)) {
+      return 'user_explicit'
+    }
+    return 'system_default'
   }
 
   private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {

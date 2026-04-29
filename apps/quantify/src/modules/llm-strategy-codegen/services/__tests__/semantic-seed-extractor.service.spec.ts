@@ -302,8 +302,21 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('extracts user-explicit entry price basis metadata', () => {
+    const result = service.extract('按开仓价亏损 5% 止损')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'user_explicit',
+      }),
+    }))
+  })
+
   it('extracts advanced pnl risk as recognized unsupported condition expression', () => {
-    const result = service.extract('如果持仓亏损超过 5%，暂停策略并平仓')
+    const result = service.extract('亏损超过 5%，暂停策略')
 
     expect(result.risk).toContainEqual(expect.objectContaining({
       key: 'risk.condition_expression',
