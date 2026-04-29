@@ -1697,6 +1697,57 @@ describe('ai-quant-page-conversation', () => {
 
     expect(restored.conversations[0]?.params.sizing).toEqual({ mode: 'RATIO', value: 12 })
     expect(restored.conversations[0]?.params.positionPct).toBe(12)
+    expect(restored.conversations[0]?.paramValues.sizing).toEqual({ mode: 'RATIO', value: 12 })
+    expect(restored.conversations[0]?.paramValues.positionPct).toBe(12)
+  })
+
+  it('hydrates stale default paramValues sizing from normalized persisted params', () => {
+    const envelope = {
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+      conversations: [
+        {
+          id: 'conv-stale-default-sizing',
+          title: 'stale default sizing',
+          messages: [],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            sizing: { mode: 'RATIO', value: 25 },
+            positionPct: 25,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            sizing: { mode: 'RATIO', value: 10 },
+            positionPct: 25,
+          },
+          updatedAt: 1,
+          schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+        },
+      ],
+    }
+
+    const restored = readPersistedConversations({
+      raw: JSON.stringify(envelope),
+      translate: (key: string) => key,
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+    })
+
+    expect(restored.conversations[0]?.params.sizing).toEqual({ mode: 'RATIO', value: 25 })
+    expect(restored.conversations[0]?.params.positionPct).toBe(25)
+    expect(restored.conversations[0]?.paramValues.sizing).toEqual({ mode: 'RATIO', value: 25 })
+    expect(restored.conversations[0]?.paramValues.positionPct).toBe(25)
   })
 
   it('does not require republish when only backtest range changes', () => {
