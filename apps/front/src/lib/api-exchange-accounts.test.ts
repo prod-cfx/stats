@@ -7,6 +7,7 @@ const mockClient = {
   AccountExchangeAccountsController_delete: jest.fn(),
   AccountExchangeAccountsController_list: jest.fn(),
 }
+const originalFetch = globalThis.fetch
 
 jest.mock('@ai/api-contracts', () => ({
   createApiClient: jest.fn(() => mockClient),
@@ -54,6 +55,11 @@ describe('exchange account transport', () => {
   })
 
   afterEach(() => {
+    if (originalFetch) {
+      globalThis.fetch = originalFetch
+    } else {
+      delete (globalThis as { fetch?: typeof fetch }).fetch
+    }
     jest.restoreAllMocks()
   })
 
