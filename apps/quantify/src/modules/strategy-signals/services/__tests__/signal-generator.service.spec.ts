@@ -525,6 +525,79 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
   })
 
+  it('uses the previous closed 1m bar for bar-close published runtime evaluation', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-04-20T09:30:01.000Z'))
+    const { service } = createService()
+    jest.spyOn(service as any, 'loadRecentBars').mockResolvedValue([
+      {
+        open: 99,
+        high: 100,
+        low: 97,
+        close: 98,
+        volume: 10,
+        timestamp: Date.parse('2026-04-20T09:28:00.000Z'),
+      },
+      {
+        open: 98,
+        high: 102,
+        low: 97,
+        close: 101,
+        volume: 10,
+        timestamp: Date.parse('2026-04-20T09:29:00.000Z'),
+      },
+      {
+        open: 101,
+        high: 101,
+        low: 99,
+        close: 100,
+        volume: 10,
+        timestamp: Date.parse('2026-04-20T09:30:00.000Z'),
+      },
+    ])
+    const onBar = jest.fn().mockReturnValue({
+      action: 'NOOP',
+      reason: 'test.noop',
+    })
+    jest.spyOn(service as any, 'buildCompiledRuntimeAdapter').mockReturnValue({
+      adapter: { onBar },
+      parseError: null,
+    })
+    jest
+      .spyOn((service as any).decisionStage, 'buildPublishedRuntimeSignalOutcomeFromDecision')
+      .mockReturnValue({
+        kind: 'noop',
+        reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+        reason: 'test',
+      })
+
+    await (service as any).generatePublishedSnapshotRuntimeSignalOutcome(
+      { id: 'instance-1', params: {} },
+      {
+        id: 'template-1',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'compiled strategy script',
+      },
+      {
+        id: 'symbol-perp-1',
+        code: 'BTCUSDT:PERP',
+        exchange: 'OKX',
+        instrumentType: 'PERPETUAL',
+      },
+      '1m',
+      config,
+      101,
+    )
+
+    const context = onBar.mock.calls[0]?.[0]
+    expect(context.bars).toHaveLength(2)
+    expect(context.bars.at(-1)).toMatchObject({
+      close: 101,
+      timestamp: Date.parse('2026-04-20T09:29:00.000Z'),
+    })
+
+    nowSpy.mockRestore()
+  })
+
   it('uses effective params market type for multi-leg primary and batch symbol lookup', async () => {
     const { service, generatorRepository } = createService({
       generatorRepository: {
