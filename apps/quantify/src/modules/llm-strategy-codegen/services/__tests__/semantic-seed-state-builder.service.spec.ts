@@ -96,4 +96,64 @@ describe('SemanticSeedStateBuilderService', () => {
       questionHint: '请确认开仓订单类型。',
     })])
   })
+
+  it('normalizes planner basis open slot before resolving risk status', () => {
+    const state = service.build({
+      risk: [{
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5 },
+        openSlots: [{
+          slotKey: 'risk.stopLossBasis',
+          fieldPath: 'risk[0].params.stopLossBasis',
+          questionHint: '请确认止损基准',
+          status: 'open',
+          priority: 'risk',
+          affectsExecution: true,
+        }],
+      }],
+    })
+
+    expect(state?.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+      openSlots: [],
+    }))
+  })
+
+  it('preserves planner risk expression as structured recognized unsupported risk', () => {
+    const state = service.build({
+      risk: [{
+        key: 'risk.condition_expression',
+        params: {
+          condition: {
+            kind: 'predicate',
+            left: { kind: 'position', field: 'pnl_pct' },
+            op: 'LTE',
+            right: { kind: 'constant', value: -5 },
+          },
+          effect: { type: 'close_position' },
+          scope: 'current_position',
+        },
+        openSlots: [{
+          slotKey: 'risk.stopLossBasis',
+          fieldPath: 'risk[0].params.basis',
+          questionHint: '请确认计算基准',
+          status: 'open',
+          priority: 'risk',
+          affectsExecution: true,
+        }],
+      }],
+    })
+
+    expect(state?.risk[0]).toEqual(expect.objectContaining({
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        capabilityStatus: 'recognized_unsupported',
+      }),
+      openSlots: [],
+    }))
+  })
 })

@@ -272,6 +272,55 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('extracts plain stop loss with default basis metadata', () => {
+    const result = service.extract('亏损 5% 止损')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
+  })
+
+  it('extracts user-explicit position pnl basis metadata', () => {
+    const result = service.extract('按持仓收益率盈利 10% 止盈')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({
+        valuePct: 10,
+        direction: 'profit',
+        basis: 'position_pnl',
+        basisSource: 'user_explicit',
+      }),
+    }))
+  })
+
+  it('extracts advanced pnl risk as recognized unsupported condition expression', () => {
+    const result = service.extract('如果持仓亏损超过 5%，暂停策略并平仓')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5, unit: 'percent' },
+        },
+        effect: { type: 'pause_strategy' },
+        scope: 'strategy',
+        capabilityStatus: 'recognized_unsupported',
+      }),
+    }))
+  })
+
   it('does not emit a no-position gate for ordinary open prohibitions', () => {
     const patch = service.extract('波动过大不要开仓。BTCUSDT 1m 收盘价高于开盘价时开多。')
 
@@ -332,11 +381,11 @@ describe('SemanticSeedExtractorService', () => {
       risk: expect.arrayContaining([
         expect.objectContaining({
           key: 'risk.stop_loss_pct',
-          params: { valuePct: 5, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
         expect.objectContaining({
           key: 'risk.take_profit_pct',
-          params: { valuePct: 10, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 10, basis: 'entry_avg_price' }),
         }),
       ]),
       position: {
@@ -989,7 +1038,7 @@ describe('SemanticSeedExtractorService', () => {
       risk: [
         expect.objectContaining({
           key: 'risk.stop_loss_pct',
-          params: { valuePct: 5, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
       ],
       position: {
@@ -1067,11 +1116,11 @@ describe('SemanticSeedExtractorService', () => {
       risk: expect.arrayContaining([
         expect.objectContaining({
           key: 'risk.stop_loss_pct',
-          params: { valuePct: 1, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 1, basis: 'entry_avg_price' }),
         }),
         expect.objectContaining({
           key: 'risk.take_profit_pct',
-          params: { valuePct: 1.5, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 1.5, basis: 'entry_avg_price' }),
         }),
       ]),
       position: {
@@ -1854,7 +1903,7 @@ describe('SemanticSeedExtractorService', () => {
       risk: expect.arrayContaining([
         expect.objectContaining({
           key: 'risk.stop_loss_pct',
-          params: { valuePct: 5, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
       ]),
       position: {
@@ -1896,7 +1945,7 @@ describe('SemanticSeedExtractorService', () => {
       risk: expect.arrayContaining([
         expect.objectContaining({
           key: 'risk.stop_loss_pct',
-          params: { valuePct: 5, basis: 'entry_avg_price' },
+          params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
       ]),
       position: {

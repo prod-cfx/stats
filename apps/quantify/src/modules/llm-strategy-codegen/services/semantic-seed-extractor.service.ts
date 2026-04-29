@@ -176,11 +176,16 @@ export class SemanticSeedExtractorService {
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ])
     if (stopLoss !== null) {
+      const basis = this.resolveRiskBasis(text)
       risk.push({
         key: 'risk.stop_loss_pct',
         params: {
           valuePct: stopLoss,
-          basis: this.resolveRiskBasis(text),
+          direction: 'loss',
+          basis,
+          basisSource: basis === 'position_pnl' ? 'user_explicit' : 'system_default',
+          effect: 'close_position',
+          scope: 'current_position',
         },
       })
     }
@@ -195,11 +200,39 @@ export class SemanticSeedExtractorService {
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
     if (takeProfit !== null) {
+      const basis = this.resolveRiskBasis(text)
       risk.push({
         key: 'risk.take_profit_pct',
         params: {
           valuePct: takeProfit,
-          basis: this.resolveRiskBasis(text),
+          direction: 'profit',
+          basis,
+          basisSource: basis === 'position_pnl' ? 'user_explicit' : 'system_default',
+          effect: 'close_position',
+          scope: 'current_position',
+        },
+      })
+    }
+
+    const strategyHaltLoss = this.extractPercent(text, [
+      /持仓亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+      /亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+    ])
+    if (strategyHaltLoss !== null) {
+      const condition: SemanticExpression = {
+        kind: 'predicate',
+        left: { kind: 'position', field: 'pnl_pct' },
+        op: 'LTE',
+        right: { kind: 'constant', value: -strategyHaltLoss, unit: 'percent' },
+      }
+      risk.push({
+        key: 'risk.condition_expression',
+        params: {
+          condition,
+          effect: { type: /平仓|全平/u.test(text) ? 'pause_strategy' : 'notify_only' },
+          scope: 'strategy',
+          capabilityStatus: 'recognized_unsupported',
+          unsupportedReason: 'risk_expression_compiler_not_available',
         },
       })
     }
@@ -970,7 +1003,7 @@ export class SemanticSeedExtractorService {
   }
 
   private resolveRiskBasis(text: string): 'entry_avg_price' | 'position_pnl' {
-    if (/持仓盈亏|持仓.*盈亏|浮盈|pnl/u.test(text)) {
+    if (/持仓盈亏|持仓.*盈亏|持仓收益率|持仓.*收益率|浮盈|pnl/u.test(text)) {
       return 'position_pnl'
     }
     return 'entry_avg_price'
