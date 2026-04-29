@@ -121,6 +121,12 @@ function parseString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
+function parseExchange(value: unknown): StrategyParamSyncFallback['exchange'] | null {
+  const normalized = parseString(value)?.toLowerCase()
+  if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') return normalized
+  return null
+}
+
 function normalizeSymbol(raw: string): string {
   return raw.replace('/', '').replace(/\s+/g, '').toUpperCase()
 }
@@ -149,6 +155,23 @@ function inferBaseTimeframe(specTimeframes: string[], fallback: string, allowedB
   const candidate = specTimeframes[0] ?? fallback
   if (allowedBaseTimeframes.length === 0) return candidate
   return allowedBaseTimeframes.includes(candidate) ? candidate : (allowedBaseTimeframes[0] ?? candidate)
+}
+
+function readMarketStrings(market: Record<string, unknown>, pluralKey: string, singularKey: string): string[] {
+  const pluralValues = asStringArray(market[pluralKey])
+  if (pluralValues.length > 0) return pluralValues
+  const singularValue = parseString(market[singularKey])
+  return singularValue ? [singularValue] : []
+}
+
+function hasSizingShape(value: unknown): value is Record<string, unknown> {
+  const raw = asObject(value)
+  const mode = parseString(raw?.mode)?.toUpperCase()
+  return Boolean(
+    raw
+    && (mode === 'RATIO' || mode === 'QUOTE' || mode === 'QTY')
+    && parseNumber(raw.value) !== null,
+  )
 }
 
 function setNumberField(
@@ -229,7 +252,7 @@ export function syncStrategyParamsFromCodegen(args: {
     if (topLevelRules.length === 0) return {}
     const next: Record<string, unknown> = {}
     const lockedParams = asObject(typed.lockedParams)
-    const exchange = parseString(lockedParams?.exchange) ?? parseString(canonicalMarket.exchange)
+    const exchange = parseExchange(lockedParams?.exchange) ?? parseExchange(canonicalMarket.exchange)
     if (exchange) next.exchange = exchange
     const marketType = parseString(canonicalMarket.marketType)
     if (marketType) next.marketType = marketType
@@ -268,13 +291,15 @@ export function syncStrategyParamsFromCodegen(args: {
   const exitRules = topLevelRules.length > 0
     ? deriveExitRulesFromCanonicalRules(topLevelRules)
     : asStringArray(typed.exitRules)
-  const marketSymbols = asStringArray(market.symbols)
-  const marketTimeframes = asStringArray(market.timeframes)
+  const marketSymbols = readMarketStrings(market, 'symbols', 'symbol')
+  const marketTimeframes = readMarketStrings(market, 'timeframes', 'timeframe')
   const allowedBaseTimeframes = args.capabilities?.allowedBaseTimeframes ?? []
   const contextText = `${args.contextText ?? ''} ${entryRules.join(' ')} ${exitRules.join(' ')}`.trim()
 
-  const nextExchange = inferExchange(contextText, args.fallback.exchange)
   const currentValues = args.currentValues ?? {}
+  const nextExchange = parseExchange(riskRules.exchange)
+    ?? parseExchange(canonicalMarket.exchange)
+    ?? inferExchange(contextText, args.fallback.exchange)
   const symbolFromMarket = inferSymbol(marketSymbols[0] ?? '', args.fallback.symbol)
   const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
   const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
@@ -293,9 +318,12 @@ export function syncStrategyParamsFromCodegen(args: {
     nextSymbol,
     legacyPositionPct,
   )
+  const retainedSizing = hasSizingShape(currentValues.sizing)
+    ? normalizeSizingFromCanonicalValue(currentValues.sizing, nextSymbol, legacyPositionPct)
+    : args.fallback.sizing
   const nextSizing = hasCanonicalOrActionSizing
     ? parsedSizing
-    : (args.fallback.sizing ?? { mode: 'RATIO', value: legacyPositionPct })
+    : (retainedSizing ?? { mode: 'RATIO', value: legacyPositionPct })
   const parsedPositionPct = derivePositionPctFromSizing(nextSizing) ?? legacyPositionPct
   const nextMarketType = (() => {
     const fromRiskRules = parseString(riskRules.marketType)?.toLowerCase()
