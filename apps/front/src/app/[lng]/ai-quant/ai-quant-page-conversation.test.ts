@@ -1654,6 +1654,51 @@ describe('ai-quant-page-conversation', () => {
     expect(restored.conversations[0]?.serverConversationId).toBe('server-conv-1')
   })
 
+  it('hydrates legacy positionPct conversations into semantic ratio sizing', () => {
+    const envelope = {
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+      conversations: [
+        {
+          id: 'conv-legacy-sizing',
+          title: 'legacy sizing',
+          messages: [],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 12,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 12,
+          },
+          updatedAt: 1,
+          schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+        },
+      ],
+    }
+
+    const restored = readPersistedConversations({
+      raw: JSON.stringify(envelope),
+      translate: (key: string) => key,
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+    })
+
+    expect(restored.conversations[0]?.params.sizing).toEqual({ mode: 'RATIO', value: 12 })
+    expect(restored.conversations[0]?.params.positionPct).toBe(12)
+  })
+
   it('does not require republish when only backtest range changes', () => {
     expect(requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: 'snapshot-1',
@@ -2149,6 +2194,22 @@ describe('ai-quant-page-conversation', () => {
       expect(message).toContain('当前策略：')
       expect(message).toContain('BINANCE')
       expect(message).toContain('请直接说明你要修改的原子语义')
+    })
+
+    it('uses semantic quote sizing in revision prompts', () => {
+      const conversation = createConversation((key: string) => key)
+      const message = buildStrategyRevisionPromptMessage({
+        ...conversation,
+        params: {
+          ...conversation.params,
+          symbol: 'BTCUSDT',
+          sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+          positionPct: 10,
+        },
+      }, '请继续补充')
+
+      expect(message).toContain('仓位 1000 USDT')
+      expect(message).not.toContain('仓位 1000%')
     })
   })
 

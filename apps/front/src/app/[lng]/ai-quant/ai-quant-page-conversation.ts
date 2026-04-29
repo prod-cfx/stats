@@ -26,6 +26,12 @@ import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmatio
 import { buildDisplayLogicGraphFromCodegenSpec } from '@/components/ai-quant/display-logic-graph'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { syncStrategyParamsFromCodegen } from '@/components/ai-quant/strategy-param-sync'
+import {
+  derivePositionPctFromSizing,
+  formatSizing,
+  normalizeSizing,
+  type QuantSizing,
+} from './semantic-sizing'
 
 export interface QuantParams {
   exchange: 'binance' | 'okx' | 'hyperliquid'
@@ -35,6 +41,7 @@ export interface QuantParams {
   buyDropPct: number
   sellWindowMin: number
   sellRisePct: number
+  sizing: QuantSizing
   positionPct: number
 }
 
@@ -46,6 +53,7 @@ export const DEFAULT_PARAMS: QuantParams = {
   buyDropPct: 1,
   sellWindowMin: 15,
   sellRisePct: 2,
+  sizing: { mode: 'RATIO', value: 10 },
   positionPct: 10,
 }
 
@@ -830,12 +838,17 @@ export function normalizeParamsFromValues(
       : values.exchange === 'hyperliquid'
         ? 'hyperliquid'
         : 'binance'
+  const nextSymbol =
+    typeof values.symbol === 'string' && values.symbol.trim()
+      ? values.symbol.trim()
+      : fallback.symbol
+  const legacyPositionPct = normalizeNumber(values.positionPct, fallback.positionPct)
+  const sizing = normalizeSizing(values.sizing, legacyPositionPct, nextSymbol)
+  const derivedPositionPct = derivePositionPctFromSizing(sizing) ?? fallback.positionPct
+
   return {
     exchange,
-    symbol:
-      typeof values.symbol === 'string' && values.symbol.trim()
-        ? values.symbol.trim()
-        : fallback.symbol,
+    symbol: nextSymbol,
     baseTimeframe:
       typeof values.baseTimeframe === 'string' && values.baseTimeframe.trim()
         ? values.baseTimeframe.trim()
@@ -844,7 +857,8 @@ export function normalizeParamsFromValues(
     buyDropPct: normalizeNumber(values.buyDropPct, fallback.buyDropPct),
     sellWindowMin: normalizeNumber(values.sellWindowMin, fallback.sellWindowMin),
     sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
-    positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
+    sizing,
+    positionPct: derivedPositionPct,
   }
 }
 
@@ -1618,13 +1632,16 @@ export function buildStrategyRevisionPromptMessage(
   conversation: ConversationState,
   fallbackMessage: string,
 ): string {
+  const sizing = normalizeSizing(
+    conversation.params.sizing,
+    conversation.params.positionPct,
+    conversation.params.symbol,
+  )
   const contextParts = [
     normalizeRevisionSummaryText(conversation.params.exchange)?.toUpperCase(),
     normalizeRevisionSummaryText(conversation.params.symbol)?.toUpperCase(),
     normalizeRevisionSummaryText(conversation.params.baseTimeframe),
-    Number.isFinite(conversation.params.positionPct)
-      ? `仓位 ${conversation.params.positionPct}%`
-      : null,
+    `仓位 ${formatSizing(sizing, conversation.params.symbol)}`,
   ].filter((item): item is string => Boolean(item))
 
   const revisionGraph = buildRevisionGraphFromCodegenSpec(conversation) ?? conversation.displayLogicGraph
@@ -2021,11 +2038,15 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     item.paramValues && typeof item.paramValues === 'object' && !Array.isArray(item.paramValues)
       ? item.paramValues
       : {}
+  const defaultParamValues = { ...DEFAULT_PARAM_VALUES }
+  if (!('sizing' in baseParams) && !('sizing' in storedValues)) {
+    delete defaultParamValues.sizing
+  }
   const nextParamValues = applyBacktestDraftConfigToValues({
     currentValues: {
-    ...DEFAULT_PARAM_VALUES,
-    ...baseParams,
-    ...storedValues,
+      ...defaultParamValues,
+      ...baseParams,
+      ...storedValues,
     },
     backtestDraftConfig,
   })
