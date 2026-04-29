@@ -24,6 +24,7 @@ interface OkxOrderResponse {
   side: string
   ordType: string
   fillSz: string
+  accFillSz?: string
   sz: string
   px?: string
   avgPx?: string
@@ -171,7 +172,7 @@ export class OkxClient extends BaseCexClient {
       // 以交易所实际接收的价格和数量为准，保证与后续查询/取消路径一致
       price: this.resolveOrderPrice(order, input.price),
       amount: order.sz ? this.fromExchangeSize(order.sz, instrumentSpec) : input.amount,
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.resolveFilledSize(order, instrumentSpec),
       // OKX create-order ACK 通常不返回完整 state，最终状态由后续 fetchOrder 收敛。
       status: order.state ? this.mapOrderStatus(order.state) : 'open',
       createdAt,
@@ -206,7 +207,7 @@ export class OkxClient extends BaseCexClient {
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
       amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.resolveFilledSize(order, instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -239,7 +240,7 @@ export class OkxClient extends BaseCexClient {
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
       amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.resolveFilledSize(order, instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -672,7 +673,7 @@ export class OkxClient extends BaseCexClient {
       type: this.reverseMapOrderType(order.ordType),
       price: this.resolveOrderPrice(order),
       amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(order.fillSz ?? '0', instrumentSpec),
+      filled: this.resolveFilledSize(order, instrumentSpec),
       status: this.mapOrderStatus(order.state),
       createdAt,
       updatedAt,
@@ -692,6 +693,13 @@ export class OkxClient extends BaseCexClient {
     }
 
     return Number(this.formatNumber(parsedSize * contractValue))
+  }
+
+  private resolveFilledSize(
+    order: OkxOrderResponse,
+    instrumentSpec?: OkxInstrumentSpecItem | null,
+  ): number {
+    return this.fromExchangeSize(order.accFillSz ?? order.fillSz ?? '0', instrumentSpec)
   }
 
   private formatNumber(value: number): string {
