@@ -192,20 +192,26 @@ describe('SemanticSeedExtractorService', () => {
   })
 
   it('does not inherit standalone no-position context into explicit existing-position entry clauses', () => {
-    const patch = service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果已有持仓则开多加仓，单笔 3%。')
+    const patches = [
+      service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果已有持仓则开多加仓，单笔 3%。'),
+      service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果有持仓则开多加仓，单笔 3%。'),
+      service.extract('当前没有持仓。用 BTCUSDT 1m K 线，如果持有仓位则开多加仓，单笔 3%。'),
+    ]
 
-    expect(patch.triggers).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        key: 'condition.expression',
-        phase: 'gate',
-        params: {
-          expression: expect.objectContaining({
-            left: { kind: 'position', field: 'has_position', side: 'long' },
-            right: { kind: 'constant', value: false },
-          }),
-        },
-      }),
-    ]))
+    for (const patch of patches) {
+      expect(patch.triggers).not.toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'condition.expression',
+          phase: 'gate',
+          params: {
+            expression: expect.objectContaining({
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            }),
+          },
+        }),
+      ]))
+    }
   })
 
   it('emits an open breakout trigger for undefined key reference phrases', () => {

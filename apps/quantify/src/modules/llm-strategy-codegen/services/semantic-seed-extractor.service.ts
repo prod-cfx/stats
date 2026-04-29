@@ -410,7 +410,7 @@ export class SemanticSeedExtractorService {
   }
 
   private hasExistingPositionContext(segment: string): boolean {
-    return /(?:已有|已经有|当前|现有)(?:持仓|仓位)|(?:持仓|仓位)(?:已存在|存在|不为空)/u.test(segment)
+    return /(?:已有|已经有|当前有|现在有|目前有|现有|持有)(?:持仓|仓位)|(?:^|[^没无未])有(?:持仓|仓位)|(?:持仓|仓位)(?:已存在|存在|不为空)/u.test(segment)
   }
 
   private hasNoPositionContext(segment: string): boolean {
