@@ -4,15 +4,6 @@ CREATE TYPE "GridRuntimeStatus" AS ENUM ('CREATED', 'INITIALIZING', 'RUNNING', '
 -- CreateEnum
 CREATE TYPE "GridOrderStatus" AS ENUM ('PLANNED', 'SUBMITTING', 'OPEN', 'PARTIALLY_FILLED', 'FILLED', 'CANCELING', 'CANCELED', 'REJECTED', 'STALE');
 
--- AlterTable
-ALTER TABLE "outbox_message" ALTER COLUMN "updated_at" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "published_strategy_snapshots" ALTER COLUMN "user_intent_summary" DROP DEFAULT,
-ALTER COLUMN "strategy_summary" DROP DEFAULT,
-ALTER COLUMN "script_summary" DROP DEFAULT,
-ALTER COLUMN "locked_params" DROP DEFAULT;
-
 -- CreateTable
 CREATE TABLE "grid_runtime_instances" (
     "id" TEXT NOT NULL,
