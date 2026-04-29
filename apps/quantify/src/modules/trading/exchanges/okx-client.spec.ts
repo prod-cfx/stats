@@ -570,6 +570,75 @@ describe('okxClient', () => {
     expect(order.status).toBe('canceled')
   })
 
+  it('fetches full order details after OKX cancel ack omits order fields', async () => {
+    const seenRequests: Array<{ method: string, url: URL }> = []
+
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+      const method = init?.method ?? 'GET'
+      seenRequests.push({ method, url })
+
+      if (url.pathname === '/api/v5/trade/cancel-order') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              ordId: 'cancel-ack-1',
+              clOrdId: 'grid-client-cancel',
+              sCode: '0',
+              sMsg: '',
+              ts: '1773829253570',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      expect(url.pathname).toBe('/api/v5/trade/order')
+      expect(url.searchParams.get('ordId')).toBe('cancel-ack-1')
+      expect(url.searchParams.get('instId')).toBe('BTC-USDT')
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'cancel-ack-1',
+            clOrdId: 'grid-client-cancel',
+            instId: 'BTC-USDT',
+            state: 'canceled',
+            side: 'sell',
+            ordType: 'limit',
+            sz: '0.002',
+            fillSz: '0.001',
+            px: '71000',
+            uTime: '1773829253570',
+            cTime: '1773829253522',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await createClient().cancelOrder('cancel-ack-1', 'BTC/USDT')
+
+    expect(seenRequests.map(request => `${request.method} ${request.url.pathname}`)).toEqual([
+      'POST /api/v5/trade/cancel-order',
+      'GET /api/v5/trade/order',
+    ])
+    expect(order).toEqual(expect.objectContaining({
+      id: 'cancel-ack-1',
+      clientOrderId: 'grid-client-cancel',
+      side: 'sell',
+      type: 'limit',
+      price: 71000,
+      amount: 0.002,
+      filled: 0.001,
+      status: 'canceled',
+    }))
+  })
+
   it('throws exchange error when canceling an order from empty OKX data', async () => {
     globalThis.fetch = jest.fn(async () => {
       return new Response(JSON.stringify({
@@ -585,6 +654,30 @@ describe('okxClient', () => {
         name: 'ExchangeError',
         message: 'OKX cancelOrder returned empty response',
       })
+  })
+
+  it('throws exchange error when OKX rejects a cancel ack', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'rejected-cancel-1',
+            sCode: '51400',
+            sMsg: 'Cancellation failed.',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    await expect(createClient().cancelOrder('rejected-cancel-1', 'BTC/USDT'))
+      .rejects.toEqual(expect.objectContaining<Partial<ExchangeError>>({
+        name: 'ExchangeError',
+        code: '51400',
+      }))
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('converts perp contract sizes back to base sizes when listing open orders', async () => {
@@ -636,6 +729,48 @@ describe('okxClient', () => {
 
     expect(orders).toHaveLength(1)
     expect(orders[0]?.amount).toBeCloseTo(0.0013)
+  })
+
+  it.each([
+    ['spot' as const, 'SPOT'],
+    ['perp' as const, 'SWAP'],
+  ])('includes instType when listing %s open orders without symbol', async (marketType, expectedInstType) => {
+    let pendingUrl: URL | undefined
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      pendingUrl = url
+      return new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    await new OkxClient(marketType, {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).fetchOpenOrders()
+
+    expect(pendingUrl?.pathname).toBe('/api/v5/trade/orders-pending')
+    expect(pendingUrl?.searchParams.get('instType')).toBe(expectedInstType)
+    expect(pendingUrl?.searchParams.has('instId')).toBe(false)
   })
 
   it('maps OKX open order client order ids', async () => {

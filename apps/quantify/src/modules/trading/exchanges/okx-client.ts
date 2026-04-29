@@ -35,6 +35,14 @@ interface OkxOrderResponse {
   cTime?: string
 }
 
+interface OkxOrderAck {
+  ordId: string
+  clOrdId?: string
+  sCode?: string
+  sMsg?: string
+  ts?: string
+}
+
 interface OkxBalanceItem {
   ccy: string
   availBal?: string
@@ -186,10 +194,9 @@ export class OkxClient extends BaseCexClient {
 
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(symbol, this.marketType)
-    const instrumentSpec = await this.getInstrumentSpec(instId)
     const body: Record<string, unknown> = { instId, ordId: id }
 
-    const res = await this.request<{ data: OkxOrderResponse[] }>(
+    const res = await this.request<{ data: OkxOrderAck[] }>(
       'POST',
       '/api/v5/trade/cancel-order',
       {},
@@ -198,24 +205,9 @@ export class OkxClient extends BaseCexClient {
     )
 
     const order = this.requireOrderResponse(res, 'cancelOrder')
-    const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
-    const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
+    this.assertOrderAccepted(order, 'cancelOrder')
 
-    return {
-      id: order.ordId,
-      clientOrderId: order.clOrdId,
-      symbol,
-      marketType: this.marketType,
-      side: order.side === 'sell' ? 'sell' : 'buy',
-      type: this.reverseMapOrderType(order.ordType),
-      price: this.resolveOrderPrice(order),
-      amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.fromExchangeSize(this.resolveFilledSize(order), instrumentSpec),
-      status: this.mapOrderStatus(order.state),
-      createdAt,
-      updatedAt,
-      raw: order,
-    }
+    return this.fetchOrder(order.ordId, symbol)
   }
 
   async fetchOrder(id: string, symbol: string): Promise<UnifiedOrder> {
@@ -252,7 +244,9 @@ export class OkxClient extends BaseCexClient {
   }
 
   async fetchOpenOrders(symbol?: string): Promise<UnifiedOrder[]> {
-    const params: Record<string, unknown> = {}
+    const params: Record<string, unknown> = {
+      instType: this.marketType === 'spot' ? 'SPOT' : 'SWAP',
+    }
 
     if (symbol) {
       params.instId = this.toInstrumentId(symbol, this.marketType)
@@ -607,7 +601,7 @@ export class OkxClient extends BaseCexClient {
     }
   }
 
-  private assertOrderAccepted(order: OkxOrderResponse): void {
+  private assertOrderAccepted(order: OkxOrderAck, operation: 'createOrder' | 'cancelOrder' = 'createOrder'): void {
     if (order.sCode && order.sCode !== '0') {
       throw new ExchangeError(
         `OKX error ${order.sCode}: ${order.sMsg ?? 'Unknown error'}`,
@@ -617,14 +611,14 @@ export class OkxClient extends BaseCexClient {
     }
 
     if (!order.ordId) {
-      throw new ExchangeError('OKX createOrder returned empty ordId', undefined, order)
+      throw new ExchangeError(`OKX ${operation} returned empty ordId`, undefined, order)
     }
   }
 
-  private requireOrderResponse(
-    response: { data: OkxOrderResponse[] },
+  private requireOrderResponse<T extends OkxOrderAck>(
+    response: { data: T[] },
     operation: 'cancelOrder' | 'fetchOrder',
-  ): OkxOrderResponse {
+  ): T {
     const order = response.data[0]
     if (!order) {
       throw new ExchangeError(`OKX ${operation} returned empty response`, undefined, response)
