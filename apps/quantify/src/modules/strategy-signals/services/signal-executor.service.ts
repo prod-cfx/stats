@@ -578,7 +578,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
             await this.positionsService.recordTrade({
               userStrategyAccountId: account.id,
               symbol: ledgerSymbol,
-              market: `${effectiveExchangeId}:${orderParams.marketType}`,
+              market: `${effectiveExchangeId}:${effectiveOrderParams.marketType}`,
               side: tradeSide,
               positionSide,
               price: order.price.toString(),
