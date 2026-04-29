@@ -280,9 +280,15 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    const capabilities = value
-      .map(item => this.toCapability(item))
-      .filter((item): item is SemanticCapability => item !== null)
+    const capabilities: SemanticCapability[] = []
+    for (const item of value) {
+      const capability = this.toCapability(item)
+      if (!capability) {
+        return null
+      }
+      capabilities.push(capability)
+    }
+
     return capabilities.length > 0 ? capabilities : null
   }
 
@@ -310,9 +316,16 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    return value
-      .map(item => this.toRequirement(item))
-      .filter((item): item is SemanticRequirement => item !== null)
+    const requirements: SemanticRequirement[] = []
+    for (const item of value) {
+      const requirement = this.toRequirement(item)
+      if (!requirement) {
+        return null
+      }
+      requirements.push(requirement)
+    }
+
+    return requirements
   }
 
   private toRequirement(value: unknown): SemanticRequirement | null {
@@ -338,9 +351,15 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    const effects = value
-      .map(item => this.toEffect(item))
-      .filter((item): item is SemanticEffect => item !== null)
+    const effects: SemanticEffect[] = []
+    for (const item of value) {
+      const effect = this.toEffect(item)
+      if (!effect) {
+        return null
+      }
+      effects.push(effect)
+    }
+
     return effects.length > 0 ? effects : null
   }
 

@@ -193,4 +193,29 @@ describe('SemanticSeedStateBuilderService', () => {
       object: 'per_order_budget',
     }))
   })
+
+  it('rejects a semantic atom contract when a nested requirement is malformed', () => {
+    const state = service.build({
+      actions: [{
+        key: 'grid.limit_ladder',
+        contracts: [{
+          id: 'action-1',
+          kind: 'action',
+          capabilities: [{
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+            shape: { timeInForce: 'gtc', recycleOnFill: true },
+          }],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+            { domain: 'capital', verb: '', object: 'per_order_budget' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    expect(state?.actions[0]?.contracts).toBeUndefined()
+  })
 })
