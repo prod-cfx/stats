@@ -17,6 +17,7 @@ import {
 import { IndicatorEngineService } from '@/modules/indicators/services/indicator-engine.service'
 import { MarketSymbolNotFoundException } from '../exceptions'
 import {
+  detectNativeSymbolMarket,
   normalizeExactCode,
   normalizeProviderCode,
   normalizeRequestedCode,
@@ -290,40 +291,20 @@ export class MarketDataService {
     const prismaTimeframe = mapTimeframe(payload.timeframe, ErrorCode.MARKET_INVALID_TIMEFRAME)
 
     try {
-      await this.repo.upsertBar(
-        {
-          symbolId_timeframe_time: {
-            symbolId: symbol.id,
-            timeframe: prismaTimeframe,
-            time: new Date(payload.timestamp),
-          },
-        },
-        {
-          symbol: { connect: { id: symbol.id } },
-          timeframe: prismaTimeframe,
-          time: new Date(payload.timestamp),
-          open: payload.open,
-          high: payload.high,
-          low: payload.low,
-          close: payload.close,
-          volume: payload.volume,
-          quoteVolume: payload.quoteVolume,
-          trades: payload.trades,
-          source: payload.source,
-          isFinal: payload.isFinal ?? true,
-        },
-        {
-          open: payload.open,
-          high: payload.high,
-          low: payload.low,
-          close: payload.close,
-          volume: payload.volume,
-          quoteVolume: payload.quoteVolume,
-          trades: payload.trades,
-          source: payload.source,
-          isFinal: payload.isFinal ?? true,
-        },
-      )
+      await this.repo.upsertBarByUnique({
+        symbolId: symbol.id,
+        timeframe: prismaTimeframe,
+        time: new Date(payload.timestamp),
+        open: payload.open,
+        high: payload.high,
+        low: payload.low,
+        close: payload.close,
+        volume: payload.volume,
+        quoteVolume: payload.quoteVolume,
+        trades: payload.trades,
+        source: payload.source,
+        isFinal: payload.isFinal ?? true,
+      })
     } catch (error) {
       if (!this.isUniqueConflict(error)) {
         throw error
@@ -405,12 +386,18 @@ export class MarketDataService {
       return { id: cached, code: canonical }
     }
 
+    const requestedCode = normalizeRequestedCode(exact)
+    const nativeMarket = detectNativeSymbolMarket(exact)
     const codeCandidates: string[] = [exact]
     if (!exact.includes(':')) {
-      const spotCode = toSymbolCode(exact, 'SPOT')
-      const perpCode = toSymbolCode(exact, 'PERP')
-      codeCandidates.unshift(spotCode)
-      codeCandidates.push(perpCode)
+      if (nativeMarket) {
+        codeCandidates.unshift(requestedCode)
+      } else {
+        const spotCode = toSymbolCode(exact, 'SPOT')
+        const perpCode = toSymbolCode(exact, 'PERP')
+        codeCandidates.unshift(spotCode)
+        codeCandidates.push(perpCode)
+      }
     } else if (exact.endsWith(':SPOT')) {
       codeCandidates.push(exact.slice(0, -':SPOT'.length))
     }
@@ -421,14 +408,14 @@ export class MarketDataService {
     const hasSpot = symbolMap.has(toSymbolCode(exact, 'SPOT'))
     const hasPerp = symbolMap.has(toSymbolCode(exact, 'PERP'))
 
-    if (!exact.includes(':') && hasSpot && hasPerp) {
+    if (!exact.includes(':') && !nativeMarket && hasSpot && hasPerp) {
       this.logger.warn(`ambiguous symbol code, default to SPOT: ${symbolCode}`)
     }
 
     const legacyCode = exact.endsWith(':SPOT') ? exact.slice(0, -':SPOT'.length) : undefined
     const resolved = exact.includes(':')
       ? (symbolMap.get(exact) ?? (legacyCode ? symbolMap.get(legacyCode) : undefined))
-      : (symbolMap.get(normalizeRequestedCode(exact))
+      : (symbolMap.get(requestedCode)
           ?? symbolMap.get(toSymbolCode(exact, 'PERP'))
           ?? symbolMap.get(exact))
 

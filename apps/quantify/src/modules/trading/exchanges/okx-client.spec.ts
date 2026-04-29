@@ -219,11 +219,11 @@ describe('okxClient', () => {
         instId: 'BTC-USDT-SWAP',
         instType: 'SWAP',
         side: 'buy',
-        posSide: 'long',
         ordType: 'market',
         sz: '0.13',
         tdMode: 'cross',
       })
+      expect(rawBody).not.toHaveProperty('posSide')
 
       return new Response(JSON.stringify({
         data: [
@@ -261,7 +261,7 @@ describe('okxClient', () => {
     expect(order.price).toBeCloseTo(74147.2)
   })
 
-  it('sets posSide and reduceOnly for perp close-long market sell orders', async () => {
+  it('omits posSide by default for OKX perp net mode close orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
 
@@ -284,10 +284,10 @@ describe('okxClient', () => {
       expect(rawBody).toMatchObject({
         instId: 'BTC-USDT-SWAP',
         side: 'sell',
-        posSide: 'long',
         reduceOnly: true,
         sz: '0.13',
       })
+      expect(rawBody).not.toHaveProperty('posSide')
 
       return new Response(JSON.stringify({
         data: [
@@ -527,5 +527,55 @@ describe('okxClient', () => {
     expect(orders).toHaveLength(1)
     expect(orders[0]?.amount).toBeCloseTo(0.0013)
     expect(orders[0]?.status).toBe('closed')
+  })
+
+  it('converts perp position contract sizes back to base sizes', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            instId: 'BTC-USDT-SWAP',
+            instType: 'SWAP',
+            mgnMode: 'cross',
+            posSide: 'net',
+            pos: '4',
+            avgPx: '76891.8',
+            lever: '3',
+            upl: '0',
+            liqPx: '',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const positions = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).fetchPositions()
+
+    expect(positions).toHaveLength(1)
+    expect(positions[0]?.size).toBeCloseTo(0.04)
   })
 })

@@ -2,9 +2,13 @@
   "$schema": "https://vercel.json.schema.vercel.sh",
   "framework": "nextjs",
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm exec dx build shared && pnpm exec dx build admin --${APP_ENV}",
+  "buildCommand": "cd ../.. && bash ./scripts/ci/vercel-build-admin.sh",
   "outputDirectory": "../../dist/admin-front",
   "rewrites": [
+    {
+      "source": "/api/v1/:path*",
+      "destination": "https://backend.coinflux.ai/api/v1/:path*"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

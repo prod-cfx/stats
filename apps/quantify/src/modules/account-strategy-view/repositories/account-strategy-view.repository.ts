@@ -1077,6 +1077,19 @@ export class AccountStrategyViewRepository {
             where: { userId, userStrategyAccountId: accountId },
             orderBy: { createdAt: 'desc' },
             take: 20,
+            include: {
+              signal: {
+                select: {
+                  signalType: true,
+                  direction: true,
+                  symbol: {
+                    select: {
+                      code: true,
+                    },
+                  },
+                },
+              },
+            },
           })
         : Promise.resolve([]),
       accountId

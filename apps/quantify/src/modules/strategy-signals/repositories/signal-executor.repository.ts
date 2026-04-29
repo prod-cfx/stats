@@ -1,5 +1,6 @@
 import type { PositionSide, SignalStatus, QuantifyInstrumentType as InstrumentType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -146,16 +147,63 @@ export class SignalExecutorRepository {
     })
   }
 
-  findOpenPositionForClose(accountId: string, symbol: string, positionSide: PositionSide) {
+  findOpenPositionForClose(input: {
+    accountId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+    positionSide: PositionSide
+  }) {
     return this.txHost.tx.position.findFirst({
       where: {
-        userStrategyAccountId: accountId,
-        symbol,
+        userStrategyAccountId: input.accountId,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        symbol: input.symbol,
         status: 'OPEN',
-        positionSide,
+        positionSide: input.positionSide,
       },
       orderBy: { openedAt: 'desc' },
     })
+  }
+
+  findOpenPositionsForAdmission(input: {
+    accountId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+  }) {
+    return this.txHost.tx.position.findMany({
+      where: {
+        userStrategyAccountId: input.accountId,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        symbol: input.symbol,
+        status: 'OPEN',
+      },
+      select: {
+        positionSide: true,
+        quantity: true,
+      },
+    })
+  }
+
+  async hasPendingReconcileRequiredEntryExecution(accountId: string): Promise<boolean> {
+    const count = await this.txHost.tx.userSignalExecution.count({
+      where: {
+        userStrategyAccountId: accountId,
+        status: 'FAILED',
+        orderSide: { in: ['BUY', 'SELL'] },
+        signal: {
+          signalType: 'ENTRY',
+        },
+        metadata: {
+          path: ['reconcileRequired'],
+          equals: true,
+        },
+      },
+    })
+    return count > 0
   }
 
   lockAccount(accountId: string) {

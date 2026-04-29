@@ -90,6 +90,7 @@ export class PositionsRepository {
           },
           exchangeAccount: {
             select: {
+              id: true,
               exchangeId: true,
             },
           },
@@ -110,6 +111,7 @@ export class PositionsRepository {
           },
           exchangeAccount: {
             select: {
+              id: true,
               exchangeId: true,
             },
           },

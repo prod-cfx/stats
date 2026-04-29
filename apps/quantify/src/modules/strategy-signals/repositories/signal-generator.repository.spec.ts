@@ -65,6 +65,113 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     })
   })
 
+  it('normalizes raw symbol codes by explicit market type when querying one symbol', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    await repo.findSymbolByCodeForMarket('BTCUSDT', 'perp')
+    await repo.findSymbolByCodeForMarket('ETHUSDT', 'spot')
+
+    expect(findUnique).toHaveBeenNthCalledWith(1, {
+      where: { code: 'BTCUSDT:PERP' },
+    })
+    expect(findUnique).toHaveBeenNthCalledWith(2, {
+      where: { code: 'ETHUSDT:SPOT' },
+    })
+  })
+
+  it('normalizes OKX native instrument ids to canonical codes for market-aware lookup', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    await repo.findSymbolByCodeForMarket('BTC-USDT-SWAP', 'perp')
+    await repo.findSymbolByCodeForMarket('BTC-USDT', 'spot')
+
+    expect(findUnique).toHaveBeenNthCalledWith(1, {
+      where: { code: 'BTCUSDT:PERP' },
+    })
+    expect(findUnique).toHaveBeenNthCalledWith(2, {
+      where: { code: 'BTCUSDT:SPOT' },
+    })
+  })
+
+  it('normalizes raw symbol codes by explicit market type when querying multiple symbols', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    await repo.findSymbolsByCodeForMarket(['BTCUSDT', 'BTCUSDT:PERP'], 'perp')
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { code: { in: ['BTCUSDT:PERP'] } },
+    })
+  })
+
+  it('rejects explicit symbol suffixes that conflict with the requested market type', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    expect(() => repo.findSymbolByCodeForMarket('BTCUSDT:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
+    expect(() => repo.findSymbolByCodeForMarket('BTC-USDT-SWAP:SPOT', 'perp')).toThrow('market.symbol_unknown_suffix')
+    expect(() => repo.findSymbolByCodeForMarket('BTC-USDT-SWAP', 'spot')).toThrow('market.symbol_unknown_suffix')
+    expect(() => repo.findSymbolsByCodeForMarket(['BTCUSDT:PERP'], 'spot')).toThrow('market.symbol_unknown_suffix')
+    expect(findUnique).not.toHaveBeenCalled()
+    expect(findMany).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed explicit symbol suffixes before querying one symbol', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const findUnique = jest.fn().mockResolvedValue(null)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        strategyInstance: { findMany: jest.fn() },
+        symbol: {
+          findMany,
+          findUnique,
+        },
+      },
+    } as any)
+
+    expect(() => repo.findSymbolByCodeForMarket('BTCUSDT:SPOT:PERP', 'perp')).toThrow('market.symbol_unknown_suffix')
+    expect(findUnique).not.toHaveBeenCalled()
+    expect(findMany).not.toHaveBeenCalled()
+  })
+
   it('excludes cancelled and failed signals from cooldown checks', async () => {
     const count = jest.fn().mockResolvedValue(0)
     const repo = new SignalGeneratorRepository({
@@ -82,6 +189,30 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     expect(count).toHaveBeenCalledWith({
       where: expect.objectContaining({
         status: { in: ['PENDING', 'EXECUTED', 'PARTIAL'] },
+      }),
+    })
+  })
+
+  it('scopes cooldown checks by signal type and direction', async () => {
+    const count = jest.fn().mockResolvedValue(0)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        tradingSignal: { count },
+      },
+    } as any)
+
+    await repo.countRecentSignals({
+      strategyId: 'strategy-1',
+      symbolId: 'symbol-1',
+      since: new Date('2026-04-28T14:10:00.000Z'),
+      signalType: 'EXIT',
+      direction: 'CLOSE_LONG',
+    })
+
+    expect(count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
       }),
     })
   })

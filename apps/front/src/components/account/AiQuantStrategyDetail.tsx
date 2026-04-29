@@ -129,11 +129,25 @@ function formatEquitySeriesSource(marketType: AiQuantStrategyRecord['marketType'
 }
 
 function inferBaseAsset(symbol: string) {
-  const normalized = symbol.replace(/[-_/]/g, '').toUpperCase()
+  const normalized = symbol
+    .replace(/:(PERP|SPOT)$/i, '')
+    .replace(/[-_/]/g, '')
+    .replace(/(SWAP|PERP|FUTURES)$/i, '')
+    .toUpperCase()
   const quoteAssets = ['USDT', 'USDC', 'USD', 'BTC', 'ETH']
   const quote = quoteAssets.find(asset => normalized.endsWith(asset))
   if (!quote) return symbol
   return normalized.slice(0, -quote.length) || symbol
+}
+
+function inferQuoteAsset(symbol: string, fallback = 'USDT') {
+  const normalized = symbol
+    .replace(/:(PERP|SPOT)$/i, '')
+    .replace(/[-_/]/g, '')
+    .replace(/(SWAP|PERP|FUTURES)$/i, '')
+    .toUpperCase()
+  const quoteAssets = ['USDT', 'USDC', 'USD', 'BTC', 'ETH']
+  return quoteAssets.find(asset => normalized.endsWith(asset)) ?? fallback
 }
 
 function formatSpotHoldingCount(openPositionsCount: number | null | undefined, symbol: string) {
@@ -247,11 +261,35 @@ function formatRuleSummary(rule: NonNullable<AiQuantStrategyRecord['ruleSummary'
 }
 
 function formatOrderFee(order: NonNullable<AiQuantStrategyRecord['latestOrders']>[number]) {
+  if (order.reconcileRequired) return '待对账'
   if (order.fee == null) return '--'
   if (order.fee === 0 && !order.feeCurrency && order.orderId?.startsWith('sync-')) {
     return '--（同步记录未含手续费）'
   }
   return `${formatOptionalPreciseAmount(order.fee)} ${order.feeCurrency ?? ''}`.trim()
+}
+
+function formatLatestOrderQuantity(
+  order: NonNullable<AiQuantStrategyRecord['latestOrders']>[number],
+  strategySymbol: string,
+  baseCurrency: string,
+) {
+  if (typeof order.quantity !== 'number' || !Number.isFinite(order.quantity)) {
+    return { quantityLabel: '--', notionalLabel: null }
+  }
+
+  const symbol = order.symbol || strategySymbol
+  const baseAsset = inferBaseAsset(symbol)
+  const quoteAsset = inferQuoteAsset(symbol, baseCurrency || 'USDT')
+  const quantityLabel = `${formatOptionalPreciseAmount(order.quantity)} ${baseAsset}`
+  const notional = typeof order.price === 'number' && Number.isFinite(order.price)
+    ? order.price * order.quantity
+    : null
+  const notionalLabel = notional === null
+    ? null
+    : `约 ${formatOptionalAmount(notional)} ${quoteAsset}`
+
+  return { quantityLabel, notionalLabel }
 }
 
 function formatOrderEvidenceList(
@@ -891,24 +929,37 @@ export function AiQuantStrategyDetail({
                       <th className="py-2 pr-3">语义动作</th>
                       <th className="py-2 pr-3">交易对</th>
                       <th className="py-2 pr-3">价格</th>
-                      <th className="py-2 pr-3">数量</th>
+                      <th className="py-2 pr-3">数量 / 名义价值</th>
                       <th className="py-2 pr-3">手续费</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {strategy.latestOrders.map(order => (
-                      <tr key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`} className="border-b border-[color:var(--cf-border)]/60">
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.executedAt}</td>
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.semanticAction ?? '语义待确认'}</td>
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.symbol}</td>
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalPrice(order.price)}</td>
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.quantity)}</td>
-                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                          {formatOrderFee(order)}
-                        </td>
-                      </tr>
-                    ))}
+                    {strategy.latestOrders.map((order) => {
+                      const quantityDisplay = formatLatestOrderQuantity(order, strategy.symbol, baseCurrency)
+                      return (
+                        <tr key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`} className="border-b border-[color:var(--cf-border)]/60">
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.executedAt}</td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                            <div>{order.semanticAction ?? '语义待确认'}</div>
+                            {order.reconcileRequired
+                              ? <div className="mt-0.5 text-xs text-amber-300">待本地对账</div>
+                              : null}
+                          </td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.symbol}</td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalPrice(order.price)}</td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                            <div>{quantityDisplay.quantityLabel}</div>
+                            {quantityDisplay.notionalLabel
+                              ? <div className="mt-0.5 text-xs text-[color:var(--cf-muted)]">{quantityDisplay.notionalLabel}</div>
+                              : null}
+                          </td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                            {formatOrderFee(order)}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

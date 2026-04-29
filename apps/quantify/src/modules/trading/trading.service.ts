@@ -168,8 +168,11 @@ export class TradingService {
     userId: string,
     exchangeId: ExchangeId,
     marketType: MarketType,
+    exchangeAccountId?: string,
   ): Promise<UnifiedPosition[]> {
-    const account = await this.accountStore.getAccountConfig(userId, exchangeId)
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
     if (!account) {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
