@@ -6,8 +6,7 @@ function asDependency<T>(value: Partial<T>): T {
 
 function createRepository() {
   return {
-    transitionInstanceStatus: jest.fn().mockResolvedValue(true),
-    appendEvent: jest.fn().mockResolvedValue({ id: 'event-1' }),
+    transitionInstanceStatusWithEvent: jest.fn().mockResolvedValue(true),
   }
 }
 
@@ -23,31 +22,31 @@ describe('GridRuntimeStateMachineService', () => {
     await service.initialize('grid-1')
     await service.markRunning('grid-1')
 
-    expect(repository.transitionInstanceStatus).toHaveBeenNthCalledWith(1, {
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(1, {
       id: 'grid-1',
       fromStatuses: ['CREATED'],
       toStatus: 'INITIALIZING',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_initializing',
+        severity: 'info',
+        status: 'INITIALIZING',
+        message: null,
+        payload: undefined,
+      },
     })
-    expect(repository.transitionInstanceStatus).toHaveBeenNthCalledWith(2, {
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(2, {
       id: 'grid-1',
       fromStatuses: ['INITIALIZING', 'RUNNING'],
       toStatus: 'RUNNING',
-    })
-    expect(repository.appendEvent).toHaveBeenNthCalledWith(1, {
-      gridRuntimeInstanceId: 'grid-1',
-      eventType: 'runtime_initializing',
-      severity: 'info',
-      status: 'INITIALIZING',
-      message: null,
-      payload: undefined,
-    })
-    expect(repository.appendEvent).toHaveBeenNthCalledWith(2, {
-      gridRuntimeInstanceId: 'grid-1',
-      eventType: 'runtime_running',
-      severity: 'info',
-      status: 'RUNNING',
-      message: null,
-      payload: undefined,
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_running',
+        severity: 'info',
+        status: 'RUNNING',
+        message: null,
+        payload: undefined,
+      },
     })
   })
 
@@ -58,17 +57,33 @@ describe('GridRuntimeStateMachineService', () => {
     await service.stop('grid-1', 'boundary_break')
     await service.markReconcileRequired('grid-1', 'exchange_mismatch')
 
-    expect(repository.transitionInstanceStatus).toHaveBeenNthCalledWith(1, {
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(1, {
       id: 'grid-1',
       fromStatuses: ['CREATED', 'INITIALIZING', 'RUNNING', 'PAUSED', 'RECONCILE_REQUIRED', 'ERROR'],
       toStatus: 'STOPPING',
       stopReason: 'boundary_break',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_stopping',
+        severity: 'warn',
+        status: 'STOPPING',
+        message: 'boundary_break',
+        payload: undefined,
+      },
     })
-    expect(repository.transitionInstanceStatus).toHaveBeenNthCalledWith(2, {
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(2, {
       id: 'grid-1',
       fromStatuses: ['INITIALIZING', 'RUNNING', 'PAUSED'],
       toStatus: 'RECONCILE_REQUIRED',
       stopReason: 'exchange_mismatch',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_reconcile_required',
+        severity: 'warn',
+        status: 'RECONCILE_REQUIRED',
+        message: 'exchange_mismatch',
+        payload: undefined,
+      },
     })
   })
 
@@ -79,25 +94,40 @@ describe('GridRuntimeStateMachineService', () => {
     await service.pause('grid-1')
     await service.resume('grid-1')
 
-    expect(repository.transitionInstanceStatus).toHaveBeenNthCalledWith(1, {
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(1, {
       id: 'grid-1',
       fromStatuses: ['RUNNING'],
       toStatus: 'PAUSED',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_paused',
+        severity: 'info',
+        status: 'PAUSED',
+        message: null,
+        payload: undefined,
+      },
     })
-    expect(repository.transitionInstanceStatus).toHaveBeenNthCalledWith(2, {
+    expect(repository.transitionInstanceStatusWithEvent).toHaveBeenNthCalledWith(2, {
       id: 'grid-1',
       fromStatuses: ['PAUSED'],
       toStatus: 'RUNNING',
       stopReason: null,
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_resumed',
+        severity: 'info',
+        status: 'RUNNING',
+        message: null,
+        payload: undefined,
+      },
     })
   })
 
   it('rejects markRunning when the current status is not INITIALIZING or RUNNING', async () => {
     const repository = createRepository()
-    repository.transitionInstanceStatus.mockResolvedValue(false)
+    repository.transitionInstanceStatusWithEvent.mockResolvedValue(false)
     const service = createService(repository)
 
     await expect(service.markRunning('grid-1')).rejects.toThrow('grid_runtime_invalid_status_transition:runtime_running')
-    expect(repository.appendEvent).not.toHaveBeenCalled()
   })
 })

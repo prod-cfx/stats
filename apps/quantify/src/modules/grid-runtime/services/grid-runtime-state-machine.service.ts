@@ -90,24 +90,23 @@ export class GridRuntimeStateMachineService {
   }
 
   private async transition(input: TransitionInput) {
-    const transitioned = await this.repository.transitionInstanceStatus({
+    const transitioned = await this.repository.transitionInstanceStatusWithEvent({
       id: input.instanceId,
       fromStatuses: input.fromStatuses,
       toStatus: input.status,
       ...this.stopReasonPatch(input),
+      event: {
+        gridRuntimeInstanceId: input.instanceId,
+        eventType: input.eventType,
+        severity: input.severity ?? 'info',
+        status: input.status,
+        message: input.reason ?? null,
+        payload: input.payload,
+      },
     })
     if (!transitioned) {
       throw new Error(`grid_runtime_invalid_status_transition:${input.eventType}`)
     }
-
-    return this.repository.appendEvent({
-      gridRuntimeInstanceId: input.instanceId,
-      eventType: input.eventType,
-      severity: input.severity ?? 'info',
-      status: input.status,
-      message: input.reason ?? null,
-      payload: input.payload,
-    })
   }
 
   private stopReasonPatch(input: TransitionInput): { stopReason?: string | null } {

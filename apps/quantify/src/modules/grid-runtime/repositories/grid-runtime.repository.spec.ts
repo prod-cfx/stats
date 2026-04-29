@@ -1,7 +1,10 @@
 import { GridRuntimeRepository } from './grid-runtime.repository'
 
 function createTxHost(tx: unknown): ConstructorParameters<typeof GridRuntimeRepository>[0] {
-  return { tx } as ConstructorParameters<typeof GridRuntimeRepository>[0]
+  return {
+    tx,
+    withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()),
+  } as unknown as ConstructorParameters<typeof GridRuntimeRepository>[0]
 }
 
 describe('GridRuntimeRepository', () => {
@@ -284,5 +287,74 @@ describe('GridRuntimeRepository', () => {
         payload: { orderId: 'order-1' },
       },
     })
+  })
+
+  it('updates status and appends event inside one transaction', async () => {
+    const tx = {
+      gridRuntimeInstance: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      gridRuntimeEvent: {
+        create: jest.fn().mockResolvedValue({ id: 'event-1' }),
+      },
+    }
+    const txHost = createTxHost(tx)
+    const repo = new GridRuntimeRepository(txHost)
+
+    const transitioned = await repo.transitionInstanceStatusWithEvent({
+      id: 'grid-1',
+      fromStatuses: ['CREATED'],
+      toStatus: 'INITIALIZING',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_initializing',
+        severity: 'info',
+        status: 'INITIALIZING',
+      },
+    })
+
+    expect(transitioned).toBe(true)
+    expect(txHost.withTransaction).toHaveBeenCalledTimes(1)
+    expect(tx.gridRuntimeInstance.updateMany).toHaveBeenCalledWith({
+      where: { id: 'grid-1', status: { in: ['CREATED'] } },
+      data: { status: 'INITIALIZING' },
+    })
+    expect(tx.gridRuntimeEvent.create).toHaveBeenCalledWith({
+      data: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_initializing',
+        severity: 'info',
+        status: 'INITIALIZING',
+        message: null,
+        payload: undefined,
+      },
+    })
+  })
+
+  it('does not append an event when status transition CAS fails', async () => {
+    const tx = {
+      gridRuntimeInstance: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      gridRuntimeEvent: {
+        create: jest.fn(),
+      },
+    }
+    const repo = new GridRuntimeRepository(createTxHost(tx))
+
+    const transitioned = await repo.transitionInstanceStatusWithEvent({
+      id: 'grid-1',
+      fromStatuses: ['CREATED'],
+      toStatus: 'INITIALIZING',
+      event: {
+        gridRuntimeInstanceId: 'grid-1',
+        eventType: 'runtime_initializing',
+        severity: 'info',
+        status: 'INITIALIZING',
+      },
+    })
+
+    expect(transitioned).toBe(false)
+    expect(tx.gridRuntimeEvent.create).not.toHaveBeenCalled()
   })
 })

@@ -96,6 +96,10 @@ export interface TransitionGridRuntimeStatusInput {
   stopReason?: string | null
 }
 
+export interface TransitionGridRuntimeStatusWithEventInput extends TransitionGridRuntimeStatusInput {
+  event: AppendGridRuntimeEventInput
+}
+
 export interface UpdateGridOrderFromExchangeInput {
   id: string
   exchangeOrderId?: string | null
@@ -192,6 +196,16 @@ export class GridRuntimeRepository {
     })
 
     return result.count === 1
+  }
+
+  async transitionInstanceStatusWithEvent(input: TransitionGridRuntimeStatusWithEventInput): Promise<boolean> {
+    return this.txHost.withTransaction(async () => {
+      const transitioned = await this.transitionInstanceStatus(input)
+      if (!transitioned) return false
+
+      await this.appendEvent(input.event)
+      return true
+    })
   }
 
   updateInstanceLastSyncAt(instanceId: string, syncedAt = new Date()) {
