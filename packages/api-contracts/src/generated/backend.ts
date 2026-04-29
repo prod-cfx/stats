@@ -1617,7 +1617,7 @@ const endpoints = makeApi([
       {
         name: 'deleteStoppedStrategy',
         type: 'Query',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
     response: z.void(),

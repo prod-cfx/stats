@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Inject, Param, Patch, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
@@ -27,6 +27,7 @@ export class AccountAiQuantConversationsController {
   }
 
   @Delete(':id')
+  @ApiQuery({ name: 'deleteStoppedStrategy', required: false, type: String })
   async remove(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
