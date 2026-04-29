@@ -315,6 +315,27 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('isolates basis metadata across mixed risk clauses', () => {
+    const result = service.extract('按开仓价亏损 5% 止损，按持仓收益率盈利 10% 止盈')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'user_explicit',
+      }),
+    }))
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({
+        valuePct: 10,
+        basis: 'position_pnl',
+        basisSource: 'user_explicit',
+      }),
+    }))
+  })
+
   it('extracts advanced pnl risk as recognized unsupported condition expression', () => {
     const result = service.extract('亏损超过 5%，暂停策略')
 
@@ -330,6 +351,21 @@ describe('SemanticSeedExtractorService', () => {
         effect: { type: 'pause_strategy' },
         scope: 'strategy',
         capabilityStatus: 'recognized_unsupported',
+      }),
+    }))
+  })
+
+  it('extracts simple pnl halt phrasing as recognized unsupported condition expression', () => {
+    const result = service.extract('亏损 5% 停止策略')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        condition: expect.objectContaining({
+          right: expect.objectContaining({ value: -5 }),
+        }),
+        effect: { type: 'pause_strategy' },
+        scope: 'strategy',
       }),
     }))
   })

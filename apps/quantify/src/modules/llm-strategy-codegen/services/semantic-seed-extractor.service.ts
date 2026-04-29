@@ -183,8 +183,9 @@ export class SemanticSeedExtractorService {
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ])
     if (stopLoss !== null) {
-      const basis = this.resolveRiskBasis(text)
-      const basisSource = this.resolveRiskBasisSource(text, basis)
+      const riskContext = this.resolveRiskClauseContext(text, 'stop_loss')
+      const basis = this.resolveRiskBasis(riskContext)
+      const basisSource = this.resolveRiskBasisSource(riskContext, basis)
       risk.push({
         key: 'risk.stop_loss_pct',
         params: {
@@ -208,8 +209,9 @@ export class SemanticSeedExtractorService {
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
     if (takeProfit !== null) {
-      const basis = this.resolveRiskBasis(text)
-      const basisSource = this.resolveRiskBasisSource(text, basis)
+      const riskContext = this.resolveRiskClauseContext(text, 'take_profit')
+      const basis = this.resolveRiskBasis(riskContext)
+      const basisSource = this.resolveRiskBasisSource(riskContext, basis)
       risk.push({
         key: 'risk.take_profit_pct',
         params: {
@@ -226,6 +228,8 @@ export class SemanticSeedExtractorService {
     const strategyHaltLoss = this.extractPercent(text, [
       /持仓亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
       /亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+      /亏损\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+      /(\d+(?:\.\d+)?)\s*%\s*亏损.*(?:暂停策略|停止策略)/u,
     ])
     if (strategyHaltLoss !== null) {
       const condition: SemanticExpression = {
@@ -1026,6 +1030,20 @@ export class SemanticSeedExtractorService {
       return 'user_explicit'
     }
     return 'system_default'
+  }
+
+  private resolveRiskClauseContext(text: string, kind: 'stop_loss' | 'take_profit'): string {
+    const matcher = kind === 'stop_loss'
+      ? /亏损|止损/u
+      : /盈利|止盈/u
+    return this.splitRiskClauses(text).find(clause => matcher.test(clause)) ?? text
+  }
+
+  private splitRiskClauses(text: string): string[] {
+    return text
+      .split(/[；;。。，,、]|(?:并且|以及|同时|且)/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
   }
 
   private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
