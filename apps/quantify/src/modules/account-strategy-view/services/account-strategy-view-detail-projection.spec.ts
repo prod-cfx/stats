@@ -140,13 +140,11 @@ describe('buildAccountStrategyRuntimeSemanticSummary', () => {
         rules: [
           {
             phase: 'entry',
-            label: '入场',
             conditions: ['close_1m > high_1m_1'],
             actions: ['OPEN_LONG'],
           },
           {
             phase: 'exit',
-            label: '出场',
             conditions: ['close_1m < low_1m_1'],
             actions: ['CLOSE_LONG'],
           },
