@@ -94,10 +94,10 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
   },
   {
     id: 'grid-range',
-    name: '网格区间',
+    name: '区间低买高卖',
     description: '在震荡区间内低买高卖，适合方向不明显的行情。',
     logicDescription: '使用最近 36 根 K 线区间下 20%/上 55% 执行现货低买高卖。',
-    tags: ['网格', '现货', 'OKX 模拟盘'],
+    tags: ['区间', '低买高卖', 'OKX 模拟盘'],
     riskLevel: 'low',
     scenario: '区间震荡',
     exchange: 'okx',
@@ -115,12 +115,12 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
       deploymentExecutionConfig: { leverage: null, priceSource: 'last', orderType: 'market', timeInForce: 'ioc' },
     },
     editSeed: {
-      initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建网格区间策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。',
+      initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建区间低买高卖策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。',
       guideConfig: {
         symbolExample: 'BTC-USDT',
         timeframeExample: '15m',
-        entryRuleExample: '价格触及网格下沿买入',
-        exitRuleExample: '价格触及上一个网格卖出',
+        entryRuleExample: '价格进入最近 K 线区间下沿买入',
+        exitRuleExample: '价格回到区间上沿卖出',
         riskRuleExample: 'OKX 模拟盘现货，单次仓位 25%，不使用杠杆',
       },
     },

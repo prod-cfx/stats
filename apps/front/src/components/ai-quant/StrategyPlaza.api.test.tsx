@@ -6,9 +6,11 @@ import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { StrategyPlaza } from './StrategyPlaza'
 
+let mockTranslations: Record<string, string> = {}
+
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+    t: (key: string, options?: { defaultValue?: string }) => mockTranslations[key] ?? options?.defaultValue ?? key,
   }),
 }))
 
@@ -47,12 +49,24 @@ const template: StrategyPlazaTemplate = {
   },
 }
 
+const gridTemplate: StrategyPlazaTemplate = {
+  ...template,
+  id: 'grid-range',
+  name: '网格区间',
+  description: '在震荡区间内低买高卖，适合方向不明显的行情。',
+  tags: ['网格', '现货', 'OKX 模拟盘'],
+  marketType: 'spot',
+  symbol: 'BTC-USDT',
+  leverage: null,
+}
+
 describe('StrategyPlaza API rendering', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
     ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mockTranslations = {}
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -91,6 +105,37 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.textContent).toContain('+1.78%')
     expect(container.textContent).not.toContain('+12.5%')
     expect(container.textContent).not.toContain('68%')
+  })
+
+  it('uses localized range buy/sell copy for the former grid-range card', async () => {
+    mockTranslations = {
+      'aiQuant.strategies.grid-range.name': 'Range Buy/Sell',
+      'aiQuant.strategies.grid-range.desc': 'Buy near the lower range and sell near the upper range.',
+      'aiQuant.strategies.grid-range.tags.range': 'Range',
+      'aiQuant.strategies.grid-range.tags.buyLowSellHigh': 'Buy Low/Sell High',
+      'aiQuant.strategies.grid-range.tags.okxDemo': 'OKX Demo',
+      'aiQuant.strategyPlazaCard.okxDemo': 'OKX Demo',
+      'aiQuant.strategyPlazaCard.marketType.spot': 'Spot',
+    }
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[gridTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Range Buy/Sell')
+    expect(container.textContent).toContain('Buy near the lower range and sell near the upper range.')
+    expect(container.textContent).toContain('Range')
+    expect(container.textContent).toContain('Buy Low/Sell High')
+    expect(container.textContent).toContain('OKX Demo')
+    expect(container.textContent).toContain('Spot')
+    expect(container.textContent).not.toContain('网格区间')
   })
 
   it('passes the template id to run and edit actions', async () => {
