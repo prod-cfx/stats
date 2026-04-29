@@ -165,6 +165,26 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('inherits standalone no-position context into later entry gates', () => {
+    const patch = service.extract('当前没有持仓。用 BTCUSDT 1m K 线，最新收盘价突破上一根 K 线最高价则开多，使用可用余额的 3%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'EQ',
+            left: { kind: 'position', field: 'has_position', side: 'long' },
+            right: { kind: 'constant', value: false },
+          },
+        },
+      }),
+    ]))
+  })
+
   it('emits an open breakout trigger for undefined key reference phrases', () => {
     const patch = service.extract('突破关键位置开多，单笔 3%。')
 

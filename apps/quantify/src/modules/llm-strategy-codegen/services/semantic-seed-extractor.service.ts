@@ -271,7 +271,10 @@ export class SemanticSeedExtractorService {
       && /(?:不再|不要|不可|不能|禁止|避免|则不再).*(?:开仓|开多|开空)|(?:不开仓|不加仓)/u.test(segment)
     const hasNoPositionEntryGate = this.hasNoPositionContext(segment)
       && /(?:开仓|开多|开空|买入|做多|做空|入场)/u.test(segment)
-    if (!hasExistingPositionOpenBlock && !hasNoPositionEntryGate) return
+    const hasInheritedNoPositionEntryGate = !hasNoPositionEntryGate
+      && this.hasNoPositionContext(contextText)
+      && /(?:开仓|开多|开空|买入|做多|做空|入场)/u.test(segment)
+    if (!hasExistingPositionOpenBlock && !hasNoPositionEntryGate && !hasInheritedNoPositionEntryGate) return
 
     const sideScope = this.resolveNoPositionGateSideScope(segment, contextText)
     const expression: SemanticExpression = {
