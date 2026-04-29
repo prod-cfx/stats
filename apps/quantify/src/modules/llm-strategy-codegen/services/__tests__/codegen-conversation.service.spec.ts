@@ -5345,10 +5345,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.stop_loss_pct',
-        params: {
+        params: expect.objectContaining({
           valuePct: 5,
           basis: 'entry_avg_price',
-        },
+        }),
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
@@ -5365,6 +5365,29 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         reason: 'missing_stop_loss_rule',
       }),
     ]))
+  })
+
+  it('does not ask for stop loss basis after plain stop loss is understood', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充入场和仓位。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 'risk-default-basis-regression' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '做多，亏损 5% 止损',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(JSON.stringify(createPayload.semanticState?.risk ?? [])).toContain('entry_avg_price')
+    expect(result.assistantPrompt).not.toContain('entry_avg_price')
+    expect(result.assistantPrompt).not.toContain('basis')
+    expect(result.assistantPrompt).not.toContain('计算基准')
+    expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
   })
 
   it('regression: deterministic stop loss is added even when semanticPatch has max drawdown risk', async () => {

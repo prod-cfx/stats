@@ -1740,6 +1740,45 @@ describe('SemanticStateProjectionService', () => {
     })
   })
 
+  it('keeps inferred basis as metadata without creating open risk slots', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [{
+        id: 'risk-1',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5, basis: 'entry_avg_price', basisSource: 'system_default' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const view = service.buildConversationView(state)
+    const clarification = service.buildClarificationView(state)
+
+    expect(view.inferredDefaults.inferredKeys).toContain('risk.stopLossBasis')
+    expect(clarification.nextQuestion).toBeNull()
+    expect(state.risk).not.toContainEqual(expect.objectContaining({
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: expect.stringMatching(/basis/u),
+        }),
+      ]),
+    }))
+  })
+
   it('keeps conversation summary stable for the same locked atoms with different order', () => {
     const makeState = (reverseTriggerOrder = false, reverseRiskOrder = false): ReturnType<typeof service.buildConversationView> => {
       const triggers: SemanticTriggerState[] = [

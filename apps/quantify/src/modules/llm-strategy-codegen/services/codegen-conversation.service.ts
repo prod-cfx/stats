@@ -92,7 +92,7 @@ import { StrategyExecutionContextService } from './strategy-execution-context.se
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
 import { SemanticStateMergeService } from './semantic-state-merge.service'
-import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
+import { buildNormalizedIntentFromSemanticState, normalizeRiskSemantics } from './semantic-state-normalization'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
 import {
@@ -248,6 +248,7 @@ export class CodegenConversationService {
     const compileability = this.evaluateCanonicalCompileability(initialCanonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist,
+      semanticState: initialSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
       compileability,
@@ -898,7 +899,14 @@ export class CodegenConversationService {
     return {
       id,
       key,
-      params: { valuePct },
+      params: {
+        valuePct,
+        direction: key === 'risk.stop_loss_pct' ? 'loss' : 'profit',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
       status: 'locked',
       source: 'derived',
       evidence: {
@@ -1256,6 +1264,7 @@ export class CodegenConversationService {
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist: canonicalLogicSnapshot,
+      semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
       compileability,
@@ -1651,6 +1660,7 @@ export class CodegenConversationService {
       const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
       const strategyDecision = this.buildStrategyDecision({
         checklist: canonicalLogicSnapshot,
+        semanticState: replacementState,
         clarification: semanticArtifacts,
         effectiveBlockingReasons: semanticArtifacts.blockingReasons,
         compileability,
@@ -1799,6 +1809,7 @@ export class CodegenConversationService {
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
     const strategyDecision = this.buildStrategyDecision({
       checklist: canonicalLogicSnapshot,
+      semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
       compileability,
@@ -2272,7 +2283,8 @@ export class CodegenConversationService {
     checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
-    const stateWithDeterministicContext = this.withDeterministicContextSlots(state, checklist)
+    const normalizedInput = this.normalizeRiskState(state)
+    const stateWithDeterministicContext = this.withDeterministicContextSlots(normalizedInput, checklist)
     const stateWithExplicitDeterministicPosition = this.withExplicitDeterministicPositionSizing(
       stateWithDeterministicContext,
       checklist,
@@ -2979,12 +2991,14 @@ export class CodegenConversationService {
       })
     }
 
-    return this.withRequiredSemanticOpenSlots(nextState, {}, {
+    const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(nextState, {}, {
       preserveLockedPositionSizing: Boolean(
         this.hasValidLockedPositionSizing(semanticPatchState?.position)
         || this.hasValidLockedPositionSizing(input.currentState.position),
       ),
     })
+
+    return this.normalizeRiskState(stateWithRequiredSlots)
   }
 
   private mergeSemanticPatchIntoState(
@@ -4164,6 +4178,7 @@ export class CodegenConversationService {
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist: projectedLogicSnapshot,
+      semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(semanticClarificationState),
       compileability,
@@ -5804,6 +5819,7 @@ export class CodegenConversationService {
 
   private buildStrategyDecision(input: {
     checklist: StrategyLogicSnapshot
+    semanticState?: SemanticState
     clarification: {
       clarificationState: StrategyClarificationStateWithSummary
       blockingReasons: StrategyBlockingReason[]
@@ -5816,15 +5832,44 @@ export class CodegenConversationService {
       || this.buildClarificationSummary(input.checklist)
       || '已识别部分条件，但仍未完整。'
 
+    const inferredAssumptions = this.collectInferredAssumptions(
+      input.checklist,
+      input.constraintPack,
+    ).filter(assumption =>
+      !input.semanticState
+      || !this.isNonBlockingRiskBasisDefault(input.semanticState, assumption.key),
+    )
+
     return this.uniquenessDecision.decide({
       normalizedSummary,
       blockingReasons: input.effectiveBlockingReasons ?? input.clarification.blockingReasons,
-      inferredAssumptions: this.collectInferredAssumptions(
-        input.checklist,
-        input.constraintPack,
-      ),
+      inferredAssumptions,
       compileability: input.compileability,
     })
+  }
+
+  private normalizeRiskState(state: SemanticState): SemanticState {
+    return {
+      ...state,
+      risk: normalizeRiskSemantics(state.risk),
+    }
+  }
+
+  private isNonBlockingRiskBasisDefault(
+    state: SemanticState,
+    key: string,
+  ): boolean {
+    if (key !== 'risk.stopLossBasis' && key !== 'risk.takeProfitBasis') {
+      return false
+    }
+
+    const riskKey = key === 'risk.stopLossBasis' ? 'risk.stop_loss_pct' : 'risk.take_profit_pct'
+    return state.risk.some(risk =>
+      risk.key === riskKey
+      && risk.status === 'locked'
+      && risk.openSlots.length === 0
+      && risk.params.basisSource === 'system_default',
+    )
   }
 
   private resolveInitialStartSessionStatus(input: {
@@ -6046,6 +6091,7 @@ export class CodegenConversationService {
     )
     const decision = this.buildStrategyDecision({
       checklist,
+      semanticState,
       clarification,
       compileability,
       constraintPack,
@@ -6167,6 +6213,7 @@ export class CodegenConversationService {
             params: {
               ...(item.params ?? {}),
               basis: nextStopLossBasis,
+              basisSource: 'user_explicit',
             },
           }
         }
@@ -6180,6 +6227,7 @@ export class CodegenConversationService {
             params: {
               ...(item.params ?? {}),
               basis: nextTakeProfitBasis,
+              basisSource: 'user_explicit',
             },
           }
         }
@@ -7087,7 +7135,8 @@ export class CodegenConversationService {
   private buildSemanticStateFromPlannerPatch(
     semanticPatch: unknown,
   ): SemanticState | null {
-    return this.semanticSeedStateBuilder.build(semanticPatch)
+    const nextState = this.semanticSeedStateBuilder.build(semanticPatch)
+    return nextState ? this.normalizeRiskState(nextState) : null
   }
 
   private mergeRuleArrays(
