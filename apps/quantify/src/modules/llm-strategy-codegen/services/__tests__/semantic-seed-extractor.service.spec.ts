@@ -430,6 +430,12 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('does not extract fixed quote sizing answers as trading symbols', () => {
+    const patch = service.extract('1000USDT')
+
+    expect(patch.contextSlots).toBeUndefined()
+  })
+
   it('canonicalizes OKX swap instrument ids into strategy symbols', () => {
     const patch = service.extract('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。')
 

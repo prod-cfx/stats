@@ -12,6 +12,7 @@ import {
   DEFAULT_PARAMS,
   DEFAULT_PARAM_SCHEMA,
   DEFAULT_PARAM_VALUES,
+  normalizeParamsFromValues,
 } from './ai-quant-page-conversation'
 
 const mockContinueLlmCodegenSession = jest.fn()
@@ -771,13 +772,91 @@ describe('AiQuantPageClient codegen P1 guards', () => {
       backtestFeeBps: 2,
       backtestPriceSource: 'mid',
       backtestAllowPartial: false,
+      sizing: { mode: 'RATIO', value: 25 },
     })
     expect(next.params).toMatchObject({
       exchange: 'okx',
       symbol: 'ETHUSDT',
       baseTimeframe: '1h',
       positionPct: 25,
+      sizing: { mode: 'RATIO', value: 25 },
     })
+
+    expect(normalizeParamsFromValues({
+      ...next.paramValues,
+      symbol: 'ETHUSDT',
+    }, next.params)).toMatchObject({
+      positionPct: 25,
+      sizing: { mode: 'RATIO', value: 25 },
+    })
+  })
+
+  it('applies target quote sizing through codegen fallback without rendering it as percent', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        ...createConversation((key: string) => key),
+        id: 'conv-quote-codegen',
+        title: 'quote sizing',
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-quote',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-quote',
+        conversationId: 'server-conv-quote',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-quote',
+        specDesc: {
+          canonicalDigest: 'sha256:quote-codegen',
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          entryRules: ['启动时执行'],
+          rules: [],
+        },
+      } as any,
+      confirmGenerate: true,
+      targetParams: {
+        ...DEFAULT_PARAMS,
+        symbol: 'BTCUSDT',
+        sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+        positionPct: 10,
+      },
+      backtestCapabilities: null,
+      activeSessionId: 'session-quote',
+      trimmedMessage: '用 1000 USDT 开仓',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    const displayTexts = next.displayLogicGraph?.blocks.flatMap(block => block.items.map(item => item.text)) ?? []
+
+    expect(next.params.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(next.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(next.paramValues.positionAmount).toBe(1000)
+    expect(next.paramValues).not.toHaveProperty('positionPct')
+    expect(next.logicGraph?.meta.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(displayTexts).toContain('仓位: 1000 USDT')
+    expect(displayTexts.join('\n')).not.toContain('1000%')
   })
 
   it('keeps restored published script code when reconciliation returns the same snapshot without scriptCode', () => {

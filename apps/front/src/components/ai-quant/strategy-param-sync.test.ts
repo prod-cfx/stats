@@ -81,6 +81,186 @@ describe('strategy-param-sync', () => {
     ]))
   })
 
+  it('prefers canonical quote sizing over legacy positionPct', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        canonicalSpec: {
+          market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '15m' },
+          sizing: { mode: 'QUOTE', value: 1000 },
+          rules: [{
+            id: 'entry-1',
+            phase: 'entry',
+            condition: { kind: 'atom', key: 'price.direction', value: 'up' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'QUOTE', value: 1000 } }],
+          }],
+        },
+        riskRules: { positionPct: 10 },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '5m',
+        positionPct: 10,
+        sizing: { mode: 'RATIO', value: 10 },
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(result.normalized.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(result.normalized.positionPct).toBe(10)
+    expect(result.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(result.paramValues.positionPct).toBeUndefined()
+    expect((result.paramSchema.properties as Record<string, any>).positionAmount).toMatchObject({
+      title: 'Position Amount',
+      minimum: 0,
+    })
+  })
+
+  it('normalizes legacy fixed sizing modes before syncing params', () => {
+    const quoteResult = syncStrategyParamsFromCodegen({
+      spec: {
+        canonicalSpec: {
+          market: { symbol: 'BTCUSDT', timeframe: '15m' },
+          sizing: { mode: 'fixed_quote', value: 1000, asset: 'USDT' },
+        },
+        riskRules: { positionPct: 10 },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(quoteResult.normalized.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(quoteResult.paramValues.positionAmount).toBe(1000)
+    expect(quoteResult.paramValues.positionPct).toBeUndefined()
+
+    const ratioResult = syncStrategyParamsFromCodegen({
+      spec: {
+        rules: [{
+          phase: 'entry',
+          condition: { key: 'bollinger.upper_break' },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'fixed_ratio', value: 0.2 } }],
+        }],
+        market: { symbols: ['BTCUSDT'], timeframes: ['15m'] },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(ratioResult.normalized.sizing).toEqual({ mode: 'RATIO', value: 20 })
+    expect(ratioResult.paramValues.positionPct).toBe(20)
+  })
+
+  it('uses canonical singular market fields with canonical sizing', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        canonicalSpec: {
+          market: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '15m',
+          },
+          sizing: { mode: 'QUOTE', value: 1000 },
+        },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '5m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(result.normalized.exchange).toBe('okx')
+    expect(result.normalized.symbol).toBe('BTCUSDT')
+    expect(result.normalized.baseTimeframe).toBe('15m')
+    expect(result.paramValues.exchange).toBe('okx')
+    expect(result.paramValues.symbol).toBe('BTCUSDT')
+    expect(result.paramValues.baseTimeframe).toBe('15m')
+    expect((result.paramSchema.properties as Record<string, any>).symbol.enum).toEqual(['BTCUSDT'])
+    expect((result.paramSchema.properties as Record<string, any>).baseTimeframe.enum).toEqual(['15m'])
+  })
+
+  it('preserves current semantic quote sizing when codegen omits sizing', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        riskRules: { positionPct: 10 },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      currentValues: {
+        sizing: { mode: 'QUOTE', value: 750, asset: 'USDC' },
+        positionAmount: 750,
+        sizingAsset: 'USDC',
+      },
+      capabilities: null,
+    })
+
+    expect(result.normalized.sizing).toEqual({ mode: 'QUOTE', value: 750, asset: 'USDC' })
+    expect(result.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 750, asset: 'USDC' })
+    expect(result.paramValues.positionAmount).toBe(750)
+    expect(result.paramValues.sizingAsset).toBe('USDC')
+    expect(result.paramValues.positionPct).toBeUndefined()
+    expect(result.executionTags).toEqual(expect.arrayContaining([
+      'positionAmount: 750',
+      'sizingAsset: USDC',
+    ]))
+    expect(result.executionTags).not.toEqual(expect.arrayContaining([
+      'positionPct: 10',
+      'sizing: [object Object]',
+    ]))
+  })
+
+  it('preserves fallback semantic quantity sizing when codegen omits sizing', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        market: {
+          symbols: ['ETHUSDT'],
+          timeframes: ['15m'],
+        },
+        riskRules: { positionPct: 10 },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        sizing: { mode: 'QTY', value: 0.5, asset: 'ETH' },
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(result.normalized.sizing).toEqual({ mode: 'QTY', value: 0.5, asset: 'ETH' })
+    expect(result.paramValues.sizing).toEqual({ mode: 'QTY', value: 0.5, asset: 'ETH' })
+    expect(result.paramValues.positionAmount).toBe(0.5)
+    expect(result.paramValues.sizingAsset).toBe('ETH')
+    expect(result.paramValues.positionPct).toBeUndefined()
+  })
+
   it('refreshes symbol and timeframe enums from capabilities without dropping dynamic fields', () => {
     const nextSchema = applyCapabilitiesToParamSchema(
       {

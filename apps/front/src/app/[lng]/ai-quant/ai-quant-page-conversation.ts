@@ -26,6 +26,12 @@ import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmatio
 import { buildDisplayLogicGraphFromCodegenSpec } from '@/components/ai-quant/display-logic-graph'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { syncStrategyParamsFromCodegen } from '@/components/ai-quant/strategy-param-sync'
+import {
+  derivePositionPctFromSizing,
+  formatSizing,
+  normalizeSizing,
+  type QuantSizing,
+} from './semantic-sizing'
 
 export interface QuantParams {
   exchange: 'binance' | 'okx' | 'hyperliquid'
@@ -35,6 +41,7 @@ export interface QuantParams {
   buyDropPct: number
   sellWindowMin: number
   sellRisePct: number
+  sizing: QuantSizing
   positionPct: number
 }
 
@@ -46,6 +53,7 @@ export const DEFAULT_PARAMS: QuantParams = {
   buyDropPct: 1,
   sellWindowMin: 15,
   sellRisePct: 2,
+  sizing: { mode: 'RATIO', value: 10 },
   positionPct: 10,
 }
 
@@ -650,6 +658,26 @@ function normalizeComparableParamValue(value: unknown): unknown {
   return value
 }
 
+function normalizeComparableParamValueForKey(key: string, value: unknown): unknown {
+  if (key === 'sizing') {
+    const sizing = normalizeComparableParamValue(value)
+    if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
+      return sizing
+    }
+    const record = sizing as Record<string, unknown>
+    if (record.mode !== 'RATIO' || typeof record.value !== 'number' || !Number.isFinite(record.value)) {
+      return sizing
+    }
+    return {
+      ...record,
+      value: record.value > 0 && record.value < 1
+        ? Number((record.value * 100).toFixed(8))
+        : Number(record.value.toFixed(8)),
+    }
+  }
+  return normalizeComparableParamValue(value)
+}
+
 export function requiresRepublishForPublishedSnapshot(input: {
   publishedSnapshotId: string | null
   publishedSnapshotParamValues: Record<string, unknown> | null
@@ -681,8 +709,8 @@ export function requiresRepublishForPublishedSnapshot(input: {
       continue
     }
 
-    const snapshotValue = normalizeComparableParamValue(publishedSnapshotParamValues[key])
-    const editableValue = normalizeComparableParamValue(editableParamValues[key])
+    const snapshotValue = normalizeComparableParamValueForKey(key, publishedSnapshotParamValues[key])
+    const editableValue = normalizeComparableParamValueForKey(key, editableParamValues[key])
     if (JSON.stringify(snapshotValue ?? null) !== JSON.stringify(editableValue ?? null)) {
       return true
     }
@@ -820,6 +848,23 @@ function normalizeNumber(value: unknown, fallback: number): number {
   return fallback
 }
 
+function isDefaultSeededRatioSizing(
+  value: unknown,
+  legacyPositionPct: number,
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const candidate = value as Record<string, unknown>
+  const defaultSizing = DEFAULT_PARAMS.sizing
+  return (
+    defaultSizing.mode === 'RATIO'
+    && candidate.mode === 'RATIO'
+    && candidate.value === defaultSizing.value
+    && legacyPositionPct !== defaultSizing.value
+  )
+}
+
 export function normalizeParamsFromValues(
   values: Record<string, unknown>,
   fallback: QuantParams,
@@ -830,12 +875,36 @@ export function normalizeParamsFromValues(
       : values.exchange === 'hyperliquid'
         ? 'hyperliquid'
         : 'binance'
+  const nextSymbol =
+    typeof values.symbol === 'string' && values.symbol.trim()
+      ? values.symbol.trim()
+      : fallback.symbol
+  const legacyPositionPct = normalizeNumber(values.positionPct, fallback.positionPct)
+  const rawSizing = isDefaultSeededRatioSizing(values.sizing, legacyPositionPct)
+    ? undefined
+    : values.sizing
+  const sizingBase = normalizeSizing(rawSizing, legacyPositionPct, nextSymbol)
+  const amount = normalizeNumber(values.positionAmount, sizingBase.value)
+  const sizing = (() => {
+    if (sizingBase.mode === 'QUOTE') {
+      const asset = typeof values.sizingAsset === 'string' && values.sizingAsset.trim()
+        ? values.sizingAsset.trim().toUpperCase()
+        : sizingBase.asset
+      return normalizeSizing({ mode: 'QUOTE', value: amount, asset }, legacyPositionPct, nextSymbol)
+    }
+    if (sizingBase.mode === 'QTY') {
+      const asset = typeof values.sizingAsset === 'string' && values.sizingAsset.trim()
+        ? values.sizingAsset.trim().toUpperCase()
+        : sizingBase.asset
+      return normalizeSizing({ mode: 'QTY', value: amount, asset }, legacyPositionPct, nextSymbol)
+    }
+    return sizingBase
+  })()
+  const derivedPositionPct = derivePositionPctFromSizing(sizing) ?? fallback.positionPct
+
   return {
     exchange,
-    symbol:
-      typeof values.symbol === 'string' && values.symbol.trim()
-        ? values.symbol.trim()
-        : fallback.symbol,
+    symbol: nextSymbol,
     baseTimeframe:
       typeof values.baseTimeframe === 'string' && values.baseTimeframe.trim()
         ? values.baseTimeframe.trim()
@@ -844,7 +913,32 @@ export function normalizeParamsFromValues(
     buyDropPct: normalizeNumber(values.buyDropPct, fallback.buyDropPct),
     sellWindowMin: normalizeNumber(values.sellWindowMin, fallback.sellWindowMin),
     sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
-    positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
+    sizing,
+    positionPct: derivedPositionPct,
+  }
+}
+
+export function syncNormalizedSizingParamValues(
+  values: Record<string, unknown>,
+  params: QuantParams,
+): Record<string, unknown> {
+  const { positionPct: _positionPct, positionAmount: _positionAmount, sizingAsset: _sizingAsset, ...rest } = values
+  if (params.sizing.mode === 'RATIO') {
+    return {
+      ...rest,
+      sizing: params.sizing,
+      positionPct: params.positionPct,
+    }
+  }
+
+  const nextValues: Record<string, unknown> = {
+    ...rest,
+    sizing: params.sizing,
+    positionAmount: params.sizing.value,
+  }
+  if ('asset' in params.sizing && params.sizing.asset) nextValues.sizingAsset = params.sizing.asset
+  return {
+    ...nextValues,
   }
 }
 
@@ -1608,6 +1702,7 @@ function buildRevisionGraphFromCodegenSpec(
       timeframe: conversation.params.baseTimeframe,
       baseTimeframe: conversation.params.baseTimeframe,
       positionPct: conversation.params.positionPct,
+      sizing: conversation.params.sizing,
     },
   }))
 
@@ -1618,13 +1713,16 @@ export function buildStrategyRevisionPromptMessage(
   conversation: ConversationState,
   fallbackMessage: string,
 ): string {
+  const sizing = normalizeSizing(
+    conversation.params.sizing,
+    conversation.params.positionPct,
+    conversation.params.symbol,
+  )
   const contextParts = [
     normalizeRevisionSummaryText(conversation.params.exchange)?.toUpperCase(),
     normalizeRevisionSummaryText(conversation.params.symbol)?.toUpperCase(),
     normalizeRevisionSummaryText(conversation.params.baseTimeframe),
-    Number.isFinite(conversation.params.positionPct)
-      ? `仓位 ${conversation.params.positionPct}%`
-      : null,
+    `仓位 ${formatSizing(sizing, conversation.params.symbol)}`,
   ].filter((item): item is string => Boolean(item))
 
   const revisionGraph = buildRevisionGraphFromCodegenSpec(conversation) ?? conversation.displayLogicGraph
@@ -1826,6 +1924,7 @@ export function createConversationFromServerConversation(
           symbol: seed.params.symbol,
           baseTimeframe: seed.params.baseTimeframe,
           positionPct: seed.params.positionPct,
+          sizing: seed.params.sizing,
         },
         currentValues: seed.paramValues,
         capabilities: null,
@@ -1843,6 +1942,7 @@ export function createConversationFromServerConversation(
     backtestDraftConfig,
   })
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
+  const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
   const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
   const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId,
@@ -1864,10 +1964,11 @@ export function createConversationFromServerConversation(
       ? response.semanticGraph.version
       : 1
   const graphFallbackMeta = {
-    exchange: syncResult?.normalized.exchange ?? nextParams.exchange,
-    symbol: syncResult?.normalized.symbol ?? nextParams.symbol,
-    baseTimeframe: syncResult?.normalized.baseTimeframe ?? nextParams.baseTimeframe,
-    positionPct: syncResult?.normalized.positionPct ?? nextParams.positionPct,
+    exchange: nextParams.exchange,
+    symbol: nextParams.symbol,
+    baseTimeframe: nextParams.baseTimeframe,
+    positionPct: nextParams.positionPct,
+    sizing: nextParams.sizing,
     executionTags: syncResult?.executionTags ?? [],
   }
   const logicGraph = response.specDesc
@@ -1921,7 +2022,7 @@ export function createConversationFromServerConversation(
     messages,
     params: nextParams,
     paramSchema: syncResult?.paramSchema ?? seed.paramSchema,
-    paramValues: nextParamValues,
+    paramValues: normalizedParamValues,
     logicGraph,
     displayLogicGraph,
     codegenSpecDesc: response.specDesc ?? null,
@@ -2021,11 +2122,15 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     item.paramValues && typeof item.paramValues === 'object' && !Array.isArray(item.paramValues)
       ? item.paramValues
       : {}
+  const defaultParamValues = { ...DEFAULT_PARAM_VALUES }
+  if (!('sizing' in baseParams) && !('sizing' in storedValues)) {
+    delete defaultParamValues.sizing
+  }
   const nextParamValues = applyBacktestDraftConfigToValues({
     currentValues: {
-    ...DEFAULT_PARAM_VALUES,
-    ...baseParams,
-    ...storedValues,
+      ...defaultParamValues,
+      ...baseParams,
+      ...storedValues,
     },
     backtestDraftConfig,
   })
@@ -2044,6 +2149,10 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     normalizedBacktestExecutionConfig.paramValues,
     fallbackParams,
   )
+  const normalizedParamValues = syncNormalizedSizingParamValues(
+    normalizedBacktestExecutionConfig.paramValues,
+    nextParams,
+  )
 
   return normalizeHydratedConversationState({
     id: item.id ?? `conv-${Date.now()}`,
@@ -2053,7 +2162,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     messages: Array.isArray(item.messages) ? item.messages : [],
     params: nextParams,
     paramSchema: item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
-    paramValues: normalizedBacktestExecutionConfig.paramValues,
+    paramValues: normalizedParamValues,
     backtestResult: item.backtestResult ?? null,
     logicGraph: item.logicGraph ?? null,
     displayLogicGraph: normalizeDisplayLogicGraph(item.displayLogicGraph),

@@ -13,12 +13,21 @@ import {
   hydrateConversations,
   invalidateConversationPublication,
   isDeployableBacktestResult,
+  normalizeParamsFromValues,
   readPersistedConversations,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
   serializePersistedConversations,
+  syncNormalizedSizingParamValues,
 } from './ai-quant-page-conversation'
+import {
+  buildSizingRequestContext,
+  derivePositionPctFromSizing,
+  formatSizing,
+  normalizeSizing,
+  normalizeSizingFromCanonicalValue,
+} from './semantic-sizing'
 
 describe('ai-quant-page-conversation', () => {
   it('requires at least one trade before a backtest result is considered deployable', () => {
@@ -1716,6 +1725,176 @@ describe('ai-quant-page-conversation', () => {
     expect(restored.conversations[0]?.serverConversationId).toBe('server-conv-1')
   })
 
+  it('hydrates legacy positionPct conversations into semantic ratio sizing', () => {
+    const envelope = {
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+      conversations: [
+        {
+          id: 'conv-legacy-sizing',
+          title: 'legacy sizing',
+          messages: [],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 12,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 12,
+          },
+          updatedAt: 1,
+          schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+        },
+      ],
+    }
+
+    const restored = readPersistedConversations({
+      raw: JSON.stringify(envelope),
+      translate: (key: string) => key,
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+    })
+
+    expect(restored.conversations[0]?.params.sizing).toEqual({ mode: 'RATIO', value: 12 })
+    expect(restored.conversations[0]?.params.positionPct).toBe(12)
+    expect(restored.conversations[0]?.paramValues.sizing).toEqual({ mode: 'RATIO', value: 12 })
+    expect(restored.conversations[0]?.paramValues.positionPct).toBe(12)
+  })
+
+  it('hydrates stale default paramValues sizing from normalized persisted params', () => {
+    const envelope = {
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+      conversations: [
+        {
+          id: 'conv-stale-default-sizing',
+          title: 'stale default sizing',
+          messages: [],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            sizing: { mode: 'RATIO', value: 25 },
+            positionPct: 25,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            sizing: { mode: 'RATIO', value: 10 },
+            positionPct: 25,
+          },
+          updatedAt: 1,
+          schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+        },
+      ],
+    }
+
+    const restored = readPersistedConversations({
+      raw: JSON.stringify(envelope),
+      translate: (key: string) => key,
+      version: String(AI_QUANT_PERSISTED_SCHEMA_VERSION),
+    })
+
+    expect(restored.conversations[0]?.params.sizing).toEqual({ mode: 'RATIO', value: 25 })
+    expect(restored.conversations[0]?.params.positionPct).toBe(25)
+    expect(restored.conversations[0]?.paramValues.sizing).toEqual({ mode: 'RATIO', value: 25 })
+    expect(restored.conversations[0]?.paramValues.positionPct).toBe(25)
+  })
+
+  it('restores server snapshot quote sizing into params, param values, and display graph text', () => {
+    const restored = createConversationFromServerConversation({
+      id: 'server-conv-quote',
+      conversationTitle: 'quote sizing',
+      status: 'PUBLISHED',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+      activeCodegenSessionId: 'session-quote',
+      publishedSnapshotId: 'snapshot-quote',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+        positionAmount: 1000,
+        sizingAsset: 'USDT',
+      },
+      specDesc: {
+        canonicalDigest: 'sha256:quote-restore',
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        entryRules: ['启动时执行'],
+        rules: [],
+      },
+      conversationMessages: [],
+    } as any, (key: string) => key)
+
+    const displayTexts = restored.displayLogicGraph?.blocks.flatMap(block => block.items.map(item => item.text)) ?? []
+
+    expect(restored.params.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(restored.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(restored.paramValues.positionAmount).toBe(1000)
+    expect(restored.paramValues).not.toHaveProperty('positionPct')
+    expect(restored.logicGraph?.meta.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(displayTexts).toContain('仓位: 1000 USDT')
+    expect(displayTexts.join('\n')).not.toContain('1000%')
+  })
+
+  it('restores top-level canonical spec quote sizing when snapshot params omit sizing fields', () => {
+    const restored = createConversationFromServerConversation({
+      id: 'server-conv-top-level-quote',
+      conversationTitle: 'top level quote sizing',
+      status: 'PUBLISHED',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+      activeCodegenSessionId: 'session-top-level-quote',
+      publishedSnapshotId: 'snapshot-top-level-quote',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: null,
+      },
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+        entryRules: ['启动时执行'],
+        rules: [],
+      },
+      conversationMessages: [],
+    } as any, (key: string) => key)
+
+    const displayTexts = restored.displayLogicGraph?.blocks.flatMap(block => block.items.map(item => item.text)) ?? []
+
+    expect(restored.params.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(restored.paramValues.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(restored.paramValues).not.toHaveProperty('positionPct')
+    expect(displayTexts).toContain('仓位: 1000 USDT')
+    expect(displayTexts.join('\n')).not.toContain('1000%')
+  })
+
   it('does not require republish when only backtest range changes', () => {
     expect(requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: 'snapshot-1',
@@ -1749,6 +1928,26 @@ describe('ai-quant-page-conversation', () => {
         symbol: 'BTCUSDT',
         baseTimeframe: '15m',
         backtestLeverage: 3,
+      },
+    })).toBe(false)
+  })
+
+  it('does not require republish when published ratio sizing uses canonical decimal semantics', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '1m',
+        sizing: { mode: 'RATIO', value: 0.01 },
+      },
+      editableParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '1m',
+        sizing: { mode: 'RATIO', value: 1 },
       },
     })).toBe(false)
   })
@@ -2212,6 +2411,180 @@ describe('ai-quant-page-conversation', () => {
       expect(message).toContain('BINANCE')
       expect(message).toContain('请直接说明你要修改的原子语义')
     })
+
+    it('uses semantic quote sizing in revision prompts', () => {
+      const conversation = createConversation((key: string) => key)
+      const message = buildStrategyRevisionPromptMessage({
+        ...conversation,
+        params: {
+          ...conversation.params,
+          symbol: 'BTCUSDT',
+          sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+          positionPct: 10,
+        },
+      }, '请继续补充')
+
+      expect(message).toContain('仓位 1000 USDT')
+      expect(message).not.toContain('仓位 1000%')
+    })
   })
 
+})
+
+describe('semantic sizing helpers', () => {
+  it('migrates legacy positionPct into ratio sizing', () => {
+    expect(normalizeSizing(null, 12)).toEqual({ mode: 'RATIO', value: 12 })
+    expect(derivePositionPctFromSizing({ mode: 'RATIO', value: 12 })).toBe(12)
+  })
+
+  it('formats quote and quantity sizing without a percent suffix', () => {
+    expect(formatSizing({ mode: 'QUOTE', value: 1000, asset: 'USDT' }, 'BTCUSDT')).toBe('1000 USDT')
+    expect(formatSizing({ mode: 'QTY', value: 0.01 }, 'BTCUSDT')).toBe('0.01 BTC')
+  })
+
+  it('normalizes canonical ratio decimals into frontend percent values', () => {
+    expect(normalizeSizingFromCanonicalValue({ mode: 'RATIO', value: 0.1 }, 'BTCUSDT', 10)).toEqual({
+      mode: 'RATIO',
+      value: 10,
+    })
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QUOTE', value: 1000 }, 'BTCUSDT', 10)).toEqual({
+      mode: 'QUOTE',
+      value: 1000,
+      asset: 'USDT',
+    })
+  })
+
+  it('preserves explicit invalid sizing so request validation can block it', () => {
+    const quoteSizing = normalizeSizing({ mode: 'QUOTE', value: '' }, 12, 'BTCUSDT')
+    expect(quoteSizing.mode).toBe('QUOTE')
+    expect(Number.isNaN(quoteSizing.value)).toBe(true)
+
+    const unknownSizing = normalizeSizing({ mode: 'mystery', value: 1000 }, 12, 'BTCUSDT')
+    expect(unknownSizing.mode).toBe('INVALID')
+    expect(Number.isNaN(unknownSizing.value)).toBe(true)
+  })
+
+  it('infers quantity asset from canonical sizing symbols', () => {
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSDT', 10)).toEqual({
+      mode: 'QTY',
+      value: 0.01,
+      asset: 'BTC',
+    })
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSDC', 10)).toEqual({
+      mode: 'QTY',
+      value: 0.01,
+      asset: 'BTC',
+    })
+    expect(normalizeSizingFromCanonicalValue({ mode: 'QTY', value: 0.01 }, 'BTCUSD', 10)).toEqual({
+      mode: 'QTY',
+      value: 0.01,
+      asset: 'BTC',
+    })
+  })
+
+  it('builds request context without legacy positionPct for quote sizing', () => {
+    expect(buildSizingRequestContext({ mode: 'QUOTE', value: 1000, asset: 'USDT' })).toEqual([
+      'sizing.mode=QUOTE',
+      'sizing.value=1000',
+      'sizing.asset=USDT',
+    ])
+    expect(buildSizingRequestContext({ mode: 'RATIO', value: 10 })).toEqual([
+      'sizing.mode=RATIO',
+      'sizing.value=10',
+      'positionPct=10',
+    ])
+  })
+
+  it('defaults quote request context asset to USDT when missing', () => {
+    expect(buildSizingRequestContext({ mode: 'QUOTE', value: 1000 })).toEqual([
+      'sizing.mode=QUOTE',
+      'sizing.value=1000',
+      'sizing.asset=USDT',
+    ])
+  })
+
+  it('builds quantity request context without legacy positionPct', () => {
+    expect(buildSizingRequestContext({ mode: 'QTY', value: 0.01, asset: 'BTC' })).toEqual([
+      'sizing.mode=QTY',
+      'sizing.value=0.01',
+      'sizing.asset=BTC',
+    ])
+  })
+
+  it('syncs quote sizing param values without restoring legacy positionPct', () => {
+    const values = syncNormalizedSizingParamValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 1000,
+      positionAmount: 10,
+      sizingAsset: 'USDC',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      positionPct: 10,
+    })
+
+    expect(values.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(values.positionAmount).toBe(1000)
+    expect(values.sizingAsset).toBe('USDT')
+    expect(values).not.toHaveProperty('positionPct')
+  })
+
+  it('normalizes quote sizing from dynamic position amount fields', () => {
+    const params = normalizeParamsFromValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      positionAmount: 750,
+      sizingAsset: 'USDC',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      positionPct: 10,
+    })
+
+    expect(params.sizing).toEqual({ mode: 'QUOTE', value: 750, asset: 'USDC' })
+    expect(params.positionPct).toBe(10)
+  })
+
+  it('syncs quantity sizing param values without restoring legacy positionPct', () => {
+    const values = syncNormalizedSizingParamValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 50,
+      positionAmount: 1000,
+      sizingAsset: 'USDT',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'QTY', value: 0.25, asset: 'BTC' },
+      positionPct: 10,
+    })
+
+    expect(values.sizing).toEqual({ mode: 'QTY', value: 0.25, asset: 'BTC' })
+    expect(values.positionAmount).toBe(0.25)
+    expect(values.sizingAsset).toBe('BTC')
+    expect(values).not.toHaveProperty('positionPct')
+  })
+
+  it('syncs ratio sizing param values without stale fixed amount fields', () => {
+    const values = syncNormalizedSizingParamValues({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionAmount: 1000,
+      sizingAsset: 'USDT',
+    }, {
+      ...createConversation((key: string) => key).params,
+      sizing: { mode: 'RATIO', value: 25 },
+      positionPct: 25,
+    })
+
+    expect(values.sizing).toEqual({ mode: 'RATIO', value: 25 })
+    expect(values.positionPct).toBe(25)
+    expect(values).not.toHaveProperty('positionAmount')
+    expect(values).not.toHaveProperty('sizingAsset')
+  })
 })

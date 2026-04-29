@@ -82,6 +82,52 @@ const DECISION_PROGRAMS = [
     expect(profile.sizing).toEqual({ mode: 'RATIO', value: 0.1, source: 'literal' })
   })
 
+  it('normalizes compiled pct_equity one percent literal back to ratio semantics', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const DECISION_PROGRAMS = [
+  {
+    id: 'decision_01_entry',
+    actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 1 } }],
+  },
+]
+`)
+
+    expect(profile.sizing).toEqual({ mode: 'RATIO', value: 0.01, source: 'literal' })
+  })
+
+  it('normalizes compiled pct_equity sub-one percent literal back to ratio semantics', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const DECISION_PROGRAMS = [
+  {
+    id: 'decision_01_entry',
+    actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 0.5 } }],
+  },
+]
+`)
+
+    expect(profile.sizing).toEqual({ mode: 'RATIO', value: 0.005, source: 'literal' })
+  })
+
+  it('prefers compiled open sizing over full-position close quantity', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const DECISION_PROGRAMS = [
+  {
+    id: 'decision_01_exit',
+    actions: [{ kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } }],
+  },
+  {
+    id: 'decision_02_entry',
+    actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 1 } }],
+  },
+]
+`)
+
+    expect(profile.sizing).toEqual({ mode: 'RATIO', value: 0.01, source: 'literal' })
+  })
+
   it('extracts risk guard breach actions and stop-loss rule mappings from compiled guard programs', () => {
     const service = new ScriptProfileExtractorService()
     const profile = service.extract(`

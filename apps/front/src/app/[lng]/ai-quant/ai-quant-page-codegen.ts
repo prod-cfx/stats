@@ -29,7 +29,9 @@ import {
   invalidateConversationPublication,
   normalizeClarificationGate,
   normalizeParamsFromValues,
+  syncNormalizedSizingParamValues,
 } from './ai-quant-page-conversation'
+import { buildSizingRequestContext } from './semantic-sizing'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -395,16 +397,19 @@ export function applyCodegenResponseToConversationState(args: {
   const shouldUpdateGraph =
     (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
+  const syncFallback = {
+    exchange: targetParams.exchange,
+    symbol: targetParams.symbol,
+    baseTimeframe: targetParams.baseTimeframe,
+    positionPct: targetParams.positionPct,
+    sizing: targetParams.sizing,
+  }
+  const syncCurrentValues = syncNormalizedSizingParamValues(conversation.paramValues, targetParams)
   const syncResult = shouldUpdateGraph
     ? syncStrategyParamsFromCodegen({
         spec: response.specDesc,
-        fallback: {
-          exchange: targetParams.exchange,
-          symbol: targetParams.symbol,
-          baseTimeframe: targetParams.baseTimeframe,
-          positionPct: targetParams.positionPct,
-        },
-        currentValues: conversation.paramValues,
+        fallback: syncFallback,
+        currentValues: syncCurrentValues,
         capabilities: backtestCapabilities,
         contextText: [trimmedMessage, response.assistantPrompt]
           .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -459,18 +464,21 @@ export function applyCodegenResponseToConversationState(args: {
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
     : conversation.paramSchema
   const nextParams = normalizeParamsFromValues(nextParamValues, conversation.params)
+  const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
   const nextGraphStatus =
     response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
+  const graphFallbackMeta = {
+    exchange: nextParams.exchange,
+    symbol: nextParams.symbol,
+    baseTimeframe: nextParams.baseTimeframe,
+    positionPct: nextParams.positionPct,
+    sizing: nextParams.sizing,
+    executionTags: syncResult?.executionTags ?? [],
+  }
   const nextGraph = shouldUpdateGraph
     ? buildLogicGraphFromCodegenSpec(
         response.specDesc,
-        {
-          exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
-          symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
-          baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
-          positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
-          executionTags: syncResult?.executionTags ?? [],
-        },
+        graphFallbackMeta,
         nextVersion,
         nextGraphStatus,
       )
@@ -478,13 +486,7 @@ export function applyCodegenResponseToConversationState(args: {
   const nextDisplayLogicGraph = shouldUpdateGraph
     ? buildDisplayLogicGraphFromCodegenSpec({
         specDesc: response.specDesc,
-        fallbackMeta: {
-          exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
-          symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
-          baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
-          positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
-          executionTags: syncResult?.executionTags ?? [],
-        },
+        fallbackMeta: graphFallbackMeta,
       })
     : conversation.displayLogicGraph
   const nextPublishedScriptCode = (() => {
@@ -635,7 +637,7 @@ export function applyCodegenResponseToConversationState(args: {
     publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
     params: nextParams,
     paramSchema: nextParamSchema,
-    paramValues: nextParamValues,
+    paramValues: normalizedParamValues,
     logicGraph: nextGraph,
     displayLogicGraph: nextDisplayLogicGraph,
     semanticGraph: nextSemanticGraph,
@@ -821,11 +823,33 @@ function getSemanticRequestValidationError(params: QuantParams): string | null {
     return '请求前校验失败：请先确认策略周期。'
   }
 
-  if (!Number.isFinite(params.positionPct) || params.positionPct <= 0 || params.positionPct > 100) {
-    return '请求前校验失败：仓位比例需要在 0 到 100 之间。'
+  const sizing = params.sizing
+  if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {
+    return '请求前校验失败：仓位配置无效。'
   }
 
-  return null
+  if (sizing.mode === 'RATIO') {
+    if (!Number.isFinite(sizing.value) || sizing.value <= 0 || sizing.value > 100) {
+      return '请求前校验失败：仓位比例需要在 0 到 100 之间。'
+    }
+    return null
+  }
+
+  if (sizing.mode === 'QUOTE') {
+    if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
+      return '请求前校验失败：固定金额需要大于 0。'
+    }
+    return null
+  }
+
+  if (sizing.mode === 'QTY') {
+    if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
+      return '请求前校验失败：固定数量需要大于 0。'
+    }
+    return null
+  }
+
+  return '请求前校验失败：仓位配置无效。'
 }
 
 function buildSemanticRequestMessage(args: {
@@ -846,7 +870,7 @@ function buildSemanticRequestMessage(args: {
     `exchange=${params.exchange}`,
     `symbol=${params.symbol.trim()}`,
     `timeframe=${params.baseTimeframe.trim()}`,
-    `positionPct=${params.positionPct}`,
+    ...buildSizingRequestContext(params.sizing),
   ].join('\n')
 }
 

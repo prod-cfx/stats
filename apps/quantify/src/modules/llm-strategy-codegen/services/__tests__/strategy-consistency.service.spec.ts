@@ -152,6 +152,53 @@ strategy
     expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'passed')).toBe(true)
   })
 
+  it('passes when compiled pct-equity sizing is exactly one percent', () => {
+    const canonicalSpec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        '突破布林带上轨时做空',
+        '跌破布林带下轨时做多',
+      ],
+      exitRules: ['回到中轨时平仓'],
+      riskRules: { positionPct: 1, stopLossPct: 1, exchange: 'okx', marketType: 'perp' },
+    })
+    canonicalSpec.sizing = { mode: 'RATIO', value: 0.01 }
+    for (const rule of canonicalSpec.rules) {
+      for (const action of rule.actions) {
+        if (action.sizing?.mode === 'RATIO') {
+          action.sizing = { mode: 'RATIO', value: 0.01 }
+        }
+      }
+    }
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 1,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.scriptProfile.sizing).toEqual({ mode: 'RATIO', value: 0.01, source: 'literal' })
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      key: 'sizing.mode',
+      status: 'passed',
+    }))
+  })
+
   it('fails when compiled execution market metadata drifts from canonical spec', () => {
     const canonicalSpec = canonicalBuilder.build({
       symbols: ['BTCUSDT'],

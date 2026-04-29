@@ -546,6 +546,88 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     ])
   })
 
+  it('renders quote semantic sizing from fallback metadata without appending a percent sign', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: null,
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('仓位: 1000 USDT')
+    expect(text).not.toContain('1000%')
+  })
+
+  it('renders quote semantic sizing on action labels without appending a percent sign', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-fixed-quote',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [
+              {
+                type: 'OPEN_LONG',
+                sizing: { mode: 'QUOTE', value: 1000, asset: 'USDT' },
+              },
+            ],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('开多 1000 USDT')
+    expect(text).toContain('仓位: 1000 USDT')
+    expect(text).not.toContain('1000%')
+  })
+
+  it('maps legacy fixed_ratio sizing to semantic ratio instead of stale fallback positionPct', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-legacy-fixed-ratio',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [
+              {
+                type: 'OPEN_LONG',
+                sizing: { mode: 'fixed_ratio', value: 0.2 },
+              },
+            ],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 35,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('开多 20%')
+    expect(text).toContain('仓位: 20%')
+    expect(text).not.toContain('35%')
+  })
+
   it('renders official strategy plaza atomic conditions without unsupported placeholders', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

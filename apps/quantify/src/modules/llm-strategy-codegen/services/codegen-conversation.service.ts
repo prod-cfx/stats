@@ -72,7 +72,7 @@ import { CodegenConversationStateMachine } from './codegen-conversation-state-ma
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { ConversationSemanticEditService } from './conversation-semantic-edit.service'
-import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
