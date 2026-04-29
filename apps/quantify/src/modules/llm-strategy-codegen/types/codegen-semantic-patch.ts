@@ -1,4 +1,5 @@
 import type {
+  SemanticAtomContract,
   SemanticEvidence,
   SemanticExpression,
   SemanticNodeStatus,
@@ -26,19 +27,23 @@ export interface CodegenSemanticPatch {
     phase: 'entry' | 'exit' | 'risk' | 'gate'
     sideScope?: 'long' | 'short' | 'both'
     params?: CodegenSemanticTriggerParams
+    contracts?: SemanticAtomContract[]
   }>
   actions?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     params?: Record<string, unknown>
+    contracts?: SemanticAtomContract[]
   }>
   risk?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     params: Record<string, unknown>
+    contracts?: SemanticAtomContract[]
   }>
   position?: (CodegenSemanticNodeEnvelope & {
     sizing?: SemanticPositionSizingContract | null
     mode: string
     value: number
     positionMode: string
+    contracts?: SemanticAtomContract[]
   }) | null
 }
