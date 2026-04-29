@@ -694,11 +694,10 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         signal.signalType === 'EXIT'
 
       if (isCloseSignal) {
-        const symbolCode = signal.symbol?.code
         const positionSideForClose = this.mapPositionSide(signal.direction)
-        const normalizedPositionSymbol = symbolCode ? normalizeLedgerSymbol(symbolCode) : null
+        const closeIdentity = this.resolveClosePositionIdentity(signal, positionSideForClose)
 
-        if (!normalizedPositionSymbol || !positionSideForClose) {
+        if (!closeIdentity) {
           const reason = 'Cannot close position: missing symbol or position side'
           const execution = await this.executionRepository.create({
             signal: { connect: { id: signal!.id } },
@@ -712,11 +711,13 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           return { type: 'skip', reason, executionId: execution.id }
         }
 
-        const openPosition = await this.executorRepository.findOpenPositionForClose(
-          account.id,
-          normalizedPositionSymbol,
-          positionSideForClose,
-        )
+        const openPosition = await this.executorRepository.findOpenPositionForClose({
+          accountId: account.id,
+          exchangeId: closeIdentity.exchangeId,
+          marketType: closeIdentity.marketType,
+          symbol: closeIdentity.symbol,
+          positionSide: closeIdentity.positionSide,
+        })
 
         if (!openPosition || new Decimal(openPosition.quantity).lte(0)) {
           const reason = 'No open position to close for this signal'
@@ -745,6 +746,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         config,
         closePositionQuantity,
         riskProfile,
+        this.readExpectedRuntimeMarketType(signal),
       )
       if (!orderParamsResult.ok) {
         const reason = (orderParamsResult as { ok: false; reason: string }).reason
@@ -820,12 +822,14 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     config: StrategySignalsRuntimeConfig,
     closePositionQuantity?: Decimal,
     riskProfile?: StrategyInstanceRiskProfile | null,
+    runtimeMarketType?: MarketType | null,
   ): { ok: true; params: OrderParams; quoteBudget: Decimal } | { ok: false; reason: string } {
     const symbolMeta = signal?.symbol
     if (!symbolMeta) return { ok: false, reason: 'Signal missing symbol metadata' }
 
     const exchangeId = this.normalizeExchangeId(symbolMeta.exchange)
-    const marketType = this.normalizeMarketType(symbolMeta.instrumentType)
+    const symbolMarketType = this.normalizeMarketType(symbolMeta.instrumentType)
+    const marketType = runtimeMarketType ?? symbolMarketType
     if (!exchangeId || !marketType) {
       return { ok: false, reason: 'Unsupported exchange or instrument type' }
     }
@@ -840,7 +844,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const unifiedSymbol = this.buildUnifiedSymbol(symbolMeta)
+    const unifiedSymbol = this.buildUnifiedSymbol(symbolMeta, marketType)
     const side = this.mapOrderSide(signal.direction)
     if (!side) return { ok: false, reason: 'Unsupported signal direction' }
 
@@ -1095,6 +1099,33 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private resolveClosePositionIdentity(
+    signal: LoadedSignal,
+    positionSide: PositionSide | null,
+  ): {
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+    positionSide: PositionSide
+  } | null {
+    const symbolMeta = signal.symbol
+    const symbolCode = symbolMeta?.code
+    const exchangeId = this.normalizeExchangeId(symbolMeta?.exchange)
+    const marketType = this.readExpectedRuntimeMarketType(signal)
+      ?? (symbolMeta ? this.normalizeMarketType(symbolMeta.instrumentType) : null)
+
+    if (!symbolCode || !exchangeId || !marketType || !positionSide) {
+      return null
+    }
+
+    return {
+      exchangeId,
+      marketType,
+      symbol: normalizeLedgerSymbol(symbolCode),
+      positionSide,
+    }
+  }
+
   private normalizeExchangeId(exchange?: string) {
     if (!exchange) return null
     const normalized = exchange.trim().toLowerCase()
@@ -1115,20 +1146,24 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     symbolInstrumentType: PrismaSymbol['instrumentType']
     orderMarketType: MarketType
   }): { ok: true } | { ok: false; reason: 'MARKET_TYPE_MISMATCH' } {
+    if (input.expectedMarketType) {
+      return input.expectedMarketType === input.orderMarketType
+        ? { ok: true }
+        : { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    }
+
     const symbolMarketType = this.normalizeMarketType(input.symbolInstrumentType)
     if (!symbolMarketType) return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
     if (symbolMarketType !== input.orderMarketType) return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
-    if (input.expectedMarketType && input.expectedMarketType !== input.orderMarketType) {
-      return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
-    }
     return { ok: true }
   }
 
-  private buildUnifiedSymbol(symbol: PrismaSymbol): string {
+  private buildUnifiedSymbol(symbol: PrismaSymbol, marketType?: MarketType | null): string {
     const base = symbol.baseAsset?.toUpperCase() ?? ''
     const quote = symbol.quoteAsset?.toUpperCase() ?? ''
     const pair = `${base}/${quote}`
-    if (symbol.instrumentType === 'PERPETUAL' || symbol.instrumentType === 'FUTURE') {
+    const resolvedMarketType = marketType ?? this.normalizeMarketType(symbol.instrumentType)
+    if (resolvedMarketType === 'perp') {
       return `${pair}:PERP`
     }
     return pair

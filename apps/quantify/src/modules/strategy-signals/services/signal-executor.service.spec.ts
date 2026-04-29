@@ -457,6 +457,77 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('uses runtime market identity when locating close positions', async () => {
+    const service = createService()
+    const executorRepository = (service as any).executorRepository
+    const executionRepository = (service as any).executionRepository
+    const accountsService = (service as any).accountsService
+
+    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
+    executorRepository.lockAccount = jest.fn().mockResolvedValue([
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal(1000),
+        initialBalance: new Prisma.Decimal(1000),
+      },
+    ])
+    executorRepository.findOpenPositionForClose = jest.fn().mockResolvedValue({
+      id: 'pos-perp-1',
+      quantity: new Prisma.Decimal('0.25'),
+    })
+    executorRepository.findRiskProfileByStrategyInstanceId = jest.fn().mockResolvedValue(null)
+    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-close-1' })
+
+    const result = await (service as any).prepareExecution(
+      {
+        id: 'sig-close-1',
+        direction: 'CLOSE_LONG',
+        signalType: 'EXIT',
+        entryPrice: '100',
+        metadata: {
+          runtimeProvenance: {
+            marketType: 'perp',
+          },
+        },
+        symbol: {
+          code: 'BTCUSDT:SPOT',
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      } as any,
+      { id: 'account-1', userId: 'user-1' } as any,
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      'SELL',
+      'LONG',
+    )
+
+    expect(result).toMatchObject({
+      type: 'ready',
+      orderParams: expect.objectContaining({
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        reduceOnly: true,
+        amount: 0.25,
+      }),
+    })
+    expect(executorRepository.findOpenPositionForClose).toHaveBeenCalledWith({
+      accountId: 'account-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+    })
+    expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
+  })
+
   it('does not markExecuted when a market order stays open with 0 fill after reconciliation', async () => {
     const prisma = {}
     const configService = { get: jest.fn() }
