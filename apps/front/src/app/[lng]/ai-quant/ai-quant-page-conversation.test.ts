@@ -110,6 +110,58 @@ describe('ai-quant-page-conversation', () => {
     })).toBeNull()
   })
 
+  it('does not restore lastBacktestRef when its execution config is invalid', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-invalid-last-backtest',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-invalid',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-invalid',
+        publishedSnapshotId: 'snapshot-invalid',
+        config: {
+          range: {
+            preset: '7D',
+          },
+          execution: {
+            initialCash: 0,
+            leverage: -1,
+            slippageBps: -10,
+            feeBps: -5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 0.02,
+          totalReturnPct: 0.03,
+          winRatePct: 100,
+          tradeCount: 1,
+          marketType: 'spot',
+        },
+        completedAt: '2026-04-23T10:40:43.354Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toBeNull()
+    expect(conversation.backtestDraftConfig).toBeNull()
+  })
+
   it('preserves open-trade summary fields when building a backtest summary result', () => {
     expect(buildBacktestSummaryResult({
       id: 'bt-open-only',

@@ -1135,8 +1135,12 @@ function normalizeLastBacktestExecutionConfig(
 
   if (
     !Number.isFinite(initialCash)
+    || initialCash <= 0
     || !Number.isFinite(slippageBps)
+    || slippageBps < 0
     || !Number.isFinite(feeBps)
+    || feeBps < 0
+    || (candidate.leverage !== undefined && candidate.leverage !== null && (!Number.isFinite(leverage) || leverage <= 0))
     || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
     || allowPartial === null
   ) {
