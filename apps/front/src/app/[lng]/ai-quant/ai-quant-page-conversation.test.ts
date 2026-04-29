@@ -99,6 +99,15 @@ describe('ai-quant-page-conversation', () => {
       backtestPriceSource: 'close',
       backtestAllowPartial: 'maybe',
     })).toBeNull()
+
+    expect(buildBacktestDraftConfigFromValues({
+      backtestRangePreset: '30D',
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+    })).toBeNull()
   })
 
   it('preserves open-trade summary fields when building a backtest summary result', () => {

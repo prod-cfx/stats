@@ -1158,6 +1158,9 @@ export function buildBacktestDraftConfigFromValues(
 ): AiQuantBacktestDraftConfig | null {
   const range = resolveBacktestRangeInput(values)
   const execution = resolveBacktestExecutionConfig(values)
+  const hasAllowPartialInput =
+    values.backtestAllowPartial !== undefined
+    && values.backtestAllowPartial !== null
   if (
     !Number.isFinite(execution.initialCash)
     || execution.initialCash <= 0
@@ -1166,6 +1169,7 @@ export function buildBacktestDraftConfigFromValues(
     || execution.slippageBps < 0
     || !Number.isFinite(execution.feeBps)
     || execution.feeBps < 0
+    || !hasAllowPartialInput
     || !execution.allowPartialValid
     || (
     execution.priceSource !== 'open'
