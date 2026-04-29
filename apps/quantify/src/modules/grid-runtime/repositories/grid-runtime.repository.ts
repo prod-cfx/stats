@@ -30,6 +30,10 @@ export interface CreateGridRuntimeInstanceWithLevelsInput {
   levels: CreateGridRuntimeLevelInput[]
 }
 
+export interface CreateGridRuntimeInstanceWithPlanInput extends CreateGridRuntimeInstanceWithLevelsInput {
+  plannedOrders: Array<Omit<CreatePlannedGridOrderInput, 'gridRuntimeInstanceId' | 'gridLevelId'> & { levelIndex: number }>
+}
+
 export interface FindGridRuntimeInstanceForUserInput {
   id: string
   userId: string
@@ -141,6 +145,34 @@ export class GridRuntimeRepository {
     })
   }
 
+  async createInstanceWithPlan(input: CreateGridRuntimeInstanceWithPlanInput) {
+    return this.txHost.withTransaction(async () => {
+      const instance = await this.createInstanceWithLevels(input)
+      const levelsByIndex = new Map(instance.levels.map(level => [level.levelIndex, level.id]))
+
+      for (const order of input.plannedOrders) {
+        const gridLevelId = levelsByIndex.get(order.levelIndex)
+        if (!gridLevelId) {
+          throw new Error('grid_runtime_missing_level_for_planned_order')
+        }
+        await this.createPlannedOrder({
+          gridRuntimeInstanceId: instance.id,
+          gridLevelId,
+          clientOrderId: order.clientOrderId,
+          side: order.side,
+          role: order.role,
+          orderType: order.orderType,
+          timeInForce: order.timeInForce,
+          price: order.price,
+          quantity: order.quantity,
+          rawPayload: order.rawPayload,
+        })
+      }
+
+      return instance
+    })
+  }
+
   findInstanceForUser(input: FindGridRuntimeInstanceForUserInput) {
     return this.txHost.tx.gridRuntimeInstance.findFirst({
       where: {
@@ -155,6 +187,13 @@ export class GridRuntimeRepository {
     return this.txHost.tx.gridOrder.findMany({
       where: { gridRuntimeInstanceId: instanceId },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    })
+  }
+
+  listFills(instanceId: string) {
+    return this.txHost.tx.gridFill.findMany({
+      where: { gridRuntimeInstanceId: instanceId },
+      orderBy: [{ filledAt: 'asc' }, { id: 'asc' }],
     })
   }
 

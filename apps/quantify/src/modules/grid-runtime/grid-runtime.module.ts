@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
+import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { GridRuntimeController } from './controllers/grid-runtime.controller'
 import { TradingModule } from '../trading/trading.module'
 import { GridRuntimeRepository } from './repositories/grid-runtime.repository'
 import { GridOrderPlannerService } from './services/grid-order-planner.service'
@@ -10,6 +12,7 @@ import { GridRuntimeStateMachineService } from './services/grid-runtime-state-ma
 
 @Module({
   imports: [PrismaModule, TradingModule],
+  controllers: [GridRuntimeController],
   providers: [
     GridRuntimeRepository,
     GridOrderPlannerService,
@@ -17,6 +20,7 @@ import { GridRuntimeStateMachineService } from './services/grid-runtime-state-ma
     GridOrderSyncService,
     GridRuntimeService,
     GridRuntimeSchedulerService,
+    AccountStrategyCallerIdentityService,
   ],
   exports: [GridRuntimeService],
 })

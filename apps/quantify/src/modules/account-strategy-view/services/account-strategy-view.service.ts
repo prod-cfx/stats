@@ -19,6 +19,8 @@ import { ConfigService } from '@nestjs/config'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { GridRuntimeService } from '@/modules/grid-runtime/services/grid-runtime.service'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
@@ -108,6 +110,7 @@ export class AccountStrategyViewService {
     private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
     @Optional() private readonly positionsService?: PositionsService,
     @Optional() private readonly positionSyncService?: PositionSyncService,
+    @Optional() private readonly gridRuntimeService?: GridRuntimeService,
   ) {}
 
   async listStrategies(
@@ -1242,12 +1245,26 @@ export class AccountStrategyViewService {
         strategyInstanceId: deployResult.strategyInstanceId,
         ...riskProfile,
       })
-      await this.requireRuntimeExecutionStateService().initializeStatesForDeploy({
-        strategyInstanceId: deployResult.strategyInstanceId,
-        publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
-        snapshotHash: resolvedDeploy.snapshotHash,
-        snapshot: resolvedDeploy.snapshot,
-      })
+      if (this.hasAstOrderPrograms(resolvedDeploy.snapshot)) {
+        await this.requireGridRuntimeService().createFromDeployment({
+          strategyInstanceId: deployResult.strategyInstanceId,
+          publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
+          userId: dto.userId,
+          exchangeAccountId: resolvedDeploy.exchangeAccountId!,
+          exchangeId: resolvedDeploy.exchange,
+          marketType: resolvedDeploy.marketType,
+          symbol: resolvedDeploy.symbol,
+          astSnapshot: this.readRecord(this.readRecord(resolvedDeploy.snapshot)?.astSnapshot),
+          currentPrice: await this.resolveGridDeploymentCurrentPrice(resolvedDeploy.symbol),
+        })
+      } else {
+        await this.requireRuntimeExecutionStateService().initializeStatesForDeploy({
+          strategyInstanceId: deployResult.strategyInstanceId,
+          publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
+          snapshotHash: resolvedDeploy.snapshotHash,
+          snapshot: resolvedDeploy.snapshot,
+        })
+      }
       await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
       await this.repo.activateStrategyInstanceForRuntime({
         strategyInstanceId: deployResult.strategyInstanceId,
@@ -1496,6 +1513,23 @@ export class AccountStrategyViewService {
     }
 
     return this.runtimeExecutionStateService
+  }
+
+  private requireGridRuntimeService(): GridRuntimeService {
+    if (!this.gridRuntimeService) {
+      throw new DomainException('account_strategy.deploy_grid_runtime_service_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+
+    return this.gridRuntimeService
+  }
+
+  private async resolveGridDeploymentCurrentPrice(symbol: string): Promise<string | null> {
+    if (!this.marketDataReadGateway) return null
+    const quote = await this.marketDataReadGateway.getLatestQuote(symbol)
+    return quote.lastPrice
   }
 
   private assertStrategyVisible<T extends { status?: string | null }>(
@@ -2280,26 +2314,28 @@ export class AccountStrategyViewService {
       })
     }
 
-    const runtimeExecutionStateService = this.requireRuntimeExecutionStateService()
-    try {
-      const semanticKeys = runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot(snapshot)
-      if (
-        !semanticKeys.length
-        && !this.isContinuousOfficialStrategyPlazaSnapshot(snapshot)
-        && !this.hasDeployableCompiledDecisionSnapshot(snapshot)
-      ) {
+    if (!this.hasDeployableCompiledOrderProgramSnapshot(snapshot)) {
+      const runtimeExecutionStateService = this.requireRuntimeExecutionStateService()
+      try {
+        const semanticKeys = runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot(snapshot)
+        if (
+          !semanticKeys.length
+          && !this.isContinuousOfficialStrategyPlazaSnapshot(snapshot)
+          && !this.hasDeployableCompiledDecisionSnapshot(snapshot)
+        ) {
+          throw new DeploySnapshotRequiresRepublishException({
+            publishedSnapshotId: snapshot.id,
+          })
+        }
+      } catch (error) {
+        if (error instanceof DomainException || error instanceof DeploySnapshotRequiresRepublishException) {
+          throw error
+        }
+
         throw new DeploySnapshotRequiresRepublishException({
           publishedSnapshotId: snapshot.id,
         })
       }
-    } catch (error) {
-      if (error instanceof DomainException || error instanceof DeploySnapshotRequiresRepublishException) {
-        throw error
-      }
-
-      throw new DeploySnapshotRequiresRepublishException({
-        publishedSnapshotId: snapshot.id,
-      })
     }
 
     const strategyConfig = this.readRecord((snapshot as Record<string, unknown>).strategyConfig)
@@ -2509,6 +2545,22 @@ export class AccountStrategyViewService {
       const actionRecord = this.readRecord(action)
       return !!actionRecord && !!this.readString(actionRecord, ['kind'])
     })
+  }
+
+  private hasDeployableCompiledOrderProgramSnapshot(snapshot: unknown): boolean {
+    const record = this.readRecord(snapshot)
+    const astSnapshot = this.readRecord(record?.astSnapshot)
+    if (!record || !astSnapshot) return false
+    if (this.readString(astSnapshot, ['astVersion']) !== 'csa.v1') return false
+    if (!this.isCompilerV1Snapshot(record, astSnapshot)) return false
+    return this.hasAstOrderPrograms(record)
+  }
+
+  private hasAstOrderPrograms(snapshot: unknown): boolean {
+    const record = this.readRecord(snapshot)
+    const astSnapshot = this.readRecord(record?.astSnapshot)
+    const orderPrograms = astSnapshot?.orderPrograms
+    return Array.isArray(orderPrograms) && orderPrograms.length > 0
   }
 
   private readSnapshotMarketType(source: Record<string, unknown> | null | undefined): MarketType | null {

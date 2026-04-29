@@ -54,6 +54,64 @@ describe('GridRuntimeRepository', () => {
     })
   })
 
+  it('creates an instance and its initial planned orders atomically', async () => {
+    const tx = {
+      gridRuntimeInstance: {
+        create: jest.fn().mockResolvedValue({
+          id: 'grid-1',
+          levels: [
+            { id: 'level-0', levelIndex: 0 },
+            { id: 'level-1', levelIndex: 1 },
+          ],
+        }),
+      },
+      gridOrder: {
+        create: jest.fn().mockResolvedValue({ id: 'order-1' }),
+      },
+    }
+    const txHost = createTxHost(tx)
+    const repo = new GridRuntimeRepository(txHost)
+
+    await repo.createInstanceWithPlan({
+      strategyInstanceId: 'strategy-instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      mode: 'spot',
+      configSnapshot: { mode: 'spot', lowerPrice: '90' },
+      levels: [
+        { levelIndex: 0, price: '90', side: 'buy', role: 'spot_buy', quoteBudget: '100', status: 'planned' },
+        { levelIndex: 1, price: '100', side: 'buy', role: 'spot_buy', quoteBudget: '100', status: 'planned' },
+      ],
+      plannedOrders: [{
+        levelIndex: 0,
+        side: 'buy',
+        role: 'spot_buy',
+        orderType: 'limit',
+        timeInForce: 'gtc',
+        price: '90',
+        quantity: '1.111111111111111111',
+        rawPayload: { source: 'deployment' },
+      }],
+    })
+
+    expect(txHost.withTransaction).toHaveBeenCalledTimes(1)
+    expect(tx.gridOrder.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        gridRuntimeInstanceId: 'grid-1',
+        gridLevelId: 'level-0',
+        side: 'buy',
+        role: 'spot_buy',
+        price: expect.anything(),
+        quantity: expect.anything(),
+        rawPayload: { source: 'deployment' },
+      }),
+    })
+  })
+
   it('finds an instance only within the requested user scope', async () => {
     const tx = {
       gridRuntimeInstance: {
