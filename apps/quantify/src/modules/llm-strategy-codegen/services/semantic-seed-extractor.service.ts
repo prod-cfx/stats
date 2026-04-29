@@ -182,7 +182,7 @@ export class SemanticSeedExtractorService {
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ])
-    if (stopLoss !== null) {
+    if (stopLoss !== null && !this.isHaltOnlyRiskContext(text)) {
       const riskContext = this.resolveRiskClauseContext(text, 'stop_loss')
       const basis = this.resolveRiskBasis(riskContext)
       const basisSource = this.resolveRiskBasisSource(riskContext, basis)
@@ -1044,6 +1044,10 @@ export class SemanticSeedExtractorService {
       .split(/[；;。。，,、]|(?:并且|以及|同时|且)/u)
       .map(clause => clause.trim())
       .filter(Boolean)
+  }
+
+  private isHaltOnlyRiskContext(text: string): boolean {
+    return /暂停策略|停止策略/u.test(text) && !/止损|平仓|全平/u.test(text)
   }
 
   private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {

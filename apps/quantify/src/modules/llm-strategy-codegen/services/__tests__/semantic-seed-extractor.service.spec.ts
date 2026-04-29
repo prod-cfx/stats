@@ -368,6 +368,9 @@ describe('SemanticSeedExtractorService', () => {
         scope: 'strategy',
       }),
     }))
+    expect(result.risk).not.toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+    }))
   })
 
   it('does not emit a no-position gate for ordinary open prohibitions', () => {
