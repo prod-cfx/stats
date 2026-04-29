@@ -1,5 +1,6 @@
 import { Prisma } from '@/prisma/prisma.types'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
+import { PositionAdmissionService } from './position-admission.service'
 import { SignalExecutorService } from './signal-executor.service'
 
 describe('signalExecutorService', () => {
@@ -21,6 +22,7 @@ describe('signalExecutorService', () => {
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
+    const positionAdmissionService = new PositionAdmissionService()
     const executorRepository = {
       findRecoverableSignals: jest.fn().mockResolvedValue([]),
     }
@@ -38,6 +40,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       txHost as any,
+      positionAdmissionService,
     )
   }
 
@@ -257,6 +260,120 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('builds OKX perpetual order params with perp market type', () => {
+    const service = createService()
+
+    const result = (service as any).buildOrderParamsWithLockedAccount(
+      {
+        signalType: 'ENTRY',
+        direction: 'SELL',
+        entryPrice: '50000',
+        positionSizeQuote: '100',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 6,
+          lotSize: '0.000001',
+        },
+      },
+      {
+        id: 'account-perp-1',
+        userId: 'user-perp-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(1000),
+      },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+    )
+
+    expect(result).toMatchObject({
+      ok: true,
+      params: {
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        side: 'sell',
+        reduceOnly: false,
+      },
+    })
+  })
+
+  it('rejects inconsistent execution market type', () => {
+    const service = createService()
+
+    const result = (service as any).validateOrderMarketTypeConsistency({
+      expectedMarketType: 'perp',
+      symbolInstrumentType: 'SPOT',
+      orderMarketType: 'spot',
+    })
+
+    expect(result).toEqual({ ok: false, reason: 'MARKET_TYPE_MISMATCH' })
+  })
+
+  it('skips order submission when runtime market type mismatches final order params', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingService = (service as any).tradingService
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-market-mismatch'
+
+    jest.spyOn(service as any, 'prepareExecution').mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-market-mismatch' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.01,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-market-mismatch',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          instrumentType: 'SPOT',
+          quoteAsset: 'USDT',
+        },
+        metadata: {
+          runtimeProvenance: {
+            marketType: 'perp',
+          },
+        },
+      },
+      { id: 'acct-market-mismatch', userId: 'user-market-mismatch' },
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('skipped')
+    expect(executionRepository.markSkipped).toHaveBeenCalledWith(
+      'exec-market-mismatch',
+      'MARKET_TYPE_MISMATCH',
+    )
+    expect(releaseReservation).toHaveBeenCalledWith(
+      'acct-market-mismatch',
+      reservedQuote,
+      reserveReference,
+    )
+    expect(executionRepository.markStage).not.toHaveBeenCalledWith(
+      'exec-market-mismatch',
+      'ORDER_SUBMITTED',
+      expect.anything(),
+    )
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('sizes ratio orders from execution capital and caps budget by buying power', () => {
     const service = createService()
 
@@ -343,6 +460,147 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('uses runtime market identity when locating close positions', async () => {
+    const service = createService()
+    const executorRepository = (service as any).executorRepository
+    const executionRepository = (service as any).executionRepository
+    const accountsService = (service as any).accountsService
+
+    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
+    executorRepository.lockAccount = jest.fn().mockResolvedValue([
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal(1000),
+        initialBalance: new Prisma.Decimal(1000),
+      },
+    ])
+    executorRepository.findOpenPositionForClose = jest.fn().mockResolvedValue({
+      id: 'pos-perp-1',
+      quantity: new Prisma.Decimal('0.25'),
+    })
+    executorRepository.findRiskProfileByStrategyInstanceId = jest.fn().mockResolvedValue(null)
+    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-close-1' })
+
+    const result = await (service as any).prepareExecution(
+      {
+        id: 'sig-close-1',
+        direction: 'CLOSE_LONG',
+        signalType: 'EXIT',
+        entryPrice: '100',
+        metadata: {
+          runtimeProvenance: {
+            marketType: 'perp',
+          },
+        },
+        symbol: {
+          code: 'BTCUSDT:SPOT',
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      } as any,
+      { id: 'account-1', userId: 'user-1' } as any,
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      'SELL',
+      'LONG',
+    )
+
+    expect(result).toMatchObject({
+      type: 'ready',
+      orderParams: expect.objectContaining({
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        reduceOnly: true,
+        amount: 0.25,
+      }),
+    })
+    expect(executorRepository.findOpenPositionForClose).toHaveBeenCalledWith({
+      accountId: 'account-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+    })
+    expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
+  })
+
+  it('blocks entry execution when portfolio constraints disallow adding to an open position', async () => {
+    const service = createService()
+    const executorRepository = (service as any).executorRepository
+    const executionRepository = (service as any).executionRepository
+    const accountsService = (service as any).accountsService
+
+    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
+    executorRepository.lockAccount = jest.fn().mockResolvedValue([
+      {
+        id: 'account-1',
+        userId: 'user-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(1000),
+        equity: new Prisma.Decimal(1000),
+        initialBalance: new Prisma.Decimal(1000),
+      },
+    ])
+    executorRepository.findOpenPositionsForAdmission = jest.fn().mockResolvedValue([
+      { positionSide: 'LONG', quantity: new Prisma.Decimal('0.0359') },
+    ])
+    executorRepository.hasPendingReconcileRequiredEntryExecution = jest.fn().mockResolvedValue(false)
+    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-entry-blocked-1' })
+
+    const result = await (service as any).prepareExecution(
+      {
+        id: 'sig-entry-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        entryPrice: '100',
+        metadata: {
+          runtimeProvenance: {
+            marketType: 'perp',
+            portfolio: {
+              positionMode: 'long_only',
+              maxConcurrentPositions: 1,
+              allowPyramiding: false,
+            },
+          },
+        },
+        symbol: {
+          code: 'BTCUSDT:PERP',
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      } as any,
+      { id: 'account-1', userId: 'user-1' } as any,
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      'BUY',
+      'LONG',
+    )
+
+    expect(result).toEqual({
+      type: 'skip',
+      reason: 'ENTRY_BLOCKED_BY_MAX_CONCURRENT_POSITIONS',
+      executionId: 'exec-entry-blocked-1',
+    })
+    expect(executorRepository.findOpenPositionsForAdmission).toHaveBeenCalledWith({
+      accountId: 'account-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+    })
+    expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
+  })
+
   it('does not markExecuted when a market order stays open with 0 fill after reconciliation', async () => {
     const prisma = {}
     const configService = { get: jest.fn() }
@@ -410,7 +668,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(openOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-1', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-1', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-1', userId: 'user-1' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -493,7 +751,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(partialOpenOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-1b', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-1b', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-1b', userId: 'user-1' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -579,7 +837,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(canceledOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-2', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-2', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-2', userId: 'user-2' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -665,7 +923,7 @@ describe('signalExecutorService', () => {
     tradingService.placeOrder.mockResolvedValue(submittedOrder)
 
     const result = await (service as any).processAccount(
-      { id: 'sig-3', direction: 'BUY', symbol: { quoteAsset: 'USDT' } } as any,
+      { id: 'sig-3', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
       { id: 'acct-3', userId: 'user-3' } as any,
       { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
     )
@@ -1177,6 +1435,7 @@ describe('signalExecutorService', () => {
         direction: 'BUY',
         signalType: 'ENTRY',
         symbol: {
+          instrumentType: 'SPOT',
           quoteAsset: 'USDT',
         },
         metadata: {

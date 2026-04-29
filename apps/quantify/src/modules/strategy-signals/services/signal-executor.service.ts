@@ -42,6 +42,7 @@ import { SignalExecutorRepository } from '../repositories/signal-executor.reposi
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
+import { PositionAdmissionService, type PortfolioAdmissionConstraints } from './position-admission.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
 
@@ -90,6 +91,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     private readonly executionRepository: SignalExecutionRepository,
     private readonly telemetry: SignalTelemetryService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    private readonly positionAdmissionService: PositionAdmissionService = new PositionAdmissionService(),
   ) {}
 
   async onModuleInit() {
@@ -333,6 +335,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const positionSide = this.mapPositionSide(direction)
       if (!tradeSide || !positionSide) return 'skipped'
       const runtimeProvenance = this.readSignalRuntimeProvenance(resolvedSignal)
+      const expectedMarketType = this.readExpectedRuntimeMarketType(resolvedSignal)
 
       const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide)
       if (preparation.type === 'duplicate') {
@@ -441,6 +444,18 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
             effectiveExchangeId = accountExchangeId
           }
         }
+      }
+
+      const marketTypeValidation = this.validateOrderMarketTypeConsistency({
+        expectedMarketType,
+        symbolInstrumentType: resolvedSignal.symbol.instrumentType,
+        orderMarketType: effectiveOrderParams.marketType,
+      })
+
+      if ('reason' in marketTypeValidation) {
+        await this.executionRepository.markSkipped(execution.id, marketTypeValidation.reason)
+        await this.releaseReservation(account.id, reservedQuote, reserveReference)
+        return 'skipped'
       }
 
       try {
@@ -565,7 +580,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
             await this.positionsService.recordTrade({
               userStrategyAccountId: account.id,
               symbol: ledgerSymbol,
-              market: `${effectiveExchangeId}:${orderParams.marketType}`,
+              market: `${effectiveExchangeId}:${effectiveOrderParams.marketType}`,
               side: tradeSide,
               positionSide,
               price: order.price.toString(),
@@ -673,19 +688,34 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return { type: 'skip', reason: 'Account not found' }
       }
 
-      // 如果是平仓/退出信号，先查找当前持仓规模，用于构建正确的平仓数量
-      let closePositionQuantity: Decimal | undefined
       const isCloseSignal =
         signal.direction === 'CLOSE_LONG' ||
         signal.direction === 'CLOSE_SHORT' ||
         signal.signalType === 'EXIT'
 
-      if (isCloseSignal) {
-        const symbolCode = signal.symbol?.code
-        const positionSideForClose = this.mapPositionSide(signal.direction)
-        const normalizedPositionSymbol = symbolCode ? normalizeLedgerSymbol(symbolCode) : null
+      if (!isCloseSignal) {
+        const entryAdmission = await this.evaluateEntryAdmission(signal, account)
+        if (entryAdmission.ok === false) {
+          const execution = await this.executionRepository.create({
+            signal: { connect: { id: signal!.id } },
+            user: { connect: { id: account.userId } },
+            account: { connect: { id: account.id } },
+            orderSide,
+            positionSide,
+            status: 'SKIPPED',
+            errorMessage: entryAdmission.reason,
+          })
+          return { type: 'skip', reason: entryAdmission.reason, executionId: execution.id }
+        }
+      }
 
-        if (!normalizedPositionSymbol || !positionSideForClose) {
+      // 如果是平仓/退出信号，先查找当前持仓规模，用于构建正确的平仓数量
+      let closePositionQuantity: Decimal | undefined
+      if (isCloseSignal) {
+        const positionSideForClose = this.mapPositionSide(signal.direction)
+        const closeIdentity = this.resolveClosePositionIdentity(signal, positionSideForClose)
+
+        if (!closeIdentity) {
           const reason = 'Cannot close position: missing symbol or position side'
           const execution = await this.executionRepository.create({
             signal: { connect: { id: signal!.id } },
@@ -699,11 +729,13 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           return { type: 'skip', reason, executionId: execution.id }
         }
 
-        const openPosition = await this.executorRepository.findOpenPositionForClose(
-          account.id,
-          normalizedPositionSymbol,
-          positionSideForClose,
-        )
+        const openPosition = await this.executorRepository.findOpenPositionForClose({
+          accountId: account.id,
+          exchangeId: closeIdentity.exchangeId,
+          marketType: closeIdentity.marketType,
+          symbol: closeIdentity.symbol,
+          positionSide: closeIdentity.positionSide,
+        })
 
         if (!openPosition || new Decimal(openPosition.quantity).lte(0)) {
           const reason = 'No open position to close for this signal'
@@ -732,6 +764,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         config,
         closePositionQuantity,
         riskProfile,
+        this.readExpectedRuntimeMarketType(signal),
       )
       if (!orderParamsResult.ok) {
         const reason = (orderParamsResult as { ok: false; reason: string }).reason
@@ -794,6 +827,33 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     })
   }
 
+  private async evaluateEntryAdmission(
+    signal: LoadedSignal,
+    account: UserStrategyAccount,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const identity = this.resolvePositionAdmissionIdentity(signal)
+    if (!identity) {
+      return { ok: true }
+    }
+
+    const [openPositions, hasPendingReconciliation] = await Promise.all([
+      this.executorRepository.findOpenPositionsForAdmission({
+        accountId: account.id,
+        exchangeId: identity.exchangeId,
+        marketType: identity.marketType,
+        symbol: identity.symbol,
+      }),
+      this.executorRepository.hasPendingReconcileRequiredEntryExecution(account.id),
+    ])
+
+    return this.positionAdmissionService.evaluateEntry({
+      direction: signal.direction,
+      constraints: this.readPortfolioAdmissionConstraints(signal),
+      openPositions,
+      hasPendingReconciliation,
+    })
+  }
+
   private async lockAccount(
     accountId: string,
   ): Promise<LockedStrategyAccount | null> {
@@ -807,12 +867,14 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     config: StrategySignalsRuntimeConfig,
     closePositionQuantity?: Decimal,
     riskProfile?: StrategyInstanceRiskProfile | null,
+    runtimeMarketType?: MarketType | null,
   ): { ok: true; params: OrderParams; quoteBudget: Decimal } | { ok: false; reason: string } {
     const symbolMeta = signal?.symbol
     if (!symbolMeta) return { ok: false, reason: 'Signal missing symbol metadata' }
 
     const exchangeId = this.normalizeExchangeId(symbolMeta.exchange)
-    const marketType = this.normalizeMarketType(symbolMeta.instrumentType)
+    const symbolMarketType = this.normalizeMarketType(symbolMeta.instrumentType)
+    const marketType = runtimeMarketType ?? symbolMarketType
     if (!exchangeId || !marketType) {
       return { ok: false, reason: 'Unsupported exchange or instrument type' }
     }
@@ -827,7 +889,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const unifiedSymbol = this.buildUnifiedSymbol(symbolMeta)
+    const unifiedSymbol = this.buildUnifiedSymbol(symbolMeta, marketType)
     const side = this.mapOrderSide(signal.direction)
     if (!side) return { ok: false, reason: 'Unsupported signal direction' }
 
@@ -1082,6 +1144,86 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private resolveClosePositionIdentity(
+    signal: LoadedSignal,
+    positionSide: PositionSide | null,
+  ): {
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+    positionSide: PositionSide
+  } | null {
+    const symbolMeta = signal.symbol
+    const symbolCode = symbolMeta?.code
+    const exchangeId = this.normalizeExchangeId(symbolMeta?.exchange)
+    const marketType = this.readExpectedRuntimeMarketType(signal)
+      ?? (symbolMeta ? this.normalizeMarketType(symbolMeta.instrumentType) : null)
+
+    if (!symbolCode || !exchangeId || !marketType || !positionSide) {
+      return null
+    }
+
+    return {
+      exchangeId,
+      marketType,
+      symbol: normalizeLedgerSymbol(symbolCode),
+      positionSide,
+    }
+  }
+
+  private resolvePositionAdmissionIdentity(
+    signal: LoadedSignal,
+  ): {
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+  } | null {
+    const symbolMeta = signal.symbol
+    const symbolCode = symbolMeta?.code
+    const exchangeId = this.normalizeExchangeId(symbolMeta?.exchange)
+    const marketType = this.readExpectedRuntimeMarketType(signal)
+      ?? (symbolMeta ? this.normalizeMarketType(symbolMeta.instrumentType) : null)
+
+    if (!symbolCode || !exchangeId || !marketType) {
+      return null
+    }
+
+    return {
+      exchangeId,
+      marketType,
+      symbol: normalizeLedgerSymbol(symbolCode),
+    }
+  }
+
+  private readPortfolioAdmissionConstraints(signal: LoadedSignal): PortfolioAdmissionConstraints | null {
+    const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
+    const raw = runtimeProvenance?.portfolio ?? runtimeProvenance?.portfolioConstraints
+    if (!raw || Array.isArray(raw) || typeof raw !== 'object') {
+      return null
+    }
+
+    const value = raw as Prisma.JsonObject
+    return {
+      positionMode: this.readPortfolioPositionMode(value.positionMode),
+      maxConcurrentPositions: this.readPositiveInteger(value.maxConcurrentPositions),
+      allowPyramiding: typeof value.allowPyramiding === 'boolean' ? value.allowPyramiding : null,
+    }
+  }
+
+  private readPortfolioPositionMode(value: Prisma.JsonValue | undefined) {
+    if (value === 'long_only' || value === 'short_only' || value === 'long_short') {
+      return value
+    }
+    return null
+  }
+
+  private readPositiveInteger(value: Prisma.JsonValue | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      return null
+    }
+    return value
+  }
+
   private normalizeExchangeId(exchange?: string) {
     if (!exchange) return null
     const normalized = exchange.trim().toLowerCase()
@@ -1097,11 +1239,29 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return null
   }
 
-  private buildUnifiedSymbol(symbol: PrismaSymbol): string {
+  private validateOrderMarketTypeConsistency(input: {
+    expectedMarketType: MarketType | null
+    symbolInstrumentType: PrismaSymbol['instrumentType']
+    orderMarketType: MarketType
+  }): { ok: true } | { ok: false; reason: 'MARKET_TYPE_MISMATCH' } {
+    if (input.expectedMarketType) {
+      return input.expectedMarketType === input.orderMarketType
+        ? { ok: true }
+        : { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    }
+
+    const symbolMarketType = this.normalizeMarketType(input.symbolInstrumentType)
+    if (!symbolMarketType) return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    if (symbolMarketType !== input.orderMarketType) return { ok: false, reason: 'MARKET_TYPE_MISMATCH' }
+    return { ok: true }
+  }
+
+  private buildUnifiedSymbol(symbol: PrismaSymbol, marketType?: MarketType | null): string {
     const base = symbol.baseAsset?.toUpperCase() ?? ''
     const quote = symbol.quoteAsset?.toUpperCase() ?? ''
     const pair = `${base}/${quote}`
-    if (symbol.instrumentType === 'PERPETUAL' || symbol.instrumentType === 'FUTURE') {
+    const resolvedMarketType = marketType ?? this.normalizeMarketType(symbol.instrumentType)
+    if (resolvedMarketType === 'perp') {
       return `${pair}:PERP`
     }
     return pair
@@ -1274,5 +1434,12 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     }
 
     return runtimeProvenance as Prisma.JsonObject
+  }
+
+  private readExpectedRuntimeMarketType(signal: LoadedSignal): MarketType | null {
+    const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
+    const raw = runtimeProvenance?.marketType
+    if (raw === 'spot' || raw === 'perp') return raw
+    return null
   }
 }

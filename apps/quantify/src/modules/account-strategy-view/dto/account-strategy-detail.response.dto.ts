@@ -173,6 +173,18 @@ export class AccountStrategyLatestOrderDto {
 
   @ApiPropertyOptional({ nullable: true })
   orderId!: string | null
+
+  @ApiProperty({ enum: ['ledger', 'execution_reconcile_required'] })
+  source!: 'ledger' | 'execution_reconcile_required'
+
+  @ApiProperty()
+  ledgerApplied!: boolean
+
+  @ApiProperty()
+  reconcileRequired!: boolean
+
+  @ApiPropertyOptional({ nullable: true })
+  executionStatus!: string | null
 }
 
 export class AccountStrategyRuntimeSemanticOrderEvidenceDto {

@@ -523,6 +523,10 @@ export function mapAccountStrategyDetailToRecord(
           fee: typeof order.fee === 'number' && Number.isFinite(order.fee) ? order.fee : null,
           feeCurrency: order.feeCurrency ?? null,
           orderId: order.orderId ?? null,
+          source: order.source,
+          ledgerApplied: order.ledgerApplied,
+          reconcileRequired: order.reconcileRequired,
+          executionStatus: order.executionStatus ?? null,
         }
       })
     : []

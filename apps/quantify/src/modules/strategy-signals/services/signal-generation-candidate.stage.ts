@@ -15,7 +15,10 @@ import type {
 import { Logger } from '@nestjs/common'
 import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
-import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
+import {
+  normalizeRequestedCode,
+  normalizeRequestedCodeForMarket,
+} from '@/modules/market-data/utils/market-symbol-code.util'
 import {
   mapLegDataRequirementTimeframes,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
@@ -131,9 +134,12 @@ export class SignalGenerationCandidateStage {
   async loadMultiLegDataBatch(
     legs: StrategyLegDefinition[],
     dataRequirements: StrategyDataRequirements,
+    marketType: 'spot' | 'perp' | null = null,
   ): Promise<Record<string, Record<string, LegTimeframeData>>> {
     const symbolCodes = legs.map(leg => leg.symbol)
-    const symbols = await this.generatorRepository.findSymbolsByCode(symbolCodes)
+    const symbols = marketType
+      ? await this.generatorRepository.findSymbolsByCodeForMarket(symbolCodes, marketType)
+      : await this.generatorRepository.findSymbolsByCode(symbolCodes)
     const symbolMap = new Map(symbols.map(s => [s.code, s]))
 
     interface DataRequest {
@@ -145,7 +151,9 @@ export class SignalGenerationCandidateStage {
 
     const dataRequests: DataRequest[] = []
     for (const leg of legs) {
-      const normalizedLegSymbol = normalizeRequestedCode(leg.symbol)
+      const normalizedLegSymbol = marketType
+        ? normalizeRequestedCodeForMarket(leg.symbol, marketType)
+        : normalizeRequestedCode(leg.symbol)
       const symbol = symbolMap.get(normalizedLegSymbol)
       if (!symbol) {
         this.logger.warn(`Symbol ${leg.symbol} not found for leg ${leg.id}`)

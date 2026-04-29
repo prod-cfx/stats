@@ -1,17 +1,34 @@
 import type { MarketTimeframe, QuantifyInstrumentType as InstrumentType, SymbolType } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient, MarketBar, MarketQuote, Prisma, Symbol as PrismaSymbol } from '@/prisma/prisma.types'
+import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { randomUUID } from 'node:crypto'
 import { ErrorCode, SymbolStatus as PrismaSymbolStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { MarketSymbolNotFoundException } from '../exceptions'
 
 interface IndicatorSnapshotRecord {
   field: string
   value: number
+}
+
+interface UpsertMarketBarByUniqueInput {
+  symbolId: string
+  timeframe: PrismaMarketTimeframe
+  time: Date
+  open: string
+  high: string
+  low: string
+  close: string
+  volume?: string
+  quoteVolume?: string
+  trades?: number
+  source?: string
+  isFinal: boolean
 }
 
 @Injectable()
@@ -201,6 +218,55 @@ export class MarketDataRepository {
     update: Prisma.MarketBarUpdateInput,
   ): Promise<void> {
     await this.txHost.tx.marketBar.upsert({ where, create, update })
+  }
+
+  async upsertBarByUnique(input: UpsertMarketBarByUniqueInput): Promise<void> {
+    const dbTimeframe = reverseMapTimeframe(input.timeframe)
+
+    await this.txHost.tx.$executeRaw`
+      INSERT INTO "market_bars" (
+        "id",
+        "symbol_id",
+        "timeframe",
+        "time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "quote_volume",
+        "trades",
+        "source",
+        "is_final"
+      )
+      VALUES (
+        ${randomUUID()},
+        ${input.symbolId},
+        ${dbTimeframe}::"MarketTimeframe",
+        ${input.time},
+        ${input.open},
+        ${input.high},
+        ${input.low},
+        ${input.close},
+        ${input.volume ?? null},
+        ${input.quoteVolume ?? null},
+        ${input.trades ?? null},
+        ${input.source ?? null},
+        ${input.isFinal}
+      )
+      ON CONFLICT ("symbol_id", "timeframe", "time")
+      DO UPDATE SET
+        "open" = EXCLUDED."open",
+        "high" = EXCLUDED."high",
+        "low" = EXCLUDED."low",
+        "close" = EXCLUDED."close",
+        "volume" = EXCLUDED."volume",
+        "quote_volume" = EXCLUDED."quote_volume",
+        "trades" = EXCLUDED."trades",
+        "source" = EXCLUDED."source",
+        "is_final" = EXCLUDED."is_final",
+        "updated_at" = NOW()
+    `
   }
 
   async findLatestQuoteBySymbolId(symbolId: string): Promise<MarketQuote | null> {

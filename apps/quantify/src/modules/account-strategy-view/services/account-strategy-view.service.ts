@@ -26,6 +26,8 @@ import { MarketDataIngestionService } from '@/modules/market-data/services/marke
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PositionsService } from '@/modules/positions/positions.service'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { PositionSyncService } from '@/modules/positions/position-sync.service'
 import {
   resolveStrategyFundingFromExchangeBalance,
   resolveStrategyFundingFromStrategyAccount,
@@ -105,6 +107,7 @@ export class AccountStrategyViewService {
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
     private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
     @Optional() private readonly positionsService?: PositionsService,
+    @Optional() private readonly positionSyncService?: PositionSyncService,
   ) {}
 
   async listStrategies(
@@ -227,6 +230,23 @@ export class AccountStrategyViewService {
     const latestDailySnapshot = account
       ? await this.repo.loadLatestDailySnapshot?.(account.id) ?? this.getLatestDailySnapshotFromSeries(equityRows)
       : this.getLatestDailySnapshotFromSeries(equityRows)
+    let positionOverview = account
+      ? await this.repo.loadPositionOverview(account.id)
+      : { openCount: 0, closedCount: 0 }
+
+    if (account && positionOverview.openCount > 0) {
+      const didSync = await this.syncOpenPositionsBeforeDetail({
+        userId,
+        accountId: account.id,
+        exchangeId,
+        marketType,
+        exchangeAccountId: sub?.exchangeAccount?.id ?? null,
+      })
+      if (didSync) {
+        positionOverview = await this.repo.loadPositionOverview(account.id)
+      }
+    }
+
     const closedPositionRows = account
       ? await this.repo.loadClosedPositionPnlSeries?.(account.id) ?? []
       : []
@@ -239,9 +259,6 @@ export class AccountStrategyViewService {
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
       : { tradeCount: 0, closedCount: 0, winningCount: 0 }
-    const positionOverview = account
-      ? await this.repo.loadPositionOverview(account.id)
-      : { openCount: 0, closedCount: 0 }
     const hasLocalActivity = this.hasLocalStrategyActivity({
       account,
       tradeStats,
@@ -1929,9 +1946,6 @@ export class AccountStrategyViewService {
   ): number {
     const positionUnrealized = this.toFiniteNumber(positionFinancials?.totalUnrealizedPnl)
     const accountUnrealized = this.toFiniteNumber(this.readRecord(account)?.totalUnrealizedPnl)
-    if (this.shouldPreferAccountAggregateField(account, positionFinancials, 'totalUnrealizedPnl')) {
-      return accountUnrealized ?? 0
-    }
     if (positionUnrealized !== null) return positionUnrealized
     return accountUnrealized ?? 0
   }
@@ -2086,6 +2100,38 @@ export class AccountStrategyViewService {
       return this.pickExchangeBalance(balances, input.preferredAsset)
     } catch {
       return null
+    }
+  }
+
+  private async syncOpenPositionsBeforeDetail(input: {
+    userId: string
+    accountId: string
+    exchangeId: ExchangeId | null
+    marketType: MarketType
+    exchangeAccountId: string | null
+  }): Promise<boolean> {
+    if (!this.positionSyncService || !input.exchangeId || !input.exchangeAccountId) {
+      return false
+    }
+
+    try {
+      await this.withBestEffortTimeout(
+        this.positionSyncService.syncUserPositions(
+          input.userId,
+          input.accountId,
+          input.exchangeId,
+          input.marketType,
+          'auto',
+          'account-strategy-detail',
+          input.exchangeAccountId,
+        ),
+      )
+      return true
+    } catch (error) {
+      this.logger.warn(
+        `Best-effort position sync before account detail failed for account ${input.accountId}: ${(error as Error).message}`,
+      )
+      return false
     }
   }
 
