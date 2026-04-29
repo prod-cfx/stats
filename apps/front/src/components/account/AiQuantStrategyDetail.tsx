@@ -261,6 +261,7 @@ function formatRuleSummary(rule: NonNullable<AiQuantStrategyRecord['ruleSummary'
 }
 
 function formatOrderFee(order: NonNullable<AiQuantStrategyRecord['latestOrders']>[number]) {
+  if (order.reconcileRequired) return '待对账'
   if (order.fee == null) return '--'
   if (order.fee === 0 && !order.feeCurrency && order.orderId?.startsWith('sync-')) {
     return '--（同步记录未含手续费）'
@@ -939,7 +940,12 @@ export function AiQuantStrategyDetail({
                         <tr key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`} className="border-b border-[color:var(--cf-border)]/60">
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.executedAt}</td>
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
-                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.semanticAction ?? '语义待确认'}</td>
+                          <td className="py-2 pr-3 text-[color:var(--cf-text)]">
+                            <div>{order.semanticAction ?? '语义待确认'}</div>
+                            {order.reconcileRequired
+                              ? <div className="mt-0.5 text-xs text-amber-300">待本地对账</div>
+                              : null}
+                          </td>
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.symbol}</td>
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalPrice(order.price)}</td>
                           <td className="py-2 pr-3 text-[color:var(--cf-text)]">

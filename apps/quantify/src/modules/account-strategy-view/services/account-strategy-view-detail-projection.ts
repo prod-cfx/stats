@@ -21,9 +21,19 @@ interface TimelineSignalExecution {
   status?: string
   errorMessage?: string | null
   tradeId?: string | null
+  orderSide?: string | null
+  executedPrice?: unknown
+  executedQuantity?: unknown
   fee?: unknown
   feeCurrency?: string | null
   metadata?: unknown
+  signal?: {
+    signalType?: string | null
+    direction?: string | null
+    symbol?: {
+      code?: string | null
+    } | null
+  } | null
 }
 
 interface TimelineTrade {
@@ -111,6 +121,47 @@ function buildExecutionFeeByOrderId(
   return feeByOrderId
 }
 
+function readExecutionOrderResponse(execution: TimelineSignalExecution): Record<string, unknown> | null {
+  return readNestedRecord(execution.metadata, ['orderResponse'])
+}
+
+function isReconcileRequiredExecution(execution: TimelineSignalExecution): boolean {
+  const metadata = readRecord(execution.metadata)
+  return metadata?.reconcileRequired === true && metadata?.ledgerApplied === false
+}
+
+function buildExecutionOrderId(execution: TimelineSignalExecution, orderResponse: Record<string, unknown> | null): string | null {
+  const tradeId = typeof execution.tradeId === 'string' && execution.tradeId.trim()
+    ? execution.tradeId.trim()
+    : null
+  const responseId = typeof orderResponse?.id === 'string' && orderResponse.id.trim()
+    ? orderResponse.id.trim()
+    : null
+  return tradeId ?? responseId
+}
+
+function buildExecutionOrderExecutedAt(execution: TimelineSignalExecution, orderResponse: Record<string, unknown> | null): Date {
+  const rawCreatedAt = orderResponse?.createdAt
+  if (typeof rawCreatedAt === 'string') {
+    const parsed = new Date(rawCreatedAt)
+    if (!Number.isNaN(parsed.getTime())) return parsed
+  }
+  return execution.createdAt
+}
+
+function buildExecutionOrderFee(execution: TimelineSignalExecution, orderResponse: Record<string, unknown> | null) {
+  const rawOrder = readRecord(orderResponse?.raw)
+  const rawFee = normalizeFeeAmount(rawOrder?.fee)
+  const rawFeeCurrency = typeof rawOrder?.feeCcy === 'string' && rawOrder.feeCcy.trim()
+    ? rawOrder.feeCcy.trim()
+    : null
+
+  return {
+    fee: rawFee ?? normalizeFeeAmount(execution.fee),
+    feeCurrency: rawFeeCurrency ?? execution.feeCurrency ?? null,
+  }
+}
+
 export function buildAccountStrategyMixedTimeline(source: AccountStrategyTimelineSource): AccountStrategyTimelineEventDto[] {
   const events: AccountStrategyTimelineEventDto[] = []
 
@@ -158,12 +209,9 @@ export function buildAccountStrategyLatestOrders(
   signalExecutions: TimelineSignalExecution[] = [],
 ): AccountStrategyLatestOrderDto[] {
   const feeByOrderId = buildExecutionFeeByOrderId(signalExecutions)
-
-  return trades
+  const ledgerOrders = trades
     .filter(trade => trade.executedAt instanceof Date && typeof trade.symbol === 'string' && typeof trade.side === 'string')
     .filter(isExchangeOrderTrade)
-    .sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime())
-    .slice(0, 10)
     .map((trade) => {
       const orderId = trade.orderId ?? null
       const executionFee = orderId ? feeByOrderId.get(orderId) : undefined
@@ -176,8 +224,43 @@ export function buildAccountStrategyLatestOrders(
         fee: executionFee?.fee ?? toFiniteNumber(trade.fee),
         feeCurrency: executionFee?.feeCurrency ?? trade.feeCurrency ?? null,
         orderId,
+        source: 'ledger' as const,
+        ledgerApplied: true,
+        reconcileRequired: false,
+        executionStatus: null,
       }
     })
+  const ledgerOrderIds = new Set(ledgerOrders.flatMap(order => order.orderId ? [order.orderId] : []))
+  const reconcileOrders = signalExecutions
+    .filter(isReconcileRequiredExecution)
+    .flatMap((execution) => {
+      const orderResponse = readExecutionOrderResponse(execution)
+      const orderId = buildExecutionOrderId(execution, orderResponse)
+      if (!orderId || ledgerOrderIds.has(orderId)) return []
+
+      const quantity = toFiniteNumber(orderResponse?.filled) ?? toFiniteNumber(orderResponse?.amount) ?? toFiniteNumber(execution.executedQuantity)
+      if (quantity === null || quantity <= 0) return []
+
+      const { fee, feeCurrency } = buildExecutionOrderFee(execution, orderResponse)
+      return [{
+        executedAt: buildExecutionOrderExecutedAt(execution, orderResponse).toISOString(),
+        side: execution.orderSide ?? execution.signal?.direction ?? 'UNKNOWN',
+        symbol: execution.signal?.symbol?.code ?? '',
+        price: toFiniteNumber(orderResponse?.price) ?? toFiniteNumber(execution.executedPrice),
+        quantity,
+        fee,
+        feeCurrency,
+        orderId,
+        source: 'execution_reconcile_required' as const,
+        ledgerApplied: false,
+        reconcileRequired: true,
+        executionStatus: execution.status ?? null,
+      }]
+    })
+
+  return [...ledgerOrders, ...reconcileOrders]
+    .sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime())
+    .slice(0, 10)
 }
 
 function findRuleActions(
