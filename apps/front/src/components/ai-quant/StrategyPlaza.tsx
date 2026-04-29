@@ -4,6 +4,10 @@ import type { StrategyPlazaTemplate } from '@/lib/api'
 import { Activity, Edit3, Play } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+const TRANSLATED_TEMPLATE_TAG_KEYS: Partial<Record<string, readonly string[]>> = {
+  'grid-range': ['range', 'buyLowSellHigh', 'okxDemo'],
+}
+
 interface StrategyPlazaProps {
   templates: StrategyPlazaTemplate[]
   loading: boolean
@@ -33,6 +37,20 @@ function formatMetricPct(value: number | null, options: { sign?: boolean } = {})
   if (value == null) return '--'
   const formatted = `${Number(value.toFixed(2)).toString()}%`
   return options.sign && value > 0 ? `+${formatted}` : formatted
+}
+
+function resolveTemplateDisplay(
+  template: StrategyPlazaTemplate,
+  t: ReturnType<typeof useTranslation>['t'],
+) {
+  const name = t(`aiQuant.strategies.${template.id}.name`, { defaultValue: template.name })
+  const description = t(`aiQuant.strategies.${template.id}.desc`, { defaultValue: template.description })
+  const translatedTagKeys = TRANSLATED_TEMPLATE_TAG_KEYS[template.id]
+  const tags = translatedTagKeys
+    ? translatedTagKeys.map(tag => t(`aiQuant.strategies.${template.id}.tags.${tag}`, { defaultValue: tag }))
+    : template.tags
+
+  return { name, description, tags }
 }
 
 export function StrategyPlaza({
@@ -109,6 +127,7 @@ export function StrategyPlaza({
         {templates.map(template => {
           const isRunning = pendingTemplateId === template.id && pendingAction === 'run'
           const isEditing = pendingTemplateId === template.id && pendingAction === 'edit'
+          const display = resolveTemplateDisplay(template, t)
 
           return (
             <article
@@ -122,9 +141,9 @@ export function StrategyPlaza({
                       <Activity className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-[color:var(--cf-text-strong)]">{template.name}</h3>
+                      <h3 className="font-bold text-[color:var(--cf-text-strong)]">{display.name}</h3>
                       <div className="mt-1 flex flex-wrap gap-1.5">
-                        {template.tags.map(tag => (
+                        {display.tags.map(tag => (
                           <span
                             key={tag}
                             className="inline-flex items-center rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--cf-muted)]"
@@ -138,12 +157,12 @@ export function StrategyPlaza({
                 </div>
 
                 <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-[color:var(--cf-muted)]">
-                  {template.description}
+                  {display.description}
                 </p>
 
                 <div className="mt-4 grid gap-2 rounded-xl bg-[color:var(--cf-bg)] px-3 py-3 text-xs text-[color:var(--cf-muted)]">
                   <div className="flex items-center justify-between gap-3">
-                    <span>交易对 / 周期</span>
+                    <span>{t('aiQuant.strategyPlazaCard.pairTimeframe', { defaultValue: '交易对 / 周期' })}</span>
                     <span className="font-mono font-semibold text-[color:var(--cf-text)]">
                       {template.symbol}
                       {' / '}
@@ -151,17 +170,21 @@ export function StrategyPlaza({
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span>环境</span>
-                    <span className="font-semibold text-[color:var(--cf-text)]">OKX 模拟盘</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <span>市场</span>
+                    <span>{t('aiQuant.strategyPlazaCard.environment', { defaultValue: '环境' })}</span>
                     <span className="font-semibold text-[color:var(--cf-text)]">
-                      {getMarketTypeLabel(template.marketType)}
+                      {t('aiQuant.strategyPlazaCard.okxDemo', { defaultValue: 'OKX 模拟盘' })}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span>仓位 / 杠杆</span>
+                    <span>{t('aiQuant.strategyPlazaCard.market', { defaultValue: '市场' })}</span>
+                    <span className="font-semibold text-[color:var(--cf-text)]">
+                      {t(`aiQuant.strategyPlazaCard.marketType.${template.marketType}`, {
+                        defaultValue: getMarketTypeLabel(template.marketType),
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>{t('aiQuant.strategyPlazaCard.positionLeverage', { defaultValue: '仓位 / 杠杆' })}</span>
                     <span className="font-mono font-semibold text-[color:var(--cf-text)]">
                       {formatPositionPct(template.positionPct)}
                       {' / '}
@@ -172,19 +195,25 @@ export function StrategyPlaza({
 
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
-                    <div className="text-[10px] text-[color:var(--cf-muted)]">胜率</div>
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">
+                      {t('aiQuant.winRate', { defaultValue: '胜率' })}
+                    </div>
                     <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
                       {formatMetricPct(template.displayMetrics.winRatePct)}
                     </div>
                   </div>
                   <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
-                    <div className="text-[10px] text-[color:var(--cf-muted)]">最大回撤</div>
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">
+                      {t('aiQuant.maxDrawdown', { defaultValue: '最大回撤' })}
+                    </div>
                     <div className="mt-1 font-mono font-semibold text-emerald-500">
                       {formatMetricPct(template.displayMetrics.maxDrawdownPct)}
                     </div>
                   </div>
                   <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
-                    <div className="text-[10px] text-[color:var(--cf-muted)]">收益</div>
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">
+                      {t('aiQuant.totalReturn', { defaultValue: '收益' })}
+                    </div>
                     <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
                       {formatMetricPct(template.displayMetrics.returnPct, { sign: true })}
                     </div>
@@ -201,7 +230,7 @@ export function StrategyPlaza({
                   className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-indigo-600 hover:to-purple-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Play className="h-4 w-4 fill-current" />
-                  {isRunning ? '运行中' : t('aiQuant.run')}
+                  {isRunning ? t('aiQuant.strategyPlazaCard.running', { defaultValue: '运行中' }) : t('aiQuant.run')}
                 </button>
                 <button
                   type="button"
@@ -211,7 +240,7 @@ export function StrategyPlaza({
                   className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Edit3 className="h-4 w-4" />
-                  {isEditing ? '处理中' : t('aiQuant.edit')}
+                  {isEditing ? t('aiQuant.strategyPlazaCard.processing', { defaultValue: '处理中' }) : t('aiQuant.edit')}
                 </button>
               </div>
             </article>

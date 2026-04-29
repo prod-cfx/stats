@@ -152,6 +152,19 @@
     "edit": "编辑",
     "strategyPlazaSubtitle": "首次对话可先从推荐策略开始，也可以继续在上面对话自定义。",
     "myStrategies": "我的策略",
+    "strategyPlazaCard": {
+      "pairTimeframe": "交易对 / 周期",
+      "environment": "环境",
+      "okxDemo": "OKX 模拟盘",
+      "market": "市场",
+      "marketType": {
+        "spot": "现货",
+        "perp": "永续"
+      },
+      "positionLeverage": "仓位 / 杠杆",
+      "running": "运行中",
+      "processing": "处理中"
+    },
     "noStrategies": "暂无运行策略",
     "noStrategiesDesc": "你还没有创建任何 AI 量化策略。立即开始对话，让 AI 帮你生成第一个自动化交易策略。",
     "createStrategy": "创建新策略",
@@ -439,11 +452,14 @@
         }
       },
       "grid-range": {
-        "name": "网格（区间震荡）",
-        "desc": "区间 60000-80000，网格 0.5%，单笔 10% 仓位",
+        "name": "区间低买高卖",
+        "desc": "区间下沿买入，回到区间上沿卖出，适合震荡行情。",
         "tags": {
           "oscillation": "震荡",
-          "grid": "网格"
+          "grid": "网格",
+          "range": "区间",
+          "buyLowSellHigh": "低买高卖",
+          "okxDemo": "OKX 模拟盘"
         }
       },
       "bollinger-reversion": {

@@ -2,6 +2,7 @@ import type { UserExchangeAccountStatus, UpsertUserExchangeAccountPayload } from
 
 import {
   ApiError,
+  API_BASE_URL,
   apiCall,
   client,
   extractBackendErrorMessage,
@@ -35,12 +36,31 @@ async function requestAccountExchangeAccounts<T>(
       throw new ApiError('exchangeId is required', 'INVALID_INPUT')
     }
 
-    const response = await accountExchangeClient.AccountExchangeAccountsController_delete({
+    const response = await fetch(`${API_BASE_URL}/account/exchange-accounts/${encodeURIComponent(options.exchangeId)}`, {
+      method: 'DELETE',
       headers: authHeaders,
-      params: { exchangeId: options.exchangeId },
     })
 
-    return unwrapResponse(response as T | { data?: T; message?: string })
+    let payload: unknown = null
+    try {
+      payload = await response.json()
+    } catch {
+      payload = null
+    }
+
+    if (!response.ok) {
+      const code = typeof (payload as { error?: { code?: unknown } } | null)?.error?.code === 'string'
+        ? (payload as { error: { code: string } }).error.code
+        : 'API_ERROR'
+      throw new ApiError(
+        extractBackendErrorMessage(payload, response.statusText || '操作失败'),
+        code,
+        response.status,
+        payload,
+      )
+    }
+
+    return undefined as T
   } catch (error) {
     const status = getHttpStatusFromError(error) ?? 500
     const payload = error instanceof ApiError ? error.details : null
