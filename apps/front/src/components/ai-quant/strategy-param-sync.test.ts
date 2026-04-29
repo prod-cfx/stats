@@ -117,6 +117,52 @@ describe('strategy-param-sync', () => {
     })
   })
 
+  it('normalizes legacy fixed sizing modes before syncing params', () => {
+    const quoteResult = syncStrategyParamsFromCodegen({
+      spec: {
+        canonicalSpec: {
+          market: { symbol: 'BTCUSDT', timeframe: '15m' },
+          sizing: { mode: 'fixed_quote', value: 1000, asset: 'USDT' },
+        },
+        riskRules: { positionPct: 10 },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(quoteResult.normalized.sizing).toEqual({ mode: 'QUOTE', value: 1000, asset: 'USDT' })
+    expect(quoteResult.paramValues.positionAmount).toBe(1000)
+    expect(quoteResult.paramValues.positionPct).toBeUndefined()
+
+    const ratioResult = syncStrategyParamsFromCodegen({
+      spec: {
+        rules: [{
+          phase: 'entry',
+          condition: { key: 'bollinger.upper_break' },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'fixed_ratio', value: 0.2 } }],
+        }],
+        market: { symbols: ['BTCUSDT'], timeframes: ['15m'] },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(ratioResult.normalized.sizing).toEqual({ mode: 'RATIO', value: 20 })
+    expect(ratioResult.paramValues.positionPct).toBe(20)
+  })
+
   it('uses canonical singular market fields with canonical sizing', () => {
     const result = syncStrategyParamsFromCodegen({
       spec: {

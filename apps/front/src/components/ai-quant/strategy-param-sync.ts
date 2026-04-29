@@ -165,13 +165,30 @@ function readMarketStrings(market: Record<string, unknown>, pluralKey: string, s
 }
 
 function hasSizingShape(value: unknown): value is Record<string, unknown> {
-  const raw = asObject(value)
+  const raw = normalizeLegacySizingInput(value)
   const mode = parseString(raw?.mode)?.toUpperCase()
   return Boolean(
     raw
     && (mode === 'RATIO' || mode === 'QUOTE' || mode === 'QTY')
     && parseNumber(raw.value) !== null,
   )
+}
+
+function normalizeLegacySizingInput(value: unknown): Record<string, unknown> | null {
+  const raw = asObject(value)
+  if (!raw) return null
+  const rawMode = parseString(raw.mode)?.toLowerCase().replace(/[\s-]+/g, '_')
+  switch (rawMode) {
+    case 'fixed_ratio':
+      return { ...raw, mode: 'RATIO' }
+    case 'fixed_quote':
+      return { ...raw, mode: 'QUOTE' }
+    case 'fixed_qty':
+    case 'fixed_quantity':
+      return { ...raw, mode: 'QTY' }
+    default:
+      return raw
+  }
 }
 
 function setNumberField(
@@ -259,8 +276,9 @@ export function syncStrategyParamsFromCodegen(args: {
     const positionPct = parseNumber(lockedParams?.positionPct)
       ?? (() => {
         const openAction = topLevelRules.flatMap(rule => rule.actions ?? []).find(action => action.sizing)
-        if (openAction?.sizing?.mode !== 'RATIO') return null
-        const sizingValue = parseNumber(openAction?.sizing?.value)
+        const openSizing = normalizeLegacySizingInput(openAction?.sizing)
+        if (parseString(openSizing?.mode)?.toUpperCase() !== 'RATIO') return null
+        const sizingValue = parseNumber(openSizing?.value)
         if (sizingValue === null) return null
         return sizingValue <= 1 ? sizingValue * 100 : sizingValue
       })()
@@ -304,11 +322,13 @@ export function syncStrategyParamsFromCodegen(args: {
   const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
   const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
   const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
-  const canonicalSizing = asObject(canonicalSpec.sizing) ?? asObject(typed.sizing)
+  const canonicalSizing = normalizeLegacySizingInput(canonicalSpec.sizing)
+    ?? normalizeLegacySizingInput(typed.sizing)
   const actionSizing = topLevelRules
     .flatMap(rule => rule.actions ?? [])
     .map(action => action.sizing)
-    .find((value): value is { mode?: string, value?: unknown } => Boolean(value))
+    .map(normalizeLegacySizingInput)
+    .find((value): value is Record<string, unknown> => Boolean(value))
   const legacyPositionPct = parseNumber(riskRules.positionPct)
     ?? parseNumber(contextText.match(/(\d+(?:\.\d+)?)%\s*(?:总仓位|仓位)/)?.[1])
     ?? args.fallback.positionPct
@@ -319,7 +339,7 @@ export function syncStrategyParamsFromCodegen(args: {
     legacyPositionPct,
   )
   const retainedSizing = hasSizingShape(currentValues.sizing)
-    ? normalizeSizingFromCanonicalValue(currentValues.sizing, nextSymbol, legacyPositionPct)
+    ? normalizeSizingFromCanonicalValue(normalizeLegacySizingInput(currentValues.sizing), nextSymbol, legacyPositionPct)
     : args.fallback.sizing
   const nextSizing = hasCanonicalOrActionSizing
     ? parsedSizing
