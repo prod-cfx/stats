@@ -29,6 +29,7 @@ import {
   invalidateConversationPublication,
   normalizeClarificationGate,
   normalizeParamsFromValues,
+  syncNormalizedSizingParamValues,
 } from './ai-quant-page-conversation'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED'])
@@ -459,6 +460,7 @@ export function applyCodegenResponseToConversationState(args: {
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
     : conversation.paramSchema
   const nextParams = normalizeParamsFromValues(nextParamValues, conversation.params)
+  const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
   const nextGraphStatus =
     response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
   const nextGraph = shouldUpdateGraph
@@ -635,7 +637,7 @@ export function applyCodegenResponseToConversationState(args: {
     publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
     params: nextParams,
     paramSchema: nextParamSchema,
-    paramValues: nextParamValues,
+    paramValues: normalizedParamValues,
     logicGraph: nextGraph,
     displayLogicGraph: nextDisplayLogicGraph,
     semanticGraph: nextSemanticGraph,

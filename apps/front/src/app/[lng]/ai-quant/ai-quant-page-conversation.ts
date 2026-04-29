@@ -883,6 +883,17 @@ export function normalizeParamsFromValues(
   }
 }
 
+export function syncNormalizedSizingParamValues(
+  values: Record<string, unknown>,
+  params: QuantParams,
+): Record<string, unknown> {
+  return {
+    ...values,
+    sizing: params.sizing,
+    positionPct: params.positionPct,
+  }
+}
+
 export function buildParamSchemaWithCapabilities(
   capabilities: BacktestCapabilities | null,
   currentSymbol = DEFAULT_PARAMS.symbol,
@@ -1881,6 +1892,7 @@ export function createConversationFromServerConversation(
     backtestDraftConfig,
   })
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
+  const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
   const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
   const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId,
@@ -1959,7 +1971,7 @@ export function createConversationFromServerConversation(
     messages,
     params: nextParams,
     paramSchema: syncResult?.paramSchema ?? seed.paramSchema,
-    paramValues: nextParamValues,
+    paramValues: normalizedParamValues,
     logicGraph,
     displayLogicGraph,
     codegenSpecDesc: response.specDesc ?? null,
@@ -2086,6 +2098,10 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     normalizedBacktestExecutionConfig.paramValues,
     fallbackParams,
   )
+  const normalizedParamValues = syncNormalizedSizingParamValues(
+    normalizedBacktestExecutionConfig.paramValues,
+    nextParams,
+  )
 
   return normalizeHydratedConversationState({
     id: item.id ?? `conv-${Date.now()}`,
@@ -2095,7 +2111,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     messages: Array.isArray(item.messages) ? item.messages : [],
     params: nextParams,
     paramSchema: item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
-    paramValues: normalizedBacktestExecutionConfig.paramValues,
+    paramValues: normalizedParamValues,
     backtestResult: item.backtestResult ?? null,
     logicGraph: item.logicGraph ?? null,
     displayLogicGraph: normalizeDisplayLogicGraph(item.displayLogicGraph),

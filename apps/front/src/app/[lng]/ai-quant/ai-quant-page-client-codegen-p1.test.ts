@@ -12,6 +12,7 @@ import {
   DEFAULT_PARAMS,
   DEFAULT_PARAM_SCHEMA,
   DEFAULT_PARAM_VALUES,
+  normalizeParamsFromValues,
 } from './ai-quant-page-conversation'
 
 const mockContinueLlmCodegenSession = jest.fn()
@@ -714,11 +715,20 @@ describe('AiQuantPageClient codegen P1 guards', () => {
       backtestFeeBps: 2,
       backtestPriceSource: 'mid',
       backtestAllowPartial: false,
+      sizing: { mode: 'RATIO', value: 25 },
     })
     expect(next.params).toMatchObject({
       exchange: 'okx',
       symbol: 'ETHUSDT',
       baseTimeframe: '1h',
+      positionPct: 25,
+      sizing: { mode: 'RATIO', value: 25 },
+    })
+
+    expect(normalizeParamsFromValues({
+      ...next.paramValues,
+      symbol: 'ETHUSDT',
+    }, next.params)).toMatchObject({
       positionPct: 25,
       sizing: { mode: 'RATIO', value: 25 },
     })
