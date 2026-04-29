@@ -16,13 +16,21 @@ function createService(repository: { createInstanceWithPlan: jest.Mock }) {
       ],
     }),
   }
+  const stateMachine = {
+    initialize: jest.fn().mockResolvedValue({ id: 'event-initializing' }),
+    markRunning: jest.fn().mockResolvedValue({ id: 'event-running' }),
+    pause: jest.fn(),
+    resume: jest.fn(),
+    stop: jest.fn(),
+  }
   return {
     planner,
+    stateMachine,
     service: new GridRuntimeService(
       asDependency<ConstructorParameters<typeof GridRuntimeService>[0]>(repository),
       asDependency<ConstructorParameters<typeof GridRuntimeService>[1]>(planner),
       asDependency<ConstructorParameters<typeof GridRuntimeService>[2]>({ syncInstance: jest.fn() }),
-      asDependency<ConstructorParameters<typeof GridRuntimeService>[3]>({ initialize: jest.fn(), markRunning: jest.fn(), pause: jest.fn(), resume: jest.fn(), stop: jest.fn() }),
+      asDependency<ConstructorParameters<typeof GridRuntimeService>[3]>(stateMachine),
     ),
   }
 }
@@ -61,7 +69,7 @@ function createAstSnapshot() {
 describe('GridRuntimeService', () => {
   it('creates a grid runtime plan from AST order programs', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-1' }) }
-    const { service, planner } = createService(repository)
+    const { service, planner, stateMachine } = createService(repository)
 
     await service.createFromDeployment({
       strategyInstanceId: 'strategy-1',
@@ -103,5 +111,13 @@ describe('GridRuntimeService', () => {
         rawPayload: { source: 'deployment', quoteBudget: '50' },
       })],
     }))
+    expect(stateMachine.initialize).toHaveBeenCalledWith('grid-runtime-1')
+    expect(stateMachine.markRunning).toHaveBeenCalledWith('grid-runtime-1')
+    expect(repository.createInstanceWithPlan.mock.invocationCallOrder[0]).toBeLessThan(
+      stateMachine.initialize.mock.invocationCallOrder[0],
+    )
+    expect(stateMachine.initialize.mock.invocationCallOrder[0]).toBeLessThan(
+      stateMachine.markRunning.mock.invocationCallOrder[0],
+    )
   })
 })

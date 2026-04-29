@@ -33,14 +33,14 @@ export class GridRuntimeService {
     private readonly stateMachine: GridRuntimeStateMachineService,
   ) {}
 
-  createFromDeployment(input: CreateGridRuntimeFromDeploymentInput) {
+  async createFromDeployment(input: CreateGridRuntimeFromDeploymentInput) {
     const config = this.buildConfigFromAst(input.astSnapshot, input.symbol)
     const plan = this.planner.planInitialOrders({
       config,
       currentPrice: this.resolveCurrentPrice(input.currentPrice, config),
     })
 
-    return this.repository.createInstanceWithPlan({
+    const instance = await this.repository.createInstanceWithPlan({
       strategyInstanceId: input.strategyInstanceId,
       publishedSnapshotId: input.publishedSnapshotId,
       userId: input.userId,
@@ -63,6 +63,9 @@ export class GridRuntimeService {
         rawPayload: { source: 'deployment', quoteBudget: order.quoteBudget },
       })),
     })
+    await this.stateMachine.initialize(instance.id)
+    await this.stateMachine.markRunning(instance.id)
+    return instance
   }
 
   syncInstance(instanceId: string): Promise<void> {
