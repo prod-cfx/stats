@@ -1,3 +1,4 @@
+import type { QuantSizing } from './semantic-sizing'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
@@ -30,7 +31,6 @@ import {
   derivePositionPctFromSizing,
   formatSizing,
   normalizeSizing,
-  type QuantSizing,
 } from './semantic-sizing'
 
 export interface QuantParams {
@@ -1186,7 +1186,7 @@ export function buildBacktestDraftConfigFromValues(
   }
 }
 
-function doesBacktestConfigMatch(
+function doesBacktestRangeMatch(
   current: AiQuantBacktestDraftConfig,
   stored: AiQuantBacktestDraftConfig,
 ): boolean {
@@ -1199,6 +1199,13 @@ function doesBacktestConfigMatch(
     }
   }
 
+  return true
+}
+
+function doesBacktestExecutionConfigMatch(
+  current: AiQuantBacktestDraftConfig,
+  stored: AiQuantBacktestDraftConfig,
+): boolean {
   return (
     current.execution.initialCash === stored.execution.initialCash
     && current.execution.leverage === stored.execution.leverage
@@ -1216,15 +1223,18 @@ function restoreBacktestResultFromLastBacktestRef(input: {
   symbol: string
 }): BacktestResult | null {
   const { conversationPublishedSnapshotId, lastBacktestRef, currentBacktestConfig, symbol } = input
-  if (!lastBacktestRef || !conversationPublishedSnapshotId || !currentBacktestConfig) {
+  if (!lastBacktestRef || !conversationPublishedSnapshotId) {
     return null
   }
   if (conversationPublishedSnapshotId !== lastBacktestRef.publishedSnapshotId) {
     return null
   }
-  if (!doesBacktestConfigMatch(currentBacktestConfig, lastBacktestRef.config)) {
+  if (currentBacktestConfig && !doesBacktestRangeMatch(currentBacktestConfig, lastBacktestRef.config)) {
     return null
   }
+  const configChanged =
+    !currentBacktestConfig
+    || !doesBacktestExecutionConfigMatch(currentBacktestConfig, lastBacktestRef.config)
 
   return {
     id: lastBacktestRef.jobId,
@@ -1240,6 +1250,7 @@ function restoreBacktestResultFromLastBacktestRef(input: {
       ? { openPnl: lastBacktestRef.summary.openPnl }
       : {}),
     ...(lastBacktestRef.summary.marketType ? { marketType: lastBacktestRef.summary.marketType } : {}),
+    ...(configChanged ? { recoveryStatus: 'config_changed' as const } : {}),
   }
 }
 

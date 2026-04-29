@@ -27,6 +27,7 @@ export interface BacktestResult {
   symbol?: string
   startAt?: string
   endAt?: string
+  recoveryStatus?: 'config_changed'
 }
 
 export function BacktestSummaryCard({
@@ -177,6 +178,15 @@ export function BacktestSummaryCard({
           </p>
           {backtestContext && (
             <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{backtestContext}</p>
+          )}
+          {result.recoveryStatus === 'config_changed' && (
+            <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500">
+              {t('aiQuant.messages.backtestConfigChanged', {
+                defaultValue: isEn
+                  ? 'Backtest parameters changed. This is the latest result for the published strategy snapshot; rerun backtest to refresh it.'
+                  : '回测参数已变化。当前展示的是已发布策略快照的最近回测结果，建议重新回测刷新。',
+              })}
+            </p>
           )}
         </div>
         <button
