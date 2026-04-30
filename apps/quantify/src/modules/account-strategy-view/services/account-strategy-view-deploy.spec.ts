@@ -1368,4 +1368,80 @@ describe('accountStrategyViewService.deployStrategy', () => {
     })
     expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
+
+  it('fails closed for deploy when perp snapshot tdMode is unsupported by constraints', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn(),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-invalid-td-mode-1',
+        snapshotHash: 'snapshot-invalid-td-mode-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          marketType: 'perp',
+          positionPct: 12,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 2,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'ioc',
+          tdMode: 'banana',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          strategyDeclaredLeverageRange: { min: 1, max: 3 },
+          defaultLeverage: 2,
+          supportedPriceSources: ['mark'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['ioc'],
+          supportedTdModes: ['cross'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const tradingService = {
+      getLeverageConstraints: jest.fn().mockResolvedValue({
+        minLeverage: 1,
+        maxLeverage: 3,
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
+    )
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'invalid td mode deploy',
+      publishedSnapshotId: 'snapshot-invalid-td-mode-1',
+      deployRequestId: 'deploy-req-invalid-td-mode-1',
+      exchangeAccountId: 'acct-1',
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.invalid_snapshot_execution_config',
+    })
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
+  })
 })

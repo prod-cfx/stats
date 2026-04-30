@@ -2389,15 +2389,23 @@ export class AccountStrategyViewService {
     const tdMode = marketType === 'perp'
       ? this.readString(deploymentExecutionDefaults, ['tdMode'])
       : null
-    if (!priceSource || !orderType || !timeInForce || (marketType === 'perp' && !tdMode)) {
+    const supportedTdModes = this.readStringArray(deploymentExecutionConstraints, ['supportedTdModes'])
+    const tdModeAllowed = marketType !== 'perp'
+      || !!tdMode
+        && ['cross', 'isolated'].includes(tdMode)
+        && (supportedTdModes.length === 0 || supportedTdModes.includes(tdMode))
+    if (!priceSource || !orderType || !timeInForce || (marketType === 'perp' && (!tdMode || !tdModeAllowed))) {
       const missing = {
         priceSource: !priceSource,
         orderType: !orderType,
         timeInForce: !timeInForce,
         tdMode: marketType === 'perp' && !tdMode,
       }
+      const invalid = {
+        tdMode: marketType === 'perp' && !!tdMode && !tdModeAllowed,
+      }
       this.logger.error(
-        `[AccountStrategyViewService.resolveDeployPayload] invalid snapshot execution config; input=${JSON.stringify({ publishedSnapshotId, marketType, missing })}; reason=missing required deployment execution field`,
+        `[AccountStrategyViewService.resolveDeployPayload] invalid snapshot execution config; input=${JSON.stringify({ publishedSnapshotId, marketType, missing, invalid, tdMode, supportedTdModes })}; reason=missing or unsupported deployment execution field`,
       )
       throw new DomainException('account_strategy.invalid_snapshot_execution_config', {
         code: ErrorCode.BAD_REQUEST,
@@ -2406,6 +2414,9 @@ export class AccountStrategyViewService {
           publishedSnapshotId,
           marketType,
           missing,
+          invalid,
+          tdMode,
+          supportedTdModes,
         },
       })
     }
