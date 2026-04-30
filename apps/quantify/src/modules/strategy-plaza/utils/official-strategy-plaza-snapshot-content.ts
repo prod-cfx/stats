@@ -56,6 +56,7 @@ export function buildOfficialTemplateDeploymentExecutionDefaults(
     priceSource: config.priceSource,
     orderType: config.orderType,
     timeInForce: config.timeInForce,
+    ...(config.tdMode ? { tdMode: config.tdMode } : {}),
   }
 }
 
@@ -71,6 +72,7 @@ export function buildOfficialTemplateDeploymentExecutionConstraints(
     supportedPriceSources: [config.priceSource],
     supportedOrderTypes: [config.orderType],
     supportedTimeInForce: [config.timeInForce],
+    ...(config.tdMode ? { supportedTdModes: [config.tdMode] } : {}),
     constraintExplanation: 'official strategy plaza template runtime constraints',
   }
 }

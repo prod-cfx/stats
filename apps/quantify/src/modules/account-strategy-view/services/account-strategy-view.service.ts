@@ -432,7 +432,7 @@ export class AccountStrategyViewService {
     const driftReasons: string[] = []
     if (baselineExecutionConfig && deploymentExecutionConfig) {
       const driftFields = snapshotMarketType === 'perp'
-        ? ['leverage', 'priceSource', 'orderType', 'timeInForce']
+        ? ['leverage', 'priceSource', 'orderType', 'timeInForce', 'tdMode']
         : ['priceSource', 'orderType', 'timeInForce']
       for (const field of driftFields) {
         if (baselineExecutionConfig[field] !== deploymentExecutionConfig[field]) {
@@ -588,6 +588,7 @@ export class AccountStrategyViewService {
               priceSource: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['priceSource']) : null,
               orderType: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['orderType']) : null,
               timeInForce: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['timeInForce']) : null,
+              tdMode: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['tdMode']) : null,
             },
             executionConfigVersion: typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
               ? ((row as Record<string, unknown>).executionConfigVersion as number)
@@ -1365,6 +1366,7 @@ export class AccountStrategyViewService {
       priceSource: this.readString(existingConfig ?? deploymentDefaults, ['priceSource']) ?? null,
       orderType: this.readString(existingConfig ?? deploymentDefaults, ['orderType']) ?? null,
       timeInForce: this.readString(existingConfig ?? deploymentDefaults, ['timeInForce']) ?? null,
+      tdMode: this.readString(existingConfig ?? deploymentDefaults, ['tdMode']) ?? null,
     }
     const nextVersion = typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
       ? ((row as Record<string, unknown>).executionConfigVersion as number) + 1
@@ -1378,6 +1380,7 @@ export class AccountStrategyViewService {
         priceSource: string
         orderType: string
         timeInForce: string
+        tdMode?: string | null
       },
       executionConfigVersion: nextVersion,
       existingParams: this.readRecord((row as Record<string, unknown>).params) ?? {},
@@ -2241,6 +2244,7 @@ export class AccountStrategyViewService {
       priceSource: string
       orderType: string
       timeInForce: string
+      tdMode?: string | null
     }
     publishedSnapshotId: string
     snapshotHash: string
@@ -2379,6 +2383,33 @@ export class AccountStrategyViewService {
       })
     }
 
+    const priceSource = this.readString(deploymentExecutionDefaults, ['priceSource'])
+    const orderType = this.readString(deploymentExecutionDefaults, ['orderType'])
+    const timeInForce = this.readString(deploymentExecutionDefaults, ['timeInForce'])
+    const tdMode = marketType === 'perp'
+      ? this.readString(deploymentExecutionDefaults, ['tdMode'])
+      : null
+    if (!priceSource || !orderType || !timeInForce || (marketType === 'perp' && !tdMode)) {
+      const missing = {
+        priceSource: !priceSource,
+        orderType: !orderType,
+        timeInForce: !timeInForce,
+        tdMode: marketType === 'perp' && !tdMode,
+      }
+      this.logger.error(
+        `[AccountStrategyViewService.resolveDeployPayload] invalid snapshot execution config; input=${JSON.stringify({ publishedSnapshotId, marketType, missing })}; reason=missing required deployment execution field`,
+      )
+      throw new DomainException('account_strategy.invalid_snapshot_execution_config', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          publishedSnapshotId,
+          marketType,
+          missing,
+        },
+      })
+    }
+
     return {
       exchange,
       symbol,
@@ -2388,9 +2419,10 @@ export class AccountStrategyViewService {
       marketType,
       deploymentExecutionConfig: {
         leverage: requestedLeverage,
-        priceSource: this.readString(deploymentExecutionDefaults, ['priceSource']) ?? 'close',
-        orderType: this.readString(deploymentExecutionDefaults, ['orderType']) ?? 'market',
-        timeInForce: this.readString(deploymentExecutionDefaults, ['timeInForce']) ?? 'GTC',
+        priceSource,
+        orderType,
+        timeInForce,
+        ...(tdMode ? { tdMode } : {}),
       },
       publishedSnapshotId: snapshot.id,
       snapshotHash: snapshot.snapshotHash,

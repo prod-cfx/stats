@@ -3,6 +3,8 @@ import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-confi
 import { PositionAdmissionService } from './position-admission.service'
 import { SignalExecutorService } from './signal-executor.service'
 
+const OKX_PERP_EXECUTION_CONFIG = { tdMode: 'cross' }
+
 describe('signalExecutorService', () => {
   function createSchedulerRegistry() {
     return { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
@@ -70,6 +72,10 @@ describe('signalExecutorService', () => {
         balance: new Prisma.Decimal(1000),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      undefined,
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toEqual({
@@ -207,6 +213,10 @@ describe('signalExecutorService', () => {
         balance: new Prisma.Decimal(1000),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      undefined,
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -252,6 +262,10 @@ describe('signalExecutorService', () => {
         initialBalance: new Prisma.Decimal('4901.58222'),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      undefined,
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toEqual({
@@ -286,6 +300,10 @@ describe('signalExecutorService', () => {
         balance: new Prisma.Decimal(1000),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      undefined,
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -409,6 +427,10 @@ describe('signalExecutorService', () => {
           maxRiskFraction: 1,
         },
       } as any,
+      undefined,
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -448,6 +470,9 @@ describe('signalExecutorService', () => {
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
       new Prisma.Decimal('0.25'),
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -488,6 +513,9 @@ describe('signalExecutorService', () => {
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
       new Prisma.Decimal('0.0359'),
+      undefined,
+      undefined,
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -511,6 +539,7 @@ describe('signalExecutorService', () => {
         amount: 0.0359,
         price: 94500,
         reduceOnly: true,
+        positionSide: 'LONG',
       },
       {
         baseAsset: 'BTC',
@@ -590,6 +619,7 @@ describe('signalExecutorService', () => {
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
       'SELL',
       'LONG',
+      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({

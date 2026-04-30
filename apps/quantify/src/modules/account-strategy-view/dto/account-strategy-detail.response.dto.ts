@@ -22,6 +22,9 @@ export class AccountStrategyExecutionConfigDto {
 
   @ApiPropertyOptional({ nullable: true })
   timeInForce!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  tdMode!: string | null
 }
 
 export class AccountStrategyCompatibilityMetadataDto {

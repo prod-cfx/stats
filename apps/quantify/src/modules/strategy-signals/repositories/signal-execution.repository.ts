@@ -102,13 +102,29 @@ export class SignalExecutionRepository {
     })
   }
 
-  async markFailed(id: string, errorMessage: string) {
+  async markFailed(id: string, errorMessage: string, metadataPatch?: Prisma.JsonObject) {
+    const existing = metadataPatch
+      ? await this.txHost.tx.userSignalExecution.findUnique({
+          where: { id },
+          select: { metadata: true },
+        })
+      : null
+    const current = this.asExecutionMetadata(existing?.metadata)
+    const nextMetadata = metadataPatch
+      ? {
+          ...current,
+          ...metadataPatch,
+          stageHistory: current.stageHistory ?? [],
+        }
+      : current
+
     await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         status: ExecutionStatus.FAILED,
         errorMessage,
         executedAt: new Date(),
+        ...(metadataPatch ? { metadata: nextMetadata } : {}),
       },
     })
   }

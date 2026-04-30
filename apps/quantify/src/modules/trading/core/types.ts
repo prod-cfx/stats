@@ -9,6 +9,8 @@ export type OrderSide = 'buy' | 'sell'
 export type OrderType = 'limit' | 'market' | 'stop' | 'stop_limit'
 
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK'
+export type PositionIntentSide = 'LONG' | 'SHORT'
+export type TradeMode = 'cash' | 'cross' | 'isolated'
 
 export interface UnifiedSymbol {
   exchangeId: ExchangeId
@@ -87,6 +89,8 @@ export interface CreateOrderInput {
   amount: number
   price?: number
   timeInForce?: TimeInForce
+  tdMode?: TradeMode
+  positionSide?: PositionIntentSide
   reduceOnly?: boolean
   clientOrderId?: string
   /**

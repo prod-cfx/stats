@@ -12,6 +12,7 @@ export type StrategyPlazaTemplateStatus = 'live' | 'hidden'
 export type StrategyPlazaDeploymentPriceSource = 'last' | 'mark'
 export type StrategyPlazaDeploymentOrderType = 'market'
 export type StrategyPlazaDeploymentTimeInForce = 'ioc'
+export type StrategyPlazaDeploymentTradeMode = 'cash' | 'cross' | 'isolated'
 export type StrategyPlazaEvidenceExchange = 'okx' | 'binance'
 export type StrategyPlazaEvidenceMarketType = 'spot' | 'swap'
 
@@ -87,6 +88,7 @@ export interface OfficialStrategyPlazaRunConfig {
     priceSource?: StrategyPlazaDeploymentPriceSource | null
     orderType?: StrategyPlazaDeploymentOrderType | null
     timeInForce?: StrategyPlazaDeploymentTimeInForce | null
+    tdMode?: StrategyPlazaDeploymentTradeMode | null
   }
 }
 

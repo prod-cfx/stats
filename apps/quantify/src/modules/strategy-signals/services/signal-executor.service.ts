@@ -4,7 +4,7 @@ import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, TradeMode, UnifiedOrder } from '@/modules/trading/core/types'
 import type {
   Symbol as PrismaSymbol,
   PrismaClient,
@@ -64,6 +64,8 @@ interface OrderParams {
   symbol: string
   side: 'buy' | 'sell'
   reduceOnly?: boolean
+  positionSide: PositionSide
+  tdMode?: TradeMode
   amount: number
   price?: number
 }
@@ -311,6 +313,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const resolvedSignal = signal as NonNullable<typeof signal>
 
       let strategySubscription: Awaited<ReturnType<SignalExecutorRepository['findActiveSubscriptionNetwork']>> | null = null
+      let strategyDeploymentExecutionConfig: Record<string, unknown> | null = null
 
       if (resolvedSignal.strategyInstanceId) {
         const [instanceModeRow, subscriptionNetwork] = await Promise.all([
@@ -318,6 +321,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           this.executorRepository.findActiveSubscriptionNetwork(account.userId, resolvedSignal.strategyInstanceId),
         ])
         strategySubscription = subscriptionNetwork
+        strategyDeploymentExecutionConfig = this.readRecord(instanceModeRow?.deploymentExecutionConfig)
         const mode = instanceModeRow?.mode
         const shouldEnforceNetworkMatch = mode === 'TESTNET' || mode === 'LIVE'
         const expectedIsTestnet = mode === 'TESTNET'
@@ -337,7 +341,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const runtimeProvenance = this.readSignalRuntimeProvenance(resolvedSignal)
       const expectedMarketType = this.readExpectedRuntimeMarketType(resolvedSignal)
 
-      const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide)
+      const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide, strategyDeploymentExecutionConfig)
       if (preparation.type === 'duplicate') {
         this.logger.debug(`Execution already exists for signal=${signal.id} account=${account.id}`)
         return 'skipped'
@@ -458,7 +462,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'skipped'
       }
 
+      let clientOrderId = ''
       try {
+        clientOrderId = this.buildClientOrderId(execution.id)
         const orderRequest = {
           exchangeId: effectiveExchangeId,
           exchangeAccountId: exchangeAccountId ?? null,
@@ -469,6 +475,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           amount: effectiveOrderParams.amount,
           price: effectiveOrderParams.price,
           reduceOnly: effectiveOrderParams.reduceOnly ?? false,
+          positionSide: effectiveOrderParams.positionSide,
+          tdMode: effectiveOrderParams.tdMode ?? null,
+          clientOrderId,
         } satisfies Prisma.JsonObject
 
         await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
@@ -488,6 +497,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
             amount: effectiveOrderParams.amount,
             price: effectiveOrderParams.price,
             reduceOnly: effectiveOrderParams.reduceOnly,
+            positionSide: effectiveOrderParams.positionSide,
+            tdMode: effectiveOrderParams.tdMode,
+            clientOrderId,
           },
           exchangeAccountId,
         )
@@ -648,8 +660,20 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'executed'
       }
       catch (error) {
-        await this.executionRepository.markFailed(execution.id, (error as Error).message)
-        this.logger.error(`Signal execution failed for account ${account.id}: ${(error as Error).message}`)
+        await this.executionRepository.markFailed(
+          execution.id,
+          (error as Error).message,
+          this.buildExecutionErrorMetadata({
+            error,
+            exchangeId: effectiveExchangeId,
+            marketType: effectiveOrderParams.marketType,
+            symbol: effectiveOrderParams.symbol,
+            clientOrderId,
+          }),
+        )
+        this.logger.error(
+          `[SignalExecutorService.processAccount] failed to execute signal order; input=${JSON.stringify({ signalId: signal.id, accountId: account.id, exchangeId: effectiveExchangeId, marketType: effectiveOrderParams.marketType, symbol: effectiveOrderParams.symbol, clientOrderId })}; reason=${(error as Error).message}`,
+        )
         // 下单失败时释放全部预留
         await this.releaseReservation(account.id, reservedQuote, reserveReference)
         return 'failed'
@@ -670,6 +694,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     config: StrategySignalsRuntimeConfig,
     orderSide: TradeSide,
     positionSide: PositionSide,
+    deploymentExecutionConfig: Record<string, unknown> | null,
   ): Promise<
     | { type: 'duplicate' }
     | { type: 'skip'; reason: string; executionId?: string }
@@ -765,9 +790,14 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         closePositionQuantity,
         riskProfile,
         this.readExpectedRuntimeMarketType(signal),
+        deploymentExecutionConfig,
+        positionSide,
       )
       if (!orderParamsResult.ok) {
         const reason = (orderParamsResult as { ok: false; reason: string }).reason
+        this.logger.warn(
+          `[SignalExecutorService.prepareExecution] skipped signal execution; input=${JSON.stringify({ signalId: signal.id, accountId: account.id, strategyInstanceId: signal.strategyInstanceId ?? null })}; reason=${reason}`,
+        )
         const execution = await this.executionRepository.create({
           signal: { connect: { id: signal!.id } },
           user: { connect: { id: account.userId } },
@@ -868,6 +898,8 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     closePositionQuantity?: Decimal,
     riskProfile?: StrategyInstanceRiskProfile | null,
     runtimeMarketType?: MarketType | null,
+    deploymentExecutionConfig?: Record<string, unknown> | null,
+    positionSide?: PositionSide | null,
   ): { ok: true; params: OrderParams; quoteBudget: Decimal } | { ok: false; reason: string } {
     const symbolMeta = signal?.symbol
     if (!symbolMeta) return { ok: false, reason: 'Signal missing symbol metadata' }
@@ -893,6 +925,15 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     const side = this.mapOrderSide(signal.direction)
     if (!side) return { ok: false, reason: 'Unsupported signal direction' }
     const reduceOnly = signal.direction === 'CLOSE_LONG' || signal.direction === 'CLOSE_SHORT'
+    const resolvedPositionSide = positionSide ?? this.mapPositionSide(signal.direction)
+    if (!resolvedPositionSide) return { ok: false, reason: 'Unsupported position side' }
+    const tdModeValue = exchangeId === 'okx' && marketType === 'perp'
+      ? this.readString(deploymentExecutionConfig ?? {}, ['tdMode'])
+      : undefined
+    const tdMode = tdModeValue ? this.readTradeMode(tdModeValue) : undefined
+    if (exchangeId === 'okx' && marketType === 'perp' && !tdMode) {
+      return { ok: false, reason: 'Missing or unsupported explicit tdMode in strategy deployment execution config' }
+    }
 
     // 根据是开仓还是平仓决定预算与原始数量来源
     const isCloseSignal =
@@ -1042,6 +1083,8 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         amount: finalAmount,
         price: finalPrice,
         reduceOnly,
+        positionSide: resolvedPositionSide,
+        ...(tdMode ? { tdMode } : {}),
       },
       quoteBudget,
     }
@@ -1211,6 +1254,12 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+
+  private readTradeMode(value: string): TradeMode | null {
+    if (value === 'cash' || value === 'cross' || value === 'isolated') return value
+    return null
+  }
+
   private readPortfolioPositionMode(value: Prisma.JsonValue | undefined) {
     if (value === 'long_only' || value === 'short_only' || value === 'long_short') {
       return value
@@ -1365,6 +1414,8 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         amount: finalAmount,
         price: finalPrice,
         reduceOnly: originalParams.reduceOnly,
+        positionSide: originalParams.positionSide,
+        ...(originalParams.tdMode ? { tdMode: originalParams.tdMode } : {}),
       },
     }
   }
@@ -1439,6 +1490,59 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         stage,
         at: now,
       })),
+    }
+  }
+
+
+  private readRecord(input: unknown): Record<string, unknown> | null {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+    return input as Record<string, unknown>
+  }
+
+  private readString(source: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+      const value = source[key]
+      if (typeof value === 'string' && value.trim().length > 0) return value.trim()
+    }
+    return null
+  }
+
+  private buildClientOrderId(executionId: string): string {
+    const normalized = executionId.replace(/[^a-zA-Z0-9]/g, '')
+    return `ce${normalized}`.slice(0, 32)
+  }
+
+  private buildExecutionErrorMetadata(input: {
+    error: unknown
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+    clientOrderId: string
+  }): Prisma.JsonObject {
+    const error = input.error as { code?: string; args?: Record<string, unknown>; getResponse?: () => unknown }
+    const response = typeof error?.getResponse === 'function' ? error.getResponse() : null
+    const responseRecord = response && typeof response === 'object' && !Array.isArray(response)
+      ? response as Record<string, unknown>
+      : null
+    const args = responseRecord?.args && typeof responseRecord.args === 'object' && !Array.isArray(responseRecord.args)
+      ? responseRecord.args as Record<string, unknown>
+      : error?.args
+    const reason = typeof args?.reason === 'string'
+      ? args.reason
+      : input.error instanceof Error
+        ? input.error.message
+        : String(input.error)
+
+    return {
+      executionError: {
+        stage: 'ORDER_SUBMITTED',
+        code: typeof responseRecord?.code === 'string' ? responseRecord.code : error?.code ?? null,
+        reason,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        symbol: input.symbol,
+        clientOrderId: input.clientOrderId,
+      } as Prisma.JsonObject,
     }
   }
 

@@ -2938,6 +2938,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         priceSource: 'close',
         orderType: 'market',
         timeInForce: 'gtc',
+        tdMode: null,
       },
       effectiveAllowedLeverageRange: null,
     }))

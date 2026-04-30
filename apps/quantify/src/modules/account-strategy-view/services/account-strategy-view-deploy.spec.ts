@@ -245,6 +245,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           priceSource: 'close',
           orderType: 'market',
           timeInForce: 'GTC',
+          tdMode: 'cross',
         },
         deploymentExecutionConstraints: {
           platformRiskMaxLeverage: 5,
@@ -316,6 +317,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           priceSource: 'close',
           orderType: 'market',
           timeInForce: 'GTC',
+          tdMode: 'cross',
         },
         deploymentExecutionConstraints: {
           platformRiskMaxLeverage: 5,
@@ -896,6 +898,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
+          tdMode: 'cross',
         },
         deploymentExecutionConstraints: {
           platformRiskMaxLeverage: 5,
@@ -1162,6 +1165,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
+          tdMode: 'cross',
         },
         deploymentExecutionConstraints: {
           platformRiskMaxLeverage: 5,
@@ -1225,6 +1229,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         priceSource: 'mark',
         orderType: 'market',
         timeInForce: 'IOC',
+        tdMode: 'cross',
       },
       executionConfigVersion: 1,
     }))
@@ -1258,6 +1263,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
           priceSource: 'close',
           orderType: 'market',
           timeInForce: 'GTC',
+          tdMode: 'cross',
         },
         deploymentExecutionConstraints: {
           platformRiskMaxLeverage: 1,
