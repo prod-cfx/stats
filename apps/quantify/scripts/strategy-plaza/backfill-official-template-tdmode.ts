@@ -69,7 +69,6 @@ interface BackfillPrisma {
   publishedStrategySnapshot: {
     findUnique: (args: unknown) => Promise<SnapshotRow | null>
     findMany: (args: unknown) => Promise<SnapshotRow[]>
-    update: (args: unknown) => Promise<unknown>
   }
   strategyTemplate: {
     update: (args: unknown) => Promise<unknown>
@@ -124,39 +123,6 @@ function mergeParams(template: OfficialStrategyPlazaTemplate, current: unknown, 
       asRecord(currentParams).deploymentExecutionConfig,
     ),
     executionConfigVersion,
-  }
-}
-
-function snapshotUpdateData(template: OfficialStrategyPlazaTemplate): JsonObject {
-  const content = buildOfficialStrategySnapshotContent(template)
-  return {
-    snapshotHash: content.snapshotHash,
-    scriptHash: content.scriptHash,
-    specHash: content.specHash,
-    irHash: content.irHash,
-    astDigest: content.astDigest,
-    structuralDigest: content.structuralDigest,
-    scriptSnapshot: content.scriptSnapshot,
-    specSnapshot: content.specSnapshot as Prisma.InputJsonValue,
-    semanticGraph: content.semanticGraph as Prisma.InputJsonValue,
-    compiledIr: content.compiledIr as Prisma.InputJsonValue,
-    irSnapshot: content.irSnapshot as Prisma.InputJsonValue,
-    astSnapshot: content.astSnapshot as Prisma.InputJsonValue,
-    compiledManifest: content.compiledManifest as Prisma.InputJsonValue,
-    consistencyReport: content.consistencyReport as Prisma.InputJsonValue,
-    paramsSnapshot: content.paramsSnapshot as Prisma.InputJsonValue,
-    strategyConfig: content.strategyConfig as Prisma.InputJsonValue,
-    backtestConfigDefaults: content.backtestConfigDefaults as Prisma.InputJsonValue,
-    deploymentExecutionDefaults: content.deploymentExecutionDefaults as Prisma.InputJsonValue,
-    deploymentExecutionConstraints: content.deploymentExecutionConstraints as Prisma.InputJsonValue,
-    executionEnvelope: content.executionEnvelope as Prisma.InputJsonValue,
-    executionPolicy: content.executionPolicy as Prisma.InputJsonValue,
-    dataRequirements: content.dataRequirements as Prisma.InputJsonValue,
-    userIntentSummary: content.userIntentSummary as Prisma.InputJsonValue,
-    strategySummary: content.strategySummary as Prisma.InputJsonValue,
-    scriptSummary: content.scriptSummary as Prisma.InputJsonValue,
-    lockedParams: content.lockedParams as Prisma.InputJsonValue,
-    snapshotVersion: content.snapshotVersion,
   }
 }
 
@@ -229,8 +195,6 @@ async function synchronizeStrategyBinding(
   tx: BackfillPrisma,
   template: OfficialStrategyPlazaTemplate,
   snapshot: SnapshotRow,
-  expectedHash: string,
-  expectedVersion: number,
 ): Promise<void> {
   if (!snapshot.strategyInstanceId) return
 
@@ -253,10 +217,10 @@ async function synchronizeStrategyBinding(
 
   const metadata = {
     ...asRecord(instance.metadata),
-    ...officialMetadata(template, expectedHash, expectedVersion),
+    ...officialMetadata(template, snapshot.snapshotHash, snapshot.snapshotVersion),
     bindingSource: 'PUBLISHED_SNAPSHOT',
     publishedSnapshotId: snapshot.id,
-    snapshotHash: expectedHash,
+    snapshotHash: snapshot.snapshotHash,
   }
   const deploymentExecutionConfig = mergeDeploymentExecutionConfig(template, instance.deploymentExecutionConfig)
   const executionConfigVersion = resolveExecutionConfigVersion(instance.executionConfigVersion)
@@ -270,7 +234,7 @@ async function synchronizeStrategyBinding(
     data: {
       defaultParams: buildOfficialTemplateParamsSnapshot(template) as Prisma.InputJsonValue,
       rulesJson: buildOfficialStrategySnapshotContent(template).specSnapshot as Prisma.InputJsonValue,
-      metadata: officialMetadata(template, expectedHash, expectedVersion) as Prisma.InputJsonValue,
+      metadata: officialMetadata(template, snapshot.snapshotHash, snapshot.snapshotVersion) as Prisma.InputJsonValue,
     },
   })
   await tx.strategyInstance.update({
@@ -305,9 +269,9 @@ async function synchronizeStrategyBinding(
     where: {
       strategyInstanceId: instance.id,
       publishedSnapshotId: snapshot.id,
-      snapshotHash: { not: expectedHash },
+      snapshotHash: { not: snapshot.snapshotHash },
     },
-    data: { snapshotHash: expectedHash },
+    data: { snapshotHash: snapshot.snapshotHash },
   })
 }
 
@@ -319,8 +283,21 @@ async function buildSnapshotRepairReasons(
   expectedVersion: number,
 ): Promise<{ repairs: string[]; skipped?: BackfillSkipItem }> {
   const repairs: string[] = []
-  if (snapshotNeedsRepair(snapshot, expectedHash, expectedVersion)) {
-    repairs.push('snapshot-content')
+  if (snapshotNeedsRepair(snapshot, expectedHash, expectedVersion) && !snapshot.strategyInstanceId) {
+    return {
+      repairs,
+      skipped: {
+        templateId: template.id,
+        input: {
+          snapshotId: snapshot.id,
+          currentHash: snapshot.snapshotHash,
+          currentVersion: snapshot.snapshotVersion,
+          expectedHash,
+          expectedVersion,
+        },
+        reason: 'published snapshots are immutable audit records; content/hash/version drift must be repaired by publishing a new snapshot and rebinding, not by in-place backfill',
+      },
+    }
   }
   if (!snapshot.strategyInstanceId) return { repairs }
 
@@ -351,7 +328,7 @@ async function buildSnapshotRepairReasons(
   if (deploymentConfigNeedsTdModeRepair(template, asRecord(instance.params).deploymentExecutionConfig)) {
     repairs.push('instance-params-deployment-execution-config')
   }
-  if (metadataNeedsRepair(instance.metadata, snapshot, expectedHash, expectedVersion)) {
+  if (metadataNeedsRepair(instance.metadata, snapshot, snapshot.snapshotHash, snapshot.snapshotVersion)) {
     repairs.push('instance-metadata-binding')
   }
 
@@ -367,7 +344,7 @@ async function buildSnapshotRepairReasons(
     where: {
       strategyInstanceId: instance.id,
       publishedSnapshotId: snapshot.id,
-      snapshotHash: { not: expectedHash },
+      snapshotHash: { not: snapshot.snapshotHash },
     },
     select: { id: true, snapshotHash: true },
   })
@@ -428,26 +405,21 @@ export async function runBackfill(prisma: BackfillPrisma, options: BackfillOptio
   const dryRunPlan = await buildBackfillPlan(prisma, options)
   if (!options.apply) return dryRunPlan
 
+  let updated = 0
   await prisma.$transaction(async tx => {
     for (const template of selectBackfillTemplates(options.templateIds)) {
       const content = buildOfficialStrategySnapshotContent(template)
-      const data = snapshotUpdateData(template)
       const snapshots = await findTemplateSnapshots(tx, template)
       for (const snapshot of snapshots) {
         const { repairs, skipped: skippedItem } = await buildSnapshotRepairReasons(tx, template, snapshot, content.snapshotHash, content.snapshotVersion)
         if (skippedItem || repairs.length === 0) continue
-        if (repairs.includes('snapshot-content')) {
-          await tx.publishedStrategySnapshot.update({
-            where: { id: snapshot.id },
-            data,
-          })
-        }
-        await synchronizeStrategyBinding(tx, template, snapshot, content.snapshotHash, content.snapshotVersion)
+        await synchronizeStrategyBinding(tx, template, snapshot)
+        updated += 1
       }
     }
   })
 
-  return { ...dryRunPlan, updated: dryRunPlan.plan.length }
+  return { ...dryRunPlan, updated }
 }
 
 export function parseArgs(argv: string[]): BackfillOptions {
