@@ -1,4 +1,4 @@
-import type { AiSignalPayload } from '@ai/shared'
+import type { AiSignalPayload, PositionSide } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { RuntimeMarketType } from '@/modules/market-data/utils/market-symbol-code.util'
 import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
@@ -223,6 +223,96 @@ export class SignalGeneratorRepository {
         quantity: true,
       },
     })
+  }
+
+  findClosablePositionsForExitAdmission(input: {
+    strategyId: string
+    strategyInstanceId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+    positionSide: PositionSide
+  }) {
+    return this.txHost.tx.position.findMany({
+      where: {
+        symbol: input.symbol,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        positionSide: input.positionSide,
+        status: 'OPEN',
+        quantity: { gt: 0 },
+        account: {
+          strategyId: input.strategyId,
+          user: {
+            strategySubscriptions: {
+              some: {
+                strategyInstanceId: input.strategyInstanceId,
+                status: 'active',
+                exchangeAccount: {
+                  exchangeId: input.exchangeId,
+                },
+              },
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        positionSide: true,
+        quantity: true,
+      },
+    })
+  }
+
+  async hasExitReconcileRisk(input: {
+    strategyId: string
+    strategyInstanceId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+    positionSide: PositionSide
+  }): Promise<boolean> {
+    const signalSymbolCodes = input.marketType === 'perp'
+      ? [input.symbol, `${input.symbol}:PERP`]
+      : [input.symbol, `${input.symbol}:SPOT`]
+    const count = await this.txHost.tx.userSignalExecution.count({
+      where: {
+        orderSide: { in: ['BUY', 'SELL'] },
+        positionSide: input.positionSide,
+        OR: [
+          { status: 'PENDING' },
+          {
+            status: 'FAILED',
+            OR: [
+              { metadata: { path: ['reconcileRequired'], equals: true } },
+              { metadata: { path: ['ledgerApplied'], equals: false } },
+            ],
+          },
+        ],
+        signal: {
+          strategyInstanceId: input.strategyInstanceId,
+          signalType: 'ENTRY',
+          symbol: {
+            code: { in: signalSymbolCodes },
+          },
+        },
+        account: {
+          strategyId: input.strategyId,
+          user: {
+            strategySubscriptions: {
+              some: {
+                strategyInstanceId: input.strategyInstanceId,
+                status: 'active',
+                exchangeAccount: {
+                  exchangeId: input.exchangeId,
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    return count > 0
   }
 
   async hasPendingReconcileRequiredEntryExecution(input: {

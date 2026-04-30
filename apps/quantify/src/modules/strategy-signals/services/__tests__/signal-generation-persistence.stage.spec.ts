@@ -159,6 +159,8 @@ describe('signalGenerationPersistenceStage', () => {
     const generatorRepository = {
       lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
       countRecentSignals: jest.fn().mockResolvedValue(1),
+      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([{ id: 'pos-1', positionSide: 'LONG', quantity: '0.01' }]),
+      hasExitReconcileRisk: jest.fn().mockResolvedValue(false),
     }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
     const stage = new SignalGenerationPersistenceStage(
@@ -173,7 +175,7 @@ describe('signalGenerationPersistenceStage', () => {
     const result = await stage.createSignalWithCooldownAndLock(
       { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
       { id: 'strategy-1' } as any,
-      { symbol: { id: 'symbol-1', code: 'BTCUSDT' }, timeframe: 'm15' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT:PERP', exchange: 'OKX', instrumentType: 'PERPETUAL' }, timeframe: 'm15' } as any,
       config,
       {},
       new Date('2026-04-10T10:00:00.000Z'),
@@ -200,6 +202,8 @@ describe('signalGenerationPersistenceStage', () => {
     const generatorRepository = {
       lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
       findRecentSignalForCooldown: jest.fn().mockResolvedValue({ id: 'recent-exit-signal' }),
+      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([{ id: 'pos-1', positionSide: 'LONG', quantity: '0.01' }]),
+      hasExitReconcileRisk: jest.fn().mockResolvedValue(false),
     }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
     const stage = new SignalGenerationPersistenceStage(
@@ -214,7 +218,7 @@ describe('signalGenerationPersistenceStage', () => {
     const result = await stage.createMultiLegSignal(
       { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
       { id: 'strategy-1' } as any,
-      { id: 'symbol-1', code: 'BTCUSDT' } as any,
+      { id: 'symbol-1', code: 'BTCUSDT:PERP', exchange: 'OKX', instrumentType: 'PERPETUAL' } as any,
       { timeframe: '1m', cooldownMinutes: 15 },
       {},
       {
@@ -294,6 +298,7 @@ describe('signalGenerationPersistenceStage', () => {
       created: false,
       signalId: null,
       reason: 'ENTRY_BLOCKED_BY_MAX_CONCURRENT_POSITIONS',
+      runtimeDisposition: 'consume',
     })
     expect(generatorRepository.findOpenPositionsForAdmission).toHaveBeenCalledWith({
       strategyId: 'strategy-1',
@@ -348,7 +353,7 @@ describe('signalGenerationPersistenceStage', () => {
       },
     )
 
-    expect(result).toEqual({ created: false, signalId: null, reason: 'COOLDOWN' })
+    expect(result).toEqual({ created: false, signalId: null, reason: 'COOLDOWN', runtimeDisposition: 'consume' })
     expect(telemetry.recordGeneration).toHaveBeenCalledWith({
       strategyId: 'strategy-1',
       symbolCode: 'BTCUSDT',
@@ -447,4 +452,93 @@ describe('signalGenerationPersistenceStage', () => {
       runtimePhase: 'consumed',
     })
   })
+
+  it('consumes runtime state without creating an exit signal when no active account has a closable position', async () => {
+    const tradingSignalRepository = { create: jest.fn() }
+    const eventEmitter = { emit: jest.fn() }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([]),
+      hasExitReconcileRisk: jest.fn().mockResolvedValue(false),
+      countRecentSignals: jest.fn().mockResolvedValue(0),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      eventEmitter as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    const result = await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT:PERP', exchange: 'OKX', instrumentType: 'PERPETUAL' }, timeframe: 'm15' } as any,
+      config,
+      {},
+      new Date('2026-04-10T10:00:00.000Z'),
+      { signalType: 'EXIT', direction: 'CLOSE_LONG', entryPrice: 100, reasoning: 'close', rawResponse: '{}' } as any,
+      { marketType: 'perp' },
+      false,
+    )
+
+    expect(result).toEqual({
+      created: false,
+      signalId: null,
+      reason: 'EXIT_NO_OPEN_POSITION_TO_CLOSE',
+      runtimeDisposition: 'consume',
+    })
+    expect(generatorRepository.findClosablePositionsForExitAdmission).toHaveBeenCalledWith(expect.objectContaining({
+      strategyId: 'strategy-1',
+      strategyInstanceId: 'instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+    }))
+    expect(tradingSignalRepository.create).not.toHaveBeenCalled()
+    expect(eventEmitter.emit).not.toHaveBeenCalled()
+  })
+
+  it('keeps runtime execution retryable when exit admission sees reconcile risk', async () => {
+    const tradingSignalRepository = { create: jest.fn() }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([]),
+      hasExitReconcileRisk: jest.fn().mockResolvedValue(true),
+      countRecentSignals: jest.fn().mockResolvedValue(0),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    const result = await stage.createMultiLegSignal(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { id: 'symbol-1', code: 'BTCUSDT:PERP', exchange: 'OKX', instrumentType: 'PERPETUAL' } as any,
+      { timeframe: '15m', cooldownMinutes: 15 },
+      {},
+      { signalType: 'EXIT', direction: 'CLOSE_LONG', entryPrice: 100, reasoning: 'close', rawResponse: '{}' } as any,
+      config,
+      { marketType: 'perp' },
+      false,
+    )
+
+    expect(result).toEqual({
+      created: false,
+      signalId: null,
+      reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED',
+      runtimeDisposition: 'retry',
+    })
+    expect(tradingSignalRepository.create).not.toHaveBeenCalled()
+  })
+
 })

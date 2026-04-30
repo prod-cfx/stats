@@ -77,6 +77,61 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.exchange).toBe('hyperliquid')
   })
 
+  it('preserves informational no-position-close timeline metadata', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-skip-info',
+      name: 'skip info strategy',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-04-30T12:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-skip-info',
+        snapshotHash: 'hash-skip-info',
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+      },
+      accountOverview: null,
+      positionOverview: null,
+      latestOrders: [],
+      openOrdersCount: 0,
+      timeline: [{
+        at: '2026-04-30T12:00:00.000Z',
+        event: '信号跳过',
+        eventType: 'trade',
+        note: '无持仓可平，已跳过',
+        severity: 'info',
+        skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
+      }],
+    } as any)
+
+    expect(record.timeline).toEqual([expect.objectContaining({
+      event: '信号跳过',
+      note: '无持仓可平，已跳过',
+      severity: 'info',
+      skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
+    })])
+  })
+
   it('enforces dynamic param contract when schema is missing', () => {
     const record = mapAccountStrategyDetailToRecord({
       id: 'inst-2',

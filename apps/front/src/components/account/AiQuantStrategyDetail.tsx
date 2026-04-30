@@ -5,10 +5,10 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { setIntent } from '@/components/ai-quant/intent-storage'
-import { useAuth } from '@/hooks/use-auth'
-import { fetchAccountAiQuantStrategyDetail, performAccountAiQuantStrategyAction } from '@/lib/api'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
+import { useAuth } from '@/hooks/use-auth'
+import { fetchAccountAiQuantStrategyDetail, performAccountAiQuantStrategyAction } from '@/lib/api'
 import { resolveDisplayMetrics } from './account-strategy-display-metrics'
 import { mapAccountStrategyDetailToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamRows } from './dynamic-param-summary'
@@ -1106,10 +1106,17 @@ export function AiQuantStrategyDetail({
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>
           <ol className="mt-3 space-y-3">
             {strategy.timeline.map(item => (
-              <li key={`${item.at}-${item.event}`} className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <li
+                key={`${item.at}-${item.event}`}
+                className={`rounded-lg border p-3 ${
+                  item.severity === 'info'
+                    ? 'border-sky-500/30 bg-sky-500/5'
+                    : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]'
+                }`}
+              >
                 <p className="text-xs text-[color:var(--cf-muted)]">{item.at}</p>
                 <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">{item.event}</p>
-                {item.note && <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{item.note}</p>}
+                {item.note && <p className={`mt-1 text-xs ${item.severity === 'info' ? 'text-sky-300' : 'text-[color:var(--cf-muted)]'}`}>{item.note}</p>}
               </li>
             ))}
           </ol>

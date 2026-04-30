@@ -605,6 +605,8 @@ export function mapAccountStrategyDetailToRecord(
       at: fmtTimelineTime(item.at),
       event: item.event,
       note: item.note ?? undefined,
+      severity: item.severity ?? undefined,
+      skipKind: item.skipKind ?? undefined,
     })),
     deploy: !invalidBinding && detail.snapshot.deployAt
       ? {

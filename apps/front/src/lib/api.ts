@@ -306,6 +306,8 @@ export interface AccountAiQuantStrategyTimelineEvent {
   eventType: 'system' | 'trade'
   event: string
   note?: string | null
+  severity?: 'info' | 'warning' | 'error' | null
+  skipKind?: string | null
 }
 
 export interface AccountAiQuantRuntimeSemanticSummary {

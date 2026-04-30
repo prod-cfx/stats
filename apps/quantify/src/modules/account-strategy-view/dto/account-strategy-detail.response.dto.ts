@@ -110,6 +110,12 @@ export class AccountStrategyTimelineEventDto {
 
   @ApiPropertyOptional({ nullable: true })
   note?: string | null
+
+  @ApiPropertyOptional({ enum: ['info', 'warning', 'error'], nullable: true })
+  severity?: 'info' | 'warning' | 'error' | null
+
+  @ApiPropertyOptional({ nullable: true })
+  skipKind?: string | null
 }
 
 export class AccountStrategyAccountOverviewDto {

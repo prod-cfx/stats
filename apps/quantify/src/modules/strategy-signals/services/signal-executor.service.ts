@@ -3,6 +3,7 @@ import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapt
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
+import type { PortfolioAdmissionConstraints } from './position-admission.service'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { ExchangeId, MarketType, TradeMode, UnifiedOrder } from '@/modules/trading/core/types'
 import type {
@@ -42,7 +43,7 @@ import { SignalExecutorRepository } from '../repositories/signal-executor.reposi
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
-import { PositionAdmissionService, type PortfolioAdmissionConstraints } from './position-admission.service'
+import { PositionAdmissionService } from './position-admission.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
 
@@ -348,7 +349,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       }
       if (preparation.type === 'skip') {
         if (preparation.executionId) {
-          await this.executionRepository.markSkipped(preparation.executionId, preparation.reason)
+          await this.executionRepository.markSkipped(preparation.executionId, preparation.reason, preparation.metadata)
         }
         return 'skipped'
       }
@@ -697,7 +698,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     deploymentExecutionConfig: Record<string, unknown> | null,
   ): Promise<
     | { type: 'duplicate' }
-    | { type: 'skip'; reason: string; executionId?: string }
+    | { type: 'skip'; reason: string; executionId?: string; metadata?: Prisma.JsonObject }
     | { type: 'ready'; execution: Prisma.UserSignalExecutionGetPayload<{ select: { id: true } }>; orderParams: OrderParams; reservedQuote: Decimal; reserveReference: string }
   > {
     return this.txHost.withTransaction(async () => {
@@ -764,6 +765,10 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
         if (!openPosition || new Decimal(openPosition.quantity).lte(0)) {
           const reason = 'No open position to close for this signal'
+          const metadata: Prisma.JsonObject = {
+            skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
+            severity: 'info',
+          }
           const execution = await this.executionRepository.create({
             signal: { connect: { id: signal!.id } },
             user: { connect: { id: account.userId } },
@@ -772,8 +777,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
             positionSide,
             status: 'SKIPPED',
             errorMessage: reason,
+            metadata,
           })
-          return { type: 'skip', reason, executionId: execution.id }
+          return { type: 'skip', reason, executionId: execution.id, metadata }
         }
 
         closePositionQuantity = new Decimal(openPosition.quantity).abs()
@@ -1508,7 +1514,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   }
 
   private buildClientOrderId(executionId: string): string {
-    const normalized = executionId.replace(/[^a-zA-Z0-9]/g, '')
+    const normalized = executionId.replace(/[^a-z0-9]/gi, '')
     return `ce${normalized}`.slice(0, 32)
   }
 

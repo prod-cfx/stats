@@ -1941,7 +1941,7 @@ strategy`,
     }
   })
 
-  it('consumes a ready on_start snapshot semantic when cooldown prevents creating a duplicate signal', async () => {
+  it('consumes a ready on_start snapshot semantic when admission intentionally skips signal creation', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -1996,6 +1996,8 @@ strategy`,
     jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue({
       created: false,
       signalId: null,
+      reason: 'EXIT_NO_OPEN_POSITION_TO_CLOSE',
+      runtimeDisposition: 'consume',
     })
     jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
 
@@ -2030,6 +2032,99 @@ strategy`,
     })
     expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
     expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
+  })
+
+  it('keeps a ready on_start snapshot semantic retryable when admission cannot prove position truth', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest.spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome').mockResolvedValue({
+      kind: 'signal',
+      payload: {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        confidence: 88,
+        entryPrice: 100,
+        rawResponse: '{"direction":"CLOSE_LONG"}',
+      },
+    })
+    jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue({
+      created: false,
+      signalId: null,
+      reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED',
+      runtimeDisposition: 'retry',
+    })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: { symbol: 'BTCUSDT', timeframe: '15m' },
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return \"template-script\"',
+        },
+      },
+      config,
+    )
+
+    expect(runtimeExecutionStateService.markRunning).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+    expect(runtimeExecutionStateService.markRetryableFailure).toHaveBeenCalledWith(expect.objectContaining({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      failureReason: 'EXIT_BLOCKED_RECONCILE_REQUIRED',
+      failureCode: 'EXIT_BLOCKED_RECONCILE_REQUIRED',
+    }))
+    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
   })
 
   it('marks a running on_start snapshot semantic as terminal when runtime outcome reports an unexpected error', async () => {

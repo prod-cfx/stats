@@ -16,6 +16,8 @@ export interface StrategyTimelineEvent {
   at: string
   event: string
   note?: string
+  severity?: 'info' | 'warning' | 'error'
+  skipKind?: string
 }
 
 export interface StrategyRuntimeExecutionState {

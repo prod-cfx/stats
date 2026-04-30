@@ -216,4 +216,89 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
       }),
     })
   })
+
+  it('scopes exit admission to active subscriptions and exact closable side', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        position: { findMany },
+      },
+    } as any)
+
+    await repo.findClosablePositionsForExitAdmission({
+      strategyId: 'strategy-template-1',
+      strategyInstanceId: 'strategy-instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+    })
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        exchangeId: 'okx',
+        marketType: 'perp',
+        positionSide: 'LONG',
+        status: 'OPEN',
+        quantity: { gt: 0 },
+        account: expect.objectContaining({
+          strategyId: 'strategy-template-1',
+          user: {
+            strategySubscriptions: {
+              some: expect.objectContaining({
+                strategyInstanceId: 'strategy-instance-1',
+                status: 'active',
+                exchangeAccount: { exchangeId: 'okx' },
+              }),
+            },
+          },
+        }),
+      }),
+      select: expect.objectContaining({
+        positionSide: true,
+        quantity: true,
+      }),
+    })
+  })
+
+  it('detects exit reconcile risk from pending or unreconciled entry executions', async () => {
+    const count = jest.fn().mockResolvedValue(1)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        userSignalExecution: { count },
+      },
+    } as any)
+
+    await expect(repo.hasExitReconcileRisk({
+      strategyId: 'strategy-template-1',
+      strategyInstanceId: 'strategy-instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+    })).resolves.toBe(true)
+
+    expect(count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        orderSide: { in: ['BUY', 'SELL'] },
+        positionSide: 'LONG',
+        OR: expect.arrayContaining([
+          { status: 'PENDING' },
+          expect.objectContaining({
+            status: 'FAILED',
+            OR: expect.arrayContaining([
+              { metadata: { path: ['reconcileRequired'], equals: true } },
+              { metadata: { path: ['ledgerApplied'], equals: false } },
+            ]),
+          }),
+        ]),
+        signal: expect.objectContaining({
+          strategyInstanceId: 'strategy-instance-1',
+          signalType: 'ENTRY',
+          symbol: { code: { in: ['BTCUSDT', 'BTCUSDT:PERP'] } },
+        }),
+      }),
+    })
+  })
 })
