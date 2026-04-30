@@ -114,7 +114,7 @@ export class SignalExecutionRepository {
       ? {
           ...current,
           ...metadataPatch,
-          stageHistory: current.stageHistory ?? [],
+          stageHistory: Array.isArray(current.stageHistory) ? current.stageHistory : [],
         }
       : current
 
