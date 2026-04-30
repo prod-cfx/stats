@@ -159,7 +159,7 @@ describe('signalGenerationPersistenceStage', () => {
     const generatorRepository = {
       lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
       countRecentSignals: jest.fn().mockResolvedValue(1),
-      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([{ id: 'pos-1', positionSide: 'LONG', quantity: '0.01' }]),
+      hasClosablePositionForExitAdmission: jest.fn().mockResolvedValue(true),
       hasExitReconcileRisk: jest.fn().mockResolvedValue(false),
     }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
@@ -202,7 +202,7 @@ describe('signalGenerationPersistenceStage', () => {
     const generatorRepository = {
       lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
       findRecentSignalForCooldown: jest.fn().mockResolvedValue({ id: 'recent-exit-signal' }),
-      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([{ id: 'pos-1', positionSide: 'LONG', quantity: '0.01' }]),
+      hasClosablePositionForExitAdmission: jest.fn().mockResolvedValue(true),
       hasExitReconcileRisk: jest.fn().mockResolvedValue(false),
     }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
@@ -458,7 +458,7 @@ describe('signalGenerationPersistenceStage', () => {
     const eventEmitter = { emit: jest.fn() }
     const generatorRepository = {
       lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
-      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([]),
+      hasClosablePositionForExitAdmission: jest.fn().mockResolvedValue(false),
       hasExitReconcileRisk: jest.fn().mockResolvedValue(false),
       countRecentSignals: jest.fn().mockResolvedValue(0),
     }
@@ -490,7 +490,7 @@ describe('signalGenerationPersistenceStage', () => {
       reason: 'EXIT_NO_OPEN_POSITION_TO_CLOSE',
       runtimeDisposition: 'consume',
     })
-    expect(generatorRepository.findClosablePositionsForExitAdmission).toHaveBeenCalledWith(expect.objectContaining({
+    expect(generatorRepository.hasClosablePositionForExitAdmission).toHaveBeenCalledWith(expect.objectContaining({
       strategyId: 'strategy-1',
       strategyInstanceId: 'instance-1',
       exchangeId: 'okx',
@@ -506,7 +506,7 @@ describe('signalGenerationPersistenceStage', () => {
     const tradingSignalRepository = { create: jest.fn() }
     const generatorRepository = {
       lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
-      findClosablePositionsForExitAdmission: jest.fn().mockResolvedValue([]),
+      hasClosablePositionForExitAdmission: jest.fn().mockResolvedValue(false),
       hasExitReconcileRisk: jest.fn().mockResolvedValue(true),
       countRecentSignals: jest.fn().mockResolvedValue(0),
     }
@@ -538,6 +538,50 @@ describe('signalGenerationPersistenceStage', () => {
       reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED',
       runtimeDisposition: 'retry',
     })
+    expect(tradingSignalRepository.create).not.toHaveBeenCalled()
+  })
+
+  it('blocks duplicate exit creation when a closable position already has same-direction execution risk', async () => {
+    const tradingSignalRepository = { create: jest.fn() }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      hasClosablePositionForExitAdmission: jest.fn().mockResolvedValue(true),
+      hasExitReconcileRisk: jest.fn().mockResolvedValue(true),
+      countRecentSignals: jest.fn().mockResolvedValue(0),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    const result = await stage.createMultiLegSignal(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { id: 'symbol-1', code: 'BTCUSDT:PERP', exchange: 'OKX', instrumentType: 'PERPETUAL' } as any,
+      { timeframe: '15m', cooldownMinutes: 15 },
+      {},
+      { signalType: 'EXIT', direction: 'CLOSE_LONG', entryPrice: 100, reasoning: 'close', rawResponse: '{}' } as any,
+      config,
+      { marketType: 'perp' },
+      false,
+    )
+
+    expect(result).toEqual({
+      created: false,
+      signalId: null,
+      reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED',
+      runtimeDisposition: 'retry',
+    })
+    expect(generatorRepository.hasExitReconcileRisk).toHaveBeenCalledWith(expect.objectContaining({
+      direction: 'CLOSE_LONG',
+      positionSide: 'LONG',
+      symbol: 'BTCUSDT',
+    }))
     expect(tradingSignalRepository.create).not.toHaveBeenCalled()
   })
 

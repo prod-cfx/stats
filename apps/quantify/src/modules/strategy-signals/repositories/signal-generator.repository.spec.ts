@@ -217,24 +217,24 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
     })
   })
 
-  it('scopes exit admission to active subscriptions and exact closable side', async () => {
-    const findMany = jest.fn().mockResolvedValue([])
+  it('checks exit admission closable positions with an existence query', async () => {
+    const findFirst = jest.fn().mockResolvedValue({ id: 'position-1' })
     const repo = new SignalGeneratorRepository({
       tx: {
-        position: { findMany },
+        position: { findFirst },
       },
     } as any)
 
-    await repo.findClosablePositionsForExitAdmission({
+    await expect(repo.hasClosablePositionForExitAdmission({
       strategyId: 'strategy-template-1',
       strategyInstanceId: 'strategy-instance-1',
       exchangeId: 'okx',
       marketType: 'perp',
       symbol: 'BTCUSDT',
       positionSide: 'LONG',
-    })
+    })).resolves.toBe(true)
 
-    expect(findMany).toHaveBeenCalledWith({
+    expect(findFirst).toHaveBeenCalledWith({
       where: expect.objectContaining({
         symbol: 'BTCUSDT',
         exchangeId: 'okx',
@@ -256,13 +256,12 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
         }),
       }),
       select: expect.objectContaining({
-        positionSide: true,
-        quantity: true,
+        id: true,
       }),
     })
   })
 
-  it('detects exit reconcile risk from pending or unreconciled entry executions', async () => {
+  it('detects exit reconcile risk from pending or unreconciled entry executions and same-direction exits', async () => {
     const count = jest.fn().mockResolvedValue(1)
     const repo = new SignalGeneratorRepository({
       tx: {
@@ -277,6 +276,7 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
       marketType: 'perp',
       symbol: 'BTCUSDT',
       positionSide: 'LONG',
+      direction: 'CLOSE_LONG',
     })).resolves.toBe(true)
 
     expect(count).toHaveBeenCalledWith({
@@ -295,7 +295,10 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
         ]),
         signal: expect.objectContaining({
           strategyInstanceId: 'strategy-instance-1',
-          signalType: 'ENTRY',
+          OR: expect.arrayContaining([
+            { signalType: 'ENTRY' },
+            { signalType: 'EXIT', direction: 'CLOSE_LONG' },
+          ]),
           symbol: { code: { in: ['BTCUSDT', 'BTCUSDT:PERP'] } },
         }),
       }),

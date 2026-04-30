@@ -345,8 +345,8 @@ export class SignalGenerationPersistenceStage {
       return { ok: false, reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED', runtimeDisposition: 'retry' }
     }
 
-    const [closablePositions, hasExitReconcileRisk] = await Promise.all([
-      this.generatorRepository.findClosablePositionsForExitAdmission({
+    const [hasClosablePosition, hasExitReconcileRisk] = await Promise.all([
+      this.generatorRepository.hasClosablePositionForExitAdmission({
         strategyId: strategy.id,
         strategyInstanceId: instance.id,
         exchangeId: identity.exchangeId,
@@ -361,18 +361,19 @@ export class SignalGenerationPersistenceStage {
         marketType: identity.marketType,
         symbol: identity.symbol,
         positionSide,
+        direction: payload.direction,
       }),
     ])
 
-    if (closablePositions.length > 0) {
-      return { ok: true }
-    }
-
     if (hasExitReconcileRisk) {
       this.logger.warn(
-        `[SignalGenerationPersistenceStage.evaluateExitAdmission] retrying exit signal because position truth is unsafe; input=${JSON.stringify({ strategyId: strategy.id, strategyInstanceId: instance.id, exchangeId: identity.exchangeId, marketType: identity.marketType, symbol: identity.symbol, positionSide })}; reason=reconcile or pending entry execution exists`,
+        `[SignalGenerationPersistenceStage.evaluateExitAdmission] retrying exit signal because position truth is unsafe; input=${JSON.stringify({ strategyId: strategy.id, strategyInstanceId: instance.id, exchangeId: identity.exchangeId, marketType: identity.marketType, symbol: identity.symbol, positionSide, direction: payload.direction })}; reason=reconcile or pending execution exists`,
       )
       return { ok: false, reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED', runtimeDisposition: 'retry' }
+    }
+
+    if (hasClosablePosition) {
+      return { ok: true }
     }
 
     this.logger.log(

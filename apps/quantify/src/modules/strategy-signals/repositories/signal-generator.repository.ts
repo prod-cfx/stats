@@ -225,15 +225,15 @@ export class SignalGeneratorRepository {
     })
   }
 
-  findClosablePositionsForExitAdmission(input: {
+  async hasClosablePositionForExitAdmission(input: {
     strategyId: string
     strategyInstanceId: string
     exchangeId: ExchangeId
     marketType: MarketType
     symbol: string
     positionSide: PositionSide
-  }) {
-    return this.txHost.tx.position.findMany({
+  }): Promise<boolean> {
+    const position = await this.txHost.tx.position.findFirst({
       where: {
         symbol: input.symbol,
         exchangeId: input.exchangeId,
@@ -258,10 +258,9 @@ export class SignalGeneratorRepository {
       },
       select: {
         id: true,
-        positionSide: true,
-        quantity: true,
       },
     })
+    return position !== null
   }
 
   async hasExitReconcileRisk(input: {
@@ -271,6 +270,7 @@ export class SignalGeneratorRepository {
     marketType: MarketType
     symbol: string
     positionSide: PositionSide
+    direction: AiSignalPayload['direction']
   }): Promise<boolean> {
     const signalSymbolCodes = input.marketType === 'perp'
       ? [input.symbol, `${input.symbol}:PERP`]
@@ -291,7 +291,10 @@ export class SignalGeneratorRepository {
         ],
         signal: {
           strategyInstanceId: input.strategyInstanceId,
-          signalType: 'ENTRY',
+          OR: [
+            { signalType: 'ENTRY' },
+            { signalType: 'EXIT', direction: input.direction },
+          ],
           symbol: {
             code: { in: signalSymbolCodes },
           },
