@@ -262,6 +262,73 @@ describe('okxClient', () => {
     expect(order.price).toBeCloseTo(74147.2)
   })
 
+  it('uses typed tdMode and positionSide fields when creating OKX perp orders', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      const rawBody = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      expect(rawBody).toMatchObject({
+        instId: 'BTC-USDT-SWAP',
+        instType: 'SWAP',
+        side: 'buy',
+        ordType: 'market',
+        sz: '0.13',
+        tdMode: 'cross',
+        posSide: 'long',
+      })
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-order-typed-fields',
+            sCode: '0',
+            sMsg: '',
+            sz: '0.13',
+            fillSz: '0.13',
+            avgPx: '74147.2',
+            state: 'filled',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'market',
+      amount: 0.001348,
+      tdMode: 'cross',
+      positionSide: 'LONG',
+    })
+
+    expect(order.id).toBe('perp-order-typed-fields')
+    expect(order.amount).toBeCloseTo(0.0013)
+  })
+
   it('omits posSide by default for OKX perp net mode close orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)

@@ -129,7 +129,9 @@ export class OkxClient extends BaseCexClient {
   async createOrder(input: CreateOrderInput): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(input.symbol, input.marketType)
     const instType = this.marketType === 'spot' ? 'SPOT' : 'SWAP'
-    const perpTdMode = this.marketType === 'perp' ? input.extra?.tdMode as string | undefined : undefined
+    const perpTdMode = this.marketType === 'perp'
+      ? input.tdMode ?? (input.extra?.tdMode as string | undefined)
+      : undefined
     if (this.marketType === 'perp' && !perpTdMode) {
       throw new ExchangeError('OKX perp order requires explicit tdMode', 'OKX_TD_MODE_REQUIRED', { symbol: input.symbol, marketType: input.marketType })
     }
@@ -155,7 +157,8 @@ export class OkxClient extends BaseCexClient {
     // OKX 所有产品都需要 tdMode：现货使用 cash；永续必须由上游显式传入。
     if (this.marketType === 'perp') {
       body.tdMode = perpTdMode
-      const posSide = input.extra?.posSide as string | undefined
+      const posSide = (input.extra?.posSide as string | undefined)
+        ?? (input.positionSide ? input.positionSide.toLowerCase() : undefined)
       if (posSide) {
         body.posSide = posSide
       }
