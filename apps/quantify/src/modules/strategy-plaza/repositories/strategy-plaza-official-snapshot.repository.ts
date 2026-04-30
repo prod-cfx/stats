@@ -48,10 +48,48 @@ export class StrategyPlazaOfficialSnapshotRepository {
     const client = this.txHost.tx
     const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
-    const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot, input.template)
+    const existing = await this.findCurrentUserSnapshot(input.userId, sessionId, sourceSnapshot)
     if (existing) {
       await this.synchronizeOfficialRuntimeBindings(existing.strategyInstanceId, input.template, sourceSnapshot, existing)
       return { id: existing.id }
+    }
+    const legacy = await this.findLegacyUserSnapshot(input.userId, input.template)
+    if (legacy) {
+      await client.llmStrategyCodegenSession.upsert({
+        where: { id: sessionId },
+        update: {
+          status: 'PUBLISHED',
+          latestDraftCode: sourceSnapshot.scriptSnapshot,
+          latestSpecDesc: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
+        },
+        create: {
+          id: sessionId,
+          userId: input.userId,
+          status: 'PUBLISHED',
+          latestDraftCode: sourceSnapshot.scriptSnapshot,
+          latestSpecDesc: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
+          strategyInstanceId: legacy.strategyInstanceId,
+        },
+      })
+      const copiedSnapshotId = this.buildCopiedSnapshotId(sessionId, sourceSnapshot)
+      const snapshot = await client.publishedStrategySnapshot.upsert({
+        where: { id: copiedSnapshotId },
+        update: {
+          strategyInstanceId: legacy.strategyInstanceId,
+          strategyTemplateId: legacy.strategyTemplateId,
+          ...this.copySnapshotContent(sourceSnapshot, input.template),
+        },
+        create: {
+          id: copiedSnapshotId,
+          session: { connect: { id: sessionId } },
+          strategyTemplateId: legacy.strategyTemplateId,
+          strategyInstanceId: legacy.strategyInstanceId,
+          ...this.copySnapshotContent(sourceSnapshot, input.template),
+        },
+        select: { id: true, snapshotHash: true },
+      })
+      await this.synchronizeOfficialRuntimeBindings(legacy.strategyInstanceId, input.template, sourceSnapshot, snapshot)
+      return { id: snapshot.id }
     }
 
     await client.llmStrategyCodegenSession.upsert({
@@ -221,31 +259,39 @@ export class StrategyPlazaOfficialSnapshotRepository {
       && !snapshot.scriptSnapshot.includes("action: 'HOLD'")
   }
 
-  private async findExistingUserSnapshot(
+  private async findCurrentUserSnapshot(
     userId: string,
     sessionId: string,
     sourceSnapshot: PublishedStrategySnapshot,
-    template: OfficialStrategyPlazaTemplate,
   ): Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null> {
     return this.txHost.tx.publishedStrategySnapshot.findFirst({
       where: {
-        OR: [
-          {
-            sessionId,
-            snapshotHash: sourceSnapshot.snapshotHash,
-            snapshotVersion: sourceSnapshot.snapshotVersion,
-          },
-          {
-            executionEnvelope: { path: ['source'], equals: 'strategy-plaza-official-template' },
-            userIntentSummary: { path: ['templateId'], equals: template.id },
-          },
-        ],
+        sessionId,
+        snapshotHash: sourceSnapshot.snapshotHash,
+        snapshotVersion: sourceSnapshot.snapshotVersion,
         strategyInstanceId: { not: null },
         session: { userId },
       },
       orderBy: [{ createdAt: 'desc' }],
       select: { id: true, snapshotHash: true, strategyInstanceId: true },
     }) as Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null>
+  }
+
+  private async findLegacyUserSnapshot(
+    userId: string,
+    template: OfficialStrategyPlazaTemplate,
+  ): Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId' | 'strategyTemplateId'> | null> {
+    return this.txHost.tx.publishedStrategySnapshot.findFirst({
+      where: {
+        executionEnvelope: { path: ['source'], equals: 'strategy-plaza-official-template' },
+        userIntentSummary: { path: ['templateId'], equals: template.id },
+        strategyInstanceId: { not: null },
+        strategyTemplateId: { not: null },
+        session: { userId },
+      },
+      orderBy: [{ createdAt: 'desc' }],
+      select: { id: true, snapshotHash: true, strategyInstanceId: true, strategyTemplateId: true },
+    }) as Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId' | 'strategyTemplateId'> | null>
   }
 
   private async synchronizeOfficialRuntimeBindings(
