@@ -404,7 +404,10 @@ export async function buildBackfillPlan(prisma: BackfillPrisma, options: Pick<Ba
         content.snapshotHash,
         content.snapshotVersion,
       )
-      if (skippedItem) skipped.push(skippedItem)
+      if (skippedItem) {
+        skipped.push(skippedItem)
+        continue
+      }
       if (repairs.length === 0) continue
       plan.push({
         templateId: template.id,
@@ -431,8 +434,8 @@ export async function runBackfill(prisma: BackfillPrisma, options: BackfillOptio
       const data = snapshotUpdateData(template)
       const snapshots = await findTemplateSnapshots(tx, template)
       for (const snapshot of snapshots) {
-        const { repairs } = await buildSnapshotRepairReasons(tx, template, snapshot, content.snapshotHash, content.snapshotVersion)
-        if (repairs.length === 0) continue
+        const { repairs, skipped: skippedItem } = await buildSnapshotRepairReasons(tx, template, snapshot, content.snapshotHash, content.snapshotVersion)
+        if (skippedItem || repairs.length === 0) continue
         if (repairs.includes('snapshot-content')) {
           await tx.publishedStrategySnapshot.update({
             where: { id: snapshot.id },

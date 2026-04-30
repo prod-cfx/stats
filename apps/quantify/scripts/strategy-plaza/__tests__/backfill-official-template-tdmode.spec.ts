@@ -174,6 +174,31 @@ describe('backfill-official-template-tdmode', () => {
     expect(second.updated).toBe(0)
   })
 
+
+  it('skips orphan copied snapshots without aborting apply', async () => {
+    const { prisma } = buildPrismaMock()
+    prisma.strategyInstance.findUnique.mockResolvedValue(null)
+
+    const dryRun = await buildBackfillPlan(prisma as never, { templateIds: ['ma-cross'] })
+
+    expect(dryRun.plan).toHaveLength(1)
+    expect(dryRun.plan[0]).toEqual(expect.objectContaining({
+      snapshotId: template.runConfig.publishedSnapshotId,
+      repairs: ['snapshot-content'],
+    }))
+    expect(dryRun.skipped).toEqual(expect.arrayContaining([expect.objectContaining({
+      input: expect.objectContaining({
+        snapshotId: 'user-snapshot-1',
+        strategyInstanceId: 'strategy-instance-1',
+      }),
+      reason: 'snapshot references a missing strategy instance',
+    })]))
+
+    await expect(runBackfill(prisma as never, { apply: true, templateIds: ['ma-cross'] })).resolves.toEqual(expect.objectContaining({
+      updated: 1,
+    }))
+  })
+
   it('repairs runtime-only drift even when snapshot content is already current', async () => {
     const { instance, prisma, snapshots, subscription } = buildPrismaMock()
     for (const snapshot of snapshots) {
