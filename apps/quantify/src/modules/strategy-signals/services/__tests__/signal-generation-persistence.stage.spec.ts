@@ -152,7 +152,7 @@ describe('signalGenerationPersistenceStage', () => {
     expect(onCreatedInTransaction).toHaveBeenCalledWith('signal-atomic-1')
   })
 
-  it('does not apply cooldown checks to exit signals', async () => {
+  it('applies cooldown checks to exit signals before creating duplicates', async () => {
     const tradingSignalRepository = {
       create: jest.fn().mockResolvedValue({ id: 'exit-signal-1' }),
     }
@@ -191,11 +191,15 @@ describe('signalGenerationPersistenceStage', () => {
       false,
     )
 
-    expect(result).toEqual({ created: true, signalId: 'exit-signal-1' })
-    expect(generatorRepository.countRecentSignals).not.toHaveBeenCalled()
+    expect(result).toEqual({ created: false, signalId: null, reason: 'COOLDOWN', runtimeDisposition: 'consume' })
+    expect(generatorRepository.countRecentSignals).toHaveBeenCalledWith(expect.objectContaining({
+      signalType: 'EXIT',
+      direction: 'CLOSE_LONG',
+    }))
+    expect(tradingSignalRepository.create).not.toHaveBeenCalled()
   })
 
-  it('does not apply cooldown checks to multi-leg exit signals', async () => {
+  it('applies cooldown checks to multi-leg exit signals before creating duplicates', async () => {
     const tradingSignalRepository = {
       create: jest.fn().mockResolvedValue({ id: 'multi-exit-signal-1' }),
     }
@@ -234,8 +238,12 @@ describe('signalGenerationPersistenceStage', () => {
       false,
     )
 
-    expect(result).toEqual({ created: true, signalId: 'multi-exit-signal-1' })
-    expect(generatorRepository.findRecentSignalForCooldown).not.toHaveBeenCalled()
+    expect(result).toEqual({ created: false, signalId: null, reason: 'COOLDOWN', runtimeDisposition: 'consume' })
+    expect(generatorRepository.findRecentSignalForCooldown).toHaveBeenCalledWith(expect.objectContaining({
+      signalType: 'EXIT',
+      direction: 'CLOSE_LONG',
+    }))
+    expect(tradingSignalRepository.create).not.toHaveBeenCalled()
   })
 
   it('blocks duplicate entry signal generation when an active subscribed account already has an open position', async () => {

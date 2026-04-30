@@ -277,7 +277,7 @@ export class SignalGenerationPersistenceStage {
   }
 
   private shouldApplyCooldown(payload: Pick<AiSignalPayload, 'signalType'>): boolean {
-    return payload.signalType !== 'EXIT'
+    return payload.signalType === 'ENTRY' || payload.signalType === 'EXIT'
   }
 
   private shouldApplyEntryAdmission(payload: Pick<AiSignalPayload, 'signalType' | 'direction'>): boolean {
