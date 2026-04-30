@@ -25,6 +25,7 @@ export class TradingService {
   private readonly logger = new Logger(TradingService.name)
   private readonly okxPositionModeCache = new Map<string, { posMode: string; expiresAt: number }>()
   private readonly okxPositionModeCacheTtlMs = 5_000
+  private readonly okxPositionModeCacheMaxEntries = 500
 
   constructor(
     @Inject(ExchangeFactory)
@@ -87,7 +88,7 @@ export class TradingService {
     marketType: MarketType
     input: CreateOrderInput
     client: { createOrder: (input: CreateOrderInput) => Promise<UnifiedOrder>; fetchAccountConfig?: () => Promise<{ posMode: string }> }
-    positionModeCacheKey: string
+    positionModeCacheKey: string | null
   }): Promise<CreateOrderInput> {
     if (input.exchangeId !== 'okx' || input.marketType !== 'perp') {
       return input.input
@@ -135,20 +136,28 @@ export class TradingService {
   }
 
   private async resolveOkxPositionMode(
-    cacheKey: string,
+    cacheKey: string | null,
     fetchAccountConfig: () => Promise<{ posMode: string }>,
   ): Promise<string> {
-    const cached = this.okxPositionModeCache.get(cacheKey)
     const now = Date.now()
-    if (cached && cached.expiresAt > now) {
-      return cached.posMode
+    if (cacheKey) {
+      const cached = this.okxPositionModeCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        return cached.posMode
+      }
+      if (cached) {
+        this.okxPositionModeCache.delete(cacheKey)
+      }
     }
 
     const posMode = (await fetchAccountConfig()).posMode
-    this.okxPositionModeCache.set(cacheKey, {
-      posMode,
-      expiresAt: now + this.okxPositionModeCacheTtlMs,
-    })
+    if (cacheKey) {
+      this.pruneOkxPositionModeCache(now)
+      this.okxPositionModeCache.set(cacheKey, {
+        posMode,
+        expiresAt: now + this.okxPositionModeCacheTtlMs,
+      })
+    }
     return posMode
   }
 
@@ -156,8 +165,20 @@ export class TradingService {
     userId: string,
     exchangeId: ExchangeId,
     exchangeAccountId?: string,
-  ): string {
-    return `${exchangeId}:${exchangeAccountId ?? userId}`
+  ): string | null {
+    if (!exchangeAccountId) return null
+    return `${exchangeId}:${exchangeAccountId}`
+  }
+
+  private pruneOkxPositionModeCache(now: number): void {
+    for (const [key, value] of this.okxPositionModeCache) {
+      if (value.expiresAt <= now) this.okxPositionModeCache.delete(key)
+    }
+    while (this.okxPositionModeCache.size >= this.okxPositionModeCacheMaxEntries) {
+      const oldestKey = this.okxPositionModeCache.keys().next().value
+      if (!oldestKey) break
+      this.okxPositionModeCache.delete(oldestKey)
+    }
   }
 
   private summarizeOrderInput(exchangeId: ExchangeId, marketType: MarketType, input: CreateOrderInput) {
