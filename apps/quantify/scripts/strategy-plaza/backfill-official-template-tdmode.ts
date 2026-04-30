@@ -181,11 +181,11 @@ function metadataNeedsRepair(value: unknown, snapshot: SnapshotRow, expectedHash
 export function selectBackfillTemplates(templateIds?: string[]): OfficialStrategyPlazaTemplate[] {
   const requested = new Set(templateIds ?? [])
   if (requested.size > 0) {
-    const allowed = new Set(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(template => template.id))
+    const allowed = new Set(OFFICIAL_STRATEGY_PLAZA_TEMPLATES.filter(template => template.runConfig.marketType === 'perp').map(template => template.id))
     const unknown = [...requested].filter(templateId => !allowed.has(templateId))
     if (unknown.length > 0) {
       throw new Error(
-        `[${MODULE}.selectBackfillTemplates] invalid template filter; input=${JSON.stringify({ templateIds })}; reason=unknown template ids; allowed=${JSON.stringify([...allowed].sort())}`,
+        `[${MODULE}.selectBackfillTemplates] invalid template filter; input=${JSON.stringify({ templateIds })}; reason=unknown or non-perp template ids; allowed=${JSON.stringify([...allowed].sort())}`,
       )
     }
   }
