@@ -1,3 +1,4 @@
+import type { QuantSizing } from './semantic-sizing'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
@@ -30,7 +31,6 @@ import {
   derivePositionPctFromSizing,
   formatSizing,
   normalizeSizing,
-  type QuantSizing,
 } from './semantic-sizing'
 
 export interface QuantParams {
@@ -365,7 +365,7 @@ export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
 
 export function hasExplicitBacktestExecutionOverrides(values: Record<string, unknown>): boolean {
   return BACKTEST_EXECUTION_PARAM_KEYS.some(
-    key => values[key] !== DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
+    key => key in values && values[key] !== DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
   )
 }
 
@@ -536,9 +536,13 @@ function normalizeBacktestConfigDefaults(
     : null
   if (
     !Number.isFinite(initialCash)
+    || initialCash <= 0
     || !Number.isFinite(slippageBps)
+    || slippageBps < 0
     || !Number.isFinite(feeBps)
-    || !priceSource
+    || feeBps < 0
+    || (candidate.leverage !== undefined && candidate.leverage !== null && (!Number.isFinite(leverage) || leverage <= 0))
+    || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
     || allowPartial === null
   ) {
     return null
@@ -1135,8 +1139,12 @@ function normalizeLastBacktestExecutionConfig(
 
   if (
     !Number.isFinite(initialCash)
+    || initialCash <= 0
     || !Number.isFinite(slippageBps)
+    || slippageBps < 0
     || !Number.isFinite(feeBps)
+    || feeBps < 0
+    || (candidate.leverage !== undefined && candidate.leverage !== null && (!Number.isFinite(leverage) || leverage <= 0))
     || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
     || allowPartial === null
   ) {
@@ -1158,10 +1166,24 @@ export function buildBacktestDraftConfigFromValues(
 ): AiQuantBacktestDraftConfig | null {
   const range = resolveBacktestRangeInput(values)
   const execution = resolveBacktestExecutionConfig(values)
+  const hasAllowPartialInput =
+    values.backtestAllowPartial !== undefined
+    && values.backtestAllowPartial !== null
   if (
+    !Number.isFinite(execution.initialCash)
+    || execution.initialCash <= 0
+    || (execution.leverage !== null && (!Number.isFinite(execution.leverage) || execution.leverage <= 0))
+    || !Number.isFinite(execution.slippageBps)
+    || execution.slippageBps < 0
+    || !Number.isFinite(execution.feeBps)
+    || execution.feeBps < 0
+    || !hasAllowPartialInput
+    || !execution.allowPartialValid
+    || (
     execution.priceSource !== 'open'
     && execution.priceSource !== 'close'
     && execution.priceSource !== 'mid'
+    )
   ) {
     return null
   }
@@ -1186,7 +1208,7 @@ export function buildBacktestDraftConfigFromValues(
   }
 }
 
-function doesBacktestConfigMatch(
+function doesBacktestRangeMatch(
   current: AiQuantBacktestDraftConfig,
   stored: AiQuantBacktestDraftConfig,
 ): boolean {
@@ -1199,6 +1221,13 @@ function doesBacktestConfigMatch(
     }
   }
 
+  return true
+}
+
+function doesBacktestExecutionConfigMatch(
+  current: AiQuantBacktestDraftConfig,
+  stored: AiQuantBacktestDraftConfig,
+): boolean {
   return (
     current.execution.initialCash === stored.execution.initialCash
     && current.execution.leverage === stored.execution.leverage
@@ -1216,15 +1245,18 @@ function restoreBacktestResultFromLastBacktestRef(input: {
   symbol: string
 }): BacktestResult | null {
   const { conversationPublishedSnapshotId, lastBacktestRef, currentBacktestConfig, symbol } = input
-  if (!lastBacktestRef || !conversationPublishedSnapshotId || !currentBacktestConfig) {
+  if (!lastBacktestRef || !conversationPublishedSnapshotId) {
     return null
   }
   if (conversationPublishedSnapshotId !== lastBacktestRef.publishedSnapshotId) {
     return null
   }
-  if (!doesBacktestConfigMatch(currentBacktestConfig, lastBacktestRef.config)) {
+  if (currentBacktestConfig && !doesBacktestRangeMatch(currentBacktestConfig, lastBacktestRef.config)) {
     return null
   }
+  const configChanged =
+    !currentBacktestConfig
+    || !doesBacktestExecutionConfigMatch(currentBacktestConfig, lastBacktestRef.config)
 
   return {
     id: lastBacktestRef.jobId,
@@ -1240,6 +1272,7 @@ function restoreBacktestResultFromLastBacktestRef(input: {
       ? { openPnl: lastBacktestRef.summary.openPnl }
       : {}),
     ...(lastBacktestRef.summary.marketType ? { marketType: lastBacktestRef.summary.marketType } : {}),
+    ...(configChanged ? { recoveryStatus: 'config_changed' as const } : {}),
   }
 }
 
@@ -1643,6 +1676,7 @@ export function isOpenOnlyBacktestResult(result: BacktestResult | null | undefin
 
 export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {
   if (!result) return false
+  if (result.recoveryStatus === 'config_changed') return false
   return (result.tradeCount > 0 || (result.openTradeCount ?? 0) > 0) && result.maxDrawdownPct <= 20
 }
 
@@ -1936,14 +1970,23 @@ export function createConversationFromServerConversation(
     snapshotParamValues,
     snapshotBacktestConfigDefaults,
   })
+  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const backtestDraftConfig = normalizeBacktestDraftConfig(response.backtestDraftConfig)
+  const backtestDraftConfigRestoredFromLastRef =
+    !backtestDraftConfig
+    && lastBacktestRef !== null
+    && publishedSnapshotId !== null
+    && lastBacktestRef.publishedSnapshotId === publishedSnapshotId
+  const effectiveBacktestDraftConfig = backtestDraftConfigRestoredFromLastRef
+    ? lastBacktestRef.config
+    : backtestDraftConfig
   const nextParamValues = applyBacktestDraftConfigToValues({
     currentValues: mergedSnapshotParamValues.paramValues,
-    backtestDraftConfig,
+    backtestDraftConfig: effectiveBacktestDraftConfig,
   })
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
   const normalizedParamValues = syncNormalizedSizingParamValues(nextParamValues, nextParams)
-  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
   const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId,
     publishedSnapshotStrategyConfig: snapshotStrategyConfig,
@@ -1952,11 +1995,10 @@ export function createConversationFromServerConversation(
     ?? (typeof snapshotStrategyConfig?.symbol === 'string' && snapshotStrategyConfig.symbol.trim()
       ? snapshotStrategyConfig.symbol.trim()
       : nextParams.symbol)
-  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
     conversationPublishedSnapshotId: publishedSnapshotId,
     lastBacktestRef,
-    currentBacktestConfig: backtestDraftConfig,
+    currentBacktestConfig: effectiveBacktestDraftConfig,
     symbol: restoredBacktestSymbol,
   })
   const graphVersion =
@@ -2043,14 +2085,17 @@ export function createConversationFromServerConversation(
     publishedSnapshotDeploymentExecutionDefaults: snapshotDeploymentExecutionDefaults,
     publishedSnapshotDeploymentExecutionConstraints: snapshotDeploymentExecutionConstraints,
     publishedSnapshotCompatibilityMetadata: snapshotCompatibilityMetadata,
-    backtestDraftConfig,
+    backtestDraftConfig: effectiveBacktestDraftConfig,
     publishedScriptCode: response.scriptCode ?? null,
     publishedScriptGraphVersion:
       response.scriptCode && logicGraph?.status === 'confirmed'
         ? logicGraph.version
         : null,
     backtestResult: restoredBacktestResult,
-    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
+    backtestExecutionConfigExplicit:
+      backtestDraftConfigRestoredFromLastRef
+        ? true
+        : mergedSnapshotParamValues.explicit,
     updatedAt,
   }
 }
