@@ -283,7 +283,7 @@ async function buildSnapshotRepairReasons(
   expectedVersion: number,
 ): Promise<{ repairs: string[]; skipped?: BackfillSkipItem }> {
   const repairs: string[] = []
-  if (snapshotNeedsRepair(snapshot, expectedHash, expectedVersion) && !snapshot.strategyInstanceId) {
+  if (snapshotNeedsRepair(snapshot, expectedHash, expectedVersion)) {
     return {
       repairs,
       skipped: {

@@ -115,7 +115,7 @@ describe('backfill-official-template-tdmode', () => {
 
     expect(result.scanned).toBe(2)
     expect(result.updated).toBe(0)
-    expect(result.plan).toHaveLength(1)
+    expect(result.plan).toHaveLength(0)
     expect(result.skipped).toEqual(expect.arrayContaining([expect.objectContaining({
       templateId: 'ma-cross',
       input: expect.objectContaining({
@@ -125,52 +125,31 @@ describe('backfill-official-template-tdmode', () => {
       }),
       reason: expect.stringContaining('published snapshots are immutable audit records'),
     })]))
-    expect(result.plan[0]).toEqual(expect.objectContaining({
-      repairs: expect.arrayContaining([
-        'instance-deployment-execution-config',
-        'instance-params-deployment-execution-config',
-        'subscription-custom-params-deployment-execution-config',
-      ]),
-    }))
+    expect(result.skipped).toEqual(expect.arrayContaining([expect.objectContaining({
+      templateId: 'ma-cross',
+      input: expect.objectContaining({
+        snapshotId: 'user-snapshot-1',
+        currentHash: 'stale-user-hash',
+        expectedHash: expected.snapshotHash,
+      }),
+      reason: expect.stringContaining('published snapshots are immutable audit records'),
+    })]))
     expect(prisma.$transaction).not.toHaveBeenCalled()
     expect(prisma.publishedStrategySnapshot.update).not.toHaveBeenCalled()
   })
 
-  it('applies runtime binding repairs without mutating published snapshots, then becomes idempotent', async () => {
+  it('skips stale copied snapshots instead of mixing current execution config into old snapshot bindings', async () => {
     const { instance, prisma, runtimeStates, snapshots, subscription } = buildPrismaMock()
 
     const first = await runBackfill(prisma as never, { apply: true, templateIds: ['ma-cross'] })
 
-    expect(first.updated).toBe(1)
+    expect(first.updated).toBe(0)
     expect(prisma.publishedStrategySnapshot.update).not.toHaveBeenCalled()
     expect(snapshots.map(item => item.snapshotHash)).toEqual(['stale-source-hash', 'stale-user-hash'])
-    expect(instance.deploymentExecutionConfig).toEqual(expect.objectContaining({
-      leverage: 5,
-      tdMode: 'cross',
-    }))
+    expect(instance.deploymentExecutionConfig).toEqual({ leverage: 5, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' })
     expect(instance.executionConfigVersion).toBe(3)
-    expect(instance.params).toEqual(expect.objectContaining({
-      deploymentExecutionConfig: expect.objectContaining({
-        leverage: 5,
-        tdMode: 'cross',
-      }),
-      executionConfigVersion: 3,
-    }))
-    expect(subscription.customParams).toEqual(expect.objectContaining({
-      deploymentExecutionConfig: expect.objectContaining({
-        leverage: 5,
-        tdMode: 'cross',
-      }),
-      executionConfigVersion: 3,
-    }))
-    expect(prisma.strategyRuntimeExecutionState.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({
-        strategyInstanceId: 'strategy-instance-1',
-        publishedSnapshotId: 'user-snapshot-1',
-        snapshotHash: { not: 'stale-user-hash' },
-      }),
-      data: { snapshotHash: 'stale-user-hash' },
-    }))
+    expect(subscription.customParams).toEqual({ deploymentExecutionConfig: { leverage: 5, priceSource: 'mark' } })
+    expect(prisma.strategyRuntimeExecutionState.updateMany).not.toHaveBeenCalled()
     expect(runtimeStates).toEqual([{ id: 'runtime-state-1', snapshotHash: 'stale-user-hash' }])
 
     const second = await runBackfill(prisma as never, { apply: true, templateIds: ['ma-cross'] })
@@ -179,18 +158,16 @@ describe('backfill-official-template-tdmode', () => {
 
 
   it('skips orphan copied snapshots without aborting apply', async () => {
-    const { prisma } = buildPrismaMock()
+    const { prisma, snapshots } = buildPrismaMock()
+    for (const snapshot of snapshots) {
+      snapshot.snapshotHash = expected.snapshotHash
+      snapshot.snapshotVersion = expected.snapshotVersion
+    }
     prisma.strategyInstance.findUnique.mockResolvedValue(null)
 
     const dryRun = await buildBackfillPlan(prisma as never, { templateIds: ['ma-cross'] })
 
     expect(dryRun.plan).toHaveLength(0)
-    expect(dryRun.skipped).toEqual(expect.arrayContaining([expect.objectContaining({
-      input: expect.objectContaining({
-        snapshotId: template.runConfig.publishedSnapshotId,
-      }),
-      reason: expect.stringContaining('published snapshots are immutable audit records'),
-    })]))
     expect(dryRun.skipped).toEqual(expect.arrayContaining([expect.objectContaining({
       input: expect.objectContaining({
         snapshotId: 'user-snapshot-1',
