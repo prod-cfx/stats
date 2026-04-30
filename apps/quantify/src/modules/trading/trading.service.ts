@@ -23,6 +23,8 @@ import { ExchangeFactory } from './factory/exchange-factory'
 @Injectable()
 export class TradingService {
   private readonly logger = new Logger(TradingService.name)
+  private readonly okxPositionModeCache = new Map<string, { posMode: string; expiresAt: number }>()
+  private readonly okxPositionModeCacheTtlMs = 5_000
 
   constructor(
     @Inject(ExchangeFactory)
@@ -58,7 +60,13 @@ export class TradingService {
 
     try {
       // 预留风控入口：下单前可在此加入限额、黑名单等检查
-      const resolvedInput = await this.prepareOrderInput({ exchangeId, marketType, input, client })
+      const resolvedInput = await this.prepareOrderInput({
+        exchangeId,
+        marketType,
+        input,
+        client,
+        positionModeCacheKey: this.buildOkxPositionModeCacheKey(userId, exchangeId, exchangeAccountId),
+      })
       return await client.createOrder(resolvedInput)
     }
     catch (error) {
@@ -79,6 +87,7 @@ export class TradingService {
     marketType: MarketType
     input: CreateOrderInput
     client: { createOrder: (input: CreateOrderInput) => Promise<UnifiedOrder>; fetchAccountConfig?: () => Promise<{ posMode: string }> }
+    positionModeCacheKey: string
   }): Promise<CreateOrderInput> {
     if (input.exchangeId !== 'okx' || input.marketType !== 'perp') {
       return input.input
@@ -95,7 +104,7 @@ export class TradingService {
 
     let posMode: string
     try {
-      posMode = (await input.client.fetchAccountConfig()).posMode
+      posMode = await this.resolveOkxPositionMode(input.positionModeCacheKey, input.client.fetchAccountConfig)
     }
     catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
@@ -123,6 +132,32 @@ export class TradingService {
 
   private mapOkxPositionSide(positionSide: PositionIntentSide): 'long' | 'short' {
     return positionSide === 'LONG' ? 'long' : 'short'
+  }
+
+  private async resolveOkxPositionMode(
+    cacheKey: string,
+    fetchAccountConfig: () => Promise<{ posMode: string }>,
+  ): Promise<string> {
+    const cached = this.okxPositionModeCache.get(cacheKey)
+    const now = Date.now()
+    if (cached && cached.expiresAt > now) {
+      return cached.posMode
+    }
+
+    const posMode = (await fetchAccountConfig()).posMode
+    this.okxPositionModeCache.set(cacheKey, {
+      posMode,
+      expiresAt: now + this.okxPositionModeCacheTtlMs,
+    })
+    return posMode
+  }
+
+  private buildOkxPositionModeCacheKey(
+    userId: string,
+    exchangeId: ExchangeId,
+    exchangeAccountId?: string,
+  ): string {
+    return `${exchangeId}:${exchangeAccountId ?? userId}`
   }
 
   private summarizeOrderInput(exchangeId: ExchangeId, marketType: MarketType, input: CreateOrderInput) {

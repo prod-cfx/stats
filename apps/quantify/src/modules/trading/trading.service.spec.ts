@@ -252,6 +252,33 @@ describe('tradingService', () => {
     }))
   })
 
+  it('caches OKX position mode briefly for repeated perp orders on the same account', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchAccountConfig.mockResolvedValue({ posMode: 'long_short_mode' })
+    client.createOrder.mockResolvedValue({ id: 'order-okx-cache', status: 'open' })
+
+    const orderInput = {
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp' as const,
+      side: 'buy' as const,
+      type: 'market' as const,
+      amount: 0.001,
+      tdMode: 'cross' as const,
+      positionSide: 'LONG' as const,
+    }
+
+    await service.placeOrder('user-1', 'okx', 'perp', orderInput, 'exchange-account-1')
+    await service.placeOrder('user-1', 'okx', 'perp', orderInput, 'exchange-account-1')
+
+    expect(client.fetchAccountConfig).toHaveBeenCalledTimes(1)
+    expect(client.createOrder).toHaveBeenCalledTimes(2)
+  })
+
   it('omits OKX posSide and typed positionSide for net mode perp orders', async () => {
     const { service, client, accountStore } = createService()
 
