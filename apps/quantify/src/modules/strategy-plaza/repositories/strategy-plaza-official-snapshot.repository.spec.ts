@@ -244,9 +244,17 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
 
     expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
       where: expect.objectContaining({
-        sessionId: expect.stringContaining('strategy-plaza:official:ma-cross'),
-        snapshotHash: sourceSnapshot.snapshotHash,
-        snapshotVersion: sourceSnapshot.snapshotVersion,
+        OR: expect.arrayContaining([
+          expect.objectContaining({
+            sessionId: expect.stringContaining('strategy-plaza:official:ma-cross'),
+            snapshotHash: sourceSnapshot.snapshotHash,
+            snapshotVersion: sourceSnapshot.snapshotVersion,
+          }),
+          expect.objectContaining({
+            executionEnvelope: { path: ['source'], equals: 'strategy-plaza-official-template' },
+            userIntentSummary: { path: ['templateId'], equals: 'ma-cross' },
+          }),
+        ]),
         strategyInstanceId: { not: null },
         session: { userId: 'user-1' },
       }),
@@ -255,35 +263,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
     expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
     expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
-    expect(tx.publishedStrategySnapshot.update).toHaveBeenCalledWith({
-      where: { id: 'user-snapshot-1' },
-      data: expect.objectContaining({
-        paramsSnapshot: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'perp',
-          symbol: 'BTC-USDT-SWAP',
-          timeframe: '15m',
-          positionPct: 10,
-          leverage: 2,
-          optimizedParams: expect.objectContaining({ fastPeriod: 6, slowPeriod: 48 }),
-          parameterSearchId: expect.stringContaining('ma-cross'),
-        }),
-        strategyConfig: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'perp',
-          symbol: 'BTC-USDT-SWAP',
-          baseTimeframe: '15m',
-          positionPct: 10,
-        }),
-        deploymentExecutionDefaults: {
-          leverage: 2,
-          priceSource: 'mark',
-          orderType: 'market',
-          timeInForce: 'ioc',
-          tdMode: 'cross',
-        },
-      }),
-    })
+    expect(tx.publishedStrategySnapshot.update).not.toHaveBeenCalled()
     expect(tx.strategyInstance.update).toHaveBeenCalledWith({
       where: { id: 'strategy-instance-1' },
       data: expect.objectContaining({
@@ -323,6 +303,41 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
   })
 
+  it('reuses an older official user snapshot by lineage without mutating its published content', async () => {
+    const existingSnapshot = {
+      id: 'user-snapshot-v3',
+      snapshotHash: 'old-user-snapshot-hash',
+      strategyInstanceId: 'strategy-instance-1',
+    }
+    const tx = buildTx({ existingSnapshot })
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-v3',
+    })
+
+    expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.update).not.toHaveBeenCalled()
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
+      where: { id: 'strategy-instance-1' },
+      data: expect.objectContaining({
+        deploymentExecutionConfig: expect.objectContaining({ tdMode: 'cross' }),
+        metadata: expect.objectContaining({
+          officialSnapshotHash: sourceSnapshot.snapshotHash,
+          publishedSnapshotId: 'user-snapshot-v3',
+          snapshotHash: 'old-user-snapshot-hash',
+        }),
+      }),
+    })
+    expect(tx.strategyRuntimeExecutionState.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        publishedSnapshotId: 'user-snapshot-v3',
+        snapshotHash: { not: 'old-user-snapshot-hash' },
+      }),
+      data: { snapshotHash: 'old-user-snapshot-hash' },
+    }))
+  })
+
   it('upserts a deterministic copied snapshot instead of reusing an old official source version', async () => {
     const tx = buildTx({ existingSnapshot: null })
     const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
@@ -333,8 +348,12 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
 
     expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
       where: expect.objectContaining({
-        snapshotHash: sourceSnapshot.snapshotHash,
-        snapshotVersion: sourceSnapshot.snapshotVersion,
+        OR: expect.arrayContaining([
+          expect.objectContaining({
+            snapshotHash: sourceSnapshot.snapshotHash,
+            snapshotVersion: sourceSnapshot.snapshotVersion,
+          }),
+        ]),
       }),
       orderBy: [{ createdAt: 'desc' }],
       select: { id: true, snapshotHash: true, strategyInstanceId: true },

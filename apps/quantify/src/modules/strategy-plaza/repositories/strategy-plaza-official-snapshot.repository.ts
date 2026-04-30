@@ -48,9 +48,8 @@ export class StrategyPlazaOfficialSnapshotRepository {
     const client = this.txHost.tx
     const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
-    const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
+    const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot, input.template)
     if (existing) {
-      await this.updateSnapshotTemplateRuntimeContent(existing.id, input.template)
       await this.synchronizeOfficialRuntimeBindings(existing.strategyInstanceId, input.template, sourceSnapshot, existing)
       return { id: existing.id }
     }
@@ -222,26 +221,25 @@ export class StrategyPlazaOfficialSnapshotRepository {
       && !snapshot.scriptSnapshot.includes("action: 'HOLD'")
   }
 
-  private async updateSnapshotTemplateRuntimeContent(
-    snapshotId: string,
-    template: OfficialStrategyPlazaTemplate,
-  ): Promise<void> {
-    await this.txHost.tx.publishedStrategySnapshot.update({
-      where: { id: snapshotId },
-      data: this.buildTemplateRuntimeContent(template),
-    })
-  }
-
   private async findExistingUserSnapshot(
     userId: string,
     sessionId: string,
     sourceSnapshot: PublishedStrategySnapshot,
+    template: OfficialStrategyPlazaTemplate,
   ): Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null> {
     return this.txHost.tx.publishedStrategySnapshot.findFirst({
       where: {
-        sessionId,
-        snapshotHash: sourceSnapshot.snapshotHash,
-        snapshotVersion: sourceSnapshot.snapshotVersion,
+        OR: [
+          {
+            sessionId,
+            snapshotHash: sourceSnapshot.snapshotHash,
+            snapshotVersion: sourceSnapshot.snapshotVersion,
+          },
+          {
+            executionEnvelope: { path: ['source'], equals: 'strategy-plaza-official-template' },
+            userIntentSummary: { path: ['templateId'], equals: template.id },
+          },
+        ],
         strategyInstanceId: { not: null },
         session: { userId },
       },
