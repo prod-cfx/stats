@@ -139,18 +139,23 @@ describe('buildAccountStrategyRuntimeSemanticSummary', () => {
       ruleSummary: {
         rules: [
           {
+            id: 'entry-rule',
             phase: 'entry',
-            label: '入场',
-            conditions: ['close_1m > high_1m_1'],
+            conditionKey: 'close_1m',
+            operator: 'GT',
+            value: null,
             actions: ['OPEN_LONG'],
           },
           {
+            id: 'exit-rule',
             phase: 'exit',
-            label: '出场',
-            conditions: ['close_1m < low_1m_1'],
+            conditionKey: 'close_1m',
+            operator: 'LT',
+            value: null,
             actions: ['CLOSE_LONG'],
           },
         ],
+        executionPolicy: null,
       },
       trades: [
         {
