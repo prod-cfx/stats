@@ -252,6 +252,41 @@ describe('tradingService', () => {
     }))
   })
 
+  it('omits OKX posSide and typed positionSide for net mode perp orders', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchAccountConfig.mockResolvedValue({ posMode: 'net_mode' })
+    client.createOrder.mockResolvedValue({ id: 'order-okx-net-1', status: 'open' })
+
+    await service.placeOrder(
+      'user-1',
+      'okx',
+      'perp',
+      {
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+        tdMode: 'cross',
+        positionSide: 'LONG',
+        extra: { posSide: 'long' },
+      },
+      'exchange-account-1',
+    )
+
+    expect(client.createOrder).toHaveBeenCalledWith(expect.objectContaining({
+      tdMode: 'cross',
+      extra: { tdMode: 'cross' },
+    }))
+    expect(client.createOrder.mock.calls[0][0]).not.toHaveProperty('positionSide')
+    expect(client.createOrder.mock.calls[0][0].extra).not.toHaveProperty('posSide')
+  })
+
   it('rejects OKX perp orders when tdMode is absent instead of applying a default', async () => {
     const { service, client, accountStore } = createService()
 

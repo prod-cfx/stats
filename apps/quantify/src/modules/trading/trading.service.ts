@@ -110,7 +110,9 @@ export class TradingService {
       extra.posSide = this.mapOkxPositionSide(input.input.positionSide)
     }
     else if (posMode === 'net_mode') {
+      const { positionSide: _positionSide, ...netModeInput } = input.input
       delete extra.posSide
+      return { ...netModeInput, extra }
     }
     else {
       throw new ExchangeError(`Unsupported OKX position mode: ${posMode}`, 'POSITION_MODE_UNAVAILABLE')
