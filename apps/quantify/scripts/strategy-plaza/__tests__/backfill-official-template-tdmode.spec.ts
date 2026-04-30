@@ -95,6 +95,7 @@ describe('backfill-official-template-tdmode', () => {
       'macd-cross',
     ])
     expect(selectBackfillTemplates(['ma-cross']).map(item => item.id)).toEqual(['ma-cross'])
+    expect(() => selectBackfillTemplates(['missing-template'])).toThrow(/unknown template ids/u)
   })
 
   it('parses dry-run/apply options without allowing conflicting modes', () => {
