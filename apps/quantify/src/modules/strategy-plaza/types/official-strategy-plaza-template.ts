@@ -75,7 +75,7 @@ export interface OfficialStrategyPlazaBacktestEvidence {
   templates: OfficialStrategyPlazaEvidenceTemplate[]
 }
 
-export interface OfficialStrategyPlazaRunConfig {
+interface OfficialStrategyPlazaRunConfigBase {
   exchange: 'okx'
   marketType: StrategyPlazaMarketType
   symbol: string
@@ -83,14 +83,33 @@ export interface OfficialStrategyPlazaRunConfig {
   positionPct: number
   leverage: number | null
   publishedSnapshotId: string
+}
+
+export interface OfficialStrategyPlazaPerpRunConfig extends OfficialStrategyPlazaRunConfigBase {
+  marketType: 'perp'
+  leverage: number
   deploymentExecutionConfig: {
-    leverage?: number | null
-    priceSource?: StrategyPlazaDeploymentPriceSource | null
-    orderType?: StrategyPlazaDeploymentOrderType | null
-    timeInForce?: StrategyPlazaDeploymentTimeInForce | null
-    tdMode?: StrategyPlazaDeploymentTradeMode | null
+    leverage: number
+    priceSource: 'mark'
+    orderType: StrategyPlazaDeploymentOrderType
+    timeInForce: StrategyPlazaDeploymentTimeInForce
+    tdMode: 'cross'
   }
 }
+
+export interface OfficialStrategyPlazaSpotRunConfig extends OfficialStrategyPlazaRunConfigBase {
+  marketType: 'spot'
+  leverage: null
+  deploymentExecutionConfig: {
+    leverage: null
+    priceSource: 'last'
+    orderType: StrategyPlazaDeploymentOrderType
+    timeInForce: StrategyPlazaDeploymentTimeInForce
+    tdMode?: undefined
+  }
+}
+
+export type OfficialStrategyPlazaRunConfig = OfficialStrategyPlazaPerpRunConfig | OfficialStrategyPlazaSpotRunConfig
 
 export interface OfficialStrategyPlazaEditSeed {
   initialMessage: string

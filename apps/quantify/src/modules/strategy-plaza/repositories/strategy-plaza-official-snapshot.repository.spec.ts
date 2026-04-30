@@ -28,7 +28,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       positionPct: 10,
       leverage: 2,
       publishedSnapshotId: 'official-plaza-ma-cross-v1-snapshot',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
     },
     editSeed: {
       initialMessage: '创建一个 MA 20/60 均线交叉趋势跟随策略。',
@@ -86,10 +86,30 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       },
       strategyTemplate: {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-template-1' }),
+        update: jest.fn(),
       },
       strategyInstance: {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'strategy-instance-1',
+          strategyTemplateId: 'strategy-template-1',
+          params: { deploymentExecutionConfig: { leverage: 5, priceSource: 'mark' } },
+          deploymentExecutionConfig: { leverage: 5, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+          metadata: { existing: true },
+        }),
         update: jest.fn(),
+      },
+      userStrategySubscription: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'subscription-1',
+            customParams: { deploymentExecutionConfig: { leverage: 5, priceSource: 'mark' } },
+          },
+        ]),
+        update: jest.fn(),
+      },
+      strategyRuntimeExecutionState: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     }
   }
@@ -115,11 +135,11 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       where: { id: 'official-plaza-ma-cross-v1-snapshot' },
       create: expect.objectContaining({
         id: 'official-plaza-ma-cross-v1-snapshot',
-        snapshotVersion: 3,
+        snapshotVersion: 4,
         userIntentSummary: expect.objectContaining({ templateId: 'ma-cross' }),
       }),
       update: expect.objectContaining({
-        snapshotVersion: 3,
+        snapshotVersion: 4,
         scriptSnapshot: expect.stringContaining('protocolVersion: "v1"'),
       }),
     }))
@@ -259,12 +279,23 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'ioc',
+          tdMode: 'cross',
         },
       }),
     })
     expect(tx.strategyInstance.update).toHaveBeenCalledWith({
       where: { id: 'strategy-instance-1' },
-      data: {
+      data: expect.objectContaining({
+        deploymentExecutionConfig: expect.objectContaining({
+          leverage: 5,
+          tdMode: 'cross',
+        }),
+        params: expect.objectContaining({
+          deploymentExecutionConfig: expect.objectContaining({
+            leverage: 5,
+            tdMode: 'cross',
+          }),
+        }),
         metadata: expect.objectContaining({
           bindingSource: 'PUBLISHED_SNAPSHOT',
           officialSnapshotHash: sourceSnapshot.snapshotHash,
@@ -272,6 +303,17 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
           officialSnapshotVersion: sourceSnapshot.snapshotVersion,
           publishedSnapshotId: 'user-snapshot-1',
           snapshotHash: sourceSnapshot.snapshotHash,
+        }),
+      }),
+    })
+    expect(tx.userStrategySubscription.update).toHaveBeenCalledWith({
+      where: { id: 'subscription-1' },
+      data: {
+        customParams: expect.objectContaining({
+          deploymentExecutionConfig: expect.objectContaining({
+            leverage: 5,
+            tdMode: 'cross',
+          }),
         }),
       },
     })
@@ -329,12 +371,12 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     expect(secondSnapshotId).toBe(firstSnapshotId)
     expect(tx.strategyInstance.update).toHaveBeenCalledWith({
       where: { id: 'strategy-instance-1' },
-      data: {
+      data: expect.objectContaining({
         metadata: expect.objectContaining({
           publishedSnapshotId: firstSnapshotId,
           snapshotHash: sourceSnapshot.snapshotHash,
         }),
-      },
+      }),
     })
     expect(tx.strategyInstance.update).not.toHaveBeenCalledWith({
       where: { id: 'strategy-instance-1' },
@@ -468,7 +510,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
           priceSource: 'mark',
           allowPartial: false,
         },
-        deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+        deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
         deploymentExecutionConstraints: {
           platformRiskMaxLeverage: 2,
           strategyDeclaredLeverageRange: { min: 1, max: 2 },
@@ -476,6 +518,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
           supportedPriceSources: ['mark'],
           supportedOrderTypes: ['market'],
           supportedTimeInForce: ['ioc'],
+          supportedTdModes: ['cross'],
           constraintExplanation: 'official strategy plaza template runtime constraints',
         },
         executionEnvelope: sourceSnapshot.executionEnvelope,
@@ -506,6 +549,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         deploymentExecutionDefaults: expect.objectContaining({
           leverage: 2,
           priceSource: 'mark',
+          tdMode: 'cross',
         }),
       }),
       select: { id: true, snapshotHash: true },

@@ -23,7 +23,7 @@ function metricsFor(templateId: OfficialStrategyPlazaTemplate['id']): OfficialSt
   }
 }
 
-export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
+export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTemplate[] = [
   {
     id: 'ma-cross',
     name: 'MA 均线交叉',
@@ -228,4 +228,4 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     displayMetrics: metricsFor('macd-cross'),
   },
-] satisfies readonly OfficialStrategyPlazaTemplate[]
+]
