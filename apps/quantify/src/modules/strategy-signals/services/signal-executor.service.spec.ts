@@ -778,6 +778,68 @@ describe('signalExecutorService', () => {
     expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
   })
 
+  it.each([
+    ['missing', null],
+    ['unsupported', { tdMode: 'margin' }],
+  ])('fails OKX perp execution when deployment tdMode is %s', async (_caseName, deploymentExecutionConfig) => {
+    const service = createService()
+    const executorRepository = (service as any).executorRepository
+    const executionRepository = (service as any).executionRepository
+    const accountsService = (service as any).accountsService
+
+    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
+    executorRepository.lockAccount = jest.fn().mockResolvedValue([
+      {
+        id: 'account-td-mode-1',
+        userId: 'user-td-mode-1',
+        baseCurrency: 'USDT',
+        balance: new Prisma.Decimal(1000),
+        equity: new Prisma.Decimal(1000),
+        initialBalance: new Prisma.Decimal(1000),
+      },
+    ])
+    executorRepository.findOpenPositionsForAdmission = jest.fn().mockResolvedValue([])
+    executorRepository.hasPendingReconcileRequiredEntryExecution = jest.fn().mockResolvedValue(false)
+    executorRepository.findRiskProfileByStrategyInstanceId = jest.fn().mockResolvedValue(null)
+    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-td-mode-1' })
+
+    const result = await (service as any).prepareExecution(
+      {
+        id: 'sig-td-mode-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        entryPrice: '100',
+        strategyInstanceId: 'strategy-instance-td-mode-1',
+        symbol: {
+          code: 'BTCUSDT:PERP',
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          precisionPrice: 2,
+          precisionQuantity: 4,
+          lotSize: '0.0001',
+        },
+      } as any,
+      { id: 'account-td-mode-1', userId: 'user-td-mode-1' } as any,
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      'BUY',
+      'LONG',
+      deploymentExecutionConfig,
+    )
+
+    expect(result).toEqual({
+      type: 'failed',
+      reason: 'Missing or unsupported explicit tdMode in strategy deployment execution config',
+      executionId: 'exec-td-mode-1',
+    })
+    expect(executionRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'FAILED',
+      errorMessage: 'Missing or unsupported explicit tdMode in strategy deployment execution config',
+    }))
+    expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
+  })
+
   it('does not markExecuted when a market order stays open with 0 fill after reconciliation', async () => {
     const prisma = {}
     const configService = { get: jest.fn() }

@@ -71,6 +71,11 @@ interface OrderParams {
   price?: number
 }
 
+type ExecutionPreparationFailureKind = 'DEPLOYMENT_EXECUTION_CONTRACT'
+type OrderParamsResult =
+  | { ok: true; params: OrderParams; quoteBudget: Decimal }
+  | { ok: false; reason: string; failureKind?: ExecutionPreparationFailureKind }
+
 const RECOVERY_BATCH_SIZE = 50
 const EXECUTION_RECOVERY_GRACE_MS = 5_000
 const ORDER_RECONCILE_RETRY_MS = 300
@@ -352,6 +357,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           await this.executionRepository.markSkipped(preparation.executionId, preparation.reason, preparation.metadata)
         }
         return 'skipped'
+      }
+      if (preparation.type === 'failed') {
+        return 'failed'
       }
 
       const { execution, orderParams, reservedQuote, reserveReference } = preparation
@@ -699,6 +707,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   ): Promise<
     | { type: 'duplicate' }
     | { type: 'skip'; reason: string; executionId?: string; metadata?: Prisma.JsonObject }
+    | { type: 'failed'; reason: string; executionId?: string }
     | { type: 'ready'; execution: Prisma.UserSignalExecutionGetPayload<{ select: { id: true } }>; orderParams: OrderParams; reservedQuote: Decimal; reserveReference: string }
   > {
     return this.txHost.withTransaction(async () => {
@@ -800,19 +809,26 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         positionSide,
       )
       if (!orderParamsResult.ok) {
-        const reason = (orderParamsResult as { ok: false; reason: string }).reason
-        this.logger.warn(
-          `[SignalExecutorService.prepareExecution] skipped signal execution; input=${JSON.stringify({ signalId: signal.id, accountId: account.id, strategyInstanceId: signal.strategyInstanceId ?? null })}; reason=${reason}`,
-        )
+        const orderParamsFailure = orderParamsResult as Extract<OrderParamsResult, { ok: false }>
+        const reason = orderParamsFailure.reason
+        const isDeploymentExecutionContractFailure = orderParamsFailure.failureKind === 'DEPLOYMENT_EXECUTION_CONTRACT'
+        const logMessage = `[SignalExecutorService.prepareExecution] ${
+          isDeploymentExecutionContractFailure ? 'failed' : 'skipped'
+        } signal execution; input=${JSON.stringify({ signalId: signal.id, accountId: account.id, strategyInstanceId: signal.strategyInstanceId ?? null })}; reason=${reason}`
+        if (isDeploymentExecutionContractFailure) this.logger.error(logMessage)
+        else this.logger.warn(logMessage)
         const execution = await this.executionRepository.create({
           signal: { connect: { id: signal!.id } },
           user: { connect: { id: account.userId } },
           account: { connect: { id: account.id } },
           orderSide,
           positionSide,
-          status: 'SKIPPED',
+          status: isDeploymentExecutionContractFailure ? 'FAILED' : 'SKIPPED',
           errorMessage: reason,
         })
+        if (isDeploymentExecutionContractFailure) {
+          return { type: 'failed', reason, executionId: execution.id }
+        }
         return { type: 'skip', reason, executionId: execution.id }
       }
 
@@ -906,7 +922,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     runtimeMarketType?: MarketType | null,
     deploymentExecutionConfig?: Record<string, unknown> | null,
     positionSide?: PositionSide | null,
-  ): { ok: true; params: OrderParams; quoteBudget: Decimal } | { ok: false; reason: string } {
+  ): OrderParamsResult {
     const symbolMeta = signal?.symbol
     if (!symbolMeta) return { ok: false, reason: 'Signal missing symbol metadata' }
 
@@ -938,7 +954,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       : undefined
     const tdMode = tdModeValue ? this.readTradeMode(tdModeValue) : undefined
     if (exchangeId === 'okx' && marketType === 'perp' && !tdMode) {
-      return { ok: false, reason: 'Missing or unsupported explicit tdMode in strategy deployment execution config' }
+      return {
+        ok: false,
+        reason: 'Missing or unsupported explicit tdMode in strategy deployment execution config',
+        failureKind: 'DEPLOYMENT_EXECUTION_CONTRACT',
+      }
     }
 
     // 根据是开仓还是平仓决定预算与原始数量来源
