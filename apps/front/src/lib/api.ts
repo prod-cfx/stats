@@ -218,6 +218,7 @@ export interface AccountAiQuantDeploymentExecutionConfig {
   priceSource?: string | null
   orderType?: string | null
   timeInForce?: string | null
+  tdMode?: 'cross' | 'isolated' | null
 }
 
 export interface AccountAiQuantDeploymentExecutionConstraints {
@@ -228,6 +229,7 @@ export interface AccountAiQuantDeploymentExecutionConstraints {
   supportedPriceSources?: string[] | null
   supportedOrderTypes?: string[] | null
   supportedTimeInForce?: string[] | null
+  supportedTdModes?: Array<'cross' | 'isolated'> | null
   constraintExplanation?: string | null
 }
 

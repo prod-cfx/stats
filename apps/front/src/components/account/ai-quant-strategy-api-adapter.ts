@@ -1,4 +1,4 @@
-import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
+import type { AiQuantMarketType, AiQuantStrategyRecord, AiQuantStrategyViewState, AiQuantTdMode } from './ai-quant-strategy-store'
 import type {
   AccountAiQuantBacktestConfigDefaults,
   AccountAiQuantConsistencySummary,
@@ -105,10 +105,16 @@ function normalizeDeploymentExecutionConfig(
     priceSource: typeof config.priceSource === 'string' ? config.priceSource : null,
     orderType: typeof config.orderType === 'string' ? config.orderType : null,
     timeInForce: typeof config.timeInForce === 'string' ? config.timeInForce : null,
+    tdMode: normalizeTdMode(config.tdMode),
   }
 }
 
-function normalizeMarketType(value: unknown): AiQuantStrategyRecord['marketType'] {
+function normalizeTdMode(value: unknown): AiQuantTdMode | null {
+  if (value === 'cross' || value === 'isolated') return value
+  return null
+}
+
+function normalizeMarketType(value: unknown): AiQuantMarketType {
   if (value === 'spot' || value === 'perp' || value === 'futures' || value === 'swap') return value
   return 'unknown'
 }

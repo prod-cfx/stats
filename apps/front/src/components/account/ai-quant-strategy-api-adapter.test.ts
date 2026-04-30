@@ -512,12 +512,14 @@ describe('ai-quant-strategy-api-adapter', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
+          tdMode: 'cross',
         },
         deploymentExecutionCurrent: {
           leverage: 4,
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
+          tdMode: 'isolated',
         },
         executionConfigVersion: 3,
         compatibilityMetadata: {
@@ -578,12 +580,14 @@ describe('ai-quant-strategy-api-adapter', () => {
       priceSource: 'mark',
       orderType: 'market',
       timeInForce: 'IOC',
+      tdMode: 'cross',
     })
     expect(record.deploymentExecutionCurrent).toEqual({
       leverage: 4,
       priceSource: 'mark',
       orderType: 'market',
       timeInForce: 'IOC',
+      tdMode: 'isolated',
     })
     expect(record.executionConfigVersion).toBe(3)
     expect(record.compatibilityMetadata).toEqual({
@@ -660,12 +664,14 @@ describe('ai-quant-strategy-api-adapter', () => {
           priceSource: 'close',
           orderType: 'market',
           timeInForce: 'GTC',
+          tdMode: 'cross',
         },
         deploymentExecutionCurrent: {
           leverage: 1,
           priceSource: 'close',
           orderType: 'market',
           timeInForce: 'GTC',
+          tdMode: 'isolated',
         },
         executionConfigVersion: 1,
         compatibilityMetadata: {
@@ -701,12 +707,14 @@ describe('ai-quant-strategy-api-adapter', () => {
       priceSource: 'close',
       orderType: 'market',
       timeInForce: 'GTC',
+      tdMode: 'cross',
     })
     expect(record.deploymentExecutionCurrent).toEqual({
       leverage: null,
       priceSource: 'close',
       orderType: 'market',
       timeInForce: 'GTC',
+      tdMode: 'isolated',
     })
   })
 
