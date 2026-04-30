@@ -265,6 +265,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
         strategyTemplateId: true,
         params: true,
         deploymentExecutionConfig: true,
+        executionConfigVersion: true,
         metadata: true,
       },
     })
@@ -282,10 +283,11 @@ export class StrategyPlazaOfficialSnapshotRepository {
       instance.deploymentExecutionConfig,
       template.runConfig.deploymentExecutionConfig,
     )
+    const executionConfigVersion = this.resolveExecutionConfigVersion(instance.executionConfigVersion)
     const params = {
       ...this.asRecord(instance.params),
       deploymentExecutionConfig,
-      executionConfigVersion: 1,
+      executionConfigVersion,
     }
     const metadata = {
       ...this.asRecord(instance.metadata),
@@ -309,7 +311,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
       data: {
         params: params as Prisma.InputJsonValue,
         deploymentExecutionConfig: deploymentExecutionConfig as Prisma.InputJsonValue,
-        executionConfigVersion: 1,
+        executionConfigVersion,
         metadata: metadata as Prisma.InputJsonValue,
       },
     })
@@ -329,7 +331,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
               customParams.deploymentExecutionConfig,
               template.runConfig.deploymentExecutionConfig,
             ),
-            executionConfigVersion: 1,
+            executionConfigVersion,
           } as Prisma.InputJsonValue,
         },
       })
@@ -388,6 +390,10 @@ export class StrategyPlazaOfficialSnapshotRepository {
 
   private asRecord(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {}
+  }
+
+  private resolveExecutionConfigVersion(value: unknown): number {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 1
   }
 
   private mergeDeploymentExecutionConfig(

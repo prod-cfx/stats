@@ -95,6 +95,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
           strategyTemplateId: 'strategy-template-1',
           params: { deploymentExecutionConfig: { leverage: 5, priceSource: 'mark' } },
           deploymentExecutionConfig: { leverage: 5, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+          executionConfigVersion: 3,
           metadata: { existing: true },
         }),
         update: jest.fn(),
@@ -290,11 +291,13 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
           leverage: 5,
           tdMode: 'cross',
         }),
+        executionConfigVersion: 3,
         params: expect.objectContaining({
           deploymentExecutionConfig: expect.objectContaining({
             leverage: 5,
             tdMode: 'cross',
           }),
+          executionConfigVersion: 3,
         }),
         metadata: expect.objectContaining({
           bindingSource: 'PUBLISHED_SNAPSHOT',
@@ -314,6 +317,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
             leverage: 5,
             tdMode: 'cross',
           }),
+          executionConfigVersion: 3,
         }),
       },
     })

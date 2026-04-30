@@ -28,6 +28,7 @@ describe('backfill-official-template-tdmode', () => {
       strategyTemplateId: 'strategy-template-1',
       params: { deploymentExecutionConfig: { leverage: 5, priceSource: 'mark' } },
       deploymentExecutionConfig: { leverage: 5, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+      executionConfigVersion: 3,
       metadata: { previous: true },
     }
     const subscription = {
@@ -57,6 +58,7 @@ describe('backfill-official-template-tdmode', () => {
         update: jest.fn(async ({ data }: any) => {
           instance.params = data.params
           instance.deploymentExecutionConfig = data.deploymentExecutionConfig
+          instance.executionConfigVersion = data.executionConfigVersion
           instance.metadata = data.metadata
         }),
       },
@@ -143,17 +145,20 @@ describe('backfill-official-template-tdmode', () => {
       leverage: 5,
       tdMode: 'cross',
     }))
+    expect(instance.executionConfigVersion).toBe(3)
     expect(instance.params).toEqual(expect.objectContaining({
       deploymentExecutionConfig: expect.objectContaining({
         leverage: 5,
         tdMode: 'cross',
       }),
+      executionConfigVersion: 3,
     }))
     expect(subscription.customParams).toEqual(expect.objectContaining({
       deploymentExecutionConfig: expect.objectContaining({
         leverage: 5,
         tdMode: 'cross',
       }),
+      executionConfigVersion: 3,
     }))
     expect(prisma.strategyRuntimeExecutionState.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({

@@ -27,6 +27,7 @@ interface StrategyInstanceRow {
   strategyTemplateId: string
   params: unknown
   deploymentExecutionConfig: unknown
+  executionConfigVersion: number | null
   metadata: unknown
 }
 
@@ -91,6 +92,10 @@ const asRecord = (value: unknown): JsonObject => {
   return value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as JsonObject) } : {}
 }
 
+function resolveExecutionConfigVersion(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 1
+}
+
 function officialMetadata(template: OfficialStrategyPlazaTemplate, snapshotHash: string, snapshotVersion: number): JsonObject {
   return {
     source: 'strategy-plaza-official-template',
@@ -110,7 +115,7 @@ function mergeDeploymentExecutionConfig(template: OfficialStrategyPlazaTemplate,
   }
 }
 
-function mergeParams(template: OfficialStrategyPlazaTemplate, current: unknown): JsonObject {
+function mergeParams(template: OfficialStrategyPlazaTemplate, current: unknown, executionConfigVersion: number): JsonObject {
   const currentParams = asRecord(current)
   return {
     ...currentParams,
@@ -118,7 +123,7 @@ function mergeParams(template: OfficialStrategyPlazaTemplate, current: unknown):
       template,
       asRecord(currentParams).deploymentExecutionConfig,
     ),
-    executionConfigVersion: 1,
+    executionConfigVersion,
   }
 }
 
@@ -227,6 +232,7 @@ async function synchronizeStrategyBinding(
       strategyTemplateId: true,
       params: true,
       deploymentExecutionConfig: true,
+      executionConfigVersion: true,
       metadata: true,
     },
   })
@@ -244,8 +250,9 @@ async function synchronizeStrategyBinding(
     snapshotHash: expectedHash,
   }
   const deploymentExecutionConfig = mergeDeploymentExecutionConfig(template, instance.deploymentExecutionConfig)
+  const executionConfigVersion = resolveExecutionConfigVersion(instance.executionConfigVersion)
   const params = {
-    ...mergeParams(template, instance.params),
+    ...mergeParams(template, instance.params, executionConfigVersion),
     deploymentExecutionConfig,
   }
 
@@ -262,7 +269,7 @@ async function synchronizeStrategyBinding(
     data: {
       params: params as Prisma.InputJsonValue,
       deploymentExecutionConfig: deploymentExecutionConfig as Prisma.InputJsonValue,
-      executionConfigVersion: 1,
+      executionConfigVersion,
       metadata: metadata as Prisma.InputJsonValue,
     },
   })
@@ -279,7 +286,7 @@ async function synchronizeStrategyBinding(
         customParams: {
           ...customParams,
           deploymentExecutionConfig: mergeDeploymentExecutionConfig(template, customParams.deploymentExecutionConfig),
-          executionConfigVersion: 1,
+          executionConfigVersion,
         } as Prisma.InputJsonValue,
       },
     })
