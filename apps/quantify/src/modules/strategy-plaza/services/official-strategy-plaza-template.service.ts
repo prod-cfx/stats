@@ -10,7 +10,7 @@ function cloneTemplate(template: OfficialStrategyPlazaTemplate): OfficialStrateg
     runConfig: {
       ...template.runConfig,
       deploymentExecutionConfig: { ...template.runConfig.deploymentExecutionConfig },
-    },
+    } as OfficialStrategyPlazaTemplate['runConfig'],
     editSeed: {
       ...template.editSeed,
       guideConfig: template.editSeed.guideConfig ? { ...template.editSeed.guideConfig } : undefined,

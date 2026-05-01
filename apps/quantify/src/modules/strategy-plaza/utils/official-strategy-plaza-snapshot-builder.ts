@@ -8,9 +8,11 @@ import {
   buildOfficialTemplateParamsSnapshot,
   buildOfficialTemplateStrategyConfig,
 } from './official-strategy-plaza-snapshot-content'
+import { assertOfficialTemplateRuntimeContract } from './official-strategy-plaza-runtime-contract'
 
 export const OFFICIAL_STRATEGY_PLAZA_USER_ID = 'official-strategy-plaza'
 export const OFFICIAL_STRATEGY_PLAZA_LLM_MODEL = 'official-strategy-plaza'
+export const OFFICIAL_STRATEGY_PLAZA_SNAPSHOT_VERSION = 4
 
 function sha256Json(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -210,6 +212,7 @@ function buildOfficialStrategyAstSnapshot() {
 }
 
 export function buildOfficialStrategySnapshotContent(template: OfficialStrategyPlazaTemplate) {
+  assertOfficialTemplateRuntimeContract(template)
   const scriptSnapshot = buildOfficialStrategyScript(template)
   const scriptHash = sha256Json(scriptSnapshot)
   const specSnapshot = buildOfficialStrategySpec(template)
@@ -264,6 +267,6 @@ export function buildOfficialStrategySnapshotContent(template: OfficialStrategyP
     userIntentSummary: { templateId: template.id, name: template.name },
     strategySummary: { name: template.name, description: template.description },
     scriptSummary: { source: 'strategy-plaza-official-template', logic: template.logicDescription },
-    snapshotVersion: 3,
+    snapshotVersion: OFFICIAL_STRATEGY_PLAZA_SNAPSHOT_VERSION,
   }
 }

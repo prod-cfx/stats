@@ -16,6 +16,8 @@ export interface StrategyTimelineEvent {
   at: string
   event: string
   note?: string
+  severity?: 'info' | 'warning' | 'error'
+  skipKind?: string
 }
 
 export interface StrategyRuntimeExecutionState {
@@ -32,6 +34,7 @@ export interface StrategyRuntimeExecutionState {
 }
 
 export type AiQuantMarketType = 'spot' | 'perp' | 'futures' | 'swap' | 'unknown'
+export type AiQuantTdMode = 'cross' | 'isolated'
 export type AiQuantPositionState = 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
 export type AiQuantCycleState = 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
 
@@ -90,12 +93,14 @@ export interface AiQuantStrategyRecord {
     priceSource?: string | null
     orderType?: string | null
     timeInForce?: string | null
+    tdMode?: AiQuantTdMode | null
   } | null
   deploymentExecutionCurrent?: {
     leverage?: number | null
     priceSource?: string | null
     orderType?: string | null
     timeInForce?: string | null
+    tdMode?: AiQuantTdMode | null
   } | null
   executionConfigVersion?: number | null
   deploymentLeverageRange?: {

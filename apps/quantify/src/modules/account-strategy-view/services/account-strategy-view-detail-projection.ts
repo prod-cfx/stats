@@ -81,6 +81,18 @@ function readNestedRecord(root: unknown, keys: string[]): Record<string, unknown
   return readRecord(current)
 }
 
+function readNoOpenPositionSkipMetadata(metadata: unknown): { skipKind: string; severity: 'info'; note: string } | null {
+  const record = readRecord(metadata)
+  if (!record) return null
+  if (record.skipKind !== 'NO_OPEN_POSITION_TO_CLOSE') return null
+  if (record.severity !== 'info') return null
+  return {
+    skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
+    severity: 'info',
+    note: '无持仓可平，已跳过',
+  }
+}
+
 function normalizeFeeAmount(value: unknown): number | null {
   const amount = toFiniteNumber(value)
   if (amount === null) return null
@@ -182,11 +194,14 @@ export function buildAccountStrategyMixedTimeline(source: AccountStrategyTimelin
   }
 
   for (const execution of source.signalExecutions) {
+    const noOpenPositionSkip = readNoOpenPositionSkipMetadata(execution.metadata)
     events.push({
       at: execution.createdAt.toISOString(),
       eventType: 'trade',
-      event: execution.status === 'SUCCESS' ? '信号执行成功' : '信号执行',
-      note: execution.errorMessage ?? null,
+      event: noOpenPositionSkip ? '信号跳过' : execution.status === 'SUCCESS' ? '信号执行成功' : '信号执行',
+      note: noOpenPositionSkip?.note ?? execution.errorMessage ?? null,
+      severity: noOpenPositionSkip?.severity ?? null,
+      skipKind: noOpenPositionSkip?.skipKind ?? null,
     })
   }
 
