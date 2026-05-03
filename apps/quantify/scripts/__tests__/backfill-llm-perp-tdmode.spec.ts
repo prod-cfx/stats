@@ -119,7 +119,7 @@ describe('backfill-llm-perp-tdmode', () => {
       },
       $transaction: jest.fn(async (callback: (tx: any) => Promise<void>) => callback(prisma)),
     }
-    return { instance, prisma, snapshots, subscription }
+    return { instance, instances, prisma, snapshots, subscription }
   }
 
   it('parses dry-run and apply options', () => {
@@ -163,6 +163,25 @@ describe('backfill-llm-perp-tdmode', () => {
     expect(subscription.customParams).toEqual(expect.objectContaining({
       deploymentExecutionConfig: expect.objectContaining({ tdMode: 'cross' }),
     }))
+  })
+
+  it('plans bound runtime repairs when snapshot already has tdMode contract', async () => {
+    const state = buildPrismaMock()
+    const currentInstance = state.instances.get('instance-current')!
+    currentInstance.deploymentExecutionConfig = { leverage: 1 }
+    currentInstance.params = { deploymentExecutionConfig: { leverage: 1 } }
+
+    const result = await buildBackfillPlan(state.prisma as never)
+
+    expect(result.plan).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        snapshotId: 'llm-perp-current',
+        repairs: ['instance-deployment-execution-config', 'instance-params-deployment-execution-config'],
+      }),
+    ]))
+    expect(result.skipped).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ snapshotId: 'llm-perp-current', reason: 'snapshot already has tdMode contract' }),
+    ]))
   })
 
   it.each([

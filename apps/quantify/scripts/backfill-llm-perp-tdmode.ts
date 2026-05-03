@@ -180,9 +180,6 @@ async function buildSnapshotPlanItem(
   if (!isRecord(snapshot.deploymentExecutionDefaults) || !isRecord(snapshot.deploymentExecutionConstraints)) {
     return { skipped: { snapshotId, reason: 'snapshot lacks deployment execution objects and requires republish' } }
   }
-  if (hasCrossTdMode(snapshot.deploymentExecutionDefaults) && hasSupportedCrossTdMode(snapshot.deploymentExecutionConstraints)) {
-    return { skipped: { snapshotId, reason: 'snapshot already has tdMode contract' } }
-  }
 
   const repairs: string[] = []
   if (!hasCrossTdMode(snapshot.deploymentExecutionDefaults)) {
@@ -240,6 +237,9 @@ async function buildSnapshotPlanItem(
         repairs.push('subscription-custom-params-deployment-execution-config')
       }
     }
+  }
+  if (repairs.length === 0) {
+    return { skipped: { snapshotId, reason: 'snapshot already has tdMode contract' } }
   }
 
   return {
