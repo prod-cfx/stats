@@ -42,7 +42,6 @@ const helper = new CodegenConversationContextHelper()
 
 export function buildStartSessionBootstrap(
   input: StartSessionBootstrapInput,
-  buildCompileabilityAssistantPrompt: (report: CanonicalCompileabilityReport) => string,
 ): StartSessionBootstrapResult {
   const status: LlmCodegenSessionStatus = input.decisionKind === 'CONFIRM_INFERRED'
     ? 'DRAFTING'
@@ -60,9 +59,7 @@ export function buildStartSessionBootstrap(
             : `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`)
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
-            : (input.compileability && !input.compileability.canCompile
-            ? buildCompileabilityAssistantPrompt(input.compileability)
-            : input.plan.assistantPrompt)))
+            : input.plan.assistantPrompt))
 
   return {
     status,

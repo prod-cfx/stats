@@ -29,6 +29,7 @@ import { RecommendationIndexService } from './services/recommendation-index.serv
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
+import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
@@ -94,6 +95,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CodegenConversationService,
     PositionSizingContractService,
     SemanticAtomContractService,
+    SemanticContractReadinessService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })

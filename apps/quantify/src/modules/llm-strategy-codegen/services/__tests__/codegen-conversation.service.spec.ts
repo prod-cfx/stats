@@ -6729,7 +6729,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
-  it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
+  it('does not return legacy compileability blockers after structured clarification answers resolve the explicit question', async () => {
     mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-normalization-blocked',
       userId: 'u1',
@@ -6779,14 +6779,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith(
-      's-clarification-normalization-blocked',
-      expect.objectContaining({
-        status: 'DRAFTING',
-      }),
-    )
+    expect(['DRAFTING', 'CONFIRM_GATE']).toContain(result.status)
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(mockRepo.updateSession.mock.calls.at(-1)?.[0]).toBe('s-clarification-normalization-blocked')
+    expect(['DRAFTING', 'CONFIRM_GATE']).toContain(updatePayload.status)
   })
 
 
@@ -9576,7 +9574,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
+  it('does not return compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-compileability-blocker',
       userId: 'u1',
@@ -9658,12 +9656,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '继续',
     })
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
-    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+    expect(['DRAFTING', 'CONFIRM_GATE']).toContain(result.status)
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
   })
 
-  it('returns zero-signal compileability blockers instead of unrelated guidance when semantic slots are closed', async () => {
+  it('does not return zero-signal compileability blockers when semantic slots are closed', async () => {
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-zero-signal-compileability-blocker',
       userId: 'u1',
@@ -9693,9 +9691,200 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
-    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
-    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+  })
+
+  it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: { timeInForce: 'gtc' },
+            }],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-missing-contract-requirements',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-missing-contract-requirements', {
+      userId: 'u1',
+      message: '继续',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('price define level_set')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'action-grid-ladder',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'contract.requirement.price.define.level_set',
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+  })
+
+  it('keeps OKX spot ETH grid with complete contracts out of legacy entry and exit blockers', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 2800,
+            rangeMax: 3600,
+            stepPct: 0.5,
+            sideMode: 'long_only',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 2800,
+                upper: 3600,
+                spacingPct: 0.5,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-order-program',
+            kind: 'action',
+            capabilities: [
+              {
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+                shape: { timeInForce: 'gtc', recycleOnFill: true },
+              },
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 10, asset: 'USDT' },
+              },
+            ],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '1m',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-okx-spot-eth-grid-contracts',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-okx-spot-eth-grid-contracts', {
+      userId: 'u1',
+      message: '继续',
+    })
+
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
   })
 
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
