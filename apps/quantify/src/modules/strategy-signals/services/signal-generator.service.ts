@@ -1376,7 +1376,7 @@ export class SignalGeneratorService {
       return
     }
 
-    const hasRuntimeMarketTypeParam = this.hasRecordProperty(params, 'marketType')
+    const hasRuntimeMarketTypeParam = this.hasOwnProperty(params, 'marketType')
     const marketType = this.readRuntimeMarketType(params.marketType)
     if (hasRuntimeMarketTypeParam && !marketType) {
       this.logger.warn(
@@ -1577,25 +1577,7 @@ export class SignalGeneratorService {
       )
 
       if (!createdSignal.created) {
-        if (createdSignal.runtimeDisposition === 'retry') {
-          this.logger.warn(
-            `[SignalGeneratorService.runPublishedSnapshotRuntime] retrying runtime execution after signal admission block; input=${JSON.stringify({ strategyInstanceId: instance.id, strategyId: strategy.id, symbolCode, reason: createdSignal.reason, executionSemanticKey: activeRuntimeState?.executionSemanticKey ?? null })}; reason=${createdSignal.reason}`,
-          )
-          await this.markRuntimeExecutionStateRetryable(activeRuntimeState, config, {
-            failureReason: createdSignal.reason,
-            failureCode: createdSignal.reason,
-          })
-          this.telemetry.recordGeneration({
-            strategyId: strategy.id,
-            symbolCode,
-            success: false,
-            reason: createdSignal.reason,
-            runtimePhase: 'execution',
-          })
-        }
-        else {
-          await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
-        }
+        await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
       }
     } catch (error) {
       await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
@@ -1837,7 +1819,7 @@ export class SignalGeneratorService {
     return 'spot'
   }
 
-  private hasRecordProperty(record: Record<string, unknown>, key: string): boolean {
+  private hasOwnProperty(record: Record<string, unknown>, key: string): boolean {
     return Object.prototype.hasOwnProperty.call(record, key)
   }
 
@@ -1990,7 +1972,7 @@ export class SignalGeneratorService {
     const runtimeMarketType = this.readRuntimeMarketType(
       effectiveParams?.marketType,
     )
-    if (effectiveParams && this.hasRecordProperty(effectiveParams, 'marketType') && !runtimeMarketType) {
+    if (effectiveParams && this.hasOwnProperty(effectiveParams, 'marketType') && !runtimeMarketType) {
       this.logger.warn(`Invalid marketType for multi-leg strategy ${strategy.id}: ${String(effectiveParams.marketType)}`)
       await this.handleStrategyFailure(instance.id, config)
       this.telemetry.recordGeneration({

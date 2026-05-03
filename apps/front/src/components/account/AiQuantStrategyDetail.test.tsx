@@ -1003,28 +1003,4 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('约 2,767.64 USDT')
     expect(container.textContent).not.toContain('0.04')
   })
-
-  it('shows no-open-position close skips as neutral timeline information', async () => {
-    await act(async () => {
-      root.render(
-        <AiQuantStrategyDetail
-          lng="zh"
-          strategy={buildStrategy({
-            timeline: [{
-              at: '2026-04-30T12:00:00.000Z',
-              event: '信号跳过',
-              eventType: 'trade',
-              note: '无持仓可平，已跳过',
-              severity: 'info',
-              skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
-            }],
-          })}
-        />,
-      )
-    })
-
-    expect(container.textContent).toContain('信号跳过')
-    expect(container.textContent).toContain('无持仓可平，已跳过')
-    expect(container.querySelector('.border-sky-500\\/30')).not.toBeNull()
-  })
 })

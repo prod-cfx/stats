@@ -27,7 +27,6 @@ export interface BacktestResult {
   symbol?: string
   startAt?: string
   endAt?: string
-  recoveryStatus?: 'config_changed'
 }
 
 export function BacktestSummaryCard({
@@ -137,21 +136,15 @@ export function BacktestSummaryCard({
             }]
           : []),
       ]
-  const deployBlockMessage = result.recoveryStatus === 'config_changed'
-    ? t('aiQuant.messages.backtestConfigChangedDeployBlocked', {
-        defaultValue: isEn
-          ? 'Backtest parameters changed. Rerun backtest before deploying.'
-          : '回测参数已变化，请重新回测后再部署。',
-      })
-    : result.maxDrawdownPct > 20
-      ? t('aiQuant.messages.backtestDrawdownFail')
-      : result.tradeCount === 0
-        ? normalizedMarketType === 'spot'
-          ? isEn
-            ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
-            : '本次回测未形成已完成交易，暂不允许部署。请调整现货策略条件后重试。'
-          : t('aiQuant.messages.backtestNoTrades')
-        : t('aiQuant.messages.backtestDrawdownFail')
+  const deployBlockMessage = result.maxDrawdownPct > 20
+    ? t('aiQuant.messages.backtestDrawdownFail')
+    : result.tradeCount === 0
+      ? normalizedMarketType === 'spot'
+        ? isEn
+          ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
+          : '本次回测未形成已完成交易，暂不允许部署。请调整现货策略条件后重试。'
+        : t('aiQuant.messages.backtestNoTrades')
+      : t('aiQuant.messages.backtestDrawdownFail')
   const effectiveDeployLabel = deployLabel
     ?? (deploymentState === 'running'
       ? t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
@@ -184,15 +177,6 @@ export function BacktestSummaryCard({
           </p>
           {backtestContext && (
             <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{backtestContext}</p>
-          )}
-          {result.recoveryStatus === 'config_changed' && (
-            <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500">
-              {t('aiQuant.messages.backtestConfigChanged', {
-                defaultValue: isEn
-                  ? 'Backtest parameters changed. This is the latest result for the published strategy snapshot; rerun backtest to refresh it.'
-                  : '回测参数已变化。当前展示的是已发布策略快照的最近回测结果，建议重新回测刷新。',
-              })}
-            </p>
           )}
         </div>
         <button

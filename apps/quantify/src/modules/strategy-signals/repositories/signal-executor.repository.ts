@@ -77,7 +77,7 @@ export class SignalExecutorRepository {
   findStrategyInstanceMode(strategyInstanceId: string) {
     return this.txHost.tx.strategyInstance.findUnique({
       where: { id: strategyInstanceId },
-      select: { mode: true, deploymentExecutionConfig: true },
+      select: { mode: true },
     })
   }
 

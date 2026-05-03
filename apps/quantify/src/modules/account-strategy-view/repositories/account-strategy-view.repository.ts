@@ -42,7 +42,6 @@ interface DeployStrategyInput {
     priceSource?: string | null
     orderType?: string | null
     timeInForce?: string | null
-    tdMode?: string | null
   }
   executionConfigVersion?: number
   publishedSnapshotBinding?: {
@@ -751,7 +750,6 @@ export class AccountStrategyViewRepository {
       priceSource: string
       orderType: string
       timeInForce: string
-      tdMode?: string | null
     }
     executionConfigVersion: number
     existingParams: Record<string, unknown>

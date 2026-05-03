@@ -2,12 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
-import type {
-  AccountAiQuantBacktestConfigDefaults,
-  AiQuantBacktestDraftConfig,
-  LlmCodegenSessionResponse,
-} from '@/lib/api'
+import type { LlmCodegenSessionResponse } from '@/lib/api'
 import {
   buildAiQuantErrorMessage,
   buildAiQuantStageFallbackMessage,
@@ -30,8 +25,6 @@ import { ApiError } from '@/lib/errors'
 import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
 import {
   BACKTEST_EXECUTION_PARAM_KEYS,
-  applyBacktestDraftConfigToValues,
-  buildBacktestDraftConfigFromValues,
   hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
   normalizeClarificationGate,
@@ -84,76 +77,15 @@ function normalizePublishedSnapshotParamValues(
   return normalized
 }
 
-function normalizeSnapshotBacktestConfigDefaults(
-  value: unknown,
-): AccountAiQuantBacktestConfigDefaults | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-
-  const candidate = value as Record<string, unknown>
-  const initialCash = typeof candidate.initialCash === 'number' ? candidate.initialCash : Number(candidate.initialCash)
-  const leverage =
-    candidate.leverage === null
-      ? null
-      : (typeof candidate.leverage === 'number' ? candidate.leverage : Number(candidate.leverage))
-  const slippageBps = typeof candidate.slippageBps === 'number' ? candidate.slippageBps : Number(candidate.slippageBps)
-  const feeBps = typeof candidate.feeBps === 'number' ? candidate.feeBps : Number(candidate.feeBps)
-  const priceSource = typeof candidate.priceSource === 'string' ? candidate.priceSource.trim() : ''
-  const allowPartial = candidate.allowPartial
-
-  if (
-    !Number.isFinite(initialCash)
-    || initialCash <= 0
-    || (leverage !== null && (!Number.isFinite(leverage) || leverage <= 0))
-    || !Number.isFinite(slippageBps)
-    || slippageBps < 0
-    || !Number.isFinite(feeBps)
-    || feeBps < 0
-    || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
-    || typeof allowPartial !== 'boolean'
-  ) {
-    return null
-  }
-
-  return {
-    initialCash,
-    leverage,
-    slippageBps,
-    feeBps,
-    priceSource,
-    allowPartial,
-    ...(Array.isArray(candidate.stateTimeframes)
-      ? {
-          stateTimeframes: candidate.stateTimeframes
-            .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-            .map(item => item.trim()),
-        }
-      : {}),
-  }
-}
-
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
-  snapshotBacktestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  const { currentValues, snapshotParamValues, snapshotBacktestConfigDefaults } = input
-  const snapshotBacktestExecutionParamValues = snapshotBacktestConfigDefaults
-    ? {
-        backtestInitialCash: snapshotBacktestConfigDefaults.initialCash,
-        backtestLeverage: snapshotBacktestConfigDefaults.leverage,
-        backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
-        backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
-        backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
-        backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
-      }
-    : null
-
-  if (!snapshotParamValues && !snapshotBacktestExecutionParamValues) {
+  const { currentValues, snapshotParamValues } = input
+  if (!snapshotParamValues) {
     return {
       paramValues: currentValues,
       explicit: hasExplicitBacktestExecutionOverrides(currentValues),
@@ -162,95 +94,12 @@ function mergeSnapshotBoundParamValues(input: {
 
   const nextValues = {
     ...currentValues,
-    ...(snapshotBacktestExecutionParamValues ?? {}),
-    ...(snapshotParamValues ?? {}),
+    ...snapshotParamValues,
   }
 
   return {
     paramValues: nextValues,
     explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
-  }
-}
-
-function hasCompleteBacktestDraftConfigValues(values: Record<string, unknown>): boolean {
-  const preset = typeof values.backtestRangePreset === 'string' ? values.backtestRangePreset.trim() : ''
-  if (!preset) {
-    return false
-  }
-  if (
-    preset === 'CUSTOM'
-    && (
-      typeof values.backtestStart !== 'string'
-      || !values.backtestStart.trim()
-      || typeof values.backtestEnd !== 'string'
-      || !values.backtestEnd.trim()
-    )
-  ) {
-    return false
-  }
-  return BACKTEST_EXECUTION_PARAM_KEYS.every(key => key in values)
-}
-
-function buildExplicitBacktestDraftConfigFromValues(
-  values: Record<string, unknown>,
-): AiQuantBacktestDraftConfig | null {
-  if (!hasCompleteBacktestDraftConfigValues(values)) {
-    return null
-  }
-  return buildBacktestDraftConfigFromValues(values)
-}
-
-function areBacktestDraftConfigsEqual(
-  left: AiQuantBacktestDraftConfig | null,
-  right: AiQuantBacktestDraftConfig | null,
-): boolean {
-  if (!left || !right) {
-    return false
-  }
-  if (left.range.preset !== right.range.preset) {
-    return false
-  }
-  if (
-    left.range.preset === 'CUSTOM'
-    && (
-      left.range.startAt !== right.range.startAt
-      || left.range.endAt !== right.range.endAt
-    )
-  ) {
-    return false
-  }
-  return (
-    left.execution.initialCash === right.execution.initialCash
-    && left.execution.leverage === right.execution.leverage
-    && left.execution.slippageBps === right.execution.slippageBps
-    && left.execution.feeBps === right.execution.feeBps
-    && left.execution.priceSource === right.execution.priceSource
-    && left.execution.allowPartial === right.execution.allowPartial
-  )
-}
-
-function resolvePreservedBacktestResult(input: {
-  shouldPreserve: boolean
-  result: BacktestResult | null
-  currentConfig: AiQuantBacktestDraftConfig | null
-  nextConfig: AiQuantBacktestDraftConfig | null
-}): BacktestResult | null {
-  const {
-    shouldPreserve,
-    result,
-    currentConfig,
-    nextConfig,
-  } = input
-
-  if (!shouldPreserve || !result) {
-    return null
-  }
-  if (areBacktestDraftConfigsEqual(currentConfig, nextConfig)) {
-    return result
-  }
-  return {
-    ...result,
-    recoveryStatus: 'config_changed',
   }
 }
 
@@ -522,7 +371,6 @@ export function applyCodegenResponseToConversationState(args: {
   trimmedMessage: string
   t: (key: string, options?: Record<string, unknown>) => string
   loadingMessageId?: string | null
-  preserveBacktestResultOnSameSnapshot?: boolean
 }): ConversationState {
   const {
     conversation,
@@ -534,7 +382,6 @@ export function applyCodegenResponseToConversationState(args: {
     trimmedMessage,
     t,
     loadingMessageId = null,
-    preserveBacktestResultOnSameSnapshot = false,
   } = args
 
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
@@ -550,10 +397,6 @@ export function applyCodegenResponseToConversationState(args: {
   const shouldUpdateGraph =
     (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
-  const responseSnapshotBacktestConfigDefaults =
-    response.status === 'PUBLISHED'
-      ? normalizeSnapshotBacktestConfigDefaults(response.publishedSnapshotBacktestConfigDefaults)
-      : null
   const syncFallback = {
     exchange: targetParams.exchange,
     symbol: targetParams.symbol,
@@ -579,10 +422,6 @@ export function applyCodegenResponseToConversationState(args: {
       response.status === 'PUBLISHED'
         ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
         : null,
-    snapshotBacktestConfigDefaults:
-      response.status === 'PUBLISHED'
-        ? responseSnapshotBacktestConfigDefaults
-        : null,
   })
   const nextPublishedSnapshotParamValues =
     response.status === 'PUBLISHED'
@@ -598,7 +437,7 @@ export function applyCodegenResponseToConversationState(args: {
         : conversation.publishedSnapshotStrategyConfig
   const nextPublishedSnapshotBacktestConfigDefaults =
     response.status === 'PUBLISHED'
-      ? responseSnapshotBacktestConfigDefaults
+      ? (response.publishedSnapshotBacktestConfigDefaults ?? null)
       : shouldUpdateGraph
         ? null
         : conversation.publishedSnapshotBacktestConfigDefaults
@@ -620,13 +459,7 @@ export function applyCodegenResponseToConversationState(args: {
       : shouldUpdateGraph
         ? null
         : conversation.publishedSnapshotCompatibilityMetadata
-  const nextParamValues =
-    preserveBacktestResultOnSameSnapshot && conversation.backtestDraftConfig
-      ? applyBacktestDraftConfigToValues({
-          currentValues: mergedSnapshotParamValues.paramValues,
-          backtestDraftConfig: conversation.backtestDraftConfig,
-        })
-      : mergedSnapshotParamValues.paramValues
+  const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParamSchema = shouldUpdateGraph
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
     : conversation.paramSchema
@@ -699,18 +532,6 @@ export function applyCodegenResponseToConversationState(args: {
   const nextPublishedScriptGraphVersion = nextPublishedScriptCode
     ? (nextGraph?.version ?? conversation.publishedScriptGraphVersion)
     : null
-  const shouldPreserveBacktestResult =
-    preserveBacktestResultOnSameSnapshot
-    && Boolean(conversation.backtestResult)
-    && normalizePublishedSnapshotId(conversation.publishedSnapshotId) !== null
-    && normalizePublishedSnapshotId(conversation.publishedSnapshotId) === nextPublishedSnapshotId
-  const nextBacktestDraftConfig = buildExplicitBacktestDraftConfigFromValues(normalizedParamValues)
-  const nextBacktestResult = resolvePreservedBacktestResult({
-    shouldPreserve: shouldPreserveBacktestResult,
-    result: conversation.backtestResult,
-    currentConfig: conversation.backtestDraftConfig,
-    nextConfig: nextBacktestDraftConfig,
-  })
   const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
     ? (response.semanticGraph ?? null)
     : conversation.semanticGraph
@@ -827,11 +648,8 @@ export function applyCodegenResponseToConversationState(args: {
       nextPendingCanonicalDigest !== undefined
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
-    backtestExecutionConfigExplicit:
-      preserveBacktestResultOnSameSnapshot && conversation.backtestDraftConfig
-        ? true
-        : mergedSnapshotParamValues.explicit,
-    backtestResult: nextBacktestResult,
+    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
+    backtestResult: null,
     latestSignalMessage: null,
     messages: nextMessages,
     updatedAt: response.updatedAt ? Date.parse(response.updatedAt) : Date.now(),
@@ -889,7 +707,6 @@ export async function reconcilePersistedActiveCodegenSession(args: {
         backtestCapabilities,
         activeSessionId,
         trimmedMessage: '',
-        preserveBacktestResultOnSameSnapshot: true,
         t,
       })
     }),

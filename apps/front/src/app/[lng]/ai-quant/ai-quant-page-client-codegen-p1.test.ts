@@ -387,42 +387,6 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.serverConversationId).toBe('server-conv-1')
   })
 
-  it('ignores malformed snapshot backtest defaults from codegen responses', () => {
-    const conversation = createConversation((key: string) => key, 1)
-
-    const next = applyCodegenResponseToConversationState({
-      conversation,
-      response: {
-        id: 'session-1',
-        conversationId: 'server-conv-1',
-        status: 'PUBLISHED',
-        conversationTitle: '服务端会话',
-        conversationMessages: [],
-        publishedSnapshotId: 'snapshot-1',
-        publishedSnapshotParamValues: null,
-        publishedSnapshotBacktestConfigDefaults: {
-          initialCash: 10000,
-          leverage: 1,
-          slippageBps: 10,
-          feeBps: 5,
-          priceSource: 'close',
-          allowPartial: null,
-        },
-      } as any,
-      confirmGenerate: false,
-      targetParams: DEFAULT_PARAMS,
-      backtestCapabilities: null,
-      activeSessionId: 'session-1',
-      trimmedMessage: 'test',
-      t: (key: string) => key,
-      loadingMessageId: null,
-    })
-
-    expect(next.publishedSnapshotBacktestConfigDefaults).toBeNull()
-    expect(next.paramValues).not.toHaveProperty('backtestAllowPartial')
-    expect(next.backtestExecutionConfigExplicit).toBe(false)
-  })
-
   it('rebuilds display logic graph from updated specDesc when codegen edits strategy semantics', () => {
     const conversation = {
       ...createConversation((key: string) => key, 1),

@@ -20,7 +20,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
-          tdMode: 'cross',
         },
         executionConfigVersion: 2,
         subscriptions: [{
@@ -58,7 +57,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
             priceSource: 'mark',
             orderType: 'market',
             timeInForce: 'IOC',
-            tdMode: 'cross',
           },
           deploymentExecutionConstraints: {
             platformRiskMaxLeverage: 5,
@@ -96,7 +94,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
-          tdMode: 'cross',
         },
         executionConfigVersion: 2,
         subscriptions: [{
@@ -141,7 +138,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
           priceSource: 'mark',
           orderType: 'market',
           timeInForce: 'IOC',
-          tdMode: 'cross',
         },
         executionConfigVersion: 2,
         subscriptions: [{
@@ -186,7 +182,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
             priceSource: 'mark',
             orderType: 'market',
             timeInForce: 'IOC',
-            tdMode: 'cross',
           },
           deploymentExecutionConstraints: {
             platformRiskMaxLeverage: 5,
@@ -219,7 +214,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
         priceSource: 'mark',
         orderType: 'market',
         timeInForce: 'IOC',
-        tdMode: 'cross',
       },
       executionConfigVersion: 3,
       existingParams: { symbol: 'ETHUSDT' },
@@ -252,7 +246,6 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
           priceSource: 'close',
           orderType: 'market',
           timeInForce: 'GTC',
-          tdMode: 'cross',
         },
         executionConfigVersion: 1,
         subscriptions: [{
