@@ -13,6 +13,7 @@ describe('tradingService', () => {
       fetchTicker: jest.fn(),
       fetchPositions: jest.fn(),
       fetchBalance: jest.fn(),
+      fetchAccountConfig: jest.fn(),
     }
     const exchangeFactory = {
       createClient: jest.fn(() => client),
@@ -344,5 +345,138 @@ describe('tradingService', () => {
         amount: 0.001,
       },
     )).resolves.toEqual({ id: 'order-3', status: 'open' })
+  })
+
+  it('resolves OKX long/short position mode before creating perp orders', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchAccountConfig.mockResolvedValue({ posMode: 'long_short_mode' })
+    client.createOrder.mockResolvedValue({ id: 'order-okx-1', status: 'open' })
+
+    await service.placeOrder(
+      'user-1',
+      'okx',
+      'perp',
+      {
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+        tdMode: 'cross',
+        positionSide: 'LONG',
+        clientOrderId: 'ceexecution1',
+      },
+      'exchange-account-1',
+    )
+
+    expect(client.fetchAccountConfig).toHaveBeenCalledTimes(1)
+    expect(client.createOrder).toHaveBeenCalledWith(expect.objectContaining({
+      tdMode: 'cross',
+      positionSide: 'LONG',
+      clientOrderId: 'ceexecution1',
+      extra: expect.objectContaining({
+        tdMode: 'cross',
+        posSide: 'long',
+      }),
+    }))
+  })
+
+  it('caches OKX position mode briefly for repeated perp orders on the same account', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchAccountConfig.mockResolvedValue({ posMode: 'long_short_mode' })
+    client.createOrder.mockResolvedValue({ id: 'order-okx-cache', status: 'open' })
+
+    const orderInput = {
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp' as const,
+      side: 'buy' as const,
+      type: 'market' as const,
+      amount: 0.001,
+      tdMode: 'cross' as const,
+      positionSide: 'LONG' as const,
+    }
+
+    await service.placeOrder('user-1', 'okx', 'perp', orderInput, 'exchange-account-1')
+    await service.placeOrder('user-1', 'okx', 'perp', orderInput, 'exchange-account-1')
+
+    expect(client.fetchAccountConfig).toHaveBeenCalledTimes(1)
+    expect(client.createOrder).toHaveBeenCalledTimes(2)
+  })
+
+  it('omits OKX posSide and typed positionSide for net mode perp orders', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchAccountConfig.mockResolvedValue({ posMode: 'net_mode' })
+    client.createOrder.mockResolvedValue({ id: 'order-okx-net-1', status: 'open' })
+
+    await service.placeOrder(
+      'user-1',
+      'okx',
+      'perp',
+      {
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+        tdMode: 'cross',
+        positionSide: 'LONG',
+        extra: { posSide: 'long' },
+      },
+      'exchange-account-1',
+    )
+
+    expect(client.createOrder).toHaveBeenCalledWith(expect.objectContaining({
+      tdMode: 'cross',
+      extra: { tdMode: 'cross' },
+    }))
+    expect(client.createOrder.mock.calls[0][0]).not.toHaveProperty('positionSide')
+    expect(client.createOrder.mock.calls[0][0].extra).not.toHaveProperty('posSide')
+  })
+
+  it('rejects OKX perp orders when tdMode is absent instead of applying a default', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchAccountConfig.mockResolvedValue({ posMode: 'net_mode' })
+
+    await expect(service.placeOrder(
+      'user-1',
+      'okx',
+      'perp',
+      {
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+        positionSide: 'LONG',
+      },
+      'exchange-account-1',
+    )).rejects.toMatchObject({
+      args: expect.objectContaining({
+        exchangeId: 'okx',
+        reason: 'OKX perp order requires explicit tdMode',
+      }),
+    })
+
+    expect(client.createOrder).not.toHaveBeenCalled()
   })
 })

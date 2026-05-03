@@ -2,13 +2,14 @@ import type {
   CreateOrderInput,
   ExchangeId,
   MarketType,
+  PositionIntentSide,
   UnifiedBalance,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
 } from './core/types'
 import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './factory/account-store'
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { AuthError, ExchangeError } from './core/errors'
 import {
   ExchangeOperationFailedException,
@@ -22,6 +23,11 @@ import { ExchangeFactory } from './factory/exchange-factory'
 
 @Injectable()
 export class TradingService {
+  private readonly logger = new Logger(TradingService.name)
+  private readonly okxPositionModeCache = new Map<string, { posMode: string; expiresAt: number }>()
+  private readonly okxPositionModeCacheTtlMs = 5_000
+  private readonly okxPositionModeCacheMaxEntries = 500
+
   constructor(
     @Inject(ExchangeFactory)
     private readonly exchangeFactory: ExchangeFactory,
@@ -56,14 +62,137 @@ export class TradingService {
 
     try {
       // 预留风控入口：下单前可在此加入限额、黑名单等检查
-      return await client.createOrder(input)
+      const resolvedInput = await this.prepareOrderInput({
+        exchangeId,
+        marketType,
+        input,
+        client,
+        positionModeCacheKey: this.buildOkxPositionModeCacheKey(userId, exchangeId, exchangeAccountId),
+      })
+      return await client.createOrder(resolvedInput)
     }
     catch (error) {
       // 捕获交易所错误并映射为业务异常，避免直接暴露第三方错误详情
       if (error instanceof ExchangeError) {
+        this.logger.error(
+          `[TradingService.placeOrder] failed to create order; input=${JSON.stringify(this.summarizeOrderInput(exchangeId, marketType, input))}; reason=${error.message}`,
+        )
         throw new OrderCreationFailedException({ exchangeId, reason: error.message })
       }
       throw error
+    }
+  }
+
+
+  private async prepareOrderInput(input: {
+    exchangeId: ExchangeId
+    marketType: MarketType
+    input: CreateOrderInput
+    client: { createOrder: (input: CreateOrderInput) => Promise<UnifiedOrder>; fetchAccountConfig?: () => Promise<{ posMode: string }> }
+    positionModeCacheKey: string | null
+  }): Promise<CreateOrderInput> {
+    if (input.exchangeId !== 'okx' || input.marketType !== 'perp') {
+      return input.input
+    }
+
+    const tdMode = input.input.tdMode
+    if (!tdMode) {
+      throw new ExchangeError('OKX perp order requires explicit tdMode', 'OKX_TD_MODE_REQUIRED', this.summarizeOrderInput(input.exchangeId, input.marketType, input.input))
+    }
+
+    if (!input.client.fetchAccountConfig) {
+      throw new ExchangeError('OKX position mode capability is unavailable', 'POSITION_MODE_UNAVAILABLE')
+    }
+
+    let posMode: string
+    try {
+      posMode = await this.resolveOkxPositionMode(input.positionModeCacheKey, input.client.fetchAccountConfig)
+    }
+    catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new ExchangeError(`POSITION_MODE_UNAVAILABLE: ${reason}`, 'POSITION_MODE_UNAVAILABLE')
+    }
+
+    const extra: Record<string, unknown> = { ...(input.input.extra ?? {}), tdMode }
+    if (posMode === 'long_short_mode') {
+      if (!input.input.positionSide) {
+        throw new ExchangeError('OKX long/short mode requires explicit positionSide', 'OKX_POSITION_SIDE_REQUIRED', this.summarizeOrderInput(input.exchangeId, input.marketType, input.input))
+      }
+      extra.posSide = this.mapOkxPositionSide(input.input.positionSide)
+    }
+    else if (posMode === 'net_mode') {
+      const { positionSide: _positionSide, ...netModeInput } = input.input
+      delete extra.posSide
+      return { ...netModeInput, extra }
+    }
+    else {
+      throw new ExchangeError(`Unsupported OKX position mode: ${posMode}`, 'POSITION_MODE_UNAVAILABLE')
+    }
+
+    return { ...input.input, extra }
+  }
+
+  private mapOkxPositionSide(positionSide: PositionIntentSide): 'long' | 'short' {
+    return positionSide === 'LONG' ? 'long' : 'short'
+  }
+
+  private async resolveOkxPositionMode(
+    cacheKey: string | null,
+    fetchAccountConfig: () => Promise<{ posMode: string }>,
+  ): Promise<string> {
+    const now = Date.now()
+    if (cacheKey) {
+      const cached = this.okxPositionModeCache.get(cacheKey)
+      if (cached && cached.expiresAt > now) {
+        return cached.posMode
+      }
+      if (cached) {
+        this.okxPositionModeCache.delete(cacheKey)
+      }
+    }
+
+    const posMode = (await fetchAccountConfig()).posMode
+    if (cacheKey) {
+      this.pruneOkxPositionModeCache(now)
+      this.okxPositionModeCache.set(cacheKey, {
+        posMode,
+        expiresAt: now + this.okxPositionModeCacheTtlMs,
+      })
+    }
+    return posMode
+  }
+
+  private buildOkxPositionModeCacheKey(
+    userId: string,
+    exchangeId: ExchangeId,
+    exchangeAccountId?: string,
+  ): string | null {
+    if (!exchangeAccountId) return null
+    return `${exchangeId}:${exchangeAccountId}`
+  }
+
+  private pruneOkxPositionModeCache(now: number): void {
+    for (const [key, value] of this.okxPositionModeCache) {
+      if (value.expiresAt <= now) this.okxPositionModeCache.delete(key)
+    }
+    while (this.okxPositionModeCache.size >= this.okxPositionModeCacheMaxEntries) {
+      const oldestKey = this.okxPositionModeCache.keys().next().value
+      if (!oldestKey) break
+      this.okxPositionModeCache.delete(oldestKey)
+    }
+  }
+
+  private summarizeOrderInput(exchangeId: ExchangeId, marketType: MarketType, input: CreateOrderInput) {
+    return {
+      exchangeId,
+      marketType,
+      symbol: input.symbol,
+      side: input.side,
+      type: input.type,
+      reduceOnly: input.reduceOnly ?? false,
+      positionSide: input.positionSide ?? null,
+      tdMode: input.tdMode ?? null,
+      clientOrderId: input.clientOrderId ?? null,
     }
   }
 

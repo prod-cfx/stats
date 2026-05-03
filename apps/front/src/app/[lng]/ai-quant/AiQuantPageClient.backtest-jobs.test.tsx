@@ -141,11 +141,12 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
       totalReturnPct: number
       winRatePct: number
       tradeCount: number
+      recoveryStatus?: string
     }
     canDeploy: boolean
   }) => (
     <div data-testid="backtest-summary">
-      {`${result.id}|${result.symbol}|${result.startAt}|${result.endAt}|${result.maxDrawdownPct}|${result.totalReturnPct}|${result.winRatePct}|${result.tradeCount}|${canDeploy ? 'deployable' : 'blocked'}`}
+      {`${result.id}|${result.symbol}|${result.startAt}|${result.endAt}|${result.maxDrawdownPct}|${result.totalReturnPct}|${result.winRatePct}|${result.tradeCount}|${result.recoveryStatus ?? 'fresh'}|${canDeploy ? 'deployable' : 'blocked'}`}
     </div>
   ),
 }))
@@ -924,12 +925,16 @@ describe('AiQuantPageClient backtest jobs integration', () => {
   it('restores the latest backtest summary from server-owned conversations after reload when snapshot ids still match', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock
+    const getLlmCodegenSession = jest.requireMock('@/lib/api')
+      .getLlmCodegenSession as jest.Mock
     listAiQuantConversations.mockResolvedValue([
       {
         id: 'conv-1',
+        activeCodegenSessionId: 'session-1',
         conversationTitle: 'server conv',
         conversationMessages: [],
         status: 'PUBLISHED',
+        scriptCode: 'return { ok: true }',
         publishedSnapshotId: 'snapshot-1',
         publishedSnapshotParamValues: null,
         publishedSnapshotStrategyConfig: {
@@ -987,13 +992,173 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         },
       },
     ])
+    getLlmCodegenSession.mockResolvedValue({
+      id: 'session-1',
+      conversationId: 'conv-1',
+      conversationTitle: 'server conv',
+      conversationMessages: [],
+      status: 'PUBLISHED',
+      scriptCode: 'return { ok: true }',
+      publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      updatedAt: '2026-04-23T00:04:00.000Z',
+    })
 
     await act(async () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
+  })
+
+  it('keeps server-owned restored backtests fresh when only codegen snapshot defaults differ from current backtest draft', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    const getLlmCodegenSession = jest.requireMock('@/lib/api')
+      .getLlmCodegenSession as jest.Mock
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        activeCodegenSessionId: 'session-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        scriptCode: 'return { ok: true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 25000,
+            leverage: 5,
+            slippageBps: 1,
+            feeBps: 1,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 25000,
+              leverage: 5,
+              slippageBps: 1,
+              feeBps: 1,
+              priceSource: 'close',
+              allowPartial: false,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+    getLlmCodegenSession.mockResolvedValue({
+      id: 'session-1',
+      conversationId: 'conv-1',
+      conversationTitle: 'server conv',
+      conversationMessages: [],
+      status: 'PUBLISHED',
+      scriptCode: 'return { ok: true }',
+      publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      updatedAt: '2026-04-23T00:04:00.000Z',
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const summary = container.querySelector('[data-testid="backtest-summary"]')?.textContent
+    expect(summary).toContain('btjob-1')
+    expect(summary).not.toContain('config_changed')
+    expect(summary).toContain('deployable')
   })
 
   it('allows rerunning backtest immediately after server-owned recovery by backfilling snapshot execution defaults', async () => {
@@ -1133,7 +1298,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('does not restore server-owned lastBacktestRef when execution config changed under the same snapshot', async () => {
+  it('restores server-owned lastBacktestRef as config changed when execution config changed under the same snapshot', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock
     listAiQuantConversations.mockResolvedValue([
@@ -1204,7 +1369,9 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
     })
 
-    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('config_changed')
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('blocked')
   })
 
   it.each([
