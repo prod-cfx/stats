@@ -86,11 +86,11 @@ export function runDecisionPrograms(
       continue
     }
 
-    const action = program.actions[0]
-    if (!action) continue
-    compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
+    const decision = buildFirstApplicableDecision(program, ctx)
+    if (!decision) continue
 
-    return Object.freeze(buildDecision(action, ctx, program.id))
+    compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
+    return Object.freeze(decision)
   }
 
   return Object.freeze({
@@ -122,6 +122,20 @@ function ensureCompiledDecisionState(
   const fallback = { barIndex: 0, lastTriggeredByProgram: {} as Record<string, number> }
   ;(ctx as Record<string, unknown>).__compiledDecisionState = fallback
   return fallback
+}
+
+function buildFirstApplicableDecision(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+): StrategyDecisionV1 | null {
+  for (const action of program.actions) {
+    const decision = buildDecision(action, ctx, program.id)
+    if (decision.action !== 'NOOP') {
+      return decision
+    }
+  }
+
+  return null
 }
 
 function buildDecision(
