@@ -1,4 +1,10 @@
 import { Prisma, PrismaClient } from '../../generated/prisma'
+import path from 'node:path'
+import { loadEnvironment } from '@net/config'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { Pool } from 'pg'
+import { createEnvAccessor } from '../../src/common/env/env.accessor'
+import { applyQuantifyEnvOverrides } from '../../src/config/quantify-env'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../../src/modules/strategy-plaza/constants/official-strategy-plaza-templates'
 import type { OfficialStrategyPlazaTemplate } from '../../src/modules/strategy-plaza/types/official-strategy-plaza-template'
 import { buildOfficialTemplateParamsSnapshot } from '../../src/modules/strategy-plaza/utils/official-strategy-plaza-snapshot-content'
@@ -6,6 +12,7 @@ import { buildOfficialStrategySnapshotContent } from '../../src/modules/strategy
 import { getOfficialTemplateDeploymentExecutionConfig } from '../../src/modules/strategy-plaza/utils/official-strategy-plaza-runtime-contract'
 
 const MODULE = 'StrategyPlazaOfficialTdModeBackfill'
+const rootDir = path.resolve(__dirname, '../../../..')
 
 type JsonObject = Record<string, unknown>
 
@@ -446,9 +453,23 @@ function logResult(result: BackfillResult, apply: boolean): void {
   }
 }
 
+function createPrismaClient(): PrismaClient {
+  loadEnvironment({ basePath: rootDir })
+  applyQuantifyEnvOverrides()
+
+  const dbUrl = createEnvAccessor().str('DATABASE_URL')
+  if (!dbUrl || dbUrl === '__SET_IN_env.local__') {
+    throw new Error('DATABASE_URL is not configured. Set a valid value in .env.*.local.')
+  }
+
+  const pool = new Pool({ connectionString: dbUrl })
+  const adapter = new PrismaPg(pool)
+  return new PrismaClient({ adapter })
+}
+
 const main = async () => {
   const options = parseArgs(process.argv.slice(2))
-  const prisma = new PrismaClient()
+  const prisma = createPrismaClient()
   try {
     const result = await runBackfill(prisma as unknown as BackfillPrisma, options)
     logResult(result, options.apply)
