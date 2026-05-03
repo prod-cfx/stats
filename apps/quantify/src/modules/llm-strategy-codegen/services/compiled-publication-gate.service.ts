@@ -68,6 +68,7 @@ interface FormalDeploymentExecutionDefaults {
   priceSource: 'open' | 'close' | 'mid'
   orderType: 'market' | 'limit'
   timeInForce: 'gtc' | 'ioc' | 'fok'
+  tdMode?: 'cross'
 }
 
 interface FormalDeploymentExecutionConstraints {
@@ -78,6 +79,7 @@ interface FormalDeploymentExecutionConstraints {
   supportedPriceSources: Array<'open' | 'close' | 'mid'>
   supportedOrderTypes: Array<'market' | 'limit'>
   supportedTimeInForce: Array<'gtc' | 'ioc' | 'fok'>
+  supportedTdModes?: ['cross']
   constraintExplanation: string
 }
 
@@ -280,11 +282,13 @@ export class CompiledPublicationGateService {
   private buildDeploymentExecutionDefaults(
     input: PublishCompiledSnapshotInput,
   ): FormalDeploymentExecutionDefaults {
+    const isPerp = input.ir.market.instrumentType === 'perpetual'
     return {
       leverage: 1,
       priceSource: this.resolvePriceSource(input.ir.market.priceFeed),
       orderType: input.ir.executionPolicy.orderTypeDefault,
       timeInForce: input.ir.executionPolicy.timeInForce,
+      ...(isPerp ? { tdMode: 'cross' as const } : {}),
     }
   }
 
@@ -292,7 +296,8 @@ export class CompiledPublicationGateService {
     input: PublishCompiledSnapshotInput,
     defaults: FormalDeploymentExecutionDefaults,
   ): FormalDeploymentExecutionConstraints {
-    const platformRiskMaxLeverage = input.ir.market.instrumentType === 'perpetual'
+    const isPerp = input.ir.market.instrumentType === 'perpetual'
+    const platformRiskMaxLeverage = isPerp
       ? DEFAULT_PERP_PLATFORM_MAX_LEVERAGE
       : 1
     return {
@@ -303,6 +308,7 @@ export class CompiledPublicationGateService {
       supportedPriceSources: [defaults.priceSource],
       supportedOrderTypes: [defaults.orderType],
       supportedTimeInForce: [defaults.timeInForce],
+      ...(isPerp ? { supportedTdModes: ['cross'] as const } : {}),
       constraintExplanation: 'strategy/default constraints pending account-capability intersection',
     }
   }
