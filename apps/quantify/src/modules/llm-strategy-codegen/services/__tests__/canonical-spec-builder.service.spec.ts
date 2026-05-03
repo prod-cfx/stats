@@ -1068,7 +1068,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('preserves executable clarified stop-loss basis and skips unsupported take-profit basis', () => {
+  it('preserves executable clarified stop-loss basis and compiles position-pnl take-profit as an expression', () => {
     const service = new CanonicalSpecBuilderService()
 
     const spec = service.build({
@@ -1096,8 +1096,17 @@ describe('canonicalSpecBuilderService', () => {
         metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
       }),
     ]))
-    expect(spec.rules).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'risk-take-profit' }),
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'GTE',
+          left: { kind: 'position', field: 'pnl_pct' },
+          right: { kind: 'constant', value: 10, unit: 'percent' },
+        }),
+        metadata: expect.objectContaining({ basis: 'position_pnl' }),
+      }),
     ]))
   })
 
@@ -1137,7 +1146,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('keeps explicit position-pnl overrides out of executable canonical risk rules', () => {
+  it('builds explicit position-pnl risk rules as canonical expressions', () => {
     const service = new CanonicalSpecBuilderService()
 
     const spec = service.build({
@@ -1156,9 +1165,27 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'risk-stop-loss' }),
-      expect.objectContaining({ id: 'risk-take-profit' }),
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        phase: 'risk',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'LTE',
+          left: { kind: 'position', field: 'pnl_pct' },
+          right: { kind: 'constant', value: -5, unit: 'percent' },
+        }),
+      }),
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        phase: 'risk',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'GTE',
+          left: { kind: 'position', field: 'pnl_pct' },
+          right: { kind: 'constant', value: 10, unit: 'percent' },
+        }),
+      }),
     ]))
   })
 
