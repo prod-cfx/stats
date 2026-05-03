@@ -2,9 +2,32 @@ import { buildBackfillPlan, parseArgs, runBackfill } from '../backfill-llm-perp-
 
 describe('backfill-llm-perp-tdmode', () => {
   function buildPrismaMock() {
+    const hashFields = {
+      scriptHash: 'script-hash',
+      specHash: 'sha256:spec-hash',
+      irHash: null,
+      astDigest: null,
+      structuralDigest: null,
+      semanticGraph: null,
+      compiledIr: null,
+      astSnapshot: null,
+      compiledManifest: null,
+      consistencyReport: { status: 'PASSED' },
+      userIntentSummary: { marketScope: ['BTC-USDT-SWAP'] },
+      strategySummary: { thesis: 'test' },
+      scriptSummary: { indicators: [] },
+      lockedParams: { positionPct: 25 },
+      snapshotVersion: 3,
+      paramsSnapshot: { marketType: 'perp' },
+      backtestConfigDefaults: { initialCapital: 1000 },
+      executionPolicy: { orderTypeDefault: 'market', timeInForce: 'gtc' },
+      dataRequirements: { primary: ['15m'] },
+    }
     const snapshots = [
       {
         id: 'llm-perp-missing-tdmode',
+        snapshotHash: 'old-hash-llm-perp',
+        ...hashFields,
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['close'], supportedOrderTypes: ['market'], supportedTimeInForce: ['gtc'] },
@@ -14,6 +37,8 @@ describe('backfill-llm-perp-tdmode', () => {
       },
       {
         id: 'official-perp-missing-tdmode',
+        snapshotHash: 'old-hash-official',
+        ...hashFields,
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['mark'], supportedOrderTypes: ['market'], supportedTimeInForce: ['ioc'] },
@@ -23,6 +48,8 @@ describe('backfill-llm-perp-tdmode', () => {
       },
       {
         id: 'non-llm-perp-missing-tdmode',
+        snapshotHash: 'old-hash-manual',
+        ...hashFields,
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 3, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['close'], supportedOrderTypes: ['market'], supportedTimeInForce: ['gtc'] },
@@ -32,6 +59,8 @@ describe('backfill-llm-perp-tdmode', () => {
       },
       {
         id: 'llm-spot',
+        snapshotHash: 'old-hash-spot',
+        ...hashFields,
         strategyConfig: { marketType: 'spot' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['close'] },
@@ -41,6 +70,8 @@ describe('backfill-llm-perp-tdmode', () => {
       },
       {
         id: 'llm-perp-current',
+        snapshotHash: 'old-hash-current',
+        ...hashFields,
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc', tdMode: 'cross' },
         deploymentExecutionConstraints: { supportedTdModes: ['cross'] },
@@ -62,21 +93,21 @@ describe('backfill-llm-perp-tdmode', () => {
         strategyTemplateId: 'template-1',
         params: { deploymentExecutionConfig: { leverage: 1, priceSource: 'close' } },
         deploymentExecutionConfig: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
-        metadata: { source: 'llm-codegen-session' },
+        metadata: { source: 'llm-codegen-session', snapshotHash: 'old-hash-llm-perp' },
       }],
       ['manual-instance-1', {
         id: 'manual-instance-1',
         strategyTemplateId: 'manual-template-1',
         params: {},
         deploymentExecutionConfig: {},
-        metadata: { source: 'manual-import' },
+        metadata: { source: 'manual-import', snapshotHash: 'old-hash-manual' },
       }],
       ['instance-current', {
         id: 'instance-current',
         strategyTemplateId: 'template-current',
         params: { deploymentExecutionConfig: { tdMode: 'cross' } },
         deploymentExecutionConfig: { tdMode: 'cross' },
-        metadata: { source: 'llm-codegen-session' },
+        metadata: { source: 'llm-codegen-session', snapshotHash: 'old-hash-current' },
       }],
     ])
     const templates = new Map<string, { id: string; metadata: unknown }>([
@@ -95,6 +126,7 @@ describe('backfill-llm-perp-tdmode', () => {
         findMany: jest.fn(async () => snapshots),
         update: jest.fn(async ({ where, data }: any) => {
           const row = snapshots.find(item => item.id === where.id)!
+          row.snapshotHash = data.snapshotHash
           row.deploymentExecutionDefaults = data.deploymentExecutionDefaults
           row.deploymentExecutionConstraints = data.deploymentExecutionConstraints
           return row
@@ -106,6 +138,7 @@ describe('backfill-llm-perp-tdmode', () => {
           const row = instances.get(where.id)!
           row.params = data.params
           row.deploymentExecutionConfig = data.deploymentExecutionConfig
+          row.metadata = data.metadata
         }),
       },
       strategyTemplate: {
@@ -116,6 +149,9 @@ describe('backfill-llm-perp-tdmode', () => {
         update: jest.fn(async ({ data }: any) => {
           subscription.customParams = data.customParams
         }),
+      },
+      strategyRuntimeExecutionState: {
+        updateMany: jest.fn(async () => ({ count: 1 })),
       },
       $transaction: jest.fn(async (callback: (tx: any) => Promise<void>) => callback(prisma)),
     }
@@ -154,6 +190,7 @@ describe('backfill-llm-perp-tdmode', () => {
     const result = await runBackfill(prisma as never, { apply: true })
 
     expect(result.updated).toBe(1)
+    expect(snapshots[0].snapshotHash).not.toBe('old-hash-llm-perp')
     expect(snapshots[0].deploymentExecutionDefaults).toEqual(expect.objectContaining({ tdMode: 'cross' }))
     expect(snapshots[0].deploymentExecutionConstraints).toEqual(expect.objectContaining({ supportedTdModes: ['cross'] }))
     expect(instance.deploymentExecutionConfig).toEqual(expect.objectContaining({ tdMode: 'cross' }))
@@ -163,6 +200,20 @@ describe('backfill-llm-perp-tdmode', () => {
     expect(subscription.customParams).toEqual(expect.objectContaining({
       deploymentExecutionConfig: expect.objectContaining({ tdMode: 'cross' }),
     }))
+    expect(instance.metadata).toEqual(expect.objectContaining({
+      source: 'llm-codegen-session',
+      bindingSource: 'PUBLISHED_SNAPSHOT',
+      publishedSnapshotId: 'llm-perp-missing-tdmode',
+      snapshotHash: snapshots[0].snapshotHash,
+    }))
+    expect(prisma.strategyRuntimeExecutionState.updateMany).toHaveBeenCalledWith({
+      where: {
+        strategyInstanceId: 'instance-1',
+        publishedSnapshotId: 'llm-perp-missing-tdmode',
+        snapshotHash: { not: snapshots[0].snapshotHash },
+      },
+      data: { snapshotHash: snapshots[0].snapshotHash },
+    })
   })
 
   it('plans bound runtime repairs when snapshot already has tdMode contract', async () => {

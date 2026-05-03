@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 const MODULE = 'LlmPerpTdModeBackfill'
 const DEFAULT_TD_MODE = 'cross'
 const LLM_CODEGEN_SESSION_SOURCE = 'llm-codegen-session'
@@ -11,10 +13,30 @@ export interface BackfillOptions {
 
 interface SnapshotRow {
   id: string
+  snapshotHash: string
+  scriptHash: string
+  specHash: string
+  irHash: string | null
+  astDigest: string | null
+  structuralDigest: string | null
+  semanticGraph: unknown
+  compiledIr: unknown
+  astSnapshot: unknown
+  compiledManifest: unknown
+  consistencyReport: unknown
+  userIntentSummary: unknown
+  strategySummary: unknown
+  scriptSummary: unknown
+  lockedParams: unknown
+  snapshotVersion: number
+  paramsSnapshot: unknown
   strategyConfig: unknown
+  backtestConfigDefaults: unknown
   deploymentExecutionDefaults: unknown
   deploymentExecutionConstraints: unknown
   executionEnvelope: unknown
+  executionPolicy: unknown
+  dataRequirements: unknown
   strategyTemplateId: string | null
   strategyInstanceId: string | null
 }
@@ -35,6 +57,10 @@ interface StrategyTemplateRow {
 interface SubscriptionRow {
   id: string
   customParams: unknown
+}
+
+interface RuntimeStateUpdateResult {
+  count: number
 }
 
 export interface BackfillPlanItem {
@@ -72,6 +98,9 @@ export interface BackfillPrisma {
     findMany: (args: unknown) => Promise<SubscriptionRow[]>
     update: (args: unknown) => Promise<unknown>
   }
+  strategyRuntimeExecutionState: {
+    updateMany: (args: unknown) => Promise<RuntimeStateUpdateResult>
+  }
 }
 
 const asRecord = (value: unknown): JsonObject => {
@@ -80,6 +109,28 @@ const asRecord = (value: unknown): JsonObject => {
 
 const isRecord = (value: unknown): value is JsonObject => {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stableJsonStringify(value: unknown): string {
+  if (value === null || value === undefined) return 'null'
+  if (typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableJsonStringify(item)).join(',')}]`
+  }
+
+  const entries = Object.entries(value as JsonObject)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableJsonStringify(item)}`).join(',')}}`
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function normalizeOptionalJson(value: unknown): string | null {
+  return value ? stableJsonStringify(value) : null
 }
 
 function resolveBoundRecord(
@@ -115,6 +166,70 @@ function withSupportedCrossTdModes(value: unknown): JsonObject {
   }
 }
 
+function computeSnapshotHash(
+  snapshot: SnapshotRow,
+  deploymentExecutionDefaults: JsonObject,
+  deploymentExecutionConstraints: JsonObject,
+): string {
+  const normalizedSemanticGraph = normalizeOptionalJson(snapshot.semanticGraph)
+  const normalizedCompiledIr = normalizeOptionalJson(snapshot.compiledIr)
+  const normalizedAst = normalizeOptionalJson(snapshot.astSnapshot)
+  const normalizedManifest = normalizeOptionalJson(snapshot.compiledManifest)
+  const normalizedExecutionEnvelope = normalizeOptionalJson(snapshot.executionEnvelope)
+  const normalizedConsistency = stableJsonStringify(snapshot.consistencyReport)
+  const normalizedUserIntentSummary = stableJsonStringify(snapshot.userIntentSummary)
+  const normalizedStrategySummary = stableJsonStringify(snapshot.strategySummary)
+  const normalizedScriptSummary = stableJsonStringify(snapshot.scriptSummary)
+  const normalizedLockedParams = stableJsonStringify(snapshot.lockedParams)
+  const normalizedParams = normalizeOptionalJson(snapshot.paramsSnapshot)
+  const normalizedStrategyConfig = normalizeOptionalJson(snapshot.strategyConfig)
+  const normalizedBacktestConfigDefaults = normalizeOptionalJson(snapshot.backtestConfigDefaults)
+  const normalizedDeploymentExecutionDefaults = normalizeOptionalJson(deploymentExecutionDefaults)
+  const normalizedDeploymentExecutionConstraints = normalizeOptionalJson(deploymentExecutionConstraints)
+  const normalizedExecutionPolicy = normalizeOptionalJson(snapshot.executionPolicy)
+  const normalizedDataRequirements = normalizeOptionalJson(snapshot.dataRequirements)
+
+  return sha256([
+    snapshot.scriptHash,
+    snapshot.specHash,
+    normalizedSemanticGraph ? sha256(normalizedSemanticGraph) : '',
+    normalizedCompiledIr ? sha256(normalizedCompiledIr) : '',
+    snapshot.irHash ?? '',
+    snapshot.astDigest ?? '',
+    normalizedAst ? sha256(normalizedAst) : '',
+    snapshot.structuralDigest ?? '',
+    normalizedManifest ? sha256(normalizedManifest) : '',
+    normalizedExecutionEnvelope ? sha256(normalizedExecutionEnvelope) : '',
+    sha256(normalizedConsistency),
+    sha256(normalizedUserIntentSummary),
+    sha256(normalizedStrategySummary),
+    sha256(normalizedScriptSummary),
+    sha256(normalizedLockedParams),
+    sha256(String(snapshot.snapshotVersion)),
+    normalizedParams ? sha256(normalizedParams) : '',
+    normalizedStrategyConfig ? sha256(normalizedStrategyConfig) : '',
+    normalizedBacktestConfigDefaults ? sha256(normalizedBacktestConfigDefaults) : '',
+    normalizedDeploymentExecutionDefaults ? sha256(normalizedDeploymentExecutionDefaults) : '',
+    normalizedDeploymentExecutionConstraints ? sha256(normalizedDeploymentExecutionConstraints) : '',
+    normalizedExecutionPolicy ? sha256(normalizedExecutionPolicy) : '',
+    normalizedDataRequirements ? sha256(normalizedDataRequirements) : '',
+  ].join(':'))
+}
+
+function buildSnapshotRepair(snapshot: SnapshotRow): {
+  deploymentExecutionDefaults: JsonObject
+  deploymentExecutionConstraints: JsonObject
+  snapshotHash: string
+} {
+  const deploymentExecutionDefaults = withCrossTdMode(snapshot.deploymentExecutionDefaults)
+  const deploymentExecutionConstraints = withSupportedCrossTdModes(snapshot.deploymentExecutionConstraints)
+  return {
+    deploymentExecutionDefaults,
+    deploymentExecutionConstraints,
+    snapshotHash: computeSnapshotHash(snapshot, deploymentExecutionDefaults, deploymentExecutionConstraints),
+  }
+}
+
 function hasLlmCodegenSource(value: unknown): boolean {
   return asRecord(value).source === LLM_CODEGEN_SESSION_SOURCE
 }
@@ -126,10 +241,30 @@ async function findCandidateSnapshots(prisma: BackfillPrisma): Promise<SnapshotR
     },
     select: {
       id: true,
+      snapshotHash: true,
+      scriptHash: true,
+      specHash: true,
+      irHash: true,
+      astDigest: true,
+      structuralDigest: true,
+      semanticGraph: true,
+      compiledIr: true,
+      astSnapshot: true,
+      compiledManifest: true,
+      consistencyReport: true,
+      userIntentSummary: true,
+      strategySummary: true,
+      scriptSummary: true,
+      lockedParams: true,
+      snapshotVersion: true,
+      paramsSnapshot: true,
       strategyConfig: true,
+      backtestConfigDefaults: true,
       deploymentExecutionDefaults: true,
       deploymentExecutionConstraints: true,
       executionEnvelope: true,
+      executionPolicy: true,
+      dataRequirements: true,
       strategyTemplateId: true,
       strategyInstanceId: true,
     },
@@ -269,17 +404,27 @@ export async function buildBackfillPlan(prisma: BackfillPrisma): Promise<Backfil
   return { scanned: snapshots.length, updated: 0, plan, skipped }
 }
 
-async function applySnapshotRepair(tx: BackfillPrisma, snapshot: SnapshotRow): Promise<void> {
+async function applySnapshotRepair(
+  tx: BackfillPrisma,
+  snapshot: SnapshotRow,
+  repair: ReturnType<typeof buildSnapshotRepair>,
+): Promise<void> {
   await tx.publishedStrategySnapshot.update({
     where: { id: snapshot.id },
     data: {
-      deploymentExecutionDefaults: withCrossTdMode(snapshot.deploymentExecutionDefaults),
-      deploymentExecutionConstraints: withSupportedCrossTdModes(snapshot.deploymentExecutionConstraints),
+      snapshotHash: repair.snapshotHash,
+      deploymentExecutionDefaults: repair.deploymentExecutionDefaults,
+      deploymentExecutionConstraints: repair.deploymentExecutionConstraints,
     },
   })
 }
 
-async function applyStrategyInstanceRepair(tx: BackfillPrisma, snapshotId: string, strategyInstanceId: string): Promise<boolean> {
+async function applyStrategyInstanceRepair(
+  tx: BackfillPrisma,
+  snapshotId: string,
+  strategyInstanceId: string,
+  snapshotHash: string,
+): Promise<boolean> {
   const instance = await tx.strategyInstance.findUnique({
     where: { id: strategyInstanceId },
     select: { id: true, strategyTemplateId: true, params: true, deploymentExecutionConfig: true, metadata: true },
@@ -334,6 +479,12 @@ async function applyStrategyInstanceRepair(tx: BackfillPrisma, snapshotId: strin
         ...params.record,
         deploymentExecutionConfig: withCrossTdMode(paramsDeploymentExecutionConfig.record),
       },
+      metadata: {
+        ...asRecord(instance.metadata),
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: snapshotId,
+        snapshotHash,
+      },
     },
   })
 
@@ -348,6 +499,14 @@ async function applyStrategyInstanceRepair(tx: BackfillPrisma, snapshotId: strin
       },
     })
   }
+  await tx.strategyRuntimeExecutionState.updateMany({
+    where: {
+      strategyInstanceId: instance.id,
+      publishedSnapshotId: snapshotId,
+      snapshotHash: { not: snapshotHash },
+    },
+    data: { snapshotHash },
+  })
   return true
 }
 
@@ -362,11 +521,12 @@ export async function runBackfill(prisma: BackfillPrisma, options: BackfillOptio
       const item = await buildSnapshotPlanItem(tx, snapshot)
       if (!item.plan) continue
 
+      const snapshotRepair = buildSnapshotRepair(snapshot)
       if (snapshot.strategyInstanceId) {
-        const runtimeRepairApplied = await applyStrategyInstanceRepair(tx, snapshot.id, snapshot.strategyInstanceId)
+        const runtimeRepairApplied = await applyStrategyInstanceRepair(tx, snapshot.id, snapshot.strategyInstanceId, snapshotRepair.snapshotHash)
         if (!runtimeRepairApplied) continue
       }
-      await applySnapshotRepair(tx, snapshot)
+      await applySnapshotRepair(tx, snapshot, snapshotRepair)
       updated += 1
     }
   })
