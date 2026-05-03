@@ -87,6 +87,33 @@ export const WhaleNotificationDeliveryStatus = {
 } as const
 export type WhaleNotificationDeliveryStatus = (typeof WhaleNotificationDeliveryStatus)[keyof typeof WhaleNotificationDeliveryStatus]
 
+export const GridRuntimeStatus = {
+  CREATED: 'CREATED',
+  INITIALIZING: 'INITIALIZING',
+  RUNNING: 'RUNNING',
+  PAUSING: 'PAUSING',
+  PAUSED: 'PAUSED',
+  STOPPING: 'STOPPING',
+  STOPPED: 'STOPPED',
+  RECONCILE_REQUIRED: 'RECONCILE_REQUIRED',
+  ERROR: 'ERROR',
+  TERMINATED: 'TERMINATED',
+} as const
+export type GridRuntimeStatus = (typeof GridRuntimeStatus)[keyof typeof GridRuntimeStatus]
+
+export const GridOrderStatus = {
+  PLANNED: 'PLANNED',
+  SUBMITTING: 'SUBMITTING',
+  OPEN: 'OPEN',
+  PARTIALLY_FILLED: 'PARTIALLY_FILLED',
+  FILLED: 'FILLED',
+  CANCELING: 'CANCELING',
+  CANCELED: 'CANCELED',
+  REJECTED: 'REJECTED',
+  STALE: 'STALE',
+} as const
+export type GridOrderStatus = (typeof GridOrderStatus)[keyof typeof GridOrderStatus]
+
 export const LlmStrategyStatus = {
   draft: 'draft',
   live: 'live',

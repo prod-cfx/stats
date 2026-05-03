@@ -5,6 +5,8 @@
   "BackendMarketTimeframe",
   "ExchangeId",
   "ExecutionStatus",
+  "GridOrderStatus",
+  "GridRuntimeStatus",
   "IndicatorType",
   "InstrumentType",
   "LedgerEntryType",

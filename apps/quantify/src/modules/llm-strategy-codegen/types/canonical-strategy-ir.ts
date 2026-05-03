@@ -42,7 +42,7 @@ export interface CanonicalStrategyIrV1 {
   }
   executionPolicy: {
     signalEvaluation: 'bar_close'
-    fillPolicy: 'next_bar_open' | 'same_bar_close' | 'intra_bar_limit_match'
+    fillPolicy: 'next_bar_open' | 'same_bar_close' | 'intra_bar_limit_match' | 'exchange_order_update'
     timeframeAlignment: 'strict'
     orderTypeDefault: 'market' | 'limit'
     timeInForce: 'gtc' | 'ioc' | 'fok'
@@ -123,41 +123,56 @@ export interface RuleBlock {
   actions: ActionDef[]
 }
 
+export interface QuantityDef {
+  mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
+  value: number
+  asset?: string
+}
+
 export interface ActionDef {
   kind:
     | 'OPEN_LONG' | 'CLOSE_LONG'
     | 'OPEN_SHORT' | 'CLOSE_SHORT'
     | 'REDUCE_LONG' | 'REDUCE_SHORT'
-  quantity: {
-    mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
-    value: number
-    asset?: string
-  }
+  quantity: QuantityDef
 }
 
-export interface OrderProgram {
+interface OrderProgramBaseDef {
   id: string
   kind: 'LIMIT_LADDER'
-  activeWhen: string
+  activeWhen?: string
   side: 'buy' | 'sell'
-  priceSource: 'level_set' | 'offset_from_price'
-  levelSetRef?: string
-  offset?: {
+  sidePolicy: 'spot_grid' | 'perp_long' | 'perp_short' | 'perp_neutral'
+  tickPolicy: 'round' | 'floor' | 'ceil'
+  quantity: QuantityDef
+  orderType: 'limit'
+  timeInForce: 'gtc'
+  recycleOnFill: boolean
+  pairingPolicy: 'adjacent_level'
+  cancelScope: 'program_orders'
+  maxWorkingOrders: number
+  group: string
+}
+
+export interface LevelSetOrderProgramDef extends OrderProgramBaseDef {
+  priceSource: 'level_set'
+  levelSetRef: string
+  offset?: never
+}
+
+export interface OffsetOrderProgramDef extends OrderProgramBaseDef {
+  priceSource: 'offset_from_price'
+  levelSetRef?: never
+  offset: {
     basis: 'pct' | 'absolute' | 'atr_multiple'
     value: number
     anchorRef: string
   }
-  tickPolicy: 'round' | 'floor' | 'ceil'
-  quantity: {
-    mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
-    value: number
-    asset?: string
-  }
-  orderType: 'limit'
-  recycleOnFill: boolean
-  maxWorkingOrders: number
-  group: string
 }
+
+export type OrderProgramDef = LevelSetOrderProgramDef | OffsetOrderProgramDef
+
+export type OrderProgram = OrderProgramDef
 
 export interface RiskGuard {
   id: string

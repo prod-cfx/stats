@@ -9,6 +9,16 @@ export type OrderSide = 'buy' | 'sell'
 export type OrderType = 'limit' | 'market' | 'stop' | 'stop_limit'
 
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK'
+export type PositionIntentSide = 'LONG' | 'SHORT'
+export type TradeMode = 'cash' | 'cross' | 'isolated'
+
+export type PositionSide = 'long' | 'short' | 'net'
+
+export interface OrderQueryInput {
+  symbol?: string
+  clientOrderId?: string
+  exchangeOrderId?: string
+}
 
 export interface UnifiedSymbol {
   exchangeId: ExchangeId
@@ -87,7 +97,10 @@ export interface CreateOrderInput {
   amount: number
   price?: number
   timeInForce?: TimeInForce
+  tdMode?: TradeMode
+  positionSide?: PositionIntentSide
   reduceOnly?: boolean
+  posSide?: PositionSide
   clientOrderId?: string
   /**
    * 预留给特定交易所的附加参数。

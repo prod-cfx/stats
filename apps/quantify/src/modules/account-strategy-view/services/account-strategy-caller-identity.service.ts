@@ -61,6 +61,38 @@ export class AccountStrategyCallerIdentityService {
     return callerUserId
   }
 
+  async resolveVerifiedCallerUserIdFromAuthorization(
+    authorization: string | undefined,
+    forwardedUserId?: string | undefined,
+  ): Promise<string> {
+    const normalizedAuth = authorization?.trim()
+    if (!normalizedAuth) {
+      throw new DomainException('account_strategy.missing_authorization_header', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const [scheme, token] = normalizedAuth.split(/\s+/, 2)
+    if (scheme?.toLowerCase() !== 'bearer' || !token) {
+      throw new DomainException('account_strategy.invalid_authorization_header', {
+        code: ErrorCode.UNAUTHORIZED,
+        status: HttpStatus.UNAUTHORIZED,
+      })
+    }
+
+    const callerUserId = await this.verifyTokenByBackendAuth(token)
+    const normalizedForwardedUserId = forwardedUserId?.trim()
+    if (normalizedForwardedUserId && normalizedForwardedUserId !== callerUserId) {
+      throw new UserIdMismatchException({
+        authUserId: callerUserId,
+        inputUserId: normalizedForwardedUserId,
+      })
+    }
+
+    return callerUserId
+  }
+
   private decodeJwtPart(part: string, errorCode: string): Record<string, unknown> {
     try {
       const decoded = Buffer.from(part, 'base64url').toString('utf8')

@@ -2,6 +2,8 @@ import type {
   CreateOrderInput,
   MarketType,
   OrderType,
+  PositionSide,
+  TradeMode,
   UnifiedBalance,
   UnifiedOrder,
   UnifiedPosition,
@@ -23,14 +25,22 @@ interface OkxOrderResponse {
   state: string
   side: string
   ordType: string
-  fillSz: string
   accFillSz?: string
+  fillSz: string
   sz: string
   px?: string
   avgPx?: string
   fillPx?: string
   uTime?: string
   cTime?: string
+}
+
+interface OkxOrderAck {
+  ordId: string
+  clOrdId?: string
+  sCode?: string
+  sMsg?: string
+  ts?: string
 }
 
 interface OkxBalanceItem {
@@ -105,6 +115,12 @@ export class OkxClient extends BaseCexClient {
   async createOrder(input: CreateOrderInput): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(input.symbol, input.marketType)
     const instType = this.marketType === 'spot' ? 'SPOT' : 'SWAP'
+    const perpTdMode = this.marketType === 'perp'
+      ? input.tdMode ?? this.readExtraTradeMode(input.extra, 'tdMode')
+      : undefined
+    if (this.marketType === 'perp' && !perpTdMode) {
+      throw new ExchangeError('OKX perp order requires explicit tdMode', 'OKX_TD_MODE_REQUIRED', { symbol: input.symbol, marketType: input.marketType })
+    }
     const instrumentSpec = await this.getInstrumentSpec(instId)
 
     const ordType = this.mapOrderType(input.type)
@@ -124,15 +140,18 @@ export class OkxClient extends BaseCexClient {
       body.px = this.toPrice(input.price)
     }
 
-    // OKX 所有产品都需要 tdMode：现货使用 'cash'，永续默认 'cross'（可通过 extra 覆盖）
+    // OKX 所有产品都需要 tdMode：现货使用 cash；永续必须由上游显式传入。
     if (this.marketType === 'perp') {
-      body.tdMode = (input.extra?.tdMode as string | undefined) ?? 'cross'
-      const posSide = input.extra?.posSide as string | undefined
+      body.tdMode = perpTdMode
+      const posSide = input.posSide
+        ?? this.readExtraPositionSide(input.extra, 'posSide')
+        ?? (input.positionSide ? input.positionSide.toLowerCase() : undefined)
       if (posSide) {
         body.posSide = posSide
       }
-      if (input.reduceOnly) {
-        body.reduceOnly = true
+      const reduceOnly = input.reduceOnly ?? this.readExtraBoolean(input.extra, 'reduceOnly')
+      if (reduceOnly !== undefined) {
+        body.reduceOnly = reduceOnly
       }
     }
     else {
@@ -183,10 +202,9 @@ export class OkxClient extends BaseCexClient {
 
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {
     const instId = this.toInstrumentId(symbol, this.marketType)
-    const instrumentSpec = await this.getInstrumentSpec(instId)
     const body: Record<string, unknown> = { instId, ordId: id }
 
-    const res = await this.request<{ data: OkxOrderResponse[] }>(
+    const res = await this.request<{ data: OkxOrderAck[] }>(
       'POST',
       '/api/v5/trade/cancel-order',
       {},
@@ -194,25 +212,10 @@ export class OkxClient extends BaseCexClient {
       body,
     )
 
-    const order = res.data[0]
-    const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
-    const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
+    const order = this.requireOrderResponse(res, 'cancelOrder')
+    this.assertOrderAccepted(order, 'cancelOrder')
 
-    return {
-      id: order.ordId,
-      clientOrderId: order.clOrdId,
-      symbol,
-      marketType: this.marketType,
-      side: order.side === 'sell' ? 'sell' : 'buy',
-      type: this.reverseMapOrderType(order.ordType),
-      price: this.resolveOrderPrice(order),
-      amount: this.fromExchangeSize(order.sz, instrumentSpec),
-      filled: this.resolveFilledSize(order, instrumentSpec),
-      status: this.mapOrderStatus(order.state),
-      createdAt,
-      updatedAt,
-      raw: order,
-    }
+    return this.fetchOrder(order.ordId, symbol)
   }
 
   async fetchOrder(id: string, symbol: string): Promise<UnifiedOrder> {
@@ -227,7 +230,7 @@ export class OkxClient extends BaseCexClient {
       true,
     )
 
-    const order = res.data[0]
+    const order = this.requireOrderResponse(res, 'fetchOrder')
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -249,7 +252,9 @@ export class OkxClient extends BaseCexClient {
   }
 
   async fetchOpenOrders(symbol?: string): Promise<UnifiedOrder[]> {
-    const params: Record<string, unknown> = {}
+    const params: Record<string, unknown> = {
+      instType: this.marketType === 'spot' ? 'SPOT' : 'SWAP',
+    }
 
     if (symbol) {
       params.instId = this.toInstrumentId(symbol, this.marketType)
@@ -272,7 +277,9 @@ export class OkxClient extends BaseCexClient {
   }
 
   async fetchClosedOrders(symbol?: string): Promise<UnifiedOrder[]> {
-    const params: Record<string, unknown> = {}
+    const params: Record<string, unknown> = {
+      instType: this.marketType === 'spot' ? 'SPOT' : 'SWAP',
+    }
 
     if (symbol) {
       params.instId = this.toInstrumentId(symbol, this.marketType)
@@ -602,7 +609,7 @@ export class OkxClient extends BaseCexClient {
     }
   }
 
-  private assertOrderAccepted(order: OkxOrderResponse): void {
+  private assertOrderAccepted(order: OkxOrderAck, operation: 'createOrder' | 'cancelOrder' = 'createOrder'): void {
     if (order.sCode && order.sCode !== '0') {
       throw new ExchangeError(
         `OKX error ${order.sCode}: ${order.sMsg ?? 'Unknown error'}`,
@@ -612,8 +619,19 @@ export class OkxClient extends BaseCexClient {
     }
 
     if (!order.ordId) {
-      throw new ExchangeError('OKX createOrder returned empty ordId', undefined, order)
+      throw new ExchangeError(`OKX ${operation} returned empty ordId`, undefined, order)
     }
+  }
+
+  private requireOrderResponse<T extends OkxOrderAck>(
+    response: { data: T[] },
+    operation: 'cancelOrder' | 'fetchOrder',
+  ): T {
+    const order = response.data[0]
+    if (!order) {
+      throw new ExchangeError(`OKX ${operation} returned empty response`, undefined, response)
+    }
+    return order
   }
 
   private resolveOrderPrice(order: OkxOrderResponse, fallback?: number): number | undefined {
@@ -679,6 +697,21 @@ export class OkxClient extends BaseCexClient {
       updatedAt,
       raw: order,
     }
+  }
+
+  private readExtraTradeMode(extra: Record<string, unknown> | undefined, key: string): TradeMode | undefined {
+    const value = extra?.[key]
+    return value === 'cash' || value === 'cross' || value === 'isolated' ? value : undefined
+  }
+
+  private readExtraPositionSide(extra: Record<string, unknown> | undefined, key: string): PositionSide | undefined {
+    const value = extra?.[key]
+    return value === 'long' || value === 'short' || value === 'net' ? value : undefined
+  }
+
+  private readExtraBoolean(extra: Record<string, unknown> | undefined, key: string): boolean | undefined {
+    const value = extra?.[key]
+    return typeof value === 'boolean' ? value : undefined
   }
 
   private fromExchangeSize(size: string, instrumentSpec?: OkxInstrumentSpecItem | null): number {

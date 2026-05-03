@@ -1,4 +1,4 @@
-import type { CanonicalStrategySpecV2 } from './canonical-strategy-spec-v2'
+import type { CanonicalStrategySpecV2 as BaseCanonicalStrategySpecV2 } from './canonical-strategy-spec-v2'
 
 export type CanonicalSizingMode = 'RATIO' | 'QUOTE' | 'QTY'
 export type CanonicalIndicatorKind = 'bollingerBands' | 'sma' | 'ema' | 'rsi' | 'atr' | 'macd' | 'custom'
@@ -45,6 +45,32 @@ export interface CanonicalStrategySpecV1 {
   }
 }
 
+export interface CanonicalOrderProgramIntent {
+  id: string
+  kind: 'contract_order_program'
+  mode: 'spot' | 'perp_long' | 'perp_short' | 'perp_neutral'
+  levelSet: {
+    lower: number
+    upper: number
+    gridCount?: number
+    spacingPct?: number
+    spacingMode: 'arithmetic' | 'geometric'
+  }
+  budget: {
+    mode: 'per_order_quote' | 'total_quote'
+    value: number
+    asset: string
+  }
+  orderType: 'limit'
+  timeInForce: 'gtc'
+  recycleOnFill: boolean
+  cancelOnStop: boolean
+}
+
+export interface CanonicalStrategySpecV2 extends BaseCanonicalStrategySpecV2 {
+  orderPrograms?: CanonicalOrderProgramIntent[]
+}
+
 export type CanonicalAction =
   | 'OPEN_LONG'
   | 'OPEN_SHORT'
@@ -70,5 +96,4 @@ export type {
   CanonicalRulePhase,
   CanonicalRuleSideScope,
   CanonicalRuleV2,
-  CanonicalStrategySpecV2,
 } from './canonical-strategy-spec-v2'

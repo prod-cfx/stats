@@ -1,0 +1,151 @@
+enum GridRuntimeStatus {
+  CREATED
+  INITIALIZING
+  RUNNING
+  PAUSING
+  PAUSED
+  STOPPING
+  STOPPED
+  RECONCILE_REQUIRED
+  ERROR
+  TERMINATED
+}
+
+enum GridOrderStatus {
+  PLANNED
+  SUBMITTING
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELING
+  CANCELED
+  REJECTED
+  STALE
+}
+
+model GridRuntimeInstance {
+  id                  String            @id @default(cuid())
+  strategyInstanceId  String            @map("strategy_instance_id")
+  publishedSnapshotId String            @map("published_snapshot_id")
+  userId              String            @map("user_id")
+  exchangeAccountId   String            @map("exchange_account_id")
+  exchangeId          String            @map("exchange_id")
+  marketType          String            @map("market_type")
+  symbol              String
+  mode                String
+  status              GridRuntimeStatus @default(CREATED)
+  configSnapshot      Json              @map("config_snapshot")
+  stopReason          String?           @map("stop_reason")
+  lastSyncAt          DateTime?         @map("last_sync_at")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  levels GridLevel[]
+  orders GridOrder[]
+  fills  GridFill[]
+  events GridRuntimeEvent[]
+
+  @@index([userId, createdAt], map: "idx_grid_runtime_user_created")
+  @@index([strategyInstanceId], map: "idx_grid_runtime_strategy_instance")
+  @@map("grid_runtime_instances")
+}
+
+model GridLevel {
+  id                    String   @id @default(cuid())
+  gridRuntimeInstanceId String   @map("grid_runtime_instance_id")
+  levelIndex            Int      @map("level_index")
+  price                 Decimal  @db.Decimal(48, 18)
+  side                  String
+  role                  String?
+  baseQuantity          Decimal? @map("base_quantity") @db.Decimal(48, 18)
+  quoteBudget           Decimal? @map("quote_budget") @db.Decimal(48, 18)
+  status                String
+  openOrderId           String?  @map("open_order_id")
+  openClientOrderId     String?  @map("open_client_order_id")
+  openExchangeOrderId   String?  @map("open_exchange_order_id")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  instance GridRuntimeInstance @relation(fields: [gridRuntimeInstanceId], references: [id], onDelete: Cascade)
+  orders   GridOrder[]
+
+  @@unique([gridRuntimeInstanceId, levelIndex], map: "uniq_grid_level_instance_index")
+  @@index([gridRuntimeInstanceId], map: "idx_grid_levels_instance")
+  @@map("grid_levels")
+}
+
+model GridOrder {
+  id                    String          @id @default(cuid())
+  gridRuntimeInstanceId String          @map("grid_runtime_instance_id")
+  gridLevelId           String          @map("grid_level_id")
+  clientOrderId         String?         @map("client_order_id")
+  exchangeOrderId       String?         @map("exchange_order_id")
+  side                  String
+  role                  String?
+  orderType             String          @map("order_type")
+  timeInForce           String          @map("time_in_force")
+  price                 Decimal         @db.Decimal(48, 18)
+  quantity              Decimal         @db.Decimal(48, 18)
+  filledQuantity        Decimal         @default(0) @map("filled_quantity") @db.Decimal(48, 18)
+  avgFillPrice          Decimal?        @map("avg_fill_price") @db.Decimal(48, 18)
+  status                GridOrderStatus @default(PLANNED)
+  rawPayload            Json?           @map("raw_payload")
+  createdAt             DateTime        @default(now()) @map("created_at")
+  updatedAt             DateTime        @default(now()) @updatedAt @map("updated_at")
+
+  instance GridRuntimeInstance @relation(fields: [gridRuntimeInstanceId], references: [id], onDelete: Cascade)
+  level    GridLevel           @relation(fields: [gridLevelId], references: [id], onDelete: Cascade)
+  fills    GridFill[]
+
+  @@unique([gridRuntimeInstanceId, clientOrderId], map: "uniq_grid_order_instance_client_order")
+  @@unique([gridRuntimeInstanceId, exchangeOrderId], map: "uniq_grid_order_instance_exchange_order")
+  @@index([gridRuntimeInstanceId, createdAt], map: "idx_grid_orders_instance_created")
+  @@index([gridRuntimeInstanceId], map: "idx_grid_orders_instance")
+  @@index([clientOrderId], map: "idx_grid_orders_client_order")
+  @@index([exchangeOrderId], map: "idx_grid_orders_exchange_order")
+  @@map("grid_orders")
+}
+
+model GridFill {
+  id                    String   @id @default(cuid())
+  gridRuntimeInstanceId String   @map("grid_runtime_instance_id")
+  gridOrderId           String   @map("grid_order_id")
+  exchangeFillId        String?  @map("exchange_fill_id")
+  tradeId               String?  @map("trade_id")
+  side                  String
+  price                 Decimal  @db.Decimal(48, 18)
+  quantity              Decimal  @db.Decimal(48, 18)
+  fee                   Decimal? @db.Decimal(48, 18)
+  feeCurrency           String?  @map("fee_currency")
+  filledAt              DateTime @map("filled_at")
+  rawPayload            Json?    @map("raw_payload")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+
+  instance GridRuntimeInstance @relation(fields: [gridRuntimeInstanceId], references: [id], onDelete: Cascade)
+  order    GridOrder           @relation(fields: [gridOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([gridRuntimeInstanceId, exchangeFillId], map: "uniq_grid_fill_instance_exchange_fill")
+  @@index([gridRuntimeInstanceId, createdAt], map: "idx_grid_fills_instance_created")
+  @@index([gridRuntimeInstanceId, filledAt], map: "idx_grid_fills_instance_filled")
+  @@index([gridRuntimeInstanceId], map: "idx_grid_fills_instance")
+  @@index([exchangeFillId], map: "idx_grid_fills_exchange_fill")
+  @@map("grid_fills")
+}
+
+model GridRuntimeEvent {
+  id                    String   @id @default(cuid())
+  gridRuntimeInstanceId String   @map("grid_runtime_instance_id")
+  eventType             String   @map("event_type")
+  severity              String
+  status                String?
+  message               String?  @db.Text
+  payload               Json?
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  instance GridRuntimeInstance @relation(fields: [gridRuntimeInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([gridRuntimeInstanceId, createdAt], map: "idx_grid_runtime_events_instance_created")
+  @@index([gridRuntimeInstanceId], map: "idx_grid_runtime_events_instance")
+  @@map("grid_runtime_events")
+}

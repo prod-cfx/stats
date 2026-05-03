@@ -43,4 +43,22 @@ describe('accountStrategyCallerIdentityService', () => {
       service.resolveCallerUserIdFromAuthorization(`Bearer ${token}`, 'user-2'),
     ).rejects.toBeInstanceOf(DomainException)
   })
+
+  it('verifies tokens with backend auth before accepting forwarded x-user-id', async () => {
+    const service = new AccountStrategyCallerIdentityService({
+      getString: jest.fn().mockReturnValue('http://backend.local'),
+    } as never)
+    const token = `header.${encodeJwtPart({ sub: 'forged-user', principalType: 'user' })}.signature`
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { id: 'verified-user' } }),
+    } as Response)
+
+    await expect(
+      service.resolveVerifiedCallerUserIdFromAuthorization(`Bearer ${token}`, 'forged-user'),
+    ).rejects.toBeInstanceOf(DomainException)
+    expect(fetchSpy).toHaveBeenCalledWith('http://backend.local/users/me', expect.objectContaining({
+      headers: { authorization: `Bearer ${token}` },
+    }))
+  })
 })

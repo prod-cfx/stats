@@ -23,7 +23,224 @@ function createStructuredRuntimeExecutionSemantics() {
   }]
 }
 
+function createGridOrderProgramAstSnapshot() {
+  return {
+    astVersion: 'csa.v1',
+    manifest: { compileVersion: 'compiler.v1' },
+    runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+    orderPrograms: [{
+      id: 'order_01_contract_order_program_grid',
+      sourceRef: 'contract-order-program-grid',
+      payload: {
+        id: 'contract_order_program_grid',
+        kind: 'LIMIT_LADDER',
+        priceSource: 'level_set',
+        levelSetRef: 'grid_levels',
+        sidePolicy: 'spot_grid',
+        quantity: { mode: 'fixed_quote', value: 50, asset: 'USDT' },
+        orderType: 'limit',
+        timeInForce: 'gtc',
+        recycleOnFill: true,
+        maxWorkingOrders: 4,
+      },
+    }],
+    exprPool: [{
+      id: 'grid_levels',
+      nodeType: 'level_set',
+      payload: {
+        id: 'grid_levels',
+        kind: 'ARITHMETIC_LEVEL_SET',
+        hardBounds: {
+          lowerRef: 'grid_lower',
+          upperRef: 'grid_upper',
+        },
+      },
+    }, {
+      id: 'grid_lower',
+      nodeType: 'series',
+      payload: { id: 'grid_lower', kind: 'CONST', value: 90 },
+    }, {
+      id: 'grid_upper',
+      nodeType: 'series',
+      payload: { id: 'grid_upper', kind: 'CONST', value: 110 },
+    }],
+  }
+}
+
 describe('accountStrategyViewService.deployStrategy', () => {
+  it('routes deploys with AST orderPrograms to grid runtime instead of signal runtime states', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-grid-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-grid-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const runtimeExecutionStateService = createRuntimeExecutionStateService()
+    const gridRuntimeService = {
+      createFromDeployment: jest.fn().mockResolvedValue({ id: 'grid-runtime-1' }),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-grid-1',
+        snapshotHash: 'snapshot-grid-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '1m',
+          marketType: 'spot',
+          positionSizing: { mode: 'fixed_quote', value: 50, asset: 'USDT' },
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'limit',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['limit'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-grid-1',
+        strategyTemplateId: 'template-grid-1',
+        astSnapshot: createGridOrderProgramAstSnapshot(),
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
+      undefined,
+      undefined,
+      gridRuntimeService as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-grid-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX BTC grid',
+      publishedSnapshotId: 'snapshot-grid-1',
+      deployRequestId: 'deploy-req-grid-1',
+      exchangeAccountId: 'acct-grid-1',
+      mode: 'TESTNET',
+    } as any)
+
+    expect(gridRuntimeService.createFromDeployment).toHaveBeenCalledWith(expect.objectContaining({
+      strategyInstanceId: 'inst-grid-1',
+      publishedSnapshotId: 'snapshot-grid-1',
+      userId: 'user-1',
+      exchangeAccountId: 'acct-grid-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      astSnapshot: expect.objectContaining({ orderPrograms: expect.any(Array) }),
+    }))
+    expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.initializeStatesForDeploy).not.toHaveBeenCalled()
+    expect(repo.activateStrategyInstanceForRuntime).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-grid-1',
+      mode: 'TESTNET',
+      userId: 'user-1',
+    })
+  })
+
+  it('keeps mixed decision and order program snapshots on the signal runtime path', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-mixed-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-mixed-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const runtimeExecutionStateService = createRuntimeExecutionStateService()
+    const gridRuntimeService = { createFromDeployment: jest.fn() }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-mixed-1',
+        snapshotHash: 'snapshot-mixed-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '1m',
+          marketType: 'spot',
+          positionSizing: { mode: 'fixed_quote', value: 50, asset: 'USDT' },
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'limit',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['limit'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-mixed-1',
+        strategyTemplateId: 'template-mixed-1',
+        astSnapshot: {
+          ...createGridOrderProgramAstSnapshot(),
+          decisionPrograms: [{
+            id: 'decision_01_entry',
+            sourceRef: 'entry-primary',
+            phase: 'entry',
+            when: 'always',
+            actions: [{ kind: 'OPEN_LONG' }],
+          }],
+        },
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
+      undefined,
+      undefined,
+      gridRuntimeService as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-mixed-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX BTC mixed',
+      publishedSnapshotId: 'snapshot-mixed-1',
+      deployRequestId: 'deploy-req-mixed-1',
+      exchangeAccountId: 'acct-mixed-1',
+      mode: 'TESTNET',
+    } as any)
+
+    expect(gridRuntimeService.createFromDeployment).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith(expect.objectContaining({
+      strategyInstanceId: 'inst-mixed-1',
+      publishedSnapshotId: 'snapshot-mixed-1',
+    }))
+  })
+
   it('initializes runtime execution states from the published snapshot after deploy succeeds and before success is marked', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),

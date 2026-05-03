@@ -278,6 +278,305 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('projects contract order programs from SemanticState without grid signal actions', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'contract-price-levels',
+          key: 'contract.price_levels',
+          phase: 'entry',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {},
+          contracts: [{
+            id: 'contract-price-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 60000,
+                upper: 80000,
+                gridCount: 100,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'contract-limit-ladder',
+          key: 'contract.limit_ladder',
+          status: 'locked',
+          source: 'user_explicit',
+          contracts: [{
+            id: 'contract-limit-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: {
+                orderType: 'limit',
+                timeInForce: 'gtc',
+                recycleOnFill: true,
+              },
+            }],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+              { domain: 'exposure', verb: 'set', object: 'position_mode' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      risk: [{
+        id: 'contract-exposure',
+        key: 'contract.exposure',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        params: {},
+        contracts: [{
+          id: 'contract-exposure',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'exposure',
+            verb: 'set',
+            object: 'position_mode',
+            shape: { mode: 'neutral' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      position: {
+        mode: 'fixed_quote',
+        value: 20,
+        positionMode: 'neutral',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        sizing: { kind: 'quote', value: 20, asset: 'USDT' },
+        contracts: [{
+          id: 'contract-capital',
+          kind: 'position',
+          capabilities: [{
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: { value: 20, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      },
+    })
+    state.contextSlots.exchange = {
+      slotKey: 'context.exchange',
+      fieldPath: 'exchange',
+      value: 'okx',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '交易所',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = {
+      slotKey: 'context.symbol',
+      fieldPath: 'symbol',
+      value: 'BTC-USDT-SWAP',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '交易标的',
+      affectsExecution: true,
+    }
+    state.contextSlots.marketType = {
+      slotKey: 'context.marketType',
+      fieldPath: 'marketType',
+      value: 'perp',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '市场类型',
+      affectsExecution: true,
+    }
+    state.contextSlots.timeframe = {
+      slotKey: 'context.timeframe',
+      fieldPath: 'timeframe',
+      value: '15m',
+      status: 'locked',
+      priority: 'context',
+      questionHint: 'K 线周期',
+      affectsExecution: true,
+    }
+
+    const canonicalSpec = service.buildFromSemanticState(state)
+
+    expect(canonicalSpec.market).toEqual({
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      marketType: 'perp',
+      defaultTimeframe: '15m',
+    })
+    expect(canonicalSpec.orderPrograms).toEqual([
+      expect.objectContaining({
+        kind: 'contract_order_program',
+        mode: 'perp_neutral',
+        orderType: 'limit',
+        timeInForce: 'gtc',
+      }),
+    ])
+    expect(canonicalSpec.orderPrograms[0]).toEqual(expect.objectContaining({
+      levelSet: {
+        lower: 60000,
+        upper: 80000,
+        gridCount: 100,
+        spacingMode: 'arithmetic',
+      },
+      budget: {
+        mode: 'per_order_quote',
+        value: 20,
+        asset: 'USDT',
+      },
+      recycleOnFill: true,
+      cancelOnStop: true,
+    }))
+    expect(canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))).not.toContain('OPEN_LONG')
+    expect(canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))).not.toContain('CLOSE_LONG')
+  })
+
+  it.each([
+    [
+      'original order',
+      [
+        { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
+        { lower: 61000, upper: 79000, gridCount: 100, spacingMode: 'arithmetic' },
+      ],
+    ],
+    [
+      'reversed order',
+      [
+        { lower: 61000, upper: 79000, gridCount: 100, spacingMode: 'arithmetic' },
+        { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
+      ],
+    ],
+  ])('rejects conflicting duplicate contract order programs level sets in %s', (_, levelSetShapes) => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'contract-price-levels',
+          key: 'contract.price_levels',
+          phase: 'entry',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {},
+          contracts: levelSetShapes.map((shape, index) => ({
+            id: `contract-price-levels-${index + 1}`,
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape,
+            }],
+            requires: [],
+            params: {},
+          })),
+        },
+      ],
+      actions: [
+        {
+          id: 'contract-limit-ladder',
+          key: 'contract.limit_ladder',
+          status: 'locked',
+          source: 'user_explicit',
+          contracts: [{
+            id: 'contract-limit-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: {
+                orderType: 'limit',
+                timeInForce: 'gtc',
+                recycleOnFill: true,
+              },
+            }],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+              { domain: 'exposure', verb: 'set', object: 'position_mode' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      risk: [{
+        id: 'contract-exposure',
+        key: 'contract.exposure',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        params: {},
+        contracts: [{
+          id: 'contract-exposure',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'exposure',
+            verb: 'set',
+            object: 'position_mode',
+            shape: { mode: 'neutral' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      position: {
+        mode: 'fixed_quote',
+        value: 20,
+        positionMode: 'neutral',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        sizing: { kind: 'quote', value: 20, asset: 'USDT' },
+        contracts: [{
+          id: 'contract-capital',
+          kind: 'position',
+          capabilities: [{
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: { value: 20, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      },
+    })
+    state.contextSlots.marketType = {
+      slotKey: 'context.marketType',
+      fieldPath: 'marketType',
+      value: 'perp',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '市场类型',
+      affectsExecution: true,
+    }
+
+    const canonicalSpec = service.buildFromSemanticState(state)
+
+    expect(canonicalSpec.orderPrograms).toEqual([])
+  })
+
   it('attaches generic semantic gates to entry rules without blocking exits', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({

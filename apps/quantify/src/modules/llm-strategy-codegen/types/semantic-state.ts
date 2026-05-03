@@ -3,6 +3,8 @@ export type SemanticSource = 'user_explicit' | 'inferred' | 'derived'
 export type SemanticPriority = 'core' | 'behavior' | 'risk' | 'context'
 export type SemanticExpressionOperator = 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ' | 'CROSS_OVER' | 'CROSS_UNDER'
 export type SemanticExpression = SemanticPredicateExpression | SemanticLogicalExpression
+export type SemanticContractKind = 'trigger' | 'action' | 'risk' | 'position' | 'context'
+export type SemanticCapabilityDomain = 'market' | 'price' | 'order_program' | 'capital' | 'exposure' | 'margin' | 'guard'
 
 export interface SemanticPredicateExpression {
   kind: 'predicate'
@@ -50,6 +52,39 @@ export interface SemanticSlotState {
   supersedes?: string[]
 }
 
+export interface SemanticCapabilityShape {
+  [key: string]: string | number | boolean | null | SemanticCapabilityShape | SemanticCapabilityShape[]
+}
+
+export interface SemanticCapability {
+  domain: SemanticCapabilityDomain
+  verb: string
+  object: string
+  shape: SemanticCapabilityShape
+}
+
+export interface SemanticRequirement {
+  domain: SemanticCapabilityDomain
+  verb: string
+  object: string
+}
+
+export interface SemanticEffect {
+  domain: SemanticCapabilityDomain
+  verb: string
+  object: string
+  shape?: SemanticCapabilityShape
+}
+
+export interface SemanticAtomContract {
+  id: string
+  kind: SemanticContractKind
+  capabilities: readonly SemanticCapability[]
+  requires: readonly SemanticRequirement[]
+  params: Record<string, unknown>
+  effects?: readonly SemanticEffect[]
+}
+
 export interface SemanticContextSlotState {
   exchange: SemanticSlotState | null
   symbol: SemanticSlotState | null
@@ -68,6 +103,7 @@ export interface SemanticTriggerState {
   evidence?: SemanticEvidence
   openSlots: SemanticSlotState[]
   supersedes?: string[]
+  contracts?: SemanticAtomContract[]
 }
 
 export interface SemanticActionState {
@@ -79,6 +115,7 @@ export interface SemanticActionState {
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
   supersedes?: string[]
+  contracts?: SemanticAtomContract[]
 }
 
 export type SemanticRiskBasis =
@@ -131,6 +168,7 @@ export interface SemanticRiskState {
   evidence?: SemanticEvidence
   openSlots: SemanticSlotState[]
   supersedes?: string[]
+  contracts?: SemanticAtomContract[]
 }
 
 export type SemanticPositionSizingContract =
@@ -147,6 +185,7 @@ export interface SemanticPositionState {
   source: SemanticSource
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
+  contracts?: SemanticAtomContract[]
 }
 
 export interface SemanticState {

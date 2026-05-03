@@ -5,6 +5,7 @@ import type {
   UnifiedBalance,
   UnifiedOrder,
   UnifiedPosition,
+  UnifiedTicker,
 } from './core/types'
 import type { BinanceConfig, ExchangeAccountConfig, ExchangeAccountStore, HyperliquidConfig, OkxConfig } from './factory/account-store'
 import { Inject, Injectable } from '@nestjs/common'
@@ -125,6 +126,117 @@ export class TradingService {
       }
       throw new ExchangeOperationFailedException({
         operation: 'fetch open orders',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async getClosedOrders(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    symbol?: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrder[]> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      return await client.fetchClosedOrders(symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch closed orders', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch closed orders',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async getTicker(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    symbol: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedTicker> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      return await client.fetchTicker(symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch ticker', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch ticker',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async getOrderByClientOrderId(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    clientOrderId: string,
+    symbol: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrder | null> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      if (client.fetchOrderByClientOrderId) {
+        const directOrder = await client.fetchOrderByClientOrderId({ clientOrderId, symbol })
+        if (directOrder !== null && directOrder !== undefined) {
+          return directOrder
+        }
+      }
+
+      const openOrder = (await client.fetchOpenOrders(symbol))
+        .find(order => order.clientOrderId === clientOrderId)
+      if (openOrder) {
+        return openOrder
+      }
+
+      return (await client.fetchClosedOrders(symbol))
+        .find(order => order.clientOrderId === clientOrderId) ?? null
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch order by client order id', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch order by client order id',
         exchangeId,
         reason: (error as Error).message,
       })
