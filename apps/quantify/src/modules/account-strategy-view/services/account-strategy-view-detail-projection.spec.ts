@@ -137,17 +137,22 @@ describe('buildAccountStrategyRuntimeSemanticSummary', () => {
       symbol: 'BTCUSDT',
       openPositionsCount: 0,
       ruleSummary: {
+        executionPolicy: null,
         rules: [
           {
+            id: null,
             phase: 'entry',
-            label: '入场',
-            conditions: ['close_1m > high_1m_1'],
+            conditionKey: null,
+            operator: null,
+            value: null,
             actions: ['OPEN_LONG'],
           },
           {
+            id: null,
             phase: 'exit',
-            label: '出场',
-            conditions: ['close_1m < low_1m_1'],
+            conditionKey: null,
+            operator: null,
+            value: null,
             actions: ['CLOSE_LONG'],
           },
         ],
