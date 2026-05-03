@@ -20,6 +20,14 @@ describe('backfill-llm-perp-tdmode', () => {
         strategyInstanceId: 'official-instance-1',
       },
       {
+        id: 'non-llm-perp-missing-tdmode',
+        strategyConfig: { marketType: 'perp' },
+        deploymentExecutionDefaults: { leverage: 3, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
+        deploymentExecutionConstraints: { supportedPriceSources: ['close'], supportedOrderTypes: ['market'], supportedTimeInForce: ['gtc'] },
+        executionEnvelope: { source: 'manual-import' },
+        strategyInstanceId: null,
+      },
+      {
         id: 'llm-spot',
         strategyConfig: { marketType: 'spot' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
@@ -84,7 +92,7 @@ describe('backfill-llm-perp-tdmode', () => {
     const { prisma } = buildPrismaMock()
     const result = await buildBackfillPlan(prisma as never)
 
-    expect(result.scanned).toBe(4)
+    expect(result.scanned).toBe(5)
     expect(result.updated).toBe(0)
     expect(result.plan).toEqual([expect.objectContaining({
       snapshotId: 'llm-perp-missing-tdmode',
@@ -93,6 +101,7 @@ describe('backfill-llm-perp-tdmode', () => {
     })])
     expect(result.skipped).toEqual(expect.arrayContaining([
       expect.objectContaining({ snapshotId: 'official-perp-missing-tdmode', reason: 'official strategy plaza snapshot is out of scope' }),
+      expect.objectContaining({ snapshotId: 'non-llm-perp-missing-tdmode', reason: 'snapshot is not an ordinary LLM publication snapshot' }),
       expect.objectContaining({ snapshotId: 'llm-spot', reason: 'snapshot is not perp' }),
       expect.objectContaining({ snapshotId: 'llm-perp-current', reason: 'snapshot already has tdMode contract' }),
     ]))

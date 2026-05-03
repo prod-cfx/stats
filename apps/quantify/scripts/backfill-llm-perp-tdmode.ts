@@ -1,5 +1,6 @@
 const MODULE = 'LlmPerpTdModeBackfill'
 const DEFAULT_TD_MODE = 'cross'
+const LLM_CODEGEN_SESSION_SOURCE = 'llm-codegen-session'
 const OFFICIAL_STRATEGY_PLAZA_SOURCE = 'strategy-plaza-official-template'
 
 type JsonObject = Record<string, unknown>
@@ -119,6 +120,9 @@ async function buildSnapshotPlanItem(
   }
   if (asRecord(snapshot.strategyConfig).marketType !== 'perp') {
     return { skipped: { snapshotId, reason: 'snapshot is not perp' } }
+  }
+  if (asRecord(snapshot.executionEnvelope).source !== LLM_CODEGEN_SESSION_SOURCE) {
+    return { skipped: { snapshotId, reason: 'snapshot is not an ordinary LLM publication snapshot' } }
   }
   if (!isRecord(snapshot.deploymentExecutionDefaults) || !isRecord(snapshot.deploymentExecutionConstraints)) {
     return { skipped: { snapshotId, reason: 'snapshot lacks deployment execution objects and requires republish' } }
