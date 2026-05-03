@@ -408,7 +408,7 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('future_basis')
   })
 
-  it('renders recognized unsupported risk expression as risk semantic node', () => {
+  it('renders recognized risk expression as readable risk text', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
         rules: [
@@ -422,7 +422,7 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
                   kind: 'predicate',
                   left: { kind: 'position', field: 'pnl_pct' },
                   op: 'LTE',
-                  right: { kind: 'constant', value: -5 },
+                  right: { kind: 'constant', value: -5, unit: 'percent' },
                 },
                 effect: { type: 'close_position' },
                 scope: 'current_position',
@@ -441,8 +441,42 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
       },
     })
 
-    expect(JSON.stringify(graph)).toContain('risk.condition_expression')
-    expect(JSON.stringify(graph)).not.toContain('缺少计算基准')
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('风控: 持仓收益率 低于或等于 -5%')
+    expect(text).not.toContain('risk.condition_expression')
+    expect(text).not.toContain('缺少计算基准')
+  })
+
+  it('renders canonical expression risk conditions without leaking internal keys', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'risk-position-pnl-stop',
+            phase: 'risk',
+            condition: {
+              kind: 'expression',
+              left: { kind: 'position', field: 'pnl_pct' },
+              op: 'LTE',
+              right: { kind: 'constant', value: -3, unit: 'percent' },
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('风控: 持仓收益率 低于或等于 -3% -> 平仓')
+    expect(text).not.toContain('不支持的条件，待补充')
   })
 
   it('renders the first exit path as AND_AT_THEN instead of OR_THEN', () => {

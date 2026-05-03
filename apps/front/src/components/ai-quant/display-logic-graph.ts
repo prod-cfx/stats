@@ -35,11 +35,20 @@ export interface DisplayLogicGraph {
 }
 
 interface DisplayLogicGraphCondition {
+  kind?: string
   key?: string
   op?: string
   value?: unknown
   params?: Record<string, unknown>
+  left?: DisplayExpressionOperand
+  right?: DisplayExpressionOperand
 }
+
+type DisplayExpressionOperand =
+  | { kind?: 'position'; field?: unknown; side?: unknown }
+  | { kind?: 'account'; field?: unknown }
+  | { kind?: 'constant'; value?: unknown; unit?: unknown }
+  | { kind?: 'series' | 'indicator'; [key: string]: unknown }
 
 interface DisplayLogicGraphAction {
   type?: string
@@ -378,6 +387,9 @@ function formatGridCondition(condition: DisplayLogicGraphCondition): string {
 
 function formatConditionText(condition: DisplayLogicGraphCondition | undefined): string {
   if (!condition) return '条件待补充'
+  if (condition.kind === 'expression') {
+    return formatExpressionCondition(condition)
+  }
 
   switch (condition.key) {
     case 'execution.on_start':
@@ -418,9 +430,57 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
     case 'grid.range_rebalance':
       return formatGridCondition(condition)
     case 'risk.condition_expression':
-      return '风险表达式已识别，暂不支持自动执行'
+      return formatExpressionCondition(condition.params?.condition as DisplayLogicGraphCondition | undefined)
     default:
       return '不支持的条件，待补充'
+  }
+}
+
+function formatExpressionCondition(condition: DisplayLogicGraphCondition | undefined): string {
+  if (!condition || !condition.op) return '风险表达式已识别'
+  const left = formatExpressionOperand(condition.left)
+  const right = formatExpressionOperand(condition.right)
+  const op = formatExpressionOperator(condition.op)
+  return [left, op, right].filter(Boolean).join(' ')
+}
+
+function formatExpressionOperand(operand: DisplayExpressionOperand | undefined): string {
+  if (!operand || typeof operand !== 'object') return ''
+  if (operand.kind === 'position') {
+    if (operand.field === 'pnl_pct') return '持仓收益率'
+    if (operand.field === 'avg_price') return '持仓均价'
+    if (operand.field === 'bars_held') return '持仓 K 线数'
+    return '持仓状态'
+  }
+  if (operand.kind === 'account') {
+    if (operand.field === 'drawdown_pct') return '账户回撤'
+    return '账户指标'
+  }
+  if (operand.kind === 'constant') {
+    const value = formatNumber(operand.value)
+    return operand.unit === 'percent' && value ? `${value}%` : value ?? String(operand.value ?? '')
+  }
+  return ''
+}
+
+function formatExpressionOperator(op: string): string {
+  switch (op) {
+    case 'LTE':
+      return '低于或等于'
+    case 'LT':
+      return '低于'
+    case 'GTE':
+      return '高于或等于'
+    case 'GT':
+      return '高于'
+    case 'EQ':
+      return '等于'
+    case 'CROSS_OVER':
+      return '上穿'
+    case 'CROSS_UNDER':
+      return '下穿'
+    default:
+      return op
   }
 }
 
