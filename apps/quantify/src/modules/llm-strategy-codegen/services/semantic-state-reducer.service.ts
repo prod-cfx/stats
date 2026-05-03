@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
-import type { SemanticEvidence, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticEvidence, SemanticExpression, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import { PositionSizingContractService } from './position-sizing-contract.service'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 
 interface SupportedSlotReduction {
   paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference'
@@ -151,6 +152,7 @@ export class SemanticStateReducerService {
       }
     }
 
+    let riskChanged = false
     for (const risk of nextState.risk) {
       if (risk.key !== 'risk.protective_exit') continue
 
@@ -180,17 +182,18 @@ export class SemanticStateReducerService {
         break
       }
 
-      risk.key = riskKey
-      risk.params = {
-        valuePct: percentValue,
-        basis: 'entry_avg_price',
-      }
+      risk.key = riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct'
+        ? 'risk.condition_expression'
+        : riskKey
+      risk.params = this.buildProtectiveRiskParams(riskKey, percentValue)
       risk.status = 'locked'
       risk.source = 'user_explicit'
       risk.evidence = evidence
       slot.value = percentValue
       slot.status = 'locked'
       slot.evidence = evidence
+      risk.openSlots = []
+      riskChanged = true
       break
     }
 
@@ -219,7 +222,10 @@ export class SemanticStateReducerService {
       break
     }
 
-    return nextState
+    return {
+      ...nextState,
+      risk: riskChanged ? normalizeRiskSemantics(nextState.risk) : nextState.risk,
+    }
   }
 
   private resolveActionParamKey(slot: SemanticSlotState): string {
@@ -590,6 +596,37 @@ export class SemanticStateReducerService {
 
   private isValidPercentValue(value: number): boolean {
     return Number.isFinite(value) && value > 0 && value <= 100
+  }
+
+  private buildProtectiveRiskParams(
+    riskKey: 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct',
+    valuePct: number,
+  ): Record<string, unknown> {
+    if (riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct') {
+      const condition: SemanticExpression = {
+        kind: 'predicate',
+        op: riskKey === 'risk.max_drawdown_pct' ? 'GTE' : 'LTE',
+        left: riskKey === 'risk.max_drawdown_pct'
+          ? { kind: 'account', field: 'drawdown_pct' }
+          : { kind: 'position', field: 'pnl_pct' },
+        right: { kind: 'constant', value: riskKey === 'risk.max_drawdown_pct' ? valuePct : -valuePct, unit: 'percent' },
+      }
+
+      return {
+        condition,
+        effect: riskKey === 'risk.max_drawdown_pct'
+          ? { type: 'pause_strategy' }
+          : { type: 'close_position' },
+        scope: riskKey === 'risk.max_drawdown_pct' ? 'account' : 'current_position',
+        capabilityStatus: riskKey === 'risk.max_drawdown_pct' ? 'recognized_unsupported' : 'supported',
+        ...(riskKey === 'risk.max_drawdown_pct' ? { unsupportedReason: 'risk_expression_compiler_not_available' } : {}),
+      }
+    }
+
+    return {
+      valuePct,
+      basis: 'entry_avg_price',
+    }
   }
 
   private resolveProtectiveRiskAnswerKey(answerText: string): 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct' | null {

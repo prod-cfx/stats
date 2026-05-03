@@ -363,7 +363,6 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
             priceSource: 'mark',
             orderType: 'market',
             timeInForce: 'ioc',
-            tdMode: 'cross',
           },
           deploymentExecutionConstraints: {
             platformRiskMaxLeverage: 2,

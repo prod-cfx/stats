@@ -1,3 +1,4 @@
+import type { SemanticExpression } from '../types/semantic-state'
 import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type {
   NormalizedActionAtom,
@@ -810,38 +811,94 @@ export class StrategyIntentNormalizerService {
     if (!riskRules) return []
 
     const risk: NormalizedRiskAtom[] = []
+    const inferredAssumptions = this.resolveLegacyRiskInferredAssumptions(riskRules._inferredAssumptions)
     if (typeof riskRules.stopLossPct === 'number' && Number.isFinite(riskRules.stopLossPct)) {
+      const basis = this.resolveLegacyRiskBasis(riskRules.stopLossBasis)
       risk.push({
         key: 'risk.stop_loss_pct',
         params: {
           valuePct: riskRules.stopLossPct,
-          basis: typeof riskRules.stopLossBasis === 'string' ? riskRules.stopLossBasis : 'entry_avg_price',
+          direction: 'loss',
+          basis,
+          basisSource: this.resolveLegacyRiskBasisSource(riskRules.stopLossBasis, inferredAssumptions.has('risk.stopLossBasis')),
+          effect: 'close_position',
+          scope: 'current_position',
         },
       })
     }
     if (typeof riskRules.takeProfitPct === 'number' && Number.isFinite(riskRules.takeProfitPct)) {
+      const basis = this.resolveLegacyRiskBasis(riskRules.takeProfitBasis)
       risk.push({
         key: 'risk.take_profit_pct',
         params: {
           valuePct: riskRules.takeProfitPct,
-          basis: typeof riskRules.takeProfitBasis === 'string' ? riskRules.takeProfitBasis : 'entry_avg_price',
+          direction: 'profit',
+          basis,
+          basisSource: this.resolveLegacyRiskBasisSource(riskRules.takeProfitBasis, inferredAssumptions.has('risk.takeProfitBasis')),
+          effect: 'close_position',
+          scope: 'current_position',
         },
       })
     }
     if (typeof riskRules.maxDrawdownPct === 'number' && Number.isFinite(riskRules.maxDrawdownPct)) {
       risk.push({
-        key: 'risk.max_drawdown_pct',
-        params: { valuePct: riskRules.maxDrawdownPct },
+        key: 'risk.condition_expression',
+        params: this.buildLegacyRiskExpressionParams(riskRules.maxDrawdownPct, 'strategy'),
       })
     }
     if (typeof riskRules.maxSingleLossPct === 'number' && Number.isFinite(riskRules.maxSingleLossPct)) {
       risk.push({
-        key: 'risk.max_single_loss_pct',
-        params: { valuePct: riskRules.maxSingleLossPct },
+        key: 'risk.condition_expression',
+        params: this.buildLegacyRiskExpressionParams(riskRules.maxSingleLossPct, 'current_position'),
       })
     }
 
     return risk
+  }
+
+  private buildLegacyRiskExpressionParams(valuePct: number, scope: 'strategy' | 'current_position'): Record<string, unknown> {
+    const condition: SemanticExpression = {
+      kind: 'predicate',
+      op: scope === 'strategy' ? 'GTE' : 'LTE',
+      left: scope === 'strategy'
+        ? { kind: 'account', field: 'drawdown_pct' }
+        : { kind: 'position', field: 'pnl_pct' },
+      right: { kind: 'constant', value: scope === 'strategy' ? valuePct : -valuePct, unit: 'percent' },
+    }
+
+    return {
+      condition,
+      effect: scope === 'strategy'
+        ? { type: 'pause_strategy' }
+        : { type: 'close_position' },
+      scope: scope === 'strategy' ? 'account' : scope,
+      capabilityStatus: scope === 'strategy' ? 'recognized_unsupported' : 'supported',
+      ...(scope === 'strategy' ? { unsupportedReason: 'risk_expression_compiler_not_available' } : {}),
+    }
+  }
+
+  private resolveLegacyRiskInferredAssumptions(rawInferredAssumptions: unknown): Set<string> {
+    if (!Array.isArray(rawInferredAssumptions)) {
+      return new Set()
+    }
+
+    return new Set(rawInferredAssumptions.filter((item): item is string => typeof item === 'string'))
+  }
+
+  private resolveLegacyRiskBasis(rawBasis: unknown): string {
+    return typeof rawBasis === 'string' && rawBasis.trim()
+      ? rawBasis
+      : 'entry_avg_price'
+  }
+
+  private resolveLegacyRiskBasisSource(rawBasis: unknown, isInferred: boolean): 'system_default' | 'user_explicit' {
+    if (isInferred) {
+      return 'system_default'
+    }
+
+    return typeof rawBasis === 'string' && rawBasis.trim()
+      ? 'user_explicit'
+      : 'system_default'
   }
 
   private normalizeActions(

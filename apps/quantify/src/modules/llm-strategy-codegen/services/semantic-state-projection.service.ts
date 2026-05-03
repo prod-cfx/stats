@@ -704,6 +704,13 @@ export class SemanticStateProjectionService {
       return fieldLabels[operand.field]
     }
 
+    if (operand.kind === 'account') {
+      const fieldLabels: Record<typeof operand.field, string> = {
+        drawdown_pct: '账户最大回撤',
+      }
+      return fieldLabels[operand.field]
+    }
+
     if (operand.kind === 'constant') {
       if (operand.unit === 'percent') return `${operand.value}%`
       return String(operand.value)
@@ -784,6 +791,10 @@ export class SemanticStateProjectionService {
           || candidate.side === 'both')
     }
 
+    if (candidate.kind === 'account') {
+      return candidate.field === 'drawdown_pct'
+    }
+
     if (candidate.kind === 'constant') {
       return (typeof candidate.value === 'number' || typeof candidate.value === 'string' || typeof candidate.value === 'boolean')
         && (candidate.unit === undefined || typeof candidate.unit === 'string')
@@ -797,6 +808,14 @@ export class SemanticStateProjectionService {
       .filter(risk => risk.status === 'locked')
       .sort((left, right) => this.compareRiskAtoms(left, right))
       .map((risk) => {
+        if (risk.key === 'risk.condition_expression') {
+          const condition = this.formatSemanticExpression(risk.params.condition)
+          if (!condition) {
+            return ''
+          }
+          return `风控：当${condition}时${this.describeRiskExpressionEffect(risk.params.effect)}`
+        }
+
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
           return ''
@@ -826,9 +845,34 @@ export class SemanticStateProjectionService {
       .join('；')
   }
 
+  private describeRiskExpressionEffect(rawEffect: unknown): string {
+    if (!rawEffect || typeof rawEffect !== 'object') {
+      return '执行风控'
+    }
+
+    const effectType = (rawEffect as { type?: unknown }).type
+    if (effectType === 'pause_strategy') {
+      return '暂停策略'
+    }
+    if (effectType === 'reduce_position') {
+      const reducePct = (rawEffect as { reducePct?: unknown }).reducePct
+      return typeof reducePct === 'number' && Number.isFinite(reducePct)
+        ? `减仓${this.formatPercent(reducePct)}%`
+        : '减仓'
+    }
+    if (effectType === 'notify_only') {
+      return '提醒'
+    }
+    return '平仓'
+  }
+
   private describeRiskBasis(rawBasis: unknown): string {
-    if (rawBasis === 'entry_avg_price' || rawBasis === 'position_pnl') {
+    if (rawBasis === 'entry_avg_price') {
       return '入场均价'
+    }
+
+    if (rawBasis === 'position_pnl') {
+      return '持仓收益率'
     }
 
     if (rawBasis === 'peak_position_pnl' || rawBasis === 'peak_equity') {

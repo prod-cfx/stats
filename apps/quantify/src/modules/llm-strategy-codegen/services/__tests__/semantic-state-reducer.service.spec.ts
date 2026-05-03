@@ -50,6 +50,76 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('does not normalize existing risk slots when reducing an unrelated action answer', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [{
+          id: 'action-open-long',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'action.order_type',
+            fieldPath: 'actions[0].params.orderType',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请确认开仓订单类型。',
+            affectsExecution: true,
+          }],
+        }],
+        risk: [{
+          id: 'risk-stale-basis',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 5 },
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'risk.stopLossBasis',
+            fieldPath: 'risk[0].params.stopLossBasis',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认止损基准。',
+            affectsExecution: true,
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-29T00:00:00.000Z',
+      },
+      targetSlotKey: 'action.order_type',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'action.order_type',
+        fieldPath: 'actions[0].params.orderType',
+      }),
+      answer: '市价单',
+      messageIndex: 3,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: { orderType: '市价单' },
+    }))
+    expect(next.risk[0]).toEqual({
+      id: 'risk-stale-basis',
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5 },
+      status: 'open',
+      source: 'derived',
+      openSlots: [{
+        slotKey: 'risk.stopLossBasis',
+        fieldPath: 'risk[0].params.stopLossBasis',
+        status: 'open',
+        priority: 'risk',
+        questionHint: '请确认止损基准。',
+        affectsExecution: true,
+      }],
+    })
+  })
+
   it('normalizes english contract clarification answers into perp market type', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
@@ -1025,21 +1095,64 @@ describe('SemanticStateReducerService', () => {
 
     expect(next.risk[0]).toEqual(expect.objectContaining({
       key: 'risk.stop_loss_pct',
-      params: {
+      params: expect.objectContaining({
         valuePct: 5,
         basis: 'entry_avg_price',
-      },
+        basisSource: 'system_default',
+      }),
       status: 'locked',
       source: 'user_explicit',
     }))
-    expect(next.risk[0]?.openSlots[0]).toEqual(expect.objectContaining({
+    expect(next.risk[0]?.openSlots).toEqual([])
+  })
+
+  it('normalizes protective exit answer into locked stop loss without basis slot', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [
+        {
+          id: 'risk-protective',
+          key: 'risk.protective_exit',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [
+            {
+              slotKey: 'risk.protective_exit',
+              fieldPath: 'risk[0].params.rule',
+              questionHint: '请确认出场保护规则',
+              status: 'open',
+              priority: 'risk',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const next = service.applyClarificationAnswer({
+      currentState: state,
+      targetSlotKey: 'risk.protective_exit',
+      targetSlotId: buildSemanticSlotId(state.risk[0]!.openSlots[0]!),
+      answer: '亏损 5% 止损',
+    })
+
+    expect(next.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
       status: 'locked',
-      value: 5,
-      evidence: {
-        text: '亏损 5% 止损',
-        messageIndex: 15,
-        source: 'user_explicit',
-      },
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+      openSlots: [],
     }))
   })
 
@@ -1085,22 +1198,15 @@ describe('SemanticStateReducerService', () => {
 
     expect(next.risk[0]).toEqual(expect.objectContaining({
       key: 'risk.stop_loss_pct',
-      params: {
+      params: expect.objectContaining({
         valuePct: 5,
         basis: 'entry_avg_price',
-      },
+        basisSource: 'system_default',
+      }),
       status: 'locked',
       source: 'user_explicit',
     }))
-    expect(next.risk[0]?.openSlots[0]).toEqual(expect.objectContaining({
-      status: 'locked',
-      value: 5,
-      evidence: {
-        text: '亏损 5％ 止损',
-        messageIndex: 19,
-        source: 'user_explicit',
-      },
-    }))
+    expect(next.risk[0]?.openSlots).toEqual([])
   })
 
   it('maps protective risk clarification answers to explicit canonical risk atoms', () => {
@@ -1154,13 +1260,26 @@ describe('SemanticStateReducerService', () => {
     })
 
     expect(maxDrawdown.risk[0]).toEqual(expect.objectContaining({
-      key: 'risk.max_drawdown_pct',
-      params: expect.objectContaining({ valuePct: 12 }),
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        scope: 'account',
+        condition: expect.objectContaining({
+          op: 'GTE',
+          left: { kind: 'account', field: 'drawdown_pct' },
+          right: { kind: 'constant', value: 12, unit: 'percent' },
+        }),
+        effect: { type: 'pause_strategy' },
+        capabilityStatus: 'recognized_unsupported',
+      }),
       status: 'locked',
     }))
     expect(maxSingleLoss.risk[0]).toEqual(expect.objectContaining({
-      key: 'risk.max_single_loss_pct',
-      params: expect.objectContaining({ valuePct: 3 }),
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        scope: 'current_position',
+        effect: { type: 'close_position' },
+        capabilityStatus: 'supported',
+      }),
       status: 'locked',
     }))
   })

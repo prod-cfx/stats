@@ -8,6 +8,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 
 @Injectable()
 export class SemanticStateMergeService {
@@ -181,7 +182,7 @@ export class SemanticStateMergeService {
       }
     }
 
-    return next
+    return normalizeRiskSemantics(next)
   }
 
   private mergePosition(

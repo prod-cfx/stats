@@ -595,6 +595,12 @@ export class SemanticAtomInvariantService {
         side: operand.side ?? null,
       })
     }
+    if (operand.kind === 'account') {
+      return JSON.stringify({
+        kind: operand.kind,
+        field: operand.field,
+      })
+    }
     return JSON.stringify({
       kind: operand.kind,
       value: operand.value,

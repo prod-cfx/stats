@@ -15,6 +15,10 @@ import { StrategySummaryBuilderService } from '../strategy-summary-builder.servi
 import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 describe('codegenPublicationGenerationStage', () => {
+  const passingSemanticAtomInvariant = () => ({
+    validate: jest.fn().mockReturnValue([]),
+  })
+
   const completeRiskRules = (riskRules: Record<string, unknown> = {}) => ({
     exchange: 'okx',
     marketType: 'perp',
@@ -545,6 +549,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({
@@ -607,6 +613,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: executionEnvelopeBuild } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({ semanticState })
@@ -813,6 +821,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({
@@ -871,6 +881,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({
@@ -924,6 +936,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const semanticState = buildLockedMaSemanticState()
@@ -986,6 +1000,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({ semanticState })
@@ -1041,6 +1057,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({ semanticState })
@@ -1096,6 +1114,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({ semanticState })
@@ -1153,6 +1173,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({
@@ -1175,6 +1197,88 @@ describe('codegenPublicationGenerationStage', () => {
       symbol: 'BTCUSDT',
       timeframe: '15m',
       marketType: 'perp',
+    }))
+  })
+
+  it('carries normalized locked stop loss basis into publication metadata', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:semantic-risk' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+    )
+    const semanticState = buildLockedMaSemanticState()
+    semanticState.risk = [{
+      id: 'risk-1',
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5 },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }]
+
+    const artifacts = await stage.generate({ semanticState })
+
+    expect(artifacts.lockedParams).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      stopLossBasis: 'entry_avg_price',
+    }))
+    expect(artifacts.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
+    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expect.objectContaining({
+      risk: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'risk.stop_loss_pct',
+          params: expect.objectContaining({
+            valuePct: 5,
+            direction: 'loss',
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+            effect: 'close_position',
+            scope: 'current_position',
+          }),
+        }),
+      ]),
     }))
   })
 
@@ -1268,6 +1372,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
     const semanticState = buildLockedMaSemanticState()
     semanticState.contextSlots = {
@@ -1439,6 +1545,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({
@@ -1499,6 +1607,8 @@ describe('codegenPublicationGenerationStage', () => {
       { emit: jest.fn().mockReturnValue('strategy') } as any,
       { build: jest.fn().mockReturnValue({}) } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
     )
 
     const artifacts = await stage.generate({

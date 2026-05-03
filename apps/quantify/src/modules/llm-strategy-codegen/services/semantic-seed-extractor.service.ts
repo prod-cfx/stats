@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import type { SemanticExpression, SemanticExpressionOperator, SemanticExpressionOperand, SemanticPositionSizingContract } from '../types/semantic-state'
+import type {
+  SemanticExpression,
+  SemanticExpressionOperator,
+  SemanticExpressionOperand,
+  SemanticPositionSizingContract,
+  SemanticRiskBasis,
+  SemanticRiskBasisSource,
+} from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 
@@ -167,20 +174,30 @@ export class SemanticSeedExtractorService {
   private extractRisk(text: string): NonNullable<CodegenSemanticPatch['risk']> {
     const risk: NonNullable<CodegenSemanticPatch['risk']> = []
 
-    const stopLoss = this.extractPercent(text, [
+    const stopLossPatterns = [
       /亏损\s*(\d+(?:\.\d+)?)\s*%/u,
       /亏损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /止损\s*(\d+(?:\.\d+)?)\s*%/u,
       /止损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
-    ])
-    if (stopLoss !== null) {
+    ]
+    const stopLossClause = this.splitRiskClauses(text)
+      .find(clause => !this.isHaltOnlyRiskContext(clause) && this.extractPercent(clause, stopLossPatterns) !== null)
+    const stopLoss = stopLossClause ? this.extractPercent(stopLossClause, stopLossPatterns) : null
+    if (stopLoss !== null && stopLossClause) {
+      const riskContext = this.resolveRiskClauseContext(stopLossClause, 'stop_loss')
+      const basis = this.resolveRiskBasis(riskContext)
+      const basisSource = this.resolveRiskBasisSource(riskContext, basis)
       risk.push({
         key: 'risk.stop_loss_pct',
         params: {
           valuePct: stopLoss,
-          basis: this.resolveRiskBasis(text),
+          direction: 'loss',
+          basis,
+          basisSource,
+          effect: 'close_position',
+          scope: 'current_position',
         },
       })
     }
@@ -195,11 +212,43 @@ export class SemanticSeedExtractorService {
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
     if (takeProfit !== null) {
+      const riskContext = this.resolveRiskClauseContext(text, 'take_profit')
+      const basis = this.resolveRiskBasis(riskContext)
+      const basisSource = this.resolveRiskBasisSource(riskContext, basis)
       risk.push({
         key: 'risk.take_profit_pct',
         params: {
           valuePct: takeProfit,
-          basis: this.resolveRiskBasis(text),
+          direction: 'profit',
+          basis,
+          basisSource,
+          effect: 'close_position',
+          scope: 'current_position',
+        },
+      })
+    }
+
+    const strategyHaltLoss = this.extractPercent(text, [
+      /持仓亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+      /亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+      /亏损\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
+      /(\d+(?:\.\d+)?)\s*%\s*亏损.*(?:暂停策略|停止策略)/u,
+    ])
+    if (strategyHaltLoss !== null) {
+      const condition: SemanticExpression = {
+        kind: 'predicate',
+        left: { kind: 'position', field: 'pnl_pct' },
+        op: 'LTE',
+        right: { kind: 'constant', value: -strategyHaltLoss, unit: 'percent' },
+      }
+      risk.push({
+        key: 'risk.condition_expression',
+        params: {
+          condition,
+          effect: { type: 'pause_strategy' },
+          scope: 'strategy',
+          capabilityStatus: 'recognized_unsupported',
+          unsupportedReason: 'risk_expression_compiler_not_available',
         },
       })
     }
@@ -969,11 +1018,39 @@ export class SemanticSeedExtractorService {
     return 'long_only'
   }
 
-  private resolveRiskBasis(text: string): 'entry_avg_price' | 'position_pnl' {
-    if (/持仓盈亏|持仓.*盈亏|浮盈|pnl/u.test(text)) {
+  private resolveRiskBasis(text: string): SemanticRiskBasis {
+    if (/持仓盈亏|持仓.*盈亏|持仓收益率|持仓.*收益率|浮盈|pnl/u.test(text)) {
       return 'position_pnl'
     }
     return 'entry_avg_price'
+  }
+
+  private resolveRiskBasisSource(text: string, basis: SemanticRiskBasis): SemanticRiskBasisSource {
+    if (basis === 'position_pnl') {
+      return 'user_explicit'
+    }
+    if (/开仓价|入场价|入场均价|持仓均价|成本价|均价|entry_avg_price/u.test(text)) {
+      return 'user_explicit'
+    }
+    return 'system_default'
+  }
+
+  private resolveRiskClauseContext(text: string, kind: 'stop_loss' | 'take_profit'): string {
+    const matcher = kind === 'stop_loss'
+      ? /亏损|止损/u
+      : /盈利|止盈/u
+    return this.splitRiskClauses(text).find(clause => matcher.test(clause)) ?? text
+  }
+
+  private splitRiskClauses(text: string): string[] {
+    return text
+      .split(/[；;。。，,、]|(?:并且|以及|同时|且)/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+  }
+
+  private isHaltOnlyRiskContext(text: string): boolean {
+    return /暂停策略|停止策略/u.test(text) && !/止损|平仓|全平/u.test(text)
   }
 
   private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {

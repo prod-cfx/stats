@@ -771,6 +771,34 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
   })
 
+  it('keeps force exit above strategy halt when both guards trigger', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: 1 },
+        portfolio: { equity: 10000 },
+      } as any,
+      [],
+      {},
+      {
+        blockNewEntry: false,
+        forceExit: true,
+        strategyHalt: true,
+        cancelOrderPrograms: false,
+        triggered: ['guard-stop-loss', 'guard-daily-loss'],
+      },
+      [],
+    )
+
+    expect(decision).toEqual({
+      action: 'CLOSE_LONG',
+      size: { mode: 'QTY', value: 1 },
+      reason: 'compiled.force_exit',
+    })
+    expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
+  })
+
   it('does not emit a close decision when force exit triggers without an active position', () => {
     const decision = runDecisionPrograms(
       {
@@ -794,6 +822,52 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(decision).toEqual({
       action: 'NOOP',
       reason: 'compiled.force_exit.noop',
+    })
+    expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
+  })
+
+  it('selects the applicable reduce action for the active position side', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: -2 },
+        portfolio: { equity: 10000 },
+      } as any,
+      [
+        {
+          id: 'decision_reduce',
+          phase: 'rebalance',
+          priority: 10,
+          when: 'expr_reduce',
+          actions: [
+            {
+              kind: 'REDUCE_LONG',
+              quantity: { mode: 'position_pct', value: 50 },
+            },
+            {
+              kind: 'REDUCE_SHORT',
+              quantity: { mode: 'position_pct', value: 50 },
+            },
+          ],
+        },
+      ],
+      { expr_reduce: true },
+      {
+        blockNewEntry: false,
+        forceExit: false,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['decision_reduce'],
+    )
+
+    expect(decision).toEqual({
+      action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: { mode: 'QTY', value: 1 },
+      reason: 'compiled.decision_reduce',
     })
     expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
   })

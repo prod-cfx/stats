@@ -3045,7 +3045,21 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             { key: 'close_long' },
           ],
           risk: [
-            { key: 'risk.max_drawdown_pct', params: { valuePct: 12 } },
+            {
+              key: 'risk.condition_expression',
+              params: {
+                condition: {
+                  kind: 'expression',
+                  op: 'LTE',
+                  left: { kind: 'position', field: 'pnl_pct' },
+                  right: { kind: 'constant', value: -12, unit: 'percent' },
+                },
+                effect: { type: 'pause_strategy' },
+                scope: 'strategy',
+                capabilityStatus: 'recognized_unsupported',
+                unsupportedReason: 'risk_expression_compiler_not_available',
+              },
+            },
           ],
           position: {
             mode: 'fixed_ratio',
@@ -5345,10 +5359,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.stop_loss_pct',
-        params: {
+        params: expect.objectContaining({
           valuePct: 5,
           basis: 'entry_avg_price',
-        },
+        }),
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
@@ -5365,6 +5379,29 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         reason: 'missing_stop_loss_rule',
       }),
     ]))
+  })
+
+  it('does not ask for stop loss basis after plain stop loss is understood', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充入场和仓位。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 'risk-default-basis-regression' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '做多，亏损 5% 止损',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(JSON.stringify(createPayload.semanticState?.risk ?? [])).toContain('entry_avg_price')
+    expect(result.assistantPrompt).not.toContain('entry_avg_price')
+    expect(result.assistantPrompt).not.toContain('basis')
+    expect(result.assistantPrompt).not.toContain('计算基准')
+    expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
   })
 
   it('regression: deterministic stop loss is added even when semanticPatch has max drawdown risk', async () => {
@@ -7074,6 +7111,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       }),
     )
+  })
+
+  it('applies hidden default risk basis override replies without re-prompting for basis confirmation', async () => {
+    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
+      id: 's-hidden-default-risk-basis-override',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    }), ['risk.takeProfitBasis'])
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-hidden-default-risk-basis-override', {
+      userId: 'u1',
+      message: '止盈按持仓收益率',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls
+      .map(call => call[1] as Record<string, any>)
+      .reverse()
+      .find(payload => Array.isArray(payload.semanticState?.risk)) as Record<string, any>
+    const takeProfitRisk = updatePayload.semanticState.risk.find((risk: Record<string, any>) =>
+      risk.key === 'risk.take_profit_pct',
+    )
+
+    expect(takeProfitRisk).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        basis: 'position_pnl',
+        basisSource: 'user_explicit',
+      }),
+    }))
+    expect(result.assistantPrompt).not.toContain('entry_avg_price')
+    expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
   })
 
   it.each(['这样可以', '可以了', '就这样', '没问题'])(

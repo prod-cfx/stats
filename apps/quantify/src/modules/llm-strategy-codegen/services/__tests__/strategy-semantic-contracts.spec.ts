@@ -241,6 +241,45 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: true })
   })
 
+  it('accepts normalized stop loss risk params with default basis metadata', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: {
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+    })).toEqual({ ok: true })
+  })
+
+  it('accepts explicit risk basis names used by strategy rules', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5, basis: 'peak_position_pnl', basisSource: 'user_explicit' },
+    })).toEqual({ ok: true })
+  })
+
+  it('rejects invalid optional percent risk basis metadata', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5, basis: 'mark_price' },
+    } as never)).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_basis',
+    }))
+
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5, basisSource: 'legacy' },
+    } as never)).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_basis_source',
+    }))
+  })
+
   it('rejects percent-based risk contracts without numeric valuePct', () => {
     expect(validateSemanticRiskContract({
       key: 'risk.stop_loss_pct',
@@ -284,6 +323,138 @@ describe('strategySemanticContracts', () => {
     } as never)).toEqual(expect.objectContaining({
       ok: false,
       reason: 'invalid_risk_params',
+    }))
+  })
+
+  it('accepts structured risk condition expression params as recognized unsupported', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+        unsupportedReason: 'risk_expression_compiler_not_available',
+      },
+    })).toEqual({ ok: true })
+  })
+
+  it('rejects risk condition expression params without a valid expression', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: null,
+        effect: { type: 'close_position' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+      },
+    })).toEqual(expect.objectContaining({ ok: false }))
+  })
+
+  it('rejects risk condition expression params with invalid effect type', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'liquidate_account' },
+        scope: 'current_position',
+        capabilityStatus: 'recognized_unsupported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_effect',
+    }))
+  })
+
+  it('rejects risk condition expression params with invalid scope', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'close_position' },
+        scope: 'portfolio',
+        capabilityStatus: 'recognized_unsupported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_scope',
+    }))
+  })
+
+  it('accepts account drawdown risk condition expressions', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'account', field: 'drawdown_pct' },
+          op: 'GTE',
+          right: { kind: 'constant', value: 12, unit: 'percent' },
+        },
+        effect: { type: 'pause_strategy' },
+        scope: 'account',
+        capabilityStatus: 'recognized_unsupported',
+      unsupportedReason: 'risk_expression_compiler_not_available',
+      },
+    })).toEqual({ ok: true })
+  })
+
+  it.each([
+    [{ kind: 'account', field: 'drawdown_pct' }],
+    [{ kind: 'position', field: 'has_position' }],
+    [{ kind: 'constant', value: true }],
+  ])('rejects supported risk condition expressions with runtime-unsupported operands', (left) => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left,
+          op: 'GTE',
+          right: { kind: 'constant', value: 12, unit: 'percent' },
+        },
+        effect: { type: 'pause_strategy' },
+        scope: 'account',
+        capabilityStatus: 'supported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'unsupported_runtime_risk_expression_operand',
+    }))
+  })
+
+  it('rejects risk reduce expression params with invalid reduce percent', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'reduce_position', reducePct: 150 },
+        scope: 'current_position',
+        capabilityStatus: 'supported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_reduce_pct',
     }))
   })
 

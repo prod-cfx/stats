@@ -1,4 +1,4 @@
-import type { AiSignalPayload, PositionSide, SignalSourceType, SignalStatus } from '@ai/shared'
+import type { AiSignalPayload, SignalSourceType, SignalStatus } from '@ai/shared'
 import type { TransactionHost } from '@nestjs-cls/transactional'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { EventEmitter2 } from '@nestjs/event-emitter'
@@ -6,7 +6,6 @@ import type { RuntimeCooldownScope, SignalGeneratorRepository } from '../reposit
 import type { StrategySignalStateRepository } from '../repositories/strategy-signal-state.repository'
 import type { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
-import type { PortfolioAdmissionConstraints } from './position-admission.service'
 import type { IndicatorGroup } from './signal-generation-candidate.stage'
 import type { SignalTelemetryService } from './signal-telemetry.service'
 import type { StrategyExecutionConfig } from '@/modules/strategy-templates/types/strategy-template.types'
@@ -18,17 +17,9 @@ import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
-import { PositionAdmissionService } from './position-admission.service'
+import { PositionAdmissionService, type PortfolioAdmissionConstraints } from './position-admission.service'
 
 type StrategyInstanceWithTemplate = StrategyInstance & { strategyTemplate?: StrategyTemplate | null }
-type SignalPersistenceResult =
-  | { created: true; signalId: string; runtimeDisposition?: 'consume' }
-  | {
-      created: false
-      signalId: null
-      reason: 'COOLDOWN' | 'EXIT_NO_OPEN_POSITION_TO_CLOSE' | 'EXIT_BLOCKED_RECONCILE_REQUIRED' | string
-      runtimeDisposition: 'consume' | 'retry'
-    }
 
 export class SignalGenerationPersistenceStage {
   private readonly logger: Logger
@@ -84,7 +75,7 @@ export class SignalGenerationPersistenceStage {
       runtimePhase?: 'consumed'
       cooldownConsumesRuntimeState?: boolean
     },
-  ): Promise<SignalPersistenceResult> {
+  ): Promise<{ created: boolean; signalId: string | null }> {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
     const result = await this.txHost.withTransaction(async () => {
@@ -93,17 +84,7 @@ export class SignalGenerationPersistenceStage {
       if (this.shouldApplyEntryAdmission(aiPayload)) {
         const admission = await this.evaluateEntryAdmission(instance, strategy, group.symbol, aiPayload.direction, runtimeProvenance)
         if (admission.ok === false) {
-          return { created: false as const, signalId: null, reason: admission.reason, runtimeDisposition: 'consume' as const }
-        }
-      }
-
-      const exitAdmission = await this.evaluateExitAdmission(instance, strategy, group.symbol, aiPayload, runtimeProvenance)
-      if (exitAdmission.ok === false) {
-        return {
-          created: false as const,
-          signalId: null,
-          reason: exitAdmission.reason,
-          runtimeDisposition: exitAdmission.runtimeDisposition,
+          return { created: false as const, signalId: null as string | null, reason: admission.reason }
         }
       }
 
@@ -118,7 +99,7 @@ export class SignalGenerationPersistenceStage {
         })
 
         if (existingCount > 0) {
-          return { created: false as const, signalId: null, reason: 'COOLDOWN', runtimeDisposition: 'consume' as const }
+          return { created: false as const, signalId: null as string | null, reason: 'COOLDOWN' }
         }
       }
 
@@ -202,7 +183,7 @@ export class SignalGenerationPersistenceStage {
     config: StrategySignalsRuntimeConfig,
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
-  ): Promise<SignalPersistenceResult> {
+  ): Promise<{ created: boolean; signalId: string | null; reason?: string }> {
     const configuredCooldown = execution.cooldownMinutes ?? config.cooldownMinutes
     const minimumCooldown = timeframeToMinutes(execution.timeframe)
     const cooldownMinutes = Math.max(configuredCooldown, minimumCooldown)
@@ -210,16 +191,6 @@ export class SignalGenerationPersistenceStage {
 
     const result = await this.txHost.withTransaction(async () => {
       await this.generatorRepository.lockStrategyInstance(instance.id)
-
-      const exitAdmission = await this.evaluateExitAdmission(instance, strategy, primarySymbol, aiPayload, runtimeProvenance)
-      if (exitAdmission.ok === false) {
-        return {
-          created: false as const,
-          signalId: null,
-          reason: exitAdmission.reason,
-          runtimeDisposition: exitAdmission.runtimeDisposition,
-        }
-      }
 
       if (!skipCooldown && this.shouldApplyCooldown(aiPayload)) {
         const recentSignal = await this.generatorRepository.findRecentSignalForCooldown({
@@ -232,7 +203,7 @@ export class SignalGenerationPersistenceStage {
         })
 
         if (recentSignal) {
-          return { created: false as const, signalId: null, reason: 'COOLDOWN', runtimeDisposition: 'consume' as const }
+          return { created: false as const, signalId: null, reason: 'COOLDOWN' }
         }
       }
 
@@ -277,15 +248,11 @@ export class SignalGenerationPersistenceStage {
   }
 
   private shouldApplyCooldown(payload: Pick<AiSignalPayload, 'signalType'>): boolean {
-    return payload.signalType === 'ENTRY' || payload.signalType === 'EXIT'
+    return payload.signalType !== 'EXIT'
   }
 
   private shouldApplyEntryAdmission(payload: Pick<AiSignalPayload, 'signalType' | 'direction'>): boolean {
     return payload.signalType === 'ENTRY' && (payload.direction === 'BUY' || payload.direction === 'SELL')
-  }
-
-  private shouldApplyExitAdmission(payload: Pick<AiSignalPayload, 'signalType' | 'direction'>): boolean {
-    return payload.signalType === 'EXIT' || payload.direction === 'CLOSE_LONG' || payload.direction === 'CLOSE_SHORT'
   }
 
   private async evaluateEntryAdmission(
@@ -320,72 +287,6 @@ export class SignalGenerationPersistenceStage {
       openPositions,
       hasPendingReconciliation,
     })
-  }
-
-  private async evaluateExitAdmission(
-    instance: StrategyInstanceWithTemplate,
-    strategy: StrategyTemplate,
-    symbol: Symbol,
-    payload: Pick<AiSignalPayload, 'signalType' | 'direction'>,
-    runtimeProvenance: Prisma.JsonObject,
-  ): Promise<
-    | { ok: true }
-    | { ok: false; reason: 'EXIT_NO_OPEN_POSITION_TO_CLOSE' | 'EXIT_BLOCKED_RECONCILE_REQUIRED'; runtimeDisposition: 'consume' | 'retry' }
-  > {
-    if (!this.shouldApplyExitAdmission(payload)) {
-      return { ok: true }
-    }
-
-    const positionSide = this.resolveClosePositionSide(payload.direction)
-    const identity = this.resolvePositionAdmissionIdentity(symbol, runtimeProvenance)
-    if (!identity || !positionSide) {
-      this.logger.warn(
-        `[SignalGenerationPersistenceStage.evaluateExitAdmission] blocked exit signal; input=${JSON.stringify({ strategyId: strategy.id, strategyInstanceId: instance.id, symbol: symbol.code, direction: payload.direction, signalType: payload.signalType })}; reason=missing close position identity`,
-      )
-      return { ok: false, reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED', runtimeDisposition: 'retry' }
-    }
-
-    const [hasClosablePosition, hasExitReconcileRisk] = await Promise.all([
-      this.generatorRepository.hasClosablePositionForExitAdmission({
-        strategyId: strategy.id,
-        strategyInstanceId: instance.id,
-        exchangeId: identity.exchangeId,
-        marketType: identity.marketType,
-        symbol: identity.symbol,
-        positionSide,
-      }),
-      this.generatorRepository.hasExitReconcileRisk({
-        strategyId: strategy.id,
-        strategyInstanceId: instance.id,
-        exchangeId: identity.exchangeId,
-        marketType: identity.marketType,
-        symbol: identity.symbol,
-        positionSide,
-        direction: payload.direction,
-      }),
-    ])
-
-    if (hasExitReconcileRisk) {
-      this.logger.warn(
-        `[SignalGenerationPersistenceStage.evaluateExitAdmission] retrying exit signal because position truth is unsafe; input=${JSON.stringify({ strategyId: strategy.id, strategyInstanceId: instance.id, exchangeId: identity.exchangeId, marketType: identity.marketType, symbol: identity.symbol, positionSide, direction: payload.direction })}; reason=reconcile or pending execution exists`,
-      )
-      return { ok: false, reason: 'EXIT_BLOCKED_RECONCILE_REQUIRED', runtimeDisposition: 'retry' }
-    }
-
-    if (hasClosablePosition) {
-      return { ok: true }
-    }
-
-    this.logger.log(
-      `[SignalGenerationPersistenceStage.evaluateExitAdmission] skipped exit signal without open position; input=${JSON.stringify({ strategyId: strategy.id, strategyInstanceId: instance.id, exchangeId: identity.exchangeId, marketType: identity.marketType, symbol: identity.symbol, positionSide })}; reason=no active subscribed account has an open position to close`,
-    )
-    return { ok: false, reason: 'EXIT_NO_OPEN_POSITION_TO_CLOSE', runtimeDisposition: 'consume' }
-  }
-
-  private resolveClosePositionSide(direction: AiSignalPayload['direction']): PositionSide | null {
-    if (direction === 'CLOSE_LONG') return 'LONG'
-    if (direction === 'CLOSE_SHORT') return 'SHORT'
-    return null
   }
 
   private resolvePositionAdmissionIdentity(

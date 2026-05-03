@@ -4,7 +4,7 @@ import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-p
 import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { Injectable, Logger } from '@nestjs/common'
+import { Injectable } from '@nestjs/common'
 import {
   buildOfficialTemplateBacktestConfigDefaults,
   buildOfficialTemplateDataRequirements,
@@ -37,8 +37,6 @@ function sha256(value: string): string {
 
 @Injectable()
 export class StrategyPlazaOfficialSnapshotRepository {
-  private readonly logger = new Logger(StrategyPlazaOfficialSnapshotRepository.name)
-
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async resolveOfficialSnapshotForUser(input: {
@@ -48,48 +46,11 @@ export class StrategyPlazaOfficialSnapshotRepository {
     const client = this.txHost.tx
     const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
-    const existing = await this.findCurrentUserSnapshot(input.userId, sessionId, sourceSnapshot)
+    const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
     if (existing) {
-      await this.synchronizeOfficialRuntimeBindings(existing.strategyInstanceId, input.template, sourceSnapshot, existing)
+      await this.updateSnapshotTemplateRuntimeContent(existing.id, input.template)
+      await this.bindStrategyInstanceToSnapshot(existing.strategyInstanceId, input.template, sourceSnapshot, existing)
       return { id: existing.id }
-    }
-    const legacy = await this.findLegacyUserSnapshot(input.userId, input.template)
-    if (legacy) {
-      await client.llmStrategyCodegenSession.upsert({
-        where: { id: sessionId },
-        update: {
-          status: 'PUBLISHED',
-          latestDraftCode: sourceSnapshot.scriptSnapshot,
-          latestSpecDesc: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
-        },
-        create: {
-          id: sessionId,
-          userId: input.userId,
-          status: 'PUBLISHED',
-          latestDraftCode: sourceSnapshot.scriptSnapshot,
-          latestSpecDesc: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
-          strategyInstanceId: legacy.strategyInstanceId,
-        },
-      })
-      const copiedSnapshotId = this.buildCopiedSnapshotId(sessionId, sourceSnapshot)
-      const snapshot = await client.publishedStrategySnapshot.upsert({
-        where: { id: copiedSnapshotId },
-        update: {
-          strategyInstanceId: legacy.strategyInstanceId,
-          strategyTemplateId: legacy.strategyTemplateId,
-          ...this.copySnapshotContent(sourceSnapshot, input.template),
-        },
-        create: {
-          id: copiedSnapshotId,
-          session: { connect: { id: sessionId } },
-          strategyTemplateId: legacy.strategyTemplateId,
-          strategyInstanceId: legacy.strategyInstanceId,
-          ...this.copySnapshotContent(sourceSnapshot, input.template),
-        },
-        select: { id: true, snapshotHash: true },
-      })
-      await this.synchronizeOfficialRuntimeBindings(legacy.strategyInstanceId, input.template, sourceSnapshot, snapshot)
-      return { id: snapshot.id }
     }
 
     await client.llmStrategyCodegenSession.upsert({
@@ -197,7 +158,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
       select: { id: true, snapshotHash: true },
     })
 
-    await this.synchronizeOfficialRuntimeBindings(strategyInstance.id, input.template, sourceSnapshot, snapshot)
+    await this.bindStrategyInstanceToSnapshot(strategyInstance.id, input.template, sourceSnapshot, snapshot)
 
     return { id: snapshot.id }
   }
@@ -259,7 +220,17 @@ export class StrategyPlazaOfficialSnapshotRepository {
       && !snapshot.scriptSnapshot.includes("action: 'HOLD'")
   }
 
-  private async findCurrentUserSnapshot(
+  private async updateSnapshotTemplateRuntimeContent(
+    snapshotId: string,
+    template: OfficialStrategyPlazaTemplate,
+  ): Promise<void> {
+    await this.txHost.tx.publishedStrategySnapshot.update({
+      where: { id: snapshotId },
+      data: this.buildTemplateRuntimeContent(template),
+    })
+  }
+
+  private async findExistingUserSnapshot(
     userId: string,
     sessionId: string,
     sourceSnapshot: PublishedStrategySnapshot,
@@ -277,117 +248,23 @@ export class StrategyPlazaOfficialSnapshotRepository {
     }) as Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null>
   }
 
-  private async findLegacyUserSnapshot(
-    userId: string,
-    template: OfficialStrategyPlazaTemplate,
-  ): Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId' | 'strategyTemplateId'> | null> {
-    return this.txHost.tx.publishedStrategySnapshot.findFirst({
-      where: {
-        executionEnvelope: { path: ['source'], equals: 'strategy-plaza-official-template' },
-        userIntentSummary: { path: ['templateId'], equals: template.id },
-        strategyInstanceId: { not: null },
-        strategyTemplateId: { not: null },
-        session: { userId },
-      },
-      orderBy: [{ createdAt: 'desc' }],
-      select: { id: true, snapshotHash: true, strategyInstanceId: true, strategyTemplateId: true },
-    }) as Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId' | 'strategyTemplateId'> | null>
-  }
-
-  private async synchronizeOfficialRuntimeBindings(
+  private async bindStrategyInstanceToSnapshot(
     strategyInstanceId: string | null,
     template: OfficialStrategyPlazaTemplate,
     sourceSnapshot: PublishedStrategySnapshot,
     snapshot: Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash'>,
   ): Promise<void> {
     if (!strategyInstanceId) return
-    const client = this.txHost.tx
-    const instance = await client.strategyInstance.findUnique({
-      where: { id: strategyInstanceId },
-      select: {
-        id: true,
-        strategyTemplateId: true,
-        params: true,
-        deploymentExecutionConfig: true,
-        executionConfigVersion: true,
-        metadata: true,
-      },
-    })
-
-    if (!instance) {
-      this.logger.error(
-        `[StrategyPlazaOfficialSnapshotRepository.synchronizeOfficialRuntimeBindings] missing strategy instance; input=${JSON.stringify({ strategyInstanceId, templateId: template.id, snapshotId: snapshot.id })}; reason=strategy instance referenced by official snapshot does not exist`,
-      )
-      throw new Error(
-        `[StrategyPlazaOfficialSnapshotRepository.synchronizeOfficialRuntimeBindings] missing strategy instance; input=${JSON.stringify({ strategyInstanceId, templateId: template.id, snapshotId: snapshot.id })}; reason=strategy instance referenced by official snapshot does not exist`,
-      )
-    }
-
-    const deploymentExecutionConfig = this.mergeDeploymentExecutionConfig(
-      instance.deploymentExecutionConfig,
-      template.runConfig.deploymentExecutionConfig,
-    )
-    const executionConfigVersion = this.resolveExecutionConfigVersion(instance.executionConfigVersion)
-    const params = {
-      ...this.asRecord(instance.params),
-      deploymentExecutionConfig,
-      executionConfigVersion,
-    }
-    const metadata = {
-      ...this.asRecord(instance.metadata),
-      ...this.buildOfficialMetadata(template, sourceSnapshot),
-      bindingSource: 'PUBLISHED_SNAPSHOT',
-      publishedSnapshotId: snapshot.id,
-      snapshotHash: snapshot.snapshotHash,
-    }
-
-    await client.strategyTemplate.update({
-      where: { id: instance.strategyTemplateId },
-      data: {
-        defaultParams: buildOfficialTemplateParamsSnapshot(template) as Prisma.InputJsonValue,
-        rulesJson: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
-        metadata: this.buildOfficialMetadata(template, sourceSnapshot) as Prisma.InputJsonValue,
-      },
-    })
-
-    await client.strategyInstance.update({
+    await this.txHost.tx.strategyInstance.update({
       where: { id: strategyInstanceId },
       data: {
-        params: params as Prisma.InputJsonValue,
-        deploymentExecutionConfig: deploymentExecutionConfig as Prisma.InputJsonValue,
-        executionConfigVersion,
-        metadata: metadata as Prisma.InputJsonValue,
+        metadata: {
+          ...this.buildOfficialMetadata(template, sourceSnapshot),
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: snapshot.id,
+          snapshotHash: snapshot.snapshotHash,
+        } as Prisma.InputJsonValue,
       },
-    })
-
-    const subscriptions = await client.userStrategySubscription.findMany({
-      where: { strategyInstanceId },
-      select: { id: true, customParams: true },
-    })
-    for (const subscription of subscriptions) {
-      const customParams = this.asRecord(subscription.customParams)
-      await client.userStrategySubscription.update({
-        where: { id: subscription.id },
-        data: {
-          customParams: {
-            ...customParams,
-            deploymentExecutionConfig: this.mergeDeploymentExecutionConfig(
-              customParams.deploymentExecutionConfig,
-              template.runConfig.deploymentExecutionConfig,
-            ),
-            executionConfigVersion,
-          } as Prisma.InputJsonValue,
-        },
-      })
-    }
-
-    await client.strategyRuntimeExecutionState.updateMany({
-      where: {
-        strategyInstanceId,
-        publishedSnapshotId: snapshot.id,
-        snapshotHash: { not: snapshot.snapshotHash },
-      },
-      data: { snapshotHash: snapshot.snapshotHash },
     })
   }
 
@@ -429,25 +306,6 @@ export class StrategyPlazaOfficialSnapshotRepository {
       officialSnapshotHash: sourceSnapshot.snapshotHash,
       officialSnapshotId: sourceSnapshot.id,
       officialSnapshotVersion: sourceSnapshot.snapshotVersion,
-    }
-  }
-
-  private asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {}
-  }
-
-  private resolveExecutionConfigVersion(value: unknown): number {
-    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 1
-  }
-
-  private mergeDeploymentExecutionConfig(
-    current: unknown,
-    officialConfig: OfficialStrategyPlazaTemplate['runConfig']['deploymentExecutionConfig'],
-  ): Record<string, unknown> {
-    return {
-      ...officialConfig,
-      ...this.asRecord(current),
-      ...('tdMode' in officialConfig ? { tdMode: officialConfig.tdMode } : {}),
     }
   }
 

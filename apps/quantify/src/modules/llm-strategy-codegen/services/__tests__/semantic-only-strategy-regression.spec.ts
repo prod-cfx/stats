@@ -300,6 +300,33 @@ describe('semantic-only strategy regression verification', () => {
     }
   }
 
+  it('keeps default stop loss basis out of semantic open slots', async () => {
+    const semanticState = buildSemanticStateFromMessage('做多，亏损 5% 止损')
+
+    expect(semanticState.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      status: 'locked',
+      params: expect.objectContaining({
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+      openSlots: [],
+    }))
+  })
+
+  it('recognizes advanced risk expression without asking an unrelated basis question', async () => {
+    const semanticState = buildSemanticStateFromMessage('如果持仓亏损超过 5%，暂停策略并平仓')
+
+    expect(semanticState.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        capabilityStatus: 'recognized_unsupported',
+      }),
+    }))
+    expect(JSON.stringify(semanticState.risk)).not.toContain('stopLossBasis')
+    expect(JSON.stringify(semanticState.risk)).not.toContain('takeProfitBasis')
+  })
+
   it('rejects the MA price-vs-reference case as the explicit semantic compiler gap instead of checklist fallback publishing it', async () => {
     const semanticState = buildSemanticStateFromMessage('OKX 现货 BTCUSDT 15m；15m 收盘确认当价格突破 MA50 时买入；15m 收盘确认当价格跌破 MA10 时卖出；亏损 5% 止损，盈利 10% 止盈；单笔 10%。')
     const result = await expectGenerationRejected('ma-price-reference-gap', semanticState)

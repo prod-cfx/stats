@@ -352,10 +352,6 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       fee: 51.737672883,
       feeCurrency: 'DOGE',
       orderId: 'ord-1',
-      source: 'ledger',
-      ledgerApplied: true,
-      reconcileRequired: false,
-      executionStatus: null,
     })
     expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
       'user-1',
@@ -505,7 +501,6 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         priceSource: 'mark',
         orderType: 'market',
         timeInForce: 'IOC',
-        tdMode: null,
       },
       executionConfigVersion: 2,
       effectiveAllowedLeverageRange: { min: 1, max: 4 },
@@ -1833,8 +1828,6 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
   })
 
   it('refreshes local open positions before computing detail pnl', async () => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-04-29T12:00:00.000Z'))
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-sync-before-detail',
@@ -1912,32 +1905,28 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       positionSyncService as any,
     )
 
-    try {
-      const detail = await service.getStrategyDetail('user-1', 'inst-sync-before-detail')
+    const detail = await service.getStrategyDetail('user-1', 'inst-sync-before-detail')
 
-      expect(positionSyncService.syncUserPositions).toHaveBeenCalledWith(
-        'user-1',
-        'acc-sync-before-detail',
-        'okx',
-        'perp',
-        'auto',
-        'account-strategy-detail',
-        'exchange-account-1',
-      )
-      expect(detail.positionOverview).toEqual({
-        openPositionsCount: 0,
-        closedPositionsCount: 1,
-        totalRealizedPnl: -0.11,
-        totalUnrealizedPnl: 0,
-      })
-      expect(detail.accountOverview).toEqual(expect.objectContaining({
-        totalPnl: -0.11,
-        todayPnl: -0.11,
-        totalEquity: 31076.68,
-      }))
-    } finally {
-      jest.useRealTimers()
-    }
+    expect(positionSyncService.syncUserPositions).toHaveBeenCalledWith(
+      'user-1',
+      'acc-sync-before-detail',
+      'okx',
+      'perp',
+      'auto',
+      'account-strategy-detail',
+      'exchange-account-1',
+    )
+    expect(detail.positionOverview).toEqual({
+      openPositionsCount: 0,
+      closedPositionsCount: 1,
+      totalRealizedPnl: -0.11,
+      totalUnrealizedPnl: 0,
+    })
+    expect(detail.accountOverview).toEqual(expect.objectContaining({
+      totalPnl: -0.11,
+      todayPnl: -0.11,
+      totalEquity: 31076.68,
+    }))
   })
 
   it('revalues open positions from latest market quotes when stored unrealized pnl is stale', async () => {
@@ -2949,7 +2938,6 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         priceSource: 'close',
         orderType: 'market',
         timeInForce: 'gtc',
-        tdMode: null,
       },
       effectiveAllowedLeverageRange: null,
     }))

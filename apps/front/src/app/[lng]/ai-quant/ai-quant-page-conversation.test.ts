@@ -1,8 +1,8 @@
-import type { ConversationState } from './ai-quant-page-conversation'
 import { describe, expect, it } from '@jest/globals'
+
+import type { ConversationState } from './ai-quant-page-conversation'
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
-  buildBacktestDraftConfigFromValues,
   buildBacktestSummaryResult,
   buildStrategyRevisionPromptMessage,
   createConversation,
@@ -69,97 +69,6 @@ describe('ai-quant-page-conversation', () => {
       tradeCount: 0,
       openTradeCount: 1,
     })).toBe(false)
-    expect(isDeployableBacktestResult({
-      id: 'bt-config-changed',
-      maxDrawdownPct: 5,
-      totalReturnPct: 8,
-      winRatePct: 55,
-      tradeCount: 3,
-      recoveryStatus: 'config_changed',
-    })).toBe(false)
-  })
-
-  it('does not build a backtest draft config from invalid execution values', () => {
-    expect(buildBacktestDraftConfigFromValues({
-      backtestRangePreset: '30D',
-      backtestInitialCash: 'not-a-number',
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: false,
-    })).toBeNull()
-
-    expect(buildBacktestDraftConfigFromValues({
-      backtestRangePreset: '30D',
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: 'maybe',
-    })).toBeNull()
-
-    expect(buildBacktestDraftConfigFromValues({
-      backtestRangePreset: '30D',
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-    })).toBeNull()
-  })
-
-  it('does not restore lastBacktestRef when its execution config is invalid', () => {
-    const conversation = createConversationFromServerConversation({
-      id: 'conv-invalid-last-backtest',
-      conversationTitle: 'remote',
-      status: 'PUBLISHED',
-      conversationMessages: [],
-      publishedSnapshotId: 'snapshot-invalid',
-      publishedSnapshotParamValues: {
-        exchange: 'okx',
-        symbol: 'DOGEUSDT',
-        marketType: 'spot',
-        baseTimeframe: '1h',
-        positionPct: 10,
-      },
-      publishedSnapshotStrategyConfig: {
-        exchange: 'okx',
-        symbol: 'DOGEUSDT',
-        marketType: 'spot',
-        baseTimeframe: '1h',
-        positionPct: 10,
-      },
-      lastBacktestRef: {
-        jobId: 'btjob-invalid',
-        publishedSnapshotId: 'snapshot-invalid',
-        config: {
-          range: {
-            preset: '7D',
-          },
-          execution: {
-            initialCash: 0,
-            leverage: -1,
-            slippageBps: -10,
-            feeBps: -5,
-            priceSource: 'close',
-            allowPartial: false,
-          },
-        },
-        summary: {
-          maxDrawdownPct: 0.02,
-          totalReturnPct: 0.03,
-          winRatePct: 100,
-          tradeCount: 1,
-          marketType: 'spot',
-        },
-        completedAt: '2026-04-23T10:40:43.354Z',
-      },
-    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
-
-    expect(conversation.backtestResult).toBeNull()
-    expect(conversation.backtestDraftConfig).toBeNull()
   })
 
   it('preserves open-trade summary fields when building a backtest summary result', () => {
@@ -470,80 +379,6 @@ describe('ai-quant-page-conversation', () => {
     }))
   })
 
-  it('restores lastBacktestRef as config changed when snapshot matches but execution config differs', () => {
-    const conversation = createConversationFromServerConversation({
-      id: 'conv-config-changed',
-      conversationTitle: 'remote',
-      status: 'PUBLISHED',
-      conversationMessages: [],
-      publishedSnapshotId: 'snapshot-1',
-      publishedSnapshotParamValues: null,
-      publishedSnapshotStrategyConfig: {
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        marketType: 'spot',
-        baseTimeframe: '15m',
-        positionPct: 10,
-      },
-      publishedSnapshotBacktestConfigDefaults: {
-        initialCash: 10000,
-        leverage: 1,
-        slippageBps: 10,
-        feeBps: 5,
-        priceSource: 'close',
-        allowPartial: true,
-      },
-      backtestDraftConfig: {
-        range: {
-          preset: '30D',
-        },
-        execution: {
-          initialCash: 20000,
-          leverage: 1,
-          slippageBps: 10,
-          feeBps: 5,
-          priceSource: 'close',
-          allowPartial: false,
-        },
-      },
-      lastBacktestRef: {
-        jobId: 'btjob-config-changed',
-        publishedSnapshotId: 'snapshot-1',
-        config: {
-          range: {
-            preset: '30D',
-          },
-          execution: {
-            initialCash: 10000,
-            leverage: 1,
-            slippageBps: 10,
-            feeBps: 5,
-            priceSource: 'close',
-            allowPartial: true,
-          },
-        },
-        summary: {
-          maxDrawdownPct: 7,
-          totalReturnPct: 11,
-          winRatePct: 58,
-          tradeCount: 4,
-          marketType: 'spot',
-        },
-        completedAt: '2026-04-23T00:04:00.000Z',
-      },
-    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
-
-    expect(conversation.backtestResult).toEqual(expect.objectContaining({
-      id: 'btjob-config-changed',
-      maxDrawdownPct: 7,
-      totalReturnPct: 11,
-      winRatePct: 58,
-      tradeCount: 4,
-      marketType: 'spot',
-      recoveryStatus: 'config_changed',
-    }))
-  })
-
   it('restores backtest summary using normalized snapshot id and snapshot-owned symbol truth', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-1',
@@ -749,7 +584,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.backtestResult).toBeNull()
   })
 
-  it('restores lastBacktestRef as config changed when execution config has drifted under the same snapshot', () => {
+  it('does not restore lastBacktestRef when execution config has drifted under the same snapshot', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-1',
       conversationTitle: 'remote',
@@ -811,14 +646,7 @@ describe('ai-quant-page-conversation', () => {
       },
     } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
 
-    expect(conversation.backtestResult).toEqual(expect.objectContaining({
-      id: 'btjob-execution-drift',
-      maxDrawdownPct: 8,
-      totalReturnPct: 12,
-      winRatePct: 60,
-      tradeCount: 5,
-      recoveryStatus: 'config_changed',
-    }))
+    expect(conversation.backtestResult).toBeNull()
   })
 
   it('restores backtest summary using explicit backtestDraftConfig without relying on implicit range defaults', () => {
@@ -909,7 +737,7 @@ describe('ai-quant-page-conversation', () => {
     }))
   })
 
-  it('backfills missing server backtestDraftConfig from lastBacktestRef before restoring the result', () => {
+  it('does not restore lastBacktestRef when explicit backtestDraftConfig is missing', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-draft-missing',
       conversationTitle: 'remote',
@@ -965,38 +793,7 @@ describe('ai-quant-page-conversation', () => {
       },
     } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
 
-    expect(conversation.backtestResult).toEqual(expect.objectContaining({
-      id: 'btjob-7d',
-      symbol: 'DOGEUSDT',
-      maxDrawdownPct: 0.02,
-      totalReturnPct: 0.03,
-      winRatePct: 100,
-      tradeCount: 1,
-      marketType: 'spot',
-    }))
-    expect(conversation.backtestResult?.recoveryStatus).toBeUndefined()
-    expect(conversation.backtestDraftConfig).toEqual({
-      range: {
-        preset: '7D',
-      },
-      execution: {
-        initialCash: 10000,
-        leverage: null,
-        slippageBps: 10,
-        feeBps: 5,
-        priceSource: 'close',
-        allowPartial: false,
-      },
-    })
-    expect(conversation.paramValues).toEqual(expect.objectContaining({
-      backtestRangePreset: '7D',
-      backtestInitialCash: 10000,
-      backtestLeverage: null,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: false,
-    }))
+    expect(conversation.backtestResult).toBeNull()
   })
 
   it('resets transient backtest state and clears legacy implicit execution config during hydration', () => {

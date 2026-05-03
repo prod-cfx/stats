@@ -102,56 +102,24 @@ export class SignalExecutionRepository {
     })
   }
 
-  async markFailed(id: string, errorMessage: string, metadataPatch?: Prisma.JsonObject) {
-    const existing = metadataPatch
-      ? await this.txHost.tx.userSignalExecution.findUnique({
-          where: { id },
-          select: { metadata: true },
-        })
-      : null
-    const current = this.asExecutionMetadata(existing?.metadata)
-    const nextMetadata = metadataPatch
-      ? {
-          ...current,
-          ...metadataPatch,
-          stageHistory: Array.isArray(current.stageHistory) ? current.stageHistory : [],
-        }
-      : current
-
+  async markFailed(id: string, errorMessage: string) {
     await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         status: ExecutionStatus.FAILED,
         errorMessage,
         executedAt: new Date(),
-        ...(metadataPatch ? { metadata: nextMetadata } : {}),
       },
     })
   }
 
-  async markSkipped(id: string, reason: string, metadataPatch?: Prisma.JsonObject) {
-    const existing = metadataPatch
-      ? await this.txHost.tx.userSignalExecution.findUnique({
-          where: { id },
-          select: { metadata: true },
-        })
-      : null
-    const current = this.asExecutionMetadata(existing?.metadata)
-    const nextMetadata = metadataPatch
-      ? {
-          ...current,
-          ...metadataPatch,
-          stageHistory: Array.isArray(current.stageHistory) ? current.stageHistory : [],
-        }
-      : undefined
-
+  async markSkipped(id: string, reason: string) {
     await this.txHost.tx.userSignalExecution.update({
       where: { id },
       data: {
         status: ExecutionStatus.SKIPPED,
         errorMessage: reason,
         executedAt: new Date(),
-        ...(metadataPatch ? { metadata: nextMetadata } : {}),
       },
     })
   }
