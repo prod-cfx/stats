@@ -1,5 +1,6 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
 import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
+import { getOfficialTemplateDeploymentExecutionConfig } from './official-strategy-plaza-runtime-contract'
 
 function evidenceFor(template: OfficialStrategyPlazaTemplate) {
   const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === template.id)
@@ -37,12 +38,13 @@ export function buildOfficialTemplateStrategyConfig(template: OfficialStrategyPl
 }
 
 export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
+  const config = getOfficialTemplateDeploymentExecutionConfig(template)
   return {
     initialCash: 10000,
     leverage: resolveOfficialTemplateLeverage(template),
     slippageBps: 10,
     feeBps: 5,
-    priceSource: template.runConfig.deploymentExecutionConfig.priceSource,
+    priceSource: config.priceSource,
     allowPartial: false,
   }
 }
@@ -50,19 +52,20 @@ export function buildOfficialTemplateBacktestConfigDefaults(template: OfficialSt
 export function buildOfficialTemplateDeploymentExecutionDefaults(
   template: OfficialStrategyPlazaTemplate,
 ): Record<string, unknown> {
-  const config = template.runConfig.deploymentExecutionConfig
+  const config = getOfficialTemplateDeploymentExecutionConfig(template)
   return {
-    leverage: resolveOfficialTemplateLeverage(template),
+    leverage: config.leverage,
     priceSource: config.priceSource,
     orderType: config.orderType,
     timeInForce: config.timeInForce,
+    ...('tdMode' in config ? { tdMode: config.tdMode } : {}),
   }
 }
 
 export function buildOfficialTemplateDeploymentExecutionConstraints(
   template: OfficialStrategyPlazaTemplate,
 ): Record<string, unknown> {
-  const config = template.runConfig.deploymentExecutionConfig
+  const config = getOfficialTemplateDeploymentExecutionConfig(template)
   const leverage = resolveOfficialTemplateLeverage(template)
   return {
     platformRiskMaxLeverage: leverage,
@@ -71,6 +74,7 @@ export function buildOfficialTemplateDeploymentExecutionConstraints(
     supportedPriceSources: [config.priceSource],
     supportedOrderTypes: [config.orderType],
     supportedTimeInForce: [config.timeInForce],
+    ...('tdMode' in config ? { supportedTdModes: [config.tdMode] } : {}),
     constraintExplanation: 'official strategy plaza template runtime constraints',
   }
 }

@@ -216,4 +216,92 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
       }),
     })
   })
+
+  it('checks exit admission closable positions with an existence query', async () => {
+    const findFirst = jest.fn().mockResolvedValue({ id: 'position-1' })
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        position: { findFirst },
+      },
+    } as any)
+
+    await expect(repo.hasClosablePositionForExitAdmission({
+      strategyId: 'strategy-template-1',
+      strategyInstanceId: 'strategy-instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+    })).resolves.toBe(true)
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        exchangeId: 'okx',
+        marketType: 'perp',
+        positionSide: 'LONG',
+        status: 'OPEN',
+        quantity: { gt: 0 },
+        account: expect.objectContaining({
+          strategyId: 'strategy-template-1',
+          user: {
+            strategySubscriptions: {
+              some: expect.objectContaining({
+                strategyInstanceId: 'strategy-instance-1',
+                status: 'active',
+                exchangeAccount: { exchangeId: 'okx' },
+              }),
+            },
+          },
+        }),
+      }),
+      select: expect.objectContaining({
+        id: true,
+      }),
+    })
+  })
+
+  it('detects exit reconcile risk from pending or unreconciled entry executions and same-direction exits', async () => {
+    const count = jest.fn().mockResolvedValue(1)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        userSignalExecution: { count },
+      },
+    } as any)
+
+    await expect(repo.hasExitReconcileRisk({
+      strategyId: 'strategy-template-1',
+      strategyInstanceId: 'strategy-instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      positionSide: 'LONG',
+      direction: 'CLOSE_LONG',
+    })).resolves.toBe(true)
+
+    expect(count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        orderSide: { in: ['BUY', 'SELL'] },
+        positionSide: 'LONG',
+        OR: expect.arrayContaining([
+          { status: 'PENDING' },
+          expect.objectContaining({
+            status: 'FAILED',
+            OR: expect.arrayContaining([
+              { metadata: { path: ['reconcileRequired'], equals: true } },
+              { metadata: { path: ['ledgerApplied'], equals: false } },
+            ]),
+          }),
+        ]),
+        signal: expect.objectContaining({
+          strategyInstanceId: 'strategy-instance-1',
+          OR: expect.arrayContaining([
+            { signalType: 'ENTRY' },
+            { signalType: 'EXIT', direction: 'CLOSE_LONG' },
+          ]),
+          symbol: { code: { in: ['BTCUSDT', 'BTCUSDT:PERP'] } },
+        }),
+      }),
+    })
+  })
 })

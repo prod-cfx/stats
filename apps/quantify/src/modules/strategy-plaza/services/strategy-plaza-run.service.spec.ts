@@ -22,6 +22,7 @@ describe('StrategyPlazaRunService', () => {
         priceSource: 'mark'
         orderType: 'market'
         timeInForce: 'ioc'
+        tdMode: 'cross'
       }
     }
   }
@@ -37,7 +38,7 @@ describe('StrategyPlazaRunService', () => {
       positionPct: 10,
       leverage: 2,
       publishedSnapshotId: 'official-plaza-ma-cross-v1-snapshot',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
     },
   } satisfies TemplateStub
 
@@ -112,7 +113,7 @@ describe('StrategyPlazaRunService', () => {
       exchangeAccountId: 'acct-okx-demo',
       exchangeAccountName: 'OKX Demo',
       mode: 'TESTNET',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
     })
   })
 })

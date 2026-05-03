@@ -17,6 +17,30 @@ describe('buildAccountStrategyMixedTimeline', () => {
     expect(timeline[0].at).toBe('2026-03-20T10:05:00.000Z')
     expect(timeline[29].at).toBe('2026-03-20T10:34:00.000Z')
   })
+
+  it('renders no-open-position close skips as neutral timeline information', () => {
+    const timeline = buildAccountStrategyMixedTimeline({
+      instance: null,
+      subscription: null,
+      signalExecutions: [{
+        createdAt: new Date(Date.UTC(2026, 3, 30, 12, 0)),
+        status: 'SKIPPED',
+        errorMessage: 'No open position to close for this signal',
+        metadata: {
+          skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
+          severity: 'info',
+        },
+      }],
+      trades: [],
+    })
+
+    expect(timeline).toEqual([expect.objectContaining({
+      event: '信号跳过',
+      note: '无持仓可平，已跳过',
+      severity: 'info',
+      skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
+    })])
+  })
 })
 
 describe('buildAccountStrategyLatestOrders', () => {
@@ -137,25 +161,25 @@ describe('buildAccountStrategyRuntimeSemanticSummary', () => {
       symbol: 'BTCUSDT',
       openPositionsCount: 0,
       ruleSummary: {
-        executionPolicy: null,
         rules: [
           {
-            id: null,
+            id: 'entry-rule',
             phase: 'entry',
-            conditionKey: null,
-            operator: null,
+            conditionKey: 'close_1m',
+            operator: 'GT',
             value: null,
             actions: ['OPEN_LONG'],
           },
           {
-            id: null,
+            id: 'exit-rule',
             phase: 'exit',
-            conditionKey: null,
-            operator: null,
+            conditionKey: 'close_1m',
+            operator: 'LT',
             value: null,
             actions: ['CLOSE_LONG'],
           },
         ],
+        executionPolicy: null,
       },
       trades: [
         {

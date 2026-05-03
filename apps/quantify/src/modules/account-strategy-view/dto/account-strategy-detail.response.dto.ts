@@ -22,6 +22,9 @@ export class AccountStrategyExecutionConfigDto {
 
   @ApiPropertyOptional({ nullable: true })
   timeInForce!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  tdMode!: string | null
 }
 
 export class AccountStrategyCompatibilityMetadataDto {
@@ -107,6 +110,12 @@ export class AccountStrategyTimelineEventDto {
 
   @ApiPropertyOptional({ nullable: true })
   note?: string | null
+
+  @ApiPropertyOptional({ enum: ['info', 'warning', 'error'], nullable: true })
+  severity?: 'info' | 'warning' | 'error' | null
+
+  @ApiPropertyOptional({ nullable: true })
+  skipKind?: string | null
 }
 
 export class AccountStrategyAccountOverviewDto {
