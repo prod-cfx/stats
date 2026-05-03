@@ -4,10 +4,11 @@ import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 interface GuardProgramNode {
   id: string
 	payload: {
-		kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT' | 'MAX_POSITION_PCT'
+		kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT' | 'MAX_POSITION_PCT' | 'EXPRESSION_GUARD'
 		scope?: 'position' | 'strategy' | 'order_program'
 		appliesTo?: 'long' | 'short' | 'both'
 		value?: number
+		predicateRef?: string
 		onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
 	}
 }
@@ -23,7 +24,7 @@ export interface CompiledGuardState {
 export function evaluateGuards(
   ctx: StrategyExecutionContextV1,
   guards: readonly GuardProgramNode[],
-  _exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
   guardOrder: readonly string[],
 ): Readonly<CompiledGuardState> {
   const guardIndex = new Map(guards.map(guard => [guard.id, guard]))
@@ -38,7 +39,7 @@ export function evaluateGuards(
   for (const guardId of guardOrder) {
     const guard = guardIndex.get(guardId)
     if (!guard) continue
-    const breached = isGuardBreached(ctx, guard)
+    const breached = isGuardBreached(ctx, guard, exprValues)
     if (!breached) continue
 
     state.triggered = [...state.triggered, guardId]
@@ -68,7 +69,24 @@ export function evaluateGuards(
 function isGuardBreached(
   ctx: StrategyExecutionContextV1,
   guard: GuardProgramNode,
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
 ): boolean {
+  if (guard.payload.kind === 'EXPRESSION_GUARD') {
+    if (typeof guard.payload.predicateRef !== 'string' || exprValues[guard.payload.predicateRef] !== true) {
+      return false
+    }
+
+    const qty = readPositionQty(ctx)
+    if (guard.payload.scope === 'position' && qty === 0) {
+      return false
+    }
+    if (qty !== 0 && !doesGuardApplyToPositionSide(guard, qty)) {
+      return false
+    }
+
+    return true
+  }
+
   if (guard.payload.kind === 'MAX_POSITION_PCT') {
     return isMaxPositionPctBreached(ctx, guard)
   }

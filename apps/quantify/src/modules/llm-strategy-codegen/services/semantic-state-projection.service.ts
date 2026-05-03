@@ -797,6 +797,14 @@ export class SemanticStateProjectionService {
       .filter(risk => risk.status === 'locked')
       .sort((left, right) => this.compareRiskAtoms(left, right))
       .map((risk) => {
+        if (risk.key === 'risk.condition_expression') {
+          const condition = this.formatSemanticExpression(risk.params.condition)
+          if (!condition) {
+            return ''
+          }
+          return `风控：当${condition}时${this.describeRiskExpressionEffect(risk.params.effect)}`
+        }
+
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
           return ''
@@ -824,6 +832,27 @@ export class SemanticStateProjectionService {
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private describeRiskExpressionEffect(rawEffect: unknown): string {
+    if (!rawEffect || typeof rawEffect !== 'object') {
+      return '执行风控'
+    }
+
+    const effectType = (rawEffect as { type?: unknown }).type
+    if (effectType === 'pause_strategy') {
+      return '暂停策略'
+    }
+    if (effectType === 'reduce_position') {
+      const reducePct = (rawEffect as { reducePct?: unknown }).reducePct
+      return typeof reducePct === 'number' && Number.isFinite(reducePct)
+        ? `减仓${this.formatPercent(reducePct)}%`
+        : '减仓'
+    }
+    if (effectType === 'notify_only') {
+      return '提醒'
+    }
+    return '平仓'
   }
 
   private describeRiskBasis(rawBasis: unknown): string {

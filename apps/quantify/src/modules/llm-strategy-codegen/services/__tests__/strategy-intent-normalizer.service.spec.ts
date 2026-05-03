@@ -293,6 +293,34 @@ describe('strategyIntentNormalizerService', () => {
     }))
   })
 
+  it('normalizes legacy drawdown riskRules into structured risk expressions', () => {
+    const result = service.normalize({
+      riskRules: {
+        maxDrawdownPct: 12,
+        maxSingleLossPct: 4,
+      },
+    })
+
+    expect(result.normalizedIntent.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.condition_expression',
+        params: expect.objectContaining({
+          scope: 'strategy',
+          effect: { type: 'pause_strategy' },
+          capabilityStatus: 'recognized_unsupported',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'risk.condition_expression',
+        params: expect.objectContaining({
+          scope: 'current_position',
+          effect: { type: 'close_position' },
+          capabilityStatus: 'supported',
+        }),
+      }),
+    ]))
+  })
+
   it('marks absent legacy stop loss basis defaults as system generated', () => {
     const result = service.normalize({
       riskRules: {

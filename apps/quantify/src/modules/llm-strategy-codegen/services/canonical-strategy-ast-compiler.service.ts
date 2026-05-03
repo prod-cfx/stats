@@ -84,10 +84,18 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private compileGuards(ir: CanonicalStrategyIrV1): GuardProgramNode[] {
+    const exprIdIndex = this.buildExprIdIndex(
+      ir,
+      this.orderedSeries(ir),
+      this.orderedLevelSets(ir),
+      this.orderedPredicates(ir),
+    )
     return ir.riskPolicy.guards.map((guard, index) => ({
       id: `guard_${String(index + 1).padStart(2, '0')}_${guard.id}`,
       sourceRef: guard.id,
-      payload: guard,
+      payload: guard.predicateRef
+        ? { ...guard, predicateRef: this.exprIdFor(guard.predicateRef, exprIdIndex) }
+        : guard,
     }))
   }
 

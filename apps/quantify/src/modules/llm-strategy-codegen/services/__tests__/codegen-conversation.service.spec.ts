@@ -3045,7 +3045,21 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             { key: 'close_long' },
           ],
           risk: [
-            { key: 'risk.max_drawdown_pct', params: { valuePct: 12 } },
+            {
+              key: 'risk.condition_expression',
+              params: {
+                condition: {
+                  kind: 'expression',
+                  op: 'LTE',
+                  left: { kind: 'position', field: 'pnl_pct' },
+                  right: { kind: 'constant', value: -12, unit: 'percent' },
+                },
+                effect: { type: 'pause_strategy' },
+                scope: 'strategy',
+                capabilityStatus: 'recognized_unsupported',
+                unsupportedReason: 'risk_expression_compiler_not_available',
+              },
+            },
           ],
           position: {
             mode: 'fixed_ratio',

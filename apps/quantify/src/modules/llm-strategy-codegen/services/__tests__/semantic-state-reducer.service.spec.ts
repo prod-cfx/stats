@@ -1260,13 +1260,21 @@ describe('SemanticStateReducerService', () => {
     })
 
     expect(maxDrawdown.risk[0]).toEqual(expect.objectContaining({
-      key: 'risk.max_drawdown_pct',
-      params: expect.objectContaining({ valuePct: 12 }),
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        scope: 'strategy',
+        effect: { type: 'pause_strategy' },
+        capabilityStatus: 'recognized_unsupported',
+      }),
       status: 'locked',
     }))
     expect(maxSingleLoss.risk[0]).toEqual(expect.objectContaining({
-      key: 'risk.max_single_loss_pct',
-      params: expect.objectContaining({ valuePct: 3 }),
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        scope: 'current_position',
+        effect: { type: 'close_position' },
+        capabilityStatus: 'supported',
+      }),
       status: 'locked',
     }))
   })

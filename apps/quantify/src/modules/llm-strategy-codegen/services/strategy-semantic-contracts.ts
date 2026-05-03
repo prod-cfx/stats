@@ -161,7 +161,18 @@ const SUPPORTED_RISK_KEYS = new Set<string>([
 ])
 const SUPPORTED_RISK_EFFECT_TYPES = new Set<string>(['close_position', 'reduce_position', 'notify_only', 'pause_strategy'])
 const SUPPORTED_RISK_SCOPES = new Set<string>(['current_position', 'long', 'short', 'both', 'strategy', 'account'])
-const SUPPORTED_RISK_BASES = new Set<string>(['entry_avg_price', 'position_pnl'])
+const SUPPORTED_RISK_BASES = new Set<string>([
+  'prev_close',
+  'entry_avg_price',
+  'position_pnl',
+  'peak_equity',
+  'peak_position_pnl',
+  'upper_band',
+  'lower_band',
+  'middle_band',
+  'last_high',
+  'last_low',
+])
 const SUPPORTED_RISK_BASIS_SOURCES = new Set<string>(['user_explicit', 'system_default', 'derived'])
 const POSITION_SIZING_VALUE_EPSILON = 1e-9
 

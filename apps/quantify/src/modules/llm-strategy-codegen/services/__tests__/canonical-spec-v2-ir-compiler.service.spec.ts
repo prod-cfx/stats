@@ -1,7 +1,7 @@
 import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec-v2'
 import type { SemanticExpressionOperand, SemanticState } from '../../types/semantic-state'
-import { evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
+import { evaluateExprPool, evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -2021,6 +2021,239 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect.objectContaining({ phase: 'entry', cooldownBars: 5 }),
       expect.objectContaining({ phase: 'exit' }),
     ]))
+  })
+
+  it('compiles strategy pause risk expressions into halt guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec: CanonicalStrategySpecV2 = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'entry',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+        {
+          id: 'semantic-daily-loss-halt',
+          phase: 'risk',
+          sideScope: 'both',
+          priority: 120,
+          condition: {
+            kind: 'AND',
+            children: [
+              {
+                kind: 'expression',
+                op: 'LTE',
+                left: { kind: 'position', field: 'pnl_pct' },
+                right: { kind: 'constant', value: -5, unit: 'percent' },
+              },
+              {
+                kind: 'expression',
+                op: 'GT',
+                left: { kind: 'series', source: 'bar', field: 'close' },
+                right: { kind: 'series', source: 'bar', field: 'open' },
+              },
+            ],
+          },
+          actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        },
+      ],
+    }
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const haltGuard = ast.guards.find(guard => guard.sourceRef === 'guard_semantic-daily-loss-halt')
+    expect(haltGuard?.payload.predicateRef).toMatch(/^expr_/)
+    const exprValues = evaluateExprPool(
+      {
+        position: { qty: 1, avgEntryPrice: 100 },
+        currentPrice: 94,
+        bars: [{ open: 90, high: 95, low: 89, close: 94 }],
+        baseTimeframeBar: { close: 94, open: 90 },
+      } as any,
+      ast.exprPool as any,
+      ast.topology.exprOrder,
+      ast.executionModel as any,
+    )
+    const guardState = evaluateGuards(
+      {
+        position: { qty: 1, avgEntryPrice: 100 },
+        currentPrice: 94,
+        baseTimeframeBar: { close: 94, open: 90 },
+      } as any,
+      ast.guards as any,
+      exprValues,
+      ast.topology.guardOrder,
+    )
+    const entryProgram = ast.decisionPrograms.find(program => program.phase === 'entry')
+    const decision = runDecisionPrograms(
+      {
+        position: { qty: 1, avgEntryPrice: 100 },
+        currentPrice: 94,
+        baseTimeframeBar: { close: 94, open: 90 },
+      } as any,
+      ast.decisionPrograms as any,
+      { [entryProgram!.when]: true },
+      guardState,
+      ast.topology.decisionOrder,
+    )
+
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        onBreach: 'HALT_STRATEGY',
+        predicateRef: result.ir.riskPolicy.guards.find(guard => guard.id === 'guard_semantic-daily-loss-halt')?.predicateRef,
+      }),
+    ]))
+    expect(guardState.strategyHalt).toBe(true)
+    expect(decision).toEqual(expect.objectContaining({
+      action: 'NOOP',
+      reason: 'compiled.strategy_halt',
+    }))
+  })
+
+  it('compiles close-position risk expressions into sign-aware force-exit guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec: CanonicalStrategySpecV2 = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'semantic-single-loss',
+          phase: 'risk',
+          sideScope: 'both',
+          priority: 120,
+          condition: {
+            kind: 'expression',
+            op: 'LTE',
+            left: { kind: 'position', field: 'pnl_pct' },
+            right: { kind: 'constant', value: -3, unit: 'percent' },
+          },
+          actions: [{ type: 'FORCE_EXIT' }],
+        },
+      ],
+    }
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const forceExitIrGuard = result.ir.riskPolicy.guards.find(guard => guard.id === 'guard_semantic-single-loss')
+    const forceExitAstGuard = ast.guards.find(guard => guard.sourceRef === 'guard_semantic-single-loss')
+    expect(forceExitIrGuard).toEqual(expect.objectContaining({
+      kind: 'EXPRESSION_GUARD',
+      scope: 'position',
+      onBreach: 'FORCE_EXIT',
+    }))
+    expect(forceExitAstGuard?.payload.predicateRef).toMatch(/^expr_/)
+    const exprValues = evaluateExprPool(
+      {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 104,
+        baseTimeframeBar: { close: 104 },
+      } as any,
+      ast.exprPool as any,
+      ast.topology.exprOrder,
+      ast.executionModel as any,
+    )
+
+    const guardState = evaluateGuards(
+      {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 104,
+        baseTimeframeBar: { close: 104 },
+      } as any,
+      ast.guards as any,
+      exprValues,
+      ast.topology.guardOrder,
+    )
+    const decision = runDecisionPrograms(
+      {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 104,
+        baseTimeframeBar: { close: 104 },
+      } as any,
+      ast.decisionPrograms as any,
+      {},
+      guardState,
+      ast.topology.decisionOrder,
+    )
+
+    expect(guardState.forceExit).toBe(true)
+    expect(decision).toEqual(expect.objectContaining({
+      action: 'CLOSE_SHORT',
+      reason: 'compiled.force_exit',
+    }))
+
+    const longOnlyGuardState = evaluateGuards(
+      {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 104,
+        baseTimeframeBar: { close: 104 },
+      } as any,
+      [{
+        ...forceExitAstGuard,
+        payload: {
+          ...forceExitAstGuard?.payload,
+          appliesTo: 'long',
+        },
+      }] as any,
+      exprValues,
+      [forceExitAstGuard?.id],
+    )
+    expect(longOnlyGuardState.forceExit).toBe(false)
   })
 
   it('compiles short breakout and short-side trade management into deterministic IR', () => {

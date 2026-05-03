@@ -1,3 +1,4 @@
+import type { SemanticExpression } from '../types/semantic-state'
 import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type {
   NormalizedActionAtom,
@@ -841,18 +842,37 @@ export class StrategyIntentNormalizerService {
     }
     if (typeof riskRules.maxDrawdownPct === 'number' && Number.isFinite(riskRules.maxDrawdownPct)) {
       risk.push({
-        key: 'risk.max_drawdown_pct',
-        params: { valuePct: riskRules.maxDrawdownPct },
+        key: 'risk.condition_expression',
+        params: this.buildLegacyRiskExpressionParams(riskRules.maxDrawdownPct, 'strategy'),
       })
     }
     if (typeof riskRules.maxSingleLossPct === 'number' && Number.isFinite(riskRules.maxSingleLossPct)) {
       risk.push({
-        key: 'risk.max_single_loss_pct',
-        params: { valuePct: riskRules.maxSingleLossPct },
+        key: 'risk.condition_expression',
+        params: this.buildLegacyRiskExpressionParams(riskRules.maxSingleLossPct, 'current_position'),
       })
     }
 
     return risk
+  }
+
+  private buildLegacyRiskExpressionParams(valuePct: number, scope: 'strategy' | 'current_position'): Record<string, unknown> {
+    const condition: SemanticExpression = {
+      kind: 'predicate',
+      op: 'LTE',
+      left: { kind: 'position', field: 'pnl_pct' },
+      right: { kind: 'constant', value: -valuePct, unit: 'percent' },
+    }
+
+    return {
+      condition,
+      effect: scope === 'strategy'
+        ? { type: 'pause_strategy' }
+        : { type: 'close_position' },
+      scope,
+      capabilityStatus: scope === 'strategy' ? 'recognized_unsupported' : 'supported',
+      ...(scope === 'strategy' ? { unsupportedReason: 'risk_expression_compiler_not_available' } : {}),
+    }
   }
 
   private resolveLegacyRiskInferredAssumptions(rawInferredAssumptions: unknown): Set<string> {

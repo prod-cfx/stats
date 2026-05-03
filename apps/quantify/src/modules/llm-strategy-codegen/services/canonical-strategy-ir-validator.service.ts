@@ -24,6 +24,11 @@ export class CanonicalStrategyIrValidatorService {
     }
 
     for (const guard of ir.riskPolicy.guards) {
+      if (guard.kind === 'EXPRESSION_GUARD') {
+        if (typeof guard.predicateRef !== 'string' || !predicateIndex.has(guard.predicateRef)) {
+          throw new Error('codegen.ir_guard_predicate_missing')
+        }
+      }
       if (
         guard.appliesTo !== undefined
         && guard.appliesTo !== 'long'

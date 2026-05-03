@@ -128,7 +128,7 @@ export class CanonicalSpecV2IrCompilerService {
     const guards: RiskGuard[] = []
 
     for (const rule of input.canonicalSpec.rules) {
-      const guard = this.tryCompileRiskGuard(rule)
+      const guard = this.tryCompileRiskGuard(rule, context)
       if (guard) {
         guards.push(guard)
         continue
@@ -1079,7 +1079,32 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
-  private tryCompileRiskGuard(rule: CanonicalRuleV2): RiskGuard | null {
+  private tryCompileRiskGuard(rule: CanonicalRuleV2, context: CompileContext): RiskGuard | null {
+    if (rule.phase === 'risk' && rule.condition.kind !== 'atom') {
+      const predicateRef = this.compileCondition(rule.condition, context, rule.id)
+      if (rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')) {
+        return {
+          id: `guard_${rule.id}`,
+          kind: 'EXPRESSION_GUARD',
+          scope: 'strategy',
+          appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+          predicateRef,
+          onBreach: 'HALT_STRATEGY',
+        }
+      }
+
+      if (rule.actions.some(action => action.type === 'FORCE_EXIT')) {
+        return {
+          id: `guard_${rule.id}`,
+          kind: 'EXPRESSION_GUARD',
+          scope: 'position',
+          appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+          predicateRef,
+          onBreach: 'FORCE_EXIT',
+        }
+      }
+    }
+
     if (rule.condition.kind !== 'atom') {
       return null
     }

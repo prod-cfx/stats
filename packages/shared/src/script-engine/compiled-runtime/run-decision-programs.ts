@@ -50,6 +50,13 @@ export function runDecisionPrograms(
     })
   }
 
+  if (guardState.strategyHalt) {
+    return Object.freeze({
+      action: 'NOOP',
+      reason: 'compiled.strategy_halt',
+    })
+  }
+
   const decisionIndex = new Map(programs.map(program => [program.id, program]))
   const orderedPrograms = decisionOrder
     .map(id => decisionIndex.get(id))

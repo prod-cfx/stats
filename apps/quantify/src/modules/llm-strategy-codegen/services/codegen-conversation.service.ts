@@ -2500,6 +2500,16 @@ export class CodegenConversationService {
         return false
       }
 
+      if (risk.key === 'risk.condition_expression') {
+        const effect = risk.params.effect
+        const effectType = effect && typeof effect === 'object' && 'type' in effect
+          ? (effect as { type?: unknown }).type
+          : null
+        return effectType === 'close_position'
+          || effectType === 'pause_strategy'
+          || effectType === 'reduce_position'
+      }
+
       const threshold = risk.params.valuePct
       if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) {
         return false

@@ -771,6 +771,34 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
   })
 
+  it('keeps force exit above strategy halt when both guards trigger', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: 1 },
+        portfolio: { equity: 10000 },
+      } as any,
+      [],
+      {},
+      {
+        blockNewEntry: false,
+        forceExit: true,
+        strategyHalt: true,
+        cancelOrderPrograms: false,
+        triggered: ['guard-stop-loss', 'guard-daily-loss'],
+      },
+      [],
+    )
+
+    expect(decision).toEqual({
+      action: 'CLOSE_LONG',
+      size: { mode: 'QTY', value: 1 },
+      reason: 'compiled.force_exit',
+    })
+    expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
+  })
+
   it('does not emit a close decision when force exit triggers without an active position', () => {
     const decision = runDecisionPrograms(
       {

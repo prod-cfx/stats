@@ -255,6 +255,13 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: true })
   })
 
+  it('accepts explicit risk basis names used by strategy rules', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5, basis: 'peak_position_pnl', basisSource: 'user_explicit' },
+    })).toEqual({ ok: true })
+  })
+
   it('rejects invalid optional percent risk basis metadata', () => {
     expect(validateSemanticRiskContract({
       key: 'risk.stop_loss_pct',

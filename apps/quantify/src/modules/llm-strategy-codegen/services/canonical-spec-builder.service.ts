@@ -915,6 +915,32 @@ export class CanonicalSpecBuilderService {
       if (risk.status !== 'locked' || !validateSemanticRiskContract(risk).ok) {
         continue
       }
+      if (risk.key === 'risk.condition_expression') {
+        const condition = this.isValidSemanticExpression(risk.params.condition)
+          ? this.buildConditionFromSemanticExpression(risk.params.condition)
+          : null
+        const actions = this.buildActionsForSemanticRiskExpression(risk, sideScope)
+        if (!condition || actions.length === 0) {
+          continue
+        }
+
+        rules.push({
+          id: `semantic-${risk.id || `risk-expression-${priority}`}`,
+          phase: 'risk',
+          sideScope,
+          priority: priority--,
+          condition,
+          actions,
+          metadata: {
+            semanticKey: risk.key,
+            scope: risk.params.scope,
+            effect: risk.params.effect,
+            capabilityStatus: risk.params.capabilityStatus,
+            unsupportedReason: risk.params.unsupportedReason,
+          },
+        })
+        continue
+      }
       if (risk.key !== 'risk.stop_loss_pct' && risk.key !== 'risk.take_profit_pct') {
         continue
       }
@@ -942,6 +968,43 @@ export class CanonicalSpecBuilderService {
     }
 
     return rules
+  }
+
+  private buildActionsForSemanticRiskExpression(
+    risk: SemanticRiskState,
+    sideScope: 'long' | 'short' | 'both',
+  ): CanonicalRuleV2['actions'] {
+    const effect = risk.params.effect
+    const effectType = effect && typeof effect === 'object' && 'type' in effect
+      ? (effect as { type?: unknown }).type
+      : null
+
+    if (effectType === 'pause_strategy') {
+      return [{ type: 'BLOCK_NEW_ENTRY' }]
+    }
+
+    if (effectType === 'reduce_position') {
+      const reducePct = effect && typeof effect === 'object' && typeof (effect as { reducePct?: unknown }).reducePct === 'number'
+        ? (effect as { reducePct: number }).reducePct
+        : 50
+      const sizing = { mode: 'RATIO' as const, value: reducePct }
+      if (sideScope === 'long') {
+        return [{ type: 'REDUCE_LONG', sizing }]
+      }
+      if (sideScope === 'short') {
+        return [{ type: 'REDUCE_SHORT', sizing }]
+      }
+      return [
+        { type: 'REDUCE_LONG', sizing },
+        { type: 'REDUCE_SHORT', sizing },
+      ]
+    }
+
+    if (effectType === 'notify_only') {
+      return []
+    }
+
+    return [{ type: 'FORCE_EXIT' }]
   }
 
   private resolveSemanticRiskSideScope(position: SemanticPositionState | null): 'long' | 'short' | 'both' {
