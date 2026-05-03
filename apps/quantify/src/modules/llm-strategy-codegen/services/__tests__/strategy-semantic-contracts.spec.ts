@@ -396,6 +396,26 @@ describe('strategySemanticContracts', () => {
     }))
   })
 
+  it('rejects risk reduce expression params with invalid reduce percent', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'position', field: 'pnl_pct' },
+          op: 'LTE',
+          right: { kind: 'constant', value: -5 },
+        },
+        effect: { type: 'reduce_position', reducePct: 150 },
+        scope: 'current_position',
+        capabilityStatus: 'supported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'invalid_risk_reduce_pct',
+    }))
+  })
+
   it('rejects malformed top-level semantic risk contracts without throwing', () => {
     expect(validateSemanticRiskContract(null as never)).toEqual(expect.objectContaining({ ok: false }))
     expect(validateSemanticRiskContract('risk.stop_loss_pct' as never)).toEqual(expect.objectContaining({ ok: false }))

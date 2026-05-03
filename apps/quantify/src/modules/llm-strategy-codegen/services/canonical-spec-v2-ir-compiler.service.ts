@@ -1208,7 +1208,7 @@ export class CanonicalSpecV2IrCompilerService {
           actions.push({
             kind: action.type,
             quantity: action.sizing
-              ? this.resolveActionQuantity(action, spec.sizing, fallbackPositionPct)
+              ? this.resolveReduceActionQuantity(action, spec.sizing, fallbackPositionPct)
               : { mode: 'position_pct', value: 50 },
           })
           break
@@ -1226,6 +1226,22 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return actions
+  }
+
+  private resolveReduceActionQuantity(
+    action: CanonicalRuleAction,
+    defaultSizing: CanonicalStrategySpecV2['sizing'],
+    fallbackPositionPct: number,
+  ): ActionDef['quantity'] {
+    const sizing = action.sizing ?? defaultSizing
+    if (sizing?.mode === 'RATIO') {
+      return {
+        mode: 'position_pct',
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
+      }
+    }
+
+    return this.resolveActionQuantity(action, defaultSizing, fallbackPositionPct)
   }
 
   private resolveActionQuantity(

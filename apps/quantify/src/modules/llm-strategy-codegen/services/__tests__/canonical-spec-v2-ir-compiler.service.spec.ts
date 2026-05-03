@@ -2511,7 +2511,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         phase: 'rebalance',
         actions: [expect.objectContaining({
           kind: 'REDUCE_LONG',
-          quantity: { mode: 'pct_equity', value: 30 },
+          quantity: { mode: 'position_pct', value: 30 },
         })],
       }),
     ]))

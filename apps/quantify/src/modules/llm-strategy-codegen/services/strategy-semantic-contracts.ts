@@ -369,6 +369,18 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
     ) {
       return invalid('invalid_risk_effect')
     }
+    if (
+      risk.params.effect.type === 'reduce_position'
+      && risk.params.effect.reducePct !== undefined
+      && (
+        typeof risk.params.effect.reducePct !== 'number'
+        || !Number.isFinite(risk.params.effect.reducePct)
+        || risk.params.effect.reducePct <= 0
+        || risk.params.effect.reducePct > 100
+      )
+    ) {
+      return invalid('invalid_risk_reduce_pct')
+    }
     if (typeof risk.params.scope !== 'string' || !SUPPORTED_RISK_SCOPES.has(risk.params.scope)) {
       return invalid('invalid_risk_scope')
     }
