@@ -414,13 +414,17 @@ describe('strategySemanticContracts', () => {
     })).toEqual({ ok: true })
   })
 
-  it('rejects supported risk condition expressions with account operands', () => {
+  it.each([
+    [{ kind: 'account', field: 'drawdown_pct' }],
+    [{ kind: 'position', field: 'has_position' }],
+    [{ kind: 'constant', value: true }],
+  ])('rejects supported risk condition expressions with runtime-unsupported operands', (left) => {
     expect(validateSemanticRiskContract({
       key: 'risk.condition_expression',
       params: {
         condition: {
           kind: 'predicate',
-          left: { kind: 'account', field: 'drawdown_pct' },
+          left,
           op: 'GTE',
           right: { kind: 'constant', value: 12, unit: 'percent' },
         },

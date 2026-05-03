@@ -391,7 +391,7 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
     ) {
       return invalid('invalid_risk_capability_status')
     }
-    if (risk.params.capabilityStatus === 'supported' && expressionContainsAccountOperand(risk.params.condition)) {
+    if (risk.params.capabilityStatus === 'supported' && expressionContainsRuntimeUnsupportedOperand(risk.params.condition)) {
       return invalid('unsupported_runtime_risk_expression_operand')
     }
     return valid()
@@ -550,24 +550,33 @@ function validateExpressionOperand(operand: unknown): SemanticContractValidation
   return invalid('unsupported_expression_operand_kind')
 }
 
-function expressionContainsAccountOperand(expression: unknown): boolean {
+function expressionContainsRuntimeUnsupportedOperand(expression: unknown): boolean {
   if (!isRecord(expression)) {
     return false
   }
 
   if (expression.kind === 'predicate') {
-    return isRecord(expression.left) && expression.left.kind === 'account'
-      || isRecord(expression.right) && expression.right.kind === 'account'
+    return operandIsRuntimeUnsupported(expression.left) || operandIsRuntimeUnsupported(expression.right)
   }
 
   if (
     (expression.kind === 'AND' || expression.kind === 'OR' || expression.kind === 'NOT')
     && Array.isArray(expression.children)
   ) {
-    return expression.children.some(child => expressionContainsAccountOperand(child))
+    return expression.children.some(child => expressionContainsRuntimeUnsupportedOperand(child))
   }
 
   return false
+}
+
+function operandIsRuntimeUnsupported(operand: unknown): boolean {
+  if (!isRecord(operand)) {
+    return false
+  }
+
+  return operand.kind === 'account'
+    || (operand.kind === 'position' && operand.field === 'has_position')
+    || (operand.kind === 'constant' && typeof operand.value === 'boolean')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
