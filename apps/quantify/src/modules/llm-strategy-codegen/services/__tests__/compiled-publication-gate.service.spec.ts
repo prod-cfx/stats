@@ -186,6 +186,71 @@ describe('compiledPublicationGateService', () => {
       executionEnvelope: expect.objectContaining({ marginMode: 'cash' }),
       snapshotVersion: 3,
     }))
+
+    const payload = publishedSnapshotsRepo.create.mock.calls[0][0]
+    expect(payload.deploymentExecutionDefaults).not.toHaveProperty('tdMode')
+    expect(payload.deploymentExecutionConstraints).not.toHaveProperty('supportedTdModes')
+  })
+
+  it('publishes perp deployment execution truth with explicit cross tdMode', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-perp-tdmode' }),
+    }
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      undefined,
+    )
+    const ir = createIrFixture({
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      instrumentType: 'perpetual',
+      timeframes: ['15m'],
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cross' as const,
+      tickSize: 0.1,
+      pricePrecision: 1,
+      quantityPrecision: 2,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-perp-tdmode',
+      strategyTemplateId: 'template-perp',
+      strategyInstanceId: 'instance-perp',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', timeframe: '15m' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1', canonicalDigest: 'sha256:perp', confirmation: { required: false } },
+      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
+      graphSnapshot: { version: 3, status: 'confirmed', trigger: [], actions: [], risk: [], meta: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', timeframe: '15m', positionPct: 25, executionTags: [] } },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTC-USDT-SWAP'] },
+      strategySummary: { thesis: 'perp-cross' },
+      scriptSummary: { indicators: [] },
+      lockedParams: { positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      strategyConfig: expect.objectContaining({ marketType: 'perp' }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        tdMode: 'cross',
+      }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        supportedTdModes: ['cross'],
+      }),
+    }))
   })
 
   it('fails compiler graph consistency when semantic predicate graph digest drifts from IR source', async () => {
@@ -1524,7 +1589,13 @@ describe('compiledPublicationGateService', () => {
   })
 })
 
-function createIrFixture(): CanonicalStrategyIrV1 {
+type IrMarketFixtureOverrides = Partial<CanonicalStrategyIrV1['market']> & {
+  exchange?: CanonicalStrategyIrV1['market']['venue']
+}
+
+function createIrFixture(overrides: IrMarketFixtureOverrides = {}): CanonicalStrategyIrV1 {
+  const { exchange, ...marketOverrides } = overrides
+
   return {
     irVersion: 'csi.v1',
     source: {
@@ -1538,6 +1609,8 @@ function createIrFixture(): CanonicalStrategyIrV1 {
       symbol: 'BTCUSDT',
       timeframes: ['1h'],
       priceFeed: 'close',
+      ...marketOverrides,
+      ...(exchange ? { venue: exchange } : {}),
     },
     portfolio: {
       positionMode: 'long_only',
