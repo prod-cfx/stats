@@ -123,4 +123,75 @@ describe('backfill-llm-perp-tdmode', () => {
       deploymentExecutionConfig: expect.objectContaining({ tdMode: 'cross' }),
     }))
   })
+
+  it.each([
+    {
+      field: 'strategyInstance.params',
+      reason: 'strategyInstance.params is malformed and requires manual repair',
+      mutate: (state: ReturnType<typeof buildPrismaMock>) => {
+        state.instance.params = ['malformed'] as never
+      },
+    },
+    {
+      field: 'strategyInstance.deploymentExecutionConfig',
+      reason: 'strategyInstance.deploymentExecutionConfig is malformed and requires manual repair',
+      mutate: (state: ReturnType<typeof buildPrismaMock>) => {
+        state.instance.deploymentExecutionConfig = 'malformed' as never
+      },
+    },
+    {
+      field: 'strategyInstance.params.deploymentExecutionConfig',
+      reason: 'strategyInstance.params.deploymentExecutionConfig is malformed and requires manual repair',
+      mutate: (state: ReturnType<typeof buildPrismaMock>) => {
+        state.instance.params = { deploymentExecutionConfig: ['malformed'] } as never
+      },
+    },
+  ])('skips malformed bound instance JSON at $field without writes', async ({ mutate, reason }) => {
+    const state = buildPrismaMock()
+    mutate(state)
+
+    const dryRun = await buildBackfillPlan(state.prisma as never)
+    const applied = await runBackfill(state.prisma as never, { apply: true })
+
+    expect(dryRun.plan).toEqual([])
+    expect(dryRun.skipped).toEqual(expect.arrayContaining([
+      expect.objectContaining({ snapshotId: 'llm-perp-missing-tdmode', reason }),
+    ]))
+    expect(applied.updated).toBe(0)
+    expect(state.prisma.publishedStrategySnapshot.update).not.toHaveBeenCalled()
+    expect(state.prisma.strategyInstance.update).not.toHaveBeenCalled()
+    expect(state.prisma.userStrategySubscription.update).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      field: 'userStrategySubscription.customParams',
+      reason: 'userStrategySubscription.customParams is malformed and requires manual repair',
+      mutate: (state: ReturnType<typeof buildPrismaMock>) => {
+        state.subscription.customParams = 'malformed' as never
+      },
+    },
+    {
+      field: 'userStrategySubscription.customParams.deploymentExecutionConfig',
+      reason: 'userStrategySubscription.customParams.deploymentExecutionConfig is malformed and requires manual repair',
+      mutate: (state: ReturnType<typeof buildPrismaMock>) => {
+        state.subscription.customParams = { deploymentExecutionConfig: ['malformed'] } as never
+      },
+    },
+  ])('skips malformed bound subscription JSON at $field without writes', async ({ mutate, reason }) => {
+    const state = buildPrismaMock()
+    mutate(state)
+
+    const dryRun = await buildBackfillPlan(state.prisma as never)
+    const applied = await runBackfill(state.prisma as never, { apply: true })
+
+    expect(dryRun.plan).toEqual([])
+    expect(dryRun.skipped).toEqual(expect.arrayContaining([
+      expect.objectContaining({ snapshotId: 'llm-perp-missing-tdmode', reason }),
+    ]))
+    expect(applied.updated).toBe(0)
+    expect(state.prisma.publishedStrategySnapshot.update).not.toHaveBeenCalled()
+    expect(state.prisma.strategyInstance.update).not.toHaveBeenCalled()
+    expect(state.prisma.userStrategySubscription.update).not.toHaveBeenCalled()
+  })
 })

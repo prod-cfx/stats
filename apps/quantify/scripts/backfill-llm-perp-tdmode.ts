@@ -71,6 +71,16 @@ const isRecord = (value: unknown): value is JsonObject => {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
+function resolveBoundRecord(
+  snapshotId: string,
+  field: string,
+  value: unknown,
+): { record: JsonObject; skipped?: undefined } | { record?: undefined; skipped: BackfillSkipItem } {
+  if (value == null) return { record: {} }
+  if (isRecord(value)) return { record: { ...value } }
+  return { skipped: { snapshotId, reason: `${field} is malformed and requires manual repair` } }
+}
+
 function hasCrossTdMode(value: unknown): boolean {
   return asRecord(value).tdMode === DEFAULT_TD_MODE
 }
@@ -145,10 +155,27 @@ async function buildSnapshotPlanItem(
       select: { id: true, params: true, deploymentExecutionConfig: true },
     })
     if (instance) {
-      if (!hasCrossTdMode(instance.deploymentExecutionConfig)) {
+      const instanceDeploymentExecutionConfig = resolveBoundRecord(
+        snapshotId,
+        'strategyInstance.deploymentExecutionConfig',
+        instance.deploymentExecutionConfig,
+      )
+      if (instanceDeploymentExecutionConfig.skipped) return { skipped: instanceDeploymentExecutionConfig.skipped }
+
+      const params = resolveBoundRecord(snapshotId, 'strategyInstance.params', instance.params)
+      if (params.skipped) return { skipped: params.skipped }
+
+      const paramsDeploymentExecutionConfig = resolveBoundRecord(
+        snapshotId,
+        'strategyInstance.params.deploymentExecutionConfig',
+        params.record.deploymentExecutionConfig,
+      )
+      if (paramsDeploymentExecutionConfig.skipped) return { skipped: paramsDeploymentExecutionConfig.skipped }
+
+      if (!hasCrossTdMode(instanceDeploymentExecutionConfig.record)) {
         repairs.push('instance-deployment-execution-config')
       }
-      if (!hasCrossTdMode(asRecord(instance.params).deploymentExecutionConfig)) {
+      if (!hasCrossTdMode(paramsDeploymentExecutionConfig.record)) {
         repairs.push('instance-params-deployment-execution-config')
       }
 
@@ -156,7 +183,21 @@ async function buildSnapshotPlanItem(
         where: { strategyInstanceId: instance.id },
         select: { id: true, customParams: true },
       })
-      if (subscriptions.some(subscription => !hasCrossTdMode(asRecord(subscription.customParams).deploymentExecutionConfig))) {
+      let needsSubscriptionRepair = false
+      for (const subscription of subscriptions) {
+        const customParams = resolveBoundRecord(snapshotId, 'userStrategySubscription.customParams', subscription.customParams)
+        if (customParams.skipped) return { skipped: customParams.skipped }
+
+        const customDeploymentExecutionConfig = resolveBoundRecord(
+          snapshotId,
+          'userStrategySubscription.customParams.deploymentExecutionConfig',
+          customParams.record.deploymentExecutionConfig,
+        )
+        if (customDeploymentExecutionConfig.skipped) return { skipped: customDeploymentExecutionConfig.skipped }
+
+        needsSubscriptionRepair ||= !hasCrossTdMode(customDeploymentExecutionConfig.record)
+      }
+      if (needsSubscriptionRepair) {
         repairs.push('subscription-custom-params-deployment-execution-config')
       }
     }
@@ -199,41 +240,76 @@ async function applySnapshotRepair(tx: BackfillPrisma, snapshot: SnapshotRow): P
   })
 }
 
-async function applyStrategyInstanceRepair(tx: BackfillPrisma, strategyInstanceId: string): Promise<void> {
+async function applyStrategyInstanceRepair(tx: BackfillPrisma, snapshotId: string, strategyInstanceId: string): Promise<boolean> {
   const instance = await tx.strategyInstance.findUnique({
     where: { id: strategyInstanceId },
     select: { id: true, params: true, deploymentExecutionConfig: true },
   })
-  if (!instance) return
+  if (!instance) return true
 
-  const params = asRecord(instance.params)
-  await tx.strategyInstance.update({
-    where: { id: instance.id },
-    data: {
-      deploymentExecutionConfig: withCrossTdMode(instance.deploymentExecutionConfig),
-      params: {
-        ...params,
-        deploymentExecutionConfig: withCrossTdMode(params.deploymentExecutionConfig),
-      },
-    },
-  })
+  const instanceDeploymentExecutionConfig = resolveBoundRecord(
+    snapshotId,
+    'strategyInstance.deploymentExecutionConfig',
+    instance.deploymentExecutionConfig,
+  )
+  if (instanceDeploymentExecutionConfig.skipped) return false
+
+  const params = resolveBoundRecord(snapshotId, 'strategyInstance.params', instance.params)
+  if (params.skipped) return false
+
+  const paramsDeploymentExecutionConfig = resolveBoundRecord(
+    snapshotId,
+    'strategyInstance.params.deploymentExecutionConfig',
+    params.record.deploymentExecutionConfig,
+  )
+  if (paramsDeploymentExecutionConfig.skipped) return false
 
   const subscriptions = await tx.userStrategySubscription.findMany({
     where: { strategyInstanceId: instance.id },
     select: { id: true, customParams: true },
   })
+  const subscriptionRepairs: Array<{ id: string; customParams: JsonObject; deploymentExecutionConfig: JsonObject }> = []
   for (const subscription of subscriptions) {
-    const customParams = asRecord(subscription.customParams)
+    const customParams = resolveBoundRecord(snapshotId, 'userStrategySubscription.customParams', subscription.customParams)
+    if (customParams.skipped) return false
+
+    const customDeploymentExecutionConfig = resolveBoundRecord(
+      snapshotId,
+      'userStrategySubscription.customParams.deploymentExecutionConfig',
+      customParams.record.deploymentExecutionConfig,
+    )
+    if (customDeploymentExecutionConfig.skipped) return false
+
+    subscriptionRepairs.push({
+      id: subscription.id,
+      customParams: customParams.record,
+      deploymentExecutionConfig: customDeploymentExecutionConfig.record,
+    })
+  }
+
+  await tx.strategyInstance.update({
+    where: { id: instance.id },
+    data: {
+      deploymentExecutionConfig: withCrossTdMode(instanceDeploymentExecutionConfig.record),
+      params: {
+        ...params.record,
+        deploymentExecutionConfig: withCrossTdMode(paramsDeploymentExecutionConfig.record),
+      },
+    },
+  })
+
+  for (const subscription of subscriptionRepairs) {
     await tx.userStrategySubscription.update({
       where: { id: subscription.id },
       data: {
         customParams: {
-          ...customParams,
-          deploymentExecutionConfig: withCrossTdMode(customParams.deploymentExecutionConfig),
+          ...subscription.customParams,
+          deploymentExecutionConfig: withCrossTdMode(subscription.deploymentExecutionConfig),
         },
       },
     })
   }
+  return true
 }
 
 export async function runBackfill(prisma: BackfillPrisma, options: BackfillOptions): Promise<BackfillResult> {
@@ -247,10 +323,11 @@ export async function runBackfill(prisma: BackfillPrisma, options: BackfillOptio
       const item = await buildSnapshotPlanItem(tx, snapshot)
       if (!item.plan) continue
 
-      await applySnapshotRepair(tx, snapshot)
       if (snapshot.strategyInstanceId) {
-        await applyStrategyInstanceRepair(tx, snapshot.strategyInstanceId)
+        const runtimeRepairApplied = await applyStrategyInstanceRepair(tx, snapshot.id, snapshot.strategyInstanceId)
+        if (!runtimeRepairApplied) continue
       }
+      await applySnapshotRepair(tx, snapshot)
       updated += 1
     }
   })
@@ -271,7 +348,7 @@ function logResult(result: BackfillResult, apply: boolean): void {
   const mode = apply ? 'apply' : 'dry-run'
   console.log(`[${MODULE}.${mode}] scanned=${result.scanned} pending=${result.plan.length} updated=${result.updated}`)
   for (const item of result.plan) {
-    console.log(`[${MODULE}.${mode}] pending; input=${JSON.stringify(item)}`)
+    console.log(`[${MODULE}.${mode}] ${apply ? 'applied' : 'planned'}; input=${JSON.stringify(item)}`)
   }
   for (const item of result.skipped) {
     console.warn(`[${MODULE}.${mode}] skipped; input=${JSON.stringify({ snapshotId: item.snapshotId })}; reason=${item.reason}`)
