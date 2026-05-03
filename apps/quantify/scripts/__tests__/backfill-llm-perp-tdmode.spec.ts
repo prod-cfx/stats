@@ -8,7 +8,8 @@ describe('backfill-llm-perp-tdmode', () => {
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['close'], supportedOrderTypes: ['market'], supportedTimeInForce: ['gtc'] },
-        executionEnvelope: { source: 'llm-codegen-session' },
+        executionEnvelope: { positionMode: 'long_only', marginMode: 'cross', fillAssumption: 'strict' },
+        strategyTemplateId: 'template-1',
         strategyInstanceId: 'instance-1',
       },
       {
@@ -17,6 +18,7 @@ describe('backfill-llm-perp-tdmode', () => {
         deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['mark'], supportedOrderTypes: ['market'], supportedTimeInForce: ['ioc'] },
         executionEnvelope: { source: 'strategy-plaza-official-template' },
+        strategyTemplateId: 'official-template-1',
         strategyInstanceId: 'official-instance-1',
       },
       {
@@ -24,15 +26,17 @@ describe('backfill-llm-perp-tdmode', () => {
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 3, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['close'], supportedOrderTypes: ['market'], supportedTimeInForce: ['gtc'] },
-        executionEnvelope: { source: 'manual-import' },
-        strategyInstanceId: null,
+        executionEnvelope: { positionMode: 'long_only', marginMode: 'cross', fillAssumption: 'strict' },
+        strategyTemplateId: 'manual-template-1',
+        strategyInstanceId: 'manual-instance-1',
       },
       {
         id: 'llm-spot',
         strategyConfig: { marketType: 'spot' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
         deploymentExecutionConstraints: { supportedPriceSources: ['close'] },
-        executionEnvelope: { source: 'llm-codegen-session' },
+        executionEnvelope: { positionMode: 'long_only', marginMode: 'cross', fillAssumption: 'strict' },
+        strategyTemplateId: 'template-spot',
         strategyInstanceId: null,
       },
       {
@@ -40,15 +44,48 @@ describe('backfill-llm-perp-tdmode', () => {
         strategyConfig: { marketType: 'perp' },
         deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc', tdMode: 'cross' },
         deploymentExecutionConstraints: { supportedTdModes: ['cross'] },
-        executionEnvelope: { source: 'llm-codegen-session' },
-        strategyInstanceId: null,
+        executionEnvelope: { positionMode: 'long_only', marginMode: 'cross', fillAssumption: 'strict' },
+        strategyTemplateId: 'template-current',
+        strategyInstanceId: 'instance-current',
       },
     ]
-    const instance = {
-      id: 'instance-1',
-      params: { deploymentExecutionConfig: { leverage: 1, priceSource: 'close' } },
-      deploymentExecutionConfig: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
+    type InstanceFixture = {
+      id: string
+      strategyTemplateId: string
+      params: unknown
+      deploymentExecutionConfig: unknown
+      metadata: unknown
     }
+    const instances = new Map<string, InstanceFixture>([
+      ['instance-1', {
+        id: 'instance-1',
+        strategyTemplateId: 'template-1',
+        params: { deploymentExecutionConfig: { leverage: 1, priceSource: 'close' } },
+        deploymentExecutionConfig: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
+        metadata: { source: 'llm-codegen-session' },
+      }],
+      ['manual-instance-1', {
+        id: 'manual-instance-1',
+        strategyTemplateId: 'manual-template-1',
+        params: {},
+        deploymentExecutionConfig: {},
+        metadata: { source: 'manual-import' },
+      }],
+      ['instance-current', {
+        id: 'instance-current',
+        strategyTemplateId: 'template-current',
+        params: { deploymentExecutionConfig: { tdMode: 'cross' } },
+        deploymentExecutionConfig: { tdMode: 'cross' },
+        metadata: { source: 'llm-codegen-session' },
+      }],
+    ])
+    const templates = new Map<string, { id: string; metadata: unknown }>([
+      ['template-1', { id: 'template-1', metadata: { source: 'llm-codegen-session' } }],
+      ['manual-template-1', { id: 'manual-template-1', metadata: { source: 'manual-import' } }],
+      ['template-spot', { id: 'template-spot', metadata: { source: 'llm-codegen-session' } }],
+      ['template-current', { id: 'template-current', metadata: { source: 'llm-codegen-session' } }],
+    ])
+    const instance = instances.get('instance-1') as InstanceFixture
     const subscription = {
       id: 'subscription-1',
       customParams: { deploymentExecutionConfig: { leverage: 1 } },
@@ -64,14 +101,18 @@ describe('backfill-llm-perp-tdmode', () => {
         }),
       },
       strategyInstance: {
-        findUnique: jest.fn(async ({ where }: any) => where.id === instance.id ? instance : null),
-        update: jest.fn(async ({ data }: any) => {
-          instance.params = data.params
-          instance.deploymentExecutionConfig = data.deploymentExecutionConfig
+        findUnique: jest.fn(async ({ where }: any) => instances.get(where.id) ?? null),
+        update: jest.fn(async ({ where, data }: any) => {
+          const row = instances.get(where.id)!
+          row.params = data.params
+          row.deploymentExecutionConfig = data.deploymentExecutionConfig
         }),
       },
+      strategyTemplate: {
+        findUnique: jest.fn(async ({ where }: any) => templates.get(where.id) ?? null),
+      },
       userStrategySubscription: {
-        findMany: jest.fn(async () => [subscription]),
+        findMany: jest.fn(async ({ where }: any) => where.strategyInstanceId === instance.id ? [subscription] : []),
         update: jest.fn(async ({ data }: any) => {
           subscription.customParams = data.customParams
         }),

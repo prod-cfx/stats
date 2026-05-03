@@ -15,13 +15,21 @@ interface SnapshotRow {
   deploymentExecutionDefaults: unknown
   deploymentExecutionConstraints: unknown
   executionEnvelope: unknown
+  strategyTemplateId: string | null
   strategyInstanceId: string | null
 }
 
 interface StrategyInstanceRow {
   id: string
+  strategyTemplateId: string
   params: unknown
   deploymentExecutionConfig: unknown
+  metadata: unknown
+}
+
+interface StrategyTemplateRow {
+  id: string
+  metadata: unknown
 }
 
 interface SubscriptionRow {
@@ -56,6 +64,9 @@ export interface BackfillPrisma {
   strategyInstance: {
     findUnique: (args: unknown) => Promise<StrategyInstanceRow | null>
     update: (args: unknown) => Promise<unknown>
+  }
+  strategyTemplate: {
+    findUnique: (args: unknown) => Promise<StrategyTemplateRow | null>
   }
   userStrategySubscription: {
     findMany: (args: unknown) => Promise<SubscriptionRow[]>
@@ -104,6 +115,10 @@ function withSupportedCrossTdModes(value: unknown): JsonObject {
   }
 }
 
+function hasLlmCodegenSource(value: unknown): boolean {
+  return asRecord(value).source === LLM_CODEGEN_SESSION_SOURCE
+}
+
 async function findCandidateSnapshots(prisma: BackfillPrisma): Promise<SnapshotRow[]> {
   return prisma.publishedStrategySnapshot.findMany({
     where: {
@@ -115,8 +130,33 @@ async function findCandidateSnapshots(prisma: BackfillPrisma): Promise<SnapshotR
       deploymentExecutionDefaults: true,
       deploymentExecutionConstraints: true,
       executionEnvelope: true,
+      strategyTemplateId: true,
       strategyInstanceId: true,
     },
+  })
+}
+
+async function findBoundStrategyInstance(
+  prisma: BackfillPrisma,
+  strategyInstanceId: string | null,
+): Promise<StrategyInstanceRow | null> {
+  if (!strategyInstanceId) return null
+  return prisma.strategyInstance.findUnique({
+    where: { id: strategyInstanceId },
+    select: { id: true, strategyTemplateId: true, params: true, deploymentExecutionConfig: true, metadata: true },
+  })
+}
+
+async function findBoundStrategyTemplate(
+  prisma: BackfillPrisma,
+  snapshot: SnapshotRow,
+  instance: StrategyInstanceRow | null,
+): Promise<StrategyTemplateRow | null> {
+  const strategyTemplateId = snapshot.strategyTemplateId ?? instance?.strategyTemplateId ?? null
+  if (!strategyTemplateId) return null
+  return prisma.strategyTemplate.findUnique({
+    where: { id: strategyTemplateId },
+    select: { id: true, metadata: true },
   })
 }
 
@@ -131,7 +171,10 @@ async function buildSnapshotPlanItem(
   if (asRecord(snapshot.strategyConfig).marketType !== 'perp') {
     return { skipped: { snapshotId, reason: 'snapshot is not perp' } }
   }
-  if (asRecord(snapshot.executionEnvelope).source !== LLM_CODEGEN_SESSION_SOURCE) {
+
+  const instance = await findBoundStrategyInstance(prisma, snapshot.strategyInstanceId)
+  const template = await findBoundStrategyTemplate(prisma, snapshot, instance)
+  if (!hasLlmCodegenSource(instance?.metadata) && !hasLlmCodegenSource(template?.metadata)) {
     return { skipped: { snapshotId, reason: 'snapshot is not an ordinary LLM publication snapshot' } }
   }
   if (!isRecord(snapshot.deploymentExecutionDefaults) || !isRecord(snapshot.deploymentExecutionConstraints)) {
@@ -150,10 +193,6 @@ async function buildSnapshotPlanItem(
   }
 
   if (snapshot.strategyInstanceId) {
-    const instance = await prisma.strategyInstance.findUnique({
-      where: { id: snapshot.strategyInstanceId },
-      select: { id: true, params: true, deploymentExecutionConfig: true },
-    })
     if (instance) {
       const instanceDeploymentExecutionConfig = resolveBoundRecord(
         snapshotId,
@@ -243,7 +282,7 @@ async function applySnapshotRepair(tx: BackfillPrisma, snapshot: SnapshotRow): P
 async function applyStrategyInstanceRepair(tx: BackfillPrisma, snapshotId: string, strategyInstanceId: string): Promise<boolean> {
   const instance = await tx.strategyInstance.findUnique({
     where: { id: strategyInstanceId },
-    select: { id: true, params: true, deploymentExecutionConfig: true },
+    select: { id: true, strategyTemplateId: true, params: true, deploymentExecutionConfig: true, metadata: true },
   })
   if (!instance) return true
 
