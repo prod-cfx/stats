@@ -162,9 +162,9 @@ describe('backfill-llm-perp-tdmode', () => {
         findUnique: jest.fn(async ({ where }: any) => instances.get(where.id) ?? null),
         update: jest.fn(async ({ where, data }: any) => {
           const row = instances.get(where.id)!
-          row.params = data.params
-          row.deploymentExecutionConfig = data.deploymentExecutionConfig
-          row.metadata = data.metadata
+          if ('params' in data) row.params = data.params
+          if ('deploymentExecutionConfig' in data) row.deploymentExecutionConfig = data.deploymentExecutionConfig
+          if ('metadata' in data) row.metadata = data.metadata
         }),
       },
       strategyTemplate: {
@@ -262,6 +262,29 @@ describe('backfill-llm-perp-tdmode', () => {
     expect(result.skipped).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ snapshotId: 'llm-perp-current', reason: 'snapshot already has tdMode contract' }),
     ]))
+  })
+
+  it('does not rebind an instance that already points at another published snapshot', async () => {
+    const state = buildPrismaMock()
+    state.instance.metadata = {
+      source: 'llm-codegen-session',
+      publishedSnapshotId: 'newer-snapshot',
+      snapshotHash: 'newer-snapshot-hash',
+    }
+
+    const result = await runBackfill(state.prisma as never, { apply: true })
+
+    expect(result.updated).toBe(1)
+    expect(state.instance.deploymentExecutionConfig).toEqual(expect.objectContaining({ tdMode: 'cross' }))
+    expect(state.instance.params).toEqual(expect.objectContaining({
+      deploymentExecutionConfig: expect.objectContaining({ tdMode: 'cross' }),
+    }))
+    expect(state.instance.metadata).toEqual({
+      source: 'llm-codegen-session',
+      publishedSnapshotId: 'newer-snapshot',
+      snapshotHash: 'newer-snapshot-hash',
+    })
+    expect(state.prisma.strategyRuntimeExecutionState.updateMany).not.toHaveBeenCalled()
   })
 
   it.each([

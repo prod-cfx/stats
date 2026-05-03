@@ -234,6 +234,10 @@ function hasLlmCodegenSource(value: unknown): boolean {
   return asRecord(value).source === LLM_CODEGEN_SESSION_SOURCE
 }
 
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+}
+
 function isUserSubmittedScriptSnapshot(snapshot: SnapshotRow): boolean {
   const consistencyReport = asRecord(snapshot.consistencyReport)
   const scriptSummary = asRecord(snapshot.scriptSummary)
@@ -482,21 +486,28 @@ async function applyStrategyInstanceRepair(
     })
   }
 
+  const metadata = asRecord(instance.metadata)
+  const boundPublishedSnapshotId = readString(metadata.publishedSnapshotId)
+  const shouldSynchronizeBinding = !boundPublishedSnapshotId || boundPublishedSnapshotId === snapshotId
+  const instanceUpdateData: JsonObject = {
+    deploymentExecutionConfig: withCrossTdMode(instanceDeploymentExecutionConfig.record),
+    params: {
+      ...params.record,
+      deploymentExecutionConfig: withCrossTdMode(paramsDeploymentExecutionConfig.record),
+    },
+  }
+  if (shouldSynchronizeBinding) {
+    instanceUpdateData.metadata = {
+      ...metadata,
+      bindingSource: 'PUBLISHED_SNAPSHOT',
+      publishedSnapshotId: snapshotId,
+      snapshotHash,
+    }
+  }
+
   await tx.strategyInstance.update({
     where: { id: instance.id },
-    data: {
-      deploymentExecutionConfig: withCrossTdMode(instanceDeploymentExecutionConfig.record),
-      params: {
-        ...params.record,
-        deploymentExecutionConfig: withCrossTdMode(paramsDeploymentExecutionConfig.record),
-      },
-      metadata: {
-        ...asRecord(instance.metadata),
-        bindingSource: 'PUBLISHED_SNAPSHOT',
-        publishedSnapshotId: snapshotId,
-        snapshotHash,
-      },
-    },
+    data: instanceUpdateData,
   })
 
   for (const subscription of subscriptionRepairs) {
@@ -510,14 +521,16 @@ async function applyStrategyInstanceRepair(
       },
     })
   }
-  await tx.strategyRuntimeExecutionState.updateMany({
-    where: {
-      strategyInstanceId: instance.id,
-      publishedSnapshotId: snapshotId,
-      snapshotHash: { not: snapshotHash },
-    },
-    data: { snapshotHash },
-  })
+  if (shouldSynchronizeBinding) {
+    await tx.strategyRuntimeExecutionState.updateMany({
+      where: {
+        strategyInstanceId: instance.id,
+        publishedSnapshotId: snapshotId,
+        snapshotHash: { not: snapshotHash },
+      },
+      data: { snapshotHash },
+    })
+  }
   return true
 }
 
