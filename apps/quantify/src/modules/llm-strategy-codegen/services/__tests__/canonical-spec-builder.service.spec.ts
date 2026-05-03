@@ -546,6 +546,48 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('uses risk expression scope when building side-specific risk rules', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'short-loss-close',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct', side: 'short' },
+              right: { kind: 'constant', value: -3, unit: 'percent' },
+            },
+            effect: { type: 'close_position' },
+            scope: 'short',
+            capabilityStatus: 'supported',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      id: 'semantic-short-loss-close',
+      sideScope: 'short',
+      actions: [{ type: 'FORCE_EXIT' }],
+    }))
+  })
+
   it('keeps non-executable non-default risk basis out of SemanticState canonical risk rules', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({

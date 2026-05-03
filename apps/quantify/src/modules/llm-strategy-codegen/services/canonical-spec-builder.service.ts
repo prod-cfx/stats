@@ -922,7 +922,8 @@ export class CanonicalSpecBuilderService {
         const condition = this.isValidSemanticExpression(risk.params.condition)
           ? this.buildConditionFromSemanticExpression(risk.params.condition)
           : null
-        const actions = this.buildActionsForSemanticRiskExpression(risk, sideScope)
+        const riskSideScope = this.resolveSemanticRiskExpressionSideScope(risk, position)
+        const actions = this.buildActionsForSemanticRiskExpression(risk, riskSideScope)
         if (!condition || actions.length === 0) {
           continue
         }
@@ -930,7 +931,7 @@ export class CanonicalSpecBuilderService {
         rules.push({
           id: `semantic-${risk.id || `risk-expression-${priority}`}`,
           phase: 'risk',
-          sideScope,
+          sideScope: riskSideScope,
           priority: priority--,
           condition,
           actions,
@@ -1015,6 +1016,20 @@ export class CanonicalSpecBuilderService {
 
   private isExecutablePercentRiskBasis(rawBasis: unknown): boolean {
     return rawBasis === undefined || rawBasis === 'entry_avg_price'
+  }
+
+  private resolveSemanticRiskExpressionSideScope(
+    risk: SemanticRiskState,
+    position: SemanticPositionState | null,
+  ): 'long' | 'short' | 'both' {
+    if (risk.params.scope === 'long') {
+      return 'long'
+    }
+    if (risk.params.scope === 'short') {
+      return 'short'
+    }
+
+    return this.resolveSemanticRiskSideScope(position)
   }
 
   private resolveSemanticRiskSideScope(position: SemanticPositionState | null): 'long' | 'short' | 'both' {
