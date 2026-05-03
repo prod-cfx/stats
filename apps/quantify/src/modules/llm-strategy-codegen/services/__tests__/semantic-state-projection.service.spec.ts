@@ -1778,6 +1778,7 @@ describe('SemanticStateProjectionService', () => {
       stopLossBasis: null,
       takeProfitBasis: null,
     })
+    expect(view.riskSummary).toContain('持仓收益率')
   })
 
   it('keeps inferred basis as metadata without creating open risk slots', () => {

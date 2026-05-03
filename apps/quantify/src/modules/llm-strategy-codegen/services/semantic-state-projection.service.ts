@@ -867,8 +867,12 @@ export class SemanticStateProjectionService {
   }
 
   private describeRiskBasis(rawBasis: unknown): string {
-    if (rawBasis === 'entry_avg_price' || rawBasis === 'position_pnl') {
+    if (rawBasis === 'entry_avg_price') {
       return '入场均价'
+    }
+
+    if (rawBasis === 'position_pnl') {
+      return '持仓收益率'
     }
 
     if (rawBasis === 'peak_position_pnl' || rawBasis === 'peak_equity') {
