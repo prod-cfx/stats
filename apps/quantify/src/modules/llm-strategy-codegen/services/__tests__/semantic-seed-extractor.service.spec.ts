@@ -373,6 +373,29 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('keeps halt and stop-loss clauses separate in mixed risk wording', () => {
+    const result = service.extract('亏损 5% 暂停策略，并且止损 3%')
+
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.condition_expression',
+      params: expect.objectContaining({
+        effect: { type: 'pause_strategy' },
+      }),
+    }))
+    expect(result.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 3,
+      }),
+    }))
+    expect(result.risk).not.toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+      }),
+    }))
+  })
+
   it('does not emit a no-position gate for ordinary open prohibitions', () => {
     const patch = service.extract('波动过大不要开仓。BTCUSDT 1m 收盘价高于开盘价时开多。')
 

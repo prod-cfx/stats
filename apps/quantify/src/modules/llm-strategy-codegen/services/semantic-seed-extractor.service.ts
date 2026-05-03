@@ -174,16 +174,19 @@ export class SemanticSeedExtractorService {
   private extractRisk(text: string): NonNullable<CodegenSemanticPatch['risk']> {
     const risk: NonNullable<CodegenSemanticPatch['risk']> = []
 
-    const stopLoss = this.extractPercent(text, [
+    const stopLossPatterns = [
       /亏损\s*(\d+(?:\.\d+)?)\s*%/u,
       /亏损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /止损\s*(\d+(?:\.\d+)?)\s*%/u,
       /止损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
-    ])
-    if (stopLoss !== null && !this.isHaltOnlyRiskContext(text)) {
-      const riskContext = this.resolveRiskClauseContext(text, 'stop_loss')
+    ]
+    const stopLossClause = this.splitRiskClauses(text)
+      .find(clause => !this.isHaltOnlyRiskContext(clause) && this.extractPercent(clause, stopLossPatterns) !== null)
+    const stopLoss = stopLossClause ? this.extractPercent(stopLossClause, stopLossPatterns) : null
+    if (stopLoss !== null && stopLossClause) {
+      const riskContext = this.resolveRiskClauseContext(stopLossClause, 'stop_loss')
       const basis = this.resolveRiskBasis(riskContext)
       const basisSource = this.resolveRiskBasisSource(riskContext, basis)
       risk.push({
