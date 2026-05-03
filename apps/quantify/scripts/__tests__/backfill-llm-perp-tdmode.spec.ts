@@ -144,7 +144,12 @@ describe('backfill-llm-perp-tdmode', () => {
     }
     const prisma = {
       publishedStrategySnapshot: {
-        findMany: jest.fn(async () => snapshots),
+        findMany: jest.fn(async ({ where }: any) => {
+          if (where?.strategyConfig?.path?.[0] === 'marketType' && where.strategyConfig.equals === 'perp') {
+            return snapshots.filter(snapshot => snapshot.strategyConfig.marketType === 'perp')
+          }
+          return snapshots
+        }),
         update: jest.fn(async ({ where, data }: any) => {
           const row = snapshots.find(item => item.id === where.id)!
           row.snapshotHash = data.snapshotHash
@@ -190,7 +195,7 @@ describe('backfill-llm-perp-tdmode', () => {
     const { prisma } = buildPrismaMock()
     const result = await buildBackfillPlan(prisma as never)
 
-    expect(result.scanned).toBe(6)
+    expect(result.scanned).toBe(5)
     expect(result.updated).toBe(0)
     expect(result.plan).toEqual([expect.objectContaining({
       snapshotId: 'llm-perp-missing-tdmode',
@@ -200,10 +205,12 @@ describe('backfill-llm-perp-tdmode', () => {
     expect(result.skipped).toEqual(expect.arrayContaining([
       expect.objectContaining({ snapshotId: 'official-perp-missing-tdmode', reason: 'official strategy plaza snapshot is out of scope' }),
       expect.objectContaining({ snapshotId: 'non-llm-perp-missing-tdmode', reason: 'snapshot is not an ordinary LLM publication snapshot' }),
-      expect.objectContaining({ snapshotId: 'llm-spot', reason: 'snapshot is not perp' }),
       expect.objectContaining({ snapshotId: 'llm-manual-replacement-perp', reason: 'user-submitted script snapshot is out of scope' }),
       expect.objectContaining({ snapshotId: 'llm-perp-current', reason: 'snapshot already has tdMode contract' }),
     ]))
+    expect(prisma.publishedStrategySnapshot.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { strategyConfig: { path: ['marketType'], equals: 'perp' } },
+    }))
     expect(prisma.publishedStrategySnapshot.update).not.toHaveBeenCalled()
   })
 
