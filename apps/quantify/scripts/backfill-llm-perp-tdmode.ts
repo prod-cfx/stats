@@ -234,6 +234,14 @@ function hasLlmCodegenSource(value: unknown): boolean {
   return asRecord(value).source === LLM_CODEGEN_SESSION_SOURCE
 }
 
+function isUserSubmittedScriptSnapshot(snapshot: SnapshotRow): boolean {
+  const consistencyReport = asRecord(snapshot.consistencyReport)
+  const scriptSummary = asRecord(snapshot.scriptSummary)
+  return consistencyReport.source === 'user_submitted_script'
+    || consistencyReport.status === 'MANUAL_REPLACEMENT'
+    || scriptSummary.source === 'user_submitted_script'
+}
+
 async function findCandidateSnapshots(prisma: BackfillPrisma): Promise<SnapshotRow[]> {
   return prisma.publishedStrategySnapshot.findMany({
     where: {
@@ -305,6 +313,9 @@ async function buildSnapshotPlanItem(
   }
   if (asRecord(snapshot.strategyConfig).marketType !== 'perp') {
     return { skipped: { snapshotId, reason: 'snapshot is not perp' } }
+  }
+  if (isUserSubmittedScriptSnapshot(snapshot)) {
+    return { skipped: { snapshotId, reason: 'user-submitted script snapshot is out of scope' } }
   }
 
   const instance = await findBoundStrategyInstance(prisma, snapshot.strategyInstanceId)

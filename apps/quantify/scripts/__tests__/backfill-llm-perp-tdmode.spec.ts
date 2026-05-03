@@ -69,6 +69,19 @@ describe('backfill-llm-perp-tdmode', () => {
         strategyInstanceId: null,
       },
       {
+        id: 'llm-manual-replacement-perp',
+        snapshotHash: 'old-hash-manual-replacement',
+        ...hashFields,
+        consistencyReport: { status: 'MANUAL_REPLACEMENT', source: 'user_submitted_script' },
+        scriptSummary: { source: 'user_submitted_script' },
+        strategyConfig: { marketType: 'perp' },
+        deploymentExecutionDefaults: { leverage: 1, priceSource: 'close', orderType: 'market', timeInForce: 'gtc' },
+        deploymentExecutionConstraints: { supportedPriceSources: ['close'], supportedOrderTypes: ['market'], supportedTimeInForce: ['gtc'] },
+        executionEnvelope: null,
+        strategyTemplateId: 'template-manual-replacement',
+        strategyInstanceId: 'instance-manual-replacement',
+      },
+      {
         id: 'llm-perp-current',
         snapshotHash: 'old-hash-current',
         ...hashFields,
@@ -109,12 +122,20 @@ describe('backfill-llm-perp-tdmode', () => {
         deploymentExecutionConfig: { tdMode: 'cross' },
         metadata: { source: 'llm-codegen-session', snapshotHash: 'old-hash-current' },
       }],
+      ['instance-manual-replacement', {
+        id: 'instance-manual-replacement',
+        strategyTemplateId: 'template-manual-replacement',
+        params: {},
+        deploymentExecutionConfig: {},
+        metadata: { source: 'llm-codegen-session', snapshotHash: 'old-hash-manual-replacement' },
+      }],
     ])
     const templates = new Map<string, { id: string; metadata: unknown }>([
       ['template-1', { id: 'template-1', metadata: { source: 'llm-codegen-session' } }],
       ['manual-template-1', { id: 'manual-template-1', metadata: { source: 'manual-import' } }],
       ['template-spot', { id: 'template-spot', metadata: { source: 'llm-codegen-session' } }],
       ['template-current', { id: 'template-current', metadata: { source: 'llm-codegen-session' } }],
+      ['template-manual-replacement', { id: 'template-manual-replacement', metadata: { source: 'llm-codegen-session' } }],
     ])
     const instance = instances.get('instance-1') as InstanceFixture
     const subscription = {
@@ -169,7 +190,7 @@ describe('backfill-llm-perp-tdmode', () => {
     const { prisma } = buildPrismaMock()
     const result = await buildBackfillPlan(prisma as never)
 
-    expect(result.scanned).toBe(5)
+    expect(result.scanned).toBe(6)
     expect(result.updated).toBe(0)
     expect(result.plan).toEqual([expect.objectContaining({
       snapshotId: 'llm-perp-missing-tdmode',
@@ -180,6 +201,7 @@ describe('backfill-llm-perp-tdmode', () => {
       expect.objectContaining({ snapshotId: 'official-perp-missing-tdmode', reason: 'official strategy plaza snapshot is out of scope' }),
       expect.objectContaining({ snapshotId: 'non-llm-perp-missing-tdmode', reason: 'snapshot is not an ordinary LLM publication snapshot' }),
       expect.objectContaining({ snapshotId: 'llm-spot', reason: 'snapshot is not perp' }),
+      expect.objectContaining({ snapshotId: 'llm-manual-replacement-perp', reason: 'user-submitted script snapshot is out of scope' }),
       expect.objectContaining({ snapshotId: 'llm-perp-current', reason: 'snapshot already has tdMode contract' }),
     ]))
     expect(prisma.publishedStrategySnapshot.update).not.toHaveBeenCalled()
