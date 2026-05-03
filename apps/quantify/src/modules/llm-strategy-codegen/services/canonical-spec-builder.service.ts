@@ -303,7 +303,7 @@ export class CanonicalSpecBuilderService {
       typeof riskRules.stopLoss === 'string' ? riskRules.stopLoss : stopLossPct !== null ? `止损 ${stopLossPct}%` : null,
       riskRules.stopLossBasis,
     )
-    if (stopLossPct !== null) {
+    if (stopLossPct !== null && this.isExecutablePercentRiskBasis(stopLossBasis)) {
       rules.push({
         id: 'risk-stop-loss',
         phase: 'risk',
@@ -333,7 +333,7 @@ export class CanonicalSpecBuilderService {
         : takeProfitRule ? `止盈 ${takeProfitRule.pct}%` : null,
       riskRules.takeProfitBasis,
     )
-    if (takeProfitRule) {
+    if (takeProfitRule && this.isExecutablePercentRiskBasis(takeProfitBasis)) {
       rules.push({
         id: 'risk-take-profit',
         phase: 'risk',
@@ -952,6 +952,9 @@ export class CanonicalSpecBuilderService {
       if (valuePct === null || !Number.isFinite(valuePct)) {
         continue
       }
+      if (!this.isExecutablePercentRiskBasis(risk.params.basis)) {
+        continue
+      }
 
       rules.push({
         id: risk.key === 'risk.stop_loss_pct' ? 'semantic-risk-stop-loss' : 'semantic-risk-take-profit',
@@ -1008,6 +1011,10 @@ export class CanonicalSpecBuilderService {
     }
 
     return [{ type: 'FORCE_EXIT' }]
+  }
+
+  private isExecutablePercentRiskBasis(rawBasis: unknown): boolean {
+    return rawBasis === undefined || rawBasis === 'entry_avg_price'
   }
 
   private resolveSemanticRiskSideScope(position: SemanticPositionState | null): 'long' | 'short' | 'both' {
@@ -2049,6 +2056,9 @@ export class CanonicalSpecBuilderService {
         return null
       }
       const basis = typeof riskAtom.params.basis === 'string' ? riskAtom.params.basis : 'entry_avg_price'
+      if (!this.isExecutablePercentRiskBasis(basis)) {
+        return null
+      }
       return {
         id: 'risk-stop-loss',
         phase: 'risk',
@@ -2080,6 +2090,9 @@ export class CanonicalSpecBuilderService {
         return null
       }
       const basis = typeof riskAtom.params.basis === 'string' ? riskAtom.params.basis : 'entry_avg_price'
+      if (!this.isExecutablePercentRiskBasis(basis)) {
+        return null
+      }
       const actions = positionMode === 'short_only'
         ? [{ type: 'CLOSE_SHORT' as const }]
         : positionMode === 'long_only'

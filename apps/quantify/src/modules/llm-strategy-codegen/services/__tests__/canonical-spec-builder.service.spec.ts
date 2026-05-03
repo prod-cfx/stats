@@ -546,7 +546,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('keeps explicit non-default risk basis on SemanticState canonical risk rules', () => {
+  it('keeps non-executable non-default risk basis out of SemanticState canonical risk rules', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({
       risk: [
@@ -563,11 +563,10 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).toContainEqual(expect.objectContaining({
+    expect(spec.rules).not.toContainEqual(expect.objectContaining({
       phase: 'risk',
       condition: expect.objectContaining({
         key: 'position_loss_pct',
-        params: { basis: 'peak_position_pnl' },
       }),
     }))
   })
@@ -990,7 +989,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('preserves clarified stop-loss and take-profit basis on canonical risk rules', () => {
+  it('preserves executable clarified stop-loss basis and skips unsupported take-profit basis', () => {
     const service = new CanonicalSpecBuilderService()
 
     const spec = service.build({
@@ -1017,13 +1016,9 @@ describe('canonicalSpecBuilderService', () => {
         }),
         metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
       }),
-      expect.objectContaining({
-        id: 'risk-take-profit',
-        condition: expect.objectContaining({
-          params: expect.objectContaining({ basis: 'position_pnl' }),
-        }),
-        metadata: expect.objectContaining({ basis: 'position_pnl' }),
-      }),
+    ]))
+    expect(spec.rules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'risk-take-profit' }),
     ]))
   })
 
@@ -1063,7 +1058,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('keeps explicit position-pnl overrides on canonical risk rules', () => {
+  it('keeps explicit position-pnl overrides out of executable canonical risk rules', () => {
     const service = new CanonicalSpecBuilderService()
 
     const spec = service.build({
@@ -1082,15 +1077,9 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        metadata: expect.objectContaining({ basis: 'position_pnl' }),
-      }),
-      expect.objectContaining({
-        id: 'risk-take-profit',
-        metadata: expect.objectContaining({ basis: 'position_pnl' }),
-      }),
+    expect(spec.rules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'risk-stop-loss' }),
+      expect.objectContaining({ id: 'risk-take-profit' }),
     ]))
   })
 
