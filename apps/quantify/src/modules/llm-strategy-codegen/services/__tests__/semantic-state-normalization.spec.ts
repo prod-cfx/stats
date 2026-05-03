@@ -73,6 +73,33 @@ describe('normalizeRiskSemantics', () => {
     }))
   })
 
+  it('does not relock superseded percent risks while defaulting params', () => {
+    const risks: SemanticRiskState[] = [{
+      id: 'risk-superseded',
+      key: 'risk.stop_loss_pct',
+      params: { valuePct: 5 },
+      status: 'superseded',
+      source: 'derived',
+      openSlots: [{
+        slotKey: 'risk.stopLoss.basis',
+        fieldPath: 'risk[0].params.basis',
+        questionHint: '请确认止损 5% 的计算基准',
+        status: 'open',
+        priority: 'risk',
+        affectsExecution: true,
+      }],
+    }]
+
+    expect(normalizeRiskSemantics(risks)[0]).toEqual(expect.objectContaining({
+      status: 'superseded',
+      params: expect.objectContaining({
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+      openSlots: [],
+    }))
+  })
+
   it('preserves valid risk condition expressions as recognized unsupported', () => {
     const condition = {
       kind: 'predicate',

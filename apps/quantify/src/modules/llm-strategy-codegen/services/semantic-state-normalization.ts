@@ -167,7 +167,11 @@ export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): Seman
   }
 
   const openSlots = risk.openSlots.filter(slot => !isRiskBasisOpenSlot(slot.slotKey, slot.fieldPath))
-  const status = typeof params.valuePct === 'number' && Number.isFinite(params.valuePct) && params.valuePct > 0 && openSlots.length === 0
+  const status = risk.status !== 'superseded'
+    && typeof params.valuePct === 'number'
+    && Number.isFinite(params.valuePct)
+    && params.valuePct > 0
+    && openSlots.length === 0
     ? 'locked'
     : risk.status
 
