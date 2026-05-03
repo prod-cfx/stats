@@ -588,6 +588,43 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('builds supported risk expressions from normalized intent', () => {
+    const service = new CanonicalSpecBuilderService()
+    const spec = service.buildFromNormalizedIntent({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    } as any, {
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [{
+        key: 'risk.condition_expression',
+        params: {
+          condition: {
+            kind: 'predicate',
+            op: 'LTE',
+            left: { kind: 'position', field: 'pnl_pct' },
+            right: { kind: 'constant', value: -4, unit: 'percent' },
+          },
+          effect: { type: 'close_position' },
+          scope: 'current_position',
+          capabilityStatus: 'supported',
+        },
+      }],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
+      unresolved: [],
+      normalizationNotes: [],
+    } as any)
+
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      id: 'risk-condition-expression',
+      phase: 'risk',
+      condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
+      actions: [{ type: 'FORCE_EXIT' }],
+    }))
+  })
+
   it('keeps non-executable non-default risk basis out of SemanticState canonical risk rules', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({

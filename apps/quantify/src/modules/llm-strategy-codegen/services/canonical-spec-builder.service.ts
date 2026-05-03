@@ -2060,11 +2060,77 @@ export class CanonicalSpecBuilderService {
     return 'bidirectional'
   }
 
+  private resolveNormalizedRiskExpressionSideScope(
+    scope: unknown,
+    positionMode: StrategyNormalizedIntent['position']['positionMode'] | null,
+  ): 'long' | 'short' | 'both' {
+    if (scope === 'long') {
+      return 'long'
+    }
+    if (scope === 'short') {
+      return 'short'
+    }
+    if (positionMode === 'long_only') {
+      return 'long'
+    }
+    if (positionMode === 'short_only') {
+      return 'short'
+    }
+    return 'both'
+  }
+
   private buildRiskRuleFromNormalizedAtom(
     riskAtom: NormalizedRiskAtom,
     priority: number,
     positionMode: StrategyNormalizedIntent['position']['positionMode'] | null,
   ): CanonicalRuleV2 | null {
+    if (riskAtom.key === 'risk.condition_expression') {
+      const risk: SemanticRiskState = {
+        id: 'normalized-risk-expression',
+        key: riskAtom.key,
+        params: riskAtom.params,
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }
+      if (!validateSemanticRiskContract(risk).ok || risk.params.capabilityStatus !== 'supported') {
+        return null
+      }
+
+      const condition = this.isValidSemanticExpression(risk.params.condition)
+        ? this.buildConditionFromSemanticExpression(risk.params.condition)
+        : null
+      if (!condition) {
+        return null
+      }
+
+      const sideScope = this.resolveNormalizedRiskExpressionSideScope(risk.params.scope, positionMode)
+      const actions = this.buildActionsForSemanticRiskExpression(risk, sideScope)
+      if (actions.length === 0) {
+        return null
+      }
+
+      return {
+        id: 'risk-condition-expression',
+        phase: 'risk',
+        sideScope,
+        priority,
+        condition,
+        actions,
+        metadata: {
+          semanticKey: risk.key,
+          scope: risk.params.scope,
+          effect: risk.params.effect,
+          capabilityStatus: risk.params.capabilityStatus,
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: actions.map(action => action.type),
+          },
+        },
+      }
+    }
+
     if (riskAtom.key === 'risk.stop_loss_pct') {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
       if (!valuePct || !Number.isFinite(valuePct)) {
