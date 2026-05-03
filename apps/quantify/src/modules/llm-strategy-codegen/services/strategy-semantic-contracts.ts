@@ -391,6 +391,9 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
     ) {
       return invalid('invalid_risk_capability_status')
     }
+    if (risk.params.capabilityStatus === 'supported' && expressionContainsAccountOperand(risk.params.condition)) {
+      return invalid('unsupported_runtime_risk_expression_operand')
+    }
     return valid()
   }
   if (
@@ -545,6 +548,26 @@ function validateExpressionOperand(operand: unknown): SemanticContractValidation
   }
 
   return invalid('unsupported_expression_operand_kind')
+}
+
+function expressionContainsAccountOperand(expression: unknown): boolean {
+  if (!isRecord(expression)) {
+    return false
+  }
+
+  if (expression.kind === 'predicate') {
+    return isRecord(expression.left) && expression.left.kind === 'account'
+      || isRecord(expression.right) && expression.right.kind === 'account'
+  }
+
+  if (
+    (expression.kind === 'AND' || expression.kind === 'OR' || expression.kind === 'NOT')
+    && Array.isArray(expression.children)
+  ) {
+    return expression.children.some(child => expressionContainsAccountOperand(child))
+  }
+
+  return false
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

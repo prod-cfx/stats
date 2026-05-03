@@ -409,9 +409,29 @@ describe('strategySemanticContracts', () => {
         effect: { type: 'pause_strategy' },
         scope: 'account',
         capabilityStatus: 'recognized_unsupported',
-        unsupportedReason: 'risk_expression_compiler_not_available',
+      unsupportedReason: 'risk_expression_compiler_not_available',
       },
     })).toEqual({ ok: true })
+  })
+
+  it('rejects supported risk condition expressions with account operands', () => {
+    expect(validateSemanticRiskContract({
+      key: 'risk.condition_expression',
+      params: {
+        condition: {
+          kind: 'predicate',
+          left: { kind: 'account', field: 'drawdown_pct' },
+          op: 'GTE',
+          right: { kind: 'constant', value: 12, unit: 'percent' },
+        },
+        effect: { type: 'pause_strategy' },
+        scope: 'account',
+        capabilityStatus: 'supported',
+      },
+    })).toEqual(expect.objectContaining({
+      ok: false,
+      reason: 'unsupported_runtime_risk_expression_operand',
+    }))
   })
 
   it('rejects risk reduce expression params with invalid reduce percent', () => {
