@@ -150,6 +150,7 @@ const SUPPORTED_EXPRESSION_OPERATORS = new Set<string>(['GT', 'GTE', 'LT', 'LTE'
 const SUPPORTED_SERIES_FIELDS = new Set<string>(['open', 'high', 'low', 'close'])
 const SUPPORTED_INDICATOR_NAMES = new Set<string>(['sma', 'ema', 'rsi', 'macd'])
 const SUPPORTED_POSITION_FIELDS = new Set<string>(['avg_price', 'pnl_pct', 'bars_held', 'has_position'])
+const SUPPORTED_ACCOUNT_FIELDS = new Set<string>(['drawdown_pct'])
 const SUPPORTED_ACTION_KEYS = new Set<string>(['open_long', 'close_long', 'open_short', 'close_short'])
 const SUPPORTED_QUOTE_ASSETS = ['USDT', 'USDC', 'USD'] as const
 const SUPPORTED_QUOTE_ASSET_SET = new Set<string>(SUPPORTED_QUOTE_ASSETS)
@@ -518,6 +519,14 @@ function validateExpressionOperand(operand: unknown): SemanticContractValidation
   if (operand.kind === 'position') {
     if (typeof operand.field !== 'string' || !SUPPORTED_POSITION_FIELDS.has(operand.field)) {
       return invalid('unsupported_position_field')
+    }
+
+    return valid()
+  }
+
+  if (operand.kind === 'account') {
+    if (typeof operand.field !== 'string' || !SUPPORTED_ACCOUNT_FIELDS.has(operand.field)) {
+      return invalid('unsupported_account_field')
     }
 
     return valid()

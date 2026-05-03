@@ -605,9 +605,11 @@ export class SemanticStateReducerService {
     if (riskKey === 'risk.max_drawdown_pct' || riskKey === 'risk.max_single_loss_pct') {
       const condition: SemanticExpression = {
         kind: 'predicate',
-        op: 'LTE',
-        left: { kind: 'position', field: 'pnl_pct' },
-        right: { kind: 'constant', value: -valuePct, unit: 'percent' },
+        op: riskKey === 'risk.max_drawdown_pct' ? 'GTE' : 'LTE',
+        left: riskKey === 'risk.max_drawdown_pct'
+          ? { kind: 'account', field: 'drawdown_pct' }
+          : { kind: 'position', field: 'pnl_pct' },
+        right: { kind: 'constant', value: riskKey === 'risk.max_drawdown_pct' ? valuePct : -valuePct, unit: 'percent' },
       }
 
       return {
@@ -615,7 +617,7 @@ export class SemanticStateReducerService {
         effect: riskKey === 'risk.max_drawdown_pct'
           ? { type: 'pause_strategy' }
           : { type: 'close_position' },
-        scope: riskKey === 'risk.max_drawdown_pct' ? 'strategy' : 'current_position',
+        scope: riskKey === 'risk.max_drawdown_pct' ? 'account' : 'current_position',
         capabilityStatus: riskKey === 'risk.max_drawdown_pct' ? 'recognized_unsupported' : 'supported',
         ...(riskKey === 'risk.max_drawdown_pct' ? { unsupportedReason: 'risk_expression_compiler_not_available' } : {}),
       }

@@ -305,7 +305,12 @@ describe('strategyIntentNormalizerService', () => {
       expect.objectContaining({
         key: 'risk.condition_expression',
         params: expect.objectContaining({
-          scope: 'strategy',
+          scope: 'account',
+          condition: expect.objectContaining({
+            op: 'GTE',
+            left: { kind: 'account', field: 'drawdown_pct' },
+            right: { kind: 'constant', value: 12, unit: 'percent' },
+          }),
           effect: { type: 'pause_strategy' },
           capabilityStatus: 'recognized_unsupported',
         }),

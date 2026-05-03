@@ -704,6 +704,13 @@ export class SemanticStateProjectionService {
       return fieldLabels[operand.field]
     }
 
+    if (operand.kind === 'account') {
+      const fieldLabels: Record<typeof operand.field, string> = {
+        drawdown_pct: '账户最大回撤',
+      }
+      return fieldLabels[operand.field]
+    }
+
     if (operand.kind === 'constant') {
       if (operand.unit === 'percent') return `${operand.value}%`
       return String(operand.value)
@@ -782,6 +789,10 @@ export class SemanticStateProjectionService {
           || candidate.side === 'long'
           || candidate.side === 'short'
           || candidate.side === 'both')
+    }
+
+    if (candidate.kind === 'account') {
+      return candidate.field === 'drawdown_pct'
     }
 
     if (candidate.kind === 'constant') {

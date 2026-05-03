@@ -859,9 +859,11 @@ export class StrategyIntentNormalizerService {
   private buildLegacyRiskExpressionParams(valuePct: number, scope: 'strategy' | 'current_position'): Record<string, unknown> {
     const condition: SemanticExpression = {
       kind: 'predicate',
-      op: 'LTE',
-      left: { kind: 'position', field: 'pnl_pct' },
-      right: { kind: 'constant', value: -valuePct, unit: 'percent' },
+      op: scope === 'strategy' ? 'GTE' : 'LTE',
+      left: scope === 'strategy'
+        ? { kind: 'account', field: 'drawdown_pct' }
+        : { kind: 'position', field: 'pnl_pct' },
+      right: { kind: 'constant', value: scope === 'strategy' ? valuePct : -valuePct, unit: 'percent' },
     }
 
     return {
@@ -869,7 +871,7 @@ export class StrategyIntentNormalizerService {
       effect: scope === 'strategy'
         ? { type: 'pause_strategy' }
         : { type: 'close_position' },
-      scope,
+      scope: scope === 'strategy' ? 'account' : scope,
       capabilityStatus: scope === 'strategy' ? 'recognized_unsupported' : 'supported',
       ...(scope === 'strategy' ? { unsupportedReason: 'risk_expression_compiler_not_available' } : {}),
     }
