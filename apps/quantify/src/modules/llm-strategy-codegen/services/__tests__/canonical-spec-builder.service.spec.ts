@@ -485,8 +485,7 @@ describe('canonicalSpecBuilderService', () => {
             },
             effect: { type: 'pause_strategy' },
             scope: 'strategy',
-            capabilityStatus: 'recognized_unsupported',
-            unsupportedReason: 'risk_expression_compiler_not_available',
+            capabilityStatus: 'supported',
           },
           status: 'locked',
           source: 'user_explicit',
@@ -504,12 +503,47 @@ describe('canonicalSpecBuilderService', () => {
       actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
       metadata: expect.objectContaining({
         semanticKey: 'risk.condition_expression',
-        capabilityStatus: 'recognized_unsupported',
+        capabilityStatus: 'supported',
       }),
     }))
     expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
       status: 'VALID',
     }))
+  })
+
+  it('does not build executable rules for recognized unsupported risk expressions', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'daily-loss-halt',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct' },
+              right: { kind: 'constant', value: -5, unit: 'percent' },
+            },
+            effect: { type: 'pause_strategy' },
+            scope: 'strategy',
+            capabilityStatus: 'recognized_unsupported',
+            unsupportedReason: 'risk_expression_compiler_not_available',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'semantic-daily-loss-halt',
+      }),
+    ]))
   })
 
   it('keeps explicit non-default risk basis on SemanticState canonical risk rules', () => {

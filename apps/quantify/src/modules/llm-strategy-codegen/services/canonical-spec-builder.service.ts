@@ -916,6 +916,9 @@ export class CanonicalSpecBuilderService {
         continue
       }
       if (risk.key === 'risk.condition_expression') {
+        if (risk.params.capabilityStatus !== 'supported') {
+          continue
+        }
         const condition = this.isValidSemanticExpression(risk.params.condition)
           ? this.buildConditionFromSemanticExpression(risk.params.condition)
           : null
