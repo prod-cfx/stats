@@ -184,9 +184,11 @@ export interface RiskGuard {
     | 'MAX_POSITION_PCT'
     | 'TRAILING_STOP_PCT'
     | 'HARD_PRICE_STOP'
+    | 'EXPRESSION_GUARD'
   scope: 'position' | 'strategy' | 'order_program'
   appliesTo?: 'long' | 'short' | 'both'
   value?: number
   referenceRef?: string
+  predicateRef?: string
   onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
 }

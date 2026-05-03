@@ -250,13 +250,135 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.stop_loss_pct',
-        params: { valuePct: 5, basis: 'entry_avg_price' },
+        params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
       }),
       expect.objectContaining({
         key: 'risk.take_profit_pct',
-        params: { valuePct: 8, basis: 'entry_avg_price' },
+        params: expect.objectContaining({ valuePct: 8, basis: 'entry_avg_price' }),
       }),
     ]))
+  })
+
+  it('normalizes legacy riskRules into structured percent risk params', () => {
+    const result = service.normalize({
+      riskRules: {
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'position_pnl',
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'user_explicit',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({
+        valuePct: 10,
+        direction: 'profit',
+        basis: 'position_pnl',
+        basisSource: 'user_explicit',
+        effect: 'close_position',
+        scope: 'current_position',
+      }),
+    }))
+  })
+
+  it('normalizes legacy drawdown riskRules into structured risk expressions', () => {
+    const result = service.normalize({
+      riskRules: {
+        maxDrawdownPct: 12,
+        maxSingleLossPct: 4,
+      },
+    })
+
+    expect(result.normalizedIntent.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.condition_expression',
+        params: expect.objectContaining({
+          scope: 'account',
+          condition: expect.objectContaining({
+            op: 'GTE',
+            left: { kind: 'account', field: 'drawdown_pct' },
+            right: { kind: 'constant', value: 12, unit: 'percent' },
+          }),
+          effect: { type: 'pause_strategy' },
+          capabilityStatus: 'recognized_unsupported',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'risk.condition_expression',
+        params: expect.objectContaining({
+          scope: 'current_position',
+          effect: { type: 'close_position' },
+          capabilityStatus: 'supported',
+        }),
+      }),
+    ]))
+  })
+
+  it('marks absent legacy stop loss basis defaults as system generated', () => {
+    const result = service.normalize({
+      riskRules: {
+        stopLossPct: 5,
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+    }))
+  })
+
+  it('keeps inferred legacy stop loss basis provenance as system generated', () => {
+    const result = service.normalize({
+      riskRules: {
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        _inferredAssumptions: ['risk.stopLossBasis'],
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({
+        valuePct: 5,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+    }))
+  })
+
+  it('keeps inferred legacy take profit basis provenance as system generated', () => {
+    const result = service.normalize({
+      riskRules: {
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+        _inferredAssumptions: ['risk.takeProfitBasis'],
+      },
+    } as never)
+
+    expect(result.normalizedIntent.risk).toContainEqual(expect.objectContaining({
+      key: 'risk.take_profit_pct',
+      params: expect.objectContaining({
+        valuePct: 10,
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+      }),
+    }))
   })
 
   it('emits a closed grid trigger atom from checklist.grid even without explicit grid wording in rules', () => {

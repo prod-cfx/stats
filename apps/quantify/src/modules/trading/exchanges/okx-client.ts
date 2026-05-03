@@ -82,14 +82,6 @@ interface OkxInstrumentSpecItem {
   lotSz?: string
 }
 
-interface OkxAccountConfigItem {
-  posMode?: string
-}
-
-export interface OkxAccountConfigSnapshot {
-  posMode: string
-}
-
 export class OkxClient extends BaseCexClient {
   private readonly apiKey: string
 
@@ -118,22 +110,6 @@ export class OkxClient extends BaseCexClient {
 
   async ping(): Promise<void> {
     await this.request('GET', '/api/v5/public/time')
-  }
-
-  async fetchAccountConfig(): Promise<OkxAccountConfigSnapshot> {
-    const res = await this.request<{ data: OkxAccountConfigItem[] }>(
-      'GET',
-      '/api/v5/account/config',
-      {},
-      true,
-    )
-
-    const posMode = res.data[0]?.posMode
-    if (!posMode) {
-      throw new ExchangeError('OKX account config missing posMode', 'POSITION_MODE_UNAVAILABLE', res)
-    }
-
-    return { posMode }
   }
 
   async createOrder(input: CreateOrderInput): Promise<UnifiedOrder> {
@@ -552,18 +528,9 @@ export class OkxClient extends BaseCexClient {
   }
 
   private toInstrumentId(symbol: string, marketType: MarketType): string {
-    const upper = symbol.toUpperCase()
-    if (upper.includes('-')) {
-      if (marketType === 'perp' && upper.endsWith('-SWAP')) return upper
-      if (marketType === 'spot' && !upper.endsWith('-SWAP')) return upper
-    }
-
     // 统一 symbol: BTC/USDT 或 BTC/USDT:PERP
     const baseQuote = symbol.includes(':') ? symbol.split(':')[0] : symbol
     const [base, quote] = baseQuote.split('/')
-    if (!base || !quote) {
-      throw new ExchangeError(`Unsupported OKX symbol format: ${symbol}`)
-    }
     if (marketType === 'spot') {
       return `${base}-${quote}`
     }

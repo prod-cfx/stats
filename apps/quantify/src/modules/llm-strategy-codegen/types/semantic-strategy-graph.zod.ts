@@ -60,10 +60,16 @@ export const semanticExpressionConstantOperandSchema = z.object({
   unit: z.enum(['quote', 'base', 'ratio', 'percent', 'price']).optional(),
 })
 
+export const semanticExpressionAccountOperandSchema = z.object({
+  kind: z.literal('account'),
+  field: z.literal('drawdown_pct'),
+})
+
 export const semanticExpressionOperandSchema = z.discriminatedUnion('kind', [
   semanticExpressionSeriesOperandSchema,
   semanticExpressionIndicatorOperandSchema,
   semanticExpressionPositionOperandSchema,
+  semanticExpressionAccountOperandSchema,
   semanticExpressionConstantOperandSchema,
 ])
 
@@ -77,6 +83,7 @@ export const semanticGraphExpressionOperandSchema = z.discriminatedUnion('kind',
   semanticExpressionSeriesOperandSchema,
   semanticExpressionIndicatorOperandSchema,
   semanticExpressionPositionOperandSchema,
+  semanticExpressionAccountOperandSchema,
   semanticExpressionConstantOperandSchema,
   semanticGraphAtomOperandSchema,
 ])

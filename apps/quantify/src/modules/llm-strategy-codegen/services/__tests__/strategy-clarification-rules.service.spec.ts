@@ -675,6 +675,19 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('does not create legacy basis clarification when semantic risk basis is normalized', () => {
+    const state = service.detect({
+      riskRules: {
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+      },
+    } as never)
+
+    expect(state.items).not.toContainEqual(expect.objectContaining({
+      field: 'riskRules.stopLossBasis',
+    }))
+  })
+
   it('keeps drawdown-style risk rules basis-gated because they lack a safe default', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],

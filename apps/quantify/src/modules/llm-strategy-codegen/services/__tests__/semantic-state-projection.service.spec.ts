@@ -1298,6 +1298,46 @@ describe('SemanticStateProjectionService', () => {
     })
   })
 
+  it('renders structured risk condition expressions in server-side conversation summaries', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [
+        {
+          id: 'daily-loss-halt',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct' },
+              right: { kind: 'constant', value: -5, unit: 'percent' },
+            },
+            effect: { type: 'pause_strategy' },
+            scope: 'strategy',
+            capabilityStatus: 'recognized_unsupported',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-21T00:00:00.000Z',
+    })
+
+    expect(view.riskSummary).toContain('风控：当持仓收益率低于或等于-5%时暂停策略')
+  })
+
   it('builds grid recommendation signal from grid triggers and family', () => {
     const view = service.buildConversationView({
       version: 1,
@@ -1738,6 +1778,46 @@ describe('SemanticStateProjectionService', () => {
       stopLossBasis: null,
       takeProfitBasis: null,
     })
+    expect(view.riskSummary).toContain('持仓收益率')
+  })
+
+  it('keeps inferred basis as metadata without creating open risk slots', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [{
+        id: 'risk-1',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5, basis: 'entry_avg_price', basisSource: 'system_default' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const view = service.buildConversationView(state)
+    const clarification = service.buildClarificationView(state)
+
+    expect(view.inferredDefaults.inferredKeys).toContain('risk.stopLossBasis')
+    expect(clarification.nextQuestion).toBeNull()
+    expect(state.risk).not.toContainEqual(expect.objectContaining({
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: expect.stringMatching(/basis/u),
+        }),
+      ]),
+    }))
   })
 
   it('keeps conversation summary stable for the same locked atoms with different order', () => {

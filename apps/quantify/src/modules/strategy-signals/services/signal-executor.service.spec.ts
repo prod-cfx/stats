@@ -3,8 +3,6 @@ import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-confi
 import { PositionAdmissionService } from './position-admission.service'
 import { SignalExecutorService } from './signal-executor.service'
 
-const OKX_PERP_EXECUTION_CONFIG = { tdMode: 'cross' }
-
 describe('signalExecutorService', () => {
   function createSchedulerRegistry() {
     return { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
@@ -72,10 +70,6 @@ describe('signalExecutorService', () => {
         balance: new Prisma.Decimal(1000),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
-      undefined,
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toEqual({
@@ -213,10 +207,6 @@ describe('signalExecutorService', () => {
         balance: new Prisma.Decimal(1000),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
-      undefined,
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -262,10 +252,6 @@ describe('signalExecutorService', () => {
         initialBalance: new Prisma.Decimal('4901.58222'),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
-      undefined,
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toEqual({
@@ -300,10 +286,6 @@ describe('signalExecutorService', () => {
         balance: new Prisma.Decimal(1000),
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
-      undefined,
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -427,10 +409,6 @@ describe('signalExecutorService', () => {
           maxRiskFraction: 1,
         },
       } as any,
-      undefined,
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -470,9 +448,6 @@ describe('signalExecutorService', () => {
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
       new Prisma.Decimal('0.25'),
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -513,9 +488,6 @@ describe('signalExecutorService', () => {
       },
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
       new Prisma.Decimal('0.0359'),
-      undefined,
-      undefined,
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -539,7 +511,6 @@ describe('signalExecutorService', () => {
         amount: 0.0359,
         price: 94500,
         reduceOnly: true,
-        positionSide: 'LONG',
       },
       {
         baseAsset: 'BTC',
@@ -619,7 +590,6 @@ describe('signalExecutorService', () => {
       DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
       'SELL',
       'LONG',
-      OKX_PERP_EXECUTION_CONFIG,
     )
 
     expect(result).toMatchObject({
@@ -639,73 +609,6 @@ describe('signalExecutorService', () => {
       positionSide: 'LONG',
     })
     expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
-  })
-
-  it('marks close signals without open positions as informational skips', async () => {
-    const service = createService()
-    const executorRepository = (service as any).executorRepository
-    const executionRepository = (service as any).executionRepository
-
-    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
-    executorRepository.lockAccount = jest.fn().mockResolvedValue([
-      {
-        id: 'account-1',
-        userId: 'user-1',
-        baseCurrency: 'USDT',
-        balance: new Prisma.Decimal(0),
-        equity: new Prisma.Decimal(1000),
-        initialBalance: new Prisma.Decimal(1000),
-      },
-    ])
-    executorRepository.findOpenPositionForClose = jest.fn().mockResolvedValue(null)
-    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-close-skip-1' })
-
-    const result = await (service as any).prepareExecution(
-      {
-        id: 'sig-close-skip-1',
-        direction: 'CLOSE_LONG',
-        signalType: 'EXIT',
-        entryPrice: '100',
-        metadata: {
-          runtimeProvenance: {
-            marketType: 'perp',
-          },
-        },
-        symbol: {
-          code: 'BTCUSDT:PERP',
-          exchange: 'OKX',
-          instrumentType: 'PERPETUAL',
-          baseAsset: 'BTC',
-          quoteAsset: 'USDT',
-          precisionPrice: 2,
-          precisionQuantity: 4,
-          lotSize: '0.0001',
-        },
-      } as any,
-      { id: 'account-1', userId: 'user-1' } as any,
-      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
-      'SELL',
-      'LONG',
-      OKX_PERP_EXECUTION_CONFIG,
-    )
-
-    expect(result).toEqual({
-      type: 'skip',
-      reason: 'No open position to close for this signal',
-      executionId: 'exec-close-skip-1',
-      metadata: {
-        skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
-        severity: 'info',
-      },
-    })
-    expect(executionRepository.create).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'SKIPPED',
-      errorMessage: 'No open position to close for this signal',
-      metadata: {
-        skipKind: 'NO_OPEN_POSITION_TO_CLOSE',
-        severity: 'info',
-      },
-    }))
   })
 
   it('blocks entry execution when portfolio constraints disallow adding to an open position', async () => {
@@ -775,68 +678,6 @@ describe('signalExecutorService', () => {
       marketType: 'perp',
       symbol: 'BTCUSDT',
     })
-    expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    ['missing', null],
-    ['unsupported', { tdMode: 'margin' }],
-  ])('fails OKX perp execution when deployment tdMode is %s', async (_caseName, deploymentExecutionConfig) => {
-    const service = createService()
-    const executorRepository = (service as any).executorRepository
-    const executionRepository = (service as any).executionRepository
-    const accountsService = (service as any).accountsService
-
-    executionRepository.findBySignalAndAccount = jest.fn().mockResolvedValue(null)
-    executorRepository.lockAccount = jest.fn().mockResolvedValue([
-      {
-        id: 'account-td-mode-1',
-        userId: 'user-td-mode-1',
-        baseCurrency: 'USDT',
-        balance: new Prisma.Decimal(1000),
-        equity: new Prisma.Decimal(1000),
-        initialBalance: new Prisma.Decimal(1000),
-      },
-    ])
-    executorRepository.findOpenPositionsForAdmission = jest.fn().mockResolvedValue([])
-    executorRepository.hasPendingReconcileRequiredEntryExecution = jest.fn().mockResolvedValue(false)
-    executorRepository.findRiskProfileByStrategyInstanceId = jest.fn().mockResolvedValue(null)
-    executionRepository.create = jest.fn().mockResolvedValue({ id: 'exec-td-mode-1' })
-
-    const result = await (service as any).prepareExecution(
-      {
-        id: 'sig-td-mode-1',
-        direction: 'BUY',
-        signalType: 'ENTRY',
-        entryPrice: '100',
-        strategyInstanceId: 'strategy-instance-td-mode-1',
-        symbol: {
-          code: 'BTCUSDT:PERP',
-          exchange: 'OKX',
-          instrumentType: 'PERPETUAL',
-          baseAsset: 'BTC',
-          quoteAsset: 'USDT',
-          precisionPrice: 2,
-          precisionQuantity: 4,
-          lotSize: '0.0001',
-        },
-      } as any,
-      { id: 'account-td-mode-1', userId: 'user-td-mode-1' } as any,
-      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
-      'BUY',
-      'LONG',
-      deploymentExecutionConfig,
-    )
-
-    expect(result).toEqual({
-      type: 'failed',
-      reason: 'Missing or unsupported explicit tdMode in strategy deployment execution config',
-      executionId: 'exec-td-mode-1',
-    })
-    expect(executionRepository.create).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'FAILED',
-      errorMessage: 'Missing or unsupported explicit tdMode in strategy deployment execution config',
-    }))
     expect(accountsService.applyLedgerDelta).not.toHaveBeenCalled()
   })
 

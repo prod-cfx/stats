@@ -741,6 +741,214 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('projects normalized semantic risk basis to legacy riskRules compatibility output', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'risk-1',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 5 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      phase: 'risk',
+      condition: expect.objectContaining({
+        kind: 'atom',
+        key: 'position_loss_pct',
+        params: { basis: 'entry_avg_price' },
+      }),
+    }))
+  })
+
+  it('builds SemanticState canonical risk expression rules', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'daily-loss-halt',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct' },
+              right: { kind: 'constant', value: -5, unit: 'percent' },
+            },
+            effect: { type: 'pause_strategy' },
+            scope: 'strategy',
+            capabilityStatus: 'supported',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      id: 'semantic-daily-loss-halt',
+      phase: 'risk',
+      condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
+      actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      metadata: expect.objectContaining({
+        semanticKey: 'risk.condition_expression',
+        capabilityStatus: 'supported',
+      }),
+    }))
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
+      status: 'VALID',
+    }))
+  })
+
+  it('does not build executable rules for recognized unsupported risk expressions', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'daily-loss-halt',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct' },
+              right: { kind: 'constant', value: -5, unit: 'percent' },
+            },
+            effect: { type: 'pause_strategy' },
+            scope: 'strategy',
+            capabilityStatus: 'recognized_unsupported',
+            unsupportedReason: 'risk_expression_compiler_not_available',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'semantic-daily-loss-halt',
+      }),
+    ]))
+  })
+
+  it('uses risk expression scope when building side-specific risk rules', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'short-loss-close',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct', side: 'short' },
+              right: { kind: 'constant', value: -3, unit: 'percent' },
+            },
+            effect: { type: 'close_position' },
+            scope: 'short',
+            capabilityStatus: 'supported',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      id: 'semantic-short-loss-close',
+      sideScope: 'short',
+      actions: [{ type: 'FORCE_EXIT' }],
+    }))
+  })
+
+  it('builds supported risk expressions from normalized intent', () => {
+    const service = new CanonicalSpecBuilderService()
+    const spec = service.buildFromNormalizedIntent({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    } as any, {
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [{
+        key: 'risk.condition_expression',
+        params: {
+          condition: {
+            kind: 'predicate',
+            op: 'LTE',
+            left: { kind: 'position', field: 'pnl_pct' },
+            right: { kind: 'constant', value: -4, unit: 'percent' },
+          },
+          effect: { type: 'close_position' },
+          scope: 'current_position',
+          capabilityStatus: 'supported',
+        },
+      }],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
+      unresolved: [],
+      normalizationNotes: [],
+    } as any)
+
+    expect(spec.rules).toContainEqual(expect.objectContaining({
+      id: 'risk-condition-expression',
+      phase: 'risk',
+      condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
+      actions: [{ type: 'FORCE_EXIT' }],
+    }))
+  })
+
+  it('keeps non-executable non-default risk basis out of SemanticState canonical risk rules', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      risk: [
+        {
+          id: 'peak-stop',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 5, basis: 'peak_position_pnl', basisSource: 'user_explicit' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules).not.toContainEqual(expect.objectContaining({
+      phase: 'risk',
+      condition: expect.objectContaining({
+        key: 'position_loss_pct',
+      }),
+    }))
+  })
+
   it('builds SemanticState canonical condition groups from logical expressions', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({
@@ -1159,7 +1367,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('preserves clarified stop-loss and take-profit basis on canonical risk rules', () => {
+  it('preserves executable clarified stop-loss basis and compiles position-pnl take-profit as an expression', () => {
     const service = new CanonicalSpecBuilderService()
 
     const spec = service.build({
@@ -1186,10 +1394,15 @@ describe('canonicalSpecBuilderService', () => {
         }),
         metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
       }),
+    ]))
+    expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'risk-take-profit',
         condition: expect.objectContaining({
-          params: expect.objectContaining({ basis: 'position_pnl' }),
+          kind: 'expression',
+          op: 'GTE',
+          left: { kind: 'position', field: 'pnl_pct' },
+          right: { kind: 'constant', value: 10, unit: 'percent' },
         }),
         metadata: expect.objectContaining({ basis: 'position_pnl' }),
       }),
@@ -1232,7 +1445,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('keeps explicit position-pnl overrides on canonical risk rules', () => {
+  it('builds explicit position-pnl risk rules as canonical expressions', () => {
     const service = new CanonicalSpecBuilderService()
 
     const spec = service.build({
@@ -1254,11 +1467,23 @@ describe('canonicalSpecBuilderService', () => {
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'risk-stop-loss',
-        metadata: expect.objectContaining({ basis: 'position_pnl' }),
+        phase: 'risk',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'LTE',
+          left: { kind: 'position', field: 'pnl_pct' },
+          right: { kind: 'constant', value: -5, unit: 'percent' },
+        }),
       }),
       expect.objectContaining({
         id: 'risk-take-profit',
-        metadata: expect.objectContaining({ basis: 'position_pnl' }),
+        phase: 'risk',
+        condition: expect.objectContaining({
+          kind: 'expression',
+          op: 'GTE',
+          left: { kind: 'position', field: 'pnl_pct' },
+          right: { kind: 'constant', value: 10, unit: 'percent' },
+        }),
       }),
     ]))
   })

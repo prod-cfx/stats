@@ -1,6 +1,5 @@
 import type {
   SemanticActionState,
-  SemanticExpression,
   SemanticPositionSizingContract,
   SemanticPositionState,
   SemanticRiskState,
@@ -139,17 +138,43 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
       { slotKey: 'risk.take_profit', valueShape: 'scalar', unit: 'percent', paramPaths: ['valuePct', 'takeProfitPct', 'pct'] },
     ],
   },
+  'risk.condition_expression': {
+    semanticKey: 'risk.condition_expression',
+    family: 'risk',
+    requiredParams: ['condition', 'effect', 'scope', 'capabilityStatus'],
+    editableSlots: [],
+  },
 }
 
 const SUPPORTED_EXPRESSION_OPERATORS = new Set<string>(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'CROSS_OVER', 'CROSS_UNDER'])
 const SUPPORTED_SERIES_FIELDS = new Set<string>(['open', 'high', 'low', 'close'])
 const SUPPORTED_INDICATOR_NAMES = new Set<string>(['sma', 'ema', 'rsi', 'macd'])
 const SUPPORTED_POSITION_FIELDS = new Set<string>(['avg_price', 'pnl_pct', 'bars_held', 'has_position'])
+const SUPPORTED_ACCOUNT_FIELDS = new Set<string>(['drawdown_pct'])
 const SUPPORTED_ACTION_KEYS = new Set<string>(['open_long', 'close_long', 'open_short', 'close_short'])
 const SUPPORTED_QUOTE_ASSETS = ['USDT', 'USDC', 'USD'] as const
 const SUPPORTED_QUOTE_ASSET_SET = new Set<string>(SUPPORTED_QUOTE_ASSETS)
 const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only', 'long_short'])
-const SUPPORTED_RISK_KEYS = new Set<string>(['risk.stop_loss_pct', 'risk.take_profit_pct'])
+const SUPPORTED_RISK_KEYS = new Set<string>([
+  'risk.stop_loss_pct',
+  'risk.take_profit_pct',
+  'risk.condition_expression',
+])
+const SUPPORTED_RISK_EFFECT_TYPES = new Set<string>(['close_position', 'reduce_position', 'notify_only', 'pause_strategy'])
+const SUPPORTED_RISK_SCOPES = new Set<string>(['current_position', 'long', 'short', 'both', 'strategy', 'account'])
+const SUPPORTED_RISK_BASES = new Set<string>([
+  'prev_close',
+  'entry_avg_price',
+  'position_pnl',
+  'peak_equity',
+  'peak_position_pnl',
+  'upper_band',
+  'lower_band',
+  'middle_band',
+  'last_high',
+  'last_low',
+])
+const SUPPORTED_RISK_BASIS_SOURCES = new Set<string>(['user_explicit', 'system_default', 'derived'])
 const POSITION_SIZING_VALUE_EPSILON = 1e-9
 
 const FALLBACK_EDITABLE_SLOTS: SemanticEditableSlotContract[] = [
@@ -194,7 +219,7 @@ export function resolveSemanticContract(semanticKey: string): SemanticContract {
   return contract
 }
 
-export function validateSemanticExpressionContract(expression: SemanticExpression): SemanticContractValidationResult {
+export function validateSemanticExpressionContract(expression: unknown): SemanticContractValidationResult {
   return validateExpressionNode(expression)
 }
 
@@ -333,12 +358,65 @@ export function validateSemanticRiskContract(risk: unknown): SemanticContractVal
   if (!isRecord(risk.params)) {
     return invalid('invalid_risk_params')
   }
+  if (risk.key === 'risk.condition_expression') {
+    const expressionResult = validateSemanticExpressionContract(risk.params.condition)
+    if (!expressionResult.ok) {
+      return invalid('invalid_risk_condition_expression')
+    }
+    if (
+      !isRecord(risk.params.effect)
+      || typeof risk.params.effect.type !== 'string'
+      || !SUPPORTED_RISK_EFFECT_TYPES.has(risk.params.effect.type)
+    ) {
+      return invalid('invalid_risk_effect')
+    }
+    if (
+      risk.params.effect.type === 'reduce_position'
+      && risk.params.effect.reducePct !== undefined
+      && (
+        typeof risk.params.effect.reducePct !== 'number'
+        || !Number.isFinite(risk.params.effect.reducePct)
+        || risk.params.effect.reducePct <= 0
+        || risk.params.effect.reducePct > 100
+      )
+    ) {
+      return invalid('invalid_risk_reduce_pct')
+    }
+    if (typeof risk.params.scope !== 'string' || !SUPPORTED_RISK_SCOPES.has(risk.params.scope)) {
+      return invalid('invalid_risk_scope')
+    }
+    if (
+      risk.params.capabilityStatus !== 'supported'
+      && risk.params.capabilityStatus !== 'recognized_unsupported'
+    ) {
+      return invalid('invalid_risk_capability_status')
+    }
+    if (risk.params.capabilityStatus === 'supported' && expressionContainsRuntimeUnsupportedOperand(risk.params.condition)) {
+      return invalid('unsupported_runtime_risk_expression_operand')
+    }
+    return valid()
+  }
   if (
     typeof risk.params.valuePct !== 'number'
     || !Number.isFinite(risk.params.valuePct)
     || risk.params.valuePct <= 0
   ) {
     return invalid('invalid_risk_value_pct')
+  }
+  if (
+    risk.params.basis !== undefined
+    && (typeof risk.params.basis !== 'string' || !SUPPORTED_RISK_BASES.has(risk.params.basis))
+  ) {
+    return invalid('invalid_risk_basis')
+  }
+  if (
+    risk.params.basisSource !== undefined
+    && (
+      typeof risk.params.basisSource !== 'string'
+      || !SUPPORTED_RISK_BASIS_SOURCES.has(risk.params.basisSource)
+    )
+  ) {
+    return invalid('invalid_risk_basis_source')
   }
 
   return valid()
@@ -449,6 +527,14 @@ function validateExpressionOperand(operand: unknown): SemanticContractValidation
     return valid()
   }
 
+  if (operand.kind === 'account') {
+    if (typeof operand.field !== 'string' || !SUPPORTED_ACCOUNT_FIELDS.has(operand.field)) {
+      return invalid('unsupported_account_field')
+    }
+
+    return valid()
+  }
+
   if (operand.kind === 'constant') {
     if (
       typeof operand.value !== 'string'
@@ -462,6 +548,35 @@ function validateExpressionOperand(operand: unknown): SemanticContractValidation
   }
 
   return invalid('unsupported_expression_operand_kind')
+}
+
+function expressionContainsRuntimeUnsupportedOperand(expression: unknown): boolean {
+  if (!isRecord(expression)) {
+    return false
+  }
+
+  if (expression.kind === 'predicate') {
+    return operandIsRuntimeUnsupported(expression.left) || operandIsRuntimeUnsupported(expression.right)
+  }
+
+  if (
+    (expression.kind === 'AND' || expression.kind === 'OR' || expression.kind === 'NOT')
+    && Array.isArray(expression.children)
+  ) {
+    return expression.children.some(child => expressionContainsRuntimeUnsupportedOperand(child))
+  }
+
+  return false
+}
+
+function operandIsRuntimeUnsupported(operand: unknown): boolean {
+  if (!isRecord(operand)) {
+    return false
+  }
+
+  return operand.kind === 'account'
+    || (operand.kind === 'position' && operand.field === 'has_position')
+    || (operand.kind === 'constant' && typeof operand.value === 'boolean')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

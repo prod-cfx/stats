@@ -12,7 +12,6 @@ export type StrategyPlazaTemplateStatus = 'live' | 'hidden'
 export type StrategyPlazaDeploymentPriceSource = 'last' | 'mark'
 export type StrategyPlazaDeploymentOrderType = 'market'
 export type StrategyPlazaDeploymentTimeInForce = 'ioc'
-export type StrategyPlazaDeploymentTradeMode = 'cash' | 'cross' | 'isolated'
 export type StrategyPlazaEvidenceExchange = 'okx' | 'binance'
 export type StrategyPlazaEvidenceMarketType = 'spot' | 'swap'
 
@@ -75,7 +74,7 @@ export interface OfficialStrategyPlazaBacktestEvidence {
   templates: OfficialStrategyPlazaEvidenceTemplate[]
 }
 
-interface OfficialStrategyPlazaRunConfigBase {
+export interface OfficialStrategyPlazaRunConfig {
   exchange: 'okx'
   marketType: StrategyPlazaMarketType
   symbol: string
@@ -83,33 +82,13 @@ interface OfficialStrategyPlazaRunConfigBase {
   positionPct: number
   leverage: number | null
   publishedSnapshotId: string
-}
-
-export interface OfficialStrategyPlazaPerpRunConfig extends OfficialStrategyPlazaRunConfigBase {
-  marketType: 'perp'
-  leverage: number
   deploymentExecutionConfig: {
-    leverage: number
-    priceSource: 'mark'
-    orderType: StrategyPlazaDeploymentOrderType
-    timeInForce: StrategyPlazaDeploymentTimeInForce
-    tdMode: 'cross'
+    leverage?: number | null
+    priceSource?: StrategyPlazaDeploymentPriceSource | null
+    orderType?: StrategyPlazaDeploymentOrderType | null
+    timeInForce?: StrategyPlazaDeploymentTimeInForce | null
   }
 }
-
-export interface OfficialStrategyPlazaSpotRunConfig extends OfficialStrategyPlazaRunConfigBase {
-  marketType: 'spot'
-  leverage: null
-  deploymentExecutionConfig: {
-    leverage: null
-    priceSource: 'last'
-    orderType: StrategyPlazaDeploymentOrderType
-    timeInForce: StrategyPlazaDeploymentTimeInForce
-    tdMode?: undefined
-  }
-}
-
-export type OfficialStrategyPlazaRunConfig = OfficialStrategyPlazaPerpRunConfig | OfficialStrategyPlazaSpotRunConfig
 
 export interface OfficialStrategyPlazaEditSeed {
   initialMessage: string

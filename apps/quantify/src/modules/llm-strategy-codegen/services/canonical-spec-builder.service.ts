@@ -29,6 +29,7 @@ import {
 } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
+import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
@@ -315,22 +316,18 @@ export class CanonicalSpecBuilderService {
       riskRules.stopLossBasis,
     )
     if (stopLossPct !== null) {
-      rules.push({
+      const stopLossRule = this.buildPercentRiskCanonicalRule({
         id: 'risk-stop-loss',
-        phase: 'risk',
         sideScope: 'both',
         priority: 120,
-        condition: {
-          kind: 'atom',
-          key: 'position_loss_pct',
-          semanticScope: 'position',
-          op: 'GTE',
-          value: Number((stopLossPct / 100).toFixed(4)),
-          ...(stopLossBasis ? { params: { basis: stopLossBasis } } : {}),
-        },
+        riskKey: 'risk.stop_loss_pct',
+        valuePct: stopLossPct,
+        basis: stopLossBasis,
         actions: [{ type: 'FORCE_EXIT' }],
-        ...(stopLossBasis ? { metadata: { basis: stopLossBasis } } : {}),
       })
+      if (stopLossRule) {
+        rules.push(stopLossRule)
+      }
     }
 
     const takeProfitRule = this.resolveTakeProfitRule(
@@ -345,22 +342,18 @@ export class CanonicalSpecBuilderService {
       riskRules.takeProfitBasis,
     )
     if (takeProfitRule) {
-      rules.push({
+      const canonicalTakeProfitRule = this.buildPercentRiskCanonicalRule({
         id: 'risk-take-profit',
-        phase: 'risk',
         sideScope: takeProfitRule.sideScope,
         priority: 115,
-        condition: {
-          kind: 'atom',
-          key: 'risk.take_profit_pct',
-          semanticScope: 'position',
-          op: 'GTE',
-          value: Number((takeProfitRule.pct / 100).toFixed(4)),
-          ...(takeProfitBasis ? { params: { basis: takeProfitBasis } } : {}),
-        },
+        riskKey: 'risk.take_profit_pct',
+        valuePct: takeProfitRule.pct,
+        basis: takeProfitBasis,
         actions: takeProfitRule.actions,
-        ...(takeProfitBasis ? { metadata: { basis: takeProfitBasis } } : {}),
       })
+      if (canonicalTakeProfitRule) {
+        rules.push(canonicalTakeProfitRule)
+      }
     }
 
     const trailingStopRule = this.resolveTrailingStopRule([...exitTexts, ...Object.values(riskRules).map(item => String(item))])
@@ -1133,12 +1126,43 @@ export class CanonicalSpecBuilderService {
     risks: SemanticRiskState[],
     position: SemanticPositionState | null,
   ): CanonicalRuleV2[] {
+    const normalizedRisks = normalizeRiskSemantics(risks)
     const sideScope = this.resolveSemanticRiskSideScope(position)
     const rules: CanonicalRuleV2[] = []
     let priority = 120
 
-    for (const risk of risks) {
+    for (const risk of normalizedRisks) {
       if (risk.status !== 'locked' || !validateSemanticRiskContract(risk).ok) {
+        continue
+      }
+      if (risk.key === 'risk.condition_expression') {
+        if (risk.params.capabilityStatus !== 'supported') {
+          continue
+        }
+        const condition = this.isValidSemanticExpression(risk.params.condition)
+          ? this.buildConditionFromSemanticExpression(risk.params.condition)
+          : null
+        const riskSideScope = this.resolveSemanticRiskExpressionSideScope(risk, position)
+        const actions = this.buildActionsForSemanticRiskExpression(risk, riskSideScope)
+        if (!condition || actions.length === 0) {
+          continue
+        }
+
+        rules.push({
+          id: `semantic-${risk.id || `risk-expression-${priority}`}`,
+          phase: 'risk',
+          sideScope: riskSideScope,
+          priority: priority--,
+          condition,
+          actions,
+          metadata: {
+            semanticKey: risk.key,
+            scope: risk.params.scope,
+            effect: risk.params.effect,
+            capabilityStatus: risk.params.capabilityStatus,
+            unsupportedReason: risk.params.unsupportedReason,
+          },
+        })
         continue
       }
       if (risk.key !== 'risk.stop_loss_pct' && risk.key !== 'risk.take_profit_pct') {
@@ -1149,25 +1173,134 @@ export class CanonicalSpecBuilderService {
       if (valuePct === null || !Number.isFinite(valuePct)) {
         continue
       }
-
-      rules.push({
+      const riskRule = this.buildPercentRiskCanonicalRule({
         id: risk.key === 'risk.stop_loss_pct' ? 'semantic-risk-stop-loss' : 'semantic-risk-take-profit',
-        phase: 'risk',
         sideScope,
         priority: priority--,
-        condition: {
-          kind: 'atom',
-          key: risk.key === 'risk.stop_loss_pct' ? CANONICAL_RULE_KEYS.positionLossPct : risk.key,
-          semanticScope: 'position',
-          op: 'GTE',
-          value: Number((valuePct / 100).toFixed(4)),
-          ...(typeof risk.params.basis === 'string' ? { params: { basis: risk.params.basis } } : {}),
-        },
+        riskKey: risk.key,
+        valuePct,
+        basis: risk.params.basis,
         actions: [{ type: 'FORCE_EXIT' }],
       })
+      if (riskRule) {
+        rules.push(riskRule)
+      }
     }
 
     return rules
+  }
+
+  private buildActionsForSemanticRiskExpression(
+    risk: SemanticRiskState,
+    sideScope: 'long' | 'short' | 'both',
+  ): CanonicalRuleV2['actions'] {
+    const effect = risk.params.effect
+    const effectType = effect && typeof effect === 'object' && 'type' in effect
+      ? (effect as { type?: unknown }).type
+      : null
+
+    if (effectType === 'pause_strategy') {
+      return [{ type: 'BLOCK_NEW_ENTRY' }]
+    }
+
+    if (effectType === 'reduce_position') {
+      const reducePct = effect && typeof effect === 'object' && typeof (effect as { reducePct?: unknown }).reducePct === 'number'
+        ? (effect as { reducePct: number }).reducePct
+        : 50
+      const sizing = { mode: 'RATIO' as const, value: reducePct }
+      if (sideScope === 'long') {
+        return [{ type: 'REDUCE_LONG', sizing }]
+      }
+      if (sideScope === 'short') {
+        return [{ type: 'REDUCE_SHORT', sizing }]
+      }
+      return [
+        { type: 'REDUCE_LONG', sizing },
+        { type: 'REDUCE_SHORT', sizing },
+      ]
+    }
+
+    if (effectType === 'notify_only') {
+      return []
+    }
+
+    return [{ type: 'FORCE_EXIT' }]
+  }
+
+  private buildPercentRiskCanonicalRule(input: {
+    id: string
+    sideScope: CanonicalRuleV2['sideScope']
+    priority: number
+    riskKey: 'risk.stop_loss_pct' | 'risk.take_profit_pct'
+    valuePct: number
+    basis: unknown
+    actions: CanonicalRuleV2['actions']
+    metadata?: CanonicalRuleV2['metadata']
+  }): CanonicalRuleV2 | null {
+    const basis = typeof input.basis === 'string' ? input.basis : undefined
+    if (this.isExecutablePercentRiskBasis(basis)) {
+      return {
+        id: input.id,
+        phase: 'risk',
+        sideScope: input.sideScope,
+        priority: input.priority,
+        condition: {
+          kind: 'atom',
+          key: input.riskKey === 'risk.stop_loss_pct' ? CANONICAL_RULE_KEYS.positionLossPct : input.riskKey,
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((input.valuePct / 100).toFixed(4)),
+          ...(basis ? { params: { basis } } : {}),
+        },
+        actions: input.actions,
+        ...(basis || input.metadata ? { metadata: { ...input.metadata, ...(basis ? { basis } : {}) } } : {}),
+      }
+    }
+
+    if (basis !== 'position_pnl') {
+      return null
+    }
+
+    return {
+      id: input.id,
+      phase: 'risk',
+      sideScope: input.sideScope,
+      priority: input.priority,
+      condition: {
+        kind: 'expression',
+        op: input.riskKey === 'risk.stop_loss_pct' ? 'LTE' : 'GTE',
+        left: { kind: 'position', field: 'pnl_pct' },
+        right: {
+          kind: 'constant',
+          value: input.riskKey === 'risk.stop_loss_pct' ? -input.valuePct : input.valuePct,
+          unit: 'percent',
+        },
+      },
+      actions: input.actions,
+      metadata: {
+        ...input.metadata,
+        basis,
+        semanticKey: input.riskKey,
+      },
+    }
+  }
+
+  private isExecutablePercentRiskBasis(rawBasis: unknown): boolean {
+    return rawBasis === undefined || rawBasis === 'entry_avg_price'
+  }
+
+  private resolveSemanticRiskExpressionSideScope(
+    risk: SemanticRiskState,
+    position: SemanticPositionState | null,
+  ): 'long' | 'short' | 'both' {
+    if (risk.params.scope === 'long') {
+      return 'long'
+    }
+    if (risk.params.scope === 'short') {
+      return 'short'
+    }
+
+    return this.resolveSemanticRiskSideScope(position)
   }
 
   private resolveSemanticRiskSideScope(position: SemanticPositionState | null): 'long' | 'short' | 'both' {
@@ -2198,40 +2331,99 @@ export class CanonicalSpecBuilderService {
     return 'bidirectional'
   }
 
+  private resolveNormalizedRiskExpressionSideScope(
+    scope: unknown,
+    positionMode: StrategyNormalizedIntent['position']['positionMode'] | null,
+  ): 'long' | 'short' | 'both' {
+    if (scope === 'long') {
+      return 'long'
+    }
+    if (scope === 'short') {
+      return 'short'
+    }
+    if (positionMode === 'long_only') {
+      return 'long'
+    }
+    if (positionMode === 'short_only') {
+      return 'short'
+    }
+    return 'both'
+  }
+
   private buildRiskRuleFromNormalizedAtom(
     riskAtom: NormalizedRiskAtom,
     priority: number,
     positionMode: StrategyNormalizedIntent['position']['positionMode'] | null,
   ): CanonicalRuleV2 | null {
+    if (riskAtom.key === 'risk.condition_expression') {
+      const risk: SemanticRiskState = {
+        id: 'normalized-risk-expression',
+        key: riskAtom.key,
+        params: riskAtom.params,
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      }
+      if (!validateSemanticRiskContract(risk).ok || risk.params.capabilityStatus !== 'supported') {
+        return null
+      }
+
+      const condition = this.isValidSemanticExpression(risk.params.condition)
+        ? this.buildConditionFromSemanticExpression(risk.params.condition)
+        : null
+      if (!condition) {
+        return null
+      }
+
+      const sideScope = this.resolveNormalizedRiskExpressionSideScope(risk.params.scope, positionMode)
+      const actions = this.buildActionsForSemanticRiskExpression(risk, sideScope)
+      if (actions.length === 0) {
+        return null
+      }
+
+      return {
+        id: 'risk-condition-expression',
+        phase: 'risk',
+        sideScope,
+        priority,
+        condition,
+        actions,
+        metadata: {
+          semanticKey: risk.key,
+          scope: risk.params.scope,
+          effect: risk.params.effect,
+          capabilityStatus: risk.params.capabilityStatus,
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: actions.map(action => action.type),
+          },
+        },
+      }
+    }
+
     if (riskAtom.key === 'risk.stop_loss_pct') {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
       if (!valuePct || !Number.isFinite(valuePct)) {
         return null
       }
       const basis = typeof riskAtom.params.basis === 'string' ? riskAtom.params.basis : 'entry_avg_price'
-      return {
+      return this.buildPercentRiskCanonicalRule({
         id: 'risk-stop-loss',
-        phase: 'risk',
         sideScope: 'both',
         priority,
-        condition: {
-          kind: 'atom',
-          key: CANONICAL_RULE_KEYS.positionLossPct,
-          semanticScope: 'position',
-          op: 'GTE',
-          value: Number((valuePct / 100).toFixed(4)),
-          params: { basis },
-        },
+        riskKey: 'risk.stop_loss_pct',
+        valuePct,
+        basis,
         actions: [{ type: 'FORCE_EXIT' }],
         metadata: {
-          basis,
           normalized: {
             source: 'normalized-intent',
             triggerKeys: [riskAtom.key],
             actionKeys: ['FORCE_EXIT'],
           },
         },
-      }
+      })
     }
 
     if (riskAtom.key === 'risk.take_profit_pct') {
@@ -2250,29 +2442,22 @@ export class CanonicalSpecBuilderService {
         : positionMode === 'long_only'
           ? 'long'
           : 'both'
-      return {
+      return this.buildPercentRiskCanonicalRule({
         id: 'risk-take-profit',
-        phase: 'risk',
         sideScope,
         priority,
-        condition: {
-          kind: 'atom',
-          key: 'risk.take_profit_pct',
-          semanticScope: 'position',
-          op: 'GTE',
-          value: Number((valuePct / 100).toFixed(4)),
-          params: { basis },
-        },
+        riskKey: 'risk.take_profit_pct',
+        valuePct,
+        basis,
         actions,
         metadata: {
-          basis,
           normalized: {
             source: 'normalized-intent',
             triggerKeys: [riskAtom.key],
             actionKeys: actions.map(action => action.type),
           },
         },
-      }
+      })
     }
 
     if (riskAtom.key === 'risk.max_drawdown_pct') {

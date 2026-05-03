@@ -23,7 +23,7 @@ function metricsFor(templateId: OfficialStrategyPlazaTemplate['id']): OfficialSt
   }
 }
 
-export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTemplate[] = [
+export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
   {
     id: 'ma-cross',
     name: 'MA 均线交叉',
@@ -44,7 +44,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTe
       positionPct: paramsFor('ma-cross').positionPct,
       leverage: 2,
       publishedSnapshotId: 'official-plaza-ma-cross-v1-snapshot',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。入场规则：MA6 上穿 MA48 时做多开仓；出场规则：MA6 下穿 MA48 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.6%。',
@@ -78,7 +78,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTe
       positionPct: paramsFor('bollinger-reversion').positionPct,
       leverage: 2,
       publishedSnapshotId: 'official-plaza-bollinger-reversion-v1-snapshot',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。',
@@ -180,7 +180,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTe
       positionPct: paramsFor('breakout-follow').positionPct,
       leverage: 2,
       publishedSnapshotId: 'official-plaza-breakout-follow-v1-snapshot',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。入场规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；出场规则：价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，止损 3%，止盈 0.6%。',
@@ -214,7 +214,7 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTe
       positionPct: paramsFor('macd-cross').positionPct,
       leverage: 2,
       publishedSnapshotId: 'official-plaza-macd-cross-v1-snapshot',
-      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc', tdMode: 'cross' },
+      deploymentExecutionConfig: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉死叉策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。',
@@ -228,4 +228,4 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: readonly OfficialStrategyPlazaTe
     },
     displayMetrics: metricsFor('macd-cross'),
   },
-]
+] satisfies readonly OfficialStrategyPlazaTemplate[]

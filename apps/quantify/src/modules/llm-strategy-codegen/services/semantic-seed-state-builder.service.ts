@@ -18,6 +18,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import { normalizeRiskSemantic } from './semantic-state-normalization'
 
 type SemanticPatchRecord = Record<string, unknown>
 type ContextField = 'exchange' | 'symbol' | 'marketType' | 'timeframe'
@@ -163,7 +164,7 @@ export class SemanticSeedStateBuilderService {
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
 
-    return {
+    const risk: SemanticRiskState = {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
       key,
       params: this.readParams(update.params),
@@ -174,6 +175,8 @@ export class SemanticSeedStateBuilderService {
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
+
+    return normalizeRiskSemantic(risk, index)
   }
 
   private toPositionState(update: unknown): SemanticState['position'] {

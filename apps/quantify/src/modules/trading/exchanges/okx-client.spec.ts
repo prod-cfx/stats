@@ -324,7 +324,7 @@ describe('okxClient', () => {
       side: 'buy',
       type: 'market',
       amount: 0.001348,
-      extra: { tdMode: 'cross' },
+      tdMode: 'cross',
     })
 
     expect(order.amount).toBeCloseTo(0.0013)
@@ -532,29 +532,6 @@ describe('okxClient', () => {
 
     expect(order.id).toBe('perp-close-1')
     expect(order.status).toBe('open')
-  })
-
-  it('rejects OKX perp orders without explicit tdMode', async () => {
-    globalThis.fetch = jest.fn(async () => new Response(JSON.stringify({ data: [] }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    })) as typeof fetch
-
-    await expect(new OkxClient('perp', {
-      apiKey: 'test-api-key',
-      secret: 'test-secret',
-      passphrase: 'test-passphrase',
-      isTestnet: true,
-    }).createOrder({
-      symbol: 'BTC-USDT-SWAP',
-      marketType: 'perp',
-      side: 'buy',
-      type: 'market',
-      amount: 0.001348,
-    })).rejects.toEqual(expect.objectContaining<Partial<ExchangeError>>({
-      name: 'ExchangeError',
-      code: 'OKX_TD_MODE_REQUIRED',
-    }))
   })
 
   it('converts perp contract size back to base size when fetching orders', async () => {

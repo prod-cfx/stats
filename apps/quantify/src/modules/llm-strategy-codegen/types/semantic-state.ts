@@ -22,6 +22,7 @@ export type SemanticExpressionOperand =
   | { kind: 'series'; source: 'bar'; field: 'open' | 'high' | 'low' | 'close'; offsetBars?: number; timeframe?: string }
   | { kind: 'indicator'; name: 'sma' | 'ema' | 'rsi' | 'macd'; params: Record<string, unknown>; output?: string }
   | { kind: 'position'; field: 'avg_price' | 'pnl_pct' | 'bars_held' | 'has_position'; side?: 'long' | 'short' | 'both' }
+  | { kind: 'account'; field: 'drawdown_pct' }
   | { kind: 'constant'; value: number | string | boolean; unit?: 'quote' | 'base' | 'ratio' | 'percent' | 'price' }
 
 export interface SemanticSlotIdentity {
@@ -116,6 +117,47 @@ export interface SemanticActionState {
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
 }
+
+export type SemanticRiskBasis =
+  | 'prev_close'
+  | 'entry_avg_price'
+  | 'position_pnl'
+  | 'peak_equity'
+  | 'peak_position_pnl'
+  | 'upper_band'
+  | 'lower_band'
+  | 'middle_band'
+  | 'last_high'
+  | 'last_low'
+export type SemanticRiskBasisSource = 'user_explicit' | 'system_default' | 'derived'
+export type SemanticRiskEffectType = 'close_position' | 'reduce_position' | 'notify_only' | 'pause_strategy'
+export type SemanticRiskScope = 'current_position' | 'long' | 'short' | 'both' | 'strategy' | 'account'
+
+export interface SemanticPercentRiskParams extends Record<string, unknown> {
+  valuePct: number
+  direction: 'loss' | 'profit'
+  basis: SemanticRiskBasis
+  basisSource: SemanticRiskBasisSource
+  effect: Exclude<SemanticRiskEffectType, 'pause_strategy'>
+  scope: SemanticRiskScope
+  reducePct?: number
+}
+
+export interface SemanticRiskConditionExpressionParams extends Record<string, unknown> {
+  condition: SemanticExpression
+  effect: {
+    type: SemanticRiskEffectType
+    reducePct?: number
+  }
+  scope: SemanticRiskScope
+  capabilityStatus: 'supported' | 'recognized_unsupported'
+  unsupportedReason?: string
+}
+
+export type SemanticRiskParams =
+  | SemanticPercentRiskParams
+  | SemanticRiskConditionExpressionParams
+  | Record<string, unknown>
 
 export interface SemanticRiskState {
   id: string
