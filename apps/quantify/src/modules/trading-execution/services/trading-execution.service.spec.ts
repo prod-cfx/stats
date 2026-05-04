@@ -153,6 +153,47 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('returns waiting_position when positions cannot be loaded for close/reduce-only intent', async () => {
+    const tradingService = createTradingServiceMock()
+    const error = new Error('positions fetch failed')
+    tradingService.getPositions.mockRejectedValue(error)
+    const service = createService(tradingService)
+
+    const closeIntent: OrderIntent = {
+      ...intent,
+      sourceId: 'planned-close-short',
+      role: 'close_short',
+      reduceOnly: true,
+    }
+    const result = await service.executeIntent(closeIntent)
+
+    expect(result).toEqual({
+      status: 'waiting_position',
+      intent: closeIntent,
+      reason: 'positions_unavailable',
+      error,
+    })
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
+  it('returns rejected when client order id generation fails', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      ...constraints,
+      clientOrderId: { maxLength: 32, pattern: '^z+$' },
+    })
+    const service = createService(tradingService)
+
+    const result = await service.executeIntent(intent)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      intent,
+      reason: 'trading_execution_invalid_client_order_id',
+    })
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('submits a close/reduce-only intent when a matching position exists', async () => {
     const tradingService = createTradingServiceMock()
     tradingService.getPositions.mockResolvedValue([shortPosition])

@@ -38,6 +38,34 @@ describe('OrderAdmissionGateService', () => {
     expect(result).toEqual({ ok: true })
   })
 
+  it('rejects close-short intent with sell side even with a matching short position', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, side: 'sell' }, [{
+      symbol: 'BTC-USDT-SWAP',
+      marketType: 'perp',
+      side: 'short',
+      size: 0.2,
+      entryPrice: 80000,
+      unrealizedPnl: 0,
+      raw: {},
+    }])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'close_short_requires_buy_side' })
+  })
+
+  it('rejects close-long intent with buy side even with a matching long position', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'close_long', side: 'buy' }, [{
+      symbol: 'BTC-USDT-SWAP',
+      marketType: 'perp',
+      side: 'long',
+      size: 0.2,
+      entryPrice: 80000,
+      unrealizedPnl: 0,
+      raw: {},
+    }])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'close_long_requires_sell_side' })
+  })
+
   it('allows an open intent without positions', () => {
     const service = new OrderAdmissionGateService()
     const result = service.evaluate({ ...baseIntent, role: 'open_long', reduceOnly: false }, [])

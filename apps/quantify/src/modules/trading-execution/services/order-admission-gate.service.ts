@@ -5,10 +5,14 @@ import type { OrderIntent } from '../types/trading-execution.types'
 type AdmissionResult =
   | { ok: true }
   | { ok: false, status: 'waiting_position', reason: string }
+  | { ok: false, status: 'rejected', reason: string }
 
 @Injectable()
 export class OrderAdmissionGateService {
   evaluate(intent: OrderIntent, positions: UnifiedPosition[]): AdmissionResult {
+    const direction = this.validateCloseDirection(intent)
+    if (direction) return direction
+
     const requiredSide = this.requiredPositionSide(intent)
     if (!requiredSide) return { ok: true }
 
@@ -32,6 +36,16 @@ export class OrderAdmissionGateService {
     if (intent.role === 'close_short') return 'short'
     if (!intent.reduceOnly) return null
     return intent.side === 'sell' ? 'long' : 'short'
+  }
+
+  private validateCloseDirection(intent: OrderIntent): AdmissionResult | null {
+    if (intent.role === 'close_long' && intent.side !== 'sell') {
+      return { ok: false, status: 'rejected', reason: 'close_long_requires_sell_side' }
+    }
+    if (intent.role === 'close_short' && intent.side !== 'buy') {
+      return { ok: false, status: 'rejected', reason: 'close_short_requires_buy_side' }
+    }
+    return null
   }
 
   private normalizeSymbol(symbol: string): string {
