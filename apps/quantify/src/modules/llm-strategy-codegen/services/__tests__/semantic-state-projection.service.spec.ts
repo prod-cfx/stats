@@ -2028,4 +2028,118 @@ describe('SemanticStateProjectionService', () => {
       expect(view.hasDeterministicSemantics).toBe(true)
     })
   })
+
+  it('summarizes contract-only real grid semantics for confirmation prompts', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [{
+        id: 'grid-range',
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-grid-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: {
+              mode: 'centered_percent_range',
+              centerTiming: 'deployment',
+              centerSource: 'last_trade',
+              halfRangePct: 0.4,
+              gridCount: 10,
+              spacingMode: 'arithmetic',
+            },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        id: 'grid-ladder',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-grid-ladder',
+          kind: 'action',
+          capabilities: [
+            {
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: {
+                orderType: 'limit',
+                recycleOnFill: true,
+                pairingPolicy: 'adjacent_level',
+              },
+            },
+            {
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: { value: 10, asset: 'USDT' },
+            },
+          ],
+          requires: [],
+          params: {},
+        }],
+      }],
+      risk: [{
+        id: 'boundary-stop',
+        key: 'risk.boundary_guard',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-boundary-stop',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'boundary_cancel',
+            shape: {
+              trigger: 'boundary_breach',
+              onBreach: 'HALT_STRATEGY',
+              cancelOrders: true,
+              cancelScope: 'unfilled_grid_orders',
+              regrid: false,
+            },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      position: {
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-04T00:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('入场：区间网格，以部署时最新成交价为中心上下各 0.4%，共 10 格')
+    expect(view.summary).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(view.summary).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(view.summary).not.toBe('已识别部分条件，但仍未完整。')
+  })
 })

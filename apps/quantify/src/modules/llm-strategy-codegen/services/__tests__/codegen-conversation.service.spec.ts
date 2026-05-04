@@ -10172,6 +10172,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
 
     expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('入场：区间网格，以部署时最新成交价为中心上下各 0.4%，共 10 格')
+    expect(result.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(result.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(result.assistantPrompt).not.toContain('已识别部分条件，但仍未完整')
     expect(result.assistantPrompt).not.toContain('补充入场和出场')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
-import type { SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 export interface SemanticConversationView {
@@ -77,6 +77,7 @@ export class SemanticStateProjectionService {
       families: state.families,
     })
     const triggerSummary = this.buildTriggerSummary(deterministicTriggers, false)
+    const actionSummary = this.buildActionSummary(deterministicActions)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
     const positionSummary = this.buildPositionSummary(state.position)
     const executionContext = this.buildExecutionContext(state.contextSlots)
@@ -88,7 +89,7 @@ export class SemanticStateProjectionService {
       position: state.position,
       hasGridIntent: deterministicSignals.hasGridIntent,
     })
-    const summaryItems = [triggerSummary, riskSummary, positionSummary]
+    const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary]
       .filter(item => item.length > 0)
 
     return {
@@ -461,6 +462,11 @@ export class SemanticStateProjectionService {
           const lower = this.readGridRangeValue(trigger.params, 'lower')
           const upper = this.readGridRangeValue(trigger.params, 'upper')
           const stepPct = trigger.params.stepPct
+          const contractSummary = this.buildContractLevelSetSummary(trigger)
+          if (contractSummary) {
+            return contractSummary
+          }
+
           return [
             '入场：区间网格',
             typeof lower === 'number' && typeof upper === 'number' ? `${lower}-${upper}` : '区间待补充',
@@ -562,6 +568,45 @@ export class SemanticStateProjectionService {
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private buildContractLevelSetSummary(trigger: SemanticState['triggers'][number]): string {
+    const capability = this.findCapability(trigger.contracts, 'price', 'define', 'level_set')
+    if (!capability) {
+      return ''
+    }
+
+    const mode = this.readShapeString(capability.shape, 'mode')
+    if (mode === 'centered_percent_range') {
+      const centerTiming = this.readShapeString(capability.shape, 'centerTiming')
+      const centerSource = this.readShapeString(capability.shape, 'centerSource')
+      const halfRangePct = this.readShapeNumber(capability.shape, 'halfRangePct')
+      const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+      const centerText = `${centerTiming === 'deployment' ? '部署时' : '运行时'}${this.describeCenterSource(centerSource)}`
+      const rangeText = halfRangePct !== null ? `上下各 ${this.formatPercent(halfRangePct)}%` : '上下区间待补充'
+      const gridText = gridCount !== null ? `，共 ${this.formatNumber(gridCount)} 格` : ''
+      return `入场：区间网格，以${centerText}为中心${rangeText}${gridText}`
+    }
+
+    const lower = this.readShapeNumber(capability.shape, 'lower')
+    const upper = this.readShapeNumber(capability.shape, 'upper')
+    const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+    const spacingPct = this.readShapeNumber(capability.shape, 'spacingPct')
+    if (lower !== null && upper !== null) {
+      const gridText = gridCount !== null ? `，共 ${this.formatNumber(gridCount)} 格` : ''
+      const spacingText = spacingPct !== null ? `，步长 ${this.formatPercent(spacingPct)}%` : ''
+      return `入场：区间网格，固定区间 ${this.formatNumber(lower)}-${this.formatNumber(upper)}${gridText}${spacingText}`
+    }
+
+    return ''
+  }
+
+  private describeCenterSource(source: string | null): string {
+    if (source === 'last_trade') return '最新成交价'
+    if (source === 'trade_vwap') return '成交均价'
+    if (source === 'mark_price') return '标记价'
+    if (source === 'last_price') return '当前价'
+    return '当前价'
   }
 
   private readGridRangeValue(
@@ -808,6 +853,11 @@ export class SemanticStateProjectionService {
       .filter(risk => risk.status === 'locked')
       .sort((left, right) => this.compareRiskAtoms(left, right))
       .map((risk) => {
+        const contractSummary = this.buildContractGuardSummary(risk)
+        if (contractSummary) {
+          return contractSummary
+        }
+
         if (risk.key === 'risk.condition_expression') {
           const condition = this.formatSemanticExpression(risk.params.condition)
           if (!condition) {
@@ -843,6 +893,97 @@ export class SemanticStateProjectionService {
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private buildActionSummary(actions: SemanticState['actions']): string {
+    return actions
+      .filter(action => action.status === 'locked')
+      .sort((left, right) => this.compareActionAtoms(left, right))
+      .map(action => this.buildContractOrderProgramSummary(action))
+      .filter(item => item.length > 0)
+      .join('；')
+  }
+
+  private buildContractOrderProgramSummary(action: SemanticState['actions'][number]): string {
+    const orderProgram = this.findCapability(action.contracts, 'order_program', 'maintain', 'limit_ladder')
+    if (!orderProgram) {
+      return ''
+    }
+
+    const budget = this.findCapability(action.contracts, 'capital', 'allocate', 'per_order_budget')
+    const orderType = this.readShapeString(orderProgram.shape, 'orderType') === 'limit' ? '限价' : '网格'
+    const recycleText = this.readShapeBoolean(orderProgram.shape, 'recycleOnFill') === true
+      ? '，成交后相邻网格反向挂单'
+      : ''
+    const budgetValue = budget ? this.readShapeNumber(budget.shape, 'value') : null
+    const budgetAsset = budget ? this.readShapeString(budget.shape, 'asset') : null
+    const budgetText = budgetValue !== null && budgetAsset !== null
+      ? `，每格 ${this.formatNumber(budgetValue)} ${budgetAsset}`
+      : ''
+
+    return `挂单：${orderType}网格${recycleText}${budgetText}`
+  }
+
+  private buildContractGuardSummary(risk: SemanticState['risk'][number]): string {
+    const guard = (risk.contracts ?? [])
+      .flatMap(contract => contract.capabilities)
+      .find(capability => capability.domain === 'guard' && capability.verb === 'enforce')
+    if (!guard) {
+      return ''
+    }
+
+    const trigger = this.readShapeString(guard.shape, 'trigger')
+    const onBreach = this.readShapeString(guard.shape, 'onBreach')
+    const cancelOrders = this.readShapeBoolean(guard.shape, 'cancelOrders')
+    if (trigger !== 'boundary_breach' && !/boundary|breakout|breach|cancel|halt|stop|grid/u.test(guard.object)) {
+      return ''
+    }
+
+    const actionText = onBreach === 'HALT_STRATEGY' ? '停止策略' : '执行风控'
+    const cancelScope = this.describeCancelScope(this.readShapeString(guard.shape, 'cancelScope'))
+    const cancelText = cancelOrders === true ? `并撤销${cancelScope}` : ''
+    const regridText = this.readShapeBoolean(guard.shape, 'regrid') === false ? '，不再重新部署网格' : ''
+    return `风控：突破上下边界时${actionText}${cancelText}${regridText}`
+  }
+
+  private describeCancelScope(scope: string | null): string {
+    if (scope === 'unfilled_grid_limit_orders') return '未成交网格限价单'
+    if (scope === 'unfilled_grid_orders') return '未成交网格订单'
+    if (scope === 'unfilled_limit_orders') return '未成交限价单'
+    if (scope === 'unfilled_orders') return '未成交订单'
+    if (scope === 'grid_orders') return '网格订单'
+    if (scope === 'program_orders') return '策略订单'
+    return '未成交订单'
+  }
+
+  private findCapability(
+    contracts: SemanticState['triggers'][number]['contracts'] | SemanticState['actions'][number]['contracts'] | SemanticState['risk'][number]['contracts'],
+    domain: SemanticCapability['domain'],
+    verb: string,
+    object: string,
+  ): SemanticCapability | null {
+    return (contracts ?? [])
+      .flatMap(contract => contract.capabilities)
+      .find(capability =>
+        capability.domain === domain
+        && capability.verb === verb
+        && capability.object === object,
+      ) ?? null
+  }
+
+  private readShapeString(shape: SemanticCapability['shape'], key: string): string | null {
+    const value = shape[key]
+    return typeof value === 'string' && value.trim() ? value : null
+  }
+
+  private readShapeNumber(shape: SemanticCapability['shape'], key: string): number | null {
+    const value = shape[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readShapeBoolean(shape: SemanticCapability['shape'], key: string): boolean | null {
+    const value = shape[key]
+    return typeof value === 'boolean' ? value : null
   }
 
   private describeRiskExpressionEffect(rawEffect: unknown): string {
