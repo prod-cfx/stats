@@ -9882,9 +9882,29 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '继续',
     })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
 
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      viewType: 'canonical-semantic-view.v1',
+      canonicalDigest: result.canonicalDigest,
+    }))
+    expect((result as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+    }))
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(updatePayload.status).toBe('CONFIRM_GATE')
+    expect(updatePayload.latestSpecDesc).toEqual(expect.objectContaining({
+      canonicalDigest: result.canonicalDigest,
+    }))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'action-grid-ladder',
+        openSlots: [],
+      }),
+    ]))
   })
 
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
