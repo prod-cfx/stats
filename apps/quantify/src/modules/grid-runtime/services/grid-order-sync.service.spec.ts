@@ -213,6 +213,48 @@ describe('GridOrderSyncService', () => {
     }), 'exchange-account-1')
   })
 
+  it('persists exchange-accepted price and quantity when opening a submitted order', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        price: { toString: () => '79283.333333333333333' },
+        quantity: { toString: () => '0.100000000000000000' },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockResolvedValue({
+      id: 'exchange-order-created',
+      clientOrderId: 'gplannedorder1',
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      price: 79283.3,
+      amount: 0.1,
+      filled: 0,
+      status: 'open',
+      createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+      raw: { orderId: 'exchange-order-created' },
+    })
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.markOrderOpen).toHaveBeenCalledWith({
+      id: 'planned-order-1',
+      exchangeOrderId: 'exchange-order-created',
+      price: '79283.3',
+      quantity: '0.1',
+      rawPayload: { orderId: 'exchange-order-created' },
+    })
+  })
+
   it('submits perp close orders as reduce-only limit orders', async () => {
     const repository = createRepository()
     repository.findInstanceForSync.mockResolvedValue({

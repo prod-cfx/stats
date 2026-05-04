@@ -224,6 +224,8 @@ export class GridOrderSyncService {
         return this.repository.markOrderOpen({
           id: order.id,
           exchangeOrderId: exchangeOrder.id,
+          price: exchangeOrder.price == null ? this.decimalToString(order.price) : String(exchangeOrder.price),
+          quantity: String(exchangeOrder.amount),
           rawPayload: this.toJsonValue(exchangeOrder.raw),
         })
       })

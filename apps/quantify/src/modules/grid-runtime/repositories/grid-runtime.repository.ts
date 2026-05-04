@@ -61,6 +61,8 @@ export interface MarkGridOrderSubmittingInput {
 export interface MarkGridOrderOpenInput {
   id: string
   exchangeOrderId: string
+  price?: string | null
+  quantity?: string | null
   rawPayload?: GridRuntimeJsonValue
 }
 
@@ -302,6 +304,8 @@ export class GridRuntimeRepository {
       },
       data: {
         exchangeOrderId: input.exchangeOrderId,
+        price: input.price == null ? undefined : this.decimal(input.price),
+        quantity: input.quantity == null ? undefined : this.decimal(input.quantity),
         status: 'OPEN',
         rawPayload: input.rawPayload,
       },

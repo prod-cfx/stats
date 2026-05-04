@@ -167,7 +167,13 @@ describe('GridRuntimeRepository', () => {
       rawPayload: { source: 'planner' },
     })
     await repo.markOrderSubmitting({ id: 'order-1', clientOrderId: 'client-1', rawPayload: { requestId: 'req-1' } })
-    await repo.markOrderOpen({ id: 'order-1', exchangeOrderId: 'exchange-1', rawPayload: { state: 'live' } })
+    await repo.markOrderOpen({
+      id: 'order-1',
+      exchangeOrderId: 'exchange-1',
+      price: '90.1',
+      quantity: '1.1',
+      rawPayload: { state: 'live' },
+    })
 
     expect(tx.gridOrder.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -190,7 +196,13 @@ describe('GridRuntimeRepository', () => {
     })
     expect(tx.gridOrder.updateMany).toHaveBeenLastCalledWith({
       where: { id: 'order-1', status: 'SUBMITTING', instance: { status: { in: ['INITIALIZING', 'RUNNING'] } } },
-      data: { exchangeOrderId: 'exchange-1', status: 'OPEN', rawPayload: { state: 'live' } },
+      data: {
+        exchangeOrderId: 'exchange-1',
+        price: expect.anything(),
+        quantity: expect.anything(),
+        status: 'OPEN',
+        rawPayload: { state: 'live' },
+      },
     })
   })
 
