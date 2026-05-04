@@ -27,10 +27,6 @@ export class TradingExecutionService {
     const prepared = await this.prepareIntent(intent)
     if (prepared.status !== 'prepared') return prepared
     const submitted = await this.submitPrepared(prepared)
-    if (submitted.status === 'waiting_position') {
-      const { normalized: _normalized, ...result } = submitted
-      return result
-    }
     return submitted
   }
 

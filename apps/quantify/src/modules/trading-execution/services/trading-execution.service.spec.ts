@@ -183,11 +183,17 @@ describe('TradingExecutionService', () => {
     }
     const result = await service.executeIntent(closeIntent)
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       status: 'waiting_position',
       intent: closeIntent,
       reason: 'missing_closable_short_position',
-    })
+      normalized: expect.objectContaining({
+        clientOrderId: expect.any(String),
+        request: expect.objectContaining({
+          clientOrderId: expect.any(String),
+        }),
+      }),
+    }))
     expect(tradingService.getPositions).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'exchange-account-1')
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
@@ -206,12 +212,18 @@ describe('TradingExecutionService', () => {
     }
     const result = await service.executeIntent(closeIntent)
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       status: 'waiting_position',
       intent: closeIntent,
       reason: 'positions_unavailable',
       error,
-    })
+      normalized: expect.objectContaining({
+        clientOrderId: expect.any(String),
+        request: expect.objectContaining({
+          clientOrderId: expect.any(String),
+        }),
+      }),
+    }))
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 

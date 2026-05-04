@@ -33,6 +33,7 @@ describe('signalExecutorService auto stop', () => {
       { get: jest.fn().mockReturnValue({ ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, enabled: true } }) } as any,
       schedulerRegistry as any,
       { placeOrder: jest.fn() } as any,
+      { executeIntent: jest.fn() } as any,
       { applyLedgerDelta: jest.fn() } as any,
       strategyInstancesService as any,
       { recordTrade: jest.fn() } as any,
