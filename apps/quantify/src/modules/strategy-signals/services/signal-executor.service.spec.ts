@@ -646,22 +646,6 @@ describe('signalExecutorService', () => {
       },
     ],
     [
-      'submit_failed',
-      {
-        status: 'submit_failed',
-        reason: 'exchange_submit_error',
-        intent: {},
-        normalized: {
-          clientOrderId: 'sig-submit-failed-1',
-          normalizedAmount: '0.001',
-          exchangeSize: '0.001',
-          request: { symbol: 'BTC/USDT', clientOrderId: 'sig-submit-failed-1' },
-          constraints: {},
-        },
-        error: new Error('exchange_submit_error'),
-      },
-    ],
-    [
       'waiting_position',
       {
         status: 'waiting_position',
@@ -752,6 +736,93 @@ describe('signalExecutorService', () => {
         }),
       )
     }
+  })
+
+  it('keeps reservation and marks reconcile required when submitPrepared returns submit_failed', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-submit-failed-1'
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+    const resolveFinalOrderState = jest
+      .spyOn(service as any, 'resolveFinalOrderState')
+      .mockResolvedValue({} as any)
+    const submitError = new Error('exchange_submit_error')
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-submit-failed-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submit_failed',
+      reason: 'exchange_submit_error',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-submit-failed-1',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-submit-failed-1' },
+        constraints: {},
+      },
+      error: submitError,
+    })
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-submit-failed-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-submit-failed-1', userId: 'user-submit-failed-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-submit-failed-1', 'exchange_submit_error')
+    expect(releaseReservation).not.toHaveBeenCalled()
+    expect(resolveFinalOrderState).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-submit-failed-1',
+      'RECONCILE_REQUIRED',
+      expect.objectContaining({
+        reconcileRequired: true,
+        reason: 'exchange_submit_error',
+        error: 'exchange_submit_error',
+        orderRequest: expect.objectContaining({
+          source: 'signal',
+          sourceId: 'exec-submit-failed-1',
+          symbol: 'BTC/USDT',
+        }),
+        tradingExecution: expect.objectContaining({
+          status: 'submit_failed',
+          reason: 'exchange_submit_error',
+          clientOrderId: 'sig-submit-failed-1',
+          normalizedRequest: expect.objectContaining({
+            clientOrderId: 'sig-submit-failed-1',
+          }),
+        }),
+      }),
+    )
   })
 
   it('does not submit to the exchange when ORDER_SUBMITTED stage cannot be recorded before submission', async () => {

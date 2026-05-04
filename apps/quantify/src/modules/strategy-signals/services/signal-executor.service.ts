@@ -525,6 +525,20 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
           return 'failed'
         }
 
+        if (executionResult.status === 'submit_failed') {
+          exchangeAccepted = true
+          await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+            reconcileRequired: true,
+            reason: executionResult.reason,
+            error: this.errorMessage(executionResult.error),
+            exchangeAccountId: exchangeAccountId ?? null,
+            orderRequest,
+            tradingExecution: this.buildTradingExecutionResultSnapshot(executionResult),
+          })
+          await this.executionRepository.markFailed(execution.id, executionResult.reason)
+          return 'failed'
+        }
+
         if (executionResult.status !== 'submitted') {
           await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
             exchangeAccountId: exchangeAccountId ?? null,
@@ -1156,7 +1170,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async markPostSubmitLocalFailure(executionId: string, error: unknown): Promise<void> {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = this.errorMessage(error)
     try {
       await this.executionRepository.markStage(executionId, 'RECONCILE_REQUIRED', {
         reconcileRequired: true,
@@ -1170,6 +1184,10 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       )
     }
     await this.executionRepository.markFailed(executionId, message)
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
   }
 
   private mapTradeSide(direction: SignalDirection): TradeSide | null {
