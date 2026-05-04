@@ -38,7 +38,7 @@ export class GridOrderPlannerService {
 
   private buildLevels(config: GridRuntimeConfigSnapshot): GridLevelPlan[] {
     return Array.from({ length: config.gridCount }, (_, levelIndex) => {
-      const price = this.derivePrice(config, levelIndex)
+      const price = this.normalizePrice(this.derivePrice(config, levelIndex), config)
       return {
         levelIndex,
         price: this.formatDecimal(price),
@@ -59,18 +59,24 @@ export class GridOrderPlannerService {
   ): GridPlannedOrder[] {
     const specs = this.orderSpecsForMode(config.mode, comparisonToCurrent)
 
-    return specs.map(({ side, role }) => ({
-      levelIndex,
-      side,
-      role,
-      orderType: config.orderType,
-      timeInForce: config.timeInForce,
-      price: this.formatDecimal(price),
-      quantity: this.formatDecimal(this.decimal(config.perOrderQuote).div(price)),
-      quoteBudget: config.perOrderQuote,
-      baseAsset: config.baseAsset,
-      quoteAsset: config.quoteAsset,
-    }))
+    return specs.flatMap(({ side, role }) => {
+      const quantity = this.normalizeQuantity(this.decimal(config.perOrderQuote).div(price), config)
+      const minQuantity = this.toPositiveDecimal(config.minQuantity)
+      if (minQuantity && quantity.lt(minQuantity)) return []
+
+      return [{
+        levelIndex,
+        side,
+        role,
+        orderType: config.orderType,
+        timeInForce: config.timeInForce,
+        price: this.formatDecimal(price),
+        quantity: this.formatDecimal(quantity),
+        quoteBudget: config.perOrderQuote,
+        baseAsset: config.baseAsset,
+        quoteAsset: config.quoteAsset,
+      }]
+    })
   }
 
   private orderSpecsForMode(
@@ -147,6 +153,34 @@ export class GridOrderPlannerService {
 
   private decimal(value: string): Prisma.Decimal {
     return new Prisma.Decimal(value)
+  }
+
+  private normalizePrice(value: Prisma.Decimal, config: GridRuntimeConfigSnapshot): Prisma.Decimal {
+    const tickSize = this.toPositiveDecimal(config.tickSize)
+    if (tickSize) {
+      return value.div(tickSize).toDecimalPlaces(0).mul(tickSize)
+    }
+    if (Number.isInteger(config.pricePrecision) && config.pricePrecision >= 0) {
+      return value.toDecimalPlaces(config.pricePrecision)
+    }
+    return value
+  }
+
+  private normalizeQuantity(value: Prisma.Decimal, config: GridRuntimeConfigSnapshot): Prisma.Decimal {
+    const lotSize = this.toPositiveDecimal(config.lotSize)
+    if (lotSize) {
+      return value.div(lotSize).floor().mul(lotSize)
+    }
+    if (Number.isInteger(config.quantityPrecision) && config.quantityPrecision >= 0) {
+      return value.toDecimalPlaces(config.quantityPrecision, Prisma.Decimal.ROUND_DOWN)
+    }
+    return value
+  }
+
+  private toPositiveDecimal(value: string | null | undefined): Prisma.Decimal | null {
+    if (!value) return null
+    const decimal = new Prisma.Decimal(value)
+    return decimal.isPositive() ? decimal : null
   }
 
   private formatDecimal(value: Prisma.Decimal): string {

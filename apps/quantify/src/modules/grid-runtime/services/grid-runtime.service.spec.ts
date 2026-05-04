@@ -75,6 +75,11 @@ function createAstSnapshot() {
 
 function createCenteredPercentAstSnapshot() {
   return {
+    executionModel: {
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+    },
     orderPrograms: [{
       payload: {
         id: 'contract_order_program_limit_ladder',
@@ -135,7 +140,7 @@ describe('GridRuntimeService', () => {
     })
 
     expect(planner.planInitialOrders).toHaveBeenCalledWith({
-      config: {
+      config: expect.objectContaining({
         mode: 'spot',
         lowerPrice: '90',
         upperPrice: '110',
@@ -148,7 +153,7 @@ describe('GridRuntimeService', () => {
         spacingMode: 'arithmetic',
         spacingValue: '5',
         activeWhen: null,
-      },
+      }),
       currentPrice: '100',
     })
     expect(repository.createInstanceWithPlan).toHaveBeenCalledWith(expect.objectContaining({
@@ -204,6 +209,10 @@ describe('GridRuntimeService', () => {
       spacingValue: '0.08',
       pairingPolicy: 'adjacent_level',
       activeWhen: 'expr_04_active_level_set',
+      tickSize: '0.01',
+      lotSize: '0.000001',
+      quantityPrecision: 6,
+      pricePrecision: 2,
     }))
     expect(Number(config.lowerPrice)).toBeLessThan(100)
     expect(Number(config.upperPrice)).toBeGreaterThan(100)

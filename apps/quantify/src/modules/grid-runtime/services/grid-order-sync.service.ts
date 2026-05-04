@@ -204,8 +204,18 @@ export class GridOrderSyncService {
           this.buildCreateOrderInput(instance, marketType, order, clientOrderId),
           instance.exchangeAccountId,
         )
-      } catch {
-        await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed'))
+      } catch (error) {
+        await this.txEvents.withAfterCommit(async () =>
+          this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
+            orderId: order.id,
+            clientOrderId,
+            exchangeId,
+            marketType,
+            symbol: instance.symbol,
+            price: this.decimalToString(order.price),
+            quantity: this.decimalToString(order.quantity),
+            error: this.serializeError(error),
+          }))
         return
       }
 
@@ -488,6 +498,21 @@ export class GridOrderSyncService {
 
   private toJsonValue(value: unknown): GridRuntimeJsonValue {
     return this.toJsonCompatible(value) as GridRuntimeJsonValue
+  }
+
+  private serializeError(error: unknown): GridRuntimeJsonValue {
+    if (!(error instanceof Error)) {
+      return this.toJsonValue({ message: String(error) })
+    }
+
+    const record = error as Error & { code?: unknown, args?: unknown, response?: unknown }
+    return this.toJsonValue({
+      name: error.name,
+      message: error.message,
+      code: record.code,
+      args: record.args,
+      response: record.response,
+    })
   }
 
   private toJsonCompatible(value: unknown): JsonLike {

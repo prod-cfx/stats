@@ -151,6 +151,7 @@ export class GridRuntimeService {
     if (!program) throw new Error('grid_runtime_order_program_missing')
 
     const levelSet = this.findLevelSet(ast, this.readString(program, 'levelSetRef'))
+    const executionModel = this.readRecord(ast?.executionModel)
     const bounds = this.resolveLevelSetBounds(ast, levelSet, currentPrice)
     const quantity = this.readRecord(program.quantity)
     const perOrderQuote = this.readNumber(quantity, 'value')
@@ -175,6 +176,10 @@ export class GridRuntimeService {
       spacingValue: this.readSpacingValue(levelSet),
       pairingPolicy: this.readString(program, 'pairingPolicy') === 'adjacent_level' ? 'adjacent_level' : undefined,
       activeWhen: this.readString(program, 'activeWhen'),
+      tickSize: this.formatOptionalNumber(this.readNumber(executionModel, 'tickSize')),
+      lotSize: this.resolveLotSize(executionModel),
+      pricePrecision: this.readInteger(executionModel, 'pricePrecision'),
+      quantityPrecision: this.readInteger(executionModel, 'quantityPrecision'),
     }
   }
 
@@ -333,6 +338,21 @@ export class GridRuntimeService {
     return Number.isFinite(numeric) ? numeric : null
   }
 
+  private readInteger(source: Record<string, unknown> | null | undefined, key: string): number | null {
+    const numeric = this.readNumber(source, key)
+    return numeric !== null && Number.isInteger(numeric) && numeric >= 0 ? numeric : null
+  }
+
+  private resolveLotSize(executionModel: Record<string, unknown> | null): string | null {
+    const lotSize = this.readNumber(executionModel, 'lotSize')
+    if (lotSize !== null && lotSize > 0) return this.formatNumber(lotSize)
+
+    const quantityPrecision = this.readInteger(executionModel, 'quantityPrecision')
+    return quantityPrecision === null
+      ? null
+      : new Prisma.Decimal(10).pow(-quantityPrecision).toFixed()
+  }
+
   private toPositiveNumber(value: string | number | null | undefined): number | null {
     const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null
@@ -340,5 +360,9 @@ export class GridRuntimeService {
 
   private formatNumber(value: number): string {
     return new Prisma.Decimal(value).toFixed()
+  }
+
+  private formatOptionalNumber(value: number | null): string | null {
+    return value === null || value <= 0 ? null : this.formatNumber(value)
   }
 }
