@@ -78,7 +78,9 @@ interface ExpectedOrderProgramContract {
   mode: CanonicalOrderProgramIntent['mode']
   lower: number
   upper: number
+  gridIntervals?: number
   gridCount?: number
+  absoluteSpacing?: number
   spacingPct?: number
   spacingMode: CanonicalOrderProgramIntent['levelSet']['spacingMode']
   budgetMode: CanonicalOrderProgramIntent['budget']['mode']
@@ -240,7 +242,9 @@ export class SemanticAtomInvariantService {
     }
 
     const id = `contract-order-program-${orderProgram.capability.object}`
+    const gridIntervals = this.readShapeNumber(levelSet.capability.shape, 'gridIntervals') ?? undefined
     const gridCount = this.readShapeNumber(levelSet.capability.shape, 'gridCount') ?? undefined
+    const absoluteSpacing = this.readShapeNumber(levelSet.capability.shape, 'absoluteSpacing') ?? undefined
     const spacingPct = this.readShapeNumber(levelSet.capability.shape, 'spacingPct') ?? undefined
     const budgetMode = projectedBudget.budgetMode
     const maxWorkingOrders = Math.max(2, Math.floor(gridCount ?? 2))
@@ -255,7 +259,9 @@ export class SemanticAtomInvariantService {
       mode,
       lower,
       upper,
+      ...(gridIntervals !== undefined ? { gridIntervals } : {}),
       ...(gridCount !== undefined ? { gridCount } : {}),
+      ...(absoluteSpacing !== undefined ? { absoluteSpacing } : {}),
       ...(spacingPct !== undefined ? { spacingPct } : {}),
       spacingMode: this.readShapeString(levelSet.capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
       budgetMode,
@@ -487,7 +493,9 @@ export class SemanticAtomInvariantService {
     return this.stableProjectionKey({
       lower: this.readShapeNumber(capability.shape, 'lower'),
       upper: this.readShapeNumber(capability.shape, 'upper'),
+      gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),
       gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+      absoluteSpacing: this.readShapeNumber(capability.shape, 'absoluteSpacing'),
       spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
       spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
     })

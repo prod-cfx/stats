@@ -1065,6 +1065,104 @@ describe('SemanticStateProjectionService', () => {
     expect(view.summary).not.toContain('区间待补充')
   })
 
+  it('summarizes normalized fixed-range grid intervals and absolute spacing', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [{
+        id: 'grid-range',
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-grid-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: {
+              lower: 78800,
+              upper: 81400,
+              gridIntervals: 10,
+              gridCount: 11,
+              absoluteSpacing: 260,
+              spacingMode: 'arithmetic',
+            },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-04T00:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('固定区间 78800-81400')
+    expect(view.summary).toContain('共 10 格')
+    expect(view.summary).toContain('每格 260')
+    expect(view.summary).not.toContain('共 11 格')
+  })
+
+  it('describes gridCount-only level sets as price levels instead of intervals', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [{
+        id: 'grid-range',
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-grid-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: {
+              lower: 78800,
+              upper: 81400,
+              gridCount: 11,
+              spacingMode: 'arithmetic',
+            },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-04T00:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('共 11 档')
+    expect(view.summary).not.toContain('共 11 格')
+  })
+
   it('surfaces an open position sizing slot before context slots', () => {
     const result = service.buildClarificationView({
       version: 1,
@@ -2053,7 +2151,8 @@ describe('SemanticStateProjectionService', () => {
               centerTiming: 'deployment',
               centerSource: 'last_trade',
               halfRangePct: 0.4,
-              gridCount: 10,
+              gridIntervals: 10,
+              gridCount: 11,
               spacingMode: 'arithmetic',
             },
           }],

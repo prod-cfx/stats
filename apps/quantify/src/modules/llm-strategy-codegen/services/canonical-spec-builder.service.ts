@@ -669,7 +669,9 @@ export class CanonicalSpecBuilderService {
         centerTiming: this.readShapeString(capability.shape, 'centerTiming') ?? 'deployment',
         centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
         halfRangePct: this.readShapeNumber(capability.shape, 'halfRangePct'),
+        gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),
         gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+        absoluteSpacing: this.readShapeNumber(capability.shape, 'absoluteSpacing'),
         spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
         spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
       })
@@ -679,7 +681,9 @@ export class CanonicalSpecBuilderService {
       mode: 'static_range',
       lower: this.readShapeNumber(capability.shape, 'lower'),
       upper: this.readShapeNumber(capability.shape, 'upper'),
+      gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),
       gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+      absoluteSpacing: this.readShapeNumber(capability.shape, 'absoluteSpacing'),
       spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
       spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
     })

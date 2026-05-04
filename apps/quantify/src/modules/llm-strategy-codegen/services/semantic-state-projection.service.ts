@@ -582,20 +582,41 @@ export class SemanticStateProjectionService {
       const centerSource = this.readShapeString(capability.shape, 'centerSource')
       const halfRangePct = this.readShapeNumber(capability.shape, 'halfRangePct')
       const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+      const gridIntervals = this.readShapeNumber(capability.shape, 'gridIntervals')
+      const absoluteSpacing = this.readShapeNumber(capability.shape, 'absoluteSpacing')
       const centerText = `${centerTiming === 'deployment' ? '部署时' : '运行时'}${this.describeCenterSource(centerSource)}`
       const rangeText = halfRangePct !== null ? `上下各 ${this.formatPercent(halfRangePct)}%` : '上下区间待补充'
-      const gridText = gridCount !== null ? `，共 ${this.formatNumber(gridCount)} 格` : ''
-      return `入场：区间网格，以${centerText}为中心${rangeText}${gridText}`
+      const gridText = this.formatLevelSetDensityText(gridIntervals, gridCount)
+      const spacingText = absoluteSpacing !== null ? `，每格 ${this.formatNumber(absoluteSpacing)}` : ''
+      return `入场：区间网格，以${centerText}为中心${rangeText}${gridText}${spacingText}`
     }
 
     const lower = this.readShapeNumber(capability.shape, 'lower')
     const upper = this.readShapeNumber(capability.shape, 'upper')
     const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+    const gridIntervals = this.readShapeNumber(capability.shape, 'gridIntervals')
+    const absoluteSpacing = this.readShapeNumber(capability.shape, 'absoluteSpacing')
     const spacingPct = this.readShapeNumber(capability.shape, 'spacingPct')
     if (lower !== null && upper !== null) {
-      const gridText = gridCount !== null ? `，共 ${this.formatNumber(gridCount)} 格` : ''
-      const spacingText = spacingPct !== null ? `，步长 ${this.formatPercent(spacingPct)}%` : ''
+      const gridText = this.formatLevelSetDensityText(gridIntervals, gridCount)
+      const spacingText = absoluteSpacing !== null
+        ? `，每格 ${this.formatNumber(absoluteSpacing)}`
+        : spacingPct !== null
+          ? `，步长 ${this.formatPercent(spacingPct)}%`
+          : ''
       return `入场：区间网格，固定区间 ${this.formatNumber(lower)}-${this.formatNumber(upper)}${gridText}${spacingText}`
+    }
+
+    return ''
+  }
+
+  private formatLevelSetDensityText(gridIntervals: number | null, gridCount: number | null): string {
+    if (gridIntervals !== null) {
+      return `，共 ${this.formatNumber(gridIntervals)} 格`
+    }
+
+    if (gridCount !== null) {
+      return `，共 ${this.formatNumber(gridCount)} 档`
     }
 
     return ''

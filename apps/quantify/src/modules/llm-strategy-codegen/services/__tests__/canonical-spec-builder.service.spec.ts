@@ -300,7 +300,9 @@ describe('canonicalSpecBuilderService', () => {
               shape: {
                 lower: 60000,
                 upper: 80000,
-                gridCount: 100,
+                gridIntervals: 10,
+                gridCount: 11,
+                absoluteSpacing: 2000,
                 spacingMode: 'arithmetic',
               },
             }],
@@ -436,7 +438,7 @@ describe('canonicalSpecBuilderService', () => {
       levelSet: {
         lower: 60000,
         upper: 80000,
-        gridCount: 100,
+        gridCount: 11,
         spacingMode: 'arithmetic',
       },
       budget: {
@@ -475,7 +477,8 @@ describe('canonicalSpecBuilderService', () => {
                 centerTiming: 'deployment',
                 centerSource: 'last_price',
                 halfRangePct: 0.4,
-                gridCount: 10,
+                gridIntervals: 10,
+                gridCount: 11,
                 spacingMode: 'arithmetic',
               },
             }],
@@ -573,7 +576,7 @@ describe('canonicalSpecBuilderService', () => {
         centerTiming: 'deployment',
         centerSource: 'last_price',
         halfRangePct: 0.4,
-        gridCount: 10,
+        gridCount: 11,
         spacingMode: 'arithmetic',
       },
       budget: {
@@ -600,6 +603,13 @@ describe('canonicalSpecBuilderService', () => {
       [
         { lower: 61000, upper: 79000, gridCount: 100, spacingMode: 'arithmetic' },
         { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
+      ],
+    ],
+    [
+      'different absolute spacing',
+      [
+        { lower: 60000, upper: 80000, gridCount: 11, absoluteSpacing: 2000, spacingMode: 'arithmetic' },
+        { lower: 60000, upper: 80000, gridCount: 11, absoluteSpacing: 2500, spacingMode: 'arithmetic' },
       ],
     ],
   ])('rejects conflicting duplicate contract order programs level sets in %s', (_, levelSetShapes) => {
