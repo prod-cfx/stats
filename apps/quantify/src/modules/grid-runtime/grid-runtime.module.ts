@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { PositionsModule } from '@/modules/positions/positions.module'
 import { GridRuntimeController } from './controllers/grid-runtime.controller'
 import { TradingModule } from '../trading/trading.module'
 import { TradingExecutionModule } from '../trading-execution/trading-execution.module'
@@ -12,7 +13,7 @@ import { GridRuntimeService } from './services/grid-runtime.service'
 import { GridRuntimeStateMachineService } from './services/grid-runtime-state-machine.service'
 
 @Module({
-  imports: [PrismaModule, TradingModule, TradingExecutionModule],
+  imports: [PrismaModule, TradingModule, TradingExecutionModule, PositionsModule],
   controllers: [GridRuntimeController],
   providers: [
     GridRuntimeRepository,

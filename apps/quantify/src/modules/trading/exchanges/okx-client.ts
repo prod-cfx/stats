@@ -171,19 +171,7 @@ export class OkxClient extends BaseCexClient {
       body.clOrdId = input.clientOrderId
     }
 
-    const res = await this.request<{ data: OkxOrderResponse[] }>(
-      'POST',
-      '/api/v5/trade/order',
-      {},
-      true,
-      body,
-    )
-
-    const order = res.data[0]
-    if (!order) {
-      throw new ExchangeError('OKX createOrder returned empty response', undefined, res)
-    }
-    this.assertOrderAccepted(order)
+    const order = await this.submitCreateOrderBody(body)
     const createdAt = order.cTime ? Number.parseInt(order.cTime, 10) : Date.now()
     const updatedAt = order.uTime ? Number.parseInt(order.uTime, 10) : undefined
 
@@ -204,6 +192,45 @@ export class OkxClient extends BaseCexClient {
       updatedAt,
       raw: order,
     }
+  }
+
+  private async submitCreateOrderBody(body: Record<string, unknown>): Promise<OkxOrderResponse> {
+    try {
+      return await this.requestCreateOrder(body)
+    }
+    catch (error) {
+      if (!this.shouldRetryCreateOrderWithoutPosSide(error, body)) {
+        throw error
+      }
+
+      const retryBody = { ...body }
+      delete retryBody.posSide
+      return this.requestCreateOrder(retryBody)
+    }
+  }
+
+  private async requestCreateOrder(body: Record<string, unknown>): Promise<OkxOrderResponse> {
+    const res = await this.request<{ data: OkxOrderResponse[] }>(
+      'POST',
+      '/api/v5/trade/order',
+      {},
+      true,
+      body,
+    )
+
+    const order = res.data[0]
+    if (!order) {
+      throw new ExchangeError('OKX createOrder returned empty response', undefined, res)
+    }
+    this.assertOrderAccepted(order)
+    return order
+  }
+
+  private shouldRetryCreateOrderWithoutPosSide(error: unknown, body: Record<string, unknown>): boolean {
+    if (this.marketType !== 'perp') return false
+    if (body.posSide !== 'long' && body.posSide !== 'short') return false
+    if (!(error instanceof ExchangeError)) return false
+    return error.code === '51000' && /posSide/u.test(error.message)
   }
 
   async cancelOrder(id: string, symbol: string): Promise<UnifiedOrder> {

@@ -71,6 +71,11 @@ export interface MarkGridOrderPlannedInput {
   rawPayload?: GridRuntimeJsonValue
 }
 
+export interface MarkGridOrdersCanceledInput {
+  ids: string[]
+  rawPayload?: GridRuntimeJsonValue
+}
+
 export interface RecordGridFillOnceInput {
   gridRuntimeInstanceId: string
   gridOrderId: string
@@ -201,6 +206,42 @@ export class GridRuntimeRepository {
     return this.txHost.tx.gridFill.findMany({
       where: { gridRuntimeInstanceId: instanceId },
       orderBy: [{ filledAt: 'asc' }, { id: 'asc' }],
+    })
+  }
+
+  async findStrategyAccountForRuntime(instanceId: string) {
+    const instance = await this.txHost.tx.gridRuntimeInstance.findUnique({
+      where: { id: instanceId },
+      select: {
+        userId: true,
+        strategyInstanceId: true,
+      },
+    })
+    if (!instance) return null
+    const strategyInstance = await this.txHost.tx.strategyInstance.findUnique({
+      where: { id: instance.strategyInstanceId },
+      select: { strategyTemplateId: true },
+    })
+    if (!strategyInstance) return null
+
+    return this.txHost.tx.userStrategyAccount.findUnique({
+      where: {
+        userId_strategyId: {
+          userId: instance.userId,
+          strategyId: strategyInstance.strategyTemplateId,
+        },
+      },
+      select: { id: true },
+    })
+  }
+
+  findTradeByExternalTradeId(accountId: string, externalTradeId: string) {
+    return this.txHost.tx.trade.findFirst({
+      where: {
+        userStrategyAccountId: accountId,
+        externalTradeId,
+      },
+      select: { id: true },
     })
   }
 
@@ -335,6 +376,23 @@ export class GridRuntimeRepository {
     })
 
     return result.count === 1
+  }
+
+  async markOrdersCanceled(input: MarkGridOrdersCanceledInput): Promise<number> {
+    if (input.ids.length === 0) return 0
+
+    const result = await this.txHost.tx.gridOrder.updateMany({
+      where: {
+        id: { in: input.ids },
+        status: { in: ['OPEN', 'SUBMITTING', 'PARTIALLY_FILLED', 'CANCELING'] },
+      },
+      data: {
+        status: 'CANCELED',
+        rawPayload: input.rawPayload,
+      },
+    })
+
+    return result.count
   }
 
   updateOrderFromExchange(input: UpdateGridOrderFromExchangeInput) {

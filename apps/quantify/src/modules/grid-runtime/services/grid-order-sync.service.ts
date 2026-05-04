@@ -1,6 +1,7 @@
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TradingService } from '@/modules/trading/trading.service'
+import { PositionSide, TradeSide } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 import type { GridOrderStatus } from '@/prisma/prisma.types'
@@ -9,6 +10,9 @@ import { TradingExecutionService } from '@/modules/trading-execution/services/tr
 import type { OrderIntent, TradingExecutionSubmitPreparedResult } from '@/modules/trading-execution/types/trading-execution.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TransactionEventsService } from '@/common/services/transaction-events.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
+import { PositionsService } from '@/modules/positions/positions.service'
+import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { GridRuntimeRepository } from '../repositories/grid-runtime.repository'
 import type { GridOrderRole, GridOrderSide, GridRuntimeConfigSnapshot, GridRuntimeJsonValue } from '../types/grid-runtime.types'
@@ -51,6 +55,12 @@ interface RuntimeOrder {
   status: string
 }
 
+interface RecordedGridFill {
+  id: string
+  exchangeFillId: string | null
+  tradeId: string | null
+}
+
 type JsonLike = string | number | boolean | null | JsonLike[] | { [key: string]: JsonLike }
 
 const LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER = new Set<string>([
@@ -68,6 +78,7 @@ export class GridOrderSyncService {
     private readonly tradingExecution: TradingExecutionService,
     private readonly stateMachine: GridRuntimeStateMachineService,
     private readonly txEvents: TransactionEventsService,
+    private readonly positionsService: PositionsService,
   ) {}
 
   async syncInstance(instanceId: string): Promise<void> {
@@ -144,16 +155,7 @@ export class GridOrderSyncService {
 
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, reason))
     try {
-      for (const order of ownOpenOrders) {
-        await this.tradingService.cancelOrder(
-          instance.userId,
-          exchangeId,
-          marketType,
-          order.id,
-          instance.symbol,
-          instance.exchangeAccountId,
-        )
-      }
+      await this.cancelOwnOpenOrdersAndMarkLocalCanceled(instance, orders, ownOpenOrders, reason)
       if (hasPendingLocalSubmission) {
         await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'stop_pending_submit'))
         return
@@ -345,16 +347,7 @@ export class GridOrderSyncService {
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, 'boundary_break'))
 
     try {
-      for (const order of ownOpenOrders) {
-        await this.tradingService.cancelOrder(
-          instance.userId,
-          instance.exchangeId as ExchangeId,
-          instance.marketType as MarketType,
-          order.id,
-          instance.symbol,
-          instance.exchangeAccountId,
-        )
-      }
+      await this.cancelOwnOpenOrdersAndMarkLocalCanceled(instance, orders, ownOpenOrders, 'boundary_break')
     } catch {
       await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'boundary_cancel_failed'))
       return true
@@ -366,6 +359,41 @@ export class GridOrderSyncService {
 
     await this.txEvents.withAfterCommit(async () => this.stateMachine.markStopped(instance.id, 'boundary_break'))
     return true
+  }
+
+  private async cancelOwnOpenOrdersAndMarkLocalCanceled(
+    instance: RuntimeInstance,
+    localOrders: RuntimeOrder[],
+    openOrders: UnifiedOrder[],
+    reason: string,
+  ): Promise<void> {
+    for (const order of openOrders) {
+      await this.tradingService.cancelOrder(
+        instance.userId,
+        instance.exchangeId as ExchangeId,
+        instance.marketType as MarketType,
+        order.id,
+        instance.symbol,
+        instance.exchangeAccountId,
+      )
+    }
+
+    const canceledLocalOrderIds = this.findLocalOrderIdsForExchangeOrders(localOrders, openOrders)
+    if (canceledLocalOrderIds.length === 0) return
+
+    await this.txEvents.withAfterCommit(async () =>
+      this.repository.markOrdersCanceled({
+        ids: canceledLocalOrderIds,
+        rawPayload: this.toJsonValue({
+          source: 'grid_order_sync',
+          reason,
+          exchangeOrders: openOrders.map(order => ({
+            id: order.id,
+            clientOrderId: order.clientOrderId,
+            status: order.status,
+          })),
+        }),
+      }))
   }
 
   private hasPendingLocalSubmission(orders: RuntimeOrder[], openOrders: UnifiedOrder[]): boolean {
@@ -390,12 +418,16 @@ export class GridOrderSyncService {
       gridRuntimeInstanceId: instance.id,
       gridOrderId: order.id,
       exchangeFillId,
+      tradeId: this.getRawString(exchangeOrder.raw, 'tradeId'),
       side: order.side as GridOrderSide,
       price: exchangeOrder.price == null ? this.decimalToString(order.price) : String(exchangeOrder.price),
       quantity: String(exchangeOrder.filled),
+      ...this.extractOrderFee(exchangeOrder),
       filledAt: new Date(exchangeOrder.updatedAt ?? exchangeOrder.createdAt),
       rawPayload: this.toJsonValue(exchangeOrder.raw),
     })
+    const mirrored = await this.mirrorFillToStrategyLedger(instance, order, exchangeOrder, recorded.fill as RecordedGridFill, exchangeFillId)
+    if (!mirrored) return
     if (!recorded.newlyRecorded) return
 
     const level = this.findInverseLevel(instance, order)
@@ -416,6 +448,73 @@ export class GridOrderSyncService {
       quantity: String(exchangeOrder.filled),
       rawPayload: { source: 'grid_order_sync', pairedFromOrderId: order.id },
     })
+  }
+
+  private async mirrorFillToStrategyLedger(
+    instance: RuntimeInstance,
+    order: RuntimeOrder,
+    exchangeOrder: UnifiedOrder,
+    fill: RecordedGridFill,
+    exchangeFillId: string,
+  ): Promise<boolean> {
+    const account = await this.repository.findStrategyAccountForRuntime(instance.id)
+    if (!account) {
+      await this.stateMachine.markReconcileRequired(instance.id, 'strategy_account_missing_for_grid_fill', {
+        gridFillId: fill.id,
+        exchangeFillId,
+      })
+      return false
+    }
+
+    const externalTradeId = `grid:${fill.exchangeFillId ?? exchangeFillId}`
+    const existingTrade = await this.repository.findTradeByExternalTradeId(account.id, externalTradeId)
+    if (existingTrade) return true
+
+    const fee = this.extractOrderFee(exchangeOrder)
+    try {
+      await this.positionsService.recordTrade({
+        userStrategyAccountId: account.id,
+        symbol: normalizeLedgerSymbol(instance.symbol),
+        market: `${instance.exchangeId}:${instance.marketType}`,
+        side: order.side === 'buy' ? TradeSide.BUY : TradeSide.SELL,
+        positionSide: this.resolvePositionSide(instance, order),
+        price: exchangeOrder.price == null ? this.decimalToString(order.price) : String(exchangeOrder.price),
+        quantity: String(exchangeOrder.filled),
+        fee: fee.fee ?? '0',
+        feeCurrency: fee.feeCurrency ?? undefined,
+        orderId: exchangeOrder.id,
+        externalTradeId,
+        provider: instance.exchangeId,
+        executedAt: new Date(exchangeOrder.updatedAt ?? exchangeOrder.createdAt).toISOString(),
+        metadata: {
+          source: 'grid-runtime',
+          gridRuntimeInstanceId: instance.id,
+          gridOrderId: order.id,
+          gridFillId: fill.id,
+          exchangeFillId,
+          exchangeAccountId: instance.exchangeAccountId,
+          clientOrderId: order.clientOrderId,
+          exchangeOrderId: exchangeOrder.id,
+          gridOrderRole: order.role,
+        },
+      })
+      return true
+    } catch (error) {
+      await this.stateMachine.markReconcileRequired(instance.id, 'grid_fill_ledger_mirror_failed', {
+        gridFillId: fill.id,
+        exchangeFillId,
+        externalTradeId,
+        error: this.serializeError(error),
+      })
+      return false
+    }
+  }
+
+  private resolvePositionSide(instance: RuntimeInstance, order: RuntimeOrder): PositionSide {
+    if (instance.marketType === 'spot') return PositionSide.LONG
+    if (order.role === 'open_short' || order.role === 'close_short') return PositionSide.SHORT
+    if (order.role === 'open_long' || order.role === 'close_long') return PositionSide.LONG
+    return order.side === 'sell' ? PositionSide.SHORT : PositionSide.LONG
   }
 
   private findInverseLevel(instance: RuntimeInstance, order: RuntimeOrder): RuntimeLevel | null {
@@ -485,6 +584,24 @@ export class GridOrderSyncService {
     return rawFillId ?? `${order.id}:${order.updatedAt ?? order.createdAt}:${order.filled}`
   }
 
+  private extractOrderFee(order: UnifiedOrder): { fee?: string | null; feeCurrency?: string | null } {
+    const rawFee = this.getRawNumber(order.raw, 'fee') ?? this.getRawString(order.raw, 'fee')
+    const fee = rawFee == null ? null : String(rawFee)
+    const feeCurrency =
+      this.getRawString(order.raw, 'feeCurrency')
+      ?? this.getRawString(order.raw, 'feeCcy')
+      ?? this.getRawString(order.raw, 'commissionAsset')
+    if (fee != null) return { fee, feeCurrency }
+
+    const firstFill = this.getRawArrayItem(order.raw, 'fills', 0)
+    if (!firstFill) return {}
+    const fillFee = this.getRawNumber(firstFill, 'commission') ?? this.getRawString(firstFill, 'commission')
+    return {
+      fee: fillFee == null ? null : String(fillFee),
+      feeCurrency: this.getRawString(firstFill, 'commissionAsset'),
+    }
+  }
+
   private executionPayload(result: TradingExecutionSubmitPreparedResult): GridRuntimeJsonValue {
     return this.toJsonValue({
       source: 'grid_order_sync',
@@ -513,6 +630,18 @@ export class GridOrderSyncService {
     if (typeof raw !== 'object' || raw === null || !(key in raw)) return null
     const value = (raw as Record<string, unknown>)[key]
     return typeof value === 'string' && value.length > 0 ? value : null
+  }
+
+  private getRawNumber(raw: unknown, key: string): number | null {
+    if (typeof raw !== 'object' || raw === null || !(key in raw)) return null
+    const value = (raw as Record<string, unknown>)[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private getRawArrayItem(raw: unknown, key: string, index: number): unknown | null {
+    if (typeof raw !== 'object' || raw === null || !(key in raw)) return null
+    const value = (raw as Record<string, unknown>)[key]
+    return Array.isArray(value) ? value[index] ?? null : null
   }
 
   private inverseSide(side: string): GridOrderSide {
@@ -544,6 +673,23 @@ export class GridOrderSyncService {
     )
 
     return openOrders.filter(order => ownExchangeOrderIds.has(order.id) || (order.clientOrderId != null && ownClientOrderIds.has(order.clientOrderId)))
+  }
+
+  private findLocalOrderIdsForExchangeOrders(localOrders: RuntimeOrder[], openOrders: UnifiedOrder[]): string[] {
+    const ids = new Set<string>()
+    for (const exchangeOrder of openOrders) {
+      for (const localOrder of localOrders) {
+        if (!LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER.has(localOrder.status)) continue
+        if (localOrder.exchangeOrderId === exchangeOrder.id) {
+          ids.add(localOrder.id)
+          continue
+        }
+        if (localOrder.clientOrderId != null && localOrder.clientOrderId === exchangeOrder.clientOrderId) {
+          ids.add(localOrder.id)
+        }
+      }
+    }
+    return [...ids]
   }
 
   private parseConfig(value: unknown): GridRuntimeConfigSnapshot {
