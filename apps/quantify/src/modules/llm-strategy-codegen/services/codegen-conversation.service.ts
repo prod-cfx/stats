@@ -1266,7 +1266,6 @@ export class CodegenConversationService {
       semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist: canonicalLogicSnapshot,
       semanticState: reducedSemanticState,
@@ -1652,7 +1651,6 @@ export class CodegenConversationService {
         semanticState: replacementState,
       })
       const canonicalDigest = this.readCanonicalDigest(specDesc)
-      const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
       const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(replacementState, {})
       const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
       const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
@@ -1799,7 +1797,6 @@ export class CodegenConversationService {
       semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
