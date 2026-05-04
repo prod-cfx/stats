@@ -226,10 +226,17 @@ export class TradingService {
       return await client.fetchInstrumentConstraints(symbol)
     }
     catch (error) {
+      if (error instanceof ExchangeOperationFailedException) {
+        throw error
+      }
       if (error instanceof ExchangeError) {
         throw new ExchangeOperationFailedException({ operation: 'fetch instrument constraints', exchangeId, reason: error.message })
       }
-      throw error
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch instrument constraints',
+        exchangeId,
+        reason: (error as Error).message,
+      })
     }
   }
 

@@ -309,6 +309,72 @@ describe('okxClient', () => {
       raw: expect.objectContaining({ instId: 'BTC-USDT-SWAP' }),
     })
     expect(requests.some(request => request.pathname === '/api/v5/public/instruments')).toBe(true)
+    expect(requests.some((request) => {
+      const search = new URLSearchParams(request.search)
+      return search.get('instType') === 'SWAP' && search.get('instId') === 'BTC-USDT-SWAP'
+    })).toBe(true)
+  })
+
+  it('throws when OKX perp instrument constraints are incomplete', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            minSz: '1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    await expect(createClient({ marketType: 'perp' }).fetchInstrumentConstraints?.('BTC/USDT:PERP'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX instrument constraints incomplete for BTC-USDT-SWAP',
+      })
+  })
+
+  it('returns OKX spot instrument constraints for execution admission', async () => {
+    const requests: Array<{ pathname: string; search: string }> = []
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      requests.push({ pathname: url.pathname, search: url.search })
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT',
+            lotSz: '0.00000001',
+            tickSz: '0.01',
+            minSz: '0.00001',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    const constraints = await createClient({ marketType: 'spot' }).fetchInstrumentConstraints?.('BTC/USDT')
+
+    expect(constraints).toEqual({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTC-USDT',
+      priceTickSize: '0.01',
+      quantityStepSize: '0.00000001',
+      minQuantity: '0.00001',
+      contractValue: null,
+      clientOrderId: {
+        maxLength: 32,
+        pattern: '^[A-Za-z0-9]+$',
+      },
+      raw: expect.objectContaining({ instId: 'BTC-USDT' }),
+    })
+    expect(requests.some((request) => {
+      const search = new URLSearchParams(request.search)
+      return search.get('instType') === 'SPOT' && search.get('instId') === 'BTC-USDT'
+    })).toBe(true)
   })
 
   it('converts perp base size to contract size when creating orders', async () => {

@@ -437,6 +437,9 @@ export class OkxClient extends BaseCexClient {
     if (this.marketType === 'perp' && (!instrumentSpec?.ctVal || !instrumentSpec.lotSz || !instrumentSpec.tickSz)) {
       throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
     }
+    if (this.marketType === 'spot' && (!instrumentSpec?.lotSz || !instrumentSpec.tickSz)) {
+      throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
+    }
 
     return {
       exchangeId: 'okx',
@@ -446,7 +449,7 @@ export class OkxClient extends BaseCexClient {
       priceTickSize: instrumentSpec?.tickSz ?? null,
       quantityStepSize: instrumentSpec?.lotSz ?? null,
       minQuantity: instrumentSpec?.minSz ?? null,
-      contractValue: instrumentSpec?.ctVal ?? null,
+      contractValue: this.marketType === 'perp' ? instrumentSpec?.ctVal ?? null : null,
       clientOrderId: {
         maxLength: 32,
         pattern: '^[A-Za-z0-9]+$',
@@ -797,19 +800,16 @@ export class OkxClient extends BaseCexClient {
   }
 
   private async fetchInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
-    if (this.marketType !== 'perp') {
-      return null
-    }
-
     const cached = this.instrumentSpecCache.get(instId)
     if (cached) {
       return cached
     }
 
+    const instType = this.marketType === 'spot' ? 'SPOT' : 'SWAP'
     const promise = this.request<{ data: OkxInstrumentSpecItem[] }>(
       'GET',
       '/api/v5/public/instruments',
-      { instType: 'SWAP', instId },
+      { instType, instId },
     ).then((res) => {
       return res.data[0] ?? null
     })
