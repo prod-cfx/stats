@@ -1,4 +1,4 @@
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedInstrumentConstraints, UnifiedOrder } from '@/modules/trading/core/types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TradingService } from '@/modules/trading/trading.service'
 import { PositionSide, TradeSide } from '@ai/shared'
@@ -69,6 +69,11 @@ const LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER = new Set<string>([
   'PARTIALLY_FILLED',
   'CANCELING',
 ])
+
+const DEFAULT_GRID_ORDER_SUBMISSIONS_PER_SYNC = 3
+const GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE: Partial<Record<ExchangeId, number>> = {
+  okx: 3,
+}
 
 @Injectable()
 export class GridOrderSyncService {
@@ -190,9 +195,15 @@ export class GridOrderSyncService {
     marketType: MarketType,
   ): Promise<void> {
     const plannedOrders = this.filterSubmittablePlannedOrders(orders)
+      .slice(0, this.resolveSubmissionLimit(exchangeId))
+    if (plannedOrders.length === 0) return
+
+    const constraints = await this.loadSubmissionConstraints(instance, exchangeId, marketType)
+    if (!constraints) return
+
     for (const order of plannedOrders) {
       const intent = this.buildOrderIntent(instance, exchangeId, marketType, order)
-      const prepared = await this.tradingExecution.prepareIntent(intent)
+      const prepared = await this.tradingExecution.prepareIntent(intent, { constraints })
       if (prepared.status !== 'prepared') {
         await this.txEvents.withAfterCommit(async () =>
           this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
@@ -293,6 +304,35 @@ export class GridOrderSyncService {
 
   private filterSubmittablePlannedOrders(orders: RuntimeOrder[]): RuntimeOrder[] {
     return orders.filter(order => order.status === 'PLANNED')
+  }
+
+  private resolveSubmissionLimit(exchangeId: ExchangeId): number {
+    return GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE[exchangeId] ?? DEFAULT_GRID_ORDER_SUBMISSIONS_PER_SYNC
+  }
+
+  private async loadSubmissionConstraints(
+    instance: RuntimeInstance,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+  ): Promise<UnifiedInstrumentConstraints | null> {
+    try {
+      return await this.tradingService.getInstrumentConstraints(
+        instance.userId,
+        exchangeId,
+        marketType,
+        instance.symbol,
+        instance.exchangeAccountId,
+      )
+    } catch (error) {
+      await this.txEvents.withAfterCommit(async () =>
+        this.stateMachine.markReconcileRequired(instance.id, 'order_constraints_unavailable', {
+          exchangeId,
+          marketType,
+          symbol: instance.symbol,
+          error: this.serializeError(error),
+        }))
+      return null
+    }
   }
 
   private buildOrderIntent(
