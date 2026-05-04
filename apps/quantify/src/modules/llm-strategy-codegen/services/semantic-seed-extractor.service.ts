@@ -386,6 +386,10 @@ export class SemanticSeedExtractorService {
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
     }
 
+    if (!triggers.some(trigger => trigger.key === 'grid.range_rebalance')) {
+      this.pushGridTrigger(text, triggers, seen)
+    }
+
     return this.harmonizeBollingerTriggers(triggers)
   }
 
@@ -495,8 +499,8 @@ export class SemanticSeedExtractorService {
   }
 
   private extractPerGridBudget(text: string): { value: number; asset: 'USDT' | 'USDC' | 'USD' } | null {
-    const match = text.match(/每格(?:资金|金额|预算)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
-      ?? text.match(/(?:每一格|单格)(?:资金|金额|预算)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+    const match = text.match(/每格(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+      ?? text.match(/(?:每一格|单格)(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
     if (!match?.[1] || !match[2]) {
       return null
     }

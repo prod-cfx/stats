@@ -165,6 +165,7 @@ export class BacktestSnapshotLoaderService {
 
     const specSnapshot = this.readJsonRecord(publishedSnapshot.specSnapshot) ?? undefined
     const irSnapshot = this.readJsonRecord(publishedSnapshot.irSnapshot) ?? undefined
+    const astSnapshot = this.readJsonRecord(publishedSnapshot.astSnapshot) ?? undefined
 
     return {
       ...strategy,
@@ -181,10 +182,10 @@ export class BacktestSnapshotLoaderService {
       astDigest: typeof publishedSnapshot.astDigest === 'string' ? publishedSnapshot.astDigest : undefined,
       structuralDigest: typeof publishedSnapshot.structuralDigest === 'string' ? publishedSnapshot.structuralDigest : undefined,
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      executionPolicy: this.resolveExecutionPolicy(publishedSnapshot.executionPolicy),
+      executionPolicy: this.resolveExecutionPolicy(publishedSnapshot.executionPolicy, astSnapshot?.executionModel),
       riskRules: specSnapshot ? this.buildRiskRules(specSnapshot, irSnapshot) : undefined,
       irSnapshot,
-      astSnapshot: this.readJsonRecord(publishedSnapshot.astSnapshot) ?? undefined,
+      astSnapshot,
       executionEnvelope: this.readJsonRecord(publishedSnapshot.executionEnvelope) ?? undefined,
       dataRequirements: publishedSnapshot.dataRequirements ?? undefined,
       specSnapshot,
@@ -423,7 +424,19 @@ export class BacktestSnapshotLoaderService {
     return this.normalizeHashString(snapshot.specHash) ?? snapshot.specHash
   }
 
-  private resolveExecutionPolicy(raw: unknown): BacktestRunInput['strategy']['executionPolicy'] {
+  private resolveExecutionPolicy(
+    raw: unknown,
+    fallbackRaw?: unknown,
+  ): BacktestRunInput['strategy']['executionPolicy'] {
+    const primary = this.resolveExecutionPolicyRecord(raw)
+    if (primary) {
+      return primary
+    }
+
+    return this.resolveExecutionPolicyRecord(fallbackRaw)
+  }
+
+  private resolveExecutionPolicyRecord(raw: unknown): BacktestRunInput['strategy']['executionPolicy'] {
     const policy = this.readJsonRecord(raw)
     if (!policy) return undefined
 

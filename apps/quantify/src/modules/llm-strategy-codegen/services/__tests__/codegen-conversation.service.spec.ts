@@ -10263,6 +10263,77 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('preserves a complete real-grid seed when the user only answers the missing timeframe slot', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-okx-real-grid-timeframe-slot' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '创建一个 OKX 现货ETH/USDT 真实网格策略。 固定价格区间：以当前价格为中心，上下各 0.4%。 网格数量：10 格。 每格资金：10 USDT。 订单类型：限价单。 成交后在相邻网格自动挂反向单。 价格突破上下边界时停止并撤销未成交订单。 不要用趋势信号触发开仓，部署后立即创建网格挂单。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('主周期')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+          })],
+        })],
+      }),
+    ]))
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([expect.objectContaining({
+          capabilities: expect.arrayContaining([expect.objectContaining({
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+          })]),
+        })]),
+      }),
+    ]))
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-okx-real-grid-timeframe-slot',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-okx-real-grid-timeframe-slot', {
+      userId: 'u1',
+      message: '1m',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.status).toBe('CONFIRM_GATE')
+    expect(continued.assistantPrompt).toContain('入场：区间网格，以部署时当前价为中心上下各 0.4%，共 10 格')
+    expect(continued.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(continued.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(continued.assistantPrompt).not.toContain('补充入场和出场')
+    expect(updatePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '1m',
+    }))
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'grid.range_rebalance' }),
+    ]))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')

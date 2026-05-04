@@ -38,6 +38,22 @@ describe('backtestSnapshotLoaderService', () => {
     })
   })
 
+  it('falls back to AST execution model when a strict snapshot has no persisted execution policy', () => {
+    const service = new BacktestSnapshotLoaderService({} as never, {} as never)
+
+    expect((service as any).resolveExecutionPolicy(null, {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'exchange_order_update',
+      timeframeAlignment: 'strict',
+      defaultOrderType: 'limit',
+      allowPartialFill: true,
+    })).toEqual({
+      signalTiming: 'BAR_CLOSE',
+      fillTiming: 'BAR_CLOSE',
+      noNextBarHandling: 'KEEP_PENDING',
+    })
+  })
+
   it('loads snapshot-backed strategy via published snapshot id', async () => {
     const compiledSnapshot = createCompiledSnapshotFixture()
     const snapshotsRepository = {

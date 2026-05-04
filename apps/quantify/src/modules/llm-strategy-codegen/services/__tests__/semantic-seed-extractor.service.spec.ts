@@ -1522,6 +1522,58 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('extracts formatted real-grid descriptions into one centered level-set contract', () => {
+    const patch = service.extract('创建一个 OKX 现货ETH/USDT 真实网格策略。 固定价格区间：以当前价格为中心，上下各 0.4%。 网格数量：10 格。 每格资金：10 USDT。 订单类型：限价单。 成交后在相邻网格自动挂反向单。 价格突破上下边界时停止并撤销未成交订单。 不要用趋势信号触发开仓，部署后立即创建网格挂单。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'long',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: expect.objectContaining({
+                  mode: 'centered_percent_range',
+                  halfRangePct: 0.4,
+                  gridCount: 10,
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+              }),
+              expect.objectContaining({
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: expect.objectContaining({ value: 10, asset: 'USDT' }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.boundary_guard' }),
+    ]))
+  })
+
   it('extracts bidirectional grid semantics from range and per-grid spacing wording', () => {
     const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
 
