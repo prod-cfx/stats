@@ -2449,7 +2449,11 @@ export class CodegenConversationService {
     checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
-    if (this.hasExplicitPositionSizing(checklist) || options?.preserveLockedPositionSizing === true) {
+    if (
+      this.hasExplicitPositionSizing(checklist)
+      || options?.preserveLockedPositionSizing === true
+      || this.hasContractPerOrderBudget(state)
+    ) {
       return state.position
         ? {
             ...state,
@@ -2546,6 +2550,10 @@ export class CodegenConversationService {
           || effectType === 'reduce_position'
       }
 
+      if (this.hasBoundaryCancelGuardCapability(risk)) {
+        return true
+      }
+
       const threshold = risk.params.valuePct
       if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) {
         return false
@@ -2555,6 +2563,34 @@ export class CodegenConversationService {
         || risk.key === 'risk.max_drawdown_pct'
         || risk.key === 'risk.max_single_loss_pct'
     })
+  }
+
+  private hasContractPerOrderBudget(state: SemanticState): boolean {
+    return state.actions.some(action =>
+      action.status === 'locked'
+      && (action.contracts ?? []).some(contract =>
+        contract.capabilities.some(capability =>
+          capability.domain === 'capital'
+          && capability.verb === 'allocate'
+          && capability.object === 'per_order_budget'
+          && typeof capability.shape.value === 'number'
+          && Number.isFinite(capability.shape.value)
+          && capability.shape.value > 0,
+        ),
+      ),
+    )
+  }
+
+  private hasBoundaryCancelGuardCapability(risk: SemanticRiskState): boolean {
+    return (risk.contracts ?? []).some(contract =>
+      contract.capabilities.some(capability =>
+        capability.domain === 'guard'
+        && capability.verb === 'enforce'
+        && capability.object === 'boundary_cancel'
+        && capability.shape.onBreach === 'HALT_STRATEGY'
+        && capability.shape.cancelOrders === true,
+      ),
+    )
   }
 
   private hasStopLossRisk(riskItems: SemanticState['risk']): boolean {

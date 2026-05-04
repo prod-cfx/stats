@@ -10228,6 +10228,41 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('starts a complete OKX spot real grid from deterministic atomic contracts without fallback summary', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '我整理出的策略逻辑如下：已识别部分条件，但仍未完整。。请确认是否按这个逻辑生成脚本。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-okx-real-grid-start' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('入场：区间网格，以部署时当前价为中心上下各 0.4%，共 10 格')
+    expect(result.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(result.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格限价单，不再重新部署网格')
+    expect(result.assistantPrompt).not.toContain('已识别部分条件，但仍未完整')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+          })],
+        })],
+      }),
+    ]))
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')

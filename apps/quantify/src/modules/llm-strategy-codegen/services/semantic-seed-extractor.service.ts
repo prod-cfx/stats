@@ -13,6 +13,7 @@ import { PositionSizingContractService } from './position-sizing-contract.servic
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
+type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
 type SemanticAliasContext = {
   bollingerBandParams?: {
     period?: number
@@ -121,8 +122,12 @@ export class SemanticSeedExtractorService {
   private extractActions(text: string, triggers: SeedTrigger[]): NonNullable<CodegenSemanticPatch['actions']> {
     const actions: SeedAction[] = []
     const seen = new Set<string>()
-    const push = (key: string, params?: Record<string, unknown>) => {
-      const action: SeedAction = params ? { key, params } : { key }
+    const push = (key: string, params?: Record<string, unknown>, extra?: Omit<SeedAction, 'key' | 'params'>) => {
+      const action: SeedAction = {
+        key,
+        ...(params ? { params } : {}),
+        ...(extra ?? {}),
+      }
       const signature = JSON.stringify(action)
       if (seen.has(signature)) return
       seen.add(signature)
@@ -133,10 +138,18 @@ export class SemanticSeedExtractorService {
 
     for (const trigger of triggers) {
       if (trigger.key === 'grid.range_rebalance') {
-        push('open_long')
-        push('close_long')
-        push('open_short')
-        push('close_short')
+        if (trigger.sideScope === 'short') {
+          push('open_short', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('close_short')
+        } else if (trigger.sideScope === 'both') {
+          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('close_long')
+          push('open_short')
+          push('close_short')
+        } else {
+          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('close_long')
+        }
         continue
       }
 
@@ -169,6 +182,63 @@ export class SemanticSeedExtractorService {
     }
 
     return actions
+  }
+
+  private buildGridOrderProgramActionContracts(text: string): Omit<SeedAction, 'key' | 'params'> | undefined {
+    if (!/网格/u.test(text)) {
+      return undefined
+    }
+
+    const perOrderBudget = this.extractPerGridBudget(text)
+    return {
+      contracts: [{
+        id: 'contract-grid-limit-ladder',
+        kind: 'action',
+        capabilities: [
+          {
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+            shape: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+              recycleOnFill: /反向挂单|反向单|相邻网格|成交后/u.test(text),
+              pairingPolicy: /相邻/u.test(text) ? 'adjacent_level' : 'grid_level',
+            },
+          },
+          ...(perOrderBudget
+            ? [{
+                domain: 'capital' as const,
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: {
+                  value: perOrderBudget.value,
+                  asset: perOrderBudget.asset,
+                },
+              }]
+            : []),
+        ],
+        requires: [],
+        params: {},
+      }],
+    }
+  }
+
+  private extractPerGridBudget(text: string): { value: number; asset: 'USDT' | 'USDC' | 'USD' } | null {
+    const match = text.match(/每格(?:资金|金额|预算)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+      ?? text.match(/(?:每一格|单格)(?:资金|金额|预算)?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+    if (!match?.[1] || !match[2]) {
+      return null
+    }
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    const rawAsset = match[2].toUpperCase()
+    const asset = rawAsset === 'USDC' ? 'USDC' : (rawAsset === 'USD' ? 'USD' : 'USDT')
+    return { value, asset }
   }
 
   private extractRisk(text: string): NonNullable<CodegenSemanticPatch['risk']> {
@@ -253,7 +323,50 @@ export class SemanticSeedExtractorService {
       })
     }
 
+    const boundaryGuard = this.extractBoundaryGuardRisk(text)
+    if (boundaryGuard) {
+      risk.push(boundaryGuard)
+    }
+
     return risk
+  }
+
+  private extractBoundaryGuardRisk(text: string): SeedRisk | null {
+    if (!/网格/u.test(text) || !/(?:突破|超出|越过|越界|离开).{0,12}(?:上下边界|上下界|边界|区间)/u.test(text)) {
+      return null
+    }
+    if (!/(?:停止|暂停|停用|立即停止|halt|stop)/iu.test(text) || !/(?:撤销|撤单|取消).{0,12}(?:未成交|挂单|订单)/u.test(text)) {
+      return null
+    }
+
+    const cancelScope = /网格.{0,8}限价|限价.{0,8}网格/u.test(text)
+      ? 'unfilled_grid_limit_orders'
+      : 'unfilled_grid_orders'
+
+    return {
+      key: 'risk.boundary_guard',
+      params: {},
+      status: 'locked',
+      source: 'user_explicit',
+      contracts: [{
+        id: 'contract-boundary-stop',
+        kind: 'risk',
+        capabilities: [{
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'boundary_cancel',
+          shape: {
+            trigger: 'boundary_breach',
+            onBreach: 'HALT_STRATEGY',
+            cancelOrders: true,
+            cancelScope,
+            regrid: false,
+          },
+        }],
+        requires: [],
+        params: {},
+      }],
+    }
   }
 
   private extractPosition(
@@ -643,6 +756,43 @@ export class SemanticSeedExtractorService {
   private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/网格/u.test(segment)) return
 
+    const centeredRange = this.extractCenteredGridRange(segment)
+    if (centeredRange) {
+      const sideScope = this.resolveGridSideScope(segment)
+      this.pushTrigger(triggers, seen, {
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope,
+        params: {
+          sideMode: sideScope === 'short'
+            ? 'short_only'
+            : (sideScope === 'both' ? 'bidirectional' : 'long_only'),
+          recycle: /反向挂单|反向单|自动挂/u.test(segment),
+          breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
+        },
+        contracts: [{
+          id: 'contract-grid-centered-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: {
+              mode: 'centered_percent_range',
+              centerTiming: centeredRange.centerTiming,
+              centerSource: centeredRange.centerSource,
+              halfRangePct: centeredRange.halfRangePct,
+              gridCount: centeredRange.gridCount,
+              spacingMode: 'arithmetic',
+            },
+          }],
+          requires: [],
+          params: {},
+        }],
+      })
+      return
+    }
+
     const range = segment.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const stepPct = this.extractPercent(segment, [
       /步长\s*(\d+(?:\.\d+)?)\s*%/u,
@@ -657,18 +807,62 @@ export class SemanticSeedExtractorService {
     this.pushTrigger(triggers, seen, {
       key: 'grid.range_rebalance',
       phase: 'entry',
-      sideScope: /做空/u.test(segment) ? 'short' : (/做多/u.test(segment) ? 'long' : 'both'),
+      sideScope: this.resolveGridSideScope(segment),
       params: {
         rangeLower: Number(range[1]),
         rangeUpper: Number(range[2]),
         stepPct,
         sideMode: /做空/u.test(segment)
           ? 'short_only'
-          : (/做多/u.test(segment) ? 'long_only' : 'bidirectional'),
+          : (/(?:双向|多空|both|bidirectional)/iu.test(segment) ? 'bidirectional' : 'long_only'),
         recycle: true,
         breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
       },
     })
+  }
+
+  private extractCenteredGridRange(segment: string): {
+    centerTiming: 'deployment' | 'runtime'
+    centerSource: 'last_trade' | 'last_price' | 'mark_price'
+    halfRangePct: number
+    gridCount: number
+  } | null {
+    if (!/(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark).{0,16}(?:中心|为中心)|(?:中心|为中心).{0,16}(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark)/iu.test(segment)) {
+      return null
+    }
+
+    const halfRangePct = this.extractPercent(segment, [
+      /上下\s*各\s*(\d+(?:\.\d+)?)\s*%/u,
+      /上下\s*各\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /上(?:下)?\s*各\s*(\d+(?:\.\d+)?)\s*%/u,
+    ])
+    const gridCount = this.extractNumber(segment, [
+      /共\s*(\d{1,4})\s*格/u,
+      /网格(?:数量|数)?\s*(\d{1,4})\s*格?/u,
+      /(\d{1,4})\s*格/u,
+    ])
+    if (halfRangePct === null || halfRangePct <= 0 || gridCount === null || gridCount <= 0) {
+      return null
+    }
+
+    return {
+      centerTiming: /部署|下单|启动|创建/u.test(segment) ? 'deployment' : 'runtime',
+      centerSource: /最新成交价|last/iu.test(segment)
+        ? 'last_trade'
+        : (/标记价|mark/iu.test(segment) ? 'mark_price' : 'last_price'),
+      halfRangePct,
+      gridCount,
+    }
+  }
+
+  private resolveGridSideScope(segment: string): 'long' | 'short' | 'both' {
+    if (/做空|开空|卖空/u.test(segment) && !/做多|开多|买入/u.test(segment)) {
+      return 'short'
+    }
+    if (/(?:双向|多空|both|bidirectional)/iu.test(segment)) {
+      return 'both'
+    }
+    return 'long'
   }
 
   private pushRsiTriggers(
