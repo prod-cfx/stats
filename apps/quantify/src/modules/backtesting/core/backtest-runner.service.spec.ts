@@ -643,6 +643,66 @@ describe('backtestRunnerService', () => {
     })
   })
 
+  it('fills compiled spot grid order-program limit orders when bar range touches a working level', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['ETHUSDT'],
+      baseTimeframe: '1m',
+      stateTimeframes: ['1m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-grid-order-program',
+        params: { marketType: 'spot' },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'BAR_CLOSE',
+          noNextBarHandling: 'KEEP_PENDING',
+        },
+        bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+        fn: (): StrategyDecisionV1 => ({
+          action: 'NOOP',
+          meta: {
+            orderState: {
+              workingOrders: [{
+                id: 'order_01_grid',
+                sourceRef: 'grid',
+                levels: [99, 100, 101],
+                payload: {
+                  id: 'grid',
+                  kind: 'LIMIT_LADDER',
+                  sidePolicy: 'spot_grid',
+                  priceSource: 'level_set',
+                  quantity: { mode: 'fixed_quote', value: 99, asset: 'USDT' },
+                  orderType: 'limit',
+                  timeInForce: 'gtc',
+                  recycleOnFill: true,
+                  pairingPolicy: 'adjacent_level',
+                },
+              }],
+              activeProgramIds: ['order_01_grid'],
+              cancelledProgramIds: [],
+            },
+          },
+        }),
+      } as any,
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'ETHUSDT', timeframe: '1m', closeTime: 1, open: 100, high: 100.2, low: 100, close: 100 }),
+        createBar({ symbol: 'ETHUSDT', timeframe: '1m', closeTime: 2, open: 100, high: 100.1, low: 98.9, close: 99.2 }),
+      ],
+    })
+
+    expect(report.summary.totalOpenTrades).toBe(1)
+    expect(report.openPositions?.[0]).toEqual(expect.objectContaining({
+      symbol: 'ETHUSDT',
+      qty: 1,
+      avgEntryPrice: 99,
+    }))
+  })
+
   it('fails fast when strict snapshot LLM entry signal misses size', async () => {
     const runner = createRunner()
 

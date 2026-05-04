@@ -26,7 +26,6 @@ export interface StartSessionBootstrapInput {
   confirmationAssistantPrompt?: string | null
   decisionKind?: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
   plan: ConversationPlan
-  compileability: CanonicalCompileabilityReport | null
   normalizationBlocked?: boolean
   normalizationAssistantPrompt?: string
 }
@@ -42,12 +41,11 @@ const helper = new CodegenConversationContextHelper()
 
 export function buildStartSessionBootstrap(
   input: StartSessionBootstrapInput,
-  buildCompileabilityAssistantPrompt: (report: CanonicalCompileabilityReport) => string,
 ): StartSessionBootstrapResult {
   const status: LlmCodegenSessionStatus = input.decisionKind === 'CONFIRM_INFERRED'
     ? 'DRAFTING'
     : (input.initialStatus === 'CONFIRM_GATE'
-    && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
+    && input.normalizationBlocked === true
     ? 'DRAFTING'
     : input.initialStatus)
   const shouldEnterConfirmationGate = status === 'CONFIRM_GATE'
@@ -60,9 +58,7 @@ export function buildStartSessionBootstrap(
             : `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`)
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
-            : (input.compileability && !input.compileability.canCompile
-            ? buildCompileabilityAssistantPrompt(input.compileability)
-            : input.plan.assistantPrompt)))
+            : input.plan.assistantPrompt))
 
   return {
     status,

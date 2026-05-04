@@ -107,6 +107,29 @@ describe('GridOrderPlannerService', () => {
     expect(plan.orders.map(order => order.price)).toEqual(['100', '200'])
   })
 
+  it('normalizes planned order prices and quantities to exchange tick and lot sizes', () => {
+    const plan = service.planInitialOrders({
+      config: {
+        ...baseConfig,
+        mode: 'spot',
+        lowerPrice: '2350.9180299632403',
+        upperPrice: '2351.3180299632403',
+        gridCount: 2,
+        perOrderQuote: '10',
+        tickSize: '0.01',
+        lotSize: '0.000001',
+        minQuantity: '0.0001',
+      },
+      currentPrice: '2351.5',
+    })
+
+    expect(plan.levels[0]?.price).toBe('2350.92')
+    expect(plan.orders[0]).toEqual(expect.objectContaining({
+      price: '2350.92',
+      quantity: '0.004253',
+    }))
+  })
+
   it('rejects invalid price bounds and grid counts', () => {
     expect(() => service.planInitialOrders({
       config: { ...baseConfig, mode: 'spot', upperPrice: '90' },

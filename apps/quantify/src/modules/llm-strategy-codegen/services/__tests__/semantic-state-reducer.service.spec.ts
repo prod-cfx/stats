@@ -50,6 +50,516 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('turns budget contract requirement clarification answers into structured owner capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 capital allocate per_order_budget。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+      }),
+      answer: '每格资金 10 USDT',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        status: 'locked',
+        value: '每格资金 10 USDT',
+      })],
+      contracts: [expect.objectContaining({
+        id: 'action-contract-grid-ladder',
+        capabilities: [expect.objectContaining({
+          domain: 'capital',
+          verb: 'allocate',
+          object: 'per_order_budget',
+          shape: { value: 10, asset: 'USDT' },
+        })],
+      })],
+    }))
+  })
+
+  it('keeps contract requirement slots open when answers cannot form canonical capability shape', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 capital allocate per_order_budget。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+      }),
+      answer: '按默认来',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        status: 'open',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [],
+      })],
+    }))
+  })
+
+  it('turns guard enforcement clarification answers into structured owner capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          status: 'open',
+          source: 'derived',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+            fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认突破上下边界后的停止与撤单语义。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+        fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+      }),
+      answer: '只撤销“网格限价单中状态=未成交”的订单（不包含任何其他类型订单/不包含已成交但仍在队列中的订单）',
+      messageIndex: 12,
+    })
+
+    expect(next.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+        status: 'locked',
+        value: '只撤销“网格限价单中状态=未成交”的订单（不包含任何其他类型订单/不包含已成交但仍在队列中的订单）',
+      })],
+      contracts: [expect.objectContaining({
+        id: 'risk-contract-boundary-stop',
+        capabilities: [expect.objectContaining({
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'boundary_cancel',
+          shape: expect.objectContaining({
+            cancelOrders: true,
+            cancelScope: 'unfilled_grid_limit_orders',
+            orderTypeScope: 'limit',
+            programScope: 'grid',
+            includeFilledOrders: false,
+            includeOtherOrderTypes: false,
+          }),
+        })],
+      })],
+    }))
+  })
+
+  it('uses the active guard question context when the clarification answer is affirmative', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          status: 'open',
+          source: 'derived',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+            fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '撤销触发时，是否仅撤销“网格限价单中状态=未成交”的订单（不包含任何其他类型订单/不包含已成交但仍在队列中的订单）？',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+        fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+      }),
+      answer: '是的',
+      messageIndex: 13,
+    })
+
+    expect(next.risk[0]?.status).toBe('locked')
+    expect(next.risk[0]?.contracts?.[0]?.capabilities).toEqual([
+      expect.objectContaining({
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'boundary_cancel',
+        shape: expect.objectContaining({
+          cancelOrders: true,
+          cancelScope: 'unfilled_grid_limit_orders',
+          orderTypeScope: 'limit',
+          programScope: 'grid',
+        }),
+      }),
+    ])
+  })
+
+  it('keeps per-order budget requirement open when the answer is a percentage budget', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 capital allocate per_order_budget。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+      }),
+      answer: '每格 10%',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        status: 'open',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [],
+      })],
+    }))
+  })
+
+  it('keeps unsupported contract requirement slots open instead of writing answer-only capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.exposure.set.position_mode',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.exposure.set.position_mode',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 exposure set position_mode。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'exposure', verb: 'set', object: 'position_mode' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.exposure.set.position_mode',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.exposure.set.position_mode',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.exposure.set.position_mode',
+      }),
+      answer: '只做多',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.exposure.set.position_mode',
+        status: 'open',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [],
+      })],
+    }))
+  })
+
+  it('turns level set contract requirement clarification answers into structured owner capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [{
+          id: 'trigger-grid-levels',
+          key: 'grid.price_levels',
+          phase: 'gate',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'contract.requirement.price.define.level_set',
+            fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 price define level_set。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'trigger-contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        }],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.price.define.level_set',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.price.define.level_set',
+        fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+      }),
+      answer: '下限 2800，上限 3600，10 格，等差',
+      messageIndex: 5,
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+        status: 'locked',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: {
+            lower: 2800,
+            upper: 3600,
+            gridCount: 10,
+            spacingMode: 'arithmetic',
+          },
+        })],
+      })],
+    }))
+  })
+
+  it('turns centered grid price-source clarification answers into dynamic level-set capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [{
+          id: 'trigger-grid-levels',
+          key: 'grid.price_levels',
+          phase: 'gate',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'contract.requirement.price.define.level_set',
+            fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请确认网格区间中心价格取值方式。',
+            affectsExecution: true,
+            evidence: {
+              source: 'derived',
+              text: '固定价格区间以当前价格为中心，上下各 0.4%，共 10 格。',
+            },
+          }],
+          contracts: [{
+            id: 'trigger-contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        }],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.price.define.level_set',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.price.define.level_set',
+        fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+      }),
+      answer: '部署时刻往前最近 1m 的成交均价',
+      messageIndex: 5,
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+        status: 'locked',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: {
+            mode: 'centered_percent_range',
+            centerTiming: 'deployment',
+            centerSource: 'trade_vwap',
+            aggregationWindow: '1m',
+            halfRangePct: 0.4,
+            gridCount: 10,
+            spacingMode: 'arithmetic',
+          },
+        })],
+      })],
+    }))
+  })
+
   it('does not normalize existing risk slots when reducing an unrelated action answer', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

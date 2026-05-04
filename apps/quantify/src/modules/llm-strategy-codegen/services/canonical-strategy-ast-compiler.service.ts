@@ -118,11 +118,29 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private compileOrderPrograms(ir: CanonicalStrategyIrV1): OrderProgramNode[] {
-    return ir.orderPrograms.map((program, index) => ({
-      id: `order_${String(index + 1).padStart(2, '0')}_${program.id}`,
-      sourceRef: program.id,
-      payload: program,
-    }))
+    const exprIdIndex = this.buildExprIdIndex(
+      ir,
+      this.orderedSeries(ir),
+      this.orderedLevelSets(ir),
+      this.orderedPredicates(ir),
+    )
+    return ir.orderPrograms.map((program, index) => {
+      const activeWhen = this.exprIdFor(program.activeWhen, exprIdIndex)
+      return {
+        id: `order_${String(index + 1).padStart(2, '0')}_${program.id}`,
+        sourceRef: program.id,
+        payload: program.priceSource === 'level_set'
+          ? {
+              ...program,
+              activeWhen,
+              levelSetRef: this.exprIdFor(program.levelSetRef, exprIdIndex),
+            }
+          : {
+              ...program,
+              activeWhen,
+            },
+      }
+    })
   }
 
   private buildTopology(input: {
@@ -241,12 +259,33 @@ export class CanonicalStrategyAstCompilerService {
       }
     }
 
-    return [...ir.signalCatalog.predicates].sort((left, right) => {
+    const predicateIndex = new Map(ir.signalCatalog.predicates.map(predicate => [predicate.id, predicate]))
+    const baseOrdered = [...ir.signalCatalog.predicates].sort((left, right) => {
       const leftPriority = predicatePriority.get(left.id) ?? Number.MAX_SAFE_INTEGER
       const rightPriority = predicatePriority.get(right.id) ?? Number.MAX_SAFE_INTEGER
       if (leftPriority !== rightPriority) return leftPriority - rightPriority
       return left.id.localeCompare(right.id)
     })
+    const visited = new Set<string>()
+    const visiting = new Set<string>()
+    const ordered: PredicateDef[] = []
+
+    const visit = (predicate: PredicateDef) => {
+      if (visited.has(predicate.id)) return
+      if (visiting.has(predicate.id)) return
+
+      visiting.add(predicate.id)
+      predicate.args.forEach((arg) => {
+        const dependency = predicateIndex.get(arg)
+        if (dependency) visit(dependency)
+      })
+      visiting.delete(predicate.id)
+      visited.add(predicate.id)
+      ordered.push(predicate)
+    }
+
+    baseOrdered.forEach(predicate => visit(predicate))
+    return ordered
   }
 
   private seriesRank(series: SeriesDef, seriesIndex: Map<string, SeriesDef>): number {

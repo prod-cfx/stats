@@ -242,6 +242,42 @@ describe('GridOrderSyncService', () => {
     expect(repository.markOrderOpen).not.toHaveBeenCalled()
   })
 
+  it('records exchange submit errors in reconcile event payload', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(Object.assign(new Error('OKX error 51000: Parameter px error'), {
+      code: 'TRADING_ORDER_CREATION_FAILED',
+      args: { exchangeId: 'okx', reason: 'OKX error 51000: Parameter px error' },
+    }))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_submit_failed', expect.objectContaining({
+      orderId: 'planned-order-1',
+      clientOrderId: 'g-planned-order-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      error: expect.objectContaining({
+        message: 'OKX error 51000: Parameter px error',
+        code: 'TRADING_ORDER_CREATION_FAILED',
+        args: { exchangeId: 'okx', reason: 'OKX error 51000: Parameter px error' },
+      }),
+    }))
+  })
+
   it('cancels a just-created exchange order when local open CAS loses to stop', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([

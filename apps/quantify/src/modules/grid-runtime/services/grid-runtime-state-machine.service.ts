@@ -78,7 +78,7 @@ export class GridRuntimeStateMachineService {
     })
   }
 
-  markReconcileRequired(instanceId: string, reason: string) {
+  markReconcileRequired(instanceId: string, reason: string, payload?: GridRuntimeJsonValue) {
     return this.transition({
       instanceId,
       fromStatuses: ['INITIALIZING', 'RUNNING', 'PAUSED', 'STOPPING', 'RECONCILE_REQUIRED'],
@@ -86,6 +86,7 @@ export class GridRuntimeStateMachineService {
       eventType: 'runtime_reconcile_required',
       severity: 'warn',
       reason,
+      payload,
     })
   }
 

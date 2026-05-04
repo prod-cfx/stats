@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common'
-import type { CanonicalCompileabilityReport } from './codegen-conversation-start-session.helper'
 import type {
   StrategyBlockingReason,
   StrategyDecision,
@@ -12,22 +11,8 @@ export class StrategyCompileabilityDecisionService {
     normalizedSummary: string
     blockingReasons: StrategyBlockingReason[]
     inferredAssumptions: StrategyInferredAssumption[]
-    compileability: CanonicalCompileabilityReport | null
   }): StrategyDecision {
     const blockingReasons = [...input.blockingReasons].sort((a, b) => b.priority - a.priority)
-    const compileabilityReason = blockingReasons.length === 0 && input.compileability && !input.compileability.canCompile
-      ? {
-          key: 'compileability',
-          reason: 'compileability_blocked',
-          priority: 40,
-          question: `当前规则还不能稳定生成脚本：${input.compileability.reasons.join('，')}。请按这些阻塞点补充可程序化规则后，我再继续整理逻辑图。`,
-        }
-      : null
-
-    if (compileabilityReason) {
-      blockingReasons.push(compileabilityReason)
-      blockingReasons.sort((a, b) => b.priority - a.priority)
-    }
 
     if (blockingReasons.length > 0) {
       return {

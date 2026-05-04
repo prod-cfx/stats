@@ -79,6 +79,7 @@ function evaluateSeries(
         ? node.payload.value
         : null
     case 'PRICE':
+    case 'DEPLOYMENT_PRICE':
     case 'BAR_INDEX':
     case 'PRICE_CHANGE_PCT':
     case 'RANGE_POSITION_PCT':
@@ -148,6 +149,8 @@ function evaluatePredicate(
       return touchesLevel(leftId, rightId, values, ctx, executionModel, exprIndex, seriesMemo, 'down')
     case 'TOUCH_LEVEL_UP':
       return touchesLevel(leftId, rightId, values, ctx, executionModel, exprIndex, seriesMemo, 'up')
+    case 'WITHIN_LEVEL_SET':
+      return isWithinLevelSet(leftId, rightId, values, ctx, executionModel, exprIndex, seriesMemo)
     default:
       return false
   }
@@ -178,22 +181,24 @@ function evaluateLevelSet(
     : typeof upLevelsRaw === 'string'
       ? Number(upLevelsRaw)
       : 0
+  const downLevelsRaw = payload.params?.down ?? payload.levelsPerSide?.down
+  const downLevels = typeof downLevelsRaw === 'number'
+    ? downLevelsRaw
+    : typeof downLevelsRaw === 'string'
+      ? Number(downLevelsRaw)
+      : 0
 
   const lower = typeof lowerBound === 'number' ? lowerBound : null
   const upper = typeof upperBound === 'number' ? upperBound : null
-  if (spacingMode !== 'pct' || typeof spacingValue !== 'number' || spacingValue <= 0 || upLevels <= 0) {
+  if (typeof spacingValue !== 'number' || spacingValue <= 0 || upLevels < 0 || downLevels < 0) {
     return { levels: [] }
   }
 
   const levels: number[] = []
-  const arithmeticStep = anchor * (spacingValue / 100)
-  let current: number
-  for (let index = 0; index < upLevels; index += 1) {
-    if (index === 0) {
-      current = anchor
-    } else {
-      current = anchor + arithmeticStep * index
-    }
+  for (let index = -downLevels; index <= upLevels; index += 1) {
+    const current = spacingMode === 'pct'
+      ? anchor * Math.pow(1 + spacingValue / 100, index)
+      : anchor + spacingValue * index
     if (lower !== null && current < lower) continue
     if (upper !== null && current > upper) break
     levels.push(current)
@@ -346,6 +351,8 @@ function resolveSeriesValueAt(
           (node.payload.offsetBars ?? 0) + offset,
           executionModel,
         )
+      case 'DEPLOYMENT_PRICE':
+        return readDeploymentPrice(node.payload.field ?? 'close', bars)
       case 'PRICE_CHANGE_PCT': {
         const [currentSeriesId, compareSeriesId] = resolveSeriesInputNodeIds(node, exprIndex)
         const current = resolveSeriesValueAt(
@@ -508,6 +515,28 @@ function resolveSeriesValueAt(
   return resolved
 }
 
+function isWithinLevelSet(
+  priceExprId: string | undefined,
+  levelSetExprId: string | undefined,
+  values: Record<string, CompiledRuntimeValue>,
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+  exprIndex?: ReadonlyMap<string, CompiledExprNode>,
+  seriesMemo?: Map<string, number | null>,
+): boolean {
+  const currentPrice = resolveSeriesValueAt(priceExprId, 0, ctx, executionModel, exprIndex, seriesMemo)
+  const levelSetNode = levelSetExprId && exprIndex ? exprIndex.get(levelSetExprId) : null
+  if (!levelSetNode) return false
+  const levelSet = evaluateLevelSet(levelSetNode, values)
+  if (typeof currentPrice !== 'number' || !levelSet || typeof levelSet !== 'object' || !Array.isArray(levelSet.levels) || levelSet.levels.length === 0) {
+    return false
+  }
+
+  const lower = Math.min(...levelSet.levels)
+  const upper = Math.max(...levelSet.levels)
+  return currentPrice >= lower && currentPrice <= upper
+}
+
 function collectSeriesHistory(
   nodeId: string | undefined,
   offset: number,
@@ -591,6 +620,14 @@ function readPriceAtOffset(
 ): number | null {
   const target = bars[bars.length - 1 - offset] ?? null
   return readLatestPrice(field, target, offset === 0 ? executionModel : undefined)
+}
+
+function readDeploymentPrice(
+  field: 'open' | 'high' | 'low' | 'close',
+  bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
+): number | null {
+  const deploymentBar = bars[0] ?? null
+  return readLatestPrice(field, deploymentBar)
 }
 
 function readNumericParam(

@@ -398,8 +398,11 @@ export class MarketDataService {
         codeCandidates.unshift(spotCode)
         codeCandidates.push(perpCode)
       }
-    } else if (exact.endsWith(':SPOT')) {
-      codeCandidates.push(exact.slice(0, -':SPOT'.length))
+    } else {
+      codeCandidates.unshift(requestedCode)
+      if (exact.endsWith(':SPOT')) {
+        codeCandidates.push(exact.slice(0, -':SPOT'.length))
+      }
     }
 
     const symbols = await this.repo.findSymbolsByCodeIn(codeCandidates)
@@ -414,7 +417,7 @@ export class MarketDataService {
 
     const legacyCode = exact.endsWith(':SPOT') ? exact.slice(0, -':SPOT'.length) : undefined
     const resolved = exact.includes(':')
-      ? (symbolMap.get(exact) ?? (legacyCode ? symbolMap.get(legacyCode) : undefined))
+      ? (symbolMap.get(exact) ?? symbolMap.get(requestedCode) ?? (legacyCode ? symbolMap.get(legacyCode) : undefined))
       : (symbolMap.get(requestedCode)
           ?? symbolMap.get(toSymbolCode(exact, 'PERP'))
           ?? symbolMap.get(exact))

@@ -1,6 +1,16 @@
 import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
-import type { SemanticEvidence, SemanticExpression, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type {
+  SemanticAtomContract,
+  SemanticCapability,
+  SemanticCapabilityDomain,
+  SemanticCapabilityShape,
+  SemanticEvidence,
+  SemanticExpression,
+  SemanticPositionSizingContract,
+  SemanticSlotState,
+  SemanticState,
+} from '../types/semantic-state'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 
@@ -73,6 +83,13 @@ export class SemanticStateReducerService {
       })
       if (!slot) continue
 
+      if (slot.status === 'open' && this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(trigger, slot, answerText, input.messageIndex)) {
+          trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
+        break
+      }
+
       const reduction = this.reduceSupportedSlot(slot, answerText)
       if (!reduction) {
         break
@@ -112,6 +129,13 @@ export class SemanticStateReducerService {
       })
       if (!slot || slot.status !== 'open') continue
 
+      if (this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(action, slot, answerText, input.messageIndex)) {
+          action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
+        break
+      }
+
       action.params = {
         ...(action.params ?? {}),
         [this.resolveActionParamKey(slot)]: answerText,
@@ -134,7 +158,7 @@ export class SemanticStateReducerService {
 
       return item.slotKey === input.targetSlotKey
         && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
-    })
+      })
     if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
       const parsed = this.parsePositionSizingContractAnswer(answerText, input.messageIndex)
       if (parsed) {
@@ -151,11 +175,18 @@ export class SemanticStateReducerService {
         positionSlot.evidence = evidence
       }
     }
+    if (
+      nextState.position
+      && positionSlot?.status === 'open'
+      && this.isContractRequirementSlot(positionSlot)
+    ) {
+      if (this.applyContractRequirementAnswer(nextState.position, positionSlot, answerText, input.messageIndex)) {
+        nextState.position.status = nextState.position.openSlots?.every(item => item.status !== 'open') ? 'locked' : 'open'
+      }
+    }
 
     let riskChanged = false
     for (const risk of nextState.risk) {
-      if (risk.key !== 'risk.protective_exit') continue
-
       const slot = risk.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -164,6 +195,15 @@ export class SemanticStateReducerService {
         return item.slotKey === input.targetSlotKey
           && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
       })
+
+      if (slot?.status === 'open' && this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(risk, slot, answerText, input.messageIndex)) {
+          risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
+        break
+      }
+
+      if (risk.key !== 'risk.protective_exit') continue
       if (slot?.slotKey !== 'risk.protective_exit' || slot.status !== 'open') continue
 
       const percentValue = this.parsePercentAnswer(answerText)
@@ -240,6 +280,337 @@ export class SemanticStateReducerService {
     }
 
     return slot.slotKey
+  }
+
+  private applyContractRequirementAnswer(
+    owner: { contracts?: SemanticAtomContract[] },
+    slot: SemanticSlotState,
+    answerText: string,
+    messageIndex?: number,
+  ): boolean {
+    const capability = this.buildCapabilityFromContractRequirementSlot(slot, answerText)
+    if (!capability) {
+      return false
+    }
+
+    const contractId = this.resolveContractIdFromFieldPath(slot.fieldPath)
+    const contracts = owner.contracts ?? []
+    let changed = false
+    owner.contracts = contracts.map((contract) => {
+      if (contractId && contract.id !== contractId) {
+        return contract
+      }
+      if (this.contractHasCapability(contract, capability)) {
+        changed = true
+        return contract
+      }
+
+      changed = true
+      return {
+        ...contract,
+        capabilities: [...contract.capabilities, capability],
+      }
+    })
+
+    if (!changed) {
+      return false
+    }
+
+    slot.value = answerText
+    slot.status = 'locked'
+    slot.evidence = {
+      text: answerText,
+      messageIndex,
+      source: 'user_explicit',
+    }
+    return true
+  }
+
+  private isContractRequirementSlot(slot: SemanticSlotState): boolean {
+    return slot.slotKey.startsWith('contract.requirement.')
+  }
+
+  private buildCapabilityFromContractRequirementSlot(
+    slot: SemanticSlotState,
+    answerText: string,
+  ): SemanticCapability | null {
+    if (!slot.slotKey.startsWith('contract.requirement.')) {
+      return null
+    }
+
+    const parts = slot.slotKey.slice('contract.requirement.'.length).split('.')
+    if (parts.length < 3 || !this.isSemanticCapabilityDomain(parts[0])) {
+      return null
+    }
+
+    const shape = this.buildContractRequirementCapabilityShape(
+      parts[0],
+      parts[1],
+      parts.slice(2).join('.'),
+      answerText,
+      slot,
+    )
+    if (!shape) {
+      return null
+    }
+
+    return {
+      domain: parts[0],
+      verb: parts[1],
+      object: parts.slice(2).join('.'),
+      shape,
+    }
+  }
+
+  private buildContractRequirementCapabilityShape(
+    domain: SemanticCapabilityDomain,
+    verb: string,
+    object: string,
+    answerText: string,
+    slot: SemanticSlotState,
+  ): SemanticCapabilityShape | null {
+    if (domain === 'capital' && verb === 'allocate' && object === 'per_order_budget') {
+      return this.parsePerOrderBudgetCapabilityShape(answerText)
+    }
+
+    if (domain === 'price' && verb === 'define' && object === 'level_set') {
+      return this.parseLevelSetCapabilityShape(answerText, slot)
+    }
+
+    if (domain === 'guard' && verb === 'enforce') {
+      return this.parseGuardEnforcementCapabilityShape(answerText, slot)
+    }
+
+    return null
+  }
+
+  private parsePerOrderBudgetCapabilityShape(answerText: string): SemanticCapabilityShape | null {
+    if (/(?:每(?:单|格|笔)[^，。；;,.]{0,12})?\d+(?:\.\d+)?\s*%/u.test(answerText)) {
+      return null
+    }
+
+    const amountMatch = answerText.match(/(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|刀|U)\b/iu)
+    const value = amountMatch?.[1] ? Number(amountMatch[1]) : null
+    if (value === null || !Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    const assetText = amountMatch?.[2]?.toUpperCase()
+    const asset = assetText === 'USDC'
+      ? 'USDC'
+      : assetText === 'USD'
+        ? 'USD'
+        : 'USDT'
+    return { value, asset }
+  }
+
+  private parseLevelSetCapabilityShape(
+    answerText: string,
+    slot: SemanticSlotState,
+  ): SemanticCapabilityShape | null {
+    const contextText = [
+      answerText,
+      slot.questionHint,
+      slot.evidence?.text,
+    ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join('。')
+
+    const lower = this.parseLabeledNumber(contextText, ['下限', '下界', '最低', 'lower', 'min'])
+    const upper = this.parseLabeledNumber(contextText, ['上限', '上界', '最高', 'upper', 'max'])
+    const rangeMatch = contextText.match(/(\d+(?:\.\d+)?)\s*(?:-|~|到|至)\s*(\d+(?:\.\d+)?)/iu)
+    const rangeLower = lower ?? (rangeMatch?.[1] ? Number(rangeMatch[1]) : null)
+    const rangeUpper = upper ?? (rangeMatch?.[2] ? Number(rangeMatch[2]) : null)
+    if (
+      rangeLower !== null
+      && rangeUpper !== null
+      && Number.isFinite(rangeLower)
+      && Number.isFinite(rangeUpper)
+      && rangeUpper > rangeLower
+    ) {
+      const gridCountMatch = contextText.match(/(\d{1,4})\s*(?:格|网格)/u)
+      const spacingPctMatch = contextText.match(/(?:间距|每格|spacing)[^\d]{0,12}(\d+(?:\.\d+)?)\s*%/iu)
+      return {
+        lower: rangeLower,
+        upper: rangeUpper,
+        ...(gridCountMatch?.[1] ? { gridCount: Number(gridCountMatch[1]) } : {}),
+        ...(spacingPctMatch?.[1] ? { spacingPct: Number(spacingPctMatch[1]) } : {}),
+        spacingMode: /等比|geometric/iu.test(contextText) ? 'geometric' : 'arithmetic',
+      }
+    }
+
+    return this.parseCenteredLevelSetCapabilityShape(contextText)
+  }
+
+  private parseCenteredLevelSetCapabilityShape(text: string): SemanticCapabilityShape | null {
+    const centerSource = this.parseLevelSetCenterSource(text)
+    if (!centerSource) {
+      return null
+    }
+
+    const windowMatch = text.match(/(?:部署时刻?往前|部署时往前|最近|近|过去)?\s*(\d{1,4})\s*(m|min|分钟|h|小时|d|天)/iu)
+    const halfRangePctMatch = text.match(/上下各\s*(\d+(?:\.\d+)?)\s*%/u)
+    const totalRangePctMatch = text.match(/(?:上下一共|总区间|全区间)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const gridCountMatch = text.match(/(\d{1,4})\s*(?:格|网格)/u)
+    const halfRangePct = halfRangePctMatch?.[1] ? Number(halfRangePctMatch[1]) : null
+    const totalRangePct = !halfRangePctMatch?.[1] && totalRangePctMatch?.[1]
+      ? Number(totalRangePctMatch[1])
+      : null
+
+    return {
+      mode: 'centered_percent_range',
+      centerTiming: /部署|启动|上线|创建网格|运行时|deploy|start/iu.test(text) ? 'deployment' : 'runtime',
+      centerSource,
+      ...(windowMatch?.[1] && windowMatch[2] ? { aggregationWindow: this.normalizeDurationWindow(windowMatch[1], windowMatch[2]) } : {}),
+      ...(halfRangePct !== null && Number.isFinite(halfRangePct) && halfRangePct > 0 ? { halfRangePct } : {}),
+      ...(totalRangePct !== null && Number.isFinite(totalRangePct) && totalRangePct > 0 ? { halfRangePct: totalRangePct / 2 } : {}),
+      ...(gridCountMatch?.[1] ? { gridCount: Number(gridCountMatch[1]) } : {}),
+      spacingMode: /等比|geometric/iu.test(text) ? 'geometric' : 'arithmetic',
+    }
+  }
+
+  private parseLevelSetCenterSource(text: string): string | null {
+    if (/成交均价|平均成交价|成交平均价|vwap|volume[-_\s]?weighted/iu.test(text)) {
+      return 'trade_vwap'
+    }
+
+    if (/最新成交价|最近一次成交价|last\s*trade|成交价/iu.test(text)) {
+      return 'last_trade'
+    }
+
+    if (/标记价|mark\s*price/iu.test(text)) {
+      return 'mark_price'
+    }
+
+    if (/最新价|现价|当前价格|ticker\s*last|last\s*price|current\s*price/iu.test(text)) {
+      return 'last_price'
+    }
+
+    return null
+  }
+
+  private parseGuardEnforcementCapabilityShape(
+    answerText: string,
+    slot: SemanticSlotState,
+  ): SemanticCapabilityShape | null {
+    const contextText = [
+      answerText,
+      slot.questionHint,
+      slot.evidence?.text,
+      slot.slotKey,
+    ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join('。')
+
+    const hasBoundaryContext = /边界|上下界|上下边界|区间|突破|触及|越界|boundary|breach|breakout|outside/iu.test(contextText)
+    const hasCancelIntent = /撤销|取消|撤单|cancel/iu.test(contextText)
+    const hasHaltIntent = /停止|暂停|终止|不再|halt|stop|pause/iu.test(contextText)
+
+    if (!hasBoundaryContext && !hasCancelIntent && !hasHaltIntent) {
+      return null
+    }
+
+    const cancelScope = this.parseGuardCancelScope(contextText)
+    const cancelOrders = hasCancelIntent || cancelScope !== null
+    const onBreach = hasHaltIntent
+      ? 'HALT_STRATEGY'
+      : cancelOrders
+        ? 'CANCEL_ORDER_PROGRAMS'
+        : null
+
+    if (!onBreach) {
+      return null
+    }
+
+    return {
+      trigger: hasBoundaryContext ? 'boundary_breach' : 'guard_breach',
+      onBreach,
+      cancelOrders,
+      ...(cancelScope ? { cancelScope } : {}),
+      ...(/网格|grid/iu.test(contextText) ? { programScope: 'grid' } : {}),
+      ...(/限价|limit/iu.test(contextText) ? { orderTypeScope: 'limit' } : {}),
+      ...(/未成交|未完成|挂单|open\s+orders?|pending|unfilled/iu.test(contextText) ? { orderStatusScope: 'unfilled' } : {}),
+      ...(/不包含[^。；;]*已成交|不.*已成交|不含[^。；;]*已成交|仅[^。；;]*未成交/iu.test(contextText)
+        ? { includeFilledOrders: false }
+        : {}),
+      ...(/不包含[^。；;]*其他类型|不含[^。；;]*其他类型|仅[^。；;]*(?:网格|限价)/iu.test(contextText)
+        ? { includeOtherOrderTypes: false }
+        : {}),
+      ...(/不再(?:重新)?(?:下发|挂|创建)|不重新(?:计算|下发|挂)|不再重新计算|no\s+regrid|do\s+not\s+regrid/iu.test(contextText)
+        ? { regrid: false }
+        : {}),
+    }
+  }
+
+  private parseGuardCancelScope(text: string): string | null {
+    const grid = /网格|grid/iu.test(text)
+    const limit = /限价|limit/iu.test(text)
+    const unfilled = /未成交|未完成|挂单|open\s+orders?|pending|unfilled/iu.test(text)
+
+    if (grid && limit && unfilled) {
+      return 'unfilled_grid_limit_orders'
+    }
+
+    if (grid && unfilled) {
+      return 'unfilled_grid_orders'
+    }
+
+    if (grid) {
+      return 'grid_orders'
+    }
+
+    if (limit && unfilled) {
+      return 'unfilled_limit_orders'
+    }
+
+    if (unfilled) {
+      return 'unfilled_orders'
+    }
+
+    if (/订单程序|order\s+program|program/iu.test(text)) {
+      return 'program_orders'
+    }
+
+    return null
+  }
+
+  private normalizeDurationWindow(valueText: string, unitText: string): string {
+    const value = Number(valueText)
+    const unit = unitText.toLowerCase()
+    if (unit === '分钟' || unit === 'min') {
+      return `${value}m`
+    }
+    if (unit === '小时') {
+      return `${value}h`
+    }
+    if (unit === '天') {
+      return `${value}d`
+    }
+    return `${value}${unit}`
+  }
+
+  private parseLabeledNumber(answerText: string, labels: readonly string[]): number | null {
+    for (const label of labels) {
+      const match = answerText.match(new RegExp(`${label}[^\\d]{0,12}(\\d+(?:\\.\\d+)?)`, 'iu'))
+      if (match?.[1]) {
+        const value = Number(match[1])
+        return Number.isFinite(value) ? value : null
+      }
+    }
+
+    return null
+  }
+
+  private resolveContractIdFromFieldPath(fieldPath: string): string | null {
+    return fieldPath.match(/\.?contracts\[([^\]]+)\]/u)?.[1] ?? null
+  }
+
+  private contractHasCapability(contract: SemanticAtomContract, capability: SemanticCapability): boolean {
+    return contract.capabilities.some(item =>
+      item.domain === capability.domain
+      && item.verb === capability.verb
+      && item.object === capability.object,
+    )
+  }
+
+  private isSemanticCapabilityDomain(value: string): value is SemanticCapabilityDomain {
+    return ['market', 'price', 'order_program', 'capital', 'exposure', 'margin', 'guard'].includes(value)
   }
 
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {

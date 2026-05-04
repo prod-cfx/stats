@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
+  SemanticAtomContract,
+  SemanticCapability,
+  SemanticCapabilityShape,
+  SemanticContractKind,
   SemanticExpression,
   SemanticExpressionOperator,
   SemanticExpressionOperand,
@@ -13,6 +17,7 @@ import { PositionSizingContractService } from './position-sizing-contract.servic
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
+type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
 type SemanticAliasContext = {
   bollingerBandParams?: {
     period?: number
@@ -41,10 +46,10 @@ export class SemanticSeedExtractorService {
 
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
-    const triggers = this.extractTriggers(text, aliasContext)
-    const actions = this.extractActions(text, triggers)
-    const risk = this.extractRisk(text)
-    const position = this.extractPosition(text, triggers)
+    const triggers = this.atomizeTriggers(this.extractTriggers(text, aliasContext))
+    const actions = this.atomizeActions(this.extractActions(text, triggers))
+    const risk = this.atomizeRisk(this.extractRisk(text))
+    const position = this.atomizePosition(this.extractPosition(text, triggers))
 
     const patch: CodegenSemanticPatch = {}
 
@@ -65,6 +70,272 @@ export class SemanticSeedExtractorService {
     }
 
     return patch
+  }
+
+  private atomizeTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
+    return triggers.map((trigger, index) => (
+      this.hasContracts(trigger)
+        ? trigger
+        : {
+            ...trigger,
+            contracts: [this.buildAtomContract({
+              id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(trigger.key)}`,
+              kind: 'trigger',
+              capability: this.buildTriggerCapability(trigger),
+              params: trigger.params ?? {},
+            })],
+          }
+    ))
+  }
+
+  private atomizeActions(actions: SeedAction[]): SeedAction[] {
+    return actions.map((action, index) => (
+      this.hasContracts(action)
+        ? action
+        : {
+            ...action,
+            contracts: [this.buildAtomContract({
+              id: `contract-seed-action-${index + 1}-${this.slugifyContractId(action.key)}`,
+              kind: 'action',
+              capability: this.buildActionCapability(action),
+              params: action.params ?? {},
+            })],
+          }
+    ))
+  }
+
+  private atomizeRisk(risk: SeedRisk[]): SeedRisk[] {
+    return risk.map((riskItem, index) => (
+      this.hasContracts(riskItem)
+        ? riskItem
+        : {
+            ...riskItem,
+            contracts: [this.buildAtomContract({
+              id: `contract-seed-risk-${index + 1}-${this.slugifyContractId(riskItem.key)}`,
+              kind: 'risk',
+              capability: this.buildRiskCapability(riskItem),
+              params: riskItem.params,
+            })],
+          }
+    ))
+  }
+
+  private atomizePosition(
+    position: NonNullable<CodegenSemanticPatch['position']> | null,
+  ): NonNullable<CodegenSemanticPatch['position']> | null {
+    if (!position || this.hasContracts(position)) {
+      return position
+    }
+
+    return {
+      ...position,
+      contracts: [this.buildAtomContract({
+        id: 'contract-seed-position-sizing',
+        kind: 'position',
+        capability: this.buildPositionCapability(position),
+        params: {
+          sizing: position.sizing ?? null,
+          mode: position.mode,
+          value: position.value,
+          positionMode: position.positionMode,
+        },
+      })],
+    }
+  }
+
+  private hasContracts(node: { contracts?: SemanticAtomContract[] }): boolean {
+    return Array.isArray(node.contracts) && node.contracts.length > 0
+  }
+
+  private buildAtomContract(input: {
+    id: string
+    kind: SemanticContractKind
+    capability: SemanticCapability
+    params: Record<string, unknown>
+  }): SemanticAtomContract {
+    return {
+      id: input.id,
+      kind: input.kind,
+      capabilities: [input.capability],
+      requires: [],
+      params: input.params,
+    }
+  }
+
+  private buildTriggerCapability(trigger: SeedTrigger): SemanticCapability {
+    if (trigger.key === 'grid.range_rebalance') {
+      return {
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'execution.on_start') {
+      return {
+        domain: 'order_program',
+        verb: 'schedule',
+        object: 'execution_trigger',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    return {
+      domain: 'price',
+      verb: 'detect',
+      object: 'signal_condition',
+      shape: this.toCapabilityShape({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope ?? null,
+        ...(trigger.params ?? {}),
+      }),
+    }
+  }
+
+  private buildActionCapability(action: SeedAction): SemanticCapability {
+    return {
+      domain: 'order_program',
+      verb: 'execute',
+      object: 'order_action',
+      shape: this.toCapabilityShape({
+        key: action.key,
+        side: this.resolveActionSide(action.key),
+        intent: this.resolveActionIntent(action.key),
+        ...(action.params ?? {}),
+      }),
+    }
+  }
+
+  private buildRiskCapability(risk: SeedRisk): SemanticCapability {
+    if (risk.key === 'risk.stop_loss_pct') {
+      return {
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'stop_loss',
+        shape: this.toCapabilityShape({
+          key: risk.key,
+          ...risk.params,
+        }),
+      }
+    }
+
+    if (risk.key === 'risk.take_profit_pct') {
+      return {
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'take_profit',
+        shape: this.toCapabilityShape({
+          key: risk.key,
+          ...risk.params,
+        }),
+      }
+    }
+
+    return {
+      domain: 'guard',
+      verb: 'enforce',
+      object: 'risk_condition',
+      shape: this.toCapabilityShape({
+        key: risk.key,
+        ...risk.params,
+      }),
+    }
+  }
+
+  private buildPositionCapability(
+    position: NonNullable<CodegenSemanticPatch['position']>,
+  ): SemanticCapability {
+    return {
+      domain: 'capital',
+      verb: 'allocate',
+      object: 'position_sizing',
+      shape: this.toCapabilityShape({
+        sizing: position.sizing ?? null,
+        mode: position.mode,
+        value: position.value,
+        positionMode: position.positionMode,
+      }),
+    }
+  }
+
+  private resolveActionSide(key: string): 'long' | 'short' | 'unknown' {
+    if (key.includes('long')) return 'long'
+    if (key.includes('short')) return 'short'
+    return 'unknown'
+  }
+
+  private resolveActionIntent(key: string): 'open' | 'close' | 'unknown' {
+    if (key.startsWith('open_')) return 'open'
+    if (key.startsWith('close_')) return 'close'
+    return 'unknown'
+  }
+
+  private toCapabilityShape(input: Record<string, unknown>): SemanticCapabilityShape {
+    const shape: SemanticCapabilityShape = {}
+    for (const [key, value] of Object.entries(input)) {
+      const normalizedValue = this.toCapabilityShapeValue(value)
+      if (normalizedValue !== undefined) {
+        shape[key] = normalizedValue
+      }
+    }
+    return shape
+  }
+
+  private toCapabilityShapeValue(
+    value: unknown,
+  ): string | number | boolean | null | SemanticCapabilityShape | SemanticCapabilityShape[] | undefined {
+    if (value === null) return null
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return Number.isNaN(value) ? undefined : value
+    }
+    if (Array.isArray(value)) {
+      return value
+        .map(item => this.toCapabilityArrayItem(item))
+        .filter((item): item is SemanticCapabilityShape => item !== undefined)
+    }
+    if (this.isPlainObject(value)) {
+      return this.toCapabilityShape(value)
+    }
+    return undefined
+  }
+
+  private toCapabilityArrayItem(value: unknown): SemanticCapabilityShape | undefined {
+    const normalizedValue = this.toCapabilityShapeValue(value)
+    if (normalizedValue === undefined) {
+      return undefined
+    }
+    if (
+      normalizedValue === null
+      || typeof normalizedValue === 'string'
+      || typeof normalizedValue === 'number'
+      || typeof normalizedValue === 'boolean'
+    ) {
+      return { value: normalizedValue }
+    }
+    if (Array.isArray(normalizedValue)) {
+      return { items: normalizedValue }
+    }
+    return normalizedValue
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
+
+  private slugifyContractId(value: string): string {
+    return value.replace(/[^a-z0-9]+/giu, '-').replace(/^-|-$/gu, '').toLowerCase() || 'atom'
   }
 
   private extractContextSlots(text: string): NonNullable<CodegenSemanticPatch['contextSlots']> {
@@ -115,14 +386,22 @@ export class SemanticSeedExtractorService {
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
     }
 
+    if (!triggers.some(trigger => trigger.key === 'grid.range_rebalance')) {
+      this.pushGridTrigger(text, triggers, seen)
+    }
+
     return this.harmonizeBollingerTriggers(triggers)
   }
 
   private extractActions(text: string, triggers: SeedTrigger[]): NonNullable<CodegenSemanticPatch['actions']> {
     const actions: SeedAction[] = []
     const seen = new Set<string>()
-    const push = (key: string, params?: Record<string, unknown>) => {
-      const action: SeedAction = params ? { key, params } : { key }
+    const push = (key: string, params?: Record<string, unknown>, extra?: Omit<SeedAction, 'key' | 'params'>) => {
+      const action: SeedAction = {
+        key,
+        ...(params ? { params } : {}),
+        ...(extra ?? {}),
+      }
       const signature = JSON.stringify(action)
       if (seen.has(signature)) return
       seen.add(signature)
@@ -133,10 +412,18 @@ export class SemanticSeedExtractorService {
 
     for (const trigger of triggers) {
       if (trigger.key === 'grid.range_rebalance') {
-        push('open_long')
-        push('close_long')
-        push('open_short')
-        push('close_short')
+        if (trigger.sideScope === 'short') {
+          push('open_short', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('close_short')
+        } else if (trigger.sideScope === 'both') {
+          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('close_long')
+          push('open_short')
+          push('close_short')
+        } else {
+          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('close_long')
+        }
         continue
       }
 
@@ -169,6 +456,64 @@ export class SemanticSeedExtractorService {
     }
 
     return actions
+  }
+
+  private buildGridOrderProgramActionContracts(text: string): Omit<SeedAction, 'key' | 'params'> | undefined {
+    if (!/网格/u.test(text)) {
+      return undefined
+    }
+
+    const perOrderBudget = this.extractPerGridBudget(text)
+    const shouldRecycleOnFill = /反向挂单|反向单|相邻网格|成交后|双向网格|真实网格/u.test(text)
+    return {
+      contracts: [{
+        id: 'contract-grid-limit-ladder',
+        kind: 'action',
+        capabilities: [
+          {
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+            shape: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+              recycleOnFill: shouldRecycleOnFill,
+              pairingPolicy: shouldRecycleOnFill || /相邻/u.test(text) ? 'adjacent_level' : 'grid_level',
+            },
+          },
+          ...(perOrderBudget
+            ? [{
+                domain: 'capital' as const,
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: {
+                  value: perOrderBudget.value,
+                  asset: perOrderBudget.asset,
+                },
+              }]
+            : []),
+        ],
+        requires: [],
+        params: {},
+      }],
+    }
+  }
+
+  private extractPerGridBudget(text: string): { value: number; asset: 'USDT' | 'USDC' | 'USD' } | null {
+    const match = text.match(/每格(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+      ?? text.match(/(?:每一格|单格)(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+    if (!match?.[1] || !match[2]) {
+      return null
+    }
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    const rawAsset = match[2].toUpperCase()
+    const asset = rawAsset === 'USDC' ? 'USDC' : (rawAsset === 'USD' ? 'USD' : 'USDT')
+    return { value, asset }
   }
 
   private extractRisk(text: string): NonNullable<CodegenSemanticPatch['risk']> {
@@ -253,7 +598,50 @@ export class SemanticSeedExtractorService {
       })
     }
 
+    const boundaryGuard = this.extractBoundaryGuardRisk(text)
+    if (boundaryGuard) {
+      risk.push(boundaryGuard)
+    }
+
     return risk
+  }
+
+  private extractBoundaryGuardRisk(text: string): SeedRisk | null {
+    if (!/网格/u.test(text) || !/(?:突破|超出|越过|越界|离开).{0,12}(?:上下边界|上下界|边界|区间)/u.test(text)) {
+      return null
+    }
+    if (!/(?:停止|暂停|停用|立即停止|halt|stop)/iu.test(text) || !/(?:撤销|撤单|取消).{0,12}(?:未成交|挂单|订单)/u.test(text)) {
+      return null
+    }
+
+    const cancelScope = /网格.{0,8}限价|限价.{0,8}网格/u.test(text)
+      ? 'unfilled_grid_limit_orders'
+      : 'unfilled_grid_orders'
+
+    return {
+      key: 'risk.boundary_guard',
+      params: {},
+      status: 'locked',
+      source: 'user_explicit',
+      contracts: [{
+        id: 'contract-boundary-stop',
+        kind: 'risk',
+        capabilities: [{
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'boundary_cancel',
+          shape: {
+            trigger: 'boundary_breach',
+            onBreach: 'HALT_STRATEGY',
+            cancelOrders: true,
+            cancelScope,
+            regrid: false,
+          },
+        }],
+        requires: [],
+        params: {},
+      }],
+    }
   }
 
   private extractPosition(
@@ -643,6 +1031,43 @@ export class SemanticSeedExtractorService {
   private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/网格/u.test(segment)) return
 
+    const centeredRange = this.extractCenteredGridRange(segment)
+    if (centeredRange) {
+      const sideScope = this.resolveGridSideScope(segment)
+      this.pushTrigger(triggers, seen, {
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope,
+        params: {
+          sideMode: sideScope === 'short'
+            ? 'short_only'
+            : (sideScope === 'both' ? 'bidirectional' : 'long_only'),
+          recycle: /反向挂单|反向单|自动挂/u.test(segment),
+          breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
+        },
+        contracts: [{
+          id: 'contract-grid-centered-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: {
+              mode: 'centered_percent_range',
+              centerTiming: centeredRange.centerTiming,
+              centerSource: centeredRange.centerSource,
+              halfRangePct: centeredRange.halfRangePct,
+              gridCount: centeredRange.gridCount,
+              spacingMode: 'arithmetic',
+            },
+          }],
+          requires: [],
+          params: {},
+        }],
+      })
+      return
+    }
+
     const range = segment.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const stepPct = this.extractPercent(segment, [
       /步长\s*(\d+(?:\.\d+)?)\s*%/u,
@@ -657,18 +1082,93 @@ export class SemanticSeedExtractorService {
     this.pushTrigger(triggers, seen, {
       key: 'grid.range_rebalance',
       phase: 'entry',
-      sideScope: /做空/u.test(segment) ? 'short' : (/做多/u.test(segment) ? 'long' : 'both'),
+      sideScope: this.resolveGridSideScope(segment),
       params: {
         rangeLower: Number(range[1]),
         rangeUpper: Number(range[2]),
         stepPct,
         sideMode: /做空/u.test(segment)
           ? 'short_only'
-          : (/做多/u.test(segment) ? 'long_only' : 'bidirectional'),
+          : (/(?:双向|多空|both|bidirectional)/iu.test(segment) ? 'bidirectional' : 'long_only'),
         recycle: true,
         breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
       },
+      contracts: [{
+        id: 'contract-grid-fixed-levels',
+        kind: 'trigger',
+        capabilities: [{
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: {
+            lower: Number(range[1]),
+            upper: Number(range[2]),
+            gridCount: this.deriveGridCountFromPercentStep(Number(range[1]), Number(range[2]), stepPct),
+            spacingPct: stepPct,
+            spacingMode: 'arithmetic',
+          },
+        }],
+        requires: [],
+        params: {},
+      }],
     })
+  }
+
+  private deriveGridCountFromPercentStep(lower: number, upper: number, stepPct: number): number {
+    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(stepPct) || lower <= 0 || upper <= lower || stepPct <= 0) {
+      return 2
+    }
+
+    const ratio = 1 + stepPct / 100
+    if (ratio <= 1) {
+      return 2
+    }
+
+    return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
+  }
+
+  private extractCenteredGridRange(segment: string): {
+    centerTiming: 'deployment' | 'runtime'
+    centerSource: 'last_trade' | 'last_price' | 'mark_price'
+    halfRangePct: number
+    gridCount: number
+  } | null {
+    if (!/(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark).{0,16}(?:中心|为中心)|(?:中心|为中心).{0,16}(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark)/iu.test(segment)) {
+      return null
+    }
+
+    const halfRangePct = this.extractPercent(segment, [
+      /上下\s*各\s*(\d+(?:\.\d+)?)\s*%/u,
+      /上下\s*各\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /上(?:下)?\s*各\s*(\d+(?:\.\d+)?)\s*%/u,
+    ])
+    const gridCount = this.extractNumber(segment, [
+      /共\s*(\d{1,4})\s*格/u,
+      /网格(?:数量|数)?\s*(\d{1,4})\s*格?/u,
+      /(\d{1,4})\s*格/u,
+    ])
+    if (halfRangePct === null || halfRangePct <= 0 || gridCount === null || gridCount <= 0) {
+      return null
+    }
+
+    return {
+      centerTiming: /部署|下单|启动|创建/u.test(segment) ? 'deployment' : 'runtime',
+      centerSource: /最新成交价|last/iu.test(segment)
+        ? 'last_trade'
+        : (/标记价|mark/iu.test(segment) ? 'mark_price' : 'last_price'),
+      halfRangePct,
+      gridCount,
+    }
+  }
+
+  private resolveGridSideScope(segment: string): 'long' | 'short' | 'both' {
+    if (/做空|开空|卖空/u.test(segment) && !/做多|开多|买入/u.test(segment)) {
+      return 'short'
+    }
+    if (/(?:双向|多空|both|bidirectional)/iu.test(segment)) {
+      return 'both'
+    }
+    return 'long'
   }
 
   private pushRsiTriggers(

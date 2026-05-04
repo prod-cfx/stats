@@ -12,6 +12,13 @@ import { GridOrderSyncService } from './grid-order-sync.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { GridRuntimeStateMachineService } from './grid-runtime-state-machine.service'
 
+interface GridRuntimeFundingSnapshot {
+  asset?: string | null
+  buyingPower?: number | string | null
+  executionCapital?: number | string | null
+  totalEquity?: number | string | null
+}
+
 export interface CreateGridRuntimeFromDeploymentInput {
   strategyInstanceId: string
   publishedSnapshotId: string
@@ -22,6 +29,7 @@ export interface CreateGridRuntimeFromDeploymentInput {
   symbol: string
   astSnapshot: unknown
   currentPrice?: string | number | null
+  fundingSnapshot?: GridRuntimeFundingSnapshot | null
 }
 
 @Injectable()
@@ -34,7 +42,7 @@ export class GridRuntimeService {
   ) {}
 
   async createFromDeployment(input: CreateGridRuntimeFromDeploymentInput) {
-    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol)
+    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice, input.fundingSnapshot)
     const plan = this.planner.planInitialOrders({
       config,
       currentPrice: this.resolveCurrentPrice(input.currentPrice, config),
@@ -138,42 +146,116 @@ export class GridRuntimeService {
     return this.orderSync.stopAndCancelInstance(instanceId, reason)
   }
 
-  private buildConfigFromAst(astSnapshot: unknown, symbol: string): GridRuntimeConfigSnapshot {
+  private buildConfigFromAst(
+    astSnapshot: unknown,
+    symbol: string,
+    currentPrice?: string | number | null,
+    fundingSnapshot?: GridRuntimeFundingSnapshot | null,
+  ): GridRuntimeConfigSnapshot {
     const ast = this.readRecord(astSnapshot)
     const orderPrograms = Array.isArray(ast?.orderPrograms) ? ast.orderPrograms : []
     const program = orderPrograms
       .map(item => this.readRecord(this.readRecord(item)?.payload))
       .find(item => item?.kind === 'LIMIT_LADDER' && item.priceSource === 'level_set')
-    if (!program) throw new Error('grid_runtime_order_program_missing')
+    if (!program) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_order_program_missing')
+    }
 
     const levelSet = this.findLevelSet(ast, this.readString(program, 'levelSetRef'))
-    const hardBounds = this.readRecord(levelSet?.hardBounds)
-    const lower = this.readConstSeriesValue(ast, this.readString(hardBounds, 'lowerRef'))
-    const upper = this.readConstSeriesValue(ast, this.readString(hardBounds, 'upperRef'))
+    const executionModel = this.readRecord(ast?.executionModel)
+    const bounds = this.resolveLevelSetBounds(ast, levelSet, currentPrice)
     const quantity = this.readRecord(program.quantity)
-    const perOrderQuote = this.readNumber(quantity, 'value')
-    const quoteAsset = this.readString(quantity, 'asset')
+    const sizing = this.resolvePerOrderQuoteSizing(quantity, symbol, fundingSnapshot)
     const gridCount = this.readNumber(program, 'maxWorkingOrders')
 
-    if (lower === null || upper === null || perOrderQuote === null || !quoteAsset || gridCount === null) {
-      throw new Error('grid_runtime_invalid_order_program')
+    if (!bounds || !sizing || gridCount === null) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
     }
 
     return {
       mode: this.mapMode(this.readString(program, 'sidePolicy')),
-      lowerPrice: this.formatNumber(lower),
-      upperPrice: this.formatNumber(upper),
+      lowerPrice: this.formatNumber(bounds.lower),
+      upperPrice: this.formatNumber(bounds.upper),
       gridCount: Math.max(2, Math.floor(gridCount)),
-      perOrderQuote: this.formatNumber(perOrderQuote),
-      quoteAsset,
-      baseAsset: this.resolveBaseAsset(symbol, quoteAsset),
+      perOrderQuote: this.formatNumber(sizing.perOrderQuote),
+      quoteAsset: sizing.quoteAsset,
+      baseAsset: this.resolveBaseAsset(symbol, sizing.quoteAsset),
       orderType: 'limit',
       timeInForce: 'gtc',
       spacingMode: levelSet?.kind === 'GEOMETRIC_LEVEL_SET' ? 'geometric' : 'arithmetic',
       spacingValue: this.readSpacingValue(levelSet),
       pairingPolicy: this.readString(program, 'pairingPolicy') === 'adjacent_level' ? 'adjacent_level' : undefined,
       activeWhen: this.readString(program, 'activeWhen'),
+      tickSize: this.formatOptionalNumber(this.readNumber(executionModel, 'tickSize')),
+      lotSize: this.resolveLotSize(executionModel),
+      pricePrecision: this.readInteger(executionModel, 'pricePrecision'),
+      quantityPrecision: this.readInteger(executionModel, 'quantityPrecision'),
     }
+  }
+
+  private resolveLevelSetBounds(
+    ast: Record<string, unknown> | null,
+    levelSet: Record<string, unknown> | null,
+    currentPrice?: string | number | null,
+  ): { lower: number, upper: number } | null {
+    const hardBounds = this.readRecord(levelSet?.hardBounds)
+    const hardLower = this.readConstSeriesValue(ast, this.readString(hardBounds, 'lowerRef'))
+    const hardUpper = this.readConstSeriesValue(ast, this.readString(hardBounds, 'upperRef'))
+    if (hardLower !== null && hardUpper !== null) {
+      return hardUpper > hardLower ? { lower: hardLower, upper: hardUpper } : null
+    }
+
+    const levels = this.evaluateLevelSet(ast, levelSet, currentPrice)
+    if (levels.length < 2) return null
+
+    return {
+      lower: Math.min(...levels),
+      upper: Math.max(...levels),
+    }
+  }
+
+  private evaluateLevelSet(
+    ast: Record<string, unknown> | null,
+    levelSet: Record<string, unknown> | null,
+    currentPrice?: string | number | null,
+  ): number[] {
+    const anchor = this.resolveLevelSetAnchor(ast, levelSet, currentPrice)
+    const spacing = this.readRecord(levelSet?.spacing)
+    const spacingMode = this.readString(spacing, 'mode')
+    const spacingValue = this.readNumber(spacing, 'value')
+    const levelsPerSide = this.readRecord(levelSet?.levelsPerSide)
+    const downLevels = this.readNumber(levelsPerSide, 'down') ?? 0
+    const upLevels = this.readNumber(levelsPerSide, 'up') ?? 0
+    if (
+      anchor === null
+      || spacingValue === null
+      || spacingValue <= 0
+      || downLevels < 0
+      || upLevels < 0
+    ) {
+      return []
+    }
+
+    const levels: number[] = []
+    for (let index = -Math.floor(downLevels); index <= Math.floor(upLevels); index += 1) {
+      levels.push(spacingMode === 'pct'
+        ? anchor * Math.pow(1 + spacingValue / 100, index)
+        : anchor + spacingValue * index)
+    }
+    return levels.filter(level => Number.isFinite(level) && level > 0)
+  }
+
+  private resolveLevelSetAnchor(
+    ast: Record<string, unknown> | null,
+    levelSet: Record<string, unknown> | null,
+    currentPrice?: string | number | null,
+  ): number | null {
+    const anchorRef = this.readString(levelSet, 'anchorRef')
+    const anchor = this.readSeriesValue(ast, anchorRef, currentPrice)
+    if (anchor !== null) return anchor
+
+    const current = this.toPositiveNumber(currentPrice)
+    return current
   }
 
   private readSpacingValue(levelSet: Record<string, unknown> | null): string | null {
@@ -204,6 +286,22 @@ export class GridRuntimeService {
     return null
   }
 
+  private readSeriesValue(
+    ast: Record<string, unknown> | null,
+    seriesRef: string | null,
+    currentPrice?: string | number | null,
+  ): number | null {
+    if (!ast || !seriesRef || !Array.isArray(ast.exprPool)) return null
+    for (const expr of ast.exprPool) {
+      const record = this.readRecord(expr)
+      const payload = this.readRecord(record.payload)
+      if (!this.exprMatchesRef(record, payload, seriesRef)) continue
+      if (payload?.kind === 'CONST') return this.readNumber(payload, 'value')
+      if (payload?.kind === 'DEPLOYMENT_PRICE') return this.toPositiveNumber(currentPrice)
+    }
+    return null
+  }
+
   private exprMatchesRef(
     record: Record<string, unknown> | null,
     payload: Record<string, unknown> | null,
@@ -226,11 +324,86 @@ export class GridRuntimeService {
   }
 
   private resolveBaseAsset(symbol: string, quoteAsset: string): string {
-    const normalizedSymbol = symbol.trim().toUpperCase().replace(/[-_/]/g, '')
+    const normalizedSymbol = symbol
+      .trim()
+      .toUpperCase()
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
     const normalizedQuote = quoteAsset.trim().toUpperCase()
     return normalizedSymbol.endsWith(normalizedQuote)
       ? normalizedSymbol.slice(0, -normalizedQuote.length)
       : normalizedSymbol
+  }
+
+  private resolvePerOrderQuoteSizing(
+    quantity: Record<string, unknown> | null,
+    symbol: string,
+    fundingSnapshot?: GridRuntimeFundingSnapshot | null,
+  ): { perOrderQuote: number, quoteAsset: string } | null {
+    const mode = this.readString(quantity, 'mode')
+    const value = this.readNumber(quantity, 'value')
+    if (value === null || value <= 0) return null
+
+    const quoteAsset = this.resolveQuoteAsset(quantity, symbol, fundingSnapshot)
+    if (!quoteAsset) return null
+
+    if (mode === 'fixed_quote') {
+      return { perOrderQuote: value, quoteAsset }
+    }
+
+    if (mode === 'pct_equity') {
+      const fundingBase = this.resolveFundingBase(fundingSnapshot)
+      if (fundingBase === null || fundingBase <= 0) return null
+      return { perOrderQuote: fundingBase * value / 100, quoteAsset }
+    }
+
+    return null
+  }
+
+  private resolveFundingBase(fundingSnapshot?: GridRuntimeFundingSnapshot | null): number | null {
+    const buyingPower = this.toPositiveNumber(fundingSnapshot?.buyingPower)
+    if (buyingPower !== null) return buyingPower
+
+    const executionCapital = this.toPositiveNumber(fundingSnapshot?.executionCapital)
+    if (executionCapital !== null) return executionCapital
+
+    return this.toPositiveNumber(fundingSnapshot?.totalEquity)
+  }
+
+  private resolveQuoteAsset(
+    quantity: Record<string, unknown> | null,
+    symbol: string,
+    fundingSnapshot?: GridRuntimeFundingSnapshot | null,
+  ): string | null {
+    return this.readString(quantity, 'asset')
+      ?? this.normalizeAsset(fundingSnapshot?.asset)
+      ?? this.inferQuoteAsset(symbol)
+      ?? null
+  }
+
+  private inferQuoteAsset(symbol: string): string | null {
+    const normalized = symbol.trim().toUpperCase()
+    const separated = normalized.match(/^[A-Z0-9]+[-_/]([A-Z0-9]+)(?::[A-Z0-9]+)?$/u)
+    if (separated?.[1]) return separated[1].replace(/-SWAP$/u, '')
+
+    const compact = normalized
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
+    const knownQuotes = ['USDT', 'USDC', 'USD', 'BTC', 'ETH']
+    return knownQuotes.find(asset => compact.endsWith(asset)) ?? null
+  }
+
+  private normalizeAsset(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : null
+  }
+
+  private invalidGridRuntimeConfig(message: string): DomainException {
+    return new DomainException(message, {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+    })
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {
@@ -250,7 +423,31 @@ export class GridRuntimeService {
     return Number.isFinite(numeric) ? numeric : null
   }
 
+  private readInteger(source: Record<string, unknown> | null | undefined, key: string): number | null {
+    const numeric = this.readNumber(source, key)
+    return numeric !== null && Number.isInteger(numeric) && numeric >= 0 ? numeric : null
+  }
+
+  private resolveLotSize(executionModel: Record<string, unknown> | null): string | null {
+    const lotSize = this.readNumber(executionModel, 'lotSize')
+    if (lotSize !== null && lotSize > 0) return this.formatNumber(lotSize)
+
+    const quantityPrecision = this.readInteger(executionModel, 'quantityPrecision')
+    return quantityPrecision === null
+      ? null
+      : new Prisma.Decimal(10).pow(-quantityPrecision).toFixed()
+  }
+
+  private toPositiveNumber(value: string | number | null | undefined): number | null {
+    const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+  }
+
   private formatNumber(value: number): string {
     return new Prisma.Decimal(value).toFixed()
+  }
+
+  private formatOptionalNumber(value: number | null): string | null {
+    return value === null || value <= 0 ? null : this.formatNumber(value)
   }
 }

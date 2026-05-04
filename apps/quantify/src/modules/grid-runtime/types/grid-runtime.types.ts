@@ -20,6 +20,11 @@ export interface GridRuntimeConfigSnapshot {
   spacingValue?: string | null
   pairingPolicy?: 'adjacent_level'
   activeWhen?: string | null
+  tickSize?: string | null
+  lotSize?: string | null
+  minQuantity?: string | null
+  pricePrecision?: number | null
+  quantityPrecision?: number | null
 }
 
 export interface GridLevelPlan {

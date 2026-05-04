@@ -83,7 +83,7 @@ interface ExpectedOrderProgramContract {
   spacingMode: CanonicalOrderProgramIntent['levelSet']['spacingMode']
   budgetMode: CanonicalOrderProgramIntent['budget']['mode']
   budgetValue: number
-  budgetAsset: string
+  budgetAsset?: string
   orderType: 'limit'
   timeInForce: 'gtc'
   recycleOnFill: boolean
@@ -223,22 +223,18 @@ export class SemanticAtomInvariantService {
       || exposure.status === 'conflict'
       || !levelSet.capability
       || !orderProgram.capability
-      || !budget.capability
     ) {
       return null
     }
 
     const lower = this.readShapeNumber(levelSet.capability.shape, 'lower')
     const upper = this.readShapeNumber(levelSet.capability.shape, 'upper')
-    const budgetValue = this.readShapeNumber(budget.capability.shape, 'value')
-    const budgetAsset = this.readShapeString(budget.capability.shape, 'asset')
+    const projectedBudget = this.projectExpectedOrderProgramBudget(budget.capability ?? null, state)
     if (
       lower === null
       || upper === null
       || upper <= lower
-      || budgetValue === null
-      || budgetValue <= 0
-      || !budgetAsset
+      || !projectedBudget
     ) {
       return null
     }
@@ -246,12 +242,12 @@ export class SemanticAtomInvariantService {
     const id = `contract-order-program-${orderProgram.capability.object}`
     const gridCount = this.readShapeNumber(levelSet.capability.shape, 'gridCount') ?? undefined
     const spacingPct = this.readShapeNumber(levelSet.capability.shape, 'spacingPct') ?? undefined
-    const budgetMode = budget.capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote'
+    const budgetMode = projectedBudget.budgetMode
     const maxWorkingOrders = Math.max(2, Math.floor(gridCount ?? 2))
     const mode = this.resolveContractOrderProgramMode(exposure.capability ?? null, state)
     const budgetPerOrder = budgetMode === 'total_quote'
-      ? Number((budgetValue / maxWorkingOrders).toFixed(8))
-      : budgetValue
+      ? Number((projectedBudget.budgetValue / maxWorkingOrders).toFixed(8))
+      : projectedBudget.budgetValue
 
     return {
       id,
@@ -263,8 +259,8 @@ export class SemanticAtomInvariantService {
       ...(spacingPct !== undefined ? { spacingPct } : {}),
       spacingMode: this.readShapeString(levelSet.capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
       budgetMode,
-      budgetValue,
-      budgetAsset,
+      budgetValue: projectedBudget.budgetValue,
+      ...(projectedBudget.budgetAsset ? { budgetAsset: projectedBudget.budgetAsset } : {}),
       orderType: 'limit',
       timeInForce: 'gtc',
       recycleOnFill: this.readShapeBoolean(orderProgram.capability.shape, 'recycleOnFill') ?? true,
@@ -273,13 +269,52 @@ export class SemanticAtomInvariantService {
       activeWhen: `${id.replace(/\W+/g, '_')}_active_range`,
       side: mode === 'perp_short' ? 'sell' : 'buy',
       sidePolicy: mode === 'spot' ? 'spot_grid' : mode,
-      quantity: {
-        mode: 'fixed_quote',
-        value: budgetPerOrder,
-        asset: budgetAsset,
-      },
+      quantity: budgetMode === 'per_order_pct_equity'
+        ? { mode: 'pct_equity', value: budgetPerOrder }
+        : {
+            mode: 'fixed_quote',
+            value: budgetPerOrder,
+            asset: projectedBudget.budgetAsset,
+          },
       maxWorkingOrders,
     }
+  }
+
+  private projectExpectedOrderProgramBudget(
+    capability: SemanticCapability | null,
+    state: SemanticState,
+  ): Pick<ExpectedOrderProgramContract, 'budgetMode' | 'budgetValue' | 'budgetAsset'> | null {
+    if (capability) {
+      const value = this.readShapeNumber(capability.shape, 'value')
+      const asset = this.readShapeString(capability.shape, 'asset')
+      if (value === null || value <= 0 || !asset) {
+        return null
+      }
+
+      return {
+        budgetMode: capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote',
+        budgetValue: value,
+        budgetAsset: asset,
+      }
+    }
+
+    const sizing = state.position?.sizing
+    if (sizing?.kind === 'ratio' && typeof sizing.value === 'number' && Number.isFinite(sizing.value) && sizing.value > 0) {
+      return {
+        budgetMode: 'per_order_pct_equity',
+        budgetValue: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(8)) : sizing.value,
+      }
+    }
+
+    if (sizing?.kind === 'quote' && typeof sizing.value === 'number' && Number.isFinite(sizing.value) && sizing.value > 0) {
+      return {
+        budgetMode: 'per_order_quote',
+        budgetValue: sizing.value,
+        budgetAsset: sizing.asset ?? 'USDT',
+      }
+    }
+
+    return null
   }
 
   private matchesCanonicalOrderProgram(
@@ -309,7 +344,7 @@ export class SemanticAtomInvariantService {
   ): boolean {
     return candidate.id === expected.irId
       && candidate.kind === 'LIMIT_LADDER'
-      && candidate.activeWhen === expected.activeWhen
+      && this.matchesOrderProgramActiveWhen(candidate.activeWhen, expected.activeWhen)
       && candidate.side === expected.side
       && candidate.sidePolicy === expected.sidePolicy
       && candidate.priceSource === 'level_set'
@@ -320,6 +355,10 @@ export class SemanticAtomInvariantService {
       && candidate.maxWorkingOrders === expected.maxWorkingOrders
       && candidate.group === expected.id
       && this.matchesPositionSizingSnapshot(candidate.quantity, expected.quantity)
+  }
+
+  private matchesOrderProgramActiveWhen(actual: string, expected: string): boolean {
+    return actual === expected || actual.endsWith(`_${expected}`)
   }
 
   private findIrOrderProgramFallbackActions(
@@ -589,11 +628,15 @@ export class SemanticAtomInvariantService {
   }
 
   private readAstOpenActionPositionSizings(ast: StrategyAstV1): PositionSizingSnapshot[] {
-    return ast.decisionPrograms.flatMap(program =>
+    const openActionSizings = ast.decisionPrograms.flatMap(program =>
       program.actions
         .filter(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
         .map(action => action.quantity),
     )
+    return [
+      ...openActionSizings,
+      ...ast.orderPrograms.map(program => program.payload.quantity),
+    ]
   }
 
   private matchesPositionSizingSnapshot(

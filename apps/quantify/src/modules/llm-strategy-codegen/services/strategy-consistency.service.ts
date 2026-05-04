@@ -1179,6 +1179,7 @@ export class StrategyConsistencyService {
     spec: CanonicalStrategySpec,
   ): 'long_only' | 'short_only' | 'long_short' {
     if (spec.version === 2) {
+      const orderProgramMode = this.resolveOrderProgramPositionMode(spec.orderPrograms ?? [])
       const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_LONG'
         || action.type === 'REDUCE_LONG'
@@ -1187,7 +1188,11 @@ export class StrategyConsistencyService {
         action.type === 'OPEN_SHORT'
         || action.type === 'REDUCE_SHORT'
       )))
+      if (orderProgramMode === 'long_short') return 'long_short'
+      if (orderProgramMode === 'long_only' && hasShortExposure) return 'long_short'
+      if (orderProgramMode === 'short_only' && hasLongExposure) return 'long_short'
       if (hasLongExposure && hasShortExposure) return 'long_short'
+      if (orderProgramMode) return orderProgramMode
       if (hasShortExposure) return 'short_only'
       return 'long_only'
     }
@@ -1392,6 +1397,7 @@ export class StrategyConsistencyService {
   private resolveExpectedPositionModeFromIr(
     ir: CanonicalStrategyIrV1,
   ): 'long_only' | 'short_only' | 'long_short' {
+    const orderProgramMode = this.resolveIrOrderProgramPositionMode(ir.orderPrograms)
     const hasLongExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
       action.kind === 'OPEN_LONG'
       || action.kind === 'REDUCE_LONG'
@@ -1401,9 +1407,63 @@ export class StrategyConsistencyService {
       || action.kind === 'REDUCE_SHORT'
     )))
 
+    if (orderProgramMode === 'long_short') return 'long_short'
+    if (orderProgramMode === 'long_only' && hasShortExposure) return 'long_short'
+    if (orderProgramMode === 'short_only' && hasLongExposure) return 'long_short'
     if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (orderProgramMode) return orderProgramMode
     if (hasShortExposure) return 'short_only'
     return 'long_only'
+  }
+
+  private resolveOrderProgramPositionMode(
+    orderPrograms: readonly NonNullable<Extract<CanonicalStrategySpec, { version: 2 }>['orderPrograms']>[number][],
+  ): 'long_only' | 'short_only' | 'long_short' | null {
+    let hasLongExposure = false
+    let hasShortExposure = false
+
+    orderPrograms.forEach((program) => {
+      if (program.mode === 'perp_neutral') {
+        hasLongExposure = true
+        hasShortExposure = true
+        return
+      }
+      if (program.mode === 'perp_short') {
+        hasShortExposure = true
+        return
+      }
+      hasLongExposure = true
+    })
+
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    if (hasLongExposure) return 'long_only'
+    return null
+  }
+
+  private resolveIrOrderProgramPositionMode(
+    orderPrograms: readonly CanonicalStrategyIrV1['orderPrograms'][number][],
+  ): 'long_only' | 'short_only' | 'long_short' | null {
+    let hasLongExposure = false
+    let hasShortExposure = false
+
+    orderPrograms.forEach((program) => {
+      if (program.sidePolicy === 'perp_neutral') {
+        hasLongExposure = true
+        hasShortExposure = true
+        return
+      }
+      if (program.sidePolicy === 'perp_short') {
+        hasShortExposure = true
+        return
+      }
+      hasLongExposure = true
+    })
+
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    if (hasLongExposure) return 'long_only'
+    return null
   }
 
   private buildCanonicalSpecV2Fallback(spec: Extract<CanonicalStrategySpec, { version: 2 }>): {

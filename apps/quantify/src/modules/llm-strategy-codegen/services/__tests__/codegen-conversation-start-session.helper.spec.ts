@@ -23,8 +23,7 @@ describe('buildStartSessionBootstrap', () => {
         logicReady: false,
         assistantPrompt: 'planner prompt',
       },
-      compileability: null,
-    }, () => 'compile prompt')
+    })
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toBe('请先补充交易对')
@@ -45,23 +44,18 @@ describe('buildStartSessionBootstrap', () => {
         logicReady: true,
         assistantPrompt: '逻辑已整理',
       },
-      compileability: {
-        canCompile: true,
-        entryRuleCount: 1,
-        exitRuleCount: 1,
-        reasons: [],
-      },
-    }, () => 'compile prompt')
+    })
 
     expect(result.status).toBe('CONFIRM_GATE')
     expect(result.shouldEnterConfirmationGate).toBe(true)
     expect(result.assistantPrompt).toContain('逻辑图已更新。请确认逻辑图')
   })
 
-  it('falls back to compileability prompt when confirm gate cannot compile', () => {
+  it('keeps confirm gate when direct compile decision only has legacy compileability reasons', () => {
     const result = buildStartSessionBootstrap({
       initialMessage: '确认一下',
       initialStatus: 'CONFIRM_GATE',
+      decisionKind: 'DIRECT_COMPILE',
       clarificationState: {
         status: 'CLEAR',
         items: [],
@@ -72,16 +66,13 @@ describe('buildStartSessionBootstrap', () => {
         logicReady: true,
         assistantPrompt: '逻辑已整理',
       },
-      compileability: {
-        canCompile: false,
-        entryRuleCount: 1,
-        exitRuleCount: 0,
-        reasons: ['missing exit'],
-      },
-    }, report => `compile failed: ${report.reasons.join(',')}`)
+    })
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.shouldEnterConfirmationGate).toBe(false)
-    expect(result.assistantPrompt).toBe('compile failed: missing exit')
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.shouldEnterConfirmationGate).toBe(true)
+    expect(result.assistantPrompt).toContain('逻辑图已更新。请确认逻辑图')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.assistantPrompt).not.toContain('compile failed')
   })
 })

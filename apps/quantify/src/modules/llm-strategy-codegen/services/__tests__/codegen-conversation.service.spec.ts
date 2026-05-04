@@ -6544,6 +6544,112 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(inferredAnswers).toEqual({})
   })
 
+  it('auto-binds parseable freeform execution-context answers to the active context slot', () => {
+    const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.timeframe',
+            reason: 'missing_timeframe',
+            field: 'timeframe',
+            blocking: true,
+            question: '请确认策略主周期（例如 15m 或 1h）。',
+            status: 'pending',
+          },
+        ],
+      },
+      '1m',
+    )
+
+    expect(inferredAnswers).toEqual({
+      'executionContext.timeframe': '1m',
+    })
+  })
+
+  it('locks an active timeframe slot from a freeform 1m reply before readiness evaluation', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+    })
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
+      id: 's-freeform-timeframe-clarification',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          key: 'executionContext.timeframe',
+          reason: 'missing_timeframe',
+          field: 'timeframe',
+          blocking: true,
+          question: '请确认策略主周期（例如 15m 或 1h）。',
+          status: 'pending',
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          slotId: JSON.stringify(['timeframe', 'contextSlots.timeframe']),
+        }],
+      },
+      constraintPack: {},
+    }))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-freeform-timeframe-clarification', {
+      userId: 'u1',
+      message: '1m',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(updatePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '1m',
+    }))
+    expect(result.assistantPrompt).not.toContain('主周期')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.timeframe',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not auto-bind unparseable freeform answers to execution-context slots', () => {
+    const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+      },
+      'MA50',
+    )
+
+    expect(inferredAnswers).toEqual({})
+  })
+
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
     mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-action-uniqueness',
@@ -6729,7 +6835,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
-  it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
+  it('does not return legacy compileability blockers after structured clarification answers resolve the explicit question', async () => {
     mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-normalization-blocked',
       userId: 'u1',
@@ -6779,14 +6885,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith(
-      's-clarification-normalization-blocked',
-      expect.objectContaining({
-        status: 'DRAFTING',
-      }),
-    )
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(mockRepo.updateSession.mock.calls.at(-1)?.[0]).toBe('s-clarification-normalization-blocked')
+    expect(updatePayload.status).toBe('CONFIRM_GATE')
   })
 
 
@@ -9576,7 +9680,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
+  it('does not return compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-compileability-blocker',
       userId: 'u1',
@@ -9658,12 +9762,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '继续',
     })
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
-    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
   })
 
-  it('returns zero-signal compileability blockers instead of unrelated guidance when semantic slots are closed', async () => {
+  it('does not return zero-signal compileability blockers when semantic slots are closed', async () => {
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-zero-signal-compileability-blocker',
       userId: 'u1',
@@ -9693,9 +9797,541 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
-    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
-    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+  })
+
+  it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: { timeInForce: 'gtc' },
+            }],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-missing-contract-requirements',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-missing-contract-requirements', {
+      userId: 'u1',
+      message: '继续',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('price define level_set')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_semantic_contract_requirement',
+        field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
+    ]))
+    expect(result.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'ambiguous_state_gate',
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
+    ]))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'action-grid-ladder',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'contract.requirement.price.define.level_set',
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+  })
+
+  it('keeps OKX spot ETH grid with complete contracts out of legacy entry and exit blockers', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 2800,
+            rangeMax: 3600,
+            stepPct: 0.5,
+            sideMode: 'long_only',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 2800,
+                upper: 3600,
+                spacingPct: 0.5,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-order-program',
+            kind: 'action',
+            capabilities: [
+              {
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+                shape: { timeInForce: 'gtc', recycleOnFill: true },
+              },
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 10, asset: 'USDT' },
+              },
+            ],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '1m',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-okx-spot-eth-grid-contracts',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-okx-spot-eth-grid-contracts', {
+      userId: 'u1',
+      message: '继续',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      viewType: 'canonical-semantic-view.v1',
+      canonicalDigest: result.canonicalDigest,
+    }))
+    expect((result as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+    }))
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(updatePayload.status).toBe('CONFIRM_GATE')
+    expect(updatePayload.latestSpecDesc).toEqual(expect.objectContaining({
+      canonicalDigest: result.canonicalDigest,
+    }))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'action-grid-ladder',
+        openSlots: [],
+      }),
+    ]))
+  })
+
+  it('enters confirm gate after boundary guard clarification closes a real spot grid without legacy entry and exit rules', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            sideMode: 'long_only',
+            breakoutAction: 'pause',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                mode: 'centered_percent_range',
+                centerTiming: 'deployment',
+                centerSource: 'last_trade',
+                halfRangePct: 0.4,
+                gridCount: 10,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-order-program',
+            kind: 'action',
+            capabilities: [
+              {
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+                shape: {
+                  orderType: 'limit',
+                  timeInForce: 'gtc',
+                  recycleOnFill: true,
+                  pairingPolicy: 'adjacent_level',
+                },
+              },
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 10, asset: 'USDT' },
+              },
+            ],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      risk: [
+        {
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+            fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '当价格突破上下边界后，策略是否停止并撤销未成交订单且不再重新部署/不再创建新网格？',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        asset: 'USDT',
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '1m',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-okx-real-grid-boundary-guard',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'NEEDS_CLARIFICATION', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-okx-real-grid-boundary-guard', {
+      userId: 'u1',
+      message: '当价格突破上下边界时，策略是“停止并撤销未成交订单”后就不再重新部署/不再创建新网格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('入场：区间网格，以部署时最新成交价为中心上下各 0.4%，共 10 格')
+    expect(result.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(result.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(result.assistantPrompt).not.toContain('已识别部分条件，但仍未完整')
+    expect(result.assistantPrompt).not.toContain('补充入场和出场')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(updatePayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-boundary-stop',
+        status: 'locked',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'boundary_cancel',
+            shape: expect.objectContaining({
+              onBreach: 'HALT_STRATEGY',
+              cancelOrders: true,
+              cancelScope: 'unfilled_grid_orders',
+              regrid: false,
+            }),
+          })],
+        })],
+      }),
+    ]))
+
+    mockRepo.findById.mockResolvedValueOnce({
+      ...sessionFixture,
+      status: 'CONFIRM_GATE',
+      semanticState: updatePayload.semanticState,
+      clarificationState: updatePayload.clarificationState,
+      constraintPack: updatePayload.constraintPack,
+      latestSpecDesc: updatePayload.latestSpecDesc,
+    })
+
+    const confirmed = await service.continueSession('s-okx-real-grid-boundary-guard', {
+      userId: 'u1',
+      message: '对的',
+    })
+
+    expect(confirmed.status).toBe('GENERATING')
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+      's-okx-real-grid-boundary-guard',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          triggers: expect.any(Array),
+          actions: expect.any(Array),
+          risk: expect.any(Array),
+        }),
+      }),
+    )
+  })
+
+  it('starts a complete OKX spot real grid from deterministic atomic contracts without fallback summary', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '我整理出的策略逻辑如下：已识别部分条件，但仍未完整。。请确认是否按这个逻辑生成脚本。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-okx-real-grid-start' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行“立即停止并撤销所有未成交订单”',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('入场：区间网格，以部署时当前价为中心上下各 0.4%，共 10 格')
+    expect(result.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(result.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格限价单，不再重新部署网格')
+    expect(result.assistantPrompt).not.toContain('已识别部分条件，但仍未完整')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+          })],
+        })],
+      }),
+    ]))
+  })
+
+  it('preserves a complete real-grid seed when the user only answers the missing timeframe slot', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-okx-real-grid-timeframe-slot' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '创建一个 OKX 现货ETH/USDT 真实网格策略。 固定价格区间：以当前价格为中心，上下各 0.4%。 网格数量：10 格。 每格资金：10 USDT。 订单类型：限价单。 成交后在相邻网格自动挂反向单。 价格突破上下边界时停止并撤销未成交订单。 不要用趋势信号触发开仓，部署后立即创建网格挂单。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('主周期')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+          })],
+        })],
+      }),
+    ]))
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([expect.objectContaining({
+          capabilities: expect.arrayContaining([expect.objectContaining({
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+          })]),
+        })]),
+      }),
+    ]))
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-okx-real-grid-timeframe-slot',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-okx-real-grid-timeframe-slot', {
+      userId: 'u1',
+      message: '1m',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.status).toBe('CONFIRM_GATE')
+    expect(continued.assistantPrompt).toContain('入场：区间网格，以部署时当前价为中心上下各 0.4%，共 10 格')
+    expect(continued.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单，每格 10 USDT')
+    expect(continued.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(continued.assistantPrompt).not.toContain('补充入场和出场')
+    expect(updatePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '1m',
+    }))
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'grid.range_rebalance' }),
+    ]))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
   })
 
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
@@ -10041,6 +10677,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } finally {
       readCanonicalDigestSpy.mockRestore()
       missingFieldsSpy.mockRestore()
+    }
+  })
+
+  it('reports canonical projection failure without legacy entry and exit wording during confirmGenerate', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        lockedStopLossRisk(),
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit_pct',
+          params: {
+            valuePct: 10,
+            basis: 'entry_avg_price',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-semantic-projection-gap',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    const confirmedCanonicalDigest = buildSemanticOnlyCanonicalDigest(persistedSemanticState)
+    const readCanonicalDigestSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedCanonicalDigest)
+    const compileabilitySpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'evaluateCanonicalCompileability')
+      .mockReturnValue({
+        canCompile: false,
+        entryRuleCount: 0,
+        exitRuleCount: 0,
+        reasons: ['未识别可编译入场规则', '未识别可编译出场规则'],
+      })
+    const genericGapSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'hasUnresolvedGenericCompileabilityGap')
+      .mockReturnValue(true)
+
+    try {
+      const result = await service.continueSession('s7-semantic-projection-gap', {
+        userId: 'u1',
+        message: '确认逻辑图',
+        confirmGenerate: true,
+        confirmedCanonicalDigest,
+      })
+
+      expect(result.status).toBe('DRAFTING')
+      expect(result.assistantPrompt).toContain('canonical 投影')
+      expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+      expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    } finally {
+      genericGapSpy.mockRestore()
+      compileabilitySpy.mockRestore()
+      readCanonicalDigestSpy.mockRestore()
     }
   })
 

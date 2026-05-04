@@ -1331,6 +1331,7 @@ const StrategyClarificationItemDto = z
       'grid_params_missing',
       'ambiguous_state_gate',
       'atomic_semantic_fork',
+      'missing_semantic_contract_requirement',
     ]),
     field: z.string(),
     blocking: z.boolean(),

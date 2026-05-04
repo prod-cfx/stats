@@ -492,9 +492,12 @@ export class CanonicalSpecBuilderService {
     const market = this.resolveSemanticStateMarket(state)
     const sizing = this.resolveSizingFromSemanticState(state.position)
 
-    const rules = this.buildRulesFromSemanticState(state, sizing)
-    const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const orderPrograms = this.buildContractOrderPrograms(state)
+    const rules = this.filterOrderProgramShadowRules(
+      this.buildRulesFromSemanticState(state, sizing),
+      orderPrograms,
+    )
+    const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
 
     return {
       version: 2,
@@ -511,6 +514,37 @@ export class CanonicalSpecBuilderService {
       orderPrograms,
       rules,
     }
+  }
+
+  private filterOrderProgramShadowRules(
+    rules: CanonicalRuleV2[],
+    orderPrograms: CanonicalOrderProgramIntent[],
+  ): CanonicalRuleV2[] {
+    if (orderPrograms.length === 0) {
+      return rules
+    }
+
+    return rules.filter(rule => !this.isOrderProgramShadowRule(rule))
+  }
+
+  private isOrderProgramShadowRule(rule: CanonicalRuleV2): boolean {
+    if (rule.metadata?.normalized?.family === 'grid.range_rebalance') {
+      return true
+    }
+
+    return this.conditionContainsAtom(rule.condition, 'grid.range_rebalance')
+  }
+
+  private conditionContainsAtom(condition: CanonicalRuleV2['condition'], key: string): boolean {
+    if (condition.kind === 'atom') {
+      return condition.key === key
+    }
+
+    if (condition.kind === 'expression') {
+      return false
+    }
+
+    return condition.children.some(child => this.conditionContainsAtom(child, key))
   }
 
   private buildContractOrderPrograms(state: SemanticState): CanonicalOrderProgramIntent[] {
@@ -573,22 +607,15 @@ export class CanonicalSpecBuilderService {
       || exposure.status === 'conflict'
       || !levelSet.capability
       || !orderProgram.capability
-      || !budget.capability
     ) {
       return null
     }
 
-    const lower = this.readShapeNumber(levelSet.capability.shape, 'lower')
-    const upper = this.readShapeNumber(levelSet.capability.shape, 'upper')
-    const budgetValue = this.readShapeNumber(budget.capability.shape, 'value')
-    const budgetAsset = this.readShapeString(budget.capability.shape, 'asset')
+    const projectedLevelSet = this.projectCanonicalOrderProgramLevelSet(levelSet.capability)
+    const projectedBudget = this.projectCanonicalOrderProgramBudget(budget.capability, state)
     if (
-      lower === null
-      || upper === null
-      || upper <= lower
-      || budgetValue === null
-      || budgetValue <= 0
-      || !budgetAsset
+      !projectedLevelSet
+      || !projectedBudget
     ) {
       return null
     }
@@ -597,21 +624,9 @@ export class CanonicalSpecBuilderService {
       id: `contract-order-program-${orderProgram.capability.object}`,
       kind: 'contract_order_program',
       mode: this.resolveContractOrderProgramMode(exposure.capability, state),
-      levelSet: {
-        lower,
-        upper,
-        ...(this.readShapeNumber(levelSet.capability.shape, 'gridCount') !== null
-          ? { gridCount: this.readShapeNumber(levelSet.capability.shape, 'gridCount') ?? undefined }
-          : {}),
-        ...(this.readShapeNumber(levelSet.capability.shape, 'spacingPct') !== null
-          ? { spacingPct: this.readShapeNumber(levelSet.capability.shape, 'spacingPct') ?? undefined }
-          : {}),
-        spacingMode: this.readShapeString(levelSet.capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
-      },
+      levelSet: projectedLevelSet,
       budget: {
-        mode: budget.capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote',
-        value: budgetValue,
-        asset: budgetAsset,
+        ...projectedBudget,
       },
       orderType: 'limit',
       timeInForce: 'gtc',
@@ -647,13 +662,104 @@ export class CanonicalSpecBuilderService {
   }
 
   private projectLevelSetCapabilityKey(capability: SemanticCapability): string {
+    const mode = this.readShapeString(capability.shape, 'mode')
+    if (mode === 'centered_percent_range') {
+      return this.stableProjectionKey({
+        mode,
+        centerTiming: this.readShapeString(capability.shape, 'centerTiming') ?? 'deployment',
+        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
+        halfRangePct: this.readShapeNumber(capability.shape, 'halfRangePct'),
+        gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+        spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
+        spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+      })
+    }
+
     return this.stableProjectionKey({
+      mode: 'static_range',
       lower: this.readShapeNumber(capability.shape, 'lower'),
       upper: this.readShapeNumber(capability.shape, 'upper'),
       gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
       spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
       spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
     })
+  }
+
+  private projectCanonicalOrderProgramLevelSet(
+    capability: SemanticCapability,
+  ): CanonicalOrderProgramIntent['levelSet'] | null {
+    const spacingMode = this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic'
+    const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+    const spacingPct = this.readShapeNumber(capability.shape, 'spacingPct')
+    const mode = this.readShapeString(capability.shape, 'mode')
+
+    if (mode === 'centered_percent_range') {
+      const halfRangePct = this.readShapeNumber(capability.shape, 'halfRangePct')
+      if (halfRangePct === null || halfRangePct <= 0) {
+        return null
+      }
+
+      return {
+        mode: 'centered_percent_range',
+        centerTiming: this.readShapeString(capability.shape, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
+        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
+        halfRangePct,
+        ...(gridCount !== null ? { gridCount } : {}),
+        ...(spacingPct !== null ? { spacingPct } : {}),
+        spacingMode,
+      }
+    }
+
+    const lower = this.readShapeNumber(capability.shape, 'lower')
+    const upper = this.readShapeNumber(capability.shape, 'upper')
+    if (lower === null || upper === null || upper <= lower) {
+      return null
+    }
+
+    return {
+      lower,
+      upper,
+      ...(gridCount !== null ? { gridCount } : {}),
+      ...(spacingPct !== null ? { spacingPct } : {}),
+      spacingMode,
+    }
+  }
+
+  private projectCanonicalOrderProgramBudget(
+    capability: SemanticCapability | null,
+    state: SemanticState,
+  ): CanonicalOrderProgramIntent['budget'] | null {
+    if (capability) {
+      const budgetValue = this.readShapeNumber(capability.shape, 'value')
+      const budgetAsset = this.readShapeString(capability.shape, 'asset')
+      if (budgetValue === null || budgetValue <= 0 || !budgetAsset) {
+        return null
+      }
+
+      return {
+        mode: capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote',
+        value: budgetValue,
+        asset: budgetAsset,
+      }
+    }
+
+    const sizing = state.position?.sizing
+    if (sizing?.kind === 'ratio' && typeof sizing.value === 'number' && Number.isFinite(sizing.value) && sizing.value > 0) {
+      return {
+        mode: 'per_order_pct_equity',
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(8)) : sizing.value,
+      }
+    }
+
+    if (sizing?.kind === 'quote' && typeof sizing.value === 'number' && Number.isFinite(sizing.value) && sizing.value > 0) {
+      return {
+        mode: 'per_order_quote',
+        value: sizing.value,
+        asset: sizing.asset ?? 'USDT',
+      }
+    }
+
+    return null
   }
 
   private projectLimitLadderCapabilityKey(capability: SemanticCapability): string {

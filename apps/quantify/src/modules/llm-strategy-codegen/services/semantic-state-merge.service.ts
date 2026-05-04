@@ -63,7 +63,12 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedTrigger.params, ...persistedTrigger.params }
           : { ...persistedTrigger.params, ...derivedTrigger.params },
-        openSlots: this.mergeOpenSlots(persistedTrigger.openSlots, derivedTrigger.openSlots),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedTrigger,
+          derivedTrigger,
+          persistedTrigger.openSlots,
+          derivedTrigger.openSlots,
+        ),
         status: derivedTrigger.status === 'locked' || persistedTrigger.status === 'superseded'
           ? derivedTrigger.status
           : persistedTrigger.status,
@@ -132,7 +137,12 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedAction.params, ...persistedAction.params }
           : { ...persistedAction.params, ...derivedAction.params },
-        openSlots: this.mergeOpenSlots(persistedAction.openSlots ?? [], derivedAction.openSlots ?? []),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedAction,
+          derivedAction,
+          persistedAction.openSlots ?? [],
+          derivedAction.openSlots ?? [],
+        ),
         evidence: preferPersisted
           ? persistedAction.evidence ?? derivedAction.evidence
           : derivedAction.evidence ?? persistedAction.evidence,
@@ -175,7 +185,12 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedRisk.params, ...persistedRisk.params }
           : { ...persistedRisk.params, ...derivedRisk.params },
-        openSlots: this.mergeOpenSlots(persistedRisk.openSlots, derivedRisk.openSlots),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          persistedRisk,
+          derivedRisk,
+          persistedRisk.openSlots,
+          derivedRisk.openSlots,
+        ),
         evidence: preferPersisted
           ? persistedRisk.evidence ?? derivedRisk.evidence
           : derivedRisk.evidence ?? persistedRisk.evidence,
@@ -207,6 +222,23 @@ export class SemanticStateMergeService {
       value: stronger.value ?? weaker.value,
       evidence: stronger.evidence ?? weaker.evidence,
     }
+  }
+
+  private mergeOpenSlotsForMatchedNodes(
+    persistedNode: { status: 'open' | 'locked' | 'superseded', source?: 'user_explicit' | 'inferred' | 'derived', value?: unknown },
+    derivedNode: { status: 'open' | 'locked' | 'superseded', source?: 'user_explicit' | 'inferred' | 'derived', value?: unknown },
+    persistedSlots: SemanticTriggerState['openSlots'],
+    derivedSlots: SemanticTriggerState['openSlots'],
+  ): SemanticTriggerState['openSlots'] {
+    if (
+      persistedNode.status === 'locked'
+      && derivedNode.status === 'open'
+      && this.compareNodeStrength(persistedNode, derivedNode) > 0
+    ) {
+      return persistedSlots.map(slot => ({ ...slot }))
+    }
+
+    return this.mergeOpenSlots(persistedSlots, derivedSlots)
   }
 
   private mergeContextSlots(

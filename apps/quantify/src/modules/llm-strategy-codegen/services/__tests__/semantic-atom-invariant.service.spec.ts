@@ -974,6 +974,42 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('passes when centered-percent contract order program semantics survive canonicalSpec, IR, and AST', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const levelSet = state.triggers[0]?.contracts?.[0]?.capabilities[0]
+    if (levelSet) {
+      levelSet.shape = {
+        mode: 'centered_percent_range',
+        centerTiming: 'deployment',
+        centerSource: 'last_price',
+        halfRangePct: 0.4,
+        gridCount: 10,
+        spacingMode: 'arithmetic',
+      }
+    }
+    if (state.position?.contracts?.[0]?.capabilities[0]) {
+      state.position.contracts[0].capabilities[0].shape = { value: 10, asset: 'USDT' }
+    }
+    state.contextSlots.symbol = { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'ETHUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true }
+    state.contextSlots.marketType = { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'spot', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true }
+    state.contextSlots.timeframe = { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms : []).toHaveLength(1)
+    expect(ir.orderPrograms).toHaveLength(1)
+    expect(ast.orderPrograms).toHaveLength(1)
+    expect(ast.topology.orderProgramOrder).toHaveLength(1)
+    expect(checks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
   it('fails when contract order program AST loses orderPrograms', () => {
     const state = buildContractOrderProgramSemanticState()
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)

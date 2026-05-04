@@ -1257,6 +1257,7 @@ export class AccountStrategyViewService {
           symbol: gridExecutionSymbol,
           astSnapshot: this.readRecord(this.readRecord(resolvedDeploy.snapshot)?.astSnapshot),
           currentPrice: await this.resolveGridDeploymentCurrentPrice(gridExecutionSymbol),
+          fundingSnapshot: deployFundingSnapshot,
         })
       } else {
         await this.requireRuntimeExecutionStateService().initializeStatesForDeploy({

@@ -8,7 +8,6 @@ describe('StrategyCompileabilityDecisionService', () => {
       normalizedSummary: 'OKX 合约 BTCUSDT；在 60000-80000 区间执行网格低买高卖；每格 0.5%；单笔 10% 仓位',
       blockingReasons: [],
       inferredAssumptions: [],
-      compileability: { canCompile: true, entryRuleCount: 1, exitRuleCount: 1, reasons: [] },
     })
 
     expect(decision.kind).toBe('DIRECT_COMPILE')
@@ -21,7 +20,6 @@ describe('StrategyCompileabilityDecisionService', () => {
       inferredAssumptions: [
         { key: 'trigger.confirmation', value: 'close_confirm', source: 'system_default' },
       ],
-      compileability: { canCompile: true, entryRuleCount: 1, exitRuleCount: 1, reasons: [] },
     })
 
     expect(decision.kind).toBe('CONFIRM_INFERRED')
@@ -35,7 +33,6 @@ describe('StrategyCompileabilityDecisionService', () => {
         { key: 'trigger.confirmation', reason: 'trigger_semantics_fork', priority: 10, question: '该布林带条件是触碰即触发，还是收盘确认后触发？' },
       ],
       inferredAssumptions: [],
-      compileability: { canCompile: false, entryRuleCount: 1, exitRuleCount: 0, reasons: ['未识别可编译出场规则'] },
     })
 
     expect(decision.kind).toBe('ASK_CLARIFY')
@@ -45,18 +42,15 @@ describe('StrategyCompileabilityDecisionService', () => {
     expect(decision.nextActionPayload.question.key).toBe('trigger.confirmation')
   })
 
-  it('returns ASK_CLARIFY when compileability fails even if no explicit blocker was precomputed', () => {
+  it('ignores legacy compileability concerns because they are no longer decision inputs', () => {
     const decision = service.decide({
       normalizedSummary: 'OKX 合约 BTCUSDT；价格突破阻力位入场',
       blockingReasons: [],
       inferredAssumptions: [],
-      compileability: { canCompile: false, entryRuleCount: 1, exitRuleCount: 0, reasons: ['未识别可编译出场规则'] },
     })
 
-    expect(decision.kind).toBe('ASK_CLARIFY')
-    if (decision.kind !== 'ASK_CLARIFY') {
-      throw new Error('expected ASK_CLARIFY')
-    }
-    expect(decision.nextActionPayload.question.key).toBe('compileability')
+    expect(decision.kind).toBe('DIRECT_COMPILE')
+    expect(decision.blockingReasons).toEqual([])
+    expect(decision.nextActionPayload).toEqual({ mode: 'compile' })
   })
 })

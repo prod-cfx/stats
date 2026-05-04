@@ -24,6 +24,7 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   ambiguous_risk_effect: 8,
   grid_params_missing: 5,
   ambiguous_state_gate: 5,
+  missing_semantic_contract_requirement: 5,
   missing_entry_rules: 20,
   missing_exit_rules: 20,
   missing_stop_loss_rule: 20,

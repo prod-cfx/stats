@@ -113,6 +113,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
         astSnapshot: createGridOrderProgramAstSnapshot(),
       }),
     }
+    const tradingService = {
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 1000, locked: 0, total: 1000 },
+      ]),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
@@ -120,7 +125,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
       undefined,
       undefined,
-      undefined,
+      tradingService as any,
       snapshotsRepository as any,
       runtimeExecutionStateService as any,
       undefined,
@@ -147,6 +152,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
       marketType: 'spot',
       symbol: 'BTC/USDT',
       astSnapshot: expect.objectContaining({ orderPrograms: expect.any(Array) }),
+      fundingSnapshot: expect.objectContaining({
+        asset: 'USDT',
+        buyingPower: 1000,
+        executionCapital: 1000,
+      }),
     }))
     expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).not.toHaveBeenCalled()
     expect(runtimeExecutionStateService.initializeStatesForDeploy).not.toHaveBeenCalled()
