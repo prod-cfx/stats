@@ -498,6 +498,7 @@ export class PositionsService {
 
     // 4. 确定订单方向：平多单需要卖出，平空单需要买入
     const orderSide = position.positionSide === PositionSide.LONG ? 'sell' : 'buy'
+    const isPerp = marketType === 'perp'
     const intent: OrderIntent = {
       source: 'position_tool',
       sourceId: this.createClosePositionSourceId(dto.positionId, closeQuantity),
@@ -508,9 +509,8 @@ export class PositionsService {
       side: orderSide,
       type: 'market',
       amount: closeQuantity.toNumber(),
-      role: position.positionSide === PositionSide.LONG ? 'close_long' : 'close_short',
-      reduceOnly: true,
-      ...(marketType === 'perp' ? { tdMode: 'cross' as const } : {}),
+      role: this.resolveClosePositionRole(marketType, orderSide, position.positionSide),
+      ...(isPerp ? { reduceOnly: true, tdMode: 'cross' as const } : {}),
       metadata: {
         positionId: dto.positionId,
         userStrategyAccountId: dto.userStrategyAccountId,
@@ -558,7 +558,7 @@ export class PositionsService {
           clientOrderId: executionResult.normalized.clientOrderId,
           normalizedAmount: executionResult.normalized.normalizedAmount,
           exchangeSize: executionResult.normalized.exchangeSize,
-          normalizedRequest: executionResult.normalized.request,
+          normalizedRequest: this.toJsonSafe(executionResult.normalized.request),
         },
       },
     })
@@ -576,6 +576,17 @@ export class PositionsService {
 
   private createClosePositionSourceId(positionId: string, closeQuantity: Decimal): string {
     return `${positionId}:${closeQuantity.toString()}:${Date.now()}:${randomUUID()}`
+  }
+
+  private resolveClosePositionRole(
+    marketType: MarketType,
+    orderSide: 'buy' | 'sell',
+    positionSide: PositionSide,
+  ): OrderIntent['role'] {
+    if (marketType === 'spot') {
+      return orderSide === 'sell' ? 'spot_sell' : 'spot_buy'
+    }
+    return positionSide === PositionSide.LONG ? 'close_long' : 'close_short'
   }
 
   private async executeClosePositionIntent(intent: OrderIntent, positionId: string): Promise<TradingExecutionResult> {
@@ -619,6 +630,28 @@ export class PositionsService {
         normalizedRequest: normalized?.request,
       },
     })
+  }
+
+  private toJsonSafe(value: unknown): Prisma.JsonValue | undefined {
+    if (value === undefined) return undefined
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return value as Prisma.JsonValue
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (Array.isArray(value)) {
+      return value
+        .map(item => this.toJsonSafe(item))
+        .filter((item): item is Prisma.JsonValue => item !== undefined)
+    }
+    if (typeof value === 'object') {
+      const jsonObject: Prisma.JsonObject = {}
+      for (const [key, item] of Object.entries(value)) {
+        const safeItem = this.toJsonSafe(item)
+        if (safeItem !== undefined) {
+          jsonObject[key] = safeItem
+        }
+      }
+      return jsonObject
+    }
+    return String(value)
   }
 
   private toTradeResponse(trade: Trade): TradeResponseDto {

@@ -1,4 +1,8 @@
 import { ErrorCode, LedgerEntryType, PositionSide, TradeSide } from '@ai/shared'
+import { ClientOrderIdFactoryService } from '@/modules/trading-execution/services/client-order-id-factory.service'
+import { OrderAdmissionGateService } from '@/modules/trading-execution/services/order-admission-gate.service'
+import { OrderNormalizerService } from '@/modules/trading-execution/services/order-normalizer.service'
+import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { PositionsService } from './positions.service'
 
@@ -272,6 +276,12 @@ describe('positionsService', () => {
         exchangeSize: '1',
         request: {
           clientOrderId: 'pt-close-1',
+          timeInForce: undefined,
+          extra: {
+            keep: 'value',
+            omit: undefined,
+            nested: [{ keep: true, omit: undefined }],
+          },
         },
       },
       order: {
@@ -332,11 +342,12 @@ describe('positionsService', () => {
       side: 'sell',
       type: 'market',
       amount: 1,
-      role: 'close_long',
-      reduceOnly: true,
+      role: 'spot_sell',
     }))
+    expect(executeIntent.mock.calls[0]?.[0]).not.toHaveProperty('reduceOnly')
     expect(executeIntent.mock.calls[0]?.[0]).not.toHaveProperty('tdMode')
     expect(placeOrder).not.toHaveBeenCalled()
+    const metadata = recordTrade.mock.calls[0]?.[0]?.metadata as any
     expect(recordTrade).toHaveBeenCalledWith(expect.objectContaining({
       orderId: 'order-1',
       metadata: expect.objectContaining({
@@ -345,6 +356,112 @@ describe('positionsService', () => {
           clientOrderId: 'pt-close-1',
           normalizedAmount: '1',
           exchangeSize: '1',
+          normalizedRequest: expect.objectContaining({
+            clientOrderId: 'pt-close-1',
+            extra: {
+              keep: 'value',
+              nested: [{ keep: true }],
+            },
+          }),
+        }),
+      }),
+    }))
+    expect(hasUndefined(metadata.tradingExecution.normalizedRequest)).toBe(false)
+    expect(metadata.tradingExecution.normalizedRequest).not.toHaveProperty('timeInForce')
+    expect(metadata.tradingExecution.normalizedRequest.extra).not.toHaveProperty('omit')
+
+    recordTrade.mockRestore()
+  })
+
+  it('submits a spot close through the real trading execution admission and normalizer', async () => {
+    const tradingService = {
+      getInstrumentConstraints: jest.fn().mockResolvedValue({
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        rawSymbol: 'BTC-USDT',
+        priceTickSize: '0.1',
+        quantityStepSize: '0.0001',
+        minQuantity: '0.0001',
+        contractValue: null,
+        clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+        raw: {},
+      }),
+      getPositions: jest.fn(),
+      placeOrder: jest.fn().mockResolvedValue({
+        id: 'spot-order-1',
+        clientOrderId: 'pclose1',
+        status: 'closed',
+        amount: 1,
+        filled: 1,
+        price: 120,
+        createdAt: Date.parse('2026-04-01T01:00:00.000Z'),
+        marketType: 'spot',
+        side: 'sell',
+        type: 'market',
+        symbol: 'BTC/USDT',
+        raw: {},
+      }),
+    }
+    const tradingExecution = new TradingExecutionService(
+      tradingService as any,
+      new ClientOrderIdFactoryService(),
+      new OrderNormalizerService(),
+      new OrderAdmissionGateService(),
+    )
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+    const service = createService(
+      {},
+      {},
+      tradingExecution,
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-spot-1',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal(1),
+          avgEntryPrice: new Prisma.Decimal(100),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
+    )
+
+    await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-spot-1',
+      quantity: '1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)
+
+    expect(tradingService.getPositions).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'spot',
+      expect.objectContaining({
+        symbol: 'BTC/USDT',
+        side: 'sell',
+        type: 'market',
+        clientOrderId: expect.stringMatching(/^p[A-Za-z0-9]+$/u),
+      }),
+      undefined,
+    )
+    const submittedRequest = tradingService.placeOrder.mock.calls[0]?.[3]
+    expect(submittedRequest.reduceOnly).toBeUndefined()
+    expect(recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: 'spot-order-1',
+      metadata: expect.objectContaining({
+        tradingExecution: expect.objectContaining({
+          clientOrderId: expect.stringMatching(/^p[A-Za-z0-9]+$/u),
         }),
       }),
     }))
@@ -546,3 +663,10 @@ describe('positionsService', () => {
     recordTrade.mockRestore()
   })
 })
+
+function hasUndefined(value: unknown): boolean {
+  if (value === undefined) return true
+  if (Array.isArray(value)) return value.some(item => hasUndefined(item))
+  if (!value || typeof value !== 'object') return false
+  return Object.values(value).some(item => hasUndefined(item))
+}
