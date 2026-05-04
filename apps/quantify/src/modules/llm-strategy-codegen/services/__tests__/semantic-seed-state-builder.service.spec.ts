@@ -58,7 +58,7 @@ describe('SemanticSeedStateBuilderService', () => {
     }))
   })
 
-  it('keeps legacy lightweight patches open until contracts are supplied', () => {
+  it('synthesizes contracts for complete lightweight planner patches and keeps them locked', () => {
     const state = service.build({
       triggers: [{
         key: 'condition.expression',
@@ -72,14 +72,100 @@ describe('SemanticSeedStateBuilderService', () => {
             right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
           },
         },
+      }, {
+        key: 'price.percent_change',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          direction: 'up',
+          valuePct: 3,
+        },
       }],
       actions: [{ key: 'open_long' }],
-      risk: [{ key: 'risk.max_drawdown', params: { valuePct: 10 } }],
+      risk: [{ key: 'risk.max_drawdown_pct', params: { valuePct: 10 } }],
       position: {
-        mode: 'fixed',
-        value: 20,
+        mode: 'fixed_ratio',
+        value: 0.1,
         positionMode: 'long',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       },
+    })
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        kind: 'trigger',
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'detect',
+          object: 'signal_condition',
+          shape: expect.objectContaining({ key: 'condition.expression', phase: 'entry', sideScope: 'long' }),
+        })],
+      })],
+    }))
+    expect(state?.triggers[1]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({ valuePct: 3 }),
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          shape: expect.objectContaining({ key: 'price.percent_change', valuePct: 3 }),
+        })],
+      })],
+    }))
+    expect(state?.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        kind: 'action',
+        capabilities: [expect.objectContaining({
+          domain: 'order_program',
+          verb: 'execute',
+          object: 'order_action',
+          shape: expect.objectContaining({ key: 'open_long', side: 'long', intent: 'open' }),
+        })],
+      })],
+    }))
+    expect(state?.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        kind: 'risk',
+        capabilities: [expect.objectContaining({
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'max_drawdown',
+          shape: expect.objectContaining({ key: 'risk.max_drawdown_pct', valuePct: 10 }),
+        })],
+      })],
+    }))
+    expect(state?.position).toEqual(expect.objectContaining({
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        kind: 'position',
+        capabilities: [expect.objectContaining({
+          domain: 'capital',
+          verb: 'allocate',
+          object: 'position_sizing',
+          shape: expect.objectContaining({ mode: 'fixed_ratio', value: 0.1, positionMode: 'long' }),
+        })],
+      })],
+    }))
+  })
+
+  it('keeps unknown bare executable patches open until contracts are supplied', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'unknown.trigger',
+        phase: 'entry',
+        params: { value: 1 },
+      }],
+      risk: [{ key: 'risk.unknown_guard', params: { valuePct: 10 } }],
     })
 
     expect(state?.triggers[0]).toEqual(expect.objectContaining({
@@ -87,24 +173,51 @@ describe('SemanticSeedStateBuilderService', () => {
       source: 'user_explicit',
       openSlots: [expectContractRequiredSlot('triggers[0].contracts')],
     }))
-    expect(state?.actions[0]).toEqual(expect.objectContaining({
-      status: 'open',
-      source: 'user_explicit',
-      openSlots: [expectContractRequiredSlot('actions[0].contracts')],
-    }))
     expect(state?.risk[0]).toEqual(expect.objectContaining({
       status: 'open',
       source: 'user_explicit',
       openSlots: [expectContractRequiredSlot('risk[0].contracts')],
     }))
-    expect(state?.position).toEqual(expect.objectContaining({
-      status: 'open',
-      source: 'user_explicit',
-      openSlots: [expectContractRequiredSlot('position.contracts')],
+  })
+
+  it('keeps superseded executable atoms without contracts superseded', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'unknown.trigger',
+        phase: 'entry',
+        status: 'superseded',
+      }],
+    })
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      status: 'superseded',
+      openSlots: [],
     }))
   })
 
-  it('preserves existing atom open slots and appends contract required slots', () => {
+  it('drops stale contract required slots when contracts become available', () => {
+    const state = service.build({
+      actions: [{
+        key: 'open_long',
+        openSlots: [{
+          slotKey: 'contract.required',
+          fieldPath: 'actions[0].contracts',
+          status: 'open',
+          priority: 'behavior',
+          questionHint: '请补充该原子的执行合约。',
+          affectsExecution: true,
+        }],
+      }],
+    })
+
+    expect(state?.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+      contracts: [expect.objectContaining({ kind: 'action' })],
+    }))
+  })
+
+  it('preserves existing atom open slots while synthesized contracts cover execution', () => {
     const state = service.build({
       actions: [{
         key: 'open_long',
@@ -125,8 +238,8 @@ describe('SemanticSeedStateBuilderService', () => {
         slotKey: 'action.order_type',
         fieldPath: 'actions[0].params.orderType',
       }),
-      expectContractRequiredSlot('actions[0].contracts'),
     ])
+    expect(state?.actions[0]?.contracts).toEqual([expect.objectContaining({ kind: 'action' })])
   })
 
   it('does not add contract required slots to context slots', () => {
@@ -169,8 +282,8 @@ describe('SemanticSeedStateBuilderService', () => {
         status: 'open',
         questionHint: '请确认开仓订单类型。',
       }),
-      expectContractRequiredSlot('actions[0].contracts'),
     ])
+    expect(state?.actions[0]?.contracts).toEqual([expect.objectContaining({ kind: 'action' })])
   })
 
   it('preserves semantic atom contracts from semantic seed patch', () => {
