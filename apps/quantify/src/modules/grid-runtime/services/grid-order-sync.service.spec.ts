@@ -4,6 +4,8 @@ import { ClientOrderIdFactoryService } from '../../trading-execution/services/cl
 import { OrderAdmissionGateService } from '../../trading-execution/services/order-admission-gate.service'
 import { OrderNormalizerService } from '../../trading-execution/services/order-normalizer.service'
 import { TradingExecutionService } from '../../trading-execution/services/trading-execution.service'
+import { ExchangeOperationFailedException } from '../../trading/exceptions/exchange-operation-failed.exception'
+import { OrderCreationFailedException } from '../../trading/exceptions/order-creation-failed.exception'
 
 function asDependency<T>(value: Partial<T>): T {
   return value as T
@@ -1008,6 +1010,97 @@ describe('GridOrderSyncService', () => {
     }))
     expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
     expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps runtime running when OKX submit failure wraps rate-limit reason in domain args', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(new OrderCreationFailedException({
+      exchangeId: 'okx',
+      reason: 'OKX error 50011: Too Many Requests',
+    }))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-order-1',
+      rawPayload: expect.objectContaining({
+        execution: expect.objectContaining({
+          status: 'rate_limited',
+          clientOrderId: submittedClientOrderId,
+          error: expect.objectContaining({
+            args: expect.objectContaining({
+              reason: 'OKX error 50011: Too Many Requests',
+            }),
+          }),
+        }),
+      }),
+    }))
+    expect(repository.appendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'runtime_rate_limited',
+      status: 'RUNNING',
+      payload: expect.objectContaining({
+        orderId: 'planned-order-1',
+        clientOrderId: submittedClientOrderId,
+        exchangeId: 'okx',
+      }),
+    }))
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+  })
+
+  it('keeps runtime running when OKX constraints failure wraps rate-limit reason in domain args', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getInstrumentConstraints.mockRejectedValue(new ExchangeOperationFailedException({
+      operation: 'fetch instrument constraints',
+      exchangeId: 'okx',
+      reason: 'OKX error 50011: Too Many Requests',
+    }))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.markOrderSubmitting).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect(repository.appendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'runtime_rate_limited',
+      status: 'RUNNING',
+      payload: expect.objectContaining({
+        orderId: null,
+        clientOrderId: null,
+        exchangeId: 'okx',
+        error: expect.objectContaining({
+          args: expect.objectContaining({
+            reason: 'OKX error 50011: Too Many Requests',
+          }),
+        }),
+      }),
+    }))
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
   })
 
   it('keeps non-OKX rate-limit-like submit failures on the reconcile path', async () => {

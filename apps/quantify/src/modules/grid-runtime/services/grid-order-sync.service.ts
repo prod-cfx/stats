@@ -395,6 +395,12 @@ export class GridOrderSyncService {
       error instanceof Error ? error.message : null,
       this.getErrorText(error, 'code'),
       this.getErrorText(error, 'name'),
+      this.getNestedErrorText(error, ['args', 'reason']),
+      this.getNestedErrorText(error, ['args', 'code']),
+      this.getNestedErrorText(error, ['response', 'args', 'reason']),
+      this.getNestedErrorText(error, ['response', 'args', 'code']),
+      this.getHttpResponseText(error, ['args', 'reason']),
+      this.getHttpResponseText(error, ['args', 'code']),
     ].filter((value): value is string => typeof value === 'string' && value.length > 0)
 
     return candidates.some((value) => {
@@ -412,6 +418,30 @@ export class GridOrderSyncService {
     const value = (error as Record<string, unknown>)[key]
     if (typeof value === 'string' || typeof value === 'number') return String(value)
     return null
+  }
+
+  private getNestedErrorText(error: unknown, path: string[]): string | null {
+    const value = this.readNestedValue(error, path)
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return null
+  }
+
+  private getHttpResponseText(error: unknown, path: string[]): string | null {
+    if (typeof error !== 'object' || error === null || !('getResponse' in error)) return null
+    const getResponse = (error as { getResponse?: unknown }).getResponse
+    if (typeof getResponse !== 'function') return null
+    const value = this.readNestedValue(getResponse.call(error), path)
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return null
+  }
+
+  private readNestedValue(source: unknown, path: string[]): unknown {
+    let current = source
+    for (const key of path) {
+      if (typeof current !== 'object' || current === null || !(key in current)) return null
+      current = (current as Record<string, unknown>)[key]
+    }
+    return current
   }
 
   private async handleRetryableRateLimit(input: RetryableRateLimitInput): Promise<boolean> {
