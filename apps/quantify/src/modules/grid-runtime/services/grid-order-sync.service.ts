@@ -195,13 +195,16 @@ export class GridOrderSyncService {
     marketType: MarketType,
   ): Promise<void> {
     const plannedOrders = this.filterSubmittablePlannedOrders(orders)
-      .slice(0, this.resolveSubmissionLimit(exchangeId))
     if (plannedOrders.length === 0) return
 
+    const submissionLimit = this.resolveSubmissionLimit(exchangeId)
     const constraints = await this.loadSubmissionConstraints(instance, exchangeId, marketType)
     if (!constraints) return
 
+    let submittedOrderCount = 0
     for (const order of plannedOrders) {
+      if (submittedOrderCount >= submissionLimit) break
+
       const intent = this.buildOrderIntent(instance, exchangeId, marketType, order)
       const prepared = await this.tradingExecution.prepareIntent(intent, { constraints })
       if (prepared.status !== 'prepared') {
@@ -282,7 +285,10 @@ export class GridOrderSyncService {
           rawPayload: this.executionPayload(submitted),
         })
       })
-      if (markedOpen) continue
+      if (markedOpen) {
+        submittedOrderCount += 1
+        continue
+      }
 
       try {
         await this.tradingService.cancelOrder(

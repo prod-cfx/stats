@@ -316,6 +316,93 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('keeps scanning planned orders when close orders are waiting for positions', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_neutral' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-close-short-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'close_short',
+        quantity: { toString: () => '0.1' },
+      }),
+      createOrder({
+        id: 'planned-close-short-2',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'close_short',
+        quantity: { toString: () => '0.1' },
+      }),
+      createOrder({
+        id: 'planned-close-short-3',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'close_short',
+        quantity: { toString: () => '0.1' },
+      }),
+      createOrder({
+        id: 'planned-open-long',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'open_long',
+        quantity: { toString: () => '0.1' },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    tradingService.getPositions.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.markOrderPlanned).toHaveBeenCalledTimes(3)
+    expect(repository.markOrderPlanned.mock.calls.map(call => call[0].id)).toEqual([
+      'planned-close-short-1',
+      'planned-close-short-2',
+      'planned-close-short-3',
+    ])
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+    expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'perp', expect.objectContaining({
+      side: 'buy',
+      tdMode: 'cross',
+    }), 'exchange-account-1')
+    expect(repository.markOrderSubmitting.mock.calls.map(call => call[0].id)).toEqual([
+      'planned-close-short-1',
+      'planned-close-short-2',
+      'planned-close-short-3',
+      'planned-open-long',
+    ])
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+  })
+
   it('keeps generated client order ids within OKX alphanumeric limits', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([
