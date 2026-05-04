@@ -76,8 +76,12 @@ interface ExpectedOrderProgramContract {
   id: string
   kind: 'contract_order_program'
   mode: CanonicalOrderProgramIntent['mode']
-  lower: number
-  upper: number
+  levelSetMode: NonNullable<CanonicalOrderProgramIntent['levelSet']['mode']>
+  lower?: number
+  upper?: number
+  centerTiming?: 'deployment' | 'runtime'
+  centerSource?: string
+  halfRangePct?: number
   gridIntervals?: number
   gridCount?: number
   absoluteSpacing?: number
@@ -229,13 +233,16 @@ export class SemanticAtomInvariantService {
       return null
     }
 
-    const lower = this.readShapeNumber(levelSet.capability.shape, 'lower')
-    const upper = this.readShapeNumber(levelSet.capability.shape, 'upper')
+    const levelSetMode = this.readShapeString(levelSet.capability.shape, 'mode') === 'centered_percent_range'
+      ? 'centered_percent_range'
+      : 'static_range'
+    const lower = this.readShapeNumber(levelSet.capability.shape, 'lower') ?? undefined
+    const upper = this.readShapeNumber(levelSet.capability.shape, 'upper') ?? undefined
+    const halfRangePct = this.readShapeNumber(levelSet.capability.shape, 'halfRangePct') ?? undefined
     const projectedBudget = this.projectExpectedOrderProgramBudget(budget.capability ?? null, state)
     if (
-      lower === null
-      || upper === null
-      || upper <= lower
+      (levelSetMode === 'static_range' && (lower === undefined || upper === undefined || upper <= lower))
+      || (levelSetMode === 'centered_percent_range' && (halfRangePct === undefined || halfRangePct <= 0))
       || !projectedBudget
     ) {
       return null
@@ -257,8 +264,16 @@ export class SemanticAtomInvariantService {
       id,
       kind: 'contract_order_program',
       mode,
-      lower,
-      upper,
+      levelSetMode,
+      ...(lower !== undefined ? { lower } : {}),
+      ...(upper !== undefined ? { upper } : {}),
+      ...(levelSetMode === 'centered_percent_range'
+        ? {
+            centerTiming: this.readShapeString(levelSet.capability.shape, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
+            centerSource: this.readShapeString(levelSet.capability.shape, 'centerSource') ?? 'last_price',
+          }
+        : {}),
+      ...(halfRangePct !== undefined ? { halfRangePct } : {}),
       ...(gridIntervals !== undefined ? { gridIntervals } : {}),
       ...(gridCount !== undefined ? { gridCount } : {}),
       ...(absoluteSpacing !== undefined ? { absoluteSpacing } : {}),
@@ -272,7 +287,7 @@ export class SemanticAtomInvariantService {
       recycleOnFill: this.readShapeBoolean(orderProgram.capability.shape, 'recycleOnFill') ?? true,
       cancelOnStop: this.readShapeBoolean(orderProgram.capability.shape, 'cancelOnStop') ?? true,
       irId: id.replace(/\W+/g, '_'),
-      activeWhen: `${id.replace(/\W+/g, '_')}_active_range`,
+      activeWhen: `${id.replace(/\W+/g, '_')}_${levelSetMode === 'centered_percent_range' ? 'active_level_set' : 'active_range'}`,
       side: mode === 'perp_short' ? 'sell' : 'buy',
       sidePolicy: mode === 'spot' ? 'spot_grid' : mode,
       quantity: budgetMode === 'per_order_pct_equity'
@@ -330,9 +345,15 @@ export class SemanticAtomInvariantService {
     return candidate.id === expected.id
       && candidate.kind === expected.kind
       && candidate.mode === expected.mode
+      && (candidate.levelSet.mode ?? 'static_range') === expected.levelSetMode
       && candidate.levelSet.lower === expected.lower
       && candidate.levelSet.upper === expected.upper
+      && candidate.levelSet.centerTiming === expected.centerTiming
+      && candidate.levelSet.centerSource === expected.centerSource
+      && candidate.levelSet.halfRangePct === expected.halfRangePct
+      && candidate.levelSet.gridIntervals === expected.gridIntervals
       && candidate.levelSet.gridCount === expected.gridCount
+      && candidate.levelSet.absoluteSpacing === expected.absoluteSpacing
       && candidate.levelSet.spacingPct === expected.spacingPct
       && candidate.levelSet.spacingMode === expected.spacingMode
       && candidate.budget.mode === expected.budgetMode
@@ -490,7 +511,23 @@ export class SemanticAtomInvariantService {
   }
 
   private projectLevelSetCapabilityKey(capability: SemanticCapability): string {
+    const mode = this.readShapeString(capability.shape, 'mode')
+    if (mode === 'centered_percent_range') {
+      return this.stableProjectionKey({
+        mode,
+        centerTiming: this.readShapeString(capability.shape, 'centerTiming') ?? 'deployment',
+        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
+        halfRangePct: this.readShapeNumber(capability.shape, 'halfRangePct'),
+        gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),
+        gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+        absoluteSpacing: this.readShapeNumber(capability.shape, 'absoluteSpacing'),
+        spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
+        spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+      })
+    }
+
     return this.stableProjectionKey({
+      mode: 'static_range',
       lower: this.readShapeNumber(capability.shape, 'lower'),
       upper: this.readShapeNumber(capability.shape, 'upper'),
       gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),

@@ -310,6 +310,7 @@ export class CanonicalSpecV2IrCompilerService {
       this.normalizeNumberToken(upper),
       levelCount,
       this.normalizeNumberToken(spacing.value),
+      ...this.normalizedLevelSetShapeTokens(intent),
     ].join('_').replace(/\W+/g, '_')
 
     if (!context.levelSetMap.has(id)) {
@@ -351,6 +352,7 @@ export class CanonicalSpecV2IrCompilerService {
       intent.levelSet.spacingMode,
       levelCount,
       this.normalizeNumberToken(spacing.value),
+      ...this.normalizedLevelSetShapeTokens(intent),
     ].join('_').replace(/\W+/g, '_')
 
     if (!context.levelSetMap.has(id)) {
@@ -433,6 +435,17 @@ export class CanonicalSpecV2IrCompilerService {
       mode: 'absolute',
       value: Number(((upper - lower) / Math.max(1, levelCount - 1)).toFixed(8)),
     }
+  }
+
+  private normalizedLevelSetShapeTokens(intent: CanonicalOrderProgramIntent): string[] {
+    return [
+      typeof intent.levelSet.gridIntervals === 'number' && Number.isFinite(intent.levelSet.gridIntervals)
+        ? `intervals_${this.normalizeNumberToken(intent.levelSet.gridIntervals)}`
+        : null,
+      typeof intent.levelSet.absoluteSpacing === 'number' && Number.isFinite(intent.levelSet.absoluteSpacing)
+        ? `absolute_${this.normalizeNumberToken(intent.levelSet.absoluteSpacing)}`
+        : null,
+    ].filter((token): token is string => token !== null)
   }
 
   private resolveCenteredOrderProgramSpacingPct(

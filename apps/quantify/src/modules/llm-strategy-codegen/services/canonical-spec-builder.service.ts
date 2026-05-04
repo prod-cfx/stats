@@ -693,7 +693,9 @@ export class CanonicalSpecBuilderService {
     capability: SemanticCapability,
   ): CanonicalOrderProgramIntent['levelSet'] | null {
     const spacingMode = this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic'
+    const gridIntervals = this.readShapeNumber(capability.shape, 'gridIntervals')
     const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+    const absoluteSpacing = this.readShapeNumber(capability.shape, 'absoluteSpacing')
     const spacingPct = this.readShapeNumber(capability.shape, 'spacingPct')
     const mode = this.readShapeString(capability.shape, 'mode')
 
@@ -708,7 +710,9 @@ export class CanonicalSpecBuilderService {
         centerTiming: this.readShapeString(capability.shape, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
         centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
         halfRangePct,
+        ...(gridIntervals !== null ? { gridIntervals } : {}),
         ...(gridCount !== null ? { gridCount } : {}),
+        ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
         ...(spacingPct !== null ? { spacingPct } : {}),
         spacingMode,
       }
@@ -723,7 +727,9 @@ export class CanonicalSpecBuilderService {
     return {
       lower,
       upper,
+      ...(gridIntervals !== null ? { gridIntervals } : {}),
       ...(gridCount !== null ? { gridCount } : {}),
+      ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
       ...(spacingPct !== null ? { spacingPct } : {}),
       spacingMode,
     }

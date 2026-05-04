@@ -438,7 +438,9 @@ describe('canonicalSpecBuilderService', () => {
       levelSet: {
         lower: 60000,
         upper: 80000,
+        gridIntervals: 10,
         gridCount: 11,
+        absoluteSpacing: 2000,
         spacingMode: 'arithmetic',
       },
       budget: {
@@ -576,6 +578,7 @@ describe('canonicalSpecBuilderService', () => {
         centerTiming: 'deployment',
         centerSource: 'last_price',
         halfRangePct: 0.4,
+        gridIntervals: 10,
         gridCount: 11,
         spacingMode: 'arithmetic',
       },

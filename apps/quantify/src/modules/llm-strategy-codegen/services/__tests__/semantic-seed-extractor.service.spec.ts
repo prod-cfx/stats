@@ -1633,7 +1633,8 @@ describe('SemanticSeedExtractorService', () => {
                 shape: expect.objectContaining({
                   mode: 'centered_percent_range',
                   halfRangePct: 0.4,
-                  gridCount: 10,
+                  gridIntervals: 10,
+                  gridCount: 11,
                 }),
               }),
             ]),

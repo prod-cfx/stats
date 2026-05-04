@@ -1077,6 +1077,7 @@ export class SemanticSeedExtractorService {
               centerTiming: centeredRange.centerTiming,
               centerSource: centeredRange.centerSource,
               halfRangePct: centeredRange.halfRangePct,
+              ...(centeredRange.gridIntervals !== null ? { gridIntervals: centeredRange.gridIntervals } : {}),
               gridCount: centeredRange.gridCount,
               spacingMode: 'arithmetic',
             },
@@ -1205,7 +1206,8 @@ export class SemanticSeedExtractorService {
 
   private extractGridLevelCount(segment: string): number | null {
     return this.extractPositiveInteger(segment, [
-      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})\s*(?:个|格)?/u,
+      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})\s*个/u,
+      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})(?!\s*格)/u,
       /(\d{1,4})\s*个\s*网格/u,
     ])
   }
@@ -1213,6 +1215,7 @@ export class SemanticSeedExtractorService {
   private extractGridIntervals(segment: string): number | null {
     return this.extractPositiveInteger(segment, [
       /共\s*(\d{1,4})\s*格/u,
+      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})\s*格/u,
       /拆成\s*(\d{1,4})\s*份/u,
       /分成\s*(\d{1,4})\s*(?:格|份)/u,
     ])
@@ -1265,6 +1268,7 @@ export class SemanticSeedExtractorService {
     centerTiming: 'deployment' | 'runtime'
     centerSource: 'last_trade' | 'last_price' | 'mark_price'
     halfRangePct: number
+    gridIntervals: number | null
     gridCount: number
   } | null {
     if (!/(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark).{0,16}(?:中心|为中心)|(?:中心|为中心).{0,16}(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark)/iu.test(segment)) {
@@ -1276,11 +1280,9 @@ export class SemanticSeedExtractorService {
       /上下\s*各\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /上(?:下)?\s*各\s*(\d+(?:\.\d+)?)\s*%/u,
     ])
-    const gridCount = this.extractNumber(segment, [
-      /共\s*(\d{1,4})\s*格/u,
-      /网格(?:数量|数)?\s*(\d{1,4})\s*格?/u,
-      /(\d{1,4})\s*格/u,
-    ])
+    const gridIntervals = this.extractGridIntervals(segment)
+    const explicitGridCount = this.extractGridLevelCount(segment)
+    const gridCount = gridIntervals !== null ? gridIntervals + 1 : explicitGridCount
     if (halfRangePct === null || halfRangePct <= 0 || gridCount === null || gridCount <= 0) {
       return null
     }
@@ -1291,6 +1293,7 @@ export class SemanticSeedExtractorService {
         ? 'last_trade'
         : (/标记价|mark/iu.test(segment) ? 'mark_price' : 'last_price'),
       halfRangePct,
+      gridIntervals,
       gridCount,
     }
   }

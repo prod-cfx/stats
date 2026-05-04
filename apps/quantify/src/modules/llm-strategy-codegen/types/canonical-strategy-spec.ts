@@ -56,7 +56,9 @@ export interface CanonicalOrderProgramIntent {
     centerTiming?: 'deployment' | 'runtime'
     centerSource?: string
     halfRangePct?: number
+    gridIntervals?: number
     gridCount?: number
+    absoluteSpacing?: number
     spacingPct?: number
     spacingMode: 'arithmetic' | 'geometric'
   }
