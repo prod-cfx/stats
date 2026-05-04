@@ -20,7 +20,7 @@ export class OrderNormalizerService {
       amount: Number(normalizedAmount),
       price: normalizedPrice === undefined ? undefined : Number(normalizedPrice),
       timeInForce: intent.timeInForce,
-      reduceOnly: intent.reduceOnly,
+      reduceOnly: this.reduceOnly(intent),
       tdMode: intent.tdMode,
       positionSide: positionSide?.positionSide,
       posSide: positionSide?.posSide,
@@ -52,6 +52,11 @@ export class OrderNormalizerService {
       return { positionSide: 'SHORT', posSide: 'short' }
     }
     return undefined
+  }
+
+  private reduceOnly(intent: OrderIntent): boolean | undefined {
+    if (intent.role === 'close_long' || intent.role === 'close_short') return true
+    return intent.reduceOnly
   }
 
   private validateConstraints(intent: OrderIntent, constraints: TradingExecutionConstraints): void {

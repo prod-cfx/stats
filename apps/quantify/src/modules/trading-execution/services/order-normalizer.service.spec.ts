@@ -82,6 +82,38 @@ describe('OrderNormalizerService', () => {
     }))
   })
 
+  it('forces reduce-only and long position side for close-long intent', () => {
+    const service = new OrderNormalizerService()
+
+    const normalized = service.normalize({ ...intent, role: 'close_long', side: 'sell', reduceOnly: undefined }, constraints, 'gcloselong')
+
+    expect(normalized.request).toEqual(expect.objectContaining({
+      reduceOnly: true,
+      positionSide: 'LONG',
+      posSide: 'long',
+    }))
+  })
+
+  it('forces reduce-only and short position side for close-short intent', () => {
+    const service = new OrderNormalizerService()
+
+    const normalized = service.normalize({ ...intent, role: 'close_short', side: 'buy', reduceOnly: undefined }, constraints, 'gcloseshort')
+
+    expect(normalized.request).toEqual(expect.objectContaining({
+      reduceOnly: true,
+      positionSide: 'SHORT',
+      posSide: 'short',
+    }))
+  })
+
+  it('does not force reduce-only for open-long intent', () => {
+    const service = new OrderNormalizerService()
+
+    const normalized = service.normalize({ ...intent, reduceOnly: undefined }, constraints, 'gopenlong')
+
+    expect(normalized.request.reduceOnly).toBeUndefined()
+  })
+
   it('rejects perp constraints without contract value', () => {
     const service = new OrderNormalizerService()
 
