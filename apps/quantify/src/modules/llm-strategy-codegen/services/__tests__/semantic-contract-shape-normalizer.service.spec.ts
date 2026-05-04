@@ -5,6 +5,7 @@ describe('SemanticContractShapeNormalizerService', () => {
 
   it.each([
     [{ lower: 78800, upper: 81400, gridCount: 10 }, { gridCount: 10 }],
+    [{ lower: 78800, upper: 81400, gridCount: 11, absoluteSpacing: 260 }, { gridCount: 11, absoluteSpacing: 260 }],
     [{ lower: 78800, upper: 81400, absoluteSpacing: 260 }, { absoluteSpacing: 260 }],
     [{ lower: 78800, upper: 81400, spacingPct: 0.33 }, { spacingPct: 0.33 }],
   ])('normalizes fixed-range level-set shape %j', (input, expectedDensity) => {
@@ -47,7 +48,7 @@ describe('SemanticContractShapeNormalizerService', () => {
       lower: 78800,
       upper: 81400,
       gridCount: 10,
-      absoluteSpacing: 300,
+      absoluteSpacing: 260,
     })
 
     expect(result.status).toBe('conflict')

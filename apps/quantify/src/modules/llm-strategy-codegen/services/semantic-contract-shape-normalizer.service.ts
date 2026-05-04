@@ -148,11 +148,11 @@ function withFiniteDensityFields(
 function hasSpacingConflict(shape: SemanticCapabilityShape, lower: number, upper: number): boolean {
   const gridCount = readShapeNumber(shape, 'gridCount')
   const absoluteSpacing = readShapeNumber(shape, 'absoluteSpacing')
-  if (gridCount === null || absoluteSpacing === null || gridCount <= 0) {
+  if (gridCount === null || absoluteSpacing === null || gridCount <= 1) {
     return false
   }
 
-  return Math.abs((upper - lower) / gridCount - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
+  return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
 }
 
 function hasPositiveDensity(shape: SemanticCapabilityShape): boolean {
