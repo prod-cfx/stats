@@ -186,6 +186,15 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.executionPolicy.timeInForce).toBe('gtc')
     expect(result.ir.portfolio.maxConcurrentPositions).toBeGreaterThan(1)
     expect(result.ir.portfolio.allowPyramiding).toBe(true)
+
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const exprPosition = new Map(ast.topology.exprOrder.map((exprId, index) => [exprId, index]))
+    for (const expr of ast.exprPool) {
+      const currentPosition = exprPosition.get(expr.id)
+      for (const dep of expr.deps ?? []) {
+        expect(exprPosition.get(dep)).toBeLessThan(currentPosition)
+      }
+    }
   })
 
   it('keeps contract order programs exclusive from legacy grid decision rules', () => {
