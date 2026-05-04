@@ -288,6 +288,72 @@ describe('GridOrderSyncService', () => {
     ])
   })
 
+  it('does not apply the OKX submission limit to other exchanges', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      exchangeId: 'binance',
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        price: { toString: () => '94' },
+      }),
+      createOrder({
+        id: 'planned-order-2',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        price: { toString: () => '95' },
+      }),
+      createOrder({
+        id: 'planned-order-3',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        price: { toString: () => '96' },
+      }),
+      createOrder({
+        id: 'planned-order-4',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        price: { toString: () => '97' },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'binance',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTCUSDT',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.00000001',
+      minQuantity: '0.00000001',
+      contractValue: null,
+      clientOrderId: { maxLength: 36, pattern: '^[A-Za-z0-9_-]+$' },
+      raw: {},
+    })
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.getInstrumentConstraints).toHaveBeenCalledTimes(1)
+    expect(repository.markOrderSubmitting).toHaveBeenCalledTimes(4)
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(4)
+    expect(repository.markOrderSubmitting.mock.calls.map(call => call[0].id)).toEqual([
+      'planned-order-1',
+      'planned-order-2',
+      'planned-order-3',
+      'planned-order-4',
+    ])
+  })
+
   it('marks reconcile required when planned order constraints cannot be loaded', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([
@@ -942,6 +1008,59 @@ describe('GridOrderSyncService', () => {
     }))
     expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
     expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps non-OKX rate-limit-like submit failures on the reconcile path', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      exchangeId: 'binance',
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'binance',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTCUSDT',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.00000001',
+      minQuantity: '0.00000001',
+      contractValue: null,
+      clientOrderId: { maxLength: 36, pattern: '^[A-Za-z0-9_-]+$' },
+      raw: {},
+    })
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(Object.assign(new Error('Too Many Requests'), { code: 'RATE_LIMIT' }))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(repository.markOrderPlanned).not.toHaveBeenCalled()
+    expect(repository.appendEvent).not.toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'runtime_rate_limited',
+    }))
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_submit_failed', expect.objectContaining({
+      orderId: 'planned-order-1',
+      clientOrderId: submittedClientOrderId,
+      exchangeId: 'binance',
+      status: 'submit_failed',
+      reason: 'Too Many Requests',
+      error: expect.objectContaining({
+        message: 'Too Many Requests',
+        code: 'RATE_LIMIT',
+      }),
+    }))
   })
 
   it('cancels a just-created exchange order when local open CAS loses to stop', async () => {

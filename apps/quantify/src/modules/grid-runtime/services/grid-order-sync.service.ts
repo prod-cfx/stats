@@ -80,7 +80,6 @@ const LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER = new Set<string>([
   'CANCELING',
 ])
 
-const DEFAULT_GRID_ORDER_SUBMISSIONS_PER_SYNC = 3
 const GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE: Partial<Record<ExchangeId, number>> = {
   okx: 3,
 }
@@ -213,13 +212,13 @@ export class GridOrderSyncService {
 
     let submittedOrderCount = 0
     for (const order of plannedOrders) {
-      if (submittedOrderCount >= submissionLimit) break
+      if (submissionLimit != null && submittedOrderCount >= submissionLimit) break
 
       const intent = this.buildOrderIntent(instance, exchangeId, marketType, order)
       const prepared = await this.tradingExecution.prepareIntent(intent, { constraints })
       if (prepared.status !== 'prepared') {
         const error = 'error' in prepared ? prepared.error : null
-        if (this.isRetryableRateLimitFailure(error, prepared.reason)) {
+        if (this.isRetryableRateLimitFailure(exchangeId, error, prepared.reason)) {
           await this.handleRetryableRateLimit({
             instance,
             order,
@@ -283,7 +282,7 @@ export class GridOrderSyncService {
 
       if (submitted.status !== 'submitted') {
         const error = 'error' in submitted ? submitted.error : null
-        if (this.isRetryableRateLimitFailure(error, submitted.reason)) {
+        if (this.isRetryableRateLimitFailure(exchangeId, error, submitted.reason)) {
           await this.handleRetryableRateLimit({
             instance,
             order,
@@ -348,8 +347,8 @@ export class GridOrderSyncService {
     return orders.filter(order => order.status === 'PLANNED')
   }
 
-  private resolveSubmissionLimit(exchangeId: ExchangeId): number {
-    return GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE[exchangeId] ?? DEFAULT_GRID_ORDER_SUBMISSIONS_PER_SYNC
+  private resolveSubmissionLimit(exchangeId: ExchangeId): number | null {
+    return GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE[exchangeId] ?? null
   }
 
   private async loadSubmissionConstraints(
@@ -367,7 +366,7 @@ export class GridOrderSyncService {
       )
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      if (this.isRetryableRateLimitFailure(error, reason)) {
+      if (this.isRetryableRateLimitFailure(exchangeId, error, reason)) {
         await this.handleRetryableRateLimit({
           instance,
           exchangeId,
@@ -388,7 +387,9 @@ export class GridOrderSyncService {
     }
   }
 
-  private isRetryableRateLimitFailure(error: unknown, reason?: string): boolean {
+  private isRetryableRateLimitFailure(exchangeId: ExchangeId, error: unknown, reason?: string): boolean {
+    if (exchangeId !== 'okx') return false
+
     const candidates = [
       reason,
       error instanceof Error ? error.message : null,
