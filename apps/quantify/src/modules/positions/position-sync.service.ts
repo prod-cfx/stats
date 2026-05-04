@@ -75,6 +75,7 @@ export class PositionSyncService {
       // 2. 获取本地记录的开放仓位
       const allLocalPositions = await this.positionsRepository.findOpenByAccount(accountId)
       const localPositions = allLocalPositions.filter(pos => this.isPositionInSyncScope(pos, exchangeId, marketType))
+      const matchableLocalPositions = allLocalPositions.filter(pos => this.isPositionMatchScope(pos, exchangeId, marketType))
 
       this.logger.log(
         `Syncing positions for user ${userId}, account ${accountId}: ` +
@@ -90,7 +91,7 @@ export class PositionSyncService {
 
       // 4. 构建本地仓位映射
       const localPositionMap = new Map<string, typeof localPositions[0]>()
-      for (const pos of localPositions) {
+      for (const pos of matchableLocalPositions) {
         const key = this.getPositionKey(pos.symbol, pos.positionSide)
         localPositionMap.set(key, pos)
       }
@@ -149,7 +150,13 @@ export class PositionSyncService {
       }
 
       // 5.2 处理本地存在但交易所不存在的仓位（应该关闭）
-      for (const [key, localPos] of localPositionMap.entries()) {
+      const closePositionMap = new Map<string, typeof localPositions[0]>()
+      for (const pos of localPositions) {
+        const key = this.getPositionKey(pos.symbol, pos.positionSide)
+        closePositionMap.set(key, pos)
+      }
+
+      for (const [key, localPos] of closePositionMap.entries()) {
         if (!exchangePositionMap.has(key)) {
           if (this.isSpotPosition(localPos)) {
             this.logger.warn(
@@ -348,7 +355,7 @@ export class PositionSyncService {
   }
 
   private isPositionInSyncScope(
-    localPos: { exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+    localPos: { symbol?: string | null; exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
     syncExchangeId: ExchangeId,
     syncMarketType: MarketType,
   ): boolean {
@@ -366,7 +373,8 @@ export class PositionSyncService {
         return metadataMarket === `${syncExchangeId}:${syncMarketType}`
       }
 
-      return true
+      const symbolMarketType = this.inferMarketTypeFromSymbol(localPos.symbol)
+      return symbolMarketType === syncMarketType
     }
 
     const metadataMarket = this.readMetadataMarket(localPos.metadata)
@@ -375,6 +383,37 @@ export class PositionSyncService {
     }
 
     return false
+  }
+
+  private isPositionMatchScope(
+    localPos: { symbol?: string | null; exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+    syncExchangeId: ExchangeId,
+    syncMarketType: MarketType,
+  ): boolean {
+    if (this.isPositionInSyncScope(localPos, syncExchangeId, syncMarketType)) {
+      return true
+    }
+    if (localPos.exchangeId && localPos.exchangeId !== syncExchangeId) {
+      return false
+    }
+
+    const metadataMarket = this.readMetadataMarket(localPos.metadata)
+    if (metadataMarket) {
+      return metadataMarket === `${syncExchangeId}:${syncMarketType}`
+    }
+    if (localPos.marketType) {
+      return localPos.marketType === syncMarketType
+    }
+
+    return this.inferMarketTypeFromSymbol(localPos.symbol) === syncMarketType
+  }
+
+  private inferMarketTypeFromSymbol(symbol?: string | null): MarketType | undefined {
+    const normalized = String(symbol ?? '').toUpperCase()
+    if (normalized.includes(':PERP') || normalized.endsWith('-SWAP')) {
+      return 'perp'
+    }
+    return undefined
   }
 
   private isSpotPosition(
