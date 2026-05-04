@@ -14,6 +14,8 @@ export class OrderAdmissionGateService {
     if (market) return market
     const direction = this.validateRoleDirection(intent)
     if (direction) return direction
+    const reduceOnly = this.validateReduceOnlyShape(intent)
+    if (reduceOnly) return reduceOnly
     return { ok: true }
   }
 
@@ -82,6 +84,19 @@ export class OrderAdmissionGateService {
       && intent.marketType !== 'perp'
     ) {
       return { ok: false, status: 'rejected', reason: 'perp_role_requires_perp_market' }
+    }
+    return null
+  }
+
+  private validateReduceOnlyShape(intent: OrderIntent): AdmissionResult | null {
+    if (intent.role === 'open_long' && intent.reduceOnly === true) {
+      return { ok: false, status: 'rejected', reason: 'open_long_cannot_be_reduce_only' }
+    }
+    if (intent.role === 'open_short' && intent.reduceOnly === true) {
+      return { ok: false, status: 'rejected', reason: 'open_short_cannot_be_reduce_only' }
+    }
+    if (intent.marketType === 'perp' && intent.reduceOnly === true && !intent.role) {
+      return { ok: false, status: 'rejected', reason: 'reduce_only_requires_close_role' }
     }
     return null
   }

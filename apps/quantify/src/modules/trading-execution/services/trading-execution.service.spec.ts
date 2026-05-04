@@ -241,6 +241,38 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('rejects open-long reduce-only before fetching constraints', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const reduceOnlyIntent = { ...intent, reduceOnly: true } satisfies OrderIntent
+    const result = await service.executeIntent(reduceOnlyIntent)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      intent: reduceOnlyIntent,
+      reason: 'open_long_cannot_be_reduce_only',
+    })
+    expect(tradingService.getInstrumentConstraints).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
+  it('rejects roleless perp reduce-only before fetching constraints', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const reduceOnlyIntent = { ...intent, role: null, side: 'sell', reduceOnly: true } satisfies OrderIntent
+    const result = await service.executeIntent(reduceOnlyIntent)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      intent: reduceOnlyIntent,
+      reason: 'reduce_only_requires_close_role',
+    })
+    expect(tradingService.getInstrumentConstraints).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('converts non-Error thrown values to string reasons', async () => {
     const tradingService = createTradingServiceMock()
     tradingService.getInstrumentConstraints.mockRejectedValue('constraints unavailable')

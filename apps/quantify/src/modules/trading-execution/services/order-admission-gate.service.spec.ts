@@ -102,17 +102,35 @@ describe('OrderAdmissionGateService', () => {
     expect(result).toEqual({ ok: false, status: 'rejected', reason: 'perp_role_requires_perp_market' })
   })
 
+  it('rejects open-long intent with reduce-only', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'open_long', side: 'buy', reduceOnly: true }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'open_long_cannot_be_reduce_only' })
+  })
+
+  it('rejects open-short intent with reduce-only', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'open_short', side: 'sell', reduceOnly: true }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'open_short_cannot_be_reduce_only' })
+  })
+
+  it('rejects roleless reduce-only perp intent', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: null, side: 'sell', reduceOnly: true }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'reduce_only_requires_close_role' })
+  })
+
   it('allows an open intent without positions', () => {
     const service = new OrderAdmissionGateService()
     const result = service.evaluate({ ...baseIntent, role: 'open_long', reduceOnly: false }, [])
     expect(result).toEqual({ ok: true })
   })
 
-  it('infers a reduce-only sell intent requires a matching long position', () => {
+  it('does not reject roleless reduce-only spot intent', () => {
     const service = new OrderAdmissionGateService()
-    const result = service.evaluate({ ...baseIntent, role: null, side: 'sell', reduceOnly: true }, [{
-      symbol: 'BTC-USDT-SWAP',
-      marketType: 'perp',
+    const result = service.evaluate({ ...baseIntent, role: null, side: 'sell', marketType: 'spot', symbol: 'BTC/USDT', reduceOnly: true }, [{
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
       side: 'long',
       size: 0.1,
       entryPrice: 79000,
