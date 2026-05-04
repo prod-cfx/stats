@@ -5,6 +5,7 @@ import type {
   BacktestReport,
   BacktestRunInput,
   Bar,
+  Fill,
   SignalIntent,
   StrategyContext,
 } from '../types/backtesting.types'
@@ -55,6 +56,28 @@ interface PositionRuntimeState {
   barsHeld: number
   highestPriceSinceEntry: number
   lowestPriceSinceEntry: number
+}
+
+interface CompiledWorkingOrderProgram {
+  id: string
+  sourceRef: string
+  payload?: Record<string, unknown>
+  levels?: readonly number[]
+}
+
+interface CompiledOrderProgramRuntimeOrder {
+  levelIndex: number
+  price: number
+  side: 'BUY' | 'SELL'
+  qty: number
+  role: 'spot_buy' | 'spot_sell' | 'perp_buy' | 'perp_sell'
+}
+
+interface CompiledOrderProgramRuntimeState {
+  signature: string
+  levels: readonly number[]
+  recycleOnFill: boolean
+  orders: CompiledOrderProgramRuntimeOrder[]
 }
 
 function buildRuntimeSymbolSet(input: BacktestRunInput): Set<string> {
@@ -126,6 +149,7 @@ export class BacktestRunnerService {
     const pendingOrdersBySymbol = new Map<string, PendingOrder>()
     const compiledDecisionStateBySymbol = new Map<string, CompiledDecisionRuntimeState>()
     const positionRuntimeStateBySymbol = new Map<string, PositionRuntimeState>()
+    const orderProgramStatesBySymbol = new Map<string, Map<string, CompiledOrderProgramRuntimeState>>()
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
     const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
 
@@ -190,18 +214,30 @@ export class BacktestRunnerService {
       const intent = await input.strategy.fn({
         ...strategyContext,
       })
+      this.applyCompiledOrderProgramFills({
+        intent,
+        input,
+        bar,
+        ledger,
+        reporter,
+        programStatesBySymbol: orderProgramStatesBySymbol,
+        equity: snapshot.equity,
+      })
+      ledger.markToMarket({ [bar.symbol]: bar.close })
+      const postOrderProgramSnapshot = ledger.snapshot()
+      const postOrderProgramPosition = ledger.getPosition(bar.symbol)
 
       const normalized = this.normalizeIntent(intent, {
-        currentQty: position.qty,
-        equity: snapshot.equity,
+        currentQty: postOrderProgramPosition.qty,
+        equity: postOrderProgramSnapshot.equity,
         markPrice: this.getMarkPrice(bar, input.execution.priceSource),
       }, strictSnapshotPath)
       const adjustedDelta = this.applyLeverageCap({
         leverage: this.resolveEffectiveLeverage(input),
         price: this.getMarkPrice(bar, input.execution.priceSource),
-        currentQty: position.qty,
+        currentQty: postOrderProgramPosition.qty,
         requestedDelta: normalized,
-        equity: snapshot.equity,
+        equity: postOrderProgramSnapshot.equity,
       })
       const strategyReason = this.extractIntentReason(intent)
       const strategyOrder: PendingOrder = {
@@ -214,13 +250,13 @@ export class BacktestRunnerService {
         symbol: bar.symbol,
         bar,
         historyBars: this.getHistoryBars(historyBarsBySymbolTimeframe, bar.symbol, input.baseTimeframe),
-        position,
+        position: postOrderProgramPosition,
         riskRules: input.strategy.riskRules,
       })
 
       const riskOrder: PendingOrder | undefined = riskDecision
         ? {
-          deltaQty: riskDecision.targetQty - position.qty,
+          deltaQty: riskDecision.targetQty - postOrderProgramPosition.qty,
           reason: riskDecision.reason,
           reasonSource: riskDecision.source,
         }
@@ -288,20 +324,30 @@ export class BacktestRunnerService {
     reason?: string
     reasonSource: BacktestReasonSource
     forcedPriceSource?: BacktestRunInput['execution']['priceSource']
+    limitPrice?: number
   }) {
     if (input.deltaQty === 0) return
 
     const side: 'BUY' | 'SELL' = input.deltaQty > 0 ? 'BUY' : 'SELL'
-    const fill = this.executionModel.fill(
-      input.bar,
-      side,
-      Math.abs(input.deltaQty),
-      {
-        ...input.input.execution,
-        priceSource: input.forcedPriceSource ?? input.input.execution.priceSource,
-      },
-      input.reason,
-    )
+    const fill = typeof input.limitPrice === 'number'
+      ? this.buildLimitFill({
+          bar: input.bar,
+          side,
+          qty: Math.abs(input.deltaQty),
+          price: input.limitPrice,
+          execution: input.input.execution,
+          reason: input.reason,
+        })
+      : this.executionModel.fill(
+          input.bar,
+          side,
+          Math.abs(input.deltaQty),
+          {
+            ...input.input.execution,
+            priceSource: input.forcedPriceSource ?? input.input.execution.priceSource,
+          },
+          input.reason,
+        )
     const events = input.ledger.applyFill(fill)
 
     events.forEach((event) => {
@@ -331,6 +377,278 @@ export class BacktestRunnerService {
         reasonSource: input.reasonSource,
       })
     })
+  }
+
+  private applyCompiledOrderProgramFills(input: {
+    intent: SignalIntent
+    input: BacktestRunInput
+    bar: Bar
+    ledger: ReturnType<PortfolioLedgerServiceFactory['create']>
+    reporter: ReturnType<BacktestReporterService['create']>
+    programStatesBySymbol: Map<string, Map<string, CompiledOrderProgramRuntimeState>>
+    equity: number
+  }): void {
+    const orderState = this.extractCompiledOrderState(input.intent)
+    if (!orderState) return
+
+    const statesByProgram = this.syncCompiledOrderProgramStates({
+      bar: input.bar,
+      orderState,
+      programStatesBySymbol: input.programStatesBySymbol,
+      equity: input.equity,
+    })
+    if (!statesByProgram) return
+
+    for (const [programId, state] of statesByProgram.entries()) {
+      const fills = state.orders.filter(order => this.isLimitTouched(input.bar, order))
+      for (const order of fills) {
+        this.applyDeltaOrder({
+          input: input.input,
+          bar: input.bar,
+          ledger: input.ledger,
+          reporter: input.reporter,
+          deltaQty: order.side === 'BUY' ? order.qty : -order.qty,
+          limitPrice: order.price,
+          reason: `order_program:${programId}:${order.role}`,
+          reasonSource: 'strategy',
+        })
+        this.recycleCompiledOrderProgramOrder(state, order)
+      }
+    }
+  }
+
+  private extractCompiledOrderState(intent: SignalIntent): {
+    workingOrders: CompiledWorkingOrderProgram[]
+    activeProgramIds: string[]
+    cancelledProgramIds: string[]
+  } | null {
+    if (typeof intent !== 'object' || intent === null) return null
+    const meta = (intent as { meta?: unknown }).meta
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null
+    const orderState = (meta as Record<string, unknown>).orderState
+    if (!orderState || typeof orderState !== 'object' || Array.isArray(orderState)) return null
+    const record = orderState as Record<string, unknown>
+    const workingOrders = Array.isArray(record.workingOrders)
+      ? record.workingOrders.filter(this.isCompiledWorkingOrderProgram)
+      : []
+
+    return {
+      workingOrders,
+      activeProgramIds: Array.isArray(record.activeProgramIds)
+        ? record.activeProgramIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      cancelledProgramIds: Array.isArray(record.cancelledProgramIds)
+        ? record.cancelledProgramIds.filter((id): id is string => typeof id === 'string')
+        : [],
+    }
+  }
+
+  private isCompiledWorkingOrderProgram(value: unknown): value is CompiledWorkingOrderProgram {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const record = value as Record<string, unknown>
+    return typeof record.id === 'string' && typeof record.sourceRef === 'string'
+  }
+
+  private syncCompiledOrderProgramStates(input: {
+    bar: Bar
+    orderState: {
+      workingOrders: CompiledWorkingOrderProgram[]
+      activeProgramIds: string[]
+      cancelledProgramIds: string[]
+    }
+    programStatesBySymbol: Map<string, Map<string, CompiledOrderProgramRuntimeState>>
+    equity: number
+  }): Map<string, CompiledOrderProgramRuntimeState> | null {
+    let statesByProgram = input.programStatesBySymbol.get(input.bar.symbol)
+    if (!statesByProgram) {
+      statesByProgram = new Map()
+      input.programStatesBySymbol.set(input.bar.symbol, statesByProgram)
+    }
+
+    input.orderState.cancelledProgramIds.forEach(programId => statesByProgram.delete(programId))
+    const workingProgramIds = new Set(input.orderState.workingOrders.map(program => program.id))
+    for (const programId of statesByProgram.keys()) {
+      if (!workingProgramIds.has(programId) && input.orderState.activeProgramIds.includes(programId) === false) {
+        statesByProgram.delete(programId)
+      }
+    }
+
+    input.orderState.workingOrders.forEach((program) => {
+      const signature = this.buildOrderProgramSignature(program)
+      if (statesByProgram.get(program.id)?.signature === signature) return
+      statesByProgram.set(program.id, {
+        signature,
+        levels: this.normalizeOrderProgramLevels(program),
+        recycleOnFill: program.payload?.recycleOnFill === true,
+        orders: this.buildInitialCompiledOrderProgramOrders({
+          program,
+          currentPrice: input.bar.close,
+          equity: input.equity,
+        }),
+      })
+    })
+
+    return statesByProgram
+  }
+
+  private buildOrderProgramSignature(program: CompiledWorkingOrderProgram): string {
+    const levels = (program.levels ?? []).map(level => Number(level.toFixed(8))).join(',')
+    const payload = program.payload ?? {}
+    return JSON.stringify({
+      sourceRef: program.sourceRef,
+      levels,
+      quantity: payload.quantity,
+      sidePolicy: payload.sidePolicy,
+      recycleOnFill: payload.recycleOnFill,
+      pairingPolicy: payload.pairingPolicy,
+    })
+  }
+
+  private buildInitialCompiledOrderProgramOrders(input: {
+    program: CompiledWorkingOrderProgram
+    currentPrice: number
+    equity: number
+  }): CompiledOrderProgramRuntimeOrder[] {
+    const levels = this.normalizeOrderProgramLevels(input.program)
+    const sidePolicy = this.readString(input.program.payload?.sidePolicy)
+    const orders: CompiledOrderProgramRuntimeOrder[] = []
+
+    levels.forEach((level, levelIndex) => {
+      if (sidePolicy === 'spot_grid' || sidePolicy === 'perp_long') {
+        if (level < input.currentPrice) {
+          orders.push(this.buildRuntimeLimitOrder(input, levelIndex, level, 'BUY', 'spot_buy'))
+        }
+        return
+      }
+      if (sidePolicy === 'perp_short') {
+        if (level > input.currentPrice) {
+          orders.push(this.buildRuntimeLimitOrder(input, levelIndex, level, 'SELL', 'perp_sell'))
+        }
+        return
+      }
+      if (sidePolicy === 'perp_neutral') {
+        if (level < input.currentPrice) {
+          orders.push(this.buildRuntimeLimitOrder(input, levelIndex, level, 'BUY', 'perp_buy'))
+        }
+        else if (level > input.currentPrice) {
+          orders.push(this.buildRuntimeLimitOrder(input, levelIndex, level, 'SELL', 'perp_sell'))
+        }
+      }
+    })
+
+    return orders
+  }
+
+  private buildRuntimeLimitOrder(
+    input: {
+      program: CompiledWorkingOrderProgram
+      currentPrice: number
+      equity: number
+    },
+    levelIndex: number,
+    price: number,
+    side: 'BUY' | 'SELL',
+    role: CompiledOrderProgramRuntimeOrder['role'],
+  ): CompiledOrderProgramRuntimeOrder {
+    return {
+      levelIndex,
+      price,
+      side,
+      qty: this.resolveCompiledOrderProgramQty(input.program.payload?.quantity, price, input.equity),
+      role,
+    }
+  }
+
+  private resolveCompiledOrderProgramQty(quantity: unknown, price: number, equity: number): number {
+    if (!quantity || typeof quantity !== 'object' || Array.isArray(quantity) || price <= 0) return 0
+    const record = quantity as Record<string, unknown>
+    const value = typeof record.value === 'number' && Number.isFinite(record.value) ? record.value : 0
+    if (value <= 0) return 0
+
+    switch (record.mode) {
+      case 'fixed_quote':
+        return value / price
+      case 'fixed_base':
+        return value
+      case 'pct_equity':
+        return (Math.max(0, equity) * value / 100) / price
+      default:
+        return 0
+    }
+  }
+
+  private recycleCompiledOrderProgramOrder(
+    state: CompiledOrderProgramRuntimeState,
+    filledOrder: CompiledOrderProgramRuntimeOrder,
+  ): void {
+    state.orders = state.orders.filter(order =>
+      !(order.levelIndex === filledOrder.levelIndex && order.side === filledOrder.side),
+    )
+    if (!state.recycleOnFill) return
+
+    const nextIndex = filledOrder.side === 'BUY'
+      ? filledOrder.levelIndex + 1
+      : filledOrder.levelIndex - 1
+    const nextPrice = this.findRuntimeOrderPrice(state, nextIndex)
+    if (typeof nextPrice !== 'number') return
+
+    state.orders.push({
+      levelIndex: nextIndex,
+      price: nextPrice,
+      side: filledOrder.side === 'BUY' ? 'SELL' : 'BUY',
+      qty: filledOrder.qty,
+      role: filledOrder.side === 'BUY' ? 'spot_sell' : 'spot_buy',
+    })
+  }
+
+  private findRuntimeOrderPrice(
+    state: CompiledOrderProgramRuntimeState,
+    levelIndex: number,
+  ): number | null {
+    return state.levels[levelIndex] ?? null
+  }
+
+  private normalizeOrderProgramLevels(program: CompiledWorkingOrderProgram): number[] {
+    return (program.levels ?? [])
+      .filter((level): level is number => Number.isFinite(level) && level > 0)
+      .slice()
+      .sort((left, right) => left - right)
+  }
+
+  private isLimitTouched(bar: Bar, order: CompiledOrderProgramRuntimeOrder): boolean {
+    if (order.qty <= 0 || order.price <= 0) return false
+    return order.side === 'BUY'
+      ? bar.low <= order.price
+      : bar.high >= order.price
+  }
+
+  private buildLimitFill(input: {
+    bar: Bar
+    side: 'BUY' | 'SELL'
+    qty: number
+    price: number
+    execution: BacktestRunInput['execution']
+    reason?: string
+  }): Fill {
+    const slip = input.execution.slippageBps / 10000
+    const price = input.side === 'BUY'
+      ? input.price * (1 + slip)
+      : input.price * (1 - slip)
+    const notional = Math.abs(price * input.qty)
+    return {
+      symbol: input.bar.symbol,
+      ts: input.bar.closeTime,
+      side: input.side,
+      qty: input.qty,
+      price,
+      notional,
+      fee: notional * (input.execution.feeBps / 10000),
+      reason: input.reason,
+    }
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === 'string' && value.length > 0 ? value : null
   }
 
   private isStrictSnapshotPath(strategy: BacktestRunInput['strategy']): boolean {

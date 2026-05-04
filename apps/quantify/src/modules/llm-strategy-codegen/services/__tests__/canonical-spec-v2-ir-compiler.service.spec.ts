@@ -371,6 +371,34 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(Math.min(...(evaluatedLevels as { levels: number[] }).levels)).toBeLessThan(100)
     expect(Math.max(...(evaluatedLevels as { levels: number[] }).levels)).toBeGreaterThan(100)
 
+    const activeOrderState = runOrderPrograms(
+      {
+        bars: [{ open: 100, high: 101, low: 99, close: 100 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99 },
+      } as any,
+      ast.orderPrograms as any,
+      exprValues,
+      {
+        strategyHalt: false,
+        blockNewEntry: false,
+        forceExit: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ast.topology.orderProgramOrder,
+      ast.executionModel as any,
+    )
+    expect(activeOrderState.workingOrders).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: 'LIMIT_LADDER',
+          levelSetRef: levelSetExpr?.id,
+        }),
+        levels: expect.arrayContaining([expect.any(Number)]),
+      }),
+    ])
+    expect(activeOrderState.workingOrders[0]?.levels).toHaveLength(10)
+
     const breachedExprValues = evaluateExprPool(
       {
         bars: [

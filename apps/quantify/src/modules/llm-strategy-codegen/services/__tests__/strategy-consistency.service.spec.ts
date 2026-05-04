@@ -199,6 +199,79 @@ strategy
     }))
   })
 
+  it('uses order-program exposure when checking canonical execution position mode', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'okx' as const,
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp' as const,
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [],
+      orderPrograms: [{
+        id: 'contract-order-program-grid',
+        kind: 'contract_order_program' as const,
+        mode: 'perp_neutral' as const,
+        levelSet: {
+          lower: 60000,
+          upper: 80000,
+          gridCount: 58,
+          spacingPct: 0.5,
+          spacingMode: 'arithmetic' as const,
+        },
+        budget: {
+          mode: 'per_order_pct_equity' as const,
+          value: 10,
+        },
+        orderType: 'limit' as const,
+        timeInForce: 'gtc' as const,
+        recycleOnFill: true,
+        cancelOnStop: true,
+      }],
+    }
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.execution_model',
+        status: 'passed',
+      }),
+      expect.objectContaining({
+        key: 'compiler_consistency.execution_envelope.position_mode',
+        status: 'passed',
+      }),
+    ]))
+  })
+
   it('fails when compiled execution market metadata drifts from canonical spec', () => {
     const canonicalSpec = canonicalBuilder.build({
       symbols: ['BTCUSDT'],

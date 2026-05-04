@@ -124,14 +124,23 @@ export class CanonicalStrategyAstCompilerService {
       this.orderedLevelSets(ir),
       this.orderedPredicates(ir),
     )
-    return ir.orderPrograms.map((program, index) => ({
-      id: `order_${String(index + 1).padStart(2, '0')}_${program.id}`,
-      sourceRef: program.id,
-      payload: {
-        ...program,
-        activeWhen: this.exprIdFor(program.activeWhen, exprIdIndex),
-      },
-    }))
+    return ir.orderPrograms.map((program, index) => {
+      const activeWhen = this.exprIdFor(program.activeWhen, exprIdIndex)
+      return {
+        id: `order_${String(index + 1).padStart(2, '0')}_${program.id}`,
+        sourceRef: program.id,
+        payload: program.priceSource === 'level_set'
+          ? {
+              ...program,
+              activeWhen,
+              levelSetRef: this.exprIdFor(program.levelSetRef, exprIdIndex),
+            }
+          : {
+              ...program,
+              activeWhen,
+            },
+      }
+    })
   }
 
   private buildTopology(input: {

@@ -525,8 +525,9 @@ export class CompiledPublicationGateService {
   private readCanonicalPositionMode(
     snapshot: Record<string, unknown>,
   ): 'long_only' | 'short_only' | 'long_short' | null {
+    const orderProgramMode = this.readOrderProgramPositionMode(snapshot)
     const rules = snapshot.rules
-    if (!Array.isArray(rules) || rules.length === 0) return null
+    if (!Array.isArray(rules) || rules.length === 0) return orderProgramMode
 
     const hasLongExposure = rules.some((rule) => {
       if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false
@@ -551,9 +552,49 @@ export class CompiledPublicationGateService {
       })
     })
 
+    if (orderProgramMode === 'long_short') return 'long_short'
+    if (orderProgramMode === 'long_only' && hasShortExposure) return 'long_short'
+    if (orderProgramMode === 'short_only' && hasLongExposure) return 'long_short'
     if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (orderProgramMode) return orderProgramMode
     if (hasShortExposure) return 'short_only'
     return 'long_only'
+  }
+
+  private readOrderProgramPositionMode(
+    snapshot: Record<string, unknown>,
+  ): 'long_only' | 'short_only' | 'long_short' | null {
+    const orderPrograms = snapshot.orderPrograms
+    if (!Array.isArray(orderPrograms) || orderPrograms.length === 0) return null
+
+    let hasLongExposure = false
+    let hasShortExposure = false
+
+    orderPrograms.forEach((program) => {
+      if (!program || typeof program !== 'object' || Array.isArray(program)) return
+      const record = program as Record<string, unknown>
+      const mode = typeof record.mode === 'string'
+        ? record.mode
+        : (typeof record.sidePolicy === 'string' ? record.sidePolicy : null)
+
+      if (mode === 'perp_neutral') {
+        hasLongExposure = true
+        hasShortExposure = true
+        return
+      }
+      if (mode === 'perp_short') {
+        hasShortExposure = true
+        return
+      }
+      if (mode === 'spot' || mode === 'spot_grid' || mode === 'perp_long') {
+        hasLongExposure = true
+      }
+    })
+
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    if (hasLongExposure) return 'long_only'
+    return null
   }
 
   private collectOutsideBandBars(condition: unknown): number[] {
