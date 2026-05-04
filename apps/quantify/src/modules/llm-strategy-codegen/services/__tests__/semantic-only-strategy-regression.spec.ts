@@ -559,6 +559,7 @@ describe('semantic-only strategy regression verification', () => {
                   mode: 'fixed_range',
                   lower: 60000,
                   upper: 80000,
+                  spacingPct: 1,
                   spacingMode: 'arithmetic',
                 }),
               }),

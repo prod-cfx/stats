@@ -1641,11 +1641,6 @@ describe('SemanticSeedExtractorService', () => {
         ]),
       }),
     ]))
-    const gridShape = patch.triggers
-      ?.find(trigger => trigger.key === 'grid.range_rebalance')
-      ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
-      ?.shape
-    expect(gridShape).not.toHaveProperty('absoluteSpacing')
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contracts: expect.arrayContaining([
@@ -1686,7 +1681,7 @@ describe('SemanticSeedExtractorService', () => {
     [
       'absolute spacing wording',
       'OKX BTCUSDT 永续 15m，固定区间双向网格，价格区间 78800-81400，每格价格间距 260 USDT，每格下单资金 500 USDT，限价网格挂单。',
-      { absoluteSpacing: 260 },
+      { absoluteSpacing: 260, gridCount: 11 },
     ],
     [
       'split range wording',
@@ -1720,6 +1715,49 @@ describe('SemanticSeedExtractorService', () => {
     ]))
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+              }),
+              expect.objectContaining({
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: expect.objectContaining({ value: 500, asset: 'USDT' }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+  })
+
+  it('keeps action contracts for fixed-range grid semantics without literal grid wording', () => {
+    const patch = service.extract('价格区间 78800-81400，共10格，每格下单资金 500 USDT，部署后立即创建限价挂单')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'open_long',
         contracts: expect.arrayContaining([
           expect.objectContaining({
             capabilities: expect.arrayContaining([
@@ -1839,6 +1877,11 @@ describe('SemanticSeedExtractorService', () => {
         ]),
       }),
     ]))
+    const gridShape = patch.triggers
+      ?.find(trigger => trigger.key === 'grid.range_rebalance')
+      ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
+      ?.shape
+    expect(gridShape).not.toHaveProperty('absoluteSpacing')
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contracts: expect.arrayContaining([
