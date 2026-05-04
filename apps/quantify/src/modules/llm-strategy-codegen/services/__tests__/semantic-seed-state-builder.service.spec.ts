@@ -2,6 +2,23 @@ import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.
 
 describe('SemanticSeedStateBuilderService', () => {
   const service = new SemanticSeedStateBuilderService()
+  const expectContractRequiredSlot = (fieldPath: string) => expect.objectContaining({
+    slotKey: 'contract.required',
+    fieldPath,
+    status: 'open',
+  })
+  const riskContract = {
+    id: 'risk-contract',
+    kind: 'risk',
+    capabilities: [{
+      domain: 'guard',
+      verb: 'enforce',
+      object: 'risk_rule',
+      shape: { configured: true },
+    }],
+    requires: [],
+    params: {},
+  }
 
   it('preserves open trigger envelope from semantic seed patch', () => {
     const state = service.build({
@@ -34,14 +51,14 @@ describe('SemanticSeedStateBuilderService', () => {
       status: 'open',
       source: 'user_explicit',
       params: { reference: 'unknown' },
-      openSlots: [expect.objectContaining({
+      openSlots: expect.arrayContaining([expect.objectContaining({
         slotKey: 'trigger.reference_definition',
         status: 'open',
-      })],
+      })]),
     }))
   })
 
-  it('keeps legacy lightweight trigger patches locked by default', () => {
+  it('keeps legacy lightweight patches open until contracts are supplied', () => {
     const state = service.build({
       triggers: [{
         key: 'condition.expression',
@@ -57,16 +74,72 @@ describe('SemanticSeedStateBuilderService', () => {
         },
       }],
       actions: [{ key: 'open_long' }],
+      risk: [{ key: 'risk.max_drawdown', params: { valuePct: 10 } }],
+      position: {
+        mode: 'fixed',
+        value: 20,
+        positionMode: 'long',
+      },
     })
 
     expect(state?.triggers[0]).toEqual(expect.objectContaining({
-      status: 'locked',
+      status: 'open',
       source: 'user_explicit',
-      openSlots: [],
+      openSlots: [expectContractRequiredSlot('triggers[0].contracts')],
     }))
     expect(state?.actions[0]).toEqual(expect.objectContaining({
-      status: 'locked',
+      status: 'open',
       source: 'user_explicit',
+      openSlots: [expectContractRequiredSlot('actions[0].contracts')],
+    }))
+    expect(state?.risk[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      source: 'user_explicit',
+      openSlots: [expectContractRequiredSlot('risk[0].contracts')],
+    }))
+    expect(state?.position).toEqual(expect.objectContaining({
+      status: 'open',
+      source: 'user_explicit',
+      openSlots: [expectContractRequiredSlot('position.contracts')],
+    }))
+  })
+
+  it('preserves existing atom open slots and appends contract required slots', () => {
+    const state = service.build({
+      actions: [{
+        key: 'open_long',
+        openSlots: [{
+          slotKey: 'action.order_type',
+          fieldPath: 'actions[0].params.orderType',
+          status: 'open',
+          priority: 'behavior',
+          questionHint: '请确认开仓订单类型。',
+          affectsExecution: true,
+        }],
+      }],
+    })
+
+    expect(state?.actions[0]?.status).toBe('open')
+    expect(state?.actions[0]?.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'action.order_type',
+        fieldPath: 'actions[0].params.orderType',
+      }),
+      expectContractRequiredSlot('actions[0].contracts'),
+    ])
+  })
+
+  it('does not add contract required slots to context slots', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: 'BTCUSDT',
+      },
+    })
+
+    expect(state?.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      status: 'locked',
     }))
   })
 
@@ -90,11 +163,14 @@ describe('SemanticSeedStateBuilderService', () => {
       status: 'open',
       source: 'user_explicit',
     }))
-    expect(state?.actions[0]?.openSlots).toEqual([expect.objectContaining({
-      slotKey: 'action.order_type',
-      status: 'open',
-      questionHint: '请确认开仓订单类型。',
-    })])
+    expect(state?.actions[0]?.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'action.order_type',
+        status: 'open',
+        questionHint: '请确认开仓订单类型。',
+      }),
+      expectContractRequiredSlot('actions[0].contracts'),
+    ])
   })
 
   it('preserves semantic atom contracts from semantic seed patch', () => {
@@ -227,6 +303,7 @@ describe('SemanticSeedStateBuilderService', () => {
         source: 'derived',
         evidence: { text: '按止损基准亏损 5%', source: 'user_explicit' },
         supersedes: ['risk-old'],
+        contracts: [riskContract],
         openSlots: [{
           slotKey: 'risk.stopLossBasis',
           fieldPath: 'risk[0].params.stopLossBasis',
@@ -265,6 +342,7 @@ describe('SemanticSeedStateBuilderService', () => {
           effect: { type: 'close_position' },
           scope: 'current_position',
         },
+        contracts: [riskContract],
         openSlots: [{
           slotKey: 'risk.stopLossBasis',
           fieldPath: 'risk[0].params.basis',

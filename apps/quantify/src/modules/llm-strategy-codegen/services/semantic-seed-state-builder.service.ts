@@ -99,10 +99,16 @@ export class SemanticSeedStateBuilderService {
     }
 
     const openSlots = this.readOpenSlots(update.openSlots)
-    const status = this.resolveNodeStatus(update.status, openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `triggers[${index}].contracts`,
+      priority: 'core',
+    })
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-trigger-${index + 1}`,
@@ -112,10 +118,10 @@ export class SemanticSeedStateBuilderService {
       ...(update.sideScope === 'long' || update.sideScope === 'short' || update.sideScope === 'both'
         ? { sideScope: update.sideScope }
         : {}),
-      status,
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
@@ -135,15 +141,22 @@ export class SemanticSeedStateBuilderService {
     const supersedes = this.readStringArray(update.supersedes)
     const openSlots = this.readOpenSlots(update.openSlots)
     const contracts = this.readContracts(update.contracts)
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `actions[${index}].contracts`,
+      priority: 'behavior',
+    })
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-action-${index + 1}`,
       key,
       ...(this.isRecord(update.params) ? { params: { ...update.params } } : {}),
-      status: this.resolveNodeStatus(update.status, openSlots),
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
@@ -163,15 +176,22 @@ export class SemanticSeedStateBuilderService {
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `risk[${index}].contracts`,
+      priority: 'risk',
+    })
 
     const risk: SemanticRiskState = {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
       key,
       params: this.readParams(update.params),
-      status: this.resolveNodeStatus(update.status, openSlots),
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
@@ -198,16 +218,23 @@ export class SemanticSeedStateBuilderService {
     const positionMode = update.positionMode === 'both' ? 'long_short' : update.positionMode
     const evidence = this.readEvidence(update.evidence)
     const contracts = this.readContracts(update.contracts)
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: 'position.contracts',
+      priority: 'behavior',
+    })
 
     return {
       ...(sizing ? { sizing } : {}),
       mode: update.mode,
       value: update.value,
       positionMode,
-      status: this.resolveNodeStatus(update.status, openSlots),
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(contracts ? { contracts } : {}),
     }
   }
@@ -487,6 +514,48 @@ export class SemanticSeedStateBuilderService {
     return value
       .map(item => this.toSlotState(item))
       .filter((item): item is SemanticSlotState => item !== null)
+  }
+
+  private resolveContractCoverage(options: {
+    contracts: SemanticAtomContract[] | null
+    openSlots: SemanticSlotState[]
+    statusValue: unknown
+    fieldPath: string
+    priority: SemanticPriority
+  }): { status: SemanticNodeStatus, openSlots: SemanticSlotState[] } {
+    if (options.contracts) {
+      return {
+        status: this.resolveNodeStatus(options.statusValue, options.openSlots),
+        openSlots: options.openSlots,
+      }
+    }
+
+    return {
+      status: 'open',
+      openSlots: this.appendContractRequiredSlot(options.openSlots, options.fieldPath, options.priority),
+    }
+  }
+
+  private appendContractRequiredSlot(
+    openSlots: SemanticSlotState[],
+    fieldPath: string,
+    priority: SemanticPriority,
+  ): SemanticSlotState[] {
+    if (openSlots.some(slot => slot.slotKey === 'contract.required' && slot.fieldPath === fieldPath)) {
+      return openSlots
+    }
+
+    return [
+      ...openSlots,
+      {
+        slotKey: 'contract.required',
+        fieldPath,
+        status: 'open',
+        priority,
+        questionHint: '请补充该原子的执行合约。',
+        affectsExecution: true,
+      },
+    ]
   }
 
   private toSlotState(
