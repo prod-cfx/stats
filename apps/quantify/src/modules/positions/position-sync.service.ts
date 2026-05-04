@@ -127,7 +127,7 @@ export class PositionSyncService {
           // 数量不一致，需要调整
           const diff = exchangeQty.sub(localQty)
           try {
-            await this.adjustPositionQuantity(localPos, exchangePos, diff)
+            await this.adjustPositionQuantity(localPos, exchangePos, diff, exchangeId, marketType)
             differences.push({
               symbol: exchangePos.symbol,
               positionSide: exchangePos.side === 'long' ? 'LONG' : 'SHORT',
@@ -480,6 +480,8 @@ export class PositionSyncService {
     localPos: any,
     exchangePos: UnifiedPosition,
     diff: Decimal,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
   ): Promise<void> {
     // 差异为正：需要增加仓位（买入/加仓）
     // 差异为负：需要减少仓位（卖出/减仓）
@@ -491,7 +493,7 @@ export class PositionSyncService {
     await this.positionsService.recordTrade({
       userStrategyAccountId: localPos.userStrategyAccountId,
       symbol: localPos.symbol,
-      market: this.resolveLocalPositionMarket(localPos),
+      market: `${exchangeId}:${marketType}`,
       side: tradeSide,
       positionSide: localPos.positionSide,
       price: exchangePos.entryPrice.toString(),
@@ -503,6 +505,7 @@ export class PositionSyncService {
       executedAt: new Date().toISOString(),
       metadata: {
         syncSource: 'position-adjustment',
+        market: `${exchangeId}:${marketType}`,
         originalQuantity: localPos.quantity.toString(),
         targetQuantity: exchangePos.size.toString(),
         difference: diff.toString(),

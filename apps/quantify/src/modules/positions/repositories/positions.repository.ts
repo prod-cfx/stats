@@ -199,6 +199,7 @@ export class PositionsRepository {
           ${exchangeId}::text IS NULL
           OR "exchange_id" = ${exchangeId}
           OR "metadata"->>'market' = ${marketName}
+          OR ("exchange_id" IS NULL AND "market_type" = ${marketType})
         )
         AND (
           ${marketType}::text IS NULL
@@ -209,8 +210,9 @@ export class PositionsRepository {
         CASE
           WHEN "exchange_id" = ${exchangeId} AND "market_type" = ${marketType} THEN 0
           WHEN "metadata"->>'market' = ${marketName} THEN 1
-          WHEN "market_type" = ${marketType} THEN 2
-          ELSE 3
+          WHEN "exchange_id" IS NULL AND "market_type" = ${marketType} THEN 2
+          WHEN "market_type" = ${marketType} THEN 3
+          ELSE 4
         END,
         "updated_at" DESC
       FOR UPDATE
