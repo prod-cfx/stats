@@ -33,6 +33,13 @@ describe('marketDataService symbol code compatibility', () => {
     await expect(service.getSymbolOrThrow('BTCUSDT:PERP')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
   })
 
+  it('resolves unified perp execution symbols to canonical PERP symbols', async () => {
+    repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+
+    await expect(service.getSymbolOrThrow('BTC/USDT:PERP')).resolves.toEqual({ id: 'perp-id', code: 'BTCUSDT:PERP' })
+    expect(repoMock.findSymbolsByCodeIn).toHaveBeenCalledWith(expect.arrayContaining(['BTCUSDT:PERP']))
+  })
+
   it('resolves OKX native swap symbols to canonical PERP symbols', async () => {
     repoMock.findSymbolsByCodeIn.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
 
