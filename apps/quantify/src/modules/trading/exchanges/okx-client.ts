@@ -434,10 +434,10 @@ export class OkxClient extends BaseCexClient {
   async fetchInstrumentConstraints(symbol: string): Promise<UnifiedInstrumentConstraints> {
     const instId = this.toInstrumentId(symbol, this.marketType)
     const instrumentSpec = await this.fetchInstrumentSpec(instId)
-    if (this.marketType === 'perp' && (!instrumentSpec?.ctVal || !instrumentSpec.lotSz || !instrumentSpec.tickSz)) {
+    if (this.marketType === 'perp' && (!instrumentSpec?.ctVal || !instrumentSpec.lotSz || !instrumentSpec.tickSz || !instrumentSpec.minSz)) {
       throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
     }
-    if (this.marketType === 'spot' && (!instrumentSpec?.lotSz || !instrumentSpec.tickSz)) {
+    if (this.marketType === 'spot' && (!instrumentSpec?.lotSz || !instrumentSpec.tickSz || !instrumentSpec.minSz)) {
       throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
     }
 

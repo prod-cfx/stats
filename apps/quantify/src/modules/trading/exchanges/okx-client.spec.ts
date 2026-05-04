@@ -336,6 +336,29 @@ describe('okxClient', () => {
       })
   })
 
+  it('throws when OKX perp instrument constraints omit min size', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            ctVal: '0.01',
+            lotSz: '1',
+            tickSz: '0.1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    await expect(createClient({ marketType: 'perp' }).fetchInstrumentConstraints?.('BTC/USDT:PERP'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX instrument constraints incomplete for BTC-USDT-SWAP',
+      })
+  })
+
   it('returns OKX spot instrument constraints for execution admission', async () => {
     const requests: Array<{ pathname: string; search: string }> = []
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
@@ -375,6 +398,28 @@ describe('okxClient', () => {
       const search = new URLSearchParams(request.search)
       return search.get('instType') === 'SPOT' && search.get('instId') === 'BTC-USDT'
     })).toBe(true)
+  })
+
+  it('throws when OKX spot instrument constraints are incomplete', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT',
+            lotSz: '0.00000001',
+            tickSz: '0.01',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    await expect(createClient({ marketType: 'spot' }).fetchInstrumentConstraints?.('BTC/USDT'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX instrument constraints incomplete for BTC-USDT',
+      })
   })
 
   it('converts perp base size to contract size when creating orders', async () => {
