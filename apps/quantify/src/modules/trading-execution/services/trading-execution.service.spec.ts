@@ -208,6 +208,23 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('rejects local role and side mismatch before fetching constraints', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getInstrumentConstraints.mockRejectedValue(new Error('constraints unavailable'))
+    const service = createService(tradingService)
+
+    const mismatchedIntent = { ...intent, side: 'sell' } satisfies OrderIntent
+    const result = await service.executeIntent(mismatchedIntent)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      intent: mismatchedIntent,
+      reason: 'open_long_requires_buy_side',
+    })
+    expect(tradingService.getInstrumentConstraints).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('converts non-Error thrown values to string reasons', async () => {
     const tradingService = createTradingServiceMock()
     tradingService.getInstrumentConstraints.mockRejectedValue('constraints unavailable')

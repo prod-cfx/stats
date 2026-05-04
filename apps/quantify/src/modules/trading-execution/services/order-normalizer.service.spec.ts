@@ -60,6 +60,28 @@ describe('OrderNormalizerService', () => {
       .toThrow('trading_execution_quantity_below_minimum')
   })
 
+  it('maps perp open-long role to long position side fields', () => {
+    const service = new OrderNormalizerService()
+
+    const normalized = service.normalize(intent, constraints, 'glong')
+
+    expect(normalized.request).toEqual(expect.objectContaining({
+      positionSide: 'LONG',
+      posSide: 'long',
+    }))
+  })
+
+  it('maps perp open-short role to short position side fields', () => {
+    const service = new OrderNormalizerService()
+
+    const normalized = service.normalize({ ...intent, role: 'open_short', side: 'sell' }, constraints, 'gshort')
+
+    expect(normalized.request).toEqual(expect.objectContaining({
+      positionSide: 'SHORT',
+      posSide: 'short',
+    }))
+  })
+
   it('rejects perp constraints without contract value', () => {
     const service = new OrderNormalizerService()
 

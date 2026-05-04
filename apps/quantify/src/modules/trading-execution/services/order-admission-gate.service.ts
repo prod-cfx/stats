@@ -9,9 +9,15 @@ type AdmissionResult =
 
 @Injectable()
 export class OrderAdmissionGateService {
-  evaluate(intent: OrderIntent, positions: UnifiedPosition[]): AdmissionResult {
+  evaluateIntentShape(intent: OrderIntent): AdmissionResult {
     const direction = this.validateRoleDirection(intent)
     if (direction) return direction
+    return { ok: true }
+  }
+
+  evaluate(intent: OrderIntent, positions: UnifiedPosition[]): AdmissionResult {
+    const shape = this.evaluateIntentShape(intent)
+    if (!shape.ok) return shape
 
     const requiredSide = this.requiredPositionSide(intent)
     if (!requiredSide) return { ok: true }

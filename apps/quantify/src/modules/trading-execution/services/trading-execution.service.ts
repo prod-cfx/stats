@@ -16,6 +16,11 @@ export class TradingExecutionService {
   ) {}
 
   async executeIntent(intent: OrderIntent): Promise<TradingExecutionResult> {
+    const shape = this.admissionGate.evaluateIntentShape(intent)
+    if (!shape.ok) {
+      return { status: shape.status, intent, reason: shape.reason }
+    }
+
     let constraints: TradingExecutionConstraints
     try {
       constraints = await this.tradingService.getInstrumentConstraints(

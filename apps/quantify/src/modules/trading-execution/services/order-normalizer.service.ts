@@ -1,3 +1,4 @@
+import type { PositionIntentSide, PositionSide } from '@/modules/trading/core/types'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 import type { NormalizedOrderIntent, OrderIntent, TradingExecutionConstraints } from '../types/trading-execution.types'
@@ -10,6 +11,7 @@ export class OrderNormalizerService {
       ? this.normalizePrice(intent.price, constraints)
       : undefined
     const normalizedAmount = this.normalizeAmount(intent.amount, constraints)
+    const positionSide = this.positionSide(intent)
     const request = {
       symbol: intent.symbol,
       marketType: intent.marketType,
@@ -20,6 +22,8 @@ export class OrderNormalizerService {
       timeInForce: intent.timeInForce,
       reduceOnly: intent.reduceOnly,
       tdMode: intent.tdMode,
+      positionSide: positionSide?.positionSide,
+      posSide: positionSide?.posSide,
       clientOrderId,
     }
 
@@ -37,6 +41,17 @@ export class OrderNormalizerService {
     if (value === undefined) throw new Error('trading_execution_limit_price_required')
     const tick = this.positiveDecimal(constraints.priceTickSize, 'trading_execution_missing_price_tick')
     return this.decimal(value).div(tick).toDecimalPlaces(0).mul(tick).toFixed()
+  }
+
+  private positionSide(intent: OrderIntent): { positionSide: PositionIntentSide, posSide: PositionSide } | undefined {
+    if (intent.marketType !== 'perp') return undefined
+    if (intent.role === 'open_long' || intent.role === 'close_long') {
+      return { positionSide: 'LONG', posSide: 'long' }
+    }
+    if (intent.role === 'open_short' || intent.role === 'close_short') {
+      return { positionSide: 'SHORT', posSide: 'short' }
+    }
+    return undefined
   }
 
   private validateConstraints(intent: OrderIntent, constraints: TradingExecutionConstraints): void {
