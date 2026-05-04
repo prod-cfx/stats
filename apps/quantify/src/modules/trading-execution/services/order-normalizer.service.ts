@@ -5,6 +5,7 @@ import type { NormalizedOrderIntent, OrderIntent, TradingExecutionConstraints } 
 @Injectable()
 export class OrderNormalizerService {
   normalize(intent: OrderIntent, constraints: TradingExecutionConstraints, clientOrderId: string): NormalizedOrderIntent {
+    this.validateConstraints(intent, constraints)
     const normalizedPrice = intent.type === 'limit'
       ? this.normalizePrice(intent.price, constraints)
       : undefined
@@ -38,6 +39,28 @@ export class OrderNormalizerService {
     return this.decimal(value).div(tick).toDecimalPlaces(0).mul(tick).toFixed()
   }
 
+  private validateConstraints(intent: OrderIntent, constraints: TradingExecutionConstraints): void {
+    if (
+      intent.exchangeId !== constraints.exchangeId
+      || intent.marketType !== constraints.marketType
+      || this.normalizeSymbol(intent.symbol) !== this.normalizeSymbol(constraints.symbol)
+      || this.normalizeSymbol(intent.symbol) !== this.normalizeSymbol(constraints.rawSymbol)
+    ) {
+      throw new Error('trading_execution_constraints_mismatch')
+    }
+
+    if (constraints.marketType === 'perp') {
+      this.positiveDecimal(constraints.contractValue, 'trading_execution_missing_contract_value')
+    }
+  }
+
+  private normalizeSymbol(value: string): string {
+    return value
+      .toUpperCase()
+      .replace(/(?:PERP|SWAP)$/u, '')
+      .replace(/[^A-Z0-9]/g, '')
+  }
+
   private normalizeAmount(value: number, constraints: TradingExecutionConstraints): string {
     const step = this.quantityStep(constraints)
     const normalized = this.decimal(value).div(step).floor().mul(step)
@@ -50,13 +73,13 @@ export class OrderNormalizerService {
 
   private quantityStep(constraints: TradingExecutionConstraints): Prisma.Decimal {
     const step = this.positiveDecimal(constraints.quantityStepSize, 'trading_execution_missing_quantity_step')
-    if (constraints.marketType !== 'perp' || !constraints.contractValue) return step
+    if (constraints.marketType !== 'perp') return step
     const contractValue = this.positiveDecimal(constraints.contractValue, 'trading_execution_missing_contract_value')
     return step.mul(contractValue)
   }
 
   private toExchangeSize(amount: string, constraints: TradingExecutionConstraints): string {
-    if (constraints.marketType !== 'perp' || !constraints.contractValue) return amount
+    if (constraints.marketType !== 'perp') return amount
     const contractValue = this.positiveDecimal(constraints.contractValue, 'trading_execution_missing_contract_value')
     return this.decimal(amount).div(contractValue).toFixed()
   }
