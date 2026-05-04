@@ -10199,6 +10199,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         })],
       }),
     ]))
+
+    mockRepo.findById.mockResolvedValueOnce({
+      ...sessionFixture,
+      status: 'CONFIRM_GATE',
+      semanticState: updatePayload.semanticState,
+      clarificationState: updatePayload.clarificationState,
+      constraintPack: updatePayload.constraintPack,
+      latestSpecDesc: updatePayload.latestSpecDesc,
+    })
+
+    const confirmed = await service.continueSession('s-okx-real-grid-boundary-guard', {
+      userId: 'u1',
+      message: '对的',
+    })
+
+    expect(confirmed.status).toBe('GENERATING')
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+      's-okx-real-grid-boundary-guard',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          triggers: expect.any(Array),
+          actions: expect.any(Array),
+          risk: expect.any(Array),
+        }),
+      }),
+    )
   })
 
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {

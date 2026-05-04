@@ -131,6 +131,10 @@ interface PersistedConversationSessionForContinue {
   strategyInstanceId?: string | null
 }
 
+interface ContinueConfirmedSessionOptions {
+  allowServerSideConfirmationDigest?: boolean
+}
+
 interface StructuredClarificationContinuationArgs {
   session: {
     id: string
@@ -1195,6 +1199,14 @@ export class CodegenConversationService {
     if (this.stateMachine.isProcessingStatus(session.status)) {
       return this.returnPersistedSnapshotResponse(session, sessionUserId)
     }
+    if (this.shouldTreatMessageAsConfirmGenerate(session, dto)) {
+      return this.continueConfirmedSession(session, {
+        ...dto,
+        confirmGenerate: true,
+      }, sessionUserId, {
+        allowServerSideConfirmationDigest: true,
+      })
+    }
     const baseClarificationState = this.readClarificationState(session.clarificationState)
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
@@ -1918,6 +1930,7 @@ export class CodegenConversationService {
     session: PersistedConversationSessionForContinue,
     dto: ContinueCodegenSessionDto,
     sessionUserId: string,
+    options: ContinueConfirmedSessionOptions = {},
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
     const persistedSemanticState = this.readSemanticState(session.semanticState)
@@ -1981,17 +1994,19 @@ export class CodegenConversationService {
       reducedSemanticState,
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
-    if (confirmedCanonicalDigest) {
+    const rawConfirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
+    const confirmedCanonicalDigest = rawConfirmedCanonicalDigest
+      || (options.allowServerSideConfirmationDigest ? confirmationViewDigest : '')
+    if (rawConfirmedCanonicalDigest) {
       const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
-      if (!confirmationViewDigest || confirmedCanonicalDigest !== confirmationViewDigest) {
+      if (!confirmationViewDigest || rawConfirmedCanonicalDigest !== confirmationViewDigest) {
         throw new DomainException('codegen.confirmation_digest_mismatch', {
           code: ErrorCode.BAD_REQUEST,
           status: HttpStatus.BAD_REQUEST,
           args: {
             expectedCanonicalDigest: confirmationViewDigest,
             confirmationViewDigest,
-            confirmedCanonicalDigest,
+            confirmedCanonicalDigest: rawConfirmedCanonicalDigest,
           },
         })
       }
@@ -2140,6 +2155,26 @@ export class CodegenConversationService {
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+  }
+
+  private shouldTreatMessageAsConfirmGenerate(
+    session: PersistedConversationSessionForContinue,
+    dto: ContinueCodegenSessionDto,
+  ): boolean {
+    if (session.status !== 'CONFIRM_GATE' || dto.confirmGenerate === true) {
+      return false
+    }
+    if (dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0) {
+      return false
+    }
+
+    const text = dto.message.trim()
+    if (!text || text.length > 40) {
+      return false
+    }
+
+    return /^(?:对|对的|是|是的|确认|确定|无误|没问题|可以|可以了|就这样|按这个|按此生成|确认生成|确认并生成|直接生成|生成脚本|生成代码|开始生成|继续生成)$/u.test(text)
+      || /^(?:确认|确定|无误|对的|是的).*(?:生成|编译|脚本|代码|继续)?$/u.test(text)
   }
 
   private readSemanticState(
