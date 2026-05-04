@@ -126,6 +126,9 @@ export class CanonicalSpecV2IrCompilerService {
       bollinger: this.resolveBollingerConfig(input.canonicalSpec),
     }
 
+    const orderPrograms = this.compileOrderPrograms(input.canonicalSpec.orderPrograms ?? [], context)
+    const orderProgramLevelCount = this.resolveOrderProgramLevelCount(input.canonicalSpec.orderPrograms ?? [])
+    const hasOrderPrograms = orderPrograms.length > 0
     const ruleBlocks: RuleBlock[] = []
     const guards: RiskGuard[] = []
 
@@ -133,6 +136,10 @@ export class CanonicalSpecV2IrCompilerService {
       const guard = this.tryCompileRiskGuard(rule, context)
       if (guard) {
         guards.push(guard)
+        continue
+      }
+
+      if (hasOrderPrograms && this.isOrderProgramShadowRule(rule)) {
         continue
       }
 
@@ -153,9 +160,6 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
-    const orderPrograms = this.compileOrderPrograms(input.canonicalSpec.orderPrograms ?? [], context)
-    const orderProgramLevelCount = this.resolveOrderProgramLevelCount(input.canonicalSpec.orderPrograms ?? [])
-    const hasOrderPrograms = orderPrograms.length > 0
     const positionMode = hasOrderPrograms
       ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
       : this.resolvePositionMode(input.canonicalSpec.rules)
@@ -205,6 +209,26 @@ export class CanonicalSpecV2IrCompilerService {
         allowPartialFill: hasOrderPrograms,
       },
     }
+  }
+
+  private isOrderProgramShadowRule(rule: CanonicalStrategySpecV2['rules'][number]): boolean {
+    if (rule.metadata?.normalized?.family === 'grid.range_rebalance') {
+      return true
+    }
+
+    return this.conditionContainsAtom(rule.condition, 'grid.range_rebalance')
+  }
+
+  private conditionContainsAtom(condition: CanonicalStrategySpecV2['rules'][number]['condition'], key: string): boolean {
+    if (condition.kind === 'atom') {
+      return condition.key === key
+    }
+
+    if (condition.kind === 'expression') {
+      return false
+    }
+
+    return condition.children.some(child => this.conditionContainsAtom(child, key))
   }
 
   private hashCanonicalJson(value: unknown): `sha256:${string}` {

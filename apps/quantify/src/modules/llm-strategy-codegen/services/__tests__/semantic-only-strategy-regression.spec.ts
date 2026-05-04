@@ -481,10 +481,10 @@ describe('semantic-only strategy regression verification', () => {
       buildSemanticStateFromMessage('OKX 合约 BTCUSDT 15m；在 60000-80000 区间执行双向网格，步长 0.5%，单笔 10%。'),
     )
 
-    expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
+    expect(ruleConditionKeys(result.canonicalSpec)).not.toEqual(expect.arrayContaining([
       'grid.range_rebalance',
     ]))
-    expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining([
+    expect(ruleActionTypes(result.canonicalSpec)).not.toEqual(expect.arrayContaining([
       'OPEN_LONG',
       'CLOSE_LONG',
       'OPEN_SHORT',
@@ -506,6 +506,7 @@ describe('semantic-only strategy regression verification', () => {
       }),
     ])
     expect(result.publishedSnapshot.scriptSnapshot).toEqual(expect.stringContaining('const ORDER_PROGRAMS = [{'))
+    expect(result.publishedSnapshot.scriptSnapshot).toEqual(expect.stringContaining('const DECISION_PROGRAMS = [] as const'))
   })
 
   it.each([

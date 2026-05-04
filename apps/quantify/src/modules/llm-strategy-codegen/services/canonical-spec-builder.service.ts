@@ -492,9 +492,12 @@ export class CanonicalSpecBuilderService {
     const market = this.resolveSemanticStateMarket(state)
     const sizing = this.resolveSizingFromSemanticState(state.position)
 
-    const rules = this.buildRulesFromSemanticState(state, sizing)
-    const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const orderPrograms = this.buildContractOrderPrograms(state)
+    const rules = this.filterOrderProgramShadowRules(
+      this.buildRulesFromSemanticState(state, sizing),
+      orderPrograms,
+    )
+    const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
 
     return {
       version: 2,
@@ -511,6 +514,37 @@ export class CanonicalSpecBuilderService {
       orderPrograms,
       rules,
     }
+  }
+
+  private filterOrderProgramShadowRules(
+    rules: CanonicalRuleV2[],
+    orderPrograms: CanonicalOrderProgramIntent[],
+  ): CanonicalRuleV2[] {
+    if (orderPrograms.length === 0) {
+      return rules
+    }
+
+    return rules.filter(rule => !this.isOrderProgramShadowRule(rule))
+  }
+
+  private isOrderProgramShadowRule(rule: CanonicalRuleV2): boolean {
+    if (rule.metadata?.normalized?.family === 'grid.range_rebalance') {
+      return true
+    }
+
+    return this.conditionContainsAtom(rule.condition, 'grid.range_rebalance')
+  }
+
+  private conditionContainsAtom(condition: CanonicalRuleV2['condition'], key: string): boolean {
+    if (condition.kind === 'atom') {
+      return condition.key === key
+    }
+
+    if (condition.kind === 'expression') {
+      return false
+    }
+
+    return condition.children.some(child => this.conditionContainsAtom(child, key))
   }
 
   private buildContractOrderPrograms(state: SemanticState): CanonicalOrderProgramIntent[] {

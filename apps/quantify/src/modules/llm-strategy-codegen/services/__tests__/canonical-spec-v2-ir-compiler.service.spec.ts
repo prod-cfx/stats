@@ -188,6 +188,92 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.portfolio.allowPyramiding).toBe(true)
   })
 
+  it('keeps contract order programs exclusive from legacy grid decision rules', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'semantic-entry-grid-range-rebalance-long',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 170,
+          condition: {
+            kind: 'atom',
+            key: 'grid.range_rebalance',
+            semanticScope: 'market',
+            op: 'LTE',
+            params: { rangeMin: 60000, rangeMax: 80000, stepPct: 0.5, levelCount: 58 },
+          },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+          metadata: {
+            normalized: {
+              source: 'normalized-intent',
+              family: 'grid.range_rebalance',
+            },
+          },
+        },
+      ],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'perp_neutral',
+          levelSet: {
+            lower: 60000,
+            upper: 80000,
+            gridCount: 58,
+            spacingPct: 0.5,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_pct_equity',
+            value: 10,
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.ruleBlocks).toEqual([])
+    expect(result.ir.orderPrograms).toEqual([
+      expect.objectContaining({
+        kind: 'LIMIT_LADDER',
+        quantity: { mode: 'pct_equity', value: 10 },
+        sidePolicy: 'perp_neutral',
+      }),
+    ])
+  })
+
   it('compiles centered-percent contract order programs into non-empty level-set order programs', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const canonicalSpec = {

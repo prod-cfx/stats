@@ -440,7 +440,9 @@ export class BacktestSnapshotLoaderService {
         ? 'NEXT_BAR_OPEN'
         : policy.fillPolicy === 'same_bar_close'
           ? 'BAR_CLOSE'
-          : undefined
+          : policy.fillPolicy === 'exchange_order_update' || policy.fillPolicy === 'intra_bar_limit_match'
+            ? 'BAR_CLOSE'
+            : undefined
     const noNextBarHandling: BacktestExecutionPolicy['noNextBarHandling'] | undefined = typeof policy.noNextBarHandling === 'string'
       ? policy.noNextBarHandling === 'KEEP_PENDING' || policy.noNextBarHandling === 'DROP_SIGNAL'
         ? policy.noNextBarHandling
