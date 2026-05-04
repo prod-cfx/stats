@@ -402,6 +402,63 @@ describe('okxClient', () => {
     expect(order.price).toBeCloseTo(79283.3)
   })
 
+  it('uses submitted OKX perp price and size when create order ack omits px and sz', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+              tickSz: '0.1',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-limit-order-ack-only',
+            clOrdId: 'gridclient1',
+            sCode: '0',
+            sMsg: '',
+            state: '',
+            fillSz: '0',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.10049,
+      price: 79283.33333333333,
+      tdMode: 'cross',
+      clientOrderId: 'gridclient1',
+    })
+
+    expect(order.price).toBeCloseTo(79283.3)
+    expect(order.amount).toBeCloseTo(0.1004)
+  })
+
   it('uses typed tdMode and positionSide fields when creating OKX perp orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)

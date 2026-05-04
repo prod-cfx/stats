@@ -133,12 +133,15 @@ export class OkxClient extends BaseCexClient {
       ordType,
       sz: this.toSize(input.amount, instrumentSpec),
     }
+    const submittedSize = String(body.sz)
 
+    let submittedPrice: string | undefined
     if (ordType === 'limit') {
       if (input.price === undefined) {
         throw new ExchangeError('Limit order requires price')
       }
-      body.px = this.toPrice(input.price, instrumentSpec)
+      submittedPrice = this.toPrice(input.price, instrumentSpec)
+      body.px = submittedPrice
     }
 
     // OKX 所有产品都需要 tdMode：现货使用 cash；永续必须由上游显式传入。
@@ -190,8 +193,8 @@ export class OkxClient extends BaseCexClient {
       side: input.side,
       type: input.type,
       // 以交易所实际接收的价格和数量为准，保证与后续查询/取消路径一致
-      price: this.resolveOrderPrice(order, input.price),
-      amount: order.sz ? this.fromExchangeSize(order.sz, instrumentSpec) : input.amount,
+      price: this.resolveOrderPrice(order, submittedPrice == null ? input.price : Number(submittedPrice)),
+      amount: this.fromExchangeSize(order.sz || submittedSize, instrumentSpec),
       filled: this.resolveFilledSize(order, instrumentSpec),
       // OKX create-order ACK 通常不返回完整 state，最终状态由后续 fetchOrder 收敛。
       status: order.state ? this.mapOrderStatus(order.state) : 'open',
