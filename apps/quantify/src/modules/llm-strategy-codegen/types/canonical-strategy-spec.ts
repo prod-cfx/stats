@@ -61,9 +61,9 @@ export interface CanonicalOrderProgramIntent {
     spacingMode: 'arithmetic' | 'geometric'
   }
   budget: {
-    mode: 'per_order_quote' | 'total_quote'
+    mode: 'per_order_quote' | 'total_quote' | 'per_order_pct_equity'
     value: number
-    asset: string
+    asset?: string
   }
   orderType: 'limit'
   timeInForce: 'gtc'

@@ -490,6 +490,22 @@ describe('semantic-only strategy regression verification', () => {
       'OPEN_SHORT',
       'CLOSE_SHORT',
     ]))
+    expect(result.canonicalSpec.orderPrograms).toEqual([
+      expect.objectContaining({
+        kind: 'contract_order_program',
+        mode: 'perp_neutral',
+        levelSet: expect.objectContaining({
+          lower: 60000,
+          upper: 80000,
+          spacingPct: 0.5,
+        }),
+        budget: {
+          mode: 'per_order_pct_equity',
+          value: 10,
+        },
+      }),
+    ])
+    expect(result.publishedSnapshot.scriptSnapshot).toEqual(expect.stringContaining('const ORDER_PROGRAMS = [{'))
   })
 
   it.each([
@@ -529,12 +545,24 @@ describe('semantic-only strategy regression verification', () => {
 
     expect(JSON.stringify(patch)).not.toMatch(checklistFieldPattern)
     expect(patch.triggers ?? []).toEqual([])
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       mode: 'fixed_ratio',
       value: 0.01,
       positionMode: 'long_only',
       sizing: { kind: 'ratio', value: 0.01, unit: 'ratio' },
-    })
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'position',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'position_sizing',
+            }),
+          ]),
+        }),
+      ]),
+    }))
   })
 
   it('keeps incomplete MA semantics in semantic clarification instead of checklist fallback', () => {

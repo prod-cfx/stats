@@ -1088,7 +1088,38 @@ export class SemanticSeedExtractorService {
         recycle: true,
         breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
       },
+      contracts: [{
+        id: 'contract-grid-fixed-levels',
+        kind: 'trigger',
+        capabilities: [{
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: {
+            lower: Number(range[1]),
+            upper: Number(range[2]),
+            gridCount: this.deriveGridCountFromPercentStep(Number(range[1]), Number(range[2]), stepPct),
+            spacingPct: stepPct,
+            spacingMode: 'arithmetic',
+          },
+        }],
+        requires: [],
+        params: {},
+      }],
     })
+  }
+
+  private deriveGridCountFromPercentStep(lower: number, upper: number, stepPct: number): number {
+    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(stepPct) || lower <= 0 || upper <= lower || stepPct <= 0) {
+      return 2
+    }
+
+    const ratio = 1 + stepPct / 100
+    if (ratio <= 1) {
+      return 2
+    }
+
+    return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
   }
 
   private extractCenteredGridRange(segment: string): {

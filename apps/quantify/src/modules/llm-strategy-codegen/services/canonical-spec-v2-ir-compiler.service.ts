@@ -447,10 +447,17 @@ export class CanonicalSpecV2IrCompilerService {
       ? Number((intent.budget.value / levelCount).toFixed(8))
       : intent.budget.value
 
+    if (intent.budget.mode === 'per_order_pct_equity') {
+      return {
+        mode: 'pct_equity',
+        value,
+      }
+    }
+
     return {
       mode: 'fixed_quote',
       value,
-      asset: intent.budget.asset,
+      asset: intent.budget.asset ?? 'USDT',
     }
   }
 

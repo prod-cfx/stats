@@ -1536,6 +1536,37 @@ describe('SemanticSeedExtractorService', () => {
           stepPct: 0.5,
           sideMode: 'bidirectional',
         }),
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: expect.objectContaining({
+                  lower: 60000,
+                  upper: 80000,
+                  spacingPct: 0.5,
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+              }),
+            ]),
+          }),
+        ]),
       }),
     ]))
   })

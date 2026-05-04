@@ -573,19 +573,15 @@ export class CanonicalSpecBuilderService {
       || exposure.status === 'conflict'
       || !levelSet.capability
       || !orderProgram.capability
-      || !budget.capability
     ) {
       return null
     }
 
     const projectedLevelSet = this.projectCanonicalOrderProgramLevelSet(levelSet.capability)
-    const budgetValue = this.readShapeNumber(budget.capability.shape, 'value')
-    const budgetAsset = this.readShapeString(budget.capability.shape, 'asset')
+    const projectedBudget = this.projectCanonicalOrderProgramBudget(budget.capability, state)
     if (
       !projectedLevelSet
-      || budgetValue === null
-      || budgetValue <= 0
-      || !budgetAsset
+      || !projectedBudget
     ) {
       return null
     }
@@ -596,9 +592,7 @@ export class CanonicalSpecBuilderService {
       mode: this.resolveContractOrderProgramMode(exposure.capability, state),
       levelSet: projectedLevelSet,
       budget: {
-        mode: budget.capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote',
-        value: budgetValue,
-        asset: budgetAsset,
+        ...projectedBudget,
       },
       orderType: 'limit',
       timeInForce: 'gtc',
@@ -695,6 +689,43 @@ export class CanonicalSpecBuilderService {
       ...(spacingPct !== null ? { spacingPct } : {}),
       spacingMode,
     }
+  }
+
+  private projectCanonicalOrderProgramBudget(
+    capability: SemanticCapability | null,
+    state: SemanticState,
+  ): CanonicalOrderProgramIntent['budget'] | null {
+    if (capability) {
+      const budgetValue = this.readShapeNumber(capability.shape, 'value')
+      const budgetAsset = this.readShapeString(capability.shape, 'asset')
+      if (budgetValue === null || budgetValue <= 0 || !budgetAsset) {
+        return null
+      }
+
+      return {
+        mode: capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote',
+        value: budgetValue,
+        asset: budgetAsset,
+      }
+    }
+
+    const sizing = state.position?.sizing
+    if (sizing?.kind === 'ratio' && typeof sizing.value === 'number' && Number.isFinite(sizing.value) && sizing.value > 0) {
+      return {
+        mode: 'per_order_pct_equity',
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(8)) : sizing.value,
+      }
+    }
+
+    if (sizing?.kind === 'quote' && typeof sizing.value === 'number' && Number.isFinite(sizing.value) && sizing.value > 0) {
+      return {
+        mode: 'per_order_quote',
+        value: sizing.value,
+        asset: sizing.asset ?? 'USDT',
+      }
+    }
+
+    return null
   }
 
   private projectLimitLadderCapabilityKey(capability: SemanticCapability): string {
