@@ -9656,7 +9656,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '继续',
     })
 
-    expect(['DRAFTING', 'CONFIRM_GATE']).toContain(result.status)
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
   })
