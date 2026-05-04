@@ -53,10 +53,12 @@ export class PositionsService {
       await this.ensureAccountAndNoDuplicateTrade(dto)
 
       // 2. 加锁加载当前仓位
+      const tradeMarket = this.parseTradeMarket(dto.market)
       const lockedPosition = await this.loadAndLockPosition(
         dto.userStrategyAccountId,
         normalizedSymbol,
         dto.positionSide,
+        tradeMarket,
       )
 
       // 3. 根据方向调整仓位
@@ -165,9 +167,28 @@ export class PositionsService {
     accountId: string,
     normalizedSymbol: string,
     positionSide: PositionSide,
+    market?: { exchangeId: string; marketType: string; market: string } | null,
   ): Promise<Position | null> {
-    const lockedPositions = await this.positionsRepository.lockOpenPosition(accountId, normalizedSymbol, positionSide)
+    const lockedPositions = await this.positionsRepository.lockOpenPosition(
+      accountId,
+      normalizedSymbol,
+      positionSide,
+      market,
+    )
     return lockedPositions[0] ?? null
+  }
+
+  private parseTradeMarket(market: string | undefined): { exchangeId: string; marketType: string; market: string } | null {
+    if (!market) {
+      return null
+    }
+
+    const [exchangeId, marketType] = market.split(':')
+    if (!exchangeId || !marketType) {
+      return null
+    }
+
+    return { exchangeId, marketType, market }
   }
 
   private async applyIncrease(
@@ -220,6 +241,7 @@ export class PositionsService {
           dto.userStrategyAccountId,
           normalizedSymbol,
           dto.positionSide,
+          this.parseTradeMarket(dto.market),
         )
         if (!existingPosition) {
           // 理论上不应出现（除非并发创建后又立即删除），保留原始错误
