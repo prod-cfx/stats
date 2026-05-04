@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
+  SemanticAtomContract,
+  SemanticCapability,
+  SemanticCapabilityShape,
+  SemanticContractKind,
   SemanticExpression,
   SemanticExpressionOperator,
   SemanticExpressionOperand,
@@ -42,10 +46,10 @@ export class SemanticSeedExtractorService {
 
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
-    const triggers = this.extractTriggers(text, aliasContext)
-    const actions = this.extractActions(text, triggers)
-    const risk = this.extractRisk(text)
-    const position = this.extractPosition(text, triggers)
+    const triggers = this.atomizeTriggers(this.extractTriggers(text, aliasContext))
+    const actions = this.atomizeActions(this.extractActions(text, triggers))
+    const risk = this.atomizeRisk(this.extractRisk(text))
+    const position = this.atomizePosition(this.extractPosition(text, triggers))
 
     const patch: CodegenSemanticPatch = {}
 
@@ -66,6 +70,272 @@ export class SemanticSeedExtractorService {
     }
 
     return patch
+  }
+
+  private atomizeTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
+    return triggers.map((trigger, index) => (
+      this.hasContracts(trigger)
+        ? trigger
+        : {
+            ...trigger,
+            contracts: [this.buildAtomContract({
+              id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(trigger.key)}`,
+              kind: 'trigger',
+              capability: this.buildTriggerCapability(trigger),
+              params: trigger.params ?? {},
+            })],
+          }
+    ))
+  }
+
+  private atomizeActions(actions: SeedAction[]): SeedAction[] {
+    return actions.map((action, index) => (
+      this.hasContracts(action)
+        ? action
+        : {
+            ...action,
+            contracts: [this.buildAtomContract({
+              id: `contract-seed-action-${index + 1}-${this.slugifyContractId(action.key)}`,
+              kind: 'action',
+              capability: this.buildActionCapability(action),
+              params: action.params ?? {},
+            })],
+          }
+    ))
+  }
+
+  private atomizeRisk(risk: SeedRisk[]): SeedRisk[] {
+    return risk.map((riskItem, index) => (
+      this.hasContracts(riskItem)
+        ? riskItem
+        : {
+            ...riskItem,
+            contracts: [this.buildAtomContract({
+              id: `contract-seed-risk-${index + 1}-${this.slugifyContractId(riskItem.key)}`,
+              kind: 'risk',
+              capability: this.buildRiskCapability(riskItem),
+              params: riskItem.params,
+            })],
+          }
+    ))
+  }
+
+  private atomizePosition(
+    position: NonNullable<CodegenSemanticPatch['position']> | null,
+  ): NonNullable<CodegenSemanticPatch['position']> | null {
+    if (!position || this.hasContracts(position)) {
+      return position
+    }
+
+    return {
+      ...position,
+      contracts: [this.buildAtomContract({
+        id: 'contract-seed-position-sizing',
+        kind: 'position',
+        capability: this.buildPositionCapability(position),
+        params: {
+          sizing: position.sizing ?? null,
+          mode: position.mode,
+          value: position.value,
+          positionMode: position.positionMode,
+        },
+      })],
+    }
+  }
+
+  private hasContracts(node: { contracts?: SemanticAtomContract[] }): boolean {
+    return Array.isArray(node.contracts) && node.contracts.length > 0
+  }
+
+  private buildAtomContract(input: {
+    id: string
+    kind: SemanticContractKind
+    capability: SemanticCapability
+    params: Record<string, unknown>
+  }): SemanticAtomContract {
+    return {
+      id: input.id,
+      kind: input.kind,
+      capabilities: [input.capability],
+      requires: [],
+      params: input.params,
+    }
+  }
+
+  private buildTriggerCapability(trigger: SeedTrigger): SemanticCapability {
+    if (trigger.key === 'grid.range_rebalance') {
+      return {
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'execution.on_start') {
+      return {
+        domain: 'order_program',
+        verb: 'schedule',
+        object: 'execution_trigger',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    return {
+      domain: 'price',
+      verb: 'detect',
+      object: 'signal_condition',
+      shape: this.toCapabilityShape({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope ?? null,
+        ...(trigger.params ?? {}),
+      }),
+    }
+  }
+
+  private buildActionCapability(action: SeedAction): SemanticCapability {
+    return {
+      domain: 'order_program',
+      verb: 'execute',
+      object: 'order_action',
+      shape: this.toCapabilityShape({
+        key: action.key,
+        side: this.resolveActionSide(action.key),
+        intent: this.resolveActionIntent(action.key),
+        ...(action.params ?? {}),
+      }),
+    }
+  }
+
+  private buildRiskCapability(risk: SeedRisk): SemanticCapability {
+    if (risk.key === 'risk.stop_loss_pct') {
+      return {
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'stop_loss',
+        shape: this.toCapabilityShape({
+          key: risk.key,
+          ...risk.params,
+        }),
+      }
+    }
+
+    if (risk.key === 'risk.take_profit_pct') {
+      return {
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'take_profit',
+        shape: this.toCapabilityShape({
+          key: risk.key,
+          ...risk.params,
+        }),
+      }
+    }
+
+    return {
+      domain: 'guard',
+      verb: 'enforce',
+      object: 'risk_condition',
+      shape: this.toCapabilityShape({
+        key: risk.key,
+        ...risk.params,
+      }),
+    }
+  }
+
+  private buildPositionCapability(
+    position: NonNullable<CodegenSemanticPatch['position']>,
+  ): SemanticCapability {
+    return {
+      domain: 'capital',
+      verb: 'allocate',
+      object: 'position_sizing',
+      shape: this.toCapabilityShape({
+        sizing: position.sizing ?? null,
+        mode: position.mode,
+        value: position.value,
+        positionMode: position.positionMode,
+      }),
+    }
+  }
+
+  private resolveActionSide(key: string): 'long' | 'short' | 'unknown' {
+    if (key.includes('long')) return 'long'
+    if (key.includes('short')) return 'short'
+    return 'unknown'
+  }
+
+  private resolveActionIntent(key: string): 'open' | 'close' | 'unknown' {
+    if (key.startsWith('open_')) return 'open'
+    if (key.startsWith('close_')) return 'close'
+    return 'unknown'
+  }
+
+  private toCapabilityShape(input: Record<string, unknown>): SemanticCapabilityShape {
+    const shape: SemanticCapabilityShape = {}
+    for (const [key, value] of Object.entries(input)) {
+      const normalizedValue = this.toCapabilityShapeValue(value)
+      if (normalizedValue !== undefined) {
+        shape[key] = normalizedValue
+      }
+    }
+    return shape
+  }
+
+  private toCapabilityShapeValue(
+    value: unknown,
+  ): string | number | boolean | null | SemanticCapabilityShape | SemanticCapabilityShape[] | undefined {
+    if (value === null) return null
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return Number.isNaN(value) ? undefined : value
+    }
+    if (Array.isArray(value)) {
+      return value
+        .map(item => this.toCapabilityArrayItem(item))
+        .filter((item): item is SemanticCapabilityShape => item !== undefined)
+    }
+    if (this.isPlainObject(value)) {
+      return this.toCapabilityShape(value)
+    }
+    return undefined
+  }
+
+  private toCapabilityArrayItem(value: unknown): SemanticCapabilityShape | undefined {
+    const normalizedValue = this.toCapabilityShapeValue(value)
+    if (normalizedValue === undefined) {
+      return undefined
+    }
+    if (
+      normalizedValue === null
+      || typeof normalizedValue === 'string'
+      || typeof normalizedValue === 'number'
+      || typeof normalizedValue === 'boolean'
+    ) {
+      return { value: normalizedValue }
+    }
+    if (Array.isArray(normalizedValue)) {
+      return { items: normalizedValue }
+    }
+    return normalizedValue
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+  }
+
+  private slugifyContractId(value: string): string {
+    return value.replace(/[^a-z0-9]+/giu, '-').replace(/^-|-$/gu, '').toLowerCase() || 'atom'
   }
 
   private extractContextSlots(text: string): NonNullable<CodegenSemanticPatch['contextSlots']> {

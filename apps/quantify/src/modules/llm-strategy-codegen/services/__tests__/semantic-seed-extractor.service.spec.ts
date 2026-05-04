@@ -3,37 +3,81 @@ import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service
 describe('SemanticSeedExtractorService', () => {
   const service = new SemanticSeedExtractorService()
 
+  const expectEveryExecutableSeedNodeToHaveContracts = (message: string) => {
+    const patch = service.extract(message)
+    const executableNodes = [
+      ...(patch.triggers ?? []),
+      ...(patch.actions ?? []),
+      ...(patch.risk ?? []),
+      ...(patch.position ? [patch.position] : []),
+    ]
+
+    expect(executableNodes.length).toBeGreaterThan(0)
+    for (const node of executableNodes) {
+      expect(node.contracts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.any(String),
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: expect.any(String),
+              verb: expect.any(String),
+              object: expect.any(String),
+              shape: expect.any(Object),
+            }),
+          ]),
+          requires: expect.any(Array),
+        }),
+      ]))
+    }
+  }
+
+  it('atomizes every executable seed node across representative strategy families', () => {
+    const samples = [
+      'BTCUSDT 1m，收盘价高于开盘价开多，收盘价低于开盘价平多，固定使用 10 USDT，止损 5%。',
+      'OKX 现货 BTCUSDT 15m；价格上穿 MA50 买入；价格跌破 MA20 平仓；单笔 10%。',
+      'OKX 合约 BTCUSDT 1m，使用布林带(20,2)。价格触及上轨时做空，价格触及下轨时做多；单笔仓位 10%，止盈 1%。',
+      'EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。',
+      'BTCUSDT 3分钟之内跌百分1买入；15分钟之内涨百分2卖出；单笔用百分10资金。',
+      'OKX 现货 ETHUSDT、1m 网格以部署时当前价为中心，上下各0.4%共10格、每格10 USDT、限价单并相邻网格自动挂反向单、不用趋势信号开仓；当价格突破上下边界时执行立即停止并撤销所有未成交订单。',
+      '立即开始时市价买入一次；1h；BTCUSDT；单笔 10%；亏损 5% 止损。',
+    ]
+
+    for (const sample of samples) {
+      expectEveryExecutableSeedNodeToHaveContracts(sample)
+    }
+  })
+
   it('extracts position sizing quote contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，固定使用 10 USDT')
 
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'quote', value: 10, asset: 'USDT' },
       mode: 'fixed_quote',
       value: 10,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('does not treat trigger quote prices as position sizing in seed text', () => {
     const patch = service.extract('BTC 跌到 60000 USDT 用 10u 开多')
 
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'quote', value: 10, asset: 'USDT' },
       mode: 'fixed_quote',
       value: 10,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('extracts position sizing base contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，每次买 0.001 BTC')
 
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'base', value: 0.001, asset: 'BTC' },
       mode: 'fixed_qty',
       value: 0.001,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('normalizes english contract market wording into perp context', () => {
@@ -107,12 +151,12 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'quote', value: 10, asset: 'USDT' },
       mode: 'fixed_quote',
       value: 10,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('extracts previous bar high breakout and previous bar low breakdown expressions', () => {
@@ -163,12 +207,12 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       mode: 'fixed_ratio',
       value: 0.03,
       positionMode: 'long_only',
       sizing: { kind: 'ratio', value: 0.03, unit: 'ratio' },
-    })
+    }))
   })
 
   it('inherits standalone no-position context into later entry gates', () => {
@@ -253,23 +297,23 @@ describe('SemanticSeedExtractorService', () => {
   it('keeps fixed quote profit targets from overriding explicit percent sizing', () => {
     const patch = service.extract('每次盈利 10 USDT 止盈；单笔 10% 仓位')
 
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('keeps fixed quote risk amounts from overriding explicit percent sizing', () => {
     const patch = service.extract('单笔风险 10 USDT；单笔 10% 仓位')
 
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('extracts plain stop loss with default basis metadata', () => {
@@ -463,12 +507,12 @@ describe('SemanticSeedExtractorService', () => {
           params: expect.objectContaining({ valuePct: 10, basis: 'entry_avg_price' }),
         }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('entryRules')
     expect(patch).not.toHaveProperty('exitRules')
@@ -512,12 +556,12 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'open_long' }),
         expect.objectContaining({ key: 'close_long' }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('risk')
     expect(patch).not.toHaveProperty('grid')
@@ -526,12 +570,12 @@ describe('SemanticSeedExtractorService', () => {
   it('extracts single-trade fund sizing into semantic position sizing', () => {
     const patch = service.extract('在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金')
 
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('does not lock unsupported exchanges into semantic context', () => {
@@ -592,12 +636,12 @@ describe('SemanticSeedExtractorService', () => {
         params: expect.objectContaining({ valuePct: 2, window: '15m' }),
       }),
     ]))
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('extracts unpunctuated Chinese percent-change clauses independently', () => {
@@ -626,12 +670,12 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('extracts unpunctuated Chinese percent-change entry and exit synonyms independently', () => {
@@ -706,12 +750,12 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'open_long' }),
         expect.objectContaining({ key: 'close_long' }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('contextSlots')
     expect(patch).not.toHaveProperty('risk')
@@ -1116,12 +1160,12 @@ describe('SemanticSeedExtractorService', () => {
           params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
       ],
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('entryRules')
     expect(patch).not.toHaveProperty('exitRules')
@@ -1198,12 +1242,12 @@ describe('SemanticSeedExtractorService', () => {
           params: expect.objectContaining({ valuePct: 1.5, basis: 'entry_avg_price' }),
         }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('entryRules')
     expect(patch).not.toHaveProperty('exitRules')
@@ -1465,12 +1509,12 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'open_short' }),
         expect.objectContaining({ key: 'close_short' }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('entryRules')
     expect(patch).not.toHaveProperty('exitRules')
@@ -1534,12 +1578,12 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 3 }) }),
         expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.45 }) }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.25, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.25,
         positionMode: 'long_only',
-      },
+      }),
     }))
   })
 
@@ -1695,12 +1739,12 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'close_long' }),
         expect.objectContaining({ key: 'open_short' }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('entryRules')
     expect(patch).not.toHaveProperty('exitRules')
@@ -1832,12 +1876,12 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({ key: 'close_long' }),
         expect.objectContaining({ key: 'open_short' }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_short',
-      },
+      }),
     }))
     expect(patch).not.toHaveProperty('entryRules')
     expect(patch).not.toHaveProperty('exitRules')
@@ -1981,12 +2025,12 @@ describe('SemanticSeedExtractorService', () => {
           params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
-      },
+      }),
     }))
     expect(percentChangePatch).not.toHaveProperty('entryRules')
     expect(percentChangePatch).not.toHaveProperty('exitRules')
@@ -2023,12 +2067,12 @@ describe('SemanticSeedExtractorService', () => {
           params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
         }),
       ]),
-      position: {
+      position: expect.objectContaining({
         sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
         mode: 'fixed_ratio',
         value: 0.1,
         positionMode: 'long_only',
-      },
+      }),
     }))
     expect(onStartPatch).not.toHaveProperty('entryRules')
     expect(onStartPatch).not.toHaveProperty('exitRules')
@@ -2105,12 +2149,12 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
-    expect(patch.position).toEqual({
+    expect(patch.position).toEqual(expect.objectContaining({
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'long_only',
-    })
+    }))
   })
 
   it('does not inject Bollinger period/stdDev when the band text omits them', () => {
