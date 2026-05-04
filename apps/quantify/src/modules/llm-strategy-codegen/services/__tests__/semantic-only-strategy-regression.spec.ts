@@ -541,11 +541,32 @@ describe('semantic-only strategy regression verification', () => {
     expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining(actions))
   })
 
-  it('documents the fixed-range grid wording extraction gap instead of manufacturing checklist rules', () => {
+  it('extracts fixed-range grid wording as contracts instead of manufacturing checklist rules', () => {
     const patch = seedExtractor.extract('BTCUSDT 固定区间 60000-80000，按 1% 网格买入，触达上方网格卖出，仓位 1%，单笔最大亏损 2%。')
 
     expect(JSON.stringify(patch)).not.toMatch(checklistFieldPattern)
-    expect(patch.triggers ?? []).toEqual([])
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: expect.objectContaining({
+                  mode: 'fixed_range',
+                  lower: 60000,
+                  upper: 80000,
+                  spacingMode: 'arithmetic',
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
     expect(patch.position).toEqual(expect.objectContaining({
       mode: 'fixed_ratio',
       value: 0.01,
