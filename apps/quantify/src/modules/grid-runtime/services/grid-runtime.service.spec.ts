@@ -153,6 +153,13 @@ function createCenteredPercentAstSnapshot() {
   }
 }
 
+function withExecutionModel<T extends Record<string, unknown>>(astSnapshot: T, executionModel: Record<string, unknown>): T {
+  return {
+    ...astSnapshot,
+    executionModel,
+  }
+}
+
 describe('GridRuntimeService', () => {
   it('creates a grid runtime plan from AST order programs', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-1' }) }
@@ -363,6 +370,96 @@ describe('GridRuntimeService', () => {
       Number.isInteger(Number(order.price) * 10)
       && Number.isInteger(Number(order.quantity) * 1000),
     )).toBe(true)
+  })
+
+  it('rejects exchange constraints without min quantity before creating a plan', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-missing-min-1' }) }
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      rawSymbol: 'BTC-USDT',
+      priceTickSize: '0.01',
+      quantityStepSize: '0.000001',
+      minQuantity: null,
+      contractValue: null,
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    const { service, planner } = createService(repository, { tradingService })
+
+    await expect(service.createFromDeployment({
+      strategyInstanceId: 'strategy-missing-min-1',
+      publishedSnapshotId: 'snapshot-missing-min-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      astSnapshot: createAstSnapshot(),
+      currentPrice: '100',
+    })).rejects.toThrow('grid_runtime_missing_min_quantity')
+    expect(planner.planInitialOrders).not.toHaveBeenCalled()
+    expect(repository.createInstanceWithPlan).not.toHaveBeenCalled()
+  })
+
+  it('falls back to complete AST execution constraints when exchange constraints are unavailable', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-ast-fallback-1' }) }
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockRejectedValue(new Error('constraints unavailable'))
+    const { service, planner } = createService(repository, { tradingService })
+
+    await service.createFromDeployment({
+      strategyInstanceId: 'strategy-ast-fallback-1',
+      publishedSnapshotId: 'snapshot-ast-fallback-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'demo',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      astSnapshot: withExecutionModel(createAstSnapshot(), {
+        tickSize: 0.01,
+        lotSize: 0.000001,
+        minQuantity: 0.0001,
+      }),
+      currentPrice: '100',
+    })
+
+    expect(planner.planInitialOrders).toHaveBeenCalledWith({
+      config: expect.objectContaining({
+        tickSize: '0.01',
+        lotSize: '0.000001',
+        minQuantity: '0.0001',
+        constraintsSource: 'ast',
+      }),
+      currentPrice: '100',
+    })
+    expect(repository.createInstanceWithPlan).toHaveBeenCalled()
+  })
+
+  it('rejects AST fallback when min quantity is missing', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-ast-missing-min-1' }) }
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockRejectedValue(new Error('constraints unavailable'))
+    const { service, planner } = createService(repository, { tradingService })
+
+    await expect(service.createFromDeployment({
+      strategyInstanceId: 'strategy-ast-missing-min-1',
+      publishedSnapshotId: 'snapshot-ast-missing-min-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'demo',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      astSnapshot: withExecutionModel(createAstSnapshot(), {
+        tickSize: 0.01,
+        lotSize: 0.000001,
+      }),
+      currentPrice: '100',
+    })).rejects.toThrow('grid_runtime_missing_min_quantity')
+    expect(planner.planInitialOrders).not.toHaveBeenCalled()
+    expect(repository.createInstanceWithPlan).not.toHaveBeenCalled()
   })
 
   it('stops through order sync so exchange orders are canceled before terminal state', async () => {

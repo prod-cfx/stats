@@ -23,6 +23,7 @@ export interface GridRuntimeConfigSnapshot {
   tickSize?: string | null
   lotSize?: string | null
   minQuantity?: string | null
+  constraintsSource?: 'exchange' | 'ast'
   pricePrecision?: number | null
   quantityPrecision?: number | null
 }

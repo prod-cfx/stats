@@ -222,11 +222,23 @@ export class GridOrderSyncService {
 
       const submitted = await this.tradingExecution.submitPrepared(prepared)
       if (submitted.status === 'waiting_position') {
-        await this.txEvents.withAfterCommit(async () =>
+        const markedPlanned = await this.txEvents.withAfterCommit(async () =>
           this.repository.markOrderPlanned({
             id: order.id,
             rawPayload: this.executionPayload(submitted),
           }))
+        if (!markedPlanned) {
+          await this.txEvents.withAfterCommit(async () =>
+            this.stateMachine.markReconcileRequired(instance.id, 'order_waiting_position_state_race', {
+              orderId: order.id,
+              clientOrderId,
+              status: submitted.status,
+              reason: submitted.reason,
+              normalized: this.toJsonValue(submitted.normalized),
+              error: 'error' in submitted ? this.serializeError(submitted.error) : null,
+            }))
+          return
+        }
         continue
       }
 
@@ -252,8 +264,8 @@ export class GridOrderSyncService {
         return this.repository.markOrderOpen({
           id: order.id,
           exchangeOrderId: submitted.order.id,
-          price: submitted.normalized.normalizedPrice ?? null,
-          quantity: submitted.normalized.normalizedAmount,
+          price: submitted.order.price == null ? submitted.normalized.normalizedPrice ?? null : String(submitted.order.price),
+          quantity: Number.isFinite(submitted.order.amount) ? String(submitted.order.amount) : submitted.normalized.normalizedAmount,
           rawPayload: this.executionPayload(submitted),
         })
       })
@@ -480,6 +492,7 @@ export class GridOrderSyncService {
       execution: {
         status: result.status,
         reason: 'reason' in result ? result.reason : null,
+        error: 'error' in result ? this.serializeError(result.error) : null,
         clientOrderId: 'normalized' in result ? result.normalized.clientOrderId : null,
         normalized: 'normalized' in result ? result.normalized : null,
         order: result.status === 'submitted'

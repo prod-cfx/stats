@@ -49,7 +49,9 @@ export class GridRuntimeService {
     const marketType = this.normalizeMarketType(input.marketType)
     const configFromAst = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice, input.fundingSnapshot)
     const constraints = await this.loadInstrumentConstraints(input, marketType)
-    const config = this.applyExchangeConstraints(configFromAst, constraints)
+    const config = constraints
+      ? this.applyExchangeConstraints(configFromAst, constraints)
+      : this.applyAstExecutionConstraints(configFromAst)
     let plan: ReturnType<GridOrderPlannerService['planInitialOrders']>
     try {
       plan = this.planner.planInitialOrders({
@@ -207,6 +209,7 @@ export class GridRuntimeService {
       activeWhen: this.readString(program, 'activeWhen'),
       tickSize: this.formatOptionalNumber(this.readNumber(executionModel, 'tickSize')),
       lotSize: this.resolveLotSize(executionModel),
+      minQuantity: this.formatOptionalNumber(this.readNumber(executionModel, 'minQuantity')),
       pricePrecision: this.readInteger(executionModel, 'pricePrecision'),
       quantityPrecision: this.readInteger(executionModel, 'quantityPrecision'),
     }
@@ -358,7 +361,7 @@ export class GridRuntimeService {
   private async loadInstrumentConstraints(
     input: CreateGridRuntimeFromDeploymentInput,
     marketType: MarketType,
-  ): Promise<UnifiedInstrumentConstraints> {
+  ): Promise<UnifiedInstrumentConstraints | null> {
     let constraints: UnifiedInstrumentConstraints
     try {
       constraints = await this.tradingService.getInstrumentConstraints(
@@ -370,7 +373,7 @@ export class GridRuntimeService {
       )
     }
     catch {
-      throw this.invalidGridRuntimeConfig('grid_runtime_instrument_constraints_unavailable')
+      return null
     }
     if (
       constraints.exchangeId !== input.exchangeId
@@ -388,9 +391,7 @@ export class GridRuntimeService {
   ): GridRuntimeConfigSnapshot {
     const tickSize = this.positiveDecimalToString(constraints.priceTickSize, 'grid_runtime_missing_price_tick')
     const quantityStep = this.positiveDecimal(constraints.quantityStepSize, 'grid_runtime_missing_quantity_step')
-    const minQuantity = constraints.minQuantity == null
-      ? null
-      : this.positiveDecimal(constraints.minQuantity, 'grid_runtime_invalid_min_quantity')
+    const minQuantity = this.positiveDecimal(constraints.minQuantity, 'grid_runtime_missing_min_quantity')
 
     if (constraints.marketType === 'perp') {
       const contractValue = this.positiveDecimal(constraints.contractValue, 'grid_runtime_missing_contract_value')
@@ -398,7 +399,8 @@ export class GridRuntimeService {
         ...config,
         tickSize,
         lotSize: quantityStep.mul(contractValue).toFixed(),
-        minQuantity: minQuantity?.mul(contractValue).toFixed() ?? null,
+        minQuantity: minQuantity.mul(contractValue).toFixed(),
+        constraintsSource: 'exchange',
       }
     }
 
@@ -406,7 +408,22 @@ export class GridRuntimeService {
       ...config,
       tickSize,
       lotSize: quantityStep.toFixed(),
-      minQuantity: minQuantity?.toFixed() ?? null,
+      minQuantity: minQuantity.toFixed(),
+      constraintsSource: 'exchange',
+    }
+  }
+
+  private applyAstExecutionConstraints(config: GridRuntimeConfigSnapshot): GridRuntimeConfigSnapshot {
+    const tickSize = this.positiveDecimalToString(config.tickSize, 'grid_runtime_missing_price_tick')
+    const lotSize = this.positiveDecimalToString(config.lotSize, 'grid_runtime_missing_quantity_step')
+    const minQuantity = this.positiveDecimalToString(config.minQuantity, 'grid_runtime_missing_min_quantity')
+
+    return {
+      ...config,
+      tickSize,
+      lotSize,
+      minQuantity,
+      constraintsSource: 'ast',
     }
   }
 

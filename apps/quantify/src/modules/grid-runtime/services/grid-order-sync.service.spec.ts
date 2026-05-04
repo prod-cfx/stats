@@ -273,8 +273,8 @@ describe('GridOrderSyncService', () => {
       marketType: 'perp',
       side: 'buy',
       type: 'limit',
-      price: 79283.3,
-      amount: 0.1,
+      price: 79283.4,
+      amount: 0.09,
       filled: 0,
       status: 'open',
       createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
@@ -287,8 +287,8 @@ describe('GridOrderSyncService', () => {
     expect(repository.markOrderOpen).toHaveBeenCalledWith({
       id: 'planned-order-1',
       exchangeOrderId: 'exchange-order-created',
-      price: '79283.3',
-      quantity: '0.1',
+      price: '79283.4',
+      quantity: '0.09',
       rawPayload: expect.objectContaining({
         exchange: { orderId: 'exchange-order-created' },
         execution: expect.objectContaining({ status: 'submitted' }),
@@ -414,6 +414,109 @@ describe('GridOrderSyncService', () => {
         execution: expect.objectContaining({
           status: 'waiting_position',
           reason: 'missing_closable_short_position',
+        }),
+      }),
+    }))
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+  })
+
+  it('marks reconcile required when waiting-position planned-state CAS loses', async () => {
+    const repository = createRepository()
+    repository.markOrderPlanned.mockResolvedValue(false)
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_short' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-close-short',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'close_short',
+        quantity: { toString: () => '0.1' },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    tradingService.getPositions.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({ id: 'planned-close-short' }))
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_waiting_position_state_race', expect.objectContaining({
+      orderId: 'planned-close-short',
+      status: 'waiting_position',
+      reason: 'missing_closable_short_position',
+    }))
+  })
+
+  it('records position fetch errors in waiting-position payload', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_short' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-close-short',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'close_short',
+        quantity: { toString: () => '0.1' },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    tradingService.getPositions.mockRejectedValue(new Error('positions timeout'))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-close-short',
+      rawPayload: expect.objectContaining({
+        execution: expect.objectContaining({
+          status: 'waiting_position',
+          reason: 'positions_unavailable',
+          error: expect.objectContaining({ message: 'positions timeout' }),
         }),
       }),
     }))
