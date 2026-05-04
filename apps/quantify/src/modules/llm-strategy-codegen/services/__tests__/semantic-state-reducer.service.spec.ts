@@ -171,6 +171,138 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('turns guard enforcement clarification answers into structured owner capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          status: 'open',
+          source: 'derived',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+            fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认突破上下边界后的停止与撤单语义。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+        fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+      }),
+      answer: '只撤销“网格限价单中状态=未成交”的订单（不包含任何其他类型订单/不包含已成交但仍在队列中的订单）',
+      messageIndex: 12,
+    })
+
+    expect(next.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+        status: 'locked',
+        value: '只撤销“网格限价单中状态=未成交”的订单（不包含任何其他类型订单/不包含已成交但仍在队列中的订单）',
+      })],
+      contracts: [expect.objectContaining({
+        id: 'risk-contract-boundary-stop',
+        capabilities: [expect.objectContaining({
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'boundary_cancel',
+          shape: expect.objectContaining({
+            cancelOrders: true,
+            cancelScope: 'unfilled_grid_limit_orders',
+            orderTypeScope: 'limit',
+            programScope: 'grid',
+            includeFilledOrders: false,
+            includeOtherOrderTypes: false,
+          }),
+        })],
+      })],
+    }))
+  })
+
+  it('uses the active guard question context when the clarification answer is affirmative', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          status: 'open',
+          source: 'derived',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+            fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '撤销触发时，是否仅撤销“网格限价单中状态=未成交”的订单（不包含任何其他类型订单/不包含已成交但仍在队列中的订单）？',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+        fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+      }),
+      answer: '是的',
+      messageIndex: 13,
+    })
+
+    expect(next.risk[0]?.status).toBe('locked')
+    expect(next.risk[0]?.contracts?.[0]?.capabilities).toEqual([
+      expect.objectContaining({
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'boundary_cancel',
+        shape: expect.objectContaining({
+          cancelOrders: true,
+          cancelScope: 'unfilled_grid_limit_orders',
+          orderTypeScope: 'limit',
+          programScope: 'grid',
+        }),
+      }),
+    ])
+  })
+
   it('keeps per-order budget requirement open when the answer is a percentage budget', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

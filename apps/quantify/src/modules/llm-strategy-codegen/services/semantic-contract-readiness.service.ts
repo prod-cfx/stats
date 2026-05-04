@@ -134,6 +134,14 @@ export class SemanticContractReadinessService {
       return readShapeString(capability.shape, 'mode') !== null
     }
 
+    if (requirement.domain === 'guard' && requirement.verb === 'enforce' && isBoundaryCancelRequirement(requirement.object)) {
+      const onBreach = readShapeString(capability.shape, 'onBreach')
+      const cancelOrders = readShapeBoolean(capability.shape, 'cancelOrders')
+      const cancelScope = readShapeString(capability.shape, 'cancelScope')
+
+      return onBreach !== null && (cancelOrders === false || cancelScope !== null)
+    }
+
     return true
   }
 }
@@ -146,6 +154,15 @@ function readShapeNumber(shape: SemanticCapability['shape'], key: string): numbe
 function readShapeString(shape: SemanticCapability['shape'], key: string): string | null {
   const value = shape[key]
   return typeof value === 'string' && value.trim() ? value : null
+}
+
+function readShapeBoolean(shape: SemanticCapability['shape'], key: string): boolean | null {
+  const value = shape[key]
+  return typeof value === 'boolean' ? value : null
+}
+
+function isBoundaryCancelRequirement(object: string): boolean {
+  return /boundary|breakout|breach|cancel|halt|stop|order|grid/u.test(object)
 }
 
 function collectActiveContractOwners(state: SemanticState): SemanticContractOwnerRef[] {

@@ -377,6 +377,10 @@ export class SemanticStateReducerService {
       return this.parseLevelSetCapabilityShape(answerText, slot)
     }
 
+    if (domain === 'guard' && verb === 'enforce') {
+      return this.parseGuardEnforcementCapabilityShape(answerText, slot)
+    }
+
     return null
   }
 
@@ -478,6 +482,89 @@ export class SemanticStateReducerService {
 
     if (/最新价|现价|当前价格|ticker\s*last|last\s*price|current\s*price/iu.test(text)) {
       return 'last_price'
+    }
+
+    return null
+  }
+
+  private parseGuardEnforcementCapabilityShape(
+    answerText: string,
+    slot: SemanticSlotState,
+  ): SemanticCapabilityShape | null {
+    const contextText = [
+      answerText,
+      slot.questionHint,
+      slot.evidence?.text,
+      slot.slotKey,
+    ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join('。')
+
+    const hasBoundaryContext = /边界|上下界|上下边界|区间|突破|触及|越界|boundary|breach|breakout|outside/iu.test(contextText)
+    const hasCancelIntent = /撤销|取消|撤单|cancel/iu.test(contextText)
+    const hasHaltIntent = /停止|暂停|终止|不再|halt|stop|pause/iu.test(contextText)
+
+    if (!hasBoundaryContext && !hasCancelIntent && !hasHaltIntent) {
+      return null
+    }
+
+    const cancelScope = this.parseGuardCancelScope(contextText)
+    const cancelOrders = hasCancelIntent || cancelScope !== null
+    const onBreach = hasHaltIntent
+      ? 'HALT_STRATEGY'
+      : cancelOrders
+        ? 'CANCEL_ORDER_PROGRAMS'
+        : null
+
+    if (!onBreach) {
+      return null
+    }
+
+    return {
+      trigger: hasBoundaryContext ? 'boundary_breach' : 'guard_breach',
+      onBreach,
+      cancelOrders,
+      ...(cancelScope ? { cancelScope } : {}),
+      ...(/网格|grid/iu.test(contextText) ? { programScope: 'grid' } : {}),
+      ...(/限价|limit/iu.test(contextText) ? { orderTypeScope: 'limit' } : {}),
+      ...(/未成交|未完成|挂单|open\s+orders?|pending|unfilled/iu.test(contextText) ? { orderStatusScope: 'unfilled' } : {}),
+      ...(/不包含[^。；;]*已成交|不.*已成交|不含[^。；;]*已成交|仅[^。；;]*未成交/iu.test(contextText)
+        ? { includeFilledOrders: false }
+        : {}),
+      ...(/不包含[^。；;]*其他类型|不含[^。；;]*其他类型|仅[^。；;]*(?:网格|限价)/iu.test(contextText)
+        ? { includeOtherOrderTypes: false }
+        : {}),
+      ...(/不再(?:重新)?(?:下发|挂|创建)|不重新(?:计算|下发|挂)|不再重新计算|no\s+regrid|do\s+not\s+regrid/iu.test(contextText)
+        ? { regrid: false }
+        : {}),
+    }
+  }
+
+  private parseGuardCancelScope(text: string): string | null {
+    const grid = /网格|grid/iu.test(text)
+    const limit = /限价|limit/iu.test(text)
+    const unfilled = /未成交|未完成|挂单|open\s+orders?|pending|unfilled/iu.test(text)
+
+    if (grid && limit && unfilled) {
+      return 'unfilled_grid_limit_orders'
+    }
+
+    if (grid && unfilled) {
+      return 'unfilled_grid_orders'
+    }
+
+    if (grid) {
+      return 'grid_orders'
+    }
+
+    if (limit && unfilled) {
+      return 'unfilled_limit_orders'
+    }
+
+    if (unfilled) {
+      return 'unfilled_orders'
+    }
+
+    if (/订单程序|order\s+program|program/iu.test(text)) {
+      return 'program_orders'
     }
 
     return null

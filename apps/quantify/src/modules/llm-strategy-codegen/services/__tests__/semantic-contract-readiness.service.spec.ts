@@ -393,6 +393,104 @@ describe('SemanticContractReadinessService', () => {
     }))
   })
 
+  it('accepts structured boundary cancel guard capabilities', () => {
+    const state = createSemanticState({
+      risk: [{
+        id: 'risk-boundary-stop',
+        key: 'risk.boundary_guard',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+          fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+          status: 'open',
+          priority: 'risk',
+          affectsExecution: true,
+          questionHint: '请确认突破上下边界后的停止与撤单语义。',
+        }],
+        params: {},
+        contracts: [{
+          id: 'risk-contract-boundary-stop',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'boundary_cancel',
+            shape: {
+              onBreach: 'CANCEL_ORDER_PROGRAMS',
+              cancelOrders: true,
+              cancelScope: 'unfilled_grid_limit_orders',
+              orderTypeScope: 'limit',
+              programScope: 'grid',
+              includeFilledOrders: false,
+              includeOtherOrderTypes: false,
+            },
+          }],
+          requires: [
+            { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+    }))
+  })
+
+  it('keeps boundary cancel guard requirements missing when matching capabilities have unusable shapes', () => {
+    const state = createSemanticState({
+      risk: [{
+        id: 'risk-boundary-stop',
+        key: 'risk.boundary_guard',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        params: {},
+        contracts: [{
+          id: 'risk-contract-boundary-stop',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'boundary_cancel',
+            shape: { answer: '用户确认了撤单范围但没结构化' },
+          }],
+          requires: [
+            { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual([
+      {
+        ownerKind: 'risk',
+        ownerId: 'risk-boundary-stop',
+        contractId: 'risk-contract-boundary-stop',
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'boundary_cancel',
+      },
+    ])
+    expect(result.state.risk[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+      })],
+    }))
+  })
+
   it('opens locked owners when stale non-contract slots remain open', () => {
     const state = createSemanticState({
       actions: [{
