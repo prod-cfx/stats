@@ -97,9 +97,43 @@ export class SemanticContractReadinessService {
     return capabilities.some(capability =>
       capability.domain === requirement.domain
       && capability.verb === requirement.verb
-      && capability.object === requirement.object,
+      && capability.object === requirement.object
+      && this.hasRequiredCapabilityShape(capability, requirement),
     )
   }
+
+  private hasRequiredCapabilityShape(
+    capability: SemanticCapability,
+    requirement: SemanticRequirement,
+  ): boolean {
+    if (requirement.domain === 'price' && requirement.verb === 'define' && requirement.object === 'level_set') {
+      const lower = readShapeNumber(capability.shape, 'lower')
+      const upper = readShapeNumber(capability.shape, 'upper')
+      return lower !== null && upper !== null && upper > lower
+    }
+
+    if (requirement.domain === 'capital' && requirement.verb === 'allocate' && requirement.object === 'per_order_budget') {
+      const value = readShapeNumber(capability.shape, 'value')
+      const asset = readShapeString(capability.shape, 'asset')
+      return value !== null && value > 0 && asset !== null
+    }
+
+    if (requirement.domain === 'exposure' && requirement.verb === 'set' && requirement.object === 'position_mode') {
+      return readShapeString(capability.shape, 'mode') !== null
+    }
+
+    return true
+  }
+}
+
+function readShapeNumber(shape: SemanticCapability['shape'], key: string): number | null {
+  const value = shape[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function readShapeString(shape: SemanticCapability['shape'], key: string): string | null {
+  const value = shape[key]
+  return typeof value === 'string' && value.trim() ? value : null
 }
 
 function collectActiveContractOwners(state: SemanticState): SemanticContractOwnerRef[] {
@@ -195,9 +229,11 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status
   )
 
   if (!missingSlots.length) {
-    const nextStatus = owner.status === 'open' && openSlots.every(slot => slot.status !== 'open')
-      ? 'locked'
-      : owner.status
+    const nextStatus = openSlots.some(slot => slot.status === 'open')
+      ? 'open'
+      : owner.status === 'open'
+        ? 'locked'
+        : owner.status
     if (openSlots.length === currentOpenSlots.length && nextStatus === owner.status) {
       return owner
     }
