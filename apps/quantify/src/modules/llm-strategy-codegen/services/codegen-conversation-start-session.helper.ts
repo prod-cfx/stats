@@ -26,7 +26,6 @@ export interface StartSessionBootstrapInput {
   confirmationAssistantPrompt?: string | null
   decisionKind?: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
   plan: ConversationPlan
-  compileability: CanonicalCompileabilityReport | null
   normalizationBlocked?: boolean
   normalizationAssistantPrompt?: string
 }
@@ -46,7 +45,7 @@ export function buildStartSessionBootstrap(
   const status: LlmCodegenSessionStatus = input.decisionKind === 'CONFIRM_INFERRED'
     ? 'DRAFTING'
     : (input.initialStatus === 'CONFIRM_GATE'
-    && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
+    && input.normalizationBlocked === true
     ? 'DRAFTING'
     : input.initialStatus)
   const shouldEnterConfirmationGate = status === 'CONFIRM_GATE'

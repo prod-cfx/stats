@@ -249,7 +249,6 @@ export class CodegenConversationService {
     const clarificationState = semanticArtifacts.clarificationState
     const normalization = semanticArtifacts.normalization
     const initialCanonicalSpec = this.buildCanonicalSpecForConversation(initialSemanticState, normalization)
-    const compileability = this.evaluateCanonicalCompileability(initialCanonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist,
       semanticState: initialSemanticState,
@@ -260,7 +259,6 @@ export class CodegenConversationService {
     const initialStatus = this.resolveInitialStartSessionStatus({
       clarificationState,
       normalizationBlocked: normalization.blocked,
-      compileability,
       decisionKind: decision.kind,
     })
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
@@ -277,7 +275,6 @@ export class CodegenConversationService {
       confirmationAssistantPrompt,
       decisionKind: decision.kind,
       plan,
-      compileability,
       normalizationBlocked: normalization?.blocked === true,
       normalizationAssistantPrompt: normalization?.blocked
         ? this.buildSemanticNormalizationAssistantPrompt(initialSemanticState, normalization)
@@ -5864,13 +5861,11 @@ export class CodegenConversationService {
   private resolveInitialStartSessionStatus(input: {
     clarificationState: Pick<StrategyClarificationState, 'status'>
     normalizationBlocked: boolean
-    compileability: CanonicalCompileabilityReport
     decisionKind: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
   }): LlmCodegenSessionStatus {
     return input.clarificationState.status === 'CLEAR'
       && input.decisionKind === 'DIRECT_COMPILE'
       && !input.normalizationBlocked
-      && input.compileability.canCompile
       ? 'CONFIRM_GATE'
       : 'DRAFTING'
   }
