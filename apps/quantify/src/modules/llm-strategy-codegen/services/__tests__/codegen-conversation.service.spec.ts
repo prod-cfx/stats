@@ -10233,6 +10233,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   })
 
+  it('reports canonical projection failure without legacy entry and exit wording during confirmGenerate', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        lockedStopLossRisk(),
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit_pct',
+          params: {
+            valuePct: 10,
+            basis: 'entry_avg_price',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-semantic-projection-gap',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    const confirmedCanonicalDigest = buildSemanticOnlyCanonicalDigest(persistedSemanticState)
+    const readCanonicalDigestSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedCanonicalDigest)
+    const compileabilitySpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'evaluateCanonicalCompileability')
+      .mockReturnValue({
+        canCompile: false,
+        entryRuleCount: 0,
+        exitRuleCount: 0,
+        reasons: ['未识别可编译入场规则', '未识别可编译出场规则'],
+      })
+    const genericGapSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'hasUnresolvedGenericCompileabilityGap')
+      .mockReturnValue(true)
+
+    try {
+      const result = await service.continueSession('s7-semantic-projection-gap', {
+        userId: 'u1',
+        message: '确认逻辑图',
+        confirmGenerate: true,
+        confirmedCanonicalDigest,
+      })
+
+      expect(result.status).toBe('DRAFTING')
+      expect(result.assistantPrompt).toContain('canonical 投影')
+      expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+      expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    } finally {
+      genericGapSpy.mockRestore()
+      compileabilitySpy.mockRestore()
+      readCanonicalDigestSpy.mockRestore()
+    }
+  })
+
   it('persists updated semanticState when confirmGenerate closes a semantic slot before GENERATING', async () => {
     const persistedChecklist = completeChecklist({
       entryRules: ['价格突破长期均线时买入'],

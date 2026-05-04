@@ -2091,7 +2091,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
+        assistantPrompt: this.buildCanonicalProjectionFailureAssistantPrompt(compileability),
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -5803,8 +5803,8 @@ export class CodegenConversationService {
     })
   }
 
-  private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {
-    return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请按这些阻塞点补充可程序化规则后，我再继续整理逻辑图。`
+  private buildCanonicalProjectionFailureAssistantPrompt(report: CanonicalCompileabilityReport): string {
+    return `语义已记录，但 canonical 投影暂时未生成可执行脚本结构。系统已保留当前逻辑图，请重试或继续补充更具体的执行语义。（entryRules=${report.entryRuleCount}, exitRules=${report.exitRuleCount}）`
   }
 
   private buildStrategyDecision(input: {
