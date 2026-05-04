@@ -1,6 +1,15 @@
 import { Injectable } from '@nestjs/common'
 import { buildSemanticSlotId } from '../types/semantic-state'
-import type { SemanticEvidence, SemanticExpression, SemanticPositionSizingContract, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type {
+  SemanticAtomContract,
+  SemanticCapability,
+  SemanticCapabilityDomain,
+  SemanticEvidence,
+  SemanticExpression,
+  SemanticPositionSizingContract,
+  SemanticSlotState,
+  SemanticState,
+} from '../types/semantic-state'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 
@@ -73,6 +82,11 @@ export class SemanticStateReducerService {
       })
       if (!slot) continue
 
+      if (slot.status === 'open' && this.applyContractRequirementAnswer(trigger, slot, answerText, input.messageIndex)) {
+        trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        break
+      }
+
       const reduction = this.reduceSupportedSlot(slot, answerText)
       if (!reduction) {
         break
@@ -112,6 +126,11 @@ export class SemanticStateReducerService {
       })
       if (!slot || slot.status !== 'open') continue
 
+      if (this.applyContractRequirementAnswer(action, slot, answerText, input.messageIndex)) {
+        action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
+        break
+      }
+
       action.params = {
         ...(action.params ?? {}),
         [this.resolveActionParamKey(slot)]: answerText,
@@ -134,7 +153,7 @@ export class SemanticStateReducerService {
 
       return item.slotKey === input.targetSlotKey
         && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
-    })
+      })
     if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
       const parsed = this.parsePositionSizingContractAnswer(answerText, input.messageIndex)
       if (parsed) {
@@ -151,11 +170,16 @@ export class SemanticStateReducerService {
         positionSlot.evidence = evidence
       }
     }
+    if (
+      nextState.position
+      && positionSlot?.status === 'open'
+      && this.applyContractRequirementAnswer(nextState.position, positionSlot, answerText, input.messageIndex)
+    ) {
+      nextState.position.status = nextState.position.openSlots?.every(item => item.status !== 'open') ? 'locked' : 'open'
+    }
 
     let riskChanged = false
     for (const risk of nextState.risk) {
-      if (risk.key !== 'risk.protective_exit') continue
-
       const slot = risk.openSlots.find((item) => {
         if (input.targetSlotId) {
           return buildSemanticSlotId(item) === input.targetSlotId
@@ -164,6 +188,13 @@ export class SemanticStateReducerService {
         return item.slotKey === input.targetSlotKey
           && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
       })
+
+      if (slot?.status === 'open' && this.applyContractRequirementAnswer(risk, slot, answerText, input.messageIndex)) {
+        risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        break
+      }
+
+      if (risk.key !== 'risk.protective_exit') continue
       if (slot?.slotKey !== 'risk.protective_exit' || slot.status !== 'open') continue
 
       const percentValue = this.parsePercentAnswer(answerText)
@@ -240,6 +271,87 @@ export class SemanticStateReducerService {
     }
 
     return slot.slotKey
+  }
+
+  private applyContractRequirementAnswer(
+    owner: { contracts?: SemanticAtomContract[] },
+    slot: SemanticSlotState,
+    answerText: string,
+    messageIndex?: number,
+  ): boolean {
+    const capability = this.buildCapabilityFromContractRequirementSlot(slot, answerText)
+    if (!capability) {
+      return false
+    }
+
+    const contractId = this.resolveContractIdFromFieldPath(slot.fieldPath)
+    const contracts = owner.contracts ?? []
+    let changed = false
+    owner.contracts = contracts.map((contract) => {
+      if (contractId && contract.id !== contractId) {
+        return contract
+      }
+      if (this.contractHasCapability(contract, capability)) {
+        changed = true
+        return contract
+      }
+
+      changed = true
+      return {
+        ...contract,
+        capabilities: [...contract.capabilities, capability],
+      }
+    })
+
+    if (!changed) {
+      return false
+    }
+
+    slot.value = answerText
+    slot.status = 'locked'
+    slot.evidence = {
+      text: answerText,
+      messageIndex,
+      source: 'user_explicit',
+    }
+    return true
+  }
+
+  private buildCapabilityFromContractRequirementSlot(
+    slot: SemanticSlotState,
+    answerText: string,
+  ): SemanticCapability | null {
+    if (!slot.slotKey.startsWith('contract.requirement.')) {
+      return null
+    }
+
+    const parts = slot.slotKey.slice('contract.requirement.'.length).split('.')
+    if (parts.length < 3 || !this.isSemanticCapabilityDomain(parts[0])) {
+      return null
+    }
+
+    return {
+      domain: parts[0],
+      verb: parts[1],
+      object: parts.slice(2).join('.'),
+      shape: { answer: answerText },
+    }
+  }
+
+  private resolveContractIdFromFieldPath(fieldPath: string): string | null {
+    return fieldPath.match(/\.?contracts\[([^\]]+)\]/u)?.[1] ?? null
+  }
+
+  private contractHasCapability(contract: SemanticAtomContract, capability: SemanticCapability): boolean {
+    return contract.capabilities.some(item =>
+      item.domain === capability.domain
+      && item.verb === capability.verb
+      && item.object === capability.object,
+    )
+  }
+
+  private isSemanticCapabilityDomain(value: string): value is SemanticCapabilityDomain {
+    return ['market', 'price', 'order_program', 'capital', 'exposure', 'margin', 'guard'].includes(value)
   }
 
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {

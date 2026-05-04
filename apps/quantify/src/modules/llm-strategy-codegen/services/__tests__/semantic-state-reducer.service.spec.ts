@@ -50,6 +50,70 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('turns contract requirement clarification answers into owner capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 capital allocate per_order_budget。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+      }),
+      answer: '每格资金 10 USDT',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        status: 'locked',
+        value: '每格资金 10 USDT',
+      })],
+      contracts: [expect.objectContaining({
+        id: 'action-contract-grid-ladder',
+        capabilities: [expect.objectContaining({
+          domain: 'capital',
+          verb: 'allocate',
+          object: 'per_order_budget',
+          shape: { answer: '每格资金 10 USDT' },
+        })],
+      })],
+    }))
+  })
+
   it('does not normalize existing risk slots when reducing an unrelated action answer', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
