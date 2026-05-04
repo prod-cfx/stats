@@ -225,6 +225,64 @@ describe('SemanticContractReadinessService', () => {
     ])
   })
 
+  it('locks an open owner when satisfied contract requirements leave no open slots', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-grid-levels',
+        key: 'grid.price_levels',
+        phase: 'gate',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: { lower: 100, upper: 110, gridCount: 10 },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'contract.requirement.price.define.level_set',
+          fieldPath: 'actions[action-1].contracts[action-contract-1].requires.price.define.level_set',
+          status: 'open',
+          priority: 'behavior',
+          affectsExecution: true,
+          questionHint: '请补充 price define level_set 的执行语义。',
+        }],
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+    }))
+  })
+
   it('does not use open atom capabilities to satisfy contract requirements', () => {
     const state = createSemanticState({
       triggers: [{

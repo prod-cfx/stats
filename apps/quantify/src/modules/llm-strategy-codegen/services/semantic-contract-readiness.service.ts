@@ -183,7 +183,7 @@ function toOpenSlot(requirement: MissingSemanticContractRequirement): SemanticSl
   }
 }
 
-function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[] }>(
+function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status?: SemanticNodeStatus }>(
   owner: T,
   slotsToAdd: readonly SemanticSlotState[] | undefined,
 ): T {
@@ -195,13 +195,17 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[] }>(
   )
 
   if (!missingSlots.length) {
-    if (openSlots.length === currentOpenSlots.length) {
+    const nextStatus = owner.status === 'open' && openSlots.every(slot => slot.status !== 'open')
+      ? 'locked'
+      : owner.status
+    if (openSlots.length === currentOpenSlots.length && nextStatus === owner.status) {
       return owner
     }
 
     return {
       ...owner,
       openSlots,
+      ...(nextStatus ? { status: nextStatus } : {}),
     }
   }
 
@@ -225,6 +229,7 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[] }>(
   return {
     ...owner,
     openSlots,
+    ...(owner.status === 'locked' ? { status: 'open' as const } : {}),
   }
 }
 
