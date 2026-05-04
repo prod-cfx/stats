@@ -204,6 +204,42 @@ export class GridRuntimeRepository {
     })
   }
 
+  async findStrategyAccountForRuntime(instanceId: string) {
+    const instance = await this.txHost.tx.gridRuntimeInstance.findUnique({
+      where: { id: instanceId },
+      select: {
+        userId: true,
+        strategyInstanceId: true,
+      },
+    })
+    if (!instance) return null
+    const strategyInstance = await this.txHost.tx.strategyInstance.findUnique({
+      where: { id: instance.strategyInstanceId },
+      select: { strategyTemplateId: true },
+    })
+    if (!strategyInstance) return null
+
+    return this.txHost.tx.userStrategyAccount.findUnique({
+      where: {
+        userId_strategyId: {
+          userId: instance.userId,
+          strategyId: strategyInstance.strategyTemplateId,
+        },
+      },
+      select: { id: true },
+    })
+  }
+
+  findTradeByExternalTradeId(accountId: string, externalTradeId: string) {
+    return this.txHost.tx.trade.findFirst({
+      where: {
+        userStrategyAccountId: accountId,
+        externalTradeId,
+      },
+      select: { id: true },
+    })
+  }
+
   findInstanceForSync(instanceId: string) {
     return this.txHost.tx.gridRuntimeInstance.findUnique({
       where: { id: instanceId },

@@ -1,4 +1,5 @@
 import { GridOrderSyncService } from './grid-order-sync.service'
+import { PositionSide, TradeSide } from '@ai/shared'
 import { ClientOrderIdFactoryService } from '../../trading-execution/services/client-order-id-factory.service'
 import { OrderAdmissionGateService } from '../../trading-execution/services/order-admission-gate.service'
 import { OrderNormalizerService } from '../../trading-execution/services/order-normalizer.service'
@@ -69,6 +70,8 @@ function createRepository() {
     markOrderOpen: jest.fn().mockResolvedValue({ id: 'order-1' }),
     markOrderPlanned: jest.fn().mockResolvedValue(true),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
+    findStrategyAccountForRuntime: jest.fn().mockResolvedValue({ id: 'account-1' }),
+    findTradeByExternalTradeId: jest.fn().mockResolvedValue(null),
   }
 }
 
@@ -151,11 +154,18 @@ function createTxEvents() {
   return txEvents
 }
 
+function createPositionsService() {
+  return {
+    recordTrade: jest.fn().mockResolvedValue({ id: 'trade-1' }),
+  }
+}
+
 function createService(
   repository: ReturnType<typeof createRepository>,
   tradingService = createTradingService(),
   stateMachine = createStateMachine(),
   txEvents = createTxEvents(),
+  positionsService = createPositionsService(),
 ) {
   const tradingExecution = new TradingExecutionService(
     asDependency<ConstructorParameters<typeof TradingExecutionService>[0]>(tradingService),
@@ -169,6 +179,7 @@ function createService(
     asDependency<ConstructorParameters<typeof GridOrderSyncService>[2]>(tradingExecution),
     asDependency<ConstructorParameters<typeof GridOrderSyncService>[3]>(stateMachine),
     asDependency<ConstructorParameters<typeof GridOrderSyncService>[4]>(txEvents),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[5]>(positionsService),
   )
 }
 
@@ -655,6 +666,56 @@ describe('GridOrderSyncService', () => {
     expect(txEvents.withAfterCommit).toHaveBeenCalled()
   })
 
+  it('mirrors newly recorded grid fills into the strategy account trade ledger', async () => {
+    const repository = createRepository()
+    const tradingService = createTradingService()
+    tradingService.getClosedOrders.mockResolvedValue([
+      {
+        id: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'limit',
+        price: 95,
+        amount: 1.0526315789473684,
+        filled: 1.0526315789473684,
+        status: 'closed',
+        createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { fillId: 'fill-1', fee: 0.01, feeCurrency: 'USDT' },
+      },
+    ])
+    const positionsService = createPositionsService()
+    const service = createService(repository, tradingService, createStateMachine(), createTxEvents(), positionsService)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.findStrategyAccountForRuntime).toHaveBeenCalledWith('grid-1')
+    expect(positionsService.recordTrade).toHaveBeenCalledWith({
+      userStrategyAccountId: 'account-1',
+      symbol: 'BTCUSDT',
+      market: 'okx:spot',
+      side: TradeSide.BUY,
+      positionSide: PositionSide.LONG,
+      price: '95',
+      quantity: '1.0526315789473684',
+      fee: '0.01',
+      feeCurrency: 'USDT',
+      orderId: 'exchange-order-1',
+      externalTradeId: 'grid:fill-1',
+      provider: 'okx',
+      executedAt: '2026-04-29T00:01:00.000Z',
+      metadata: expect.objectContaining({
+        source: 'grid-runtime',
+        gridRuntimeInstanceId: 'grid-1',
+        gridOrderId: 'order-1',
+        gridFillId: 'fill-1',
+        exchangeAccountId: 'exchange-account-1',
+      }),
+    })
+  })
+
   it('records canceled partial fills and plans the inverse with filled quantity only', async () => {
     const repository = createRepository()
     const tradingService = createTradingService()
@@ -691,11 +752,18 @@ describe('GridOrderSyncService', () => {
   it('does not create another inverse order when duplicate fill was already recorded', async () => {
     const repository = createRepository()
     repository.recordFillOnce.mockResolvedValue({ fill: { id: 'fill-existing' }, newlyRecorded: false })
-    const service = createService(repository)
+    const positionsService = createPositionsService()
+    const service = createService(repository, createTradingService(), createStateMachine(), createTxEvents(), positionsService)
 
     await service.syncInstance('grid-1')
 
     expect(repository.recordFillOnce).toHaveBeenCalled()
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      externalTradeId: 'grid:fill-1',
+      metadata: expect.objectContaining({
+        gridFillId: 'fill-existing',
+      }),
+    }))
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
   })
 
