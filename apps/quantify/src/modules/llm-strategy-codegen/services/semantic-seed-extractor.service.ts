@@ -464,6 +464,7 @@ export class SemanticSeedExtractorService {
     }
 
     const perOrderBudget = this.extractPerGridBudget(text)
+    const shouldRecycleOnFill = /反向挂单|反向单|相邻网格|成交后|双向网格|真实网格/u.test(text)
     return {
       contracts: [{
         id: 'contract-grid-limit-ladder',
@@ -476,8 +477,8 @@ export class SemanticSeedExtractorService {
             shape: {
               orderType: 'limit',
               timeInForce: 'gtc',
-              recycleOnFill: /反向挂单|反向单|相邻网格|成交后/u.test(text),
-              pairingPolicy: /相邻/u.test(text) ? 'adjacent_level' : 'grid_level',
+              recycleOnFill: shouldRecycleOnFill,
+              pairingPolicy: shouldRecycleOnFill || /相邻/u.test(text) ? 'adjacent_level' : 'grid_level',
             },
           },
           ...(perOrderBudget

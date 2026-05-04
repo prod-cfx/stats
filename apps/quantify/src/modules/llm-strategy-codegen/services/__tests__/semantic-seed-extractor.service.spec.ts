@@ -1615,6 +1615,9 @@ describe('SemanticSeedExtractorService', () => {
                 domain: 'order_program',
                 verb: 'maintain',
                 object: 'limit_ladder',
+                shape: expect.objectContaining({
+                  recycleOnFill: true,
+                }),
               }),
             ]),
           }),

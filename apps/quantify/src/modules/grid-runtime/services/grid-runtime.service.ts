@@ -34,7 +34,7 @@ export class GridRuntimeService {
   ) {}
 
   async createFromDeployment(input: CreateGridRuntimeFromDeploymentInput) {
-    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol)
+    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice)
     const plan = this.planner.planInitialOrders({
       config,
       currentPrice: this.resolveCurrentPrice(input.currentPrice, config),
@@ -138,7 +138,11 @@ export class GridRuntimeService {
     return this.orderSync.stopAndCancelInstance(instanceId, reason)
   }
 
-  private buildConfigFromAst(astSnapshot: unknown, symbol: string): GridRuntimeConfigSnapshot {
+  private buildConfigFromAst(
+    astSnapshot: unknown,
+    symbol: string,
+    currentPrice?: string | number | null,
+  ): GridRuntimeConfigSnapshot {
     const ast = this.readRecord(astSnapshot)
     const orderPrograms = Array.isArray(ast?.orderPrograms) ? ast.orderPrograms : []
     const program = orderPrograms
@@ -147,22 +151,20 @@ export class GridRuntimeService {
     if (!program) throw new Error('grid_runtime_order_program_missing')
 
     const levelSet = this.findLevelSet(ast, this.readString(program, 'levelSetRef'))
-    const hardBounds = this.readRecord(levelSet?.hardBounds)
-    const lower = this.readConstSeriesValue(ast, this.readString(hardBounds, 'lowerRef'))
-    const upper = this.readConstSeriesValue(ast, this.readString(hardBounds, 'upperRef'))
+    const bounds = this.resolveLevelSetBounds(ast, levelSet, currentPrice)
     const quantity = this.readRecord(program.quantity)
     const perOrderQuote = this.readNumber(quantity, 'value')
     const quoteAsset = this.readString(quantity, 'asset')
     const gridCount = this.readNumber(program, 'maxWorkingOrders')
 
-    if (lower === null || upper === null || perOrderQuote === null || !quoteAsset || gridCount === null) {
+    if (!bounds || perOrderQuote === null || !quoteAsset || gridCount === null) {
       throw new Error('grid_runtime_invalid_order_program')
     }
 
     return {
       mode: this.mapMode(this.readString(program, 'sidePolicy')),
-      lowerPrice: this.formatNumber(lower),
-      upperPrice: this.formatNumber(upper),
+      lowerPrice: this.formatNumber(bounds.lower),
+      upperPrice: this.formatNumber(bounds.upper),
       gridCount: Math.max(2, Math.floor(gridCount)),
       perOrderQuote: this.formatNumber(perOrderQuote),
       quoteAsset,
@@ -174,6 +176,71 @@ export class GridRuntimeService {
       pairingPolicy: this.readString(program, 'pairingPolicy') === 'adjacent_level' ? 'adjacent_level' : undefined,
       activeWhen: this.readString(program, 'activeWhen'),
     }
+  }
+
+  private resolveLevelSetBounds(
+    ast: Record<string, unknown> | null,
+    levelSet: Record<string, unknown> | null,
+    currentPrice?: string | number | null,
+  ): { lower: number, upper: number } | null {
+    const hardBounds = this.readRecord(levelSet?.hardBounds)
+    const hardLower = this.readConstSeriesValue(ast, this.readString(hardBounds, 'lowerRef'))
+    const hardUpper = this.readConstSeriesValue(ast, this.readString(hardBounds, 'upperRef'))
+    if (hardLower !== null && hardUpper !== null) {
+      return hardUpper > hardLower ? { lower: hardLower, upper: hardUpper } : null
+    }
+
+    const levels = this.evaluateLevelSet(ast, levelSet, currentPrice)
+    if (levels.length < 2) return null
+
+    return {
+      lower: Math.min(...levels),
+      upper: Math.max(...levels),
+    }
+  }
+
+  private evaluateLevelSet(
+    ast: Record<string, unknown> | null,
+    levelSet: Record<string, unknown> | null,
+    currentPrice?: string | number | null,
+  ): number[] {
+    const anchor = this.resolveLevelSetAnchor(ast, levelSet, currentPrice)
+    const spacing = this.readRecord(levelSet?.spacing)
+    const spacingMode = this.readString(spacing, 'mode')
+    const spacingValue = this.readNumber(spacing, 'value')
+    const levelsPerSide = this.readRecord(levelSet?.levelsPerSide)
+    const downLevels = this.readNumber(levelsPerSide, 'down') ?? 0
+    const upLevels = this.readNumber(levelsPerSide, 'up') ?? 0
+    if (
+      anchor === null
+      || spacingValue === null
+      || spacingValue <= 0
+      || downLevels < 0
+      || upLevels < 0
+    ) {
+      return []
+    }
+
+    const levels: number[] = []
+    for (let index = -Math.floor(downLevels); index <= Math.floor(upLevels); index += 1) {
+      levels.push(spacingMode === 'pct'
+        ? anchor * Math.pow(1 + spacingValue / 100, index)
+        : anchor + spacingValue * index)
+    }
+    return levels.filter(level => Number.isFinite(level) && level > 0)
+  }
+
+  private resolveLevelSetAnchor(
+    ast: Record<string, unknown> | null,
+    levelSet: Record<string, unknown> | null,
+    currentPrice?: string | number | null,
+  ): number | null {
+    const anchorRef = this.readString(levelSet, 'anchorRef')
+    const anchor = this.readSeriesValue(ast, anchorRef, currentPrice)
+    if (anchor !== null) return anchor
+
+    const current = this.toPositiveNumber(currentPrice)
+    return current
   }
 
   private readSpacingValue(levelSet: Record<string, unknown> | null): string | null {
@@ -200,6 +267,22 @@ export class GridRuntimeService {
       const payload = this.readRecord(record.payload)
       if (!this.exprMatchesRef(record, payload, seriesRef)) continue
       return payload?.kind === 'CONST' ? this.readNumber(payload, 'value') : null
+    }
+    return null
+  }
+
+  private readSeriesValue(
+    ast: Record<string, unknown> | null,
+    seriesRef: string | null,
+    currentPrice?: string | number | null,
+  ): number | null {
+    if (!ast || !seriesRef || !Array.isArray(ast.exprPool)) return null
+    for (const expr of ast.exprPool) {
+      const record = this.readRecord(expr)
+      const payload = this.readRecord(record.payload)
+      if (!this.exprMatchesRef(record, payload, seriesRef)) continue
+      if (payload?.kind === 'CONST') return this.readNumber(payload, 'value')
+      if (payload?.kind === 'DEPLOYMENT_PRICE') return this.toPositiveNumber(currentPrice)
     }
     return null
   }
@@ -248,6 +331,11 @@ export class GridRuntimeService {
     const value = source?.[key]
     const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
     return Number.isFinite(numeric) ? numeric : null
+  }
+
+  private toPositiveNumber(value: string | number | null | undefined): number | null {
+    const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : null
   }
 
   private formatNumber(value: number): string {
