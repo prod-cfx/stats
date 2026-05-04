@@ -2215,7 +2215,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
       ast,
       executionEnvelope: {
         positionMode: 'long_only',
-        marginMode: 'isolated',
+        marginMode: 'cross',
         tickSize: 0.01,
         pricePrecision: 2,
         quantityPrecision: 6,

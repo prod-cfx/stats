@@ -185,4 +185,34 @@ describe('compiledScriptExecutionEnvelopeService', () => {
       ],
     }).positionMode).toBe('long_short')
   })
+
+  it('uses cross margin for perpetual execution envelopes', () => {
+    const envelope = service.build({
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [{
+        id: 'entry',
+        phase: 'entry',
+        priority: 100,
+        condition: { kind: 'atom', key: 'ma.golden_cross' },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    })
+
+    expect(envelope.marginMode).toBe('cross')
+  })
 })

@@ -659,6 +659,15 @@ function normalizeComparableParamValue(value: unknown): unknown {
 }
 
 function normalizeComparableParamValueForKey(key: string, value: unknown): unknown {
+  if (key === 'positionPct' || key === 'positionSizeRatioPercent') {
+    const normalized = normalizeComparableParamValue(value)
+    if (typeof normalized !== 'number' || !Number.isFinite(normalized)) {
+      return normalized
+    }
+    return normalized > 0 && normalized < 1
+      ? Number((normalized * 100).toFixed(8))
+      : Number(normalized.toFixed(8))
+  }
   if (key === 'sizing') {
     const sizing = normalizeComparableParamValue(value)
     if (!sizing || typeof sizing !== 'object' || Array.isArray(sizing)) {

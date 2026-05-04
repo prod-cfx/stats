@@ -28,7 +28,7 @@ export class CompiledScriptExecutionEnvelopeService {
         hasLongExposure,
         hasShortExposure,
       }),
-      marginMode: spec.market.marketType === 'perp' ? 'isolated' : 'cash',
+      marginMode: spec.market.marketType === 'perp' ? 'cross' : 'cash',
       tickSize: 0.01,
       pricePrecision: 2,
       quantityPrecision: 6,
