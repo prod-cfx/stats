@@ -62,7 +62,9 @@ export class GridOrderPlannerService {
     return specs.flatMap(({ side, role }) => {
       const quantity = this.normalizeQuantity(this.decimal(config.perOrderQuote).div(price), config)
       const minQuantity = this.toPositiveDecimal(config.minQuantity)
-      if (minQuantity && quantity.lt(minQuantity)) return []
+      if (minQuantity && quantity.lt(minQuantity)) {
+        throw new Error('grid_runtime_quantity_below_minimum')
+      }
 
       return [{
         levelIndex,

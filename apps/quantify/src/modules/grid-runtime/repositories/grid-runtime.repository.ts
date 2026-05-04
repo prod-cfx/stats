@@ -66,6 +66,11 @@ export interface MarkGridOrderOpenInput {
   rawPayload?: GridRuntimeJsonValue
 }
 
+export interface MarkGridOrderPlannedInput {
+  id: string
+  rawPayload?: GridRuntimeJsonValue
+}
+
 export interface RecordGridFillOnceInput {
   gridRuntimeInstanceId: string
   gridOrderId: string
@@ -307,6 +312,24 @@ export class GridRuntimeRepository {
         price: input.price == null ? undefined : this.decimal(input.price),
         quantity: input.quantity == null ? undefined : this.decimal(input.quantity),
         status: 'OPEN',
+        rawPayload: input.rawPayload,
+      },
+    })
+
+    return result.count === 1
+  }
+
+  async markOrderPlanned(input: MarkGridOrderPlannedInput): Promise<boolean> {
+    const result = await this.txHost.tx.gridOrder.updateMany({
+      where: {
+        id: input.id,
+        status: 'SUBMITTING',
+        instance: {
+          status: { in: ['INITIALIZING', 'RUNNING'] },
+        },
+      },
+      data: {
+        status: 'PLANNED',
         rawPayload: input.rawPayload,
       },
     })

@@ -1,11 +1,29 @@
 import { GridRuntimeService } from './grid-runtime.service'
+import { GridOrderPlannerService } from './grid-order-planner.service'
 
 function asDependency<T>(value: Partial<T>): T {
   return value as T
 }
 
-function createService(repository: { createInstanceWithPlan: jest.Mock }) {
-  const planner = {
+function createTradingService() {
+  return {
+    getInstrumentConstraints: jest.fn().mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      rawSymbol: 'BTC-USDT',
+      priceTickSize: '0.01',
+      quantityStepSize: '0.000001',
+      minQuantity: '0.000001',
+      contractValue: null,
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    }),
+  }
+}
+
+function createPlannerMock() {
+  return {
     planInitialOrders: jest.fn().mockReturnValue({
       levels: [
         { levelIndex: 0, price: '90', side: 'buy', role: 'spot_buy', baseQuantity: null, quoteBudget: '50', status: 'planned' },
@@ -16,6 +34,17 @@ function createService(repository: { createInstanceWithPlan: jest.Mock }) {
       ],
     }),
   }
+}
+
+function createService(
+  repository: { createInstanceWithPlan: jest.Mock },
+  overrides: {
+    planner?: ReturnType<typeof createPlannerMock> | GridOrderPlannerService
+    tradingService?: ReturnType<typeof createTradingService>
+  } = {},
+) {
+  const planner = overrides.planner ?? createPlannerMock()
+  const tradingService = overrides.tradingService ?? createTradingService()
   const stateMachine = {
     initialize: jest.fn().mockResolvedValue({ id: 'event-initializing' }),
     markRunning: jest.fn().mockResolvedValue({ id: 'event-running' }),
@@ -33,7 +62,9 @@ function createService(repository: { createInstanceWithPlan: jest.Mock }) {
       asDependency<ConstructorParameters<typeof GridRuntimeService>[1]>(planner),
       asDependency<ConstructorParameters<typeof GridRuntimeService>[2]>(orderSync),
       asDependency<ConstructorParameters<typeof GridRuntimeService>[3]>(stateMachine),
+      asDependency<ConstructorParameters<typeof GridRuntimeService>[4]>(tradingService),
     ),
+    tradingService,
   }
 }
 
@@ -182,7 +213,20 @@ describe('GridRuntimeService', () => {
 
   it('creates a grid runtime plan from centered-percent deployment price order programs', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-centered-1' }) }
-    const { service, planner } = createService(repository)
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDT',
+      rawSymbol: 'ETH-USDT',
+      priceTickSize: '0.01',
+      quantityStepSize: '0.000001',
+      minQuantity: '0.000001',
+      contractValue: null,
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    const { service, planner } = createService(repository, { tradingService })
 
     await service.createFromDeployment({
       strategyInstanceId: 'strategy-centered-1',
@@ -196,7 +240,7 @@ describe('GridRuntimeService', () => {
       currentPrice: '100',
     })
 
-    const config = planner.planInitialOrders.mock.calls[0]?.[0]?.config
+    const config = (planner as ReturnType<typeof createPlannerMock>).planInitialOrders.mock.calls[0]?.[0]?.config
     expect(config).toEqual(expect.objectContaining({
       mode: 'spot',
       gridCount: 10,
@@ -220,7 +264,20 @@ describe('GridRuntimeService', () => {
 
   it('creates a perpetual neutral grid runtime plan from pct-equity order programs', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-perp-1' }) }
-    const { service, planner } = createService(repository)
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.01',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    const { service, planner } = createService(repository, { tradingService })
     const astSnapshot = createAstSnapshot() as ReturnType<typeof createAstSnapshot> & {
       executionModel?: Record<string, unknown>
     }
@@ -255,15 +312,57 @@ describe('GridRuntimeService', () => {
 
     expect(planner.planInitialOrders).toHaveBeenCalledWith({
       config: expect.objectContaining({
-        mode: 'perp_neutral',
-        perOrderQuote: '100',
-        quoteAsset: 'USDT',
-        baseAsset: 'BTC',
-        tickSize: '0.01',
-        lotSize: '0.000001',
-      }),
+      mode: 'perp_neutral',
+      perOrderQuote: '100',
+      quoteAsset: 'USDT',
+      baseAsset: 'BTC',
+      tickSize: '0.01',
+      lotSize: '0.01',
+      minQuantity: '0.01',
+    }),
       currentPrice: '100',
     })
+  })
+
+  it('normalizes initial planned orders with exchange constraints before persisting', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-normalized-1' }) }
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDT',
+      rawSymbol: 'ETH-USDT',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.001',
+      minQuantity: '0.001',
+      contractValue: null,
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    const { service } = createService(repository, {
+      planner: new GridOrderPlannerService(),
+      tradingService,
+    })
+
+    await service.createFromDeployment({
+      strategyInstanceId: 'strategy-normalized-1',
+      publishedSnapshotId: 'snapshot-normalized-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDT',
+      astSnapshot: createCenteredPercentAstSnapshot(),
+      currentPrice: '100',
+    })
+
+    const persisted = repository.createInstanceWithPlan.mock.calls[0]?.[0]
+    expect(persisted.levels.every((level: { price: string }) => Number.isInteger(Number(level.price) * 10))).toBe(true)
+    expect(persisted.plannedOrders.length).toBeGreaterThan(0)
+    expect(persisted.plannedOrders.every((order: { price: string, quantity: string }) =>
+      Number.isInteger(Number(order.price) * 10)
+      && Number.isInteger(Number(order.quantity) * 1000),
+    )).toBe(true)
   })
 
   it('stops through order sync so exchange orders are canceled before terminal state', async () => {

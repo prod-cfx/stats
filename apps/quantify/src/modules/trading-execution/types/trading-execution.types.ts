@@ -43,6 +43,24 @@ export interface NormalizedOrderIntent {
   constraints: TradingExecutionConstraints
 }
 
+export interface PreparedOrderIntent {
+  intent: OrderIntent
+  constraints: TradingExecutionConstraints
+  normalized: NormalizedOrderIntent
+}
+
+export type TradingExecutionPrepareResult =
+  | ({ status: 'prepared' } & PreparedOrderIntent)
+  | { status: 'waiting_constraints'; intent: OrderIntent; reason: string; error?: unknown }
+  | { status: 'rejected'; intent: OrderIntent; reason: string; normalized?: NormalizedOrderIntent }
+
+export type TradingExecutionSubmitPreparedResult =
+  | { status: 'submitted'; intent: OrderIntent; normalized: NormalizedOrderIntent; order: UnifiedOrder }
+  | { status: 'waiting_position'; intent: OrderIntent; normalized: NormalizedOrderIntent; reason: string; error?: unknown }
+  | { status: 'rejected'; intent: OrderIntent; reason: string; normalized?: NormalizedOrderIntent }
+  | { status: 'submit_failed'; intent: OrderIntent; normalized: NormalizedOrderIntent; reason: string; error: unknown }
+  | { status: 'reconcile_required'; intent: OrderIntent; reason: string; order?: UnifiedOrder; error?: unknown }
+
 export type TradingExecutionResult =
   | { status: 'submitted'; intent: OrderIntent; normalized: NormalizedOrderIntent; order: UnifiedOrder }
   | { status: 'waiting_constraints'; intent: OrderIntent; reason: string; error?: unknown }

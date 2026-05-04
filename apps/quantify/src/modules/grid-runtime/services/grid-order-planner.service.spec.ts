@@ -130,6 +130,19 @@ describe('GridOrderPlannerService', () => {
     }))
   })
 
+  it('rejects planned orders that normalize below the minimum quantity', () => {
+    expect(() => service.planInitialOrders({
+      config: {
+        ...baseConfig,
+        mode: 'spot',
+        perOrderQuote: '1',
+        lotSize: '0.001',
+        minQuantity: '1',
+      },
+      currentPrice: '100',
+    })).toThrow('grid_runtime_quantity_below_minimum')
+  })
+
   it('rejects invalid price bounds and grid counts', () => {
     expect(() => service.planInitialOrders({
       config: { ...baseConfig, mode: 'spot', upperPrice: '90' },

@@ -2,6 +2,9 @@ import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { Prisma } from '@/prisma/prisma.types'
+import type { ExchangeId, MarketType, UnifiedInstrumentConstraints } from '@/modules/trading/core/types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
+import { TradingService } from '@/modules/trading/trading.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { GridRuntimeRepository } from '../repositories/grid-runtime.repository'
 import type { GridRuntimeConfigSnapshot, GridRuntimeJsonValue, GridRuntimeMode } from '../types/grid-runtime.types'
@@ -39,14 +42,30 @@ export class GridRuntimeService {
     private readonly planner: GridOrderPlannerService,
     private readonly orderSync: GridOrderSyncService,
     private readonly stateMachine: GridRuntimeStateMachineService,
+    private readonly tradingService: TradingService,
   ) {}
 
   async createFromDeployment(input: CreateGridRuntimeFromDeploymentInput) {
-    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice, input.fundingSnapshot)
-    const plan = this.planner.planInitialOrders({
-      config,
-      currentPrice: this.resolveCurrentPrice(input.currentPrice, config),
-    })
+    const marketType = this.normalizeMarketType(input.marketType)
+    const configFromAst = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice, input.fundingSnapshot)
+    const constraints = await this.loadInstrumentConstraints(input, marketType)
+    const config = this.applyExchangeConstraints(configFromAst, constraints)
+    let plan: ReturnType<GridOrderPlannerService['planInitialOrders']>
+    try {
+      plan = this.planner.planInitialOrders({
+        config,
+        currentPrice: this.resolveCurrentPrice(input.currentPrice, config),
+      })
+    }
+    catch (error) {
+      if (error instanceof Error && error.message.startsWith('grid_runtime_')) {
+        throw this.invalidGridRuntimeConfig(error.message)
+      }
+      throw error
+    }
+    if (plan.orders.length === 0) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_no_submittable_orders_after_normalization')
+    }
 
     const instance = await this.repository.createInstanceWithPlan({
       strategyInstanceId: input.strategyInstanceId,
@@ -54,7 +73,7 @@ export class GridRuntimeService {
       userId: input.userId,
       exchangeAccountId: input.exchangeAccountId,
       exchangeId: input.exchangeId,
-      marketType: input.marketType,
+      marketType,
       symbol: input.symbol,
       mode: config.mode,
       configSnapshot: config as unknown as GridRuntimeJsonValue,
@@ -336,6 +355,61 @@ export class GridRuntimeService {
       : normalizedSymbol
   }
 
+  private async loadInstrumentConstraints(
+    input: CreateGridRuntimeFromDeploymentInput,
+    marketType: MarketType,
+  ): Promise<UnifiedInstrumentConstraints> {
+    let constraints: UnifiedInstrumentConstraints
+    try {
+      constraints = await this.tradingService.getInstrumentConstraints(
+        input.userId,
+        input.exchangeId as ExchangeId,
+        marketType,
+        input.symbol,
+        input.exchangeAccountId,
+      )
+    }
+    catch {
+      throw this.invalidGridRuntimeConfig('grid_runtime_instrument_constraints_unavailable')
+    }
+    if (
+      constraints.exchangeId !== input.exchangeId
+      || constraints.marketType !== marketType
+      || this.normalizeInstrumentSymbol(constraints.symbol) !== this.normalizeInstrumentSymbol(input.symbol)
+    ) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_instrument_constraints_mismatch')
+    }
+    return constraints
+  }
+
+  private applyExchangeConstraints(
+    config: GridRuntimeConfigSnapshot,
+    constraints: UnifiedInstrumentConstraints,
+  ): GridRuntimeConfigSnapshot {
+    const tickSize = this.positiveDecimalToString(constraints.priceTickSize, 'grid_runtime_missing_price_tick')
+    const quantityStep = this.positiveDecimal(constraints.quantityStepSize, 'grid_runtime_missing_quantity_step')
+    const minQuantity = constraints.minQuantity == null
+      ? null
+      : this.positiveDecimal(constraints.minQuantity, 'grid_runtime_invalid_min_quantity')
+
+    if (constraints.marketType === 'perp') {
+      const contractValue = this.positiveDecimal(constraints.contractValue, 'grid_runtime_missing_contract_value')
+      return {
+        ...config,
+        tickSize,
+        lotSize: quantityStep.mul(contractValue).toFixed(),
+        minQuantity: minQuantity?.mul(contractValue).toFixed() ?? null,
+      }
+    }
+
+    return {
+      ...config,
+      tickSize,
+      lotSize: quantityStep.toFixed(),
+      minQuantity: minQuantity?.toFixed() ?? null,
+    }
+  }
+
   private resolvePerOrderQuoteSizing(
     quantity: Record<string, unknown> | null,
     symbol: string,
@@ -399,11 +473,29 @@ export class GridRuntimeService {
     return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : null
   }
 
+  private normalizeInstrumentSymbol(value: string): string {
+    return value
+      .trim()
+      .toUpperCase()
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
+  }
+
   private invalidGridRuntimeConfig(message: string): DomainException {
     return new DomainException(message, {
       code: ErrorCode.BAD_REQUEST,
       status: HttpStatus.BAD_REQUEST,
     })
+  }
+
+  private normalizeMarketType(value: string): MarketType {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'spot') return 'spot'
+    if (normalized === 'perp' || normalized === 'swap' || normalized === 'futures' || normalized === 'future' || normalized === 'perpetual') {
+      return 'perp'
+    }
+    throw this.invalidGridRuntimeConfig('grid_runtime_invalid_market_type')
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {
@@ -441,6 +533,17 @@ export class GridRuntimeService {
   private toPositiveNumber(value: string | number | null | undefined): number | null {
     const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null
+  }
+
+  private positiveDecimalToString(value: string | null | undefined, message: string): string {
+    return this.positiveDecimal(value, message).toFixed()
+  }
+
+  private positiveDecimal(value: string | null | undefined, message: string): Prisma.Decimal {
+    if (!value) throw this.invalidGridRuntimeConfig(message)
+    const decimal = new Prisma.Decimal(value)
+    if (!decimal.isPositive()) throw this.invalidGridRuntimeConfig(message)
+    return decimal
   }
 
   private formatNumber(value: number): string {

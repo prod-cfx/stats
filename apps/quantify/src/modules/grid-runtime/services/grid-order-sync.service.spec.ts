@@ -1,4 +1,8 @@
 import { GridOrderSyncService } from './grid-order-sync.service'
+import { ClientOrderIdFactoryService } from '../../trading-execution/services/client-order-id-factory.service'
+import { OrderAdmissionGateService } from '../../trading-execution/services/order-admission-gate.service'
+import { OrderNormalizerService } from '../../trading-execution/services/order-normalizer.service'
+import { TradingExecutionService } from '../../trading-execution/services/trading-execution.service'
 
 function asDependency<T>(value: Partial<T>): T {
   return value as T
@@ -63,12 +67,25 @@ function createRepository() {
     createPlannedOrder: jest.fn().mockResolvedValue({ id: 'inverse-order-1' }),
     markOrderSubmitting: jest.fn().mockResolvedValue(true),
     markOrderOpen: jest.fn().mockResolvedValue({ id: 'order-1' }),
+    markOrderPlanned: jest.fn().mockResolvedValue(true),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
   }
 }
 
 function createTradingService() {
   return {
+    getInstrumentConstraints: jest.fn().mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTC-USDT',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.00000001',
+      minQuantity: '0.00000001',
+      contractValue: null,
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    }),
     getOpenOrders: jest.fn().mockResolvedValue([]),
     getTicker: jest.fn().mockResolvedValue({
       symbol: 'BTC/USDT',
@@ -99,20 +116,20 @@ function createTradingService() {
     ]),
     cancelOrder: jest.fn().mockResolvedValue({ id: 'exchange-order-1', status: 'canceled' }),
     getPositions: jest.fn().mockResolvedValue([]),
-    placeOrder: jest.fn().mockResolvedValue({
+    placeOrder: jest.fn().mockImplementation(async (_userId, _exchangeId, _marketType, input) => ({
       id: 'exchange-order-created',
-      clientOrderId: 'gplannedorder1',
-      symbol: 'BTC/USDT',
-      marketType: 'spot',
-      side: 'buy',
-      type: 'limit',
-      price: 95,
-      amount: 1.0526315789473684,
+      clientOrderId: input.clientOrderId,
+      symbol: input.symbol,
+      marketType: input.marketType,
+      side: input.side,
+      type: input.type,
+      price: input.price,
+      amount: input.amount,
       filled: 0,
       status: 'open',
       createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
       raw: { orderId: 'exchange-order-created' },
-    }),
+    })),
   }
 }
 
@@ -140,11 +157,18 @@ function createService(
   stateMachine = createStateMachine(),
   txEvents = createTxEvents(),
 ) {
+  const tradingExecution = new TradingExecutionService(
+    asDependency<ConstructorParameters<typeof TradingExecutionService>[0]>(tradingService),
+    new ClientOrderIdFactoryService(),
+    new OrderNormalizerService(),
+    new OrderAdmissionGateService(),
+  )
   return new GridOrderSyncService(
     asDependency<ConstructorParameters<typeof GridOrderSyncService>[0]>(repository),
     asDependency<ConstructorParameters<typeof GridOrderSyncService>[1]>(tradingService),
-    asDependency<ConstructorParameters<typeof GridOrderSyncService>[2]>(stateMachine),
-    asDependency<ConstructorParameters<typeof GridOrderSyncService>[3]>(txEvents),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[2]>(tradingExecution),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[3]>(stateMachine),
+    asDependency<ConstructorParameters<typeof GridOrderSyncService>[4]>(txEvents),
   )
 }
 
@@ -168,25 +192,36 @@ describe('GridOrderSyncService', () => {
 
     expect(repository.markOrderSubmitting).toHaveBeenCalledWith({
       id: 'planned-order-1',
-      clientOrderId: 'gplannedorder1',
-      rawPayload: { source: 'grid_order_sync' },
+      clientOrderId: expect.stringMatching(/^g[A-Za-z0-9]+$/u),
+      rawPayload: expect.objectContaining({ source: 'grid_order_sync' }),
     })
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
     expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', {
       symbol: 'BTC/USDT',
       marketType: 'spot',
       side: 'buy',
       type: 'limit',
-      amount: 1.0526315789473684,
+      amount: 1.05263157,
       price: 95,
       timeInForce: 'GTC',
-      clientOrderId: 'gplannedorder1',
+      reduceOnly: undefined,
+      tdMode: undefined,
+      positionSide: undefined,
+      posSide: undefined,
+      clientOrderId: submittedClientOrderId,
     }, 'exchange-account-1')
     expect(repository.markOrderOpen).toHaveBeenCalledWith({
       id: 'planned-order-1',
       exchangeOrderId: 'exchange-order-created',
       price: '95',
-      quantity: '1.0526315789473684',
-      rawPayload: { orderId: 'exchange-order-created' },
+      quantity: '1.05263157',
+      rawPayload: expect.objectContaining({
+        exchange: { orderId: 'exchange-order-created' },
+        execution: expect.objectContaining({
+          status: 'submitted',
+          clientOrderId: submittedClientOrderId,
+        }),
+      }),
     })
     expect(repository.updateInstanceLastSyncAt).toHaveBeenCalledWith('grid-1')
   })
@@ -208,11 +243,11 @@ describe('GridOrderSyncService', () => {
 
     await service.syncInstance('grid-1')
 
-    expect(repository.markOrderSubmitting).toHaveBeenCalledWith(expect.objectContaining({
-      clientOrderId: 'g0123456789abcdefghijklmnopqrstu',
-    }))
+    const clientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(clientOrderId).toEqual(expect.stringMatching(/^g[A-Za-z0-9]+$/u))
+    expect(clientOrderId).toHaveLength(32)
     expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', expect.objectContaining({
-      clientOrderId: 'g0123456789abcdefghijklmnopqrstu',
+      clientOrderId,
     }), 'exchange-account-1')
   })
 
@@ -254,7 +289,10 @@ describe('GridOrderSyncService', () => {
       exchangeOrderId: 'exchange-order-created',
       price: '79283.3',
       quantity: '0.1',
-      rawPayload: { orderId: 'exchange-order-created' },
+      rawPayload: expect.objectContaining({
+        exchange: { orderId: 'exchange-order-created' },
+        execution: expect.objectContaining({ status: 'submitted' }),
+      }),
     })
   })
 
@@ -278,6 +316,18 @@ describe('GridOrderSyncService', () => {
     const tradingService = createTradingService()
     tradingService.getOpenOrders.mockResolvedValue([])
     tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
     tradingService.getPositions.mockResolvedValue([
       {
         symbol: 'BTC/USDT:PERP',
@@ -314,22 +364,36 @@ describe('GridOrderSyncService', () => {
         id: 'planned-open-long',
         clientOrderId: null,
         exchangeOrderId: null,
-        status: 'PLANNED',
-        side: 'buy',
-        role: 'open_long',
-      }),
+      status: 'PLANNED',
+      side: 'buy',
+      role: 'open_long',
+      quantity: { toString: () => '0.1' },
+    }),
       createOrder({
         id: 'planned-close-short',
         clientOrderId: null,
         exchangeOrderId: null,
-        status: 'PLANNED',
-        side: 'buy',
-        role: 'close_short',
-      }),
+      status: 'PLANNED',
+      side: 'buy',
+      role: 'close_short',
+      quantity: { toString: () => '0.1' },
+    }),
     ])
     const tradingService = createTradingService()
     tradingService.getOpenOrders.mockResolvedValue([])
     tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
     tradingService.getPositions.mockResolvedValue([])
     const stateMachine = createStateMachine()
     const service = createService(repository, tradingService, stateMachine)
@@ -339,11 +403,19 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.getPositions).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'exchange-account-1')
     expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
     expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'perp', expect.objectContaining({
-      clientOrderId: 'gplannedopenlong',
       side: 'buy',
     }), 'exchange-account-1')
-    expect(repository.markOrderSubmitting).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(repository.markOrderSubmitting).toHaveBeenCalledWith(expect.objectContaining({
       id: 'planned-close-short',
+    }))
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-close-short',
+      rawPayload: expect.objectContaining({
+        execution: expect.objectContaining({
+          status: 'waiting_position',
+          reason: 'missing_closable_short_position',
+        }),
+      }),
     }))
     expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
   })
@@ -394,10 +466,12 @@ describe('GridOrderSyncService', () => {
 
     expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_submit_failed', expect.objectContaining({
       orderId: 'planned-order-1',
-      clientOrderId: 'gplannedorder1',
+      clientOrderId: expect.stringMatching(/^g[A-Za-z0-9]+$/u),
       exchangeId: 'okx',
       marketType: 'spot',
       symbol: 'BTC/USDT',
+      status: 'submit_failed',
+      normalized: expect.objectContaining({ clientOrderId: expect.stringMatching(/^g[A-Za-z0-9]+$/u) }),
       error: expect.objectContaining({
         message: 'OKX error 51000: Parameter px error',
         code: 'TRADING_ORDER_CREATION_FAILED',
@@ -430,8 +504,11 @@ describe('GridOrderSyncService', () => {
       id: 'planned-order-1',
       exchangeOrderId: 'exchange-order-created',
       price: '95',
-      quantity: '1.0526315789473684',
-      rawPayload: { orderId: 'exchange-order-created' },
+      quantity: '1.05263157',
+      rawPayload: expect.objectContaining({
+        exchange: { orderId: 'exchange-order-created' },
+        execution: expect.objectContaining({ status: 'submitted' }),
+      }),
     })
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-order-created', 'BTC/USDT', 'exchange-account-1')
     expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_submit_race')

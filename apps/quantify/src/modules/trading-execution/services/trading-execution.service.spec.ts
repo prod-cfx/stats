@@ -71,7 +71,7 @@ function createTradingServiceMock() {
 
 function createService(tradingService = createTradingServiceMock()): TradingExecutionService {
   return new TradingExecutionService(
-    tradingService as TradingService,
+    tradingService as unknown as TradingService,
     new ClientOrderIdFactoryService(),
     new OrderNormalizerService(),
     new OrderAdmissionGateService(),
@@ -79,6 +79,45 @@ function createService(tradingService = createTradingServiceMock()): TradingExec
 }
 
 describe('TradingExecutionService', () => {
+  it('prepares an intent without fetching positions or submitting an order', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const result = await service.prepareIntent(intent)
+
+    expect(result.status).toBe('prepared')
+    if (result.status !== 'prepared') throw new Error('expected prepared result')
+    expect(result.intent).toBe(intent)
+    expect(result.normalized.clientOrderId).toEqual(expect.stringMatching(/^g[A-Za-z0-9]+$/u))
+    expect(result.normalized.request).toEqual(expect.objectContaining({
+      clientOrderId: result.normalized.clientOrderId,
+      amount: 0.1,
+      price: 79200,
+    }))
+    expect(tradingService.getPositions).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
+  it('submits a prepared intent with the prepared client order id', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const prepared = await service.prepareIntent(intent)
+    if (prepared.status !== 'prepared') throw new Error('expected prepared result')
+    const result = await service.submitPrepared(prepared)
+
+    expect(result.status).toBe('submitted')
+    if (result.status !== 'submitted') throw new Error('expected submitted result')
+    expect(result.normalized.clientOrderId).toBe(prepared.normalized.clientOrderId)
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'perp',
+      expect.objectContaining({ clientOrderId: prepared.normalized.clientOrderId }),
+      'exchange-account-1',
+    )
+  })
+
   it('submits an open order without fetching positions', async () => {
     const tradingService = createTradingServiceMock()
     const service = createService(tradingService)

@@ -4,7 +4,15 @@ import { TradingService } from '@/modules/trading/trading.service'
 import { ClientOrderIdFactoryService } from './client-order-id-factory.service'
 import { OrderAdmissionGateService } from './order-admission-gate.service'
 import { OrderNormalizerService } from './order-normalizer.service'
-import type { NormalizedOrderIntent, OrderIntent, TradingExecutionConstraints, TradingExecutionResult } from '../types/trading-execution.types'
+import type {
+  NormalizedOrderIntent,
+  OrderIntent,
+  PreparedOrderIntent,
+  TradingExecutionConstraints,
+  TradingExecutionPrepareResult,
+  TradingExecutionResult,
+  TradingExecutionSubmitPreparedResult,
+} from '../types/trading-execution.types'
 
 @Injectable()
 export class TradingExecutionService {
@@ -16,9 +24,20 @@ export class TradingExecutionService {
   ) {}
 
   async executeIntent(intent: OrderIntent): Promise<TradingExecutionResult> {
+    const prepared = await this.prepareIntent(intent)
+    if (prepared.status !== 'prepared') return prepared
+    const submitted = await this.submitPrepared(prepared)
+    if (submitted.status === 'waiting_position') {
+      const { normalized: _normalized, ...result } = submitted
+      return result
+    }
+    return submitted
+  }
+
+  async prepareIntent(intent: OrderIntent): Promise<TradingExecutionPrepareResult> {
     const shape = this.admissionGate.evaluateIntentShape(intent)
-    if (!shape.ok) {
-      return { status: shape.status, intent, reason: shape.reason }
+    if (shape.ok === false) {
+      return { status: 'rejected', intent, reason: shape.reason }
     }
 
     let constraints: TradingExecutionConstraints
@@ -57,6 +76,16 @@ export class TradingExecutionService {
       return { status: 'rejected', intent, reason: this.errorReason(error) }
     }
 
+    return {
+      status: 'prepared',
+      intent,
+      constraints,
+      normalized,
+    }
+  }
+
+  async submitPrepared(prepared: PreparedOrderIntent): Promise<TradingExecutionSubmitPreparedResult> {
+    const { intent, normalized } = prepared
     const requiresPositions = intent.reduceOnly || intent.role === 'close_long' || intent.role === 'close_short'
     let positions: UnifiedPosition[] = []
     if (requiresPositions) {
@@ -64,12 +93,12 @@ export class TradingExecutionService {
         positions = await this.tradingService.getPositions(intent.userId, intent.exchangeId, intent.marketType, intent.exchangeAccountId ?? undefined)
       }
       catch (error) {
-        return { status: 'waiting_position', intent, reason: 'positions_unavailable', error }
+        return { status: 'waiting_position', intent, normalized, reason: 'positions_unavailable', error }
       }
     }
     const admission = this.admissionGate.evaluate(intent, positions)
-    if (!admission.ok) {
-      return { status: admission.status, intent, reason: admission.reason }
+    if (admission.ok === false) {
+      return { status: admission.status, intent, normalized, reason: admission.reason }
     }
 
     try {

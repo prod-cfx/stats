@@ -206,6 +206,25 @@ describe('GridRuntimeRepository', () => {
     })
   })
 
+  it('moves a submitting order back to planned when execution is waiting for position', async () => {
+    const tx = {
+      gridOrder: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const repo = new GridRuntimeRepository(createTxHost(tx))
+
+    await repo.markOrderPlanned({ id: 'order-1', rawPayload: { reason: 'missing_closable_short_position' } })
+
+    expect(tx.gridOrder.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', status: 'SUBMITTING', instance: { status: { in: ['INITIALIZING', 'RUNNING'] } } },
+      data: {
+        status: 'PLANNED',
+        rawPayload: { reason: 'missing_closable_short_position' },
+      },
+    })
+  })
+
   it('records a new exchange fill with createMany skipDuplicates', async () => {
     const newFill = { id: 'fill-2', exchangeFillId: 'exchange-fill-2' }
     const tx = {
