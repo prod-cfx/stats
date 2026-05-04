@@ -413,12 +413,13 @@ export class GridOrderSyncService {
     return null
   }
 
-  private async handleRetryableRateLimit(input: RetryableRateLimitInput): Promise<void> {
+  private async handleRetryableRateLimit(input: RetryableRateLimitInput): Promise<boolean> {
     const serializedError = input.error == null ? null : this.serializeError(input.error)
-    const payload = this.toJsonValue({
+    const payloadInput = {
       source: 'grid_order_sync',
       orderId: input.order?.id ?? null,
       clientOrderId: input.clientOrderId ?? null,
+      status: 'rate_limited',
       exchangeId: input.exchangeId,
       marketType: input.marketType,
       symbol: input.instance.symbol,
@@ -430,15 +431,21 @@ export class GridOrderSyncService {
         reason: input.reason,
         error: serializedError,
       },
-    })
+    }
+    const payload = this.toJsonValue(payloadInput)
 
     if (input.order && input.clientOrderId) {
       const order = input.order
-      await this.txEvents.withAfterCommit(async () =>
+      const restored = await this.txEvents.withAfterCommit(async () =>
         this.repository.markOrderPlanned({
           id: order.id,
           rawPayload: payload,
         }))
+      if (!restored) {
+        await this.txEvents.withAfterCommit(async () =>
+          this.stateMachine.markReconcileRequired(input.instance.id, 'order_rate_limit_restore_state_race', payload))
+        return false
+      }
     }
     await this.txEvents.withAfterCommit(async () =>
       this.repository.appendEvent({
@@ -449,6 +456,7 @@ export class GridOrderSyncService {
         message: input.reason,
         payload,
       }))
+    return true
   }
 
   private buildOrderIntent(

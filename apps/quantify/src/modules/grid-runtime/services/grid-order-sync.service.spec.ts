@@ -817,6 +817,45 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
   })
 
+  it('marks reconcile required when rate-limit restore to planned loses CAS', async () => {
+    const repository = createRepository()
+    repository.markOrderPlanned.mockResolvedValue(false)
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(new Error('OKX order creation failed: OKX error 50011: Too Many Requests'))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-order-1',
+    }))
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_rate_limit_restore_state_race', expect.objectContaining({
+      orderId: 'planned-order-1',
+      clientOrderId: submittedClientOrderId,
+      status: 'rate_limited',
+      reason: 'OKX order creation failed: OKX error 50011: Too Many Requests',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      error: expect.objectContaining({
+        message: 'OKX order creation failed: OKX error 50011: Too Many Requests',
+      }),
+    }))
+    expect(repository.appendEvent).not.toHaveBeenCalled()
+  })
+
   it('keeps runtime running when submit failure carries numeric OKX rate-limit code', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([
