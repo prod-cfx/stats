@@ -10,6 +10,8 @@ type AdmissionResult =
 @Injectable()
 export class OrderAdmissionGateService {
   evaluateIntentShape(intent: OrderIntent): AdmissionResult {
+    const market = this.validateRoleMarket(intent)
+    if (market) return market
     const direction = this.validateRoleDirection(intent)
     if (direction) return direction
     return { ok: true }
@@ -62,6 +64,24 @@ export class OrderAdmissionGateService {
     }
     if (intent.role === 'close_short' && intent.side !== 'buy') {
       return { ok: false, status: 'rejected', reason: 'close_short_requires_buy_side' }
+    }
+    return null
+  }
+
+  private validateRoleMarket(intent: OrderIntent): AdmissionResult | null {
+    if ((intent.role === 'spot_buy' || intent.role === 'spot_sell') && intent.marketType !== 'spot') {
+      return { ok: false, status: 'rejected', reason: 'spot_role_requires_spot_market' }
+    }
+    if (
+      (
+        intent.role === 'open_long'
+        || intent.role === 'open_short'
+        || intent.role === 'close_long'
+        || intent.role === 'close_short'
+      )
+      && intent.marketType !== 'perp'
+    ) {
+      return { ok: false, status: 'rejected', reason: 'perp_role_requires_perp_market' }
     }
     return null
   }

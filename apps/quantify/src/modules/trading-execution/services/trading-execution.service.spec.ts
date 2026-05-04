@@ -225,6 +225,22 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('rejects spot role on perp market before fetching constraints', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const spotIntent = { ...intent, role: 'spot_buy' } satisfies OrderIntent
+    const result = await service.executeIntent(spotIntent)
+
+    expect(result).toEqual({
+      status: 'rejected',
+      intent: spotIntent,
+      reason: 'spot_role_requires_spot_market',
+    })
+    expect(tradingService.getInstrumentConstraints).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('converts non-Error thrown values to string reasons', async () => {
     const tradingService = createTradingServiceMock()
     tradingService.getInstrumentConstraints.mockRejectedValue('constraints unavailable')
@@ -256,6 +272,36 @@ describe('TradingExecutionService', () => {
     expect(result.status).toBe('submitted')
     expect(tradingService.getPositions).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'exchange-account-1')
     expect(tradingService.placeOrder).toHaveBeenCalled()
+  })
+
+  it('submits close-short without caller reduceOnly as reduce-only short request', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getPositions.mockResolvedValue([shortPosition])
+    const service = createService(tradingService)
+
+    const closeIntent: OrderIntent = {
+      ...intent,
+      sourceId: 'planned-close-short',
+      role: 'close_short',
+      reduceOnly: undefined,
+    }
+    const result = await service.executeIntent(closeIntent)
+
+    expect(result.status).toBe('submitted')
+    if (result.status !== 'submitted') throw new Error('expected submitted result')
+    expect(tradingService.getPositions).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'exchange-account-1')
+    expect(result.normalized.request).toEqual(expect.objectContaining({
+      reduceOnly: true,
+      positionSide: 'SHORT',
+      posSide: 'short',
+    }))
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'perp',
+      result.normalized.request,
+      'exchange-account-1',
+    )
   })
 
   it('returns rejected when normalization fails', async () => {

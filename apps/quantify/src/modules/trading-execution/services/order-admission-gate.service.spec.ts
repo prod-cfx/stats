@@ -80,14 +80,26 @@ describe('OrderAdmissionGateService', () => {
 
   it('rejects spot-buy intent with sell side', () => {
     const service = new OrderAdmissionGateService()
-    const result = service.evaluate({ ...baseIntent, role: 'spot_buy', side: 'sell', reduceOnly: false }, [])
+    const result = service.evaluate({ ...baseIntent, role: 'spot_buy', side: 'sell', marketType: 'spot', symbol: 'BTC/USDT', reduceOnly: false }, [])
     expect(result).toEqual({ ok: false, status: 'rejected', reason: 'spot_buy_requires_buy_side' })
+  })
+
+  it('rejects spot-buy intent on perp market', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'spot_buy', side: 'buy', marketType: 'perp' }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'spot_role_requires_spot_market' })
   })
 
   it('rejects spot-sell intent with buy side', () => {
     const service = new OrderAdmissionGateService()
-    const result = service.evaluate({ ...baseIntent, role: 'spot_sell', side: 'buy', reduceOnly: false }, [])
+    const result = service.evaluate({ ...baseIntent, role: 'spot_sell', side: 'buy', marketType: 'spot', symbol: 'BTC/USDT', reduceOnly: false }, [])
     expect(result).toEqual({ ok: false, status: 'rejected', reason: 'spot_sell_requires_sell_side' })
+  })
+
+  it('rejects open-long intent on spot market', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'open_long', side: 'buy', marketType: 'spot', symbol: 'BTC/USDT' }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'perp_role_requires_perp_market' })
   })
 
   it('allows an open intent without positions', () => {
