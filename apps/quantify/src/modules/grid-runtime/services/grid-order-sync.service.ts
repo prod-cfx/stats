@@ -155,16 +155,7 @@ export class GridOrderSyncService {
 
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, reason))
     try {
-      for (const order of ownOpenOrders) {
-        await this.tradingService.cancelOrder(
-          instance.userId,
-          exchangeId,
-          marketType,
-          order.id,
-          instance.symbol,
-          instance.exchangeAccountId,
-        )
-      }
+      await this.cancelOwnOpenOrdersAndMarkLocalCanceled(instance, orders, ownOpenOrders, reason)
       if (hasPendingLocalSubmission) {
         await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'stop_pending_submit'))
         return
@@ -356,16 +347,7 @@ export class GridOrderSyncService {
     await this.txEvents.withAfterCommit(async () => this.stateMachine.stop(instance.id, 'boundary_break'))
 
     try {
-      for (const order of ownOpenOrders) {
-        await this.tradingService.cancelOrder(
-          instance.userId,
-          instance.exchangeId as ExchangeId,
-          instance.marketType as MarketType,
-          order.id,
-          instance.symbol,
-          instance.exchangeAccountId,
-        )
-      }
+      await this.cancelOwnOpenOrdersAndMarkLocalCanceled(instance, orders, ownOpenOrders, 'boundary_break')
     } catch {
       await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'boundary_cancel_failed'))
       return true
@@ -377,6 +359,41 @@ export class GridOrderSyncService {
 
     await this.txEvents.withAfterCommit(async () => this.stateMachine.markStopped(instance.id, 'boundary_break'))
     return true
+  }
+
+  private async cancelOwnOpenOrdersAndMarkLocalCanceled(
+    instance: RuntimeInstance,
+    localOrders: RuntimeOrder[],
+    openOrders: UnifiedOrder[],
+    reason: string,
+  ): Promise<void> {
+    for (const order of openOrders) {
+      await this.tradingService.cancelOrder(
+        instance.userId,
+        instance.exchangeId as ExchangeId,
+        instance.marketType as MarketType,
+        order.id,
+        instance.symbol,
+        instance.exchangeAccountId,
+      )
+    }
+
+    const canceledLocalOrderIds = this.findLocalOrderIdsForExchangeOrders(localOrders, openOrders)
+    if (canceledLocalOrderIds.length === 0) return
+
+    await this.txEvents.withAfterCommit(async () =>
+      this.repository.markOrdersCanceled({
+        ids: canceledLocalOrderIds,
+        rawPayload: this.toJsonValue({
+          source: 'grid_order_sync',
+          reason,
+          exchangeOrders: openOrders.map(order => ({
+            id: order.id,
+            clientOrderId: order.clientOrderId,
+            status: order.status,
+          })),
+        }),
+      }))
   }
 
   private hasPendingLocalSubmission(orders: RuntimeOrder[], openOrders: UnifiedOrder[]): boolean {
@@ -656,6 +673,23 @@ export class GridOrderSyncService {
     )
 
     return openOrders.filter(order => ownExchangeOrderIds.has(order.id) || (order.clientOrderId != null && ownClientOrderIds.has(order.clientOrderId)))
+  }
+
+  private findLocalOrderIdsForExchangeOrders(localOrders: RuntimeOrder[], openOrders: UnifiedOrder[]): string[] {
+    const ids = new Set<string>()
+    for (const exchangeOrder of openOrders) {
+      for (const localOrder of localOrders) {
+        if (!LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER.has(localOrder.status)) continue
+        if (localOrder.exchangeOrderId === exchangeOrder.id) {
+          ids.add(localOrder.id)
+          continue
+        }
+        if (localOrder.clientOrderId != null && localOrder.clientOrderId === exchangeOrder.clientOrderId) {
+          ids.add(localOrder.id)
+        }
+      }
+    }
+    return [...ids]
   }
 
   private parseConfig(value: unknown): GridRuntimeConfigSnapshot {

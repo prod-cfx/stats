@@ -71,6 +71,11 @@ export interface MarkGridOrderPlannedInput {
   rawPayload?: GridRuntimeJsonValue
 }
 
+export interface MarkGridOrdersCanceledInput {
+  ids: string[]
+  rawPayload?: GridRuntimeJsonValue
+}
+
 export interface RecordGridFillOnceInput {
   gridRuntimeInstanceId: string
   gridOrderId: string
@@ -371,6 +376,23 @@ export class GridRuntimeRepository {
     })
 
     return result.count === 1
+  }
+
+  async markOrdersCanceled(input: MarkGridOrdersCanceledInput): Promise<number> {
+    if (input.ids.length === 0) return 0
+
+    const result = await this.txHost.tx.gridOrder.updateMany({
+      where: {
+        id: { in: input.ids },
+        status: { in: ['OPEN', 'SUBMITTING', 'PARTIALLY_FILLED', 'CANCELING'] },
+      },
+      data: {
+        status: 'CANCELED',
+        rawPayload: input.rawPayload,
+      },
+    })
+
+    return result.count
   }
 
   updateOrderFromExchange(input: UpdateGridOrderFromExchangeInput) {

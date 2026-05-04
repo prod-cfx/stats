@@ -69,6 +69,7 @@ function createRepository() {
     markOrderSubmitting: jest.fn().mockResolvedValue(true),
     markOrderOpen: jest.fn().mockResolvedValue({ id: 'order-1' }),
     markOrderPlanned: jest.fn().mockResolvedValue(true),
+    markOrdersCanceled: jest.fn().mockResolvedValue(1),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
     findStrategyAccountForRuntime: jest.fn().mockResolvedValue({ id: 'account-1' }),
     findTradeByExternalTradeId: jest.fn().mockResolvedValue(null),
@@ -972,6 +973,13 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
     expect(tradingService.cancelOrder).toHaveBeenCalledTimes(1)
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'own-exchange', 'BTC/USDT', 'exchange-account-1')
+    expect(repository.markOrdersCanceled).toHaveBeenCalledWith({
+      ids: ['own-open'],
+      rawPayload: expect.objectContaining({
+        source: 'grid_order_sync',
+        reason: 'boundary_break',
+      }),
+    })
   })
 
   it('moves to STOPPING and cancels own submitting order matched by client order id on boundary break', async () => {
@@ -998,6 +1006,13 @@ describe('GridOrderSyncService', () => {
     expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'boundary_break')
     expect(stateMachine.markStopped).toHaveBeenCalledWith('grid-1', 'boundary_break')
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-submitting', 'BTC/USDT', 'exchange-account-1')
+    expect(repository.markOrdersCanceled).toHaveBeenCalledWith({
+      ids: ['own-submitting'],
+      rawPayload: expect.objectContaining({
+        source: 'grid_order_sync',
+        reason: 'boundary_break',
+      }),
+    })
   })
 
   it('marks reconcile required when boundary break sees a pending local submission without exchange order yet', async () => {
@@ -1064,6 +1079,13 @@ describe('GridOrderSyncService', () => {
     expect(stateMachine.stop).toHaveBeenCalledWith('grid-1', 'user_stop')
     expect(tradingService.cancelOrder).toHaveBeenCalledTimes(1)
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'own-exchange', 'BTC/USDT', 'exchange-account-1')
+    expect(repository.markOrdersCanceled).toHaveBeenCalledWith({
+      ids: ['own-open'],
+      rawPayload: expect.objectContaining({
+        source: 'grid_order_sync',
+        reason: 'user_stop',
+      }),
+    })
     expect(stateMachine.markStopped).toHaveBeenCalledWith('grid-1', 'user_stop')
   })
 
