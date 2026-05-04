@@ -86,10 +86,6 @@ export class SemanticContractReadinessService {
     const contracts: SemanticAtomContract[] = []
 
     for (const owner of activeOwners) {
-      if (owner.status !== 'locked') {
-        continue
-      }
-
       for (const contract of owner.contracts) {
         const capabilities = contract.capabilities.flatMap((capability) => {
           const normalizedCapability = this.normalizeProviderCapability(owner, contract, capability)
@@ -104,10 +100,12 @@ export class SemanticContractReadinessService {
           return normalizedCapability.capability ? [normalizedCapability.capability] : []
         })
 
-        contracts.push({
-          ...contract,
-          capabilities,
-        })
+        if (owner.status === 'locked') {
+          contracts.push({
+            ...contract,
+            capabilities,
+          })
+        }
       }
     }
 

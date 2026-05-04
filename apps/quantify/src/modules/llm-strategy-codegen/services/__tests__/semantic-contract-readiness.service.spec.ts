@@ -350,6 +350,75 @@ describe('SemanticContractReadinessService', () => {
     ])
   })
 
+  it('keeps provider density slots stable across repeated readiness normalization', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-grid-levels',
+        key: 'grid.price_levels',
+        phase: 'gate',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: { lower: 100, upper: 110 },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'derived',
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+    const service = new SemanticContractReadinessService()
+
+    const first = service.normalize(state)
+    const second = service.normalize(first.state)
+
+    expect(second.ready).toBe(false)
+    expect(second.missingRequirements).toEqual([
+      {
+        ownerKind: 'action',
+        ownerId: 'action-1',
+        contractId: 'action-contract-1',
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+      },
+    ])
+    expect(second.state.triggers[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
+      })],
+    }))
+    expect(second.state.actions[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
+    ])
+  })
+
   it('opens the provider spacing conflict slot when grid count and absolute spacing disagree', () => {
     const state = createSemanticState({
       triggers: [{
@@ -401,6 +470,75 @@ describe('SemanticContractReadinessService', () => {
       })],
     }))
     expect(result.state.actions[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
+    ])
+  })
+
+  it('keeps provider spacing conflict slots stable across repeated readiness normalization', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-grid-levels',
+        key: 'grid.price_levels',
+        phase: 'gate',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: { lower: 100, upper: 110, gridCount: 10, absoluteSpacing: 1 },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'derived',
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+    const service = new SemanticContractReadinessService()
+
+    const first = service.normalize(state)
+    const second = service.normalize(first.state)
+
+    expect(second.ready).toBe(false)
+    expect(second.missingRequirements).toEqual([
+      {
+        ownerKind: 'action',
+        ownerId: 'action-1',
+        contractId: 'action-contract-1',
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+      },
+    ])
+    expect(second.state.triggers[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-levels].capabilities[price.define.level_set].shape',
+      })],
+    }))
+    expect(second.state.actions[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'contract.requirement.price.define.level_set',
       }),
