@@ -1574,6 +1574,140 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it.each([
+    [
+      'grid count wording',
+      '在 OKX 交易 BTCUSDT 永续合约，15m 周期，做固定区间双向网格。价格区间 78800-81400，共 10 格，每格下单资金 500 USDT，部署后立即创建限价网格挂单，成交后在相邻网格自动挂反向单。',
+      { gridCount: 10 },
+    ],
+    [
+      'grid quantity wording',
+      'OKX BTCUSDT 永续 15m，固定区间双向网格，价格区间 78800-81400，网格数量 10 个，每格下单资金 500 USDT，限价挂单成交后相邻网格反向挂单。',
+      { gridCount: 10 },
+    ],
+    [
+      'absolute spacing wording',
+      'OKX BTCUSDT 永续 15m，固定区间双向网格，价格区间 78800-81400，每格价格间距 260 USDT，每格下单资金 500 USDT，限价网格挂单。',
+      { absoluteSpacing: 260 },
+    ],
+    [
+      'split range wording',
+      'OKX BTCUSDT 永续 15m，固定区间 78800 到 81400，拆成 10 份，双向限价网格，每格资金 500 USDT。',
+      { gridCount: 10 },
+    ],
+  ])('extracts fixed-range level-set contracts from %s', (_label, message, expectedShape) => {
+    const patch = service.extract(message)
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: expect.objectContaining({
+                  mode: 'fixed_range',
+                  lower: 78800,
+                  upper: 81400,
+                  spacingMode: 'arithmetic',
+                  ...expectedShape,
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+              }),
+              expect.objectContaining({
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: expect.objectContaining({ value: 500, asset: 'USDT' }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+  })
+
+  it('keeps all executable atoms for the original fixed-range bidirectional grid wording', () => {
+    const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，做固定区间双向网格。价格区间 78800-81400，共 10 格，按等距价格网格划分，每格价格间距 260 USDT，每格下单资金 500 USDT。部署后立即创建限价网格挂单，成交后在相邻网格自动挂反向单。价格突破上下边界时停止策略并撤销未成交网格订单。按入场均价亏损 5% 止损，盈利 10% 止盈。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sideScope: 'both',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: expect.objectContaining({
+                  mode: 'fixed_range',
+                  lower: 78800,
+                  upper: 81400,
+                  gridCount: 10,
+                  absoluteSpacing: 260,
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({ domain: 'order_program', verb: 'maintain', object: 'limit_ladder' }),
+              expect.objectContaining({
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: expect.objectContaining({ value: 500, asset: 'USDT' }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct' }),
+      expect.objectContaining({ key: 'risk.take_profit_pct' }),
+      expect.objectContaining({
+        key: 'risk.boundary_guard',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({ domain: 'guard', verb: 'enforce', object: 'boundary_cancel' }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+  })
+
   it('extracts bidirectional grid semantics from range and per-grid spacing wording', () => {
     const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
 
