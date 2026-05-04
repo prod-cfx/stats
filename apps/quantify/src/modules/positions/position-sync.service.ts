@@ -73,7 +73,8 @@ export class PositionSyncService {
       const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType, exchangeAccountId)
 
       // 2. 获取本地记录的开放仓位
-      const localPositions = await this.positionsRepository.findOpenByAccount(accountId)
+      const allLocalPositions = await this.positionsRepository.findOpenByAccount(accountId)
+      const localPositions = allLocalPositions.filter(pos => this.isPositionInSyncScope(pos, exchangeId, marketType))
 
       this.logger.log(
         `Syncing positions for user ${userId}, account ${accountId}: ` +
@@ -150,7 +151,7 @@ export class PositionSyncService {
       // 5.2 处理本地存在但交易所不存在的仓位（应该关闭）
       for (const [key, localPos] of localPositionMap.entries()) {
         if (!exchangePositionMap.has(key)) {
-          if (this.isSpotPosition(localPos, marketType)) {
+          if (this.isSpotPosition(localPos)) {
             this.logger.warn(
               `Skipped orphan closure for spot position: ${localPos.symbol} ${localPos.positionSide}`,
             )
@@ -346,11 +347,31 @@ export class PositionSyncService {
     return `${normalizeLedgerSymbol(symbol)}:${side}`
   }
 
-  private isSpotPosition(
-    localPos: { marketType?: string | null; metadata?: unknown },
+  private isPositionInSyncScope(
+    localPos: { exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+    syncExchangeId: ExchangeId,
     syncMarketType: MarketType,
   ): boolean {
-    if (syncMarketType === 'spot' || localPos.marketType === 'spot') {
+    if (localPos.exchangeId && localPos.exchangeId !== syncExchangeId) {
+      return false
+    }
+
+    if (localPos.marketType) {
+      return localPos.marketType === syncMarketType
+    }
+
+    const metadataMarket = this.readMetadataMarket(localPos.metadata)
+    if (metadataMarket) {
+      return metadataMarket === `${syncExchangeId}:${syncMarketType}`
+    }
+
+    return true
+  }
+
+  private isSpotPosition(
+    localPos: { marketType?: string | null; metadata?: unknown },
+  ): boolean {
+    if (localPos.marketType === 'spot') {
       return true
     }
 
