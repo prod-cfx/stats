@@ -1,4 +1,4 @@
-import type { CreateOrderInput, ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { CreateOrderInput, ExchangeId, MarketType, UnifiedOrder, UnifiedPosition } from '@/modules/trading/core/types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TradingService } from '@/modules/trading/trading.service'
 import { Injectable } from '@nestjs/common'
@@ -184,7 +184,7 @@ export class GridOrderSyncService {
     exchangeId: ExchangeId,
     marketType: MarketType,
   ): Promise<void> {
-    const plannedOrders = orders.filter(order => order.status === 'PLANNED')
+    const plannedOrders = await this.filterSubmittablePlannedOrders(instance, orders, exchangeId, marketType)
     for (const order of plannedOrders) {
       const clientOrderId = this.buildClientOrderId(instance.id, order)
       const markedSubmitting = await this.txEvents.withAfterCommit(async () => {
@@ -247,6 +247,50 @@ export class GridOrderSyncService {
       await this.txEvents.withAfterCommit(async () => this.stateMachine.markReconcileRequired(instance.id, 'order_submit_race'))
       return
     }
+  }
+
+  private async filterSubmittablePlannedOrders(
+    instance: RuntimeInstance,
+    orders: RuntimeOrder[],
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+  ): Promise<RuntimeOrder[]> {
+    const plannedOrders = orders.filter(order => order.status === 'PLANNED')
+    if (marketType !== 'perp' || !plannedOrders.some(order => this.isCloseRole(order.role))) {
+      return plannedOrders
+    }
+
+    const positions = await this.tradingService.getPositions(
+      instance.userId,
+      exchangeId,
+      marketType,
+      instance.exchangeAccountId,
+    )
+
+    return plannedOrders.filter((order) => {
+      if (!this.isCloseRole(order.role)) return true
+      return this.hasMatchingClosablePosition(instance.symbol, order.role, positions)
+    })
+  }
+
+  private isCloseRole(role: string | null): boolean {
+    return role === 'close_long' || role === 'close_short'
+  }
+
+  private hasMatchingClosablePosition(
+    symbol: string,
+    role: string | null,
+    positions: UnifiedPosition[],
+  ): boolean {
+    const requiredSide = role === 'close_long' ? 'long' : role === 'close_short' ? 'short' : null
+    if (!requiredSide) return false
+
+    return positions.some(position =>
+      position.side === requiredSide
+      && position.size > 0
+      && this.normalizeSymbol(position.symbol) === this.normalizeSymbol(symbol)
+      && this.normalizeMarketType(position.marketType) === 'perp',
+    )
   }
 
   private buildClientOrderId(_instanceId: string, order: RuntimeOrder): string {
@@ -401,13 +445,31 @@ export class GridOrderSyncService {
   private matchesLocalOrder(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): boolean {
     return (
       exchangeOrder.clientOrderId === order.clientOrderId
-      && exchangeOrder.symbol === instance.symbol
-      && exchangeOrder.marketType === instance.marketType
+      && this.normalizeSymbol(exchangeOrder.symbol) === this.normalizeSymbol(instance.symbol)
+      && this.normalizeMarketType(exchangeOrder.marketType) === this.normalizeMarketType(instance.marketType)
       && exchangeOrder.side === order.side
       && exchangeOrder.type === order.orderType
       && this.decimalEquals(exchangeOrder.price, order.price)
       && this.decimalEquals(exchangeOrder.amount, order.quantity)
     )
+  }
+
+  private normalizeSymbol(symbol: string): string {
+    return symbol
+      .trim()
+      .toUpperCase()
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
+  }
+
+  private normalizeMarketType(marketType: string): MarketType | string {
+    const normalized = marketType.trim().toLowerCase()
+    if (normalized === 'spot') return 'spot'
+    if (normalized === 'perp' || normalized === 'swap' || normalized === 'futures' || normalized === 'future' || normalized === 'perpetual') {
+      return 'perp'
+    }
+    return normalized
   }
 
   private toGridOrderStatus(status: UnifiedOrder['status']): GridOrderStatus {

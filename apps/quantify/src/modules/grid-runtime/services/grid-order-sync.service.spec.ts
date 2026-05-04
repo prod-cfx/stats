@@ -98,6 +98,7 @@ function createTradingService() {
       },
     ]),
     cancelOrder: jest.fn().mockResolvedValue({ id: 'exchange-order-1', status: 'canceled' }),
+    getPositions: jest.fn().mockResolvedValue([]),
     placeOrder: jest.fn().mockResolvedValue({
       id: 'exchange-order-created',
       clientOrderId: 'gplannedorder1',
@@ -277,6 +278,17 @@ describe('GridOrderSyncService', () => {
     const tradingService = createTradingService()
     tradingService.getOpenOrders.mockResolvedValue([])
     tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getPositions.mockResolvedValue([
+      {
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'long',
+        size: 1,
+        entryPrice: 100,
+        unrealizedPnl: 0,
+        raw: {},
+      },
+    ])
     const service = createService(repository, tradingService)
 
     await service.syncInstance('grid-1')
@@ -287,6 +299,53 @@ describe('GridOrderSyncService', () => {
       tdMode: 'cross',
       reduceOnly: true,
     }), 'exchange-account-1')
+  })
+
+  it('skips perp close orders when the account has no matching position', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_neutral' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-open-long',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'open_long',
+      }),
+      createOrder({
+        id: 'planned-close-short',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+        side: 'buy',
+        role: 'close_short',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.getPositions.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.getPositions).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'exchange-account-1')
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+    expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'perp', expect.objectContaining({
+      clientOrderId: 'gplannedopenlong',
+      side: 'buy',
+    }), 'exchange-account-1')
+    expect(repository.markOrderSubmitting).not.toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-close-short',
+    }))
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
   })
 
   it('does not submit a planned order when another sync worker already claimed it', async () => {
@@ -549,6 +608,35 @@ describe('GridOrderSyncService', () => {
         price: 123456789.12345679,
         amount: 0.01,
         filled: 0.01,
+        status: 'closed',
+        createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { fillId: 'fill-1' },
+      },
+    ])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(repository.recordFillOnce).toHaveBeenCalled()
+  })
+
+  it('accepts equivalent exchange symbol formatting during order matching', async () => {
+    const repository = createRepository()
+    const tradingService = createTradingService()
+    tradingService.getClosedOrders.mockResolvedValue([
+      {
+        id: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC-USDT',
+        marketType: 'SPOT' as never,
+        side: 'buy',
+        type: 'limit',
+        price: 95,
+        amount: 1.0526315789473684,
+        filled: 1.0526315789473684,
         status: 'closed',
         createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
         updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
