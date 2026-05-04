@@ -9753,6 +9753,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('price define level_set')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_semantic_contract_requirement',
+        field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
+    ]))
+    expect(result.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'ambiguous_state_gate',
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
+    ]))
     expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'action-grid-ladder',

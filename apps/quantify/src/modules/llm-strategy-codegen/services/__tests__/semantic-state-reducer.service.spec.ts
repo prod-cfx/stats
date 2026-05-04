@@ -50,7 +50,7 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
-  it('turns contract requirement clarification answers into owner capabilities', () => {
+  it('turns budget contract requirement clarification answers into structured owner capabilities', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
         version: 1,
@@ -108,7 +108,132 @@ describe('SemanticStateReducerService', () => {
           domain: 'capital',
           verb: 'allocate',
           object: 'per_order_budget',
-          shape: { answer: '每格资金 10 USDT' },
+          shape: { value: 10, asset: 'USDT' },
+        })],
+      })],
+    }))
+  })
+
+  it('keeps contract requirement slots open when answers cannot form canonical capability shape', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 capital allocate per_order_budget。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+      }),
+      answer: '按默认来',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        status: 'open',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [],
+      })],
+    }))
+  })
+
+  it('turns level set contract requirement clarification answers into structured owner capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [{
+          id: 'trigger-grid-levels',
+          key: 'grid.price_levels',
+          phase: 'gate',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'contract.requirement.price.define.level_set',
+            fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 price define level_set。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'trigger-contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        }],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.price.define.level_set',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.price.define.level_set',
+        fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+      }),
+      answer: '下限 2800，上限 3600，10 格，等差',
+      messageIndex: 5,
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+        status: 'locked',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: {
+            lower: 2800,
+            upper: 3600,
+            gridCount: 10,
+            spacingMode: 'arithmetic',
+          },
         })],
       })],
     }))

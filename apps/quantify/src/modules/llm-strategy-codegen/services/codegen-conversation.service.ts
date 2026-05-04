@@ -2840,7 +2840,8 @@ export class CodegenConversationService {
   }
 
   private buildSemanticClarificationItem(slot: SemanticSlotState): StrategyClarificationItem {
-    const isStateGateSlot = slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition'
+    const isContractRequirementSlot = slot.slotKey.startsWith('contract.requirement.')
+    const isStateGateSlot = !isContractRequirementSlot && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition')
     const isContextSlot = slot.priority === 'context'
     const isGridSlot = slot.slotKey.startsWith('grid.')
     const contextReasonMap: Partial<Record<SemanticSlotState['slotKey'], string>> = {
@@ -2854,6 +2855,8 @@ export class CodegenConversationService {
       ? 'stateGates.marketRegime'
       : isContextSlot
         ? slot.slotKey
+      : isContractRequirementSlot
+        ? slot.fieldPath
       : isGridSlot
         ? semanticMetadata.field
       : semanticMetadata.field
@@ -2861,6 +2864,8 @@ export class CodegenConversationService {
       ? 'ambiguous_state_gate'
       : isContextSlot
         ? (contextReasonMap[slot.slotKey] ?? 'missing_execution_context')
+      : isContractRequirementSlot
+        ? 'missing_semantic_contract_requirement'
       : isGridSlot
         ? semanticMetadata.reason
         : semanticMetadata.reason

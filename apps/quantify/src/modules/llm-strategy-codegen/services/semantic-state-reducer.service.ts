@@ -4,6 +4,7 @@ import type {
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
+  SemanticCapabilityShape,
   SemanticEvidence,
   SemanticExpression,
   SemanticPositionSizingContract,
@@ -82,8 +83,10 @@ export class SemanticStateReducerService {
       })
       if (!slot) continue
 
-      if (slot.status === 'open' && this.applyContractRequirementAnswer(trigger, slot, answerText, input.messageIndex)) {
-        trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (slot.status === 'open' && this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(trigger, slot, answerText, input.messageIndex)) {
+          trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
         break
       }
 
@@ -126,8 +129,10 @@ export class SemanticStateReducerService {
       })
       if (!slot || slot.status !== 'open') continue
 
-      if (this.applyContractRequirementAnswer(action, slot, answerText, input.messageIndex)) {
-        action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(action, slot, answerText, input.messageIndex)) {
+          action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
         break
       }
 
@@ -173,9 +178,11 @@ export class SemanticStateReducerService {
     if (
       nextState.position
       && positionSlot?.status === 'open'
-      && this.applyContractRequirementAnswer(nextState.position, positionSlot, answerText, input.messageIndex)
+      && this.isContractRequirementSlot(positionSlot)
     ) {
-      nextState.position.status = nextState.position.openSlots?.every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (this.applyContractRequirementAnswer(nextState.position, positionSlot, answerText, input.messageIndex)) {
+        nextState.position.status = nextState.position.openSlots?.every(item => item.status !== 'open') ? 'locked' : 'open'
+      }
     }
 
     let riskChanged = false
@@ -189,8 +196,10 @@ export class SemanticStateReducerService {
           && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
       })
 
-      if (slot?.status === 'open' && this.applyContractRequirementAnswer(risk, slot, answerText, input.messageIndex)) {
-        risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (slot?.status === 'open' && this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(risk, slot, answerText, input.messageIndex)) {
+          risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
         break
       }
 
@@ -317,6 +326,10 @@ export class SemanticStateReducerService {
     return true
   }
 
+  private isContractRequirementSlot(slot: SemanticSlotState): boolean {
+    return slot.slotKey.startsWith('contract.requirement.')
+  }
+
   private buildCapabilityFromContractRequirementSlot(
     slot: SemanticSlotState,
     answerText: string,
@@ -330,12 +343,95 @@ export class SemanticStateReducerService {
       return null
     }
 
+    const shape = this.buildContractRequirementCapabilityShape(
+      parts[0],
+      parts[1],
+      parts.slice(2).join('.'),
+      answerText,
+    )
+    if (!shape) {
+      return null
+    }
+
     return {
       domain: parts[0],
       verb: parts[1],
       object: parts.slice(2).join('.'),
-      shape: { answer: answerText },
+      shape,
     }
+  }
+
+  private buildContractRequirementCapabilityShape(
+    domain: SemanticCapabilityDomain,
+    verb: string,
+    object: string,
+    answerText: string,
+  ): SemanticCapabilityShape | null {
+    if (domain === 'capital' && verb === 'allocate' && object === 'per_order_budget') {
+      return this.parsePerOrderBudgetCapabilityShape(answerText)
+    }
+
+    if (domain === 'price' && verb === 'define' && object === 'level_set') {
+      return this.parseLevelSetCapabilityShape(answerText)
+    }
+
+    return { answer: answerText }
+  }
+
+  private parsePerOrderBudgetCapabilityShape(answerText: string): SemanticCapabilityShape | null {
+    const amountMatch = answerText.match(/(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|刀|U)\b/iu)
+      ?? answerText.match(/(?:每(?:单|格|笔)[^\d]{0,12})(\d+(?:\.\d+)?)/iu)
+    const value = amountMatch?.[1] ? Number(amountMatch[1]) : null
+    if (value === null || !Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    const assetText = amountMatch?.[2]?.toUpperCase()
+    const asset = assetText === 'USDC'
+      ? 'USDC'
+      : assetText === 'USD'
+        ? 'USD'
+        : 'USDT'
+    return { value, asset }
+  }
+
+  private parseLevelSetCapabilityShape(answerText: string): SemanticCapabilityShape | null {
+    const lower = this.parseLabeledNumber(answerText, ['下限', '下界', '最低', 'lower', 'min'])
+    const upper = this.parseLabeledNumber(answerText, ['上限', '上界', '最高', 'upper', 'max'])
+    const rangeMatch = answerText.match(/(\d+(?:\.\d+)?)\s*(?:-|~|到|至)\s*(\d+(?:\.\d+)?)/iu)
+    const rangeLower = lower ?? (rangeMatch?.[1] ? Number(rangeMatch[1]) : null)
+    const rangeUpper = upper ?? (rangeMatch?.[2] ? Number(rangeMatch[2]) : null)
+    if (
+      rangeLower === null
+      || rangeUpper === null
+      || !Number.isFinite(rangeLower)
+      || !Number.isFinite(rangeUpper)
+      || rangeUpper <= rangeLower
+    ) {
+      return null
+    }
+
+    const gridCountMatch = answerText.match(/(\d{1,4})\s*(?:格|网格)/u)
+    const spacingPctMatch = answerText.match(/(?:间距|每格|spacing)[^\d]{0,12}(\d+(?:\.\d+)?)\s*%/iu)
+    return {
+      lower: rangeLower,
+      upper: rangeUpper,
+      ...(gridCountMatch?.[1] ? { gridCount: Number(gridCountMatch[1]) } : {}),
+      ...(spacingPctMatch?.[1] ? { spacingPct: Number(spacingPctMatch[1]) } : {}),
+      spacingMode: /等比|geometric/iu.test(answerText) ? 'geometric' : 'arithmetic',
+    }
+  }
+
+  private parseLabeledNumber(answerText: string, labels: readonly string[]): number | null {
+    for (const label of labels) {
+      const match = answerText.match(new RegExp(`${label}[^\\d]{0,12}(\\d+(?:\\.\\d+)?)`, 'iu'))
+      if (match?.[1]) {
+        const value = Number(match[1])
+        return Number.isFinite(value) ? value : null
+      }
+    }
+
+    return null
   }
 
   private resolveContractIdFromFieldPath(fieldPath: string): string | null {
