@@ -375,12 +375,15 @@ export class SemanticStateReducerService {
       return this.parseLevelSetCapabilityShape(answerText)
     }
 
-    return { answer: answerText }
+    return null
   }
 
   private parsePerOrderBudgetCapabilityShape(answerText: string): SemanticCapabilityShape | null {
+    if (/(?:每(?:单|格|笔)[^，。；;,.]{0,12})?\d+(?:\.\d+)?\s*%/u.test(answerText)) {
+      return null
+    }
+
     const amountMatch = answerText.match(/(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|刀|U)\b/iu)
-      ?? answerText.match(/(?:每(?:单|格|笔)[^\d]{0,12})(\d+(?:\.\d+)?)/iu)
     const value = amountMatch?.[1] ? Number(amountMatch[1]) : null
     if (value === null || !Number.isFinite(value) || value <= 0) {
       return null

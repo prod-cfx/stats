@@ -171,6 +171,120 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('keeps per-order budget requirement open when the answer is a percentage budget', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 capital allocate per_order_budget。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.capital.allocate.per_order_budget',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.capital.allocate.per_order_budget',
+      }),
+      answer: '每格 10%',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.capital.allocate.per_order_budget',
+        status: 'open',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [],
+      })],
+    }))
+  })
+
+  it('keeps unsupported contract requirement slots open instead of writing answer-only capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [{
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+          params: {},
+          openSlots: [{
+            slotKey: 'contract.requirement.exposure.set.position_mode',
+            fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.exposure.set.position_mode',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请补充 exposure set position_mode。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'action-contract-grid-ladder',
+            kind: 'action',
+            capabilities: [],
+            requires: [
+              { domain: 'exposure', verb: 'set', object: 'position_mode' },
+            ],
+            params: {},
+          }],
+        }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.exposure.set.position_mode',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.exposure.set.position_mode',
+        fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.exposure.set.position_mode',
+      }),
+      answer: '只做多',
+      messageIndex: 5,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.exposure.set.position_mode',
+        status: 'open',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [],
+      })],
+    }))
+  })
+
   it('turns level set contract requirement clarification answers into structured owner capabilities', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
