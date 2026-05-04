@@ -9,8 +9,15 @@ describe('okxClient', () => {
     jest.restoreAllMocks()
   })
 
-  function createClient() {
-    return new OkxClient('spot', {
+  function okJson(body: unknown): Response {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  function createClient(options: { marketType?: 'spot' | 'perp' } = {}) {
+    return new OkxClient(options.marketType ?? 'spot', {
       apiKey: 'test-api-key',
       secret: 'test-secret',
       passphrase: 'test-passphrase',
@@ -265,6 +272,156 @@ describe('okxClient', () => {
     ])
   })
 
+  it('returns OKX perp instrument constraints for execution admission', async () => {
+    const requests: Array<{ pathname: string; search: string }> = []
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      requests.push({ pathname: url.pathname, search: url.search })
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            ctVal: '0.01',
+            lotSz: '1',
+            tickSz: '0.1',
+            minSz: '1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    const constraints = await createClient({ marketType: 'perp' }).fetchInstrumentConstraints?.('BTC/USDT:PERP')
+
+    expect(constraints).toEqual({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: {
+        maxLength: 32,
+        pattern: '^[A-Za-z0-9]+$',
+      },
+      raw: expect.objectContaining({ instId: 'BTC-USDT-SWAP' }),
+    })
+    expect(requests.some(request => request.pathname === '/api/v5/public/instruments')).toBe(true)
+    expect(requests.some((request) => {
+      const search = new URLSearchParams(request.search)
+      return search.get('instType') === 'SWAP' && search.get('instId') === 'BTC-USDT-SWAP'
+    })).toBe(true)
+  })
+
+  it('throws when OKX perp instrument constraints are incomplete', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            minSz: '1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    await expect(createClient({ marketType: 'perp' }).fetchInstrumentConstraints?.('BTC/USDT:PERP'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX instrument constraints incomplete for BTC-USDT-SWAP',
+      })
+  })
+
+  it('throws when OKX perp instrument constraints omit min size', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            ctVal: '0.01',
+            lotSz: '1',
+            tickSz: '0.1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    await expect(createClient({ marketType: 'perp' }).fetchInstrumentConstraints?.('BTC/USDT:PERP'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX instrument constraints incomplete for BTC-USDT-SWAP',
+      })
+  })
+
+  it('returns OKX spot instrument constraints for execution admission', async () => {
+    const requests: Array<{ pathname: string; search: string }> = []
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      requests.push({ pathname: url.pathname, search: url.search })
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT',
+            lotSz: '0.00000001',
+            tickSz: '0.01',
+            minSz: '0.00001',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    const constraints = await createClient({ marketType: 'spot' }).fetchInstrumentConstraints?.('BTC/USDT')
+
+    expect(constraints).toEqual({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTC-USDT',
+      priceTickSize: '0.01',
+      quantityStepSize: '0.00000001',
+      minQuantity: '0.00001',
+      contractValue: null,
+      clientOrderId: {
+        maxLength: 32,
+        pattern: '^[A-Za-z0-9]+$',
+      },
+      raw: expect.objectContaining({ instId: 'BTC-USDT' }),
+    })
+    expect(requests.some((request) => {
+      const search = new URLSearchParams(request.search)
+      return search.get('instType') === 'SPOT' && search.get('instId') === 'BTC-USDT'
+    })).toBe(true)
+  })
+
+  it('throws when OKX spot instrument constraints are incomplete', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT',
+            lotSz: '0.00000001',
+            tickSz: '0.01',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    await expect(createClient({ marketType: 'spot' }).fetchInstrumentConstraints?.('BTC/USDT'))
+      .rejects.toMatchObject({
+        name: 'ExchangeError',
+        message: 'OKX instrument constraints incomplete for BTC-USDT',
+      })
+  })
+
   it('converts perp base size to contract size when creating orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
@@ -330,6 +487,206 @@ describe('okxClient', () => {
     expect(order.amount).toBeCloseTo(0.0013)
     expect(order.filled).toBeCloseTo(0.0013)
     expect(order.price).toBeCloseTo(74147.2)
+  })
+
+  it('rounds OKX perp buy limit prices down to instrument tick size when creating orders', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+              tickSz: '0.1',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      const rawBody = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      expect(rawBody).toMatchObject({
+        instId: 'BTC-USDT-SWAP',
+        instType: 'SWAP',
+        side: 'buy',
+        ordType: 'limit',
+        px: '79283.3',
+        sz: '10',
+        tdMode: 'cross',
+      })
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-limit-order-1',
+            sCode: '0',
+            sMsg: '',
+            instId: 'BTC-USDT-SWAP',
+            state: 'live',
+            side: 'buy',
+            ordType: 'limit',
+            px: '79283.3',
+            sz: '10',
+            fillSz: '0',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.1,
+      price: 79283.33333333333,
+      tdMode: 'cross',
+    })
+
+    expect(order.price).toBeCloseTo(79283.3)
+  })
+
+  it('rounds OKX perp sell limit prices up to instrument tick size when creating orders', async () => {
+    let submittedBody: Record<string, unknown> | null = null
+
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+              tickSz: '0.1',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      const rawBody = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      submittedBody = rawBody
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-limit-order-2',
+            sCode: '0',
+            sMsg: '',
+            instId: 'BTC-USDT-SWAP',
+            state: 'live',
+            side: 'sell',
+            ordType: 'limit',
+            px: '79283.4',
+            sz: '10',
+            fillSz: '0',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'sell',
+      type: 'limit',
+      amount: 0.1,
+      price: 79283.33333333333,
+      tdMode: 'cross',
+    })
+
+    expect(submittedBody).toMatchObject({
+      instId: 'BTC-USDT-SWAP',
+      instType: 'SWAP',
+      side: 'sell',
+      ordType: 'limit',
+      px: '79283.4',
+      sz: '10',
+      tdMode: 'cross',
+    })
+    expect(order.price).toBeCloseTo(79283.4)
+  })
+
+  it('uses submitted OKX perp price and size when create order ack omits px and sz', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+              tickSz: '0.1',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-limit-order-ack-only',
+            clOrdId: 'gridclient1',
+            sCode: '0',
+            sMsg: '',
+            state: '',
+            fillSz: '0',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.10049,
+      price: 79283.33333333333,
+      tdMode: 'cross',
+      clientOrderId: 'gridclient1',
+    })
+
+    expect(order.price).toBeCloseTo(79283.3)
+    expect(order.amount).toBeCloseTo(0.1004)
   })
 
   it('uses typed tdMode and positionSide fields when creating OKX perp orders', async () => {

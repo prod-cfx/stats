@@ -1,9 +1,12 @@
-import type { CreateOrderInput, ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TradingService } from '@/modules/trading/trading.service'
 import { Injectable } from '@nestjs/common'
 import { Prisma } from '@/prisma/prisma.types'
 import type { GridOrderStatus } from '@/prisma/prisma.types'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
+import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
+import type { OrderIntent, TradingExecutionSubmitPreparedResult } from '@/modules/trading-execution/types/trading-execution.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
@@ -62,6 +65,7 @@ export class GridOrderSyncService {
   constructor(
     private readonly repository: GridRuntimeRepository,
     private readonly tradingService: TradingService,
+    private readonly tradingExecution: TradingExecutionService,
     private readonly stateMachine: GridRuntimeStateMachineService,
     private readonly txEvents: TransactionEventsService,
   ) {}
@@ -183,28 +187,62 @@ export class GridOrderSyncService {
     exchangeId: ExchangeId,
     marketType: MarketType,
   ): Promise<void> {
-    const plannedOrders = orders.filter(order => order.status === 'PLANNED')
+    const plannedOrders = this.filterSubmittablePlannedOrders(orders)
     for (const order of plannedOrders) {
-      const clientOrderId = this.buildClientOrderId(instance.id, order)
+      const intent = this.buildOrderIntent(instance, exchangeId, marketType, order)
+      const prepared = await this.tradingExecution.prepareIntent(intent)
+      if (prepared.status !== 'prepared') {
+        await this.txEvents.withAfterCommit(async () =>
+          this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
+            orderId: order.id,
+            status: prepared.status,
+            reason: prepared.reason,
+            normalized: 'normalized' in prepared ? this.toJsonValue(prepared.normalized) : null,
+            error: 'error' in prepared ? this.serializeError(prepared.error) : null,
+          }))
+        return
+      }
+
+      const clientOrderId = prepared.normalized.clientOrderId
       const markedSubmitting = await this.txEvents.withAfterCommit(async () => {
         return this.repository.markOrderSubmitting({
           id: order.id,
           clientOrderId,
-          rawPayload: { source: 'grid_order_sync' },
+          rawPayload: this.toJsonValue({
+            source: 'grid_order_sync',
+            execution: {
+              status: 'prepared',
+              clientOrderId,
+              normalized: prepared.normalized,
+            },
+          }),
         })
       })
       if (!markedSubmitting) continue
 
-      let exchangeOrder: UnifiedOrder
-      try {
-        exchangeOrder = await this.tradingService.placeOrder(
-          instance.userId,
-          exchangeId,
-          marketType,
-          this.buildCreateOrderInput(instance, marketType, order, clientOrderId),
-          instance.exchangeAccountId,
-        )
-      } catch (error) {
+      const submitted = await this.tradingExecution.submitPrepared(prepared)
+      if (submitted.status === 'waiting_position') {
+        const markedPlanned = await this.txEvents.withAfterCommit(async () =>
+          this.repository.markOrderPlanned({
+            id: order.id,
+            rawPayload: this.executionPayload(submitted),
+          }))
+        if (!markedPlanned) {
+          await this.txEvents.withAfterCommit(async () =>
+            this.stateMachine.markReconcileRequired(instance.id, 'order_waiting_position_state_race', {
+              orderId: order.id,
+              clientOrderId,
+              status: submitted.status,
+              reason: submitted.reason,
+              normalized: this.toJsonValue(submitted.normalized),
+              error: 'error' in submitted ? this.serializeError(submitted.error) : null,
+            }))
+          return
+        }
+        continue
+      }
+
+      if (submitted.status !== 'submitted') {
         await this.txEvents.withAfterCommit(async () =>
           this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
             orderId: order.id,
@@ -214,7 +252,10 @@ export class GridOrderSyncService {
             symbol: instance.symbol,
             price: this.decimalToString(order.price),
             quantity: this.decimalToString(order.quantity),
-            error: this.serializeError(error),
+            status: submitted.status,
+            reason: submitted.reason,
+            normalized: 'normalized' in submitted ? this.toJsonValue(submitted.normalized) : null,
+            error: 'error' in submitted ? this.serializeError(submitted.error) : null,
           }))
         return
       }
@@ -222,8 +263,10 @@ export class GridOrderSyncService {
       const markedOpen = await this.txEvents.withAfterCommit(async () => {
         return this.repository.markOrderOpen({
           id: order.id,
-          exchangeOrderId: exchangeOrder.id,
-          rawPayload: this.toJsonValue(exchangeOrder.raw),
+          exchangeOrderId: submitted.order.id,
+          price: submitted.order.price == null ? submitted.normalized.normalizedPrice ?? null : String(submitted.order.price),
+          quantity: Number.isFinite(submitted.order.amount) ? String(submitted.order.amount) : submitted.normalized.normalizedAmount,
+          rawPayload: this.executionPayload(submitted),
         })
       })
       if (markedOpen) continue
@@ -233,7 +276,7 @@ export class GridOrderSyncService {
           instance.userId,
           exchangeId,
           marketType,
-          exchangeOrder.id,
+          submitted.order.id,
           instance.symbol,
           instance.exchangeAccountId,
         )
@@ -246,35 +289,37 @@ export class GridOrderSyncService {
     }
   }
 
-  private buildClientOrderId(_instanceId: string, order: RuntimeOrder): string {
-    return `g-${order.id}`
+  private filterSubmittablePlannedOrders(orders: RuntimeOrder[]): RuntimeOrder[] {
+    return orders.filter(order => order.status === 'PLANNED')
   }
 
-  private buildCreateOrderInput(
+  private buildOrderIntent(
     instance: RuntimeInstance,
+    exchangeId: ExchangeId,
     marketType: MarketType,
     order: RuntimeOrder,
-    clientOrderId: string,
-  ): CreateOrderInput {
-    const input: CreateOrderInput = {
+  ): OrderIntent {
+    return {
+      source: 'grid',
+      sourceId: order.id,
+      userId: instance.userId,
+      exchangeAccountId: instance.exchangeAccountId,
+      exchangeId,
       symbol: instance.symbol,
       marketType,
-      side: order.side as GridOrderSide,
+      side: order.side as OrderIntent['side'],
       type: 'limit',
       amount: Number(this.decimalToString(order.quantity)),
       price: Number(this.decimalToString(order.price)),
       timeInForce: 'GTC',
-      clientOrderId,
+      role: order.role as OrderIntent['role'],
+      tdMode: marketType === 'perp' ? 'cross' : undefined,
+      metadata: {
+        gridRuntimeInstanceId: instance.id,
+        gridOrderId: order.id,
+        gridLevelId: order.gridLevelId,
+      },
     }
-
-    if (marketType === 'perp') {
-      input.tdMode = 'cross'
-      if (order.role === 'close_long' || order.role === 'close_short') {
-        input.reduceOnly = true
-      }
-    }
-
-    return input
   }
 
   private async stopForBoundaryBreak(
@@ -397,13 +442,31 @@ export class GridOrderSyncService {
   private matchesLocalOrder(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): boolean {
     return (
       exchangeOrder.clientOrderId === order.clientOrderId
-      && exchangeOrder.symbol === instance.symbol
-      && exchangeOrder.marketType === instance.marketType
+      && this.normalizeSymbol(exchangeOrder.symbol) === this.normalizeSymbol(instance.symbol)
+      && this.normalizeMarketType(exchangeOrder.marketType) === this.normalizeMarketType(instance.marketType)
       && exchangeOrder.side === order.side
       && exchangeOrder.type === order.orderType
       && this.decimalEquals(exchangeOrder.price, order.price)
       && this.decimalEquals(exchangeOrder.amount, order.quantity)
     )
+  }
+
+  private normalizeSymbol(symbol: string): string {
+    return symbol
+      .trim()
+      .toUpperCase()
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
+  }
+
+  private normalizeMarketType(marketType: string): MarketType | string {
+    const normalized = marketType.trim().toLowerCase()
+    if (normalized === 'spot') return 'spot'
+    if (normalized === 'perp' || normalized === 'swap' || normalized === 'futures' || normalized === 'future' || normalized === 'perpetual') {
+      return 'perp'
+    }
+    return normalized
   }
 
   private toGridOrderStatus(status: UnifiedOrder['status']): GridOrderStatus {
@@ -420,6 +483,30 @@ export class GridOrderSyncService {
   private extractExchangeFillId(order: UnifiedOrder): string {
     const rawFillId = this.getRawString(order.raw, 'fillId') ?? this.getRawString(order.raw, 'tradeId')
     return rawFillId ?? `${order.id}:${order.updatedAt ?? order.createdAt}:${order.filled}`
+  }
+
+  private executionPayload(result: TradingExecutionSubmitPreparedResult): GridRuntimeJsonValue {
+    return this.toJsonValue({
+      source: 'grid_order_sync',
+      exchange: result.status === 'submitted' ? result.order.raw : null,
+      execution: {
+        status: result.status,
+        reason: 'reason' in result ? result.reason : null,
+        error: 'error' in result ? this.serializeError(result.error) : null,
+        clientOrderId: 'normalized' in result ? result.normalized.clientOrderId : null,
+        normalized: 'normalized' in result ? result.normalized : null,
+        order: result.status === 'submitted'
+          ? {
+              id: result.order.id,
+              clientOrderId: result.order.clientOrderId,
+              status: result.order.status,
+              price: result.order.price,
+              amount: result.order.amount,
+              filled: result.order.filled,
+            }
+          : null,
+      },
+    })
   }
 
   private getRawString(raw: unknown, key: string): string | null {

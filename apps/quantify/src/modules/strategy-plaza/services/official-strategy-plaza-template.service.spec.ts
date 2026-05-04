@@ -1,6 +1,7 @@
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../constants/official-strategy-plaza-templates'
 import { StrategyPlazaTemplateResponseDto } from '../dto/strategy-plaza-template.response.dto'
 import { StrategyPlazaTemplateNotFoundException } from '../exceptions/strategy-plaza-template-not-found.exception'
+import { buildOfficialStrategySnapshotContent } from '../utils/official-strategy-plaza-snapshot-builder'
 import { OfficialStrategyPlazaTemplateService } from './official-strategy-plaza-template.service'
 
 describe('OfficialStrategyPlazaTemplateService', () => {
@@ -26,6 +27,31 @@ describe('OfficialStrategyPlazaTemplateService', () => {
       && item.displayMetrics.maxDrawdownPct != null,
     )).toBe(true)
     expect(Math.max(...templates.map(item => item.displayMetrics.maxDrawdownPct ?? Number.POSITIVE_INFINITY))).toBeLessThanOrEqual(20)
+  })
+
+  it('keeps all six official golden snapshots on the signal-generator deploy path', () => {
+    const snapshots = OFFICIAL_STRATEGY_PLAZA_TEMPLATES.map(template => ({
+      templateId: template.id,
+      publishedSnapshotId: template.runConfig.publishedSnapshotId,
+      content: buildOfficialStrategySnapshotContent(template),
+    }))
+
+    expect(snapshots).toHaveLength(6)
+    expect(snapshots.map(item => item.templateId)).toEqual([
+      'ma-cross',
+      'bollinger-reversion',
+      'grid-range',
+      'rsi-reversal',
+      'breakout-follow',
+      'macd-cross',
+    ])
+    expect(snapshots.every(item => item.publishedSnapshotId.endsWith('-snapshot'))).toBe(true)
+    expect(snapshots.every(item =>
+      item.content.executionEnvelope.runtime === 'signal-generator'
+      && item.content.executionEnvelope.source === 'strategy-plaza-official-template',
+    )).toBe(true)
+    expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('grid-runtime')
+    expect(snapshots.map(item => item.content.executionEnvelope.runtime)).not.toContain('trading-execution')
   })
 
   it('exposes fixed run parameters without user override fields', () => {

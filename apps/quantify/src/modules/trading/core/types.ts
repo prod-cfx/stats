@@ -40,6 +40,24 @@ export interface UnifiedSymbol {
   rawSymbol: string
 }
 
+export interface ClientOrderIdConstraints {
+  maxLength: number
+  pattern: string
+}
+
+export interface UnifiedInstrumentConstraints {
+  exchangeId: ExchangeId
+  marketType: MarketType
+  symbol: string
+  rawSymbol: string
+  priceTickSize?: string | null
+  quantityStepSize?: string | null
+  minQuantity?: string | null
+  contractValue?: string | null
+  clientOrderId: ClientOrderIdConstraints
+  raw: unknown
+}
+
 export interface UnifiedOrder {
   id: string
   clientOrderId?: string

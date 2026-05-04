@@ -5,6 +5,7 @@ import type {
   PositionSide,
   TradeMode,
   UnifiedBalance,
+  UnifiedInstrumentConstraints,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
@@ -80,6 +81,8 @@ interface OkxInstrumentSpecItem {
   instId: string
   ctVal?: string
   lotSz?: string
+  tickSz?: string
+  minSz?: string
 }
 
 export class OkxClient extends BaseCexClient {
@@ -132,12 +135,15 @@ export class OkxClient extends BaseCexClient {
       ordType,
       sz: this.toSize(input.amount, instrumentSpec),
     }
+    const submittedSize = String(body.sz)
 
+    let submittedPrice: string | undefined
     if (ordType === 'limit') {
       if (input.price === undefined) {
         throw new ExchangeError('Limit order requires price')
       }
-      body.px = this.toPrice(input.price)
+      submittedPrice = this.toPrice(input.price, input.side, instrumentSpec)
+      body.px = submittedPrice
     }
 
     // OKX 所有产品都需要 tdMode：现货使用 cash；永续必须由上游显式传入。
@@ -189,8 +195,8 @@ export class OkxClient extends BaseCexClient {
       side: input.side,
       type: input.type,
       // 以交易所实际接收的价格和数量为准，保证与后续查询/取消路径一致
-      price: this.resolveOrderPrice(order, input.price),
-      amount: order.sz ? this.fromExchangeSize(order.sz, instrumentSpec) : input.amount,
+      price: this.resolveOrderPrice(order, submittedPrice == null ? input.price : Number(submittedPrice)),
+      amount: this.fromExchangeSize(order.sz || submittedSize, instrumentSpec),
       filled: this.resolveFilledSize(order, instrumentSpec),
       // OKX create-order ACK 通常不返回完整 state，最终状态由后续 fetchOrder 收敛。
       status: order.state ? this.mapOrderStatus(order.state) : 'open',
@@ -422,6 +428,33 @@ export class OkxClient extends BaseCexClient {
       low: Number.parseFloat(t.low24h),
       volume: Number.parseFloat(t.vol24h),
       raw: t,
+    }
+  }
+
+  async fetchInstrumentConstraints(symbol: string): Promise<UnifiedInstrumentConstraints> {
+    const instId = this.toInstrumentId(symbol, this.marketType)
+    const instrumentSpec = await this.fetchInstrumentSpec(instId)
+    if (this.marketType === 'perp' && (!instrumentSpec?.ctVal || !instrumentSpec.lotSz || !instrumentSpec.tickSz || !instrumentSpec.minSz)) {
+      throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
+    }
+    if (this.marketType === 'spot' && (!instrumentSpec?.lotSz || !instrumentSpec.tickSz || !instrumentSpec.minSz)) {
+      throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
+    }
+
+    return {
+      exchangeId: 'okx',
+      marketType: this.marketType,
+      symbol,
+      rawSymbol: instId,
+      priceTickSize: instrumentSpec?.tickSz ?? null,
+      quantityStepSize: instrumentSpec?.lotSz ?? null,
+      minQuantity: instrumentSpec?.minSz ?? null,
+      contractValue: this.marketType === 'perp' ? instrumentSpec?.ctVal ?? null : null,
+      clientOrderId: {
+        maxLength: 32,
+        pattern: '^[A-Za-z0-9]+$',
+      },
+      raw: instrumentSpec ?? { instId },
     }
   }
 
@@ -670,8 +703,17 @@ export class OkxClient extends BaseCexClient {
     return this.formatNumber(steppedContracts)
   }
 
-  private toPrice(value: number): string {
-    return Number(value).toString()
+  private toPrice(value: number, side: 'buy' | 'sell', instrumentSpec?: OkxInstrumentSpecItem | null): string {
+    const tickSize = Number.parseFloat(instrumentSpec?.tickSz ?? '')
+    if (!Number.isFinite(tickSize) || tickSize <= 0) {
+      return Number(value).toString()
+    }
+
+    const rawSteps = Number(value) / tickSize
+    const steppedPrice = side === 'buy'
+      ? Math.floor(rawSteps + Number.EPSILON) * tickSize
+      : Math.ceil(rawSteps - Number.EPSILON) * tickSize
+    return this.formatNumberToStepPrecision(steppedPrice, instrumentSpec?.tickSz)
   }
 
   private mapOrderFromResponse(
@@ -739,26 +781,37 @@ export class OkxClient extends BaseCexClient {
     return Number(value.toFixed(12)).toString()
   }
 
+  private formatNumberToStepPrecision(value: number, step?: string): string {
+    const decimalPart = String(step ?? '').split('.')[1] ?? ''
+    const precision = Math.min(decimalPart.replace(/0+$/, '').length, 12)
+    return Number(value.toFixed(precision)).toString()
+  }
+
   private async getInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
     if (this.marketType !== 'perp') {
       return null
     }
 
+    const spec = await this.fetchInstrumentSpec(instId)
+    if (!spec?.ctVal) {
+      throw new ExchangeError(`OKX instrument spec missing contract value for ${instId}`)
+    }
+    return spec
+  }
+
+  private async fetchInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
     const cached = this.instrumentSpecCache.get(instId)
     if (cached) {
       return cached
     }
 
+    const instType = this.marketType === 'spot' ? 'SPOT' : 'SWAP'
     const promise = this.request<{ data: OkxInstrumentSpecItem[] }>(
       'GET',
       '/api/v5/public/instruments',
-      { instType: 'SWAP', instId },
+      { instType, instId },
     ).then((res) => {
-      const spec = res.data[0]
-      if (!spec?.ctVal) {
-        throw new ExchangeError(`OKX instrument spec missing contract value for ${instId}`)
-      }
-      return spec
+      return res.data[0] ?? null
     })
 
     this.instrumentSpecCache.set(instId, promise)

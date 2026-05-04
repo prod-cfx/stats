@@ -161,7 +161,16 @@ export class PositionsRepository {
     })
   }
 
-  lockOpenPosition(accountId: string, normalizedSymbol: string, positionSide: PositionSide) {
+  lockOpenPosition(
+    accountId: string,
+    normalizedSymbol: string,
+    positionSide: PositionSide,
+    market?: { exchangeId: string; marketType: string; market: string } | null,
+  ) {
+    const exchangeId = market?.exchangeId ?? null
+    const marketType = market?.marketType ?? null
+    const marketName = market?.market ?? null
+
     return this.txHost.tx.$queryRaw<Position[]>`
       SELECT
         "id",
@@ -186,6 +195,26 @@ export class PositionsRepository {
         AND "symbol" = ${normalizedSymbol}
         AND "position_side" = ${positionSide}
         AND "status" = ${PositionStatus.OPEN}
+        AND (
+          ${exchangeId}::text IS NULL
+          OR "exchange_id" = ${exchangeId}
+          OR "metadata"->>'market' = ${marketName}
+          OR ("exchange_id" IS NULL AND "market_type" = ${marketType})
+        )
+        AND (
+          ${marketType}::text IS NULL
+          OR "market_type" = ${marketType}
+          OR "metadata"->>'market' = ${marketName}
+        )
+      ORDER BY
+        CASE
+          WHEN "exchange_id" = ${exchangeId} AND "market_type" = ${marketType} THEN 0
+          WHEN "metadata"->>'market' = ${marketName} THEN 1
+          WHEN "exchange_id" IS NULL AND "market_type" = ${marketType} THEN 2
+          WHEN "market_type" = ${marketType} THEN 3
+          ELSE 4
+        END,
+        "updated_at" DESC
       FOR UPDATE
     `
   }

@@ -2,6 +2,7 @@ import type {
   CreateOrderInput,
   OrderQueryInput,
   UnifiedBalance,
+  UnifiedInstrumentConstraints,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
@@ -36,4 +37,6 @@ export interface IExchangeClient {
   fetchBalance: () => Promise<UnifiedBalance[]>
 
   fetchTicker: (symbol: string) => Promise<UnifiedTicker>
+
+  fetchInstrumentConstraints?: (symbol: string) => Promise<UnifiedInstrumentConstraints>
 }

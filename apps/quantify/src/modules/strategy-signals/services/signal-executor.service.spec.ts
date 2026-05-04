@@ -8,10 +8,37 @@ describe('signalExecutorService', () => {
     return { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
   }
 
+  function createTradingExecutionMock() {
+    return {
+      executeIntent: jest.fn(),
+      prepareIntent: jest.fn(),
+      submitPrepared: jest.fn(),
+    }
+  }
+
+  function mockTradingExecutionResult(
+    tradingExecution: ReturnType<typeof createTradingExecutionMock>,
+    result: any,
+  ) {
+    if (result.status === 'waiting_constraints' || result.status === 'rejected') {
+      tradingExecution.prepareIntent.mockResolvedValue(result)
+      return
+    }
+
+    tradingExecution.prepareIntent.mockResolvedValue({
+      status: 'prepared',
+      intent: result.intent ?? {},
+      constraints: result.normalized?.constraints ?? {},
+      normalized: result.normalized,
+    })
+    tradingExecution.submitPrepared.mockResolvedValue(result)
+  }
+
   function createService() {
     const configService = { get: jest.fn() }
     const schedulerRegistry = createSchedulerRegistry()
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn(), findById: jest.fn().mockResolvedValue(null) }
@@ -28,11 +55,12 @@ describe('signalExecutorService', () => {
     }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
 
-    return new SignalExecutorService(
+    const service = new SignalExecutorService(
       executorRepository as any,
       configService as any,
       schedulerRegistry as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -42,6 +70,7 @@ describe('signalExecutorService', () => {
       txHost as any,
       positionAdmissionService,
     )
+    return service
   }
 
   it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
@@ -374,6 +403,590 @@ describe('signalExecutorService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('submits OKX spot strategy signals through trading execution with the subscribed exchange account', async () => {
+    const service = createService()
+    const executorRepository = (service as any).executorRepository
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const tradingService = (service as any).tradingService
+
+    executorRepository.findStrategyInstanceMode = jest.fn().mockResolvedValue({ mode: 'TESTNET' })
+    executorRepository.findActiveSubscriptionNetwork = jest.fn().mockResolvedValue({
+      exchangeAccountId: 'exchange-account-spot-1',
+      exchangeAccount: { isTestnet: true },
+    })
+
+    const filledOrder = {
+      id: 'ord-spot-execution-1',
+      symbol: 'ORDI/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 10,
+      filled: 10,
+      price: 4.5,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-okx-spot-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'ORDI/USDT',
+        side: 'buy',
+        amount: 10,
+        price: 4.5,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(45),
+      reserveReference: 'reserve-okx-spot-1',
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
+
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-okx-spot-1',
+        normalizedAmount: '10',
+        exchangeSize: '10',
+        request: {
+          symbol: 'ORDI/USDT',
+          marketType: 'spot',
+          side: 'buy',
+          type: 'market',
+          amount: 10,
+          price: 4.5,
+          clientOrderId: 'sig-exec-okx-spot-1',
+        },
+        constraints: {},
+      },
+      order: filledOrder,
+    })
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-okx-spot-1',
+        strategyInstanceId: 'inst-okx-spot-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'ORDI',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-okx-spot-1', userId: 'user-okx-spot-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('executed')
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'signal',
+      sourceId: 'exec-okx-spot-1',
+      userId: 'user-okx-spot-1',
+      exchangeAccountId: 'exchange-account-spot-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDI/USDT',
+      side: 'buy',
+      type: 'market',
+      amount: 10,
+      price: 4.5,
+      reduceOnly: false,
+      role: 'spot_buy',
+    }))
+    expect(tradingExecution.prepareIntent.mock.calls[0][0]).not.toHaveProperty('tdMode')
+    expect(tradingExecution.submitPrepared).toHaveBeenCalled()
+    expect(tradingExecution.executeIntent).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-okx-spot-1',
+      'ORDER_SUBMITTED',
+      expect.objectContaining({
+        tradingExecution: expect.objectContaining({
+          status: 'prepared',
+          clientOrderId: 'sig-exec-okx-spot-1',
+          normalizedRequest: expect.objectContaining({
+            clientOrderId: 'sig-exec-okx-spot-1',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it.each([
+    ['CLOSE_LONG', 'sell', 'close_long'],
+    ['CLOSE_SHORT', 'buy', 'close_short'],
+  ] as const)('submits OKX perp %s close signals as reduce-only trading execution intents', async (direction, side, role) => {
+    const service = createService()
+    const tradingExecution = (service as any).tradingExecution
+    const tradingService = (service as any).tradingService
+
+    const filledOrder = {
+      id: `ord-${role}-1`,
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side,
+      type: 'market',
+      status: 'closed',
+      amount: 0.25,
+      filled: 0.25,
+      price: 50000,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: `exec-${role}-1` },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'perp',
+        symbol: 'BTC/USDT:PERP',
+        side,
+        amount: 0.25,
+        price: 50000,
+        reduceOnly: true,
+      },
+      reservedQuote: new Prisma.Decimal(0),
+      reserveReference: `reserve-${role}-1`,
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
+
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: `sig-${role}-1`,
+        normalizedAmount: '0.25',
+        exchangeSize: '0.25',
+        request: {
+          symbol: 'BTC/USDT:PERP',
+          marketType: 'perp',
+          side,
+          type: 'market',
+          amount: 0.25,
+          price: 50000,
+          reduceOnly: true,
+          tdMode: 'cross',
+          clientOrderId: `sig-${role}-1`,
+        },
+        constraints: {},
+      },
+      order: filledOrder,
+    })
+
+    const result = await (service as any).processAccount(
+      {
+        id: `sig-${role}-1`,
+        direction,
+        signalType: 'EXIT',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'PERPETUAL',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: `acct-${role}-1`, userId: `user-${role}-1` } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('executed')
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'signal',
+      sourceId: `exec-${role}-1`,
+      userId: `user-${role}-1`,
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      side,
+      type: 'market',
+      amount: 0.25,
+      price: 50000,
+      reduceOnly: true,
+      role,
+      tdMode: 'cross',
+    }))
+    expect(tradingExecution.submitPrepared).toHaveBeenCalled()
+    expect(tradingExecution.executeIntent).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'rejected',
+      {
+        status: 'rejected',
+        reason: 'amount_below_min',
+        intent: {},
+        normalized: {
+          clientOrderId: 'sig-rejected-1',
+          normalizedAmount: '0',
+          exchangeSize: '0',
+          request: { symbol: 'BTC/USDT', clientOrderId: 'sig-rejected-1' },
+          constraints: {},
+        },
+      },
+    ],
+    [
+      'waiting_constraints',
+      {
+        status: 'waiting_constraints',
+        reason: 'constraints_unavailable',
+        intent: {},
+      },
+    ],
+    [
+      'waiting_position',
+      {
+        status: 'waiting_position',
+        reason: 'missing_closable_long_position',
+        intent: {},
+        normalized: {
+          clientOrderId: 'sig-waiting-position-1',
+          normalizedAmount: '0.001',
+          exchangeSize: '0.001',
+          request: { symbol: 'BTC/USDT', clientOrderId: 'sig-waiting-position-1' },
+          constraints: {},
+        },
+      },
+    ],
+  ] as const)('fails and releases reservation when trading execution returns %s', async (status, executionResult) => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const tradingService = (service as any).tradingService
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = `reserve-${status}-1`
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+    const resolveFinalOrderState = jest
+      .spyOn(service as any, 'resolveFinalOrderState')
+      .mockResolvedValue({} as any)
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: `exec-${status}-1` },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    mockTradingExecutionResult(tradingExecution, executionResult)
+
+    const result = await (service as any).processAccount(
+      {
+        id: `sig-${status}-1`,
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: `acct-${status}-1`, userId: `user-${status}-1` } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markFailed).toHaveBeenCalledWith(`exec-${status}-1`, executionResult.reason)
+    expect(releaseReservation).toHaveBeenCalledWith(`acct-${status}-1`, reservedQuote, reserveReference)
+    expect(resolveFinalOrderState).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      `exec-${status}-1`,
+      'ORDER_SUBMITTED',
+      expect.objectContaining({
+        tradingExecution: expect.objectContaining({
+          status,
+          reason: executionResult.reason,
+        }),
+      }),
+    )
+    if ('normalized' in executionResult) {
+      expect(executionRepository.markStage).toHaveBeenCalledWith(
+        `exec-${status}-1`,
+        'ORDER_SUBMITTED',
+        expect.objectContaining({
+          tradingExecution: expect.objectContaining({
+            clientOrderId: executionResult.normalized.clientOrderId,
+            normalizedRequest: expect.objectContaining({
+              clientOrderId: executionResult.normalized.clientOrderId,
+            }),
+          }),
+        }),
+      )
+    }
+  })
+
+  it('keeps reservation and marks reconcile required when submitPrepared returns submit_failed', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-submit-failed-1'
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+    const resolveFinalOrderState = jest
+      .spyOn(service as any, 'resolveFinalOrderState')
+      .mockResolvedValue({} as any)
+    const submitError = new Error('exchange_submit_error')
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-submit-failed-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submit_failed',
+      reason: 'exchange_submit_error',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-submit-failed-1',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-submit-failed-1' },
+        constraints: {},
+      },
+      error: submitError,
+    })
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-submit-failed-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-submit-failed-1', userId: 'user-submit-failed-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-submit-failed-1', 'exchange_submit_error')
+    expect(releaseReservation).not.toHaveBeenCalled()
+    expect(resolveFinalOrderState).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-submit-failed-1',
+      'RECONCILE_REQUIRED',
+      expect.objectContaining({
+        reconcileRequired: true,
+        reason: 'exchange_submit_error',
+        error: 'exchange_submit_error',
+        orderRequest: expect.objectContaining({
+          source: 'signal',
+          sourceId: 'exec-submit-failed-1',
+          symbol: 'BTC/USDT',
+        }),
+        tradingExecution: expect.objectContaining({
+          status: 'submit_failed',
+          reason: 'exchange_submit_error',
+          clientOrderId: 'sig-submit-failed-1',
+          normalizedRequest: expect.objectContaining({
+            clientOrderId: 'sig-submit-failed-1',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('does not submit to the exchange when ORDER_SUBMITTED stage cannot be recorded before submission', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-pre-submit-mark-stage-fails'
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-pre-submit-mark-stage-fails' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    tradingExecution.prepareIntent.mockResolvedValue({
+      status: 'prepared',
+      intent: {},
+      constraints: {},
+      normalized: {
+        clientOrderId: 'sig-pre-submit-mark-stage-fails',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-pre-submit-mark-stage-fails' },
+        constraints: {},
+      },
+    })
+    executionRepository.markStage.mockRejectedValueOnce(new Error('stage write failed'))
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-pre-submit-mark-stage-fails',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-pre-submit-mark-stage-fails', userId: 'user-pre-submit-mark-stage-fails' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(tradingExecution.prepareIntent).toHaveBeenCalled()
+    expect(tradingExecution.submitPrepared).not.toHaveBeenCalled()
+    expect(executionRepository.markFailed).toHaveBeenCalledWith(
+      'exec-pre-submit-mark-stage-fails',
+      'stage write failed',
+    )
+    expect(releaseReservation).toHaveBeenCalledWith(
+      'acct-pre-submit-mark-stage-fails',
+      reservedQuote,
+      reserveReference,
+    )
+  })
+
+  it('keeps reservation when ORDER_ACKED stage fails after the exchange accepted the order', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-post-submit-acked-fails'
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    const submittedOrder = {
+      id: 'ord-post-submit-acked-fails',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 0.001,
+      filled: 0.001,
+      price: 100,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-post-submit-acked-fails' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(submittedOrder)
+    tradingExecution.prepareIntent.mockResolvedValue({
+      status: 'prepared',
+      intent: {},
+      constraints: {},
+      normalized: {
+        clientOrderId: 'sig-post-submit-acked-fails',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-post-submit-acked-fails' },
+        constraints: {},
+      },
+    })
+    tradingExecution.submitPrepared.mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-post-submit-acked-fails',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-post-submit-acked-fails' },
+        constraints: {},
+      },
+      order: submittedOrder,
+    })
+    executionRepository.markStage
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('acked write failed'))
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-post-submit-acked-fails',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-post-submit-acked-fails', userId: 'user-post-submit-acked-fails' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(tradingExecution.submitPrepared).toHaveBeenCalled()
+    expect(executionRepository.markFailed).toHaveBeenCalledWith(
+      'exec-post-submit-acked-fails',
+      'acked write failed',
+    )
+    expect(releaseReservation).not.toHaveBeenCalled()
+  })
+
   it('sizes ratio orders from execution capital and caps budget by buying power', () => {
     const service = createService()
 
@@ -685,6 +1298,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -701,6 +1315,7 @@ describe('signalExecutorService', () => {
       configService as any,
       createSchedulerRegistry() as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -745,7 +1360,18 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(openOrder)
 
-    tradingService.placeOrder.mockResolvedValue(openOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-1',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-exec-1' },
+        constraints: {},
+      },
+      order: openOrder,
+    })
 
     const result = await (service as any).processAccount(
       { id: 'sig-1', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
@@ -768,6 +1394,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -784,6 +1411,7 @@ describe('signalExecutorService', () => {
       configService as any,
       createSchedulerRegistry() as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -828,7 +1456,18 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(partialOpenOrder)
 
-    tradingService.placeOrder.mockResolvedValue(partialOpenOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-1b',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-exec-1b' },
+        constraints: {},
+      },
+      order: partialOpenOrder,
+    })
 
     const result = await (service as any).processAccount(
       { id: 'sig-1b', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
@@ -854,6 +1493,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -870,6 +1510,7 @@ describe('signalExecutorService', () => {
       configService as any,
       createSchedulerRegistry() as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -914,7 +1555,18 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(canceledOrder)
 
-    tradingService.placeOrder.mockResolvedValue(canceledOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-2',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-exec-2' },
+        constraints: {},
+      },
+      order: canceledOrder,
+    })
 
     const result = await (service as any).processAccount(
       { id: 'sig-2', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
@@ -940,6 +1592,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -956,6 +1609,7 @@ describe('signalExecutorService', () => {
       configService as any,
       createSchedulerRegistry() as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -1000,7 +1654,18 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockRejectedValue(new Error('getOrder timeout'))
 
-    tradingService.placeOrder.mockResolvedValue(submittedOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-3',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-exec-3' },
+        constraints: {},
+      },
+      order: submittedOrder,
+    })
 
     const result = await (service as any).processAccount(
       { id: 'sig-3', direction: 'BUY', symbol: { instrumentType: 'SPOT', quoteAsset: 'USDT' } } as any,
@@ -1031,6 +1696,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1048,6 +1714,7 @@ describe('signalExecutorService', () => {
       configService as any,
       schedulerRegistry as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -1094,7 +1761,18 @@ describe('signalExecutorService', () => {
     ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
     ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
 
-    tradingService.placeOrder.mockResolvedValue(filledOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-llm-1',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-exec-llm-1' },
+        constraints: {},
+      },
+      order: filledOrder,
+    })
 
     const result = await (service as any).processAccount(
       {
@@ -1114,17 +1792,18 @@ describe('signalExecutorService', () => {
 
     expect(result).toBe('executed')
     expect(executorRepository.findActiveLlmSubscription).toHaveBeenCalledWith('user-llm-1', 'llm-instance-1')
-    expect(tradingService.placeOrder).toHaveBeenCalledWith(
-      'user-llm-1',
-      'binance',
-      'spot',
-      expect.objectContaining({
-        symbol: 'BTC/USDT',
-        marketType: 'spot',
-        side: 'buy',
-      }),
-      'exchange-account-1',
-    )
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'signal',
+      sourceId: 'exec-llm-1',
+      userId: 'user-llm-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'binance',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      role: 'spot_buy',
+    }))
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
   it('does not enforce live/testnet mismatch gate for PAPER mode strategy instances', async () => {
@@ -1136,6 +1815,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1153,6 +1833,7 @@ describe('signalExecutorService', () => {
       configService as any,
       schedulerRegistry as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -1194,6 +1875,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1211,6 +1893,7 @@ describe('signalExecutorService', () => {
       configService as any,
       schedulerRegistry as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -1257,7 +1940,18 @@ describe('signalExecutorService', () => {
     ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
     ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
 
-    tradingService.placeOrder.mockResolvedValue(filledOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-spot-1',
+        normalizedAmount: '10',
+        exchangeSize: '10',
+        request: { symbol: 'ORDI/USDT', clientOrderId: 'sig-exec-spot-1' },
+        constraints: {},
+      },
+      order: filledOrder,
+    })
 
     const result = await (service as any).processAccount(
       {
@@ -1277,24 +1971,26 @@ describe('signalExecutorService', () => {
 
     expect(result).toBe('executed')
     expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-spot-1', 'inst-spot-1')
-    expect(tradingService.placeOrder).toHaveBeenCalledWith(
-      'user-spot-1',
-      'okx',
-      'spot',
-      expect.objectContaining({
-        symbol: 'ORDI/USDT',
-        marketType: 'spot',
-        side: 'buy',
-      }),
-      'exchange-account-spot-1',
-    )
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'signal',
+      sourceId: 'exec-spot-1',
+      userId: 'user-spot-1',
+      exchangeAccountId: 'exchange-account-spot-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDI/USDT',
+      side: 'buy',
+      role: 'spot_buy',
+    }))
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
     expect(executionRepository.markStage).toHaveBeenCalledWith(
       'exec-spot-1',
       'ORDER_SUBMITTED',
       expect.objectContaining({
         exchangeAccountId: 'exchange-account-spot-1',
-        orderRequest: expect.objectContaining({
-          exchangeAccountId: 'exchange-account-spot-1',
+        tradingExecution: expect.objectContaining({
+          status: 'prepared',
+          clientOrderId: 'sig-exec-spot-1',
         }),
       }),
     )
@@ -1310,6 +2006,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1327,6 +2024,7 @@ describe('signalExecutorService', () => {
       configService as any,
       schedulerRegistry as any,
       tradingService as any,
+      tradingExecution as any,
       accountsService as any,
       {} as any,
       positionsService as any,
@@ -1395,6 +2093,7 @@ describe('signalExecutorService', () => {
       { get: jest.fn() } as any,
       createSchedulerRegistry() as any,
       {} as any,
+      createTradingExecutionMock() as any,
       accountsService as any,
       {} as any,
       {} as any,
@@ -1454,6 +2153,7 @@ describe('signalExecutorService', () => {
 
   it('propagates runtime provenance into recorded trade metadata', async () => {
     const tradingService = { placeOrder: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const positionsService = { recordTrade: jest.fn().mockResolvedValue(undefined) }
     const executionRepository = {
       markStage: jest.fn(),
@@ -1466,6 +2166,7 @@ describe('signalExecutorService', () => {
       { get: jest.fn() } as any,
       createSchedulerRegistry() as any,
       tradingService as any,
+      tradingExecution as any,
       { applyLedgerDelta: jest.fn() } as any,
       {} as any,
       positionsService as any,
@@ -1507,7 +2208,18 @@ describe('signalExecutorService', () => {
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
     ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
 
-    tradingService.placeOrder.mockResolvedValue(filledOrder)
+    mockTradingExecutionResult(tradingExecution, {
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-exec-runtime-provenance-1',
+        normalizedAmount: '0.01',
+        exchangeSize: '0.01',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-exec-runtime-provenance-1' },
+        constraints: {},
+      },
+      order: filledOrder,
+    })
 
     await (service as any).processAccount(
       {
@@ -1547,6 +2259,7 @@ describe('signalExecutorService', () => {
       { get: jest.fn() } as any,
       createSchedulerRegistry() as any,
       {} as any,
+      createTradingExecutionMock() as any,
       {} as any,
       {} as any,
       {} as any,

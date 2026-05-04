@@ -6,6 +6,13 @@ import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-con
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
 import type {
+  OrderIntent,
+  OrderIntentRole,
+  TradingExecutionPrepareResult,
+  TradingExecutionResult,
+  TradingExecutionSubmitPreparedResult,
+} from '@/modules/trading-execution/types/trading-execution.types'
+import type {
   Symbol as PrismaSymbol,
   PrismaClient,
   UserStrategyAccount,
@@ -31,6 +38,8 @@ import { StrategyInstancesService } from '@/modules/strategy-instances/services/
 import { EXECUTION_STAGES } from '@/modules/trading/core/execution-stage'
 import { resolveStrategyFundingFromStrategyAccount } from '@/modules/trading/core/strategy-buying-power.resolver'
 import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
 import { Prisma } from '@/prisma/prisma.types'
@@ -84,6 +93,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly tradingService: TradingService,
+    private readonly tradingExecution: TradingExecutionService,
     private readonly accountsService: AccountsService,
     private readonly strategyInstancesService: StrategyInstancesService,
     private readonly positionsService: PositionsService,
@@ -458,39 +468,90 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'skipped'
       }
 
+      let exchangeAccepted = false
       try {
-        const orderRequest = {
-          exchangeId: effectiveExchangeId,
+        const orderIntent: OrderIntent = {
+          source: 'signal',
+          sourceId: execution.id,
+          userId: account.userId,
           exchangeAccountId: exchangeAccountId ?? null,
-          symbol: effectiveOrderParams.symbol,
+          exchangeId: effectiveExchangeId,
           marketType: effectiveOrderParams.marketType,
+          symbol: effectiveOrderParams.symbol,
           side: effectiveOrderParams.side,
           type: 'market',
           amount: effectiveOrderParams.amount,
           price: effectiveOrderParams.price,
           reduceOnly: effectiveOrderParams.reduceOnly ?? false,
-        } satisfies Prisma.JsonObject
+          role: this.mapOrderIntentRole(
+            effectiveOrderParams.marketType,
+            effectiveOrderParams.side,
+            effectiveOrderParams.reduceOnly ?? false,
+          ),
+          ...(effectiveOrderParams.marketType === 'perp' ? { tdMode: 'cross' as const } : {}),
+        }
+
+        const orderRequest = this.toJsonObject(orderIntent as unknown as Record<string, unknown>)
+
+        const prepared = await this.tradingExecution.prepareIntent(orderIntent)
+
+        if (prepared.status !== 'prepared') {
+          await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
+            exchangeAccountId: exchangeAccountId ?? null,
+            orderRequest,
+            tradingExecution: this.buildTradingExecutionResultSnapshot(prepared),
+          })
+          await this.executionRepository.markFailed(execution.id, prepared.reason)
+          await this.releaseReservation(account.id, reservedQuote, reserveReference)
+          return 'failed'
+        }
 
         await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
           exchangeAccountId: exchangeAccountId ?? null,
           orderRequest,
+          tradingExecution: this.buildTradingExecutionResultSnapshot(prepared),
         })
 
-        const initialOrder = await this.tradingService.placeOrder(
-          account.userId,
-          effectiveExchangeId,
-          effectiveOrderParams.marketType,
-          {
-            symbol: effectiveOrderParams.symbol,
-            marketType: effectiveOrderParams.marketType,
-            side: effectiveOrderParams.side,
-            type: 'market',
-            amount: effectiveOrderParams.amount,
-            price: effectiveOrderParams.price,
-            reduceOnly: effectiveOrderParams.reduceOnly,
-          },
-          exchangeAccountId,
-        )
+        const executionResult = await this.tradingExecution.submitPrepared(prepared)
+
+        if (executionResult.status === 'reconcile_required') {
+          exchangeAccepted = true
+          await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+            reconcileRequired: true,
+            reason: executionResult.reason,
+            ...(executionResult.order ? { orderResponse: this.buildOrderResponseSnapshot(executionResult.order) } : {}),
+          })
+          await this.executionRepository.markFailed(execution.id, executionResult.reason)
+          return 'failed'
+        }
+
+        if (executionResult.status === 'submit_failed') {
+          exchangeAccepted = true
+          await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
+            reconcileRequired: true,
+            reason: executionResult.reason,
+            error: this.errorMessage(executionResult.error),
+            exchangeAccountId: exchangeAccountId ?? null,
+            orderRequest,
+            tradingExecution: this.buildTradingExecutionResultSnapshot(executionResult),
+          })
+          await this.executionRepository.markFailed(execution.id, executionResult.reason)
+          return 'failed'
+        }
+
+        if (executionResult.status !== 'submitted') {
+          await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
+            exchangeAccountId: exchangeAccountId ?? null,
+            orderRequest,
+            tradingExecution: this.buildTradingExecutionResultSnapshot(executionResult),
+          })
+          await this.executionRepository.markFailed(execution.id, executionResult.reason)
+          await this.releaseReservation(account.id, reservedQuote, reserveReference)
+          return 'failed'
+        }
+
+        exchangeAccepted = true
+        const initialOrder = executionResult.order
 
         let order: UnifiedOrder
         try {
@@ -648,6 +709,10 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'executed'
       }
       catch (error) {
+        if (exchangeAccepted) {
+          await this.markPostSubmitLocalFailure(execution.id, error)
+          return 'failed'
+        }
         await this.executionRepository.markFailed(execution.id, (error as Error).message)
         this.logger.error(`Signal execution failed for account ${account.id}: ${(error as Error).message}`)
         // 下单失败时释放全部预留
@@ -1104,6 +1169,27 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return currentOrder
   }
 
+  private async markPostSubmitLocalFailure(executionId: string, error: unknown): Promise<void> {
+    const message = this.errorMessage(error)
+    try {
+      await this.executionRepository.markStage(executionId, 'RECONCILE_REQUIRED', {
+        reconcileRequired: true,
+        reason: 'POST_SUBMIT_LOCAL_ERROR',
+        error: message,
+      })
+    }
+    catch (stageError) {
+      this.logger.error(
+        `Failed to mark post-submit reconciliation for execution ${executionId}: ${(stageError as Error).message}`,
+      )
+    }
+    await this.executionRepository.markFailed(executionId, message)
+  }
+
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
+  }
+
   private mapTradeSide(direction: SignalDirection): TradeSide | null {
     switch (direction) {
       case 'BUY':
@@ -1143,6 +1229,20 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       default:
         return null
     }
+  }
+
+  private mapOrderIntentRole(
+    marketType: MarketType,
+    side: 'buy' | 'sell',
+    reduceOnly: boolean,
+  ): OrderIntentRole {
+    if (marketType === 'spot') {
+      return side === 'buy' ? 'spot_buy' : 'spot_sell'
+    }
+    if (reduceOnly) {
+      return side === 'sell' ? 'close_long' : 'close_short'
+    }
+    return side === 'buy' ? 'open_long' : 'open_short'
   }
 
   private resolveClosePositionIdentity(
@@ -1429,6 +1529,30 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       createdAt: order.createdAt,
       raw: typeof order.raw === 'object' && order.raw !== null ? order.raw as Prisma.JsonObject : null,
     }
+  }
+
+  private buildTradingExecutionResultSnapshot(
+    result: TradingExecutionPrepareResult | TradingExecutionSubmitPreparedResult | TradingExecutionResult,
+  ): Prisma.JsonObject {
+    const normalized = 'normalized' in result ? result.normalized : null
+    const order = 'order' in result ? result.order : null
+
+    return {
+      status: result.status,
+      reason: 'reason' in result ? result.reason : null,
+      clientOrderId: normalized?.clientOrderId ?? null,
+      normalizedAmount: normalized?.normalizedAmount ?? null,
+      normalizedPrice: normalized?.normalizedPrice ?? null,
+      exchangeSize: normalized?.exchangeSize ?? null,
+      normalizedRequest: normalized ? this.toJsonObject(normalized.request as unknown as Record<string, unknown>) : null,
+      orderResponse: order ? this.buildOrderResponseSnapshot(order) : null,
+    }
+  }
+
+  private toJsonObject(value: Record<string, unknown>): Prisma.JsonObject {
+    return Object.fromEntries(
+      Object.entries(value).filter(([, item]) => item !== undefined),
+    ) as Prisma.JsonObject
   }
 
   private buildExecutionStageMetadata(stages: ExecutionStage[]): Prisma.JsonObject {

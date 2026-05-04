@@ -493,7 +493,7 @@ describe('compiledPublicationGateService', () => {
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
       positionMode: 'short_only' as const,
-      marginMode: 'isolated' as const,
+      marginMode: 'cross' as const,
       tickSize: 0.01,
       pricePrecision: 2,
       quantityPrecision: 6,
@@ -1090,7 +1090,7 @@ describe('compiledPublicationGateService', () => {
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
       positionMode: 'short_only' as const,
-      marginMode: 'isolated' as const,
+      marginMode: 'cross' as const,
       tickSize: 0.01,
       pricePrecision: 2,
       quantityPrecision: 6,

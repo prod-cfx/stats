@@ -4,6 +4,7 @@ import type {
   MarketType,
   OrderType,
   UnifiedBalance,
+  UnifiedInstrumentConstraints,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
@@ -458,6 +459,30 @@ export class HyperliquidClient implements IExchangeClient {
         undefined,
         this.sanitizeError(error, 'createOrder'),
       )
+    }
+  }
+
+  async fetchInstrumentConstraints(symbol: string): Promise<UnifiedInstrumentConstraints> {
+    const rawSymbol = this.mapSymbolToHl(symbol, this.marketType)
+    const assetMeta = await this.getAssetMeta(rawSymbol, this.marketType)
+    const quantityStepSize = this.decimalStep(assetMeta.szDecimals)
+    const priceDecimals = Math.max((this.marketType === 'perp' ? 6 : 8) - assetMeta.szDecimals, 0)
+    const constraintsSymbol = this.mapHlSymbolToInternal(rawSymbol, this.marketType)
+
+    return {
+      exchangeId: 'hyperliquid',
+      marketType: this.marketType,
+      symbol,
+      rawSymbol: constraintsSymbol,
+      priceTickSize: this.decimalStep(priceDecimals),
+      quantityStepSize,
+      minQuantity: quantityStepSize,
+      contractValue: this.marketType === 'perp' ? '1' : null,
+      clientOrderId: {
+        maxLength: 34,
+        pattern: '^0x[0-9a-f]{32}$',
+      },
+      raw: { rawSymbol, ...assetMeta },
     }
   }
 
@@ -1414,5 +1439,10 @@ export class HyperliquidClient implements IExchangeClient {
     // 生成真正的 16 字节随机数据 = 32 个十六进制字符
     const buf = randomBytes(16)
     return `0x${buf.toString('hex')}`
+  }
+
+  private decimalStep(decimals: number): string {
+    if (decimals <= 0) return '1'
+    return `0.${'0'.repeat(decimals - 1)}1`
   }
 }

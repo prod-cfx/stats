@@ -61,6 +61,13 @@ export interface MarkGridOrderSubmittingInput {
 export interface MarkGridOrderOpenInput {
   id: string
   exchangeOrderId: string
+  price?: string | null
+  quantity?: string | null
+  rawPayload?: GridRuntimeJsonValue
+}
+
+export interface MarkGridOrderPlannedInput {
+  id: string
   rawPayload?: GridRuntimeJsonValue
 }
 
@@ -302,7 +309,27 @@ export class GridRuntimeRepository {
       },
       data: {
         exchangeOrderId: input.exchangeOrderId,
+        price: input.price == null ? undefined : this.decimal(input.price),
+        quantity: input.quantity == null ? undefined : this.decimal(input.quantity),
         status: 'OPEN',
+        rawPayload: input.rawPayload,
+      },
+    })
+
+    return result.count === 1
+  }
+
+  async markOrderPlanned(input: MarkGridOrderPlannedInput): Promise<boolean> {
+    const result = await this.txHost.tx.gridOrder.updateMany({
+      where: {
+        id: input.id,
+        status: 'SUBMITTING',
+        instance: {
+          status: { in: ['INITIALIZING', 'RUNNING'] },
+        },
+      },
+      data: {
+        status: 'PLANNED',
         rawPayload: input.rawPayload,
       },
     })

@@ -1,0 +1,117 @@
+import type { PositionIntentSide, PositionSide } from '@/modules/trading/core/types'
+import { Injectable } from '@nestjs/common'
+import { Prisma } from '@/prisma/prisma.types'
+import type { NormalizedOrderIntent, OrderIntent, TradingExecutionConstraints } from '../types/trading-execution.types'
+
+@Injectable()
+export class OrderNormalizerService {
+  normalize(intent: OrderIntent, constraints: TradingExecutionConstraints, clientOrderId: string): NormalizedOrderIntent {
+    this.validateConstraints(intent, constraints)
+    const normalizedPrice = intent.type === 'limit'
+      ? this.normalizePrice(intent.price, constraints)
+      : undefined
+    const normalizedAmount = this.normalizeAmount(intent.amount, constraints)
+    const positionSide = this.positionSide(intent)
+    const request = {
+      symbol: intent.symbol,
+      marketType: intent.marketType,
+      side: intent.side,
+      type: intent.type,
+      amount: Number(normalizedAmount),
+      price: normalizedPrice === undefined ? undefined : Number(normalizedPrice),
+      timeInForce: intent.timeInForce,
+      reduceOnly: this.reduceOnly(intent),
+      tdMode: intent.tdMode,
+      positionSide: positionSide?.positionSide,
+      posSide: positionSide?.posSide,
+      clientOrderId,
+    }
+
+    return {
+      request,
+      normalizedPrice,
+      normalizedAmount,
+      exchangeSize: this.toExchangeSize(normalizedAmount, constraints),
+      clientOrderId,
+      constraints,
+    }
+  }
+
+  private normalizePrice(value: number | undefined, constraints: TradingExecutionConstraints): string {
+    if (value === undefined) throw new Error('trading_execution_limit_price_required')
+    const tick = this.positiveDecimal(constraints.priceTickSize, 'trading_execution_missing_price_tick')
+    return this.decimal(value).div(tick).toDecimalPlaces(0).mul(tick).toFixed()
+  }
+
+  private positionSide(intent: OrderIntent): { positionSide: PositionIntentSide, posSide: PositionSide } | undefined {
+    if (intent.marketType !== 'perp') return undefined
+    if (intent.role === 'open_long' || intent.role === 'close_long') {
+      return { positionSide: 'LONG', posSide: 'long' }
+    }
+    if (intent.role === 'open_short' || intent.role === 'close_short') {
+      return { positionSide: 'SHORT', posSide: 'short' }
+    }
+    return undefined
+  }
+
+  private reduceOnly(intent: OrderIntent): boolean | undefined {
+    if (intent.role === 'close_long' || intent.role === 'close_short') return true
+    return intent.reduceOnly
+  }
+
+  private validateConstraints(intent: OrderIntent, constraints: TradingExecutionConstraints): void {
+    if (
+      intent.exchangeId !== constraints.exchangeId
+      || intent.marketType !== constraints.marketType
+      || this.normalizeSymbol(intent.symbol) !== this.normalizeSymbol(constraints.symbol)
+      || this.normalizeSymbol(intent.symbol) !== this.normalizeSymbol(constraints.rawSymbol)
+    ) {
+      throw new Error('trading_execution_constraints_mismatch')
+    }
+
+    if (constraints.marketType === 'perp') {
+      this.positiveDecimal(constraints.contractValue, 'trading_execution_missing_contract_value')
+    }
+  }
+
+  private normalizeSymbol(value: string): string {
+    return value
+      .toUpperCase()
+      .replace(/(?:PERP|SWAP)$/u, '')
+      .replace(/[^A-Z0-9]/g, '')
+  }
+
+  private normalizeAmount(value: number, constraints: TradingExecutionConstraints): string {
+    const step = this.quantityStep(constraints)
+    const normalized = this.decimal(value).div(step).floor().mul(step)
+    const min = constraints.minQuantity ? this.decimal(constraints.minQuantity) : null
+    const exchangeSize = this.decimal(this.toExchangeSize(normalized.toFixed(), constraints))
+    if (min && exchangeSize.lt(min)) throw new Error('trading_execution_quantity_below_minimum')
+    if (!normalized.isPositive()) throw new Error('trading_execution_quantity_below_minimum')
+    return normalized.toFixed()
+  }
+
+  private quantityStep(constraints: TradingExecutionConstraints): Prisma.Decimal {
+    const step = this.positiveDecimal(constraints.quantityStepSize, 'trading_execution_missing_quantity_step')
+    if (constraints.marketType !== 'perp') return step
+    const contractValue = this.positiveDecimal(constraints.contractValue, 'trading_execution_missing_contract_value')
+    return step.mul(contractValue)
+  }
+
+  private toExchangeSize(amount: string, constraints: TradingExecutionConstraints): string {
+    if (constraints.marketType !== 'perp') return amount
+    const contractValue = this.positiveDecimal(constraints.contractValue, 'trading_execution_missing_contract_value')
+    return this.decimal(amount).div(contractValue).toFixed()
+  }
+
+  private positiveDecimal(value: string | null | undefined, errorCode: string): Prisma.Decimal {
+    if (!value) throw new Error(errorCode)
+    const decimal = this.decimal(value)
+    if (!decimal.isPositive()) throw new Error(errorCode)
+    return decimal
+  }
+
+  private decimal(value: string | number): Prisma.Decimal {
+    return new Prisma.Decimal(value)
+  }
+}

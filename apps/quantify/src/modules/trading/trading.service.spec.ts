@@ -11,6 +11,7 @@ describe('tradingService', () => {
       fetchOpenOrders: jest.fn(),
       fetchClosedOrders: jest.fn(),
       fetchTicker: jest.fn(),
+      fetchInstrumentConstraints: jest.fn(),
       fetchPositions: jest.fn(),
       fetchBalance: jest.fn(),
     }
@@ -110,6 +111,42 @@ describe('tradingService', () => {
 
     expect(client.fetchTicker).toHaveBeenCalledWith('DOGE/USDT')
     expect(result).toEqual({ symbol: 'DOGE/USDT', last: 0.1 })
+  })
+
+  it('wraps generic instrument constraints lookup failures', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchInstrumentConstraints.mockRejectedValue(new Error('network down'))
+
+    await expect(service.getInstrumentConstraints(
+      'user-1',
+      'okx',
+      'perp',
+      'BTC/USDT:PERP',
+      'exchange-account-1',
+    )).rejects.toBeInstanceOf(ExchangeOperationFailedException)
+  })
+
+  it('wraps unsupported instrument constraints clients', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    delete (client as { fetchInstrumentConstraints?: unknown }).fetchInstrumentConstraints
+
+    await expect(service.getInstrumentConstraints(
+      'user-1',
+      'okx',
+      'spot',
+      'BTC/USDT',
+      'exchange-account-1',
+    )).rejects.toBeInstanceOf(ExchangeOperationFailedException)
   })
 
   it('finds orders by client order id from open orders before closed orders', async () => {

@@ -73,7 +73,9 @@ export class PositionSyncService {
       const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType, exchangeAccountId)
 
       // 2. 获取本地记录的开放仓位
-      const localPositions = await this.positionsRepository.findOpenByAccount(accountId)
+      const allLocalPositions = await this.positionsRepository.findOpenByAccount(accountId)
+      const localPositions = allLocalPositions.filter(pos => this.isPositionInSyncScope(pos, exchangeId, marketType))
+      const matchableLocalPositions = allLocalPositions.filter(pos => this.isPositionMatchScope(pos, exchangeId, marketType))
 
       this.logger.log(
         `Syncing positions for user ${userId}, account ${accountId}: ` +
@@ -89,7 +91,7 @@ export class PositionSyncService {
 
       // 4. 构建本地仓位映射
       const localPositionMap = new Map<string, typeof localPositions[0]>()
-      for (const pos of localPositions) {
+      for (const pos of matchableLocalPositions) {
         const key = this.getPositionKey(pos.symbol, pos.positionSide)
         localPositionMap.set(key, pos)
       }
@@ -125,7 +127,7 @@ export class PositionSyncService {
           // 数量不一致，需要调整
           const diff = exchangeQty.sub(localQty)
           try {
-            await this.adjustPositionQuantity(localPos, exchangePos, diff)
+            await this.adjustPositionQuantity(localPos, exchangePos, diff, exchangeId, marketType)
             differences.push({
               symbol: exchangePos.symbol,
               positionSide: exchangePos.side === 'long' ? 'LONG' : 'SHORT',
@@ -148,8 +150,21 @@ export class PositionSyncService {
       }
 
       // 5.2 处理本地存在但交易所不存在的仓位（应该关闭）
-      for (const [key, localPos] of localPositionMap.entries()) {
+      const closePositionMap = new Map<string, typeof localPositions[0]>()
+      for (const pos of localPositions) {
+        const key = this.getPositionKey(pos.symbol, pos.positionSide)
+        closePositionMap.set(key, pos)
+      }
+
+      for (const [key, localPos] of closePositionMap.entries()) {
         if (!exchangePositionMap.has(key)) {
+          if (this.isSpotPosition(localPos)) {
+            this.logger.warn(
+              `Skipped orphan closure for spot position: ${localPos.symbol} ${localPos.positionSide}`,
+            )
+            continue
+          }
+
           const localQty = new Decimal(localPos.quantity)
           if (localQty.gt(0)) {
             try {
@@ -339,6 +354,91 @@ export class PositionSyncService {
     return `${normalizeLedgerSymbol(symbol)}:${side}`
   }
 
+  private isPositionInSyncScope(
+    localPos: { symbol?: string | null; exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+    syncExchangeId: ExchangeId,
+    syncMarketType: MarketType,
+  ): boolean {
+    if (localPos.exchangeId) {
+      if (localPos.exchangeId !== syncExchangeId) {
+        return false
+      }
+
+      if (localPos.marketType) {
+        return localPos.marketType === syncMarketType
+      }
+
+      const metadataMarket = this.readMetadataMarket(localPos.metadata)
+      if (metadataMarket) {
+        return metadataMarket === `${syncExchangeId}:${syncMarketType}`
+      }
+
+      const symbolMarketType = this.inferMarketTypeFromSymbol(localPos.symbol)
+      return symbolMarketType === syncMarketType
+    }
+
+    const metadataMarket = this.readMetadataMarket(localPos.metadata)
+    if (metadataMarket) {
+      return metadataMarket === `${syncExchangeId}:${syncMarketType}`
+    }
+
+    return false
+  }
+
+  private isPositionMatchScope(
+    localPos: { symbol?: string | null; exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+    syncExchangeId: ExchangeId,
+    syncMarketType: MarketType,
+  ): boolean {
+    if (this.isPositionInSyncScope(localPos, syncExchangeId, syncMarketType)) {
+      return true
+    }
+    if (localPos.exchangeId && localPos.exchangeId !== syncExchangeId) {
+      return false
+    }
+
+    const metadataMarket = this.readMetadataMarket(localPos.metadata)
+    if (metadataMarket) {
+      return metadataMarket === `${syncExchangeId}:${syncMarketType}`
+    }
+    if (localPos.marketType) {
+      return localPos.marketType === syncMarketType
+    }
+
+    return this.inferMarketTypeFromSymbol(localPos.symbol) === syncMarketType
+  }
+
+  private inferMarketTypeFromSymbol(symbol?: string | null): MarketType | undefined {
+    const normalized = String(symbol ?? '').toUpperCase()
+    if (normalized.includes(':PERP') || normalized.endsWith('-SWAP')) {
+      return 'perp'
+    }
+    return undefined
+  }
+
+  private isSpotPosition(
+    localPos: { marketType?: string | null; metadata?: unknown },
+  ): boolean {
+    if (localPos.marketType === 'spot') {
+      return true
+    }
+
+    if (this.readMetadataMarket(localPos.metadata)?.endsWith(':spot')) {
+      return true
+    }
+
+    return false
+  }
+
+  private readMetadataMarket(metadata: unknown): string | undefined {
+    if (!metadata || typeof metadata !== 'object' || !('market' in metadata)) {
+      return undefined
+    }
+
+    const market = metadata.market
+    return typeof market === 'string' ? market : undefined
+  }
+
   /**
    * 创建本地缺失的仓位
    */
@@ -367,6 +467,7 @@ export class PositionSyncService {
       executedAt: new Date().toISOString(),
       metadata: {
         syncSource: 'position-reconciliation',
+        market: `${exchangeId}:${marketType}`,
         exchangePosition: exchangePos,
       },
     })
@@ -379,6 +480,8 @@ export class PositionSyncService {
     localPos: any,
     exchangePos: UnifiedPosition,
     diff: Decimal,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
   ): Promise<void> {
     // 差异为正：需要增加仓位（买入/加仓）
     // 差异为负：需要减少仓位（卖出/减仓）
@@ -390,7 +493,7 @@ export class PositionSyncService {
     await this.positionsService.recordTrade({
       userStrategyAccountId: localPos.userStrategyAccountId,
       symbol: localPos.symbol,
-      market: localPos.metadata?.market ?? 'unknown',
+      market: `${exchangeId}:${marketType}`,
       side: tradeSide,
       positionSide: localPos.positionSide,
       price: exchangePos.entryPrice.toString(),
@@ -402,6 +505,7 @@ export class PositionSyncService {
       executedAt: new Date().toISOString(),
       metadata: {
         syncSource: 'position-adjustment',
+        market: `${exchangeId}:${marketType}`,
         originalQuantity: localPos.quantity.toString(),
         targetQuantity: exchangePos.size.toString(),
         difference: diff.toString(),
@@ -419,7 +523,7 @@ export class PositionSyncService {
     await this.positionsService.recordTrade({
       userStrategyAccountId: localPos.userStrategyAccountId,
       symbol: localPos.symbol,
-      market: localPos.metadata?.market ?? 'unknown',
+      market: this.resolveLocalPositionMarket(localPos),
       side: tradeSide,
       positionSide: localPos.positionSide,
       price: localPos.avgEntryPrice.toString(), // 使用平均入场价作为平仓价
@@ -434,6 +538,16 @@ export class PositionSyncService {
         reason: 'position-not-found-on-exchange',
       },
     })
+  }
+
+  private resolveLocalPositionMarket(
+    localPos: { exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+  ): string {
+    if (localPos.exchangeId && localPos.marketType) {
+      return `${localPos.exchangeId}:${localPos.marketType}`
+    }
+
+    return this.readMetadataMarket(localPos.metadata) ?? 'unknown'
   }
 
   private delay(ms: number): Promise<void> {

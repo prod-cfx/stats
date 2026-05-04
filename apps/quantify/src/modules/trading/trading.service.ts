@@ -3,6 +3,7 @@ import type {
   ExchangeId,
   MarketType,
   UnifiedBalance,
+  UnifiedInstrumentConstraints,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
@@ -190,6 +191,49 @@ export class TradingService {
       }
       throw new ExchangeOperationFailedException({
         operation: 'fetch ticker',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async getInstrumentConstraints(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    symbol: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedInstrumentConstraints> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      if (!client.fetchInstrumentConstraints) {
+        throw new ExchangeOperationFailedException({
+          operation: 'fetch instrument constraints',
+          exchangeId,
+          reason: 'Exchange client does not support instrument constraints',
+        })
+      }
+
+      return await client.fetchInstrumentConstraints(symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeOperationFailedException) {
+        throw error
+      }
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch instrument constraints', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch instrument constraints',
         exchangeId,
         reason: (error as Error).message,
       })

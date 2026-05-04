@@ -5,7 +5,9 @@ import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { OrderIntent, TradingExecutionResult } from '@/modules/trading-execution/types/trading-execution.types'
 import type { Position, Trade, PrismaClient } from '@/prisma/prisma.types'
+import { randomUUID } from 'node:crypto'
 import { ErrorCode, LedgerEntryType, PositionSide, PositionStatus, TradeSide } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -17,7 +19,7 @@ import { AccountsService } from '@/modules/accounts/accounts.service'
 import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/strategy-account-not-found.exception'
 import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { TradingService } from '@/modules/trading/trading.service'
+import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { PositionInsufficientQuantityException } from './exceptions/position-insufficient-quantity.exception'
 import { PositionNotFoundException } from './exceptions/position-not-found.exception'
@@ -36,7 +38,7 @@ export class PositionsService {
   constructor(
     private readonly positionsRepository: PositionsRepository,
     private readonly accountsService: AccountsService,
-    private readonly tradingService: TradingService,
+    private readonly tradingExecution: TradingExecutionService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {}
 
@@ -53,10 +55,12 @@ export class PositionsService {
       await this.ensureAccountAndNoDuplicateTrade(dto)
 
       // 2. 加锁加载当前仓位
+      const tradeMarket = this.parseTradeMarket(dto.market)
       const lockedPosition = await this.loadAndLockPosition(
         dto.userStrategyAccountId,
         normalizedSymbol,
         dto.positionSide,
+        tradeMarket,
       )
 
       // 3. 根据方向调整仓位
@@ -165,9 +169,28 @@ export class PositionsService {
     accountId: string,
     normalizedSymbol: string,
     positionSide: PositionSide,
+    market?: { exchangeId: string; marketType: string; market: string } | null,
   ): Promise<Position | null> {
-    const lockedPositions = await this.positionsRepository.lockOpenPosition(accountId, normalizedSymbol, positionSide)
+    const lockedPositions = await this.positionsRepository.lockOpenPosition(
+      accountId,
+      normalizedSymbol,
+      positionSide,
+      market,
+    )
     return lockedPositions[0] ?? null
+  }
+
+  private parseTradeMarket(market: string | undefined): { exchangeId: string; marketType: string; market: string } | null {
+    if (!market) {
+      return null
+    }
+
+    const [exchangeId, marketType] = market.split(':')
+    if (!exchangeId || !marketType) {
+      return null
+    }
+
+    return { exchangeId, marketType, market }
   }
 
   private async applyIncrease(
@@ -220,6 +243,7 @@ export class PositionsService {
           dto.userStrategyAccountId,
           normalizedSymbol,
           dto.positionSide,
+          this.parseTradeMarket(dto.market),
         )
         if (!existingPosition) {
           // 理论上不应出现（除非并发创建后又立即删除），保留原始错误
@@ -448,7 +472,7 @@ export class PositionsService {
     const currentQuantity = new Decimal(position.quantity)
 
     if (closeQuantity.lte(0)) {
-      throw new PositionInsufficientQuantityException({ 
+      throw new PositionInsufficientQuantityException({
         positionId: dto.positionId,
         requested: closeQuantity.toString(),
         available: currentQuantity.toString(),
@@ -456,7 +480,7 @@ export class PositionsService {
     }
 
     if (closeQuantity.gt(currentQuantity)) {
-      throw new PositionInsufficientQuantityException({ 
+      throw new PositionInsufficientQuantityException({
         positionId: dto.positionId,
         requested: closeQuantity.toString(),
         available: currentQuantity.toString(),
@@ -467,81 +491,167 @@ export class PositionsService {
     if (!position.exchangeId || !position.marketType) {
       throw new DomainException('position.close_missing_exchange_info', { code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR, args: { positionId: dto.positionId } })
     }
-    
+
     const exchangeId = position.exchangeId as ExchangeId
     const marketType = position.marketType as MarketType
     const executionSymbol = normalizeExecutionSymbol(position.symbol, marketType, exchangeId)
-    
+
     // 4. 确定订单方向：平多单需要卖出，平空单需要买入
     const orderSide = position.positionSide === PositionSide.LONG ? 'sell' : 'buy'
-
-    // 5. 调用交易服务下市价平仓单
-    try {
-      const order = await this.tradingService.placeOrder(
-        position.account.userId,
-        exchangeId,
-        marketType,
-        {
-          symbol: executionSymbol,
-          marketType,
-          side: orderSide,
-          type: 'market',
-          amount: closeQuantity.toNumber(),
-          reduceOnly: true, // 平仓单设置为 reduceOnly
-        },
-      )
-
-      const filledQuantity =
-        typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
-          ? order.filled
-          : closeQuantity.toNumber()
-      const tradePrice =
-        typeof order.price === 'number' && Number.isFinite(order.price) && order.price > 0
-          ? order.price
-          : Number(position.avgEntryPrice)
-      const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
-
-      // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
-      await this.recordTrade({
+    const isPerp = marketType === 'perp'
+    const intent: OrderIntent = {
+      source: 'position_tool',
+      sourceId: this.createClosePositionSourceId(dto.positionId, closeQuantity),
+      userId: position.account.userId,
+      exchangeId,
+      marketType,
+      symbol: executionSymbol,
+      side: orderSide,
+      type: 'market',
+      amount: closeQuantity.toNumber(),
+      role: this.resolveClosePositionRole(marketType, orderSide, position.positionSide),
+      ...(isPerp ? { reduceOnly: true, tdMode: 'cross' as const } : {}),
+      metadata: {
+        positionId: dto.positionId,
         userStrategyAccountId: dto.userStrategyAccountId,
-        symbol: position.symbol,
-        market: `${exchangeId}:${marketType}`,
-        side: orderSide === 'buy' ? TradeSide.BUY : TradeSide.SELL,
-        positionSide: position.positionSide,
-        price: tradePrice.toString(),
-        quantity: filledQuantity.toString(),
-        fee: feeAmount > 0 ? feeAmount.toString() : '0',
-        feeCurrency: feeCurrency ?? undefined,
-        orderId: order.id,
-        externalTradeId: order.id,
-        provider: exchangeId,
-        executedAt: new Date(order.createdAt).toISOString(),
-        metadata: {
-          source: 'manual-close-position',
-          positionId: dto.positionId,
-          note: dto.note ?? null,
+        note: dto.note ?? null,
+      },
+    }
+
+    // 5. 通过通用执行内核完成 clientOrderId、约束、数量标准化与 reduceOnly/posSide gate
+    const executionResult = await this.executeClosePositionIntent(intent, dto.positionId)
+    if (executionResult.status !== 'submitted') {
+      throw this.toClosePositionExecutionException(dto.positionId, executionResult)
+    }
+    const { order } = executionResult
+    const filledQuantity =
+      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
+        ? order.filled
+        : closeQuantity.toNumber()
+    const tradePrice =
+      typeof order.price === 'number' && Number.isFinite(order.price) && order.price > 0
+        ? order.price
+        : Number(position.avgEntryPrice)
+    const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
+
+    // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
+    await this.recordTrade({
+      userStrategyAccountId: dto.userStrategyAccountId,
+      symbol: position.symbol,
+      market: `${exchangeId}:${marketType}`,
+      side: orderSide === 'buy' ? TradeSide.BUY : TradeSide.SELL,
+      positionSide: position.positionSide,
+      price: tradePrice.toString(),
+      quantity: filledQuantity.toString(),
+      fee: feeAmount > 0 ? feeAmount.toString() : '0',
+      feeCurrency: feeCurrency ?? undefined,
+      orderId: order.id,
+      externalTradeId: order.id,
+      provider: exchangeId,
+      executedAt: new Date(order.createdAt).toISOString(),
+      metadata: {
+        source: 'manual-close-position',
+        positionId: dto.positionId,
+        note: dto.note ?? null,
+        tradingExecution: {
+          status: executionResult.status,
+          clientOrderId: executionResult.normalized.clientOrderId,
+          normalizedAmount: executionResult.normalized.normalizedAmount,
+          exchangeSize: executionResult.normalized.exchangeSize,
+          normalizedRequest: this.toJsonSafe(executionResult.normalized.request),
+        },
+      },
+    })
+
+    // 7. 返回平仓结果
+    return {
+      success: true,
+      orderId: order.id,
+      positionId: dto.positionId,
+      filledQuantity: filledQuantity.toString(),
+      averagePrice: tradePrice.toString(),
+      message: dto.note || '市价平仓成功',
+    }
+  }
+
+  private createClosePositionSourceId(positionId: string, closeQuantity: Decimal): string {
+    return `${positionId}:${closeQuantity.toString()}:${Date.now()}:${randomUUID()}`
+  }
+
+  private resolveClosePositionRole(
+    marketType: MarketType,
+    orderSide: 'buy' | 'sell',
+    positionSide: PositionSide,
+  ): OrderIntent['role'] {
+    if (marketType === 'spot') {
+      return orderSide === 'sell' ? 'spot_sell' : 'spot_buy'
+    }
+    return positionSide === PositionSide.LONG ? 'close_long' : 'close_short'
+  }
+
+  private async executeClosePositionIntent(intent: OrderIntent, positionId: string): Promise<TradingExecutionResult> {
+    try {
+      return await this.tradingExecution.executeIntent(intent)
+    }
+    catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new DomainException(`position.close_execution_error reason=${reason}`, {
+        code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR,
+        args: {
+          positionId,
+          status: 'execution_error',
+          reason,
         },
       })
-
-      // 7. 返回平仓结果
-      return {
-        success: true,
-        orderId: order.id,
-        positionId: dto.positionId,
-        filledQuantity: filledQuantity.toString(),
-        averagePrice: tradePrice.toString(),
-        message: dto.note || '市价平仓成功',
-      }
-    } catch (error) {
-      // 记录交易所错误并转换为业务异常
-      console.error('交易所平仓失败', {
-        positionId: dto.positionId,
-        symbol: position.symbol,
-        exchangeId,
-        error,
-      })
-      throw error // 重新抛出让上层处理
     }
+  }
+
+  private toClosePositionExecutionException(
+    positionId: string,
+    result: Exclude<TradingExecutionResult, { status: 'submitted' }>,
+  ): DomainException {
+    const normalized = 'normalized' in result ? result.normalized : undefined
+    const clientOrderId = normalized?.clientOrderId
+    const reasonParts = [
+      `position.close_${result.status}`,
+      `reason=${result.reason}`,
+      clientOrderId ? `clientOrderId=${clientOrderId}` : null,
+    ].filter(Boolean)
+
+    return new DomainException(reasonParts.join(' '), {
+      code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR,
+      args: {
+        positionId,
+        status: result.status,
+        reason: result.reason,
+        clientOrderId,
+        normalizedAmount: normalized?.normalizedAmount,
+        exchangeSize: normalized?.exchangeSize,
+        normalizedRequest: normalized?.request,
+      },
+    })
+  }
+
+  private toJsonSafe(value: unknown): Prisma.JsonValue | undefined {
+    if (value === undefined) return undefined
+    if (value === null || typeof value === 'string' || typeof value === 'boolean') return value as Prisma.JsonValue
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null
+    if (Array.isArray(value)) {
+      return value
+        .map(item => this.toJsonSafe(item))
+        .filter((item): item is Prisma.JsonValue => item !== undefined)
+    }
+    if (typeof value === 'object') {
+      const jsonObject: Prisma.JsonObject = {}
+      for (const [key, item] of Object.entries(value)) {
+        const safeItem = this.toJsonSafe(item)
+        if (safeItem !== undefined) {
+          jsonObject[key] = safeItem
+        }
+      }
+      return jsonObject
+    }
+    return String(value)
   }
 
   private toTradeResponse(trade: Trade): TradeResponseDto {
