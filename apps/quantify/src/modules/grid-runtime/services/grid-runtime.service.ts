@@ -12,6 +12,13 @@ import { GridOrderSyncService } from './grid-order-sync.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { GridRuntimeStateMachineService } from './grid-runtime-state-machine.service'
 
+interface GridRuntimeFundingSnapshot {
+  asset?: string | null
+  buyingPower?: number | string | null
+  executionCapital?: number | string | null
+  totalEquity?: number | string | null
+}
+
 export interface CreateGridRuntimeFromDeploymentInput {
   strategyInstanceId: string
   publishedSnapshotId: string
@@ -22,6 +29,7 @@ export interface CreateGridRuntimeFromDeploymentInput {
   symbol: string
   astSnapshot: unknown
   currentPrice?: string | number | null
+  fundingSnapshot?: GridRuntimeFundingSnapshot | null
 }
 
 @Injectable()
@@ -34,7 +42,7 @@ export class GridRuntimeService {
   ) {}
 
   async createFromDeployment(input: CreateGridRuntimeFromDeploymentInput) {
-    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice)
+    const config = this.buildConfigFromAst(input.astSnapshot, input.symbol, input.currentPrice, input.fundingSnapshot)
     const plan = this.planner.planInitialOrders({
       config,
       currentPrice: this.resolveCurrentPrice(input.currentPrice, config),
@@ -142,24 +150,26 @@ export class GridRuntimeService {
     astSnapshot: unknown,
     symbol: string,
     currentPrice?: string | number | null,
+    fundingSnapshot?: GridRuntimeFundingSnapshot | null,
   ): GridRuntimeConfigSnapshot {
     const ast = this.readRecord(astSnapshot)
     const orderPrograms = Array.isArray(ast?.orderPrograms) ? ast.orderPrograms : []
     const program = orderPrograms
       .map(item => this.readRecord(this.readRecord(item)?.payload))
       .find(item => item?.kind === 'LIMIT_LADDER' && item.priceSource === 'level_set')
-    if (!program) throw new Error('grid_runtime_order_program_missing')
+    if (!program) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_order_program_missing')
+    }
 
     const levelSet = this.findLevelSet(ast, this.readString(program, 'levelSetRef'))
     const executionModel = this.readRecord(ast?.executionModel)
     const bounds = this.resolveLevelSetBounds(ast, levelSet, currentPrice)
     const quantity = this.readRecord(program.quantity)
-    const perOrderQuote = this.readNumber(quantity, 'value')
-    const quoteAsset = this.readString(quantity, 'asset')
+    const sizing = this.resolvePerOrderQuoteSizing(quantity, symbol, fundingSnapshot)
     const gridCount = this.readNumber(program, 'maxWorkingOrders')
 
-    if (!bounds || perOrderQuote === null || !quoteAsset || gridCount === null) {
-      throw new Error('grid_runtime_invalid_order_program')
+    if (!bounds || !sizing || gridCount === null) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
     }
 
     return {
@@ -167,9 +177,9 @@ export class GridRuntimeService {
       lowerPrice: this.formatNumber(bounds.lower),
       upperPrice: this.formatNumber(bounds.upper),
       gridCount: Math.max(2, Math.floor(gridCount)),
-      perOrderQuote: this.formatNumber(perOrderQuote),
-      quoteAsset,
-      baseAsset: this.resolveBaseAsset(symbol, quoteAsset),
+      perOrderQuote: this.formatNumber(sizing.perOrderQuote),
+      quoteAsset: sizing.quoteAsset,
+      baseAsset: this.resolveBaseAsset(symbol, sizing.quoteAsset),
       orderType: 'limit',
       timeInForce: 'gtc',
       spacingMode: levelSet?.kind === 'GEOMETRIC_LEVEL_SET' ? 'geometric' : 'arithmetic',
@@ -314,11 +324,86 @@ export class GridRuntimeService {
   }
 
   private resolveBaseAsset(symbol: string, quoteAsset: string): string {
-    const normalizedSymbol = symbol.trim().toUpperCase().replace(/[-_/]/g, '')
+    const normalizedSymbol = symbol
+      .trim()
+      .toUpperCase()
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
     const normalizedQuote = quoteAsset.trim().toUpperCase()
     return normalizedSymbol.endsWith(normalizedQuote)
       ? normalizedSymbol.slice(0, -normalizedQuote.length)
       : normalizedSymbol
+  }
+
+  private resolvePerOrderQuoteSizing(
+    quantity: Record<string, unknown> | null,
+    symbol: string,
+    fundingSnapshot?: GridRuntimeFundingSnapshot | null,
+  ): { perOrderQuote: number, quoteAsset: string } | null {
+    const mode = this.readString(quantity, 'mode')
+    const value = this.readNumber(quantity, 'value')
+    if (value === null || value <= 0) return null
+
+    const quoteAsset = this.resolveQuoteAsset(quantity, symbol, fundingSnapshot)
+    if (!quoteAsset) return null
+
+    if (mode === 'fixed_quote') {
+      return { perOrderQuote: value, quoteAsset }
+    }
+
+    if (mode === 'pct_equity') {
+      const fundingBase = this.resolveFundingBase(fundingSnapshot)
+      if (fundingBase === null || fundingBase <= 0) return null
+      return { perOrderQuote: fundingBase * value / 100, quoteAsset }
+    }
+
+    return null
+  }
+
+  private resolveFundingBase(fundingSnapshot?: GridRuntimeFundingSnapshot | null): number | null {
+    const buyingPower = this.toPositiveNumber(fundingSnapshot?.buyingPower)
+    if (buyingPower !== null) return buyingPower
+
+    const executionCapital = this.toPositiveNumber(fundingSnapshot?.executionCapital)
+    if (executionCapital !== null) return executionCapital
+
+    return this.toPositiveNumber(fundingSnapshot?.totalEquity)
+  }
+
+  private resolveQuoteAsset(
+    quantity: Record<string, unknown> | null,
+    symbol: string,
+    fundingSnapshot?: GridRuntimeFundingSnapshot | null,
+  ): string | null {
+    return this.readString(quantity, 'asset')
+      ?? this.normalizeAsset(fundingSnapshot?.asset)
+      ?? this.inferQuoteAsset(symbol)
+      ?? null
+  }
+
+  private inferQuoteAsset(symbol: string): string | null {
+    const normalized = symbol.trim().toUpperCase()
+    const separated = normalized.match(/^[A-Z0-9]+[-_/]([A-Z0-9]+)(?::[A-Z0-9]+)?$/u)
+    if (separated?.[1]) return separated[1].replace(/-SWAP$/u, '')
+
+    const compact = normalized
+      .replace(/:(PERP|SPOT|SWAP|FUTURES?)$/u, '')
+      .replace(/-SWAP$/u, '')
+      .replace(/[-_/]/g, '')
+    const knownQuotes = ['USDT', 'USDC', 'USD', 'BTC', 'ETH']
+    return knownQuotes.find(asset => compact.endsWith(asset)) ?? null
+  }
+
+  private normalizeAsset(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim().toUpperCase() : null
+  }
+
+  private invalidGridRuntimeConfig(message: string): DomainException {
+    return new DomainException(message, {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+    })
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {

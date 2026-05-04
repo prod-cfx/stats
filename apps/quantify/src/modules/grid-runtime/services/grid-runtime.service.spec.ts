@@ -218,6 +218,54 @@ describe('GridRuntimeService', () => {
     expect(Number(config.upperPrice)).toBeGreaterThan(100)
   })
 
+  it('creates a perpetual neutral grid runtime plan from pct-equity order programs', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-perp-1' }) }
+    const { service, planner } = createService(repository)
+    const astSnapshot = createAstSnapshot() as ReturnType<typeof createAstSnapshot> & {
+      executionModel?: Record<string, unknown>
+    }
+    astSnapshot.executionModel = {
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+    }
+    astSnapshot.orderPrograms[0]!.payload.sidePolicy = 'perp_neutral'
+    astSnapshot.orderPrograms[0]!.payload.quantity = { mode: 'pct_equity', value: 10 } as {
+      mode: string
+      value: number
+      asset: string
+    }
+
+    await service.createFromDeployment({
+      strategyInstanceId: 'strategy-perp-1',
+      publishedSnapshotId: 'snapshot-perp-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'perpetual',
+      symbol: 'BTC/USDT:PERP',
+      astSnapshot,
+      currentPrice: '100',
+      fundingSnapshot: {
+        asset: 'USDT',
+        buyingPower: 1000,
+        executionCapital: 1000,
+      },
+    })
+
+    expect(planner.planInitialOrders).toHaveBeenCalledWith({
+      config: expect.objectContaining({
+        mode: 'perp_neutral',
+        perOrderQuote: '100',
+        quoteAsset: 'USDT',
+        baseAsset: 'BTC',
+        tickSize: '0.01',
+        lotSize: '0.000001',
+      }),
+      currentPrice: '100',
+    })
+  })
+
   it('stops through order sync so exchange orders are canceled before terminal state', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-1' }) }
     const { service, orderSync, stateMachine } = createService(repository)
