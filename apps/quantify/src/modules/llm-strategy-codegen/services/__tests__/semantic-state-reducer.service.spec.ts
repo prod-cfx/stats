@@ -353,6 +353,81 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('turns centered grid price-source clarification answers into dynamic level-set capabilities', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [{
+          id: 'trigger-grid-levels',
+          key: 'grid.price_levels',
+          phase: 'gate',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'contract.requirement.price.define.level_set',
+            fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: '请确认网格区间中心价格取值方式。',
+            affectsExecution: true,
+            evidence: {
+              source: 'derived',
+              text: '固定价格区间以当前价格为中心，上下各 0.4%，共 10 格。',
+            },
+          }],
+          contracts: [{
+            id: 'trigger-contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        }],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.price.define.level_set',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.price.define.level_set',
+        fieldPath: 'triggers[trigger-grid-levels].contracts[trigger-contract-grid-levels].requires.price.define.level_set',
+      }),
+      answer: '部署时刻往前最近 1m 的成交均价',
+      messageIndex: 5,
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+        status: 'locked',
+      })],
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: {
+            mode: 'centered_percent_range',
+            centerTiming: 'deployment',
+            centerSource: 'trade_vwap',
+            aggregationWindow: '1m',
+            halfRangePct: 0.4,
+            gridCount: 10,
+            spacingMode: 'arithmetic',
+          },
+        })],
+      })],
+    }))
+  })
+
   it('does not normalize existing risk slots when reducing an unrelated action answer', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

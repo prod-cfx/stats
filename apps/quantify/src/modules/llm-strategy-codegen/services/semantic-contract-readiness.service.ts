@@ -109,7 +109,19 @@ export class SemanticContractReadinessService {
     if (requirement.domain === 'price' && requirement.verb === 'define' && requirement.object === 'level_set') {
       const lower = readShapeNumber(capability.shape, 'lower')
       const upper = readShapeNumber(capability.shape, 'upper')
-      return lower !== null && upper !== null && upper > lower
+      if (lower !== null && upper !== null && upper > lower) {
+        return true
+      }
+
+      if (readShapeString(capability.shape, 'mode') === 'centered_percent_range') {
+        const halfRangePct = readShapeNumber(capability.shape, 'halfRangePct')
+        const gridCount = readShapeNumber(capability.shape, 'gridCount')
+        return readShapeString(capability.shape, 'centerSource') !== null
+          && (halfRangePct === null || halfRangePct > 0)
+          && (gridCount === null || gridCount > 0)
+      }
+
+      return false
     }
 
     if (requirement.domain === 'capital' && requirement.verb === 'allocate' && requirement.object === 'per_order_budget') {

@@ -348,6 +348,7 @@ export class SemanticStateReducerService {
       parts[1],
       parts.slice(2).join('.'),
       answerText,
+      slot,
     )
     if (!shape) {
       return null
@@ -366,13 +367,14 @@ export class SemanticStateReducerService {
     verb: string,
     object: string,
     answerText: string,
+    slot: SemanticSlotState,
   ): SemanticCapabilityShape | null {
     if (domain === 'capital' && verb === 'allocate' && object === 'per_order_budget') {
       return this.parsePerOrderBudgetCapabilityShape(answerText)
     }
 
     if (domain === 'price' && verb === 'define' && object === 'level_set') {
-      return this.parseLevelSetCapabilityShape(answerText)
+      return this.parseLevelSetCapabilityShape(answerText, slot)
     }
 
     return null
@@ -398,31 +400,102 @@ export class SemanticStateReducerService {
     return { value, asset }
   }
 
-  private parseLevelSetCapabilityShape(answerText: string): SemanticCapabilityShape | null {
-    const lower = this.parseLabeledNumber(answerText, ['下限', '下界', '最低', 'lower', 'min'])
-    const upper = this.parseLabeledNumber(answerText, ['上限', '上界', '最高', 'upper', 'max'])
-    const rangeMatch = answerText.match(/(\d+(?:\.\d+)?)\s*(?:-|~|到|至)\s*(\d+(?:\.\d+)?)/iu)
+  private parseLevelSetCapabilityShape(
+    answerText: string,
+    slot: SemanticSlotState,
+  ): SemanticCapabilityShape | null {
+    const contextText = [
+      answerText,
+      slot.questionHint,
+      slot.evidence?.text,
+    ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join('。')
+
+    const lower = this.parseLabeledNumber(contextText, ['下限', '下界', '最低', 'lower', 'min'])
+    const upper = this.parseLabeledNumber(contextText, ['上限', '上界', '最高', 'upper', 'max'])
+    const rangeMatch = contextText.match(/(\d+(?:\.\d+)?)\s*(?:-|~|到|至)\s*(\d+(?:\.\d+)?)/iu)
     const rangeLower = lower ?? (rangeMatch?.[1] ? Number(rangeMatch[1]) : null)
     const rangeUpper = upper ?? (rangeMatch?.[2] ? Number(rangeMatch[2]) : null)
     if (
-      rangeLower === null
-      || rangeUpper === null
-      || !Number.isFinite(rangeLower)
-      || !Number.isFinite(rangeUpper)
-      || rangeUpper <= rangeLower
+      rangeLower !== null
+      && rangeUpper !== null
+      && Number.isFinite(rangeLower)
+      && Number.isFinite(rangeUpper)
+      && rangeUpper > rangeLower
     ) {
+      const gridCountMatch = contextText.match(/(\d{1,4})\s*(?:格|网格)/u)
+      const spacingPctMatch = contextText.match(/(?:间距|每格|spacing)[^\d]{0,12}(\d+(?:\.\d+)?)\s*%/iu)
+      return {
+        lower: rangeLower,
+        upper: rangeUpper,
+        ...(gridCountMatch?.[1] ? { gridCount: Number(gridCountMatch[1]) } : {}),
+        ...(spacingPctMatch?.[1] ? { spacingPct: Number(spacingPctMatch[1]) } : {}),
+        spacingMode: /等比|geometric/iu.test(contextText) ? 'geometric' : 'arithmetic',
+      }
+    }
+
+    return this.parseCenteredLevelSetCapabilityShape(contextText)
+  }
+
+  private parseCenteredLevelSetCapabilityShape(text: string): SemanticCapabilityShape | null {
+    const centerSource = this.parseLevelSetCenterSource(text)
+    if (!centerSource) {
       return null
     }
 
-    const gridCountMatch = answerText.match(/(\d{1,4})\s*(?:格|网格)/u)
-    const spacingPctMatch = answerText.match(/(?:间距|每格|spacing)[^\d]{0,12}(\d+(?:\.\d+)?)\s*%/iu)
+    const windowMatch = text.match(/(?:部署时刻?往前|部署时往前|最近|近|过去)?\s*(\d{1,4})\s*(m|min|分钟|h|小时|d|天)/iu)
+    const halfRangePctMatch = text.match(/上下各\s*(\d+(?:\.\d+)?)\s*%/u)
+    const totalRangePctMatch = text.match(/(?:上下一共|总区间|全区间)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const gridCountMatch = text.match(/(\d{1,4})\s*(?:格|网格)/u)
+    const halfRangePct = halfRangePctMatch?.[1] ? Number(halfRangePctMatch[1]) : null
+    const totalRangePct = !halfRangePctMatch?.[1] && totalRangePctMatch?.[1]
+      ? Number(totalRangePctMatch[1])
+      : null
+
     return {
-      lower: rangeLower,
-      upper: rangeUpper,
+      mode: 'centered_percent_range',
+      centerTiming: /部署|启动|上线|创建网格|运行时|deploy|start/iu.test(text) ? 'deployment' : 'runtime',
+      centerSource,
+      ...(windowMatch?.[1] && windowMatch[2] ? { aggregationWindow: this.normalizeDurationWindow(windowMatch[1], windowMatch[2]) } : {}),
+      ...(halfRangePct !== null && Number.isFinite(halfRangePct) && halfRangePct > 0 ? { halfRangePct } : {}),
+      ...(totalRangePct !== null && Number.isFinite(totalRangePct) && totalRangePct > 0 ? { halfRangePct: totalRangePct / 2 } : {}),
       ...(gridCountMatch?.[1] ? { gridCount: Number(gridCountMatch[1]) } : {}),
-      ...(spacingPctMatch?.[1] ? { spacingPct: Number(spacingPctMatch[1]) } : {}),
-      spacingMode: /等比|geometric/iu.test(answerText) ? 'geometric' : 'arithmetic',
+      spacingMode: /等比|geometric/iu.test(text) ? 'geometric' : 'arithmetic',
     }
+  }
+
+  private parseLevelSetCenterSource(text: string): string | null {
+    if (/成交均价|平均成交价|成交平均价|vwap|volume[-_\s]?weighted/iu.test(text)) {
+      return 'trade_vwap'
+    }
+
+    if (/最新成交价|最近一次成交价|last\s*trade|成交价/iu.test(text)) {
+      return 'last_trade'
+    }
+
+    if (/标记价|mark\s*price/iu.test(text)) {
+      return 'mark_price'
+    }
+
+    if (/最新价|现价|当前价格|ticker\s*last|last\s*price|current\s*price/iu.test(text)) {
+      return 'last_price'
+    }
+
+    return null
+  }
+
+  private normalizeDurationWindow(valueText: string, unitText: string): string {
+    const value = Number(valueText)
+    const unit = unitText.toLowerCase()
+    if (unit === '分钟' || unit === 'min') {
+      return `${value}m`
+    }
+    if (unit === '小时') {
+      return `${value}h`
+    }
+    if (unit === '天') {
+      return `${value}d`
+    }
+    return `${value}${unit}`
   }
 
   private parseLabeledNumber(answerText: string, labels: readonly string[]): number | null {

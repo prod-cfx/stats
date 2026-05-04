@@ -344,6 +344,55 @@ describe('SemanticContractReadinessService', () => {
     }))
   })
 
+  it('accepts centered dynamic level-set capabilities for grid contracts', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'contract.requirement.price.define.level_set',
+          fieldPath: 'actions[action-1].contracts[action-contract-1].requires.price.define.level_set',
+          status: 'open',
+          priority: 'behavior',
+          affectsExecution: true,
+          questionHint: '请确认网格区间中心价格取值方式。',
+        }],
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: {
+              mode: 'centered_percent_range',
+              centerTiming: 'deployment',
+              centerSource: 'trade_vwap',
+              aggregationWindow: '1m',
+              halfRangePct: 0.4,
+              gridCount: 10,
+            },
+          }],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+    }))
+  })
+
   it('opens locked owners when stale non-contract slots remain open', () => {
     const state = createSemanticState({
       actions: [{
