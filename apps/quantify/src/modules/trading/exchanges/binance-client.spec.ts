@@ -147,3 +147,68 @@ describe('binanceClient createOrder', () => {
     expect(order.filled).toBeCloseTo(0.005, 8)
   })
 })
+
+describe('binanceClient fetchInstrumentConstraints', () => {
+  it('derives spot constraints from exchangeInfo filters', async () => {
+    const client = new StubBinanceClient('spot', {
+      symbols: [
+        {
+          symbol: 'BTCUSDT',
+          filters: [
+            { filterType: 'PRICE_FILTER', tickSize: '0.01000000' },
+            { filterType: 'LOT_SIZE', minQty: '0.00001000', stepSize: '0.00001000' },
+          ],
+        },
+      ],
+    })
+
+    const constraints = await client.fetchInstrumentConstraints?.('BTC/USDT')
+
+    expect(constraints).toEqual({
+      exchangeId: 'binance',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTCUSDT',
+      priceTickSize: '0.01000000',
+      quantityStepSize: '0.00001000',
+      minQuantity: '0.00001000',
+      contractValue: null,
+      clientOrderId: {
+        maxLength: 36,
+        pattern: '^[A-Za-z0-9_-]+$',
+      },
+      raw: expect.objectContaining({ symbol: 'BTCUSDT' }),
+    })
+  })
+
+  it('derives perp constraints from futures exchangeInfo filters', async () => {
+    const client = new StubBinanceClient('perp', {
+      symbols: [
+        {
+          symbol: 'ETHUSDT',
+          filters: [
+            { filterType: 'PRICE_FILTER', tickSize: '0.10' },
+            { filterType: 'LOT_SIZE', minQty: '0.001', stepSize: '0.001' },
+          ],
+        },
+      ],
+    })
+
+    const constraints = await client.fetchInstrumentConstraints?.('ETH/USDT:PERP')
+
+    expect(constraints).toMatchObject({
+      exchangeId: 'binance',
+      marketType: 'perp',
+      symbol: 'ETH/USDT:PERP',
+      rawSymbol: 'ETHUSDT',
+      priceTickSize: '0.10',
+      quantityStepSize: '0.001',
+      minQuantity: '0.001',
+      contractValue: '1',
+      clientOrderId: {
+        maxLength: 36,
+        pattern: '^[A-Za-z0-9_-]+$',
+      },
+    })
+  })
+})

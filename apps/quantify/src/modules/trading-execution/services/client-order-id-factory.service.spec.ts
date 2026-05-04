@@ -92,4 +92,27 @@ describe('ClientOrderIdFactoryService', () => {
       pattern: '^[0-9]+$',
     })).toThrow('trading_execution_invalid_client_order_id')
   })
+
+  it('generates deterministic Hyperliquid cloids from signal execution ids', () => {
+    const service = new ClientOrderIdFactoryService()
+
+    const id = service.create({
+      exchangeId: 'hyperliquid',
+      source: 'signal',
+      sourceId: 'exec-hl-signal-1',
+      maxLength: 34,
+      pattern: '^0x[0-9a-f]{32}$',
+    })
+    const again = service.create({
+      exchangeId: 'hyperliquid',
+      source: 'signal',
+      sourceId: 'exec-hl-signal-1',
+      maxLength: 34,
+      pattern: '^0x[0-9a-f]{32}$',
+    })
+
+    expect(id).toBe(again)
+    expect(id).toHaveLength(34)
+    expect(id).toMatch(/^0x[0-9a-f]{32}$/u)
+  })
 })

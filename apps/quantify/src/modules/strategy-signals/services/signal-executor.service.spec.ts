@@ -8,11 +8,37 @@ describe('signalExecutorService', () => {
     return { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
   }
 
+  function createTradingExecutionMock() {
+    return {
+      executeIntent: jest.fn(),
+      prepareIntent: jest.fn(),
+      submitPrepared: jest.fn(),
+    }
+  }
+
+  function mockTradingExecutionResult(
+    tradingExecution: ReturnType<typeof createTradingExecutionMock>,
+    result: any,
+  ) {
+    if (result.status === 'waiting_constraints' || result.status === 'rejected') {
+      tradingExecution.prepareIntent.mockResolvedValue(result)
+      return
+    }
+
+    tradingExecution.prepareIntent.mockResolvedValue({
+      status: 'prepared',
+      intent: result.intent ?? {},
+      constraints: result.normalized?.constraints ?? {},
+      normalized: result.normalized,
+    })
+    tradingExecution.submitPrepared.mockResolvedValue(result)
+  }
+
   function createService() {
     const configService = { get: jest.fn() }
     const schedulerRegistry = createSchedulerRegistry()
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn(), findById: jest.fn().mockResolvedValue(null) }
@@ -422,7 +448,7 @@ describe('signalExecutorService', () => {
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
     ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -461,7 +487,7 @@ describe('signalExecutorService', () => {
     )
 
     expect(result).toBe('executed')
-    expect(tradingExecution.executeIntent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
       source: 'signal',
       sourceId: 'exec-okx-spot-1',
       userId: 'user-okx-spot-1',
@@ -476,14 +502,16 @@ describe('signalExecutorService', () => {
       reduceOnly: false,
       role: 'spot_buy',
     }))
-    expect(tradingExecution.executeIntent.mock.calls[0][0]).not.toHaveProperty('tdMode')
+    expect(tradingExecution.prepareIntent.mock.calls[0][0]).not.toHaveProperty('tdMode')
+    expect(tradingExecution.submitPrepared).toHaveBeenCalled()
+    expect(tradingExecution.executeIntent).not.toHaveBeenCalled()
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
     expect(executionRepository.markStage).toHaveBeenCalledWith(
       'exec-okx-spot-1',
       'ORDER_SUBMITTED',
       expect.objectContaining({
         tradingExecution: expect.objectContaining({
-          status: 'submitted',
+          status: 'prepared',
           clientOrderId: 'sig-exec-okx-spot-1',
           normalizedRequest: expect.objectContaining({
             clientOrderId: 'sig-exec-okx-spot-1',
@@ -533,7 +561,7 @@ describe('signalExecutorService', () => {
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
     ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -573,7 +601,7 @@ describe('signalExecutorService', () => {
     )
 
     expect(result).toBe('executed')
-    expect(tradingExecution.executeIntent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
       source: 'signal',
       sourceId: `exec-${role}-1`,
       userId: `user-${role}-1`,
@@ -588,6 +616,8 @@ describe('signalExecutorService', () => {
       role,
       tdMode: 'cross',
     }))
+    expect(tradingExecution.submitPrepared).toHaveBeenCalled()
+    expect(tradingExecution.executeIntent).not.toHaveBeenCalled()
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
@@ -675,7 +705,7 @@ describe('signalExecutorService', () => {
       reservedQuote,
       reserveReference,
     })
-    tradingExecution.executeIntent.mockResolvedValue(executionResult)
+    mockTradingExecutionResult(tradingExecution, executionResult)
 
     const result = await (service as any).processAccount(
       {
@@ -722,6 +752,168 @@ describe('signalExecutorService', () => {
         }),
       )
     }
+  })
+
+  it('does not submit to the exchange when ORDER_SUBMITTED stage cannot be recorded before submission', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-pre-submit-mark-stage-fails'
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-pre-submit-mark-stage-fails' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    tradingExecution.prepareIntent.mockResolvedValue({
+      status: 'prepared',
+      intent: {},
+      constraints: {},
+      normalized: {
+        clientOrderId: 'sig-pre-submit-mark-stage-fails',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-pre-submit-mark-stage-fails' },
+        constraints: {},
+      },
+    })
+    executionRepository.markStage.mockRejectedValueOnce(new Error('stage write failed'))
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-pre-submit-mark-stage-fails',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-pre-submit-mark-stage-fails', userId: 'user-pre-submit-mark-stage-fails' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(tradingExecution.prepareIntent).toHaveBeenCalled()
+    expect(tradingExecution.submitPrepared).not.toHaveBeenCalled()
+    expect(executionRepository.markFailed).toHaveBeenCalledWith(
+      'exec-pre-submit-mark-stage-fails',
+      'stage write failed',
+    )
+    expect(releaseReservation).toHaveBeenCalledWith(
+      'acct-pre-submit-mark-stage-fails',
+      reservedQuote,
+      reserveReference,
+    )
+  })
+
+  it('keeps reservation when ORDER_ACKED stage fails after the exchange accepted the order', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const tradingExecution = (service as any).tradingExecution
+    const reservedQuote = new Prisma.Decimal(10)
+    const reserveReference = 'reserve-post-submit-acked-fails'
+    const releaseReservation = jest
+      .spyOn(service as any, 'releaseReservation')
+      .mockResolvedValue(undefined)
+
+    const submittedOrder = {
+      id: 'ord-post-submit-acked-fails',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 0.001,
+      filled: 0.001,
+      price: 100,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-post-submit-acked-fails' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.001,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote,
+      reserveReference,
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(submittedOrder)
+    tradingExecution.prepareIntent.mockResolvedValue({
+      status: 'prepared',
+      intent: {},
+      constraints: {},
+      normalized: {
+        clientOrderId: 'sig-post-submit-acked-fails',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-post-submit-acked-fails' },
+        constraints: {},
+      },
+    })
+    tradingExecution.submitPrepared.mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'sig-post-submit-acked-fails',
+        normalizedAmount: '0.001',
+        exchangeSize: '0.001',
+        request: { symbol: 'BTC/USDT', clientOrderId: 'sig-post-submit-acked-fails' },
+        constraints: {},
+      },
+      order: submittedOrder,
+    })
+    executionRepository.markStage
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('acked write failed'))
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-post-submit-acked-fails',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-post-submit-acked-fails', userId: 'user-post-submit-acked-fails' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('failed')
+    expect(tradingExecution.submitPrepared).toHaveBeenCalled()
+    expect(executionRepository.markFailed).toHaveBeenCalledWith(
+      'exec-post-submit-acked-fails',
+      'acked write failed',
+    )
+    expect(releaseReservation).not.toHaveBeenCalled()
   })
 
   it('sizes ratio orders from execution capital and caps budget by buying power', () => {
@@ -1035,7 +1227,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1097,7 +1289,7 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(openOrder)
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1131,7 +1323,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1193,7 +1385,7 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(partialOpenOrder)
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1230,7 +1422,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1292,7 +1484,7 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(canceledOrder)
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1329,7 +1521,7 @@ describe('signalExecutorService', () => {
     const prisma = {}
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1391,7 +1583,7 @@ describe('signalExecutorService', () => {
     ;(service as any).releaseReservation = jest.fn()
     ;(service as any).resolveFinalOrderState = jest.fn().mockRejectedValue(new Error('getOrder timeout'))
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1433,7 +1625,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1498,7 +1690,7 @@ describe('signalExecutorService', () => {
     ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
     ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1529,7 +1721,7 @@ describe('signalExecutorService', () => {
 
     expect(result).toBe('executed')
     expect(executorRepository.findActiveLlmSubscription).toHaveBeenCalledWith('user-llm-1', 'llm-instance-1')
-    expect(tradingExecution.executeIntent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
       source: 'signal',
       sourceId: 'exec-llm-1',
       userId: 'user-llm-1',
@@ -1552,7 +1744,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1612,7 +1804,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1677,7 +1869,7 @@ describe('signalExecutorService', () => {
     ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
     ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1708,7 +1900,7 @@ describe('signalExecutorService', () => {
 
     expect(result).toBe('executed')
     expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-spot-1', 'inst-spot-1')
-    expect(tradingExecution.executeIntent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tradingExecution.prepareIntent).toHaveBeenCalledWith(expect.objectContaining({
       source: 'signal',
       sourceId: 'exec-spot-1',
       userId: 'user-spot-1',
@@ -1726,7 +1918,7 @@ describe('signalExecutorService', () => {
       expect.objectContaining({
         exchangeAccountId: 'exchange-account-spot-1',
         tradingExecution: expect.objectContaining({
-          status: 'submitted',
+          status: 'prepared',
           clientOrderId: 'sig-exec-spot-1',
         }),
       }),
@@ -1743,7 +1935,7 @@ describe('signalExecutorService', () => {
     }
     const configService = { get: jest.fn() }
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn() }
@@ -1830,7 +2022,7 @@ describe('signalExecutorService', () => {
       { get: jest.fn() } as any,
       createSchedulerRegistry() as any,
       {} as any,
-      { executeIntent: jest.fn() } as any,
+      createTradingExecutionMock() as any,
       accountsService as any,
       {} as any,
       {} as any,
@@ -1890,7 +2082,7 @@ describe('signalExecutorService', () => {
 
   it('propagates runtime provenance into recorded trade metadata', async () => {
     const tradingService = { placeOrder: jest.fn() }
-    const tradingExecution = { executeIntent: jest.fn() }
+    const tradingExecution = createTradingExecutionMock()
     const positionsService = { recordTrade: jest.fn().mockResolvedValue(undefined) }
     const executionRepository = {
       markStage: jest.fn(),
@@ -1945,7 +2137,7 @@ describe('signalExecutorService', () => {
     ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
     ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
 
-    tradingExecution.executeIntent.mockResolvedValue({
+    mockTradingExecutionResult(tradingExecution, {
       status: 'submitted',
       intent: {},
       normalized: {
@@ -1996,7 +2188,7 @@ describe('signalExecutorService', () => {
       { get: jest.fn() } as any,
       createSchedulerRegistry() as any,
       {} as any,
-      { executeIntent: jest.fn() } as any,
+      createTradingExecutionMock() as any,
       {} as any,
       {} as any,
       {} as any,

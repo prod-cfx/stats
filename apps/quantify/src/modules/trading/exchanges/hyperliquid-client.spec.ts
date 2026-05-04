@@ -201,6 +201,78 @@ describe('hyperliquidClient', () => {
     expect(formatSize).toHaveBeenCalledWith(12.345, 2)
   })
 
+  it('derives perp instrument constraints from meta precision', async () => {
+    infoClientMock.mockImplementation(() => ({
+      meta: jest.fn().mockResolvedValue({
+        universe: [
+          { name: 'BTC', szDecimals: 5, index: 7 },
+        ],
+      }),
+    }))
+    exchangeClientMock.mockImplementation(() => ({}))
+
+    const client = new HyperliquidClient({
+      mainWalletAddress: '0x049351452584031Ff1f81bdDA1cDf4DB32BB1c09',
+      agentPrivateKey: '0x4ccd2503441a4913d4212a764b9bccfc73378bfa5443fc90e14da28aa5f2ddc6',
+      isTestnet: true,
+    })
+
+    const constraints = await client.fetchInstrumentConstraints?.('BTC/USDT:PERP')
+
+    expect(constraints).toMatchObject({
+      exchangeId: 'hyperliquid',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC/USDT:PERP',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.00001',
+      minQuantity: '0.00001',
+      contractValue: '1',
+      clientOrderId: {
+        maxLength: 34,
+        pattern: '^0x[0-9a-f]{32}$',
+      },
+    })
+  })
+
+  it('derives spot instrument constraints from spotMeta precision', async () => {
+    infoClientMock.mockImplementation(() => ({
+      spotMeta: jest.fn().mockResolvedValue({
+        universe: [
+          { tokens: [0, 1], name: 'PURR/USDC', index: 7, isCanonical: true },
+        ],
+        tokens: [
+          { name: 'PURR', szDecimals: 2, index: 0 },
+          { name: 'USDC', szDecimals: 6, index: 1 },
+        ],
+      }),
+    }))
+    exchangeClientMock.mockImplementation(() => ({}))
+
+    const client = new (HyperliquidClient as any)({
+      mainWalletAddress: '0x049351452584031Ff1f81bdDA1cDf4DB32BB1c09',
+      agentPrivateKey: '0x4ccd2503441a4913d4212a764b9bccfc73378bfa5443fc90e14da28aa5f2ddc6',
+      isTestnet: true,
+    }, 'spot')
+
+    const constraints = await client.fetchInstrumentConstraints?.('PURR/USDC')
+
+    expect(constraints).toMatchObject({
+      exchangeId: 'hyperliquid',
+      marketType: 'spot',
+      symbol: 'PURR/USDC',
+      rawSymbol: 'PURR/USDC',
+      priceTickSize: '0.000001',
+      quantityStepSize: '0.01',
+      minQuantity: '0.01',
+      contractValue: null,
+      clientOrderId: {
+        maxLength: 34,
+        pattern: '^0x[0-9a-f]{32}$',
+      },
+    })
+  })
+
   it('fetches spot balances from the spot clearinghouse state', async () => {
     infoClientMock.mockImplementation(() => ({
       allMids: jest.fn().mockResolvedValue({}),

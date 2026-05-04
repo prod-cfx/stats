@@ -171,6 +171,96 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('prepares and submits Binance spot signal intents when Binance constraints are available', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'binance',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTCUSDT',
+      priceTickSize: '0.01',
+      quantityStepSize: '0.00001',
+      minQuantity: '0.00001',
+      contractValue: null,
+      clientOrderId: { maxLength: 36, pattern: '^[A-Za-z0-9_-]+$' },
+      raw: {},
+    })
+    const service = createService(tradingService)
+    const signalIntent: OrderIntent = {
+      source: 'signal',
+      sourceId: 'exec-binance-signal-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-binance-1',
+      exchangeId: 'binance',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      type: 'market',
+      amount: 0.00123456,
+      role: 'spot_buy',
+    }
+
+    const result = await service.executeIntent(signalIntent)
+
+    expect(result.status).toBe('submitted')
+    if (result.status !== 'submitted') throw new Error('expected submitted result')
+    expect(result.normalized.normalizedAmount).toBe('0.00123')
+    expect(result.normalized.clientOrderId).toEqual(expect.stringMatching(/^sexecbinancesignal1[a-f0-9]{8}$/u))
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-1',
+      'binance',
+      'spot',
+      expect.objectContaining({
+        symbol: 'BTC/USDT',
+        clientOrderId: result.normalized.clientOrderId,
+        amount: 0.00123,
+      }),
+      'exchange-account-binance-1',
+    )
+  })
+
+  it('prepares Hyperliquid signal intents with exchange-compatible cloids', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'hyperliquid',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC/USDT:PERP',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.00001',
+      minQuantity: '0.00001',
+      contractValue: '1',
+      clientOrderId: { maxLength: 34, pattern: '^0x[0-9a-f]{32}$' },
+      raw: {},
+    })
+    const service = createService(tradingService)
+    const signalIntent: OrderIntent = {
+      source: 'signal',
+      sourceId: 'exec-hyperliquid-signal-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-hl-1',
+      exchangeId: 'hyperliquid',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      side: 'buy',
+      type: 'market',
+      amount: 0.123456,
+      role: 'open_long',
+    }
+
+    const prepared = await service.prepareIntent(signalIntent)
+
+    expect(prepared.status).toBe('prepared')
+    if (prepared.status !== 'prepared') throw new Error('expected prepared result')
+    expect(prepared.normalized.clientOrderId).toEqual(expect.stringMatching(/^0x[0-9a-f]{32}$/u))
+    expect(prepared.normalized.normalizedAmount).toBe('0.12345')
+    expect(prepared.normalized.request).toEqual(expect.objectContaining({
+      symbol: 'BTC/USDT:PERP',
+      clientOrderId: prepared.normalized.clientOrderId,
+      amount: 0.12345,
+    }))
+  })
+
   it('returns waiting_position for close/reduce-only intent without a matching position', async () => {
     const tradingService = createTradingServiceMock()
     const service = createService(tradingService)

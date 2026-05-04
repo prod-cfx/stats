@@ -4,6 +4,7 @@ import type {
   OrderType,
   TimeInForce,
   UnifiedBalance,
+  UnifiedInstrumentConstraints,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
@@ -55,6 +56,20 @@ interface BinancePositionRisk {
   leverage: string
   unRealizedProfit: string
   liquidationPrice: string
+}
+
+interface BinanceExchangeInfoSymbol {
+  symbol: string
+  filters: Array<{
+    filterType: string
+    tickSize?: string
+    minQty?: string
+    stepSize?: string
+  }>
+}
+
+interface BinanceExchangeInfoResponse {
+  symbols: BinanceExchangeInfoSymbol[]
 }
 
 export class BinanceClient extends BaseCexClient {
@@ -308,6 +323,38 @@ export class BinanceClient extends BaseCexClient {
     }
   }
 
+  async fetchInstrumentConstraints(symbol: string): Promise<UnifiedInstrumentConstraints> {
+    const rawSymbol = this.toExchangeSymbol(symbol, this.marketType)
+    const path = this.marketType === 'spot' ? '/api/v3/exchangeInfo' : '/fapi/v1/exchangeInfo'
+    const res = await this.request<BinanceExchangeInfoResponse>('GET', path, { symbol: rawSymbol })
+    const instrument = res.symbols?.find(item => item.symbol === rawSymbol) ?? res.symbols?.[0]
+    if (!instrument) {
+      throw new ExchangeError(`Binance instrument constraints not found for ${rawSymbol}`)
+    }
+
+    const priceFilter = this.findInstrumentFilter(instrument, 'PRICE_FILTER')
+    const lotSizeFilter = this.findInstrumentFilter(instrument, 'LOT_SIZE')
+    if (!priceFilter?.tickSize || !lotSizeFilter?.stepSize || !lotSizeFilter?.minQty) {
+      throw new ExchangeError(`Binance instrument constraints incomplete for ${rawSymbol}`)
+    }
+
+    return {
+      exchangeId: 'binance',
+      marketType: this.marketType,
+      symbol,
+      rawSymbol,
+      priceTickSize: priceFilter.tickSize,
+      quantityStepSize: lotSizeFilter.stepSize,
+      minQuantity: lotSizeFilter.minQty,
+      contractValue: this.marketType === 'perp' ? '1' : null,
+      clientOrderId: {
+        maxLength: 36,
+        pattern: '^[A-Za-z0-9_-]+$',
+      },
+      raw: instrument,
+    }
+  }
+
   protected async signRequest(
     method: HttpMethod,
     path: string,
@@ -409,6 +456,13 @@ export class BinanceClient extends BaseCexClient {
       return 'API Key已被禁用，请在币安API管理页面检查状态'
     }
     return null
+  }
+
+  private findInstrumentFilter(
+    instrument: BinanceExchangeInfoSymbol,
+    filterType: string,
+  ): BinanceExchangeInfoSymbol['filters'][number] | undefined {
+    return instrument.filters.find(filter => filter.filterType === filterType)
   }
 
   private buildQuery(params: Record<string, unknown>): string {

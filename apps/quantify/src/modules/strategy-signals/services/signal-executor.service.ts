@@ -5,7 +5,13 @@ import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
 import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
-import type { OrderIntent, OrderIntentRole, TradingExecutionResult } from '@/modules/trading-execution/types/trading-execution.types'
+import type {
+  OrderIntent,
+  OrderIntentRole,
+  TradingExecutionPrepareResult,
+  TradingExecutionResult,
+  TradingExecutionSubmitPreparedResult,
+} from '@/modules/trading-execution/types/trading-execution.types'
 import type {
   Symbol as PrismaSymbol,
   PrismaClient,
@@ -462,6 +468,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'skipped'
       }
 
+      let exchangeAccepted = false
       try {
         const orderIntent: OrderIntent = {
           source: 'signal',
@@ -486,15 +493,29 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
         const orderRequest = this.toJsonObject(orderIntent as unknown as Record<string, unknown>)
 
-        const executionResult = await this.tradingExecution.executeIntent(orderIntent)
+        const prepared = await this.tradingExecution.prepareIntent(orderIntent)
+
+        if (prepared.status !== 'prepared') {
+          await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
+            exchangeAccountId: exchangeAccountId ?? null,
+            orderRequest,
+            tradingExecution: this.buildTradingExecutionResultSnapshot(prepared),
+          })
+          await this.executionRepository.markFailed(execution.id, prepared.reason)
+          await this.releaseReservation(account.id, reservedQuote, reserveReference)
+          return 'failed'
+        }
 
         await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
           exchangeAccountId: exchangeAccountId ?? null,
           orderRequest,
-          tradingExecution: this.buildTradingExecutionResultSnapshot(executionResult),
+          tradingExecution: this.buildTradingExecutionResultSnapshot(prepared),
         })
 
+        const executionResult = await this.tradingExecution.submitPrepared(prepared)
+
         if (executionResult.status === 'reconcile_required') {
+          exchangeAccepted = true
           await this.executionRepository.markStage(execution.id, 'RECONCILE_REQUIRED', {
             reconcileRequired: true,
             reason: executionResult.reason,
@@ -505,11 +526,17 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         }
 
         if (executionResult.status !== 'submitted') {
+          await this.executionRepository.markStage(execution.id, 'ORDER_SUBMITTED', {
+            exchangeAccountId: exchangeAccountId ?? null,
+            orderRequest,
+            tradingExecution: this.buildTradingExecutionResultSnapshot(executionResult),
+          })
           await this.executionRepository.markFailed(execution.id, executionResult.reason)
           await this.releaseReservation(account.id, reservedQuote, reserveReference)
           return 'failed'
         }
 
+        exchangeAccepted = true
         const initialOrder = executionResult.order
 
         let order: UnifiedOrder
@@ -668,6 +695,10 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return 'executed'
       }
       catch (error) {
+        if (exchangeAccepted) {
+          await this.markPostSubmitLocalFailure(execution.id, error)
+          return 'failed'
+        }
         await this.executionRepository.markFailed(execution.id, (error as Error).message)
         this.logger.error(`Signal execution failed for account ${account.id}: ${(error as Error).message}`)
         // 下单失败时释放全部预留
@@ -1124,6 +1155,23 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     return currentOrder
   }
 
+  private async markPostSubmitLocalFailure(executionId: string, error: unknown): Promise<void> {
+    const message = error instanceof Error ? error.message : String(error)
+    try {
+      await this.executionRepository.markStage(executionId, 'RECONCILE_REQUIRED', {
+        reconcileRequired: true,
+        reason: 'POST_SUBMIT_LOCAL_ERROR',
+        error: message,
+      })
+    }
+    catch (stageError) {
+      this.logger.error(
+        `Failed to mark post-submit reconciliation for execution ${executionId}: ${(stageError as Error).message}`,
+      )
+    }
+    await this.executionRepository.markFailed(executionId, message)
+  }
+
   private mapTradeSide(direction: SignalDirection): TradeSide | null {
     switch (direction) {
       case 'BUY':
@@ -1465,7 +1513,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private buildTradingExecutionResultSnapshot(result: TradingExecutionResult): Prisma.JsonObject {
+  private buildTradingExecutionResultSnapshot(
+    result: TradingExecutionPrepareResult | TradingExecutionSubmitPreparedResult | TradingExecutionResult,
+  ): Prisma.JsonObject {
     const normalized = 'normalized' in result ? result.normalized : null
     const order = 'order' in result ? result.order : null
 
