@@ -198,13 +198,12 @@ export class PositionsRepository {
         AND (
           ${exchangeId}::text IS NULL
           OR "exchange_id" = ${exchangeId}
-          OR "exchange_id" IS NULL
+          OR "metadata"->>'market' = ${marketName}
         )
         AND (
           ${marketType}::text IS NULL
           OR "market_type" = ${marketType}
           OR "metadata"->>'market' = ${marketName}
-          OR ("market_type" IS NULL AND "metadata"->>'market' IS NULL)
         )
       ORDER BY
         CASE

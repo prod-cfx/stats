@@ -419,6 +419,7 @@ export class PositionSyncService {
       executedAt: new Date().toISOString(),
       metadata: {
         syncSource: 'position-reconciliation',
+        market: `${exchangeId}:${marketType}`,
         exchangePosition: exchangePos,
       },
     })
@@ -442,7 +443,7 @@ export class PositionSyncService {
     await this.positionsService.recordTrade({
       userStrategyAccountId: localPos.userStrategyAccountId,
       symbol: localPos.symbol,
-      market: localPos.metadata?.market ?? 'unknown',
+      market: this.resolveLocalPositionMarket(localPos),
       side: tradeSide,
       positionSide: localPos.positionSide,
       price: exchangePos.entryPrice.toString(),
@@ -471,7 +472,7 @@ export class PositionSyncService {
     await this.positionsService.recordTrade({
       userStrategyAccountId: localPos.userStrategyAccountId,
       symbol: localPos.symbol,
-      market: localPos.metadata?.market ?? 'unknown',
+      market: this.resolveLocalPositionMarket(localPos),
       side: tradeSide,
       positionSide: localPos.positionSide,
       price: localPos.avgEntryPrice.toString(), // 使用平均入场价作为平仓价
@@ -486,6 +487,16 @@ export class PositionSyncService {
         reason: 'position-not-found-on-exchange',
       },
     })
+  }
+
+  private resolveLocalPositionMarket(
+    localPos: { exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
+  ): string {
+    if (localPos.exchangeId && localPos.marketType) {
+      return `${localPos.exchangeId}:${localPos.marketType}`
+    }
+
+    return this.readMetadataMarket(localPos.metadata) ?? 'unknown'
   }
 
   private delay(ms: number): Promise<void> {
