@@ -183,6 +183,8 @@ describe('GridOrderSyncService', () => {
     expect(repository.markOrderOpen).toHaveBeenCalledWith({
       id: 'planned-order-1',
       exchangeOrderId: 'exchange-order-created',
+      price: '95',
+      quantity: '1.0526315789473684',
       rawPayload: { orderId: 'exchange-order-created' },
     })
     expect(repository.updateInstanceLastSyncAt).toHaveBeenCalledWith('grid-1')
@@ -368,6 +370,8 @@ describe('GridOrderSyncService', () => {
     expect(repository.markOrderOpen).toHaveBeenCalledWith({
       id: 'planned-order-1',
       exchangeOrderId: 'exchange-order-created',
+      price: '95',
+      quantity: '1.0526315789473684',
       rawPayload: { orderId: 'exchange-order-created' },
     })
     expect(tradingService.cancelOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-order-created', 'BTC/USDT', 'exchange-account-1')
