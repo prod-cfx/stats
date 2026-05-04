@@ -4,6 +4,7 @@ import type {
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
+  SemanticNodeStatus,
   SemanticPriority,
   SemanticRequirement,
   SemanticSlotState,
@@ -29,6 +30,7 @@ export interface SemanticContractReadinessNormalizationResult {
 interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
+  status: SemanticNodeStatus
   contracts: SemanticAtomContract[]
 }
 
@@ -40,8 +42,10 @@ export class SemanticContractReadinessService {
 
   normalize(state: SemanticState): SemanticContractReadinessNormalizationResult {
     const activeOwners = collectActiveContractOwners(state)
-    const activeContracts = activeOwners.flatMap(owner => owner.contracts)
-    const resolution = this.semanticAtomContractService.resolve(activeContracts)
+    const providerContracts = activeOwners
+      .filter(owner => owner.status === 'locked')
+      .flatMap(owner => owner.contracts)
+    const resolution = this.semanticAtomContractService.resolve(providerContracts)
     const missingRequirements = this.collectMissingRequirements(activeOwners, resolution.capabilities)
     const slotsByOwnerKey = buildMissingRequirementSlots(missingRequirements)
 
@@ -106,6 +110,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       owners.push({
         ownerKind: 'trigger',
         ownerId: trigger.id,
+        status: trigger.status,
         contracts: trigger.contracts,
       })
     }
@@ -116,6 +121,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       owners.push({
         ownerKind: 'action',
         ownerId: action.id,
+        status: action.status,
         contracts: action.contracts,
       })
     }
@@ -126,6 +132,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       owners.push({
         ownerKind: 'risk',
         ownerId: risk.id,
+        status: risk.status,
         contracts: risk.contracts,
       })
     }
@@ -135,6 +142,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     owners.push({
       ownerKind: 'position',
       ownerId: positionOwnerId(),
+      status: state.position.status,
       contracts: state.position.contracts,
     })
   }

@@ -170,7 +170,7 @@ describe('SemanticContractReadinessService', () => {
       actions: [{
         id: 'action-1',
         key: 'action.grid_ladder',
-        status: 'open',
+        status: 'locked',
         source: 'derived',
         openSlots: [
           {
@@ -222,6 +222,66 @@ describe('SemanticContractReadinessService', () => {
         affectsExecution: true,
         questionHint: '请确认订单类型。',
       },
+    ])
+  })
+
+  it('does not use open atom capabilities to satisfy contract requirements', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-open-provider',
+        key: 'grid.price_levels',
+        phase: 'gate',
+        params: {},
+        status: 'open',
+        source: 'derived',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-open',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: { lower: 100, upper: 110, gridCount: 10 },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'derived',
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual([
+      {
+        ownerKind: 'action',
+        ownerId: 'action-1',
+        contractId: 'action-contract-1',
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+      },
+    ])
+    expect(result.state.actions[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'contract.requirement.price.define.level_set',
+      }),
     ])
   })
 
