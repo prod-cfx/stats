@@ -6779,12 +6779,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(['DRAFTING', 'CONFIRM_GATE']).toContain(result.status)
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     expect(mockRepo.updateSession.mock.calls.at(-1)?.[0]).toBe('s-clarification-normalization-blocked')
-    expect(['DRAFTING', 'CONFIRM_GATE']).toContain(updatePayload.status)
+    expect(updatePayload.status).toBe('CONFIRM_GATE')
   })
 
 
