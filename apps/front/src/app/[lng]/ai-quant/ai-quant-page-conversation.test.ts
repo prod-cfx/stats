@@ -1972,6 +1972,46 @@ describe('ai-quant-page-conversation', () => {
     })).toBe(false)
   })
 
+  it('does not require republish when published positionPct uses canonical full-ratio semantics', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 1,
+      },
+      editableParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 100,
+      },
+    })).toBe(false)
+  })
+
+  it('requires republish when ambiguous fractional positionPct changes percentage semantics', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 0.5,
+      },
+      editableParamValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 50,
+      },
+    })).toBe(true)
+  })
+
   it('requires republish when compatibility metadata says published backtest truth is incomplete', () => {
     expect(requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: 'snapshot-1',

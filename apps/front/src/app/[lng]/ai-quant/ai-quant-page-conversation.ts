@@ -664,9 +664,7 @@ function normalizeComparableParamValueForKey(key: string, value: unknown): unkno
     if (typeof normalized !== 'number' || !Number.isFinite(normalized)) {
       return normalized
     }
-    return normalized > 0 && normalized < 1
-      ? Number((normalized * 100).toFixed(8))
-      : Number(normalized.toFixed(8))
+    return Number(normalized.toFixed(8))
   }
   if (key === 'sizing') {
     const sizing = normalizeComparableParamValue(value)
@@ -685,6 +683,26 @@ function normalizeComparableParamValueForKey(key: string, value: unknown): unkno
     }
   }
   return normalizeComparableParamValue(value)
+}
+
+function areEquivalentPositionPercentages(snapshotValue: unknown, editableValue: unknown): boolean {
+  const snapshotNormalized = normalizeComparableParamValueForKey('positionPct', snapshotValue)
+  const editableNormalized = normalizeComparableParamValueForKey('positionPct', editableValue)
+  if (JSON.stringify(snapshotNormalized ?? null) === JSON.stringify(editableNormalized ?? null)) {
+    return true
+  }
+  if (
+    typeof snapshotNormalized !== 'number'
+    || typeof editableNormalized !== 'number'
+    || !Number.isFinite(snapshotNormalized)
+    || !Number.isFinite(editableNormalized)
+  ) {
+    return false
+  }
+  return (
+    (snapshotNormalized === 0.01 && editableNormalized === 1)
+    || (snapshotNormalized === 1 && editableNormalized === 100)
+  )
 }
 
 export function requiresRepublishForPublishedSnapshot(input: {
@@ -718,9 +736,14 @@ export function requiresRepublishForPublishedSnapshot(input: {
       continue
     }
 
-    const snapshotValue = normalizeComparableParamValueForKey(key, publishedSnapshotParamValues[key])
-    const editableValue = normalizeComparableParamValueForKey(key, editableParamValues[key])
-    if (JSON.stringify(snapshotValue ?? null) !== JSON.stringify(editableValue ?? null)) {
+    const snapshotValue = publishedSnapshotParamValues[key]
+    const editableValue = editableParamValues[key]
+    if (
+      (key === 'positionPct' || key === 'positionSizeRatioPercent')
+        ? !areEquivalentPositionPercentages(snapshotValue, editableValue)
+        : JSON.stringify(normalizeComparableParamValueForKey(key, snapshotValue) ?? null)
+          !== JSON.stringify(normalizeComparableParamValueForKey(key, editableValue) ?? null)
+    ) {
       return true
     }
   }
