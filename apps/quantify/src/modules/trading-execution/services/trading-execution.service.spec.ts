@@ -194,6 +194,35 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('returns rejected when role and side mismatch', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const result = await service.executeIntent({ ...intent, side: 'sell' })
+
+    expect(result).toEqual({
+      status: 'rejected',
+      intent: { ...intent, side: 'sell' },
+      reason: 'open_long_requires_buy_side',
+    })
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
+  it('converts non-Error thrown values to string reasons', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getInstrumentConstraints.mockRejectedValue('constraints unavailable')
+    const service = createService(tradingService)
+
+    const result = await service.executeIntent(intent)
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'waiting_constraints',
+      intent,
+      reason: 'constraints unavailable',
+    }))
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+  })
+
   it('submits a close/reduce-only intent when a matching position exists', async () => {
     const tradingService = createTradingServiceMock()
     tradingService.getPositions.mockResolvedValue([shortPosition])

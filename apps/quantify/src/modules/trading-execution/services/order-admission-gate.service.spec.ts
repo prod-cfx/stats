@@ -66,6 +66,30 @@ describe('OrderAdmissionGateService', () => {
     expect(result).toEqual({ ok: false, status: 'rejected', reason: 'close_long_requires_sell_side' })
   })
 
+  it('rejects open-long intent with sell side', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'open_long', side: 'sell', reduceOnly: false }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'open_long_requires_buy_side' })
+  })
+
+  it('rejects open-short intent with buy side', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'open_short', side: 'buy', reduceOnly: false }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'open_short_requires_sell_side' })
+  })
+
+  it('rejects spot-buy intent with sell side', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'spot_buy', side: 'sell', reduceOnly: false }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'spot_buy_requires_buy_side' })
+  })
+
+  it('rejects spot-sell intent with buy side', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'spot_sell', side: 'buy', reduceOnly: false }, [])
+    expect(result).toEqual({ ok: false, status: 'rejected', reason: 'spot_sell_requires_sell_side' })
+  })
+
   it('allows an open intent without positions', () => {
     const service = new OrderAdmissionGateService()
     const result = service.evaluate({ ...baseIntent, role: 'open_long', reduceOnly: false }, [])

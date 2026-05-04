@@ -27,7 +27,7 @@ export class TradingExecutionService {
       )
     }
     catch (error) {
-      return { status: 'waiting_constraints', intent, reason: (error as Error).message, error }
+      return { status: 'waiting_constraints', intent, reason: this.errorReason(error), error }
     }
 
     let clientOrderId: string
@@ -41,7 +41,7 @@ export class TradingExecutionService {
       })
     }
     catch (error) {
-      return { status: 'rejected', intent, reason: (error as Error).message }
+      return { status: 'rejected', intent, reason: this.errorReason(error) }
     }
 
     let normalized: NormalizedOrderIntent
@@ -49,7 +49,7 @@ export class TradingExecutionService {
       normalized = this.normalizer.normalize(intent, constraints, clientOrderId)
     }
     catch (error) {
-      return { status: 'rejected', intent, reason: (error as Error).message }
+      return { status: 'rejected', intent, reason: this.errorReason(error) }
     }
 
     const requiresPositions = intent.reduceOnly || intent.role === 'close_long' || intent.role === 'close_short'
@@ -78,7 +78,11 @@ export class TradingExecutionService {
       return { status: 'submitted', intent, normalized, order }
     }
     catch (error) {
-      return { status: 'submit_failed', intent, normalized, reason: (error as Error).message, error }
+      return { status: 'submit_failed', intent, normalized, reason: this.errorReason(error), error }
     }
+  }
+
+  private errorReason(error: unknown): string {
+    return error instanceof Error ? error.message : String(error)
   }
 }

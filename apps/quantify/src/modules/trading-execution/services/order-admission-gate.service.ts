@@ -10,7 +10,7 @@ type AdmissionResult =
 @Injectable()
 export class OrderAdmissionGateService {
   evaluate(intent: OrderIntent, positions: UnifiedPosition[]): AdmissionResult {
-    const direction = this.validateCloseDirection(intent)
+    const direction = this.validateRoleDirection(intent)
     if (direction) return direction
 
     const requiredSide = this.requiredPositionSide(intent)
@@ -38,7 +38,19 @@ export class OrderAdmissionGateService {
     return intent.side === 'sell' ? 'long' : 'short'
   }
 
-  private validateCloseDirection(intent: OrderIntent): AdmissionResult | null {
+  private validateRoleDirection(intent: OrderIntent): AdmissionResult | null {
+    if (intent.role === 'spot_buy' && intent.side !== 'buy') {
+      return { ok: false, status: 'rejected', reason: 'spot_buy_requires_buy_side' }
+    }
+    if (intent.role === 'spot_sell' && intent.side !== 'sell') {
+      return { ok: false, status: 'rejected', reason: 'spot_sell_requires_sell_side' }
+    }
+    if (intent.role === 'open_long' && intent.side !== 'buy') {
+      return { ok: false, status: 'rejected', reason: 'open_long_requires_buy_side' }
+    }
+    if (intent.role === 'open_short' && intent.side !== 'sell') {
+      return { ok: false, status: 'rejected', reason: 'open_short_requires_sell_side' }
+    }
     if (intent.role === 'close_long' && intent.side !== 'sell') {
       return { ok: false, status: 'rejected', reason: 'close_long_requires_sell_side' }
     }
