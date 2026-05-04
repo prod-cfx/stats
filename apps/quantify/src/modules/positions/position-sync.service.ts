@@ -150,6 +150,13 @@ export class PositionSyncService {
       // 5.2 处理本地存在但交易所不存在的仓位（应该关闭）
       for (const [key, localPos] of localPositionMap.entries()) {
         if (!exchangePositionMap.has(key)) {
+          if (this.isSpotPosition(localPos, marketType)) {
+            this.logger.warn(
+              `Skipped orphan closure for spot position: ${localPos.symbol} ${localPos.positionSide}`,
+            )
+            continue
+          }
+
           const localQty = new Decimal(localPos.quantity)
           if (localQty.gt(0)) {
             try {
@@ -337,6 +344,30 @@ export class PositionSyncService {
 
   private getPositionKey(symbol: string, side: PositionSide): string {
     return `${normalizeLedgerSymbol(symbol)}:${side}`
+  }
+
+  private isSpotPosition(
+    localPos: { marketType?: string | null; metadata?: unknown },
+    syncMarketType: MarketType,
+  ): boolean {
+    if (syncMarketType === 'spot' || localPos.marketType === 'spot') {
+      return true
+    }
+
+    if (this.readMetadataMarket(localPos.metadata)?.endsWith(':spot')) {
+      return true
+    }
+
+    return false
+  }
+
+  private readMetadataMarket(metadata: unknown): string | undefined {
+    if (!metadata || typeof metadata !== 'object' || !('market' in metadata)) {
+      return undefined
+    }
+
+    const market = metadata.market
+    return typeof market === 'string' ? market : undefined
   }
 
   /**
