@@ -1,4 +1,4 @@
-import { LedgerEntryType, PositionSide, TradeSide } from '@ai/shared'
+import { ErrorCode, LedgerEntryType, PositionSide, TradeSide } from '@ai/shared'
 import { Prisma } from '@/prisma/prisma.types'
 import { PositionsService } from './positions.service'
 
@@ -6,13 +6,13 @@ describe('positionsService', () => {
   function createService(
     txHost: any = {},
     accountsService: any = {},
-    tradingService: any = {},
+    tradingExecution: any = {},
     positionsRepository: any = {},
   ) {
     return new PositionsService(
       positionsRepository as any,
       accountsService as any,
-      tradingService as any,
+      tradingExecution as any,
       txHost,
     )
   }
@@ -261,26 +261,39 @@ describe('positionsService', () => {
     )
   })
 
-  it('uses unified exchange symbol when placing a manual close order', async () => {
-    const placeOrder = jest.fn().mockResolvedValue({
-      id: 'order-1',
-      status: 'closed',
-      amount: 1,
-      filled: 1,
-      price: 120,
-      createdAt: Date.parse('2026-04-01T01:00:00.000Z'),
-      marketType: 'spot',
-      side: 'sell',
-      type: 'market',
-      symbol: 'BTC/USDT',
-      raw: {},
+  it('uses trading execution kernel when placing a manual close order', async () => {
+    const placeOrder = jest.fn()
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'pt-close-1',
+        normalizedAmount: '1',
+        exchangeSize: '1',
+        request: {
+          clientOrderId: 'pt-close-1',
+        },
+      },
+      order: {
+        id: 'order-1',
+        status: 'closed',
+        amount: 1,
+        filled: 1,
+        price: 120,
+        createdAt: Date.parse('2026-04-01T01:00:00.000Z'),
+        marketType: 'spot',
+        side: 'sell',
+        type: 'market',
+        symbol: 'BTC/USDT',
+        raw: {},
+      },
     })
     const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
 
     const service = createService(
       {},
       {},
-      { placeOrder },
+      { executeIntent },
       {
         findUniqueWithAccount: jest.fn().mockResolvedValue({
           id: 'position-1',
@@ -309,16 +322,226 @@ describe('positionsService', () => {
       marketType: 'spot',
     } as any)
 
-    expect(placeOrder).toHaveBeenCalledWith(
-      'user-1',
-      'okx',
-      'spot',
-      expect.objectContaining({
-        symbol: 'BTC/USDT',
-        side: 'sell',
-        type: 'market',
+    expect(executeIntent).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'position_tool',
+      sourceId: expect.stringMatching(/^position-1:1:\d+:[0-9a-f-]+$/u),
+      userId: 'user-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      side: 'sell',
+      type: 'market',
+      amount: 1,
+      role: 'close_long',
+      reduceOnly: true,
+    }))
+    expect(executeIntent.mock.calls[0]?.[0]).not.toHaveProperty('tdMode')
+    expect(placeOrder).not.toHaveBeenCalled()
+    expect(recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: 'order-1',
+      metadata: expect.objectContaining({
+        tradingExecution: expect.objectContaining({
+          status: 'submitted',
+          clientOrderId: 'pt-close-1',
+          normalizedAmount: '1',
+          exchangeSize: '1',
+        }),
       }),
+    }))
+
+    recordTrade.mockRestore()
+  })
+
+  it('sets cross margin close intent for perp positions', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'pt-close-short-1',
+        normalizedAmount: '1',
+        exchangeSize: '10',
+        request: {
+          clientOrderId: 'pt-close-short-1',
+        },
+      },
+      order: {
+        id: 'order-short-1',
+        status: 'closed',
+        amount: 1,
+        filled: 1,
+        price: 120,
+        createdAt: Date.parse('2026-04-01T01:00:00.000Z'),
+        marketType: 'perp',
+        side: 'buy',
+        type: 'market',
+        symbol: 'BTC/USDT:PERP',
+        raw: {},
+      },
+    })
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+
+    const service = createService(
+      {},
+      {},
+      { executeIntent },
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-short-1',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.SHORT,
+          quantity: new Prisma.Decimal(1),
+          avgEntryPrice: new Prisma.Decimal(100),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'perp',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
     )
+
+    await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-short-1',
+      quantity: '1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+    } as any)
+
+    expect(executeIntent).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'close_short',
+      side: 'buy',
+      reduceOnly: true,
+      tdMode: 'cross',
+      symbol: 'BTC/USDT:PERP',
+    }))
+
+    recordTrade.mockRestore()
+  })
+
+  it('does not record a trade when trading execution is waiting for a closeable position', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'waiting_position',
+      intent: {},
+      reason: 'reduce_only_position_missing',
+      normalized: {
+        clientOrderId: 'pt-close-waiting',
+        normalizedAmount: '1',
+        exchangeSize: '1',
+        request: { clientOrderId: 'pt-close-waiting' },
+      },
+    })
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+    const service = createService(
+      {},
+      {},
+      { executeIntent },
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-1',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal(1),
+          avgEntryPrice: new Prisma.Decimal(100),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
+    )
+
+    await expect(service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-1',
+      quantity: '1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)).rejects.toMatchObject({
+      code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR,
+      args: expect.objectContaining({
+        status: 'waiting_position',
+        reason: 'reduce_only_position_missing',
+        clientOrderId: 'pt-close-waiting',
+      }),
+    })
+    expect(recordTrade).not.toHaveBeenCalled()
+
+    recordTrade.mockRestore()
+  })
+
+  it('does not record a trade when trading execution cannot confirm order submission', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submit_failed',
+      intent: {},
+      reason: 'exchange_timeout',
+      error: new Error('exchange_timeout'),
+      normalized: {
+        clientOrderId: 'pt-close-submit-failed',
+        normalizedAmount: '0.9',
+        exchangeSize: '9',
+        request: { clientOrderId: 'pt-close-submit-failed', amount: 0.9 },
+      },
+    })
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+    const service = createService(
+      {},
+      {},
+      { executeIntent },
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-1',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal(1),
+          avgEntryPrice: new Prisma.Decimal(100),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'perp',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
+    )
+
+    await expect(service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-1',
+      quantity: '1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+    } as any)).rejects.toMatchObject({
+      code: ErrorCode.PORTFOLIO_POSITION_CLOSE_ERROR,
+      args: expect.objectContaining({
+        status: 'submit_failed',
+        reason: 'exchange_timeout',
+        clientOrderId: 'pt-close-submit-failed',
+        normalizedAmount: '0.9',
+        exchangeSize: '9',
+      }),
+    })
+    await expect(service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-1',
+      quantity: '1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+    } as any)).rejects.toThrow(/exchange_timeout.*pt-close-submit-failed/u)
+    expect(recordTrade).not.toHaveBeenCalled()
 
     recordTrade.mockRestore()
   })
