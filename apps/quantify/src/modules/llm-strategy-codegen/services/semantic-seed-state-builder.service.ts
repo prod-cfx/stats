@@ -34,6 +34,8 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
   timeframe: '请确认策略主周期（例如 15m 或 1h）。',
 }
 const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
+const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
+const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 
 @Injectable()
 export class SemanticSeedStateBuilderService {
@@ -232,12 +234,13 @@ export class SemanticSeedStateBuilderService {
     }
 
     const openSlots = this.readOpenSlots(update.openSlots)
-    const positionMode = update.positionMode === 'both' ? 'long_short' : update.positionMode
+    const positionMode = this.normalizePositionSideMode(update.positionMode) ?? update.positionMode
+    const normalizedMode = this.normalizePositionSizingMode(update.mode)
     const evidence = this.readEvidence(update.evidence)
     const contracts = this.readContracts(update.contracts)
       ?? (this.hasOwnProperty(update, 'contracts')
         ? null
-        : this.synthesizePositionContracts({ sizing, mode: update.mode, value: update.value, positionMode }))
+        : this.synthesizePositionContracts({ sizing, mode: normalizedMode, value: update.value, positionMode }))
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -248,7 +251,7 @@ export class SemanticSeedStateBuilderService {
 
     return {
       ...(sizing ? { sizing } : {}),
-      mode: update.mode,
+      mode: normalizedMode ?? update.mode,
       value: update.value,
       positionMode,
       status: contractCoverage.status,
@@ -290,6 +293,31 @@ export class SemanticSeedStateBuilderService {
     return null
   }
 
+  private normalizePositionSizingMode(mode: string): string | null {
+    if (SYNTHESIZABLE_POSITION_MODES.has(mode)) {
+      return mode
+    }
+
+    return null
+  }
+
+  private normalizePositionSideMode(positionMode: string): string | null {
+    if (positionMode === 'long' || positionMode === 'long_only') {
+      return 'long_only'
+    }
+    if (positionMode === 'short' || positionMode === 'short_only') {
+      return 'short_only'
+    }
+    if (positionMode === 'both' || positionMode === 'long_short') {
+      return 'long_short'
+    }
+    return null
+  }
+
+  private isSupportedPositionSideMode(positionMode: string): boolean {
+    return positionMode === 'long_only' || positionMode === 'short_only' || positionMode === 'long_short'
+  }
+
   private synthesizeTriggerContracts(
     key: string,
     phase: SemanticTriggerState['phase'],
@@ -314,7 +342,78 @@ export class SemanticSeedStateBuilderService {
       return this.isRecord(params.expression)
     }
 
-    return SYNTHESIZABLE_TRIGGER_KEYS.has(key)
+    if (key === 'price.percent_change') {
+      return this.isFiniteNonZeroNumber(params.valuePct)
+    }
+
+    if (key === 'indicator.cross_over' || key === 'indicator.cross_under') {
+      return this.hasIndicatorIdentity(params)
+        && (this.hasFiniteNumber(params.fastPeriod) || this.hasFiniteNumber(params.slowPeriod))
+    }
+
+    if (key === 'indicator.above' || key === 'indicator.below') {
+      return this.hasIndicatorIdentity(params) && this.hasIndicatorReference(params)
+    }
+
+    if (key === 'oscillator.rsi_gte' || key === 'oscillator.rsi_lte') {
+      return this.hasFiniteNumber(params.value)
+    }
+
+    if (key === 'bollinger.touch_upper' || key === 'bollinger.touch_lower' || key === 'bollinger.touch_middle') {
+      return this.hasFiniteNumber(params.period) && this.hasFiniteNumber(params.stdDev)
+    }
+
+    if (key === 'price.breakout_up' || key === 'price.breakout_down') {
+      return this.hasBreakoutReference(params)
+    }
+
+    if (key === 'price.range_position_lte' || key === 'price.range_position_gte') {
+      return this.hasFiniteNumber(params.value)
+        || this.hasFiniteNumber(params.valuePct)
+        || this.hasFiniteNumber(params.threshold)
+    }
+
+    if (key === 'trend.direction' || key === 'market.regime' || key === 'volatility.state') {
+      return Object.keys(params).length > 0
+    }
+
+    return key === 'execution.on_start' && SYNTHESIZABLE_TRIGGER_KEYS.has(key)
+  }
+
+  private hasIndicatorIdentity(params: Record<string, unknown>): boolean {
+    return Boolean(this.readTrimmedString(params.indicator))
+  }
+
+  private hasIndicatorReference(params: Record<string, unknown>): boolean {
+    if (
+      this.hasFiniteNumber(params.period)
+      || this.hasFiniteNumber(params.fastPeriod)
+      || this.hasFiniteNumber(params.slowPeriod)
+      || this.hasFiniteNumber(params['reference.period'])
+    ) {
+      return true
+    }
+
+    return this.isRecord(params.reference) && this.hasFiniteNumber(params.reference.period)
+  }
+
+  private hasBreakoutReference(params: Record<string, unknown>): boolean {
+    const reference = this.readTrimmedString(params.reference)
+    if (reference && reference !== 'unknown') {
+      return true
+    }
+
+    return this.hasFiniteNumber(params.lookbackBars)
+      || this.hasFiniteNumber(params.windowBars)
+      || this.isRecord(params.expression)
+  }
+
+  private hasFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value)
+  }
+
+  private isFiniteNonZeroNumber(value: unknown): value is number {
+    return this.hasFiniteNumber(value) && value !== 0
   }
 
   private buildTriggerCapability(
@@ -354,7 +453,11 @@ export class SemanticSeedStateBuilderService {
     key: string,
     params: Record<string, unknown>,
     index: number,
-  ): SemanticAtomContract[] {
+  ): SemanticAtomContract[] | null {
+    if (!SYNTHESIZABLE_ACTION_KEYS.has(key)) {
+      return null
+    }
+
     return [this.buildAtomContract({
       id: `contract-seed-action-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'action',
@@ -420,10 +523,14 @@ export class SemanticSeedStateBuilderService {
 
   private synthesizePositionContracts(position: {
     sizing: SemanticPositionSizingContract | null
-    mode: string
+    mode: string | null
     value: number
     positionMode: string
-  }): SemanticAtomContract[] {
+  }): SemanticAtomContract[] | null {
+    if (!position.mode || !this.isSupportedPositionSideMode(position.positionMode)) {
+      return null
+    }
+
     return [this.buildAtomContract({
       id: 'contract-seed-position-sizing',
       kind: 'position',
@@ -718,12 +825,12 @@ export class SemanticSeedStateBuilderService {
     if (options.statusValue === 'superseded') {
       return {
         status: 'superseded',
-        openSlots: this.removeContractRequiredSlots(options.openSlots),
+        openSlots: this.removeContractRequiredSlots(options.openSlots, options.fieldPath),
       }
     }
 
     if (options.contracts) {
-      const openSlots = this.removeContractRequiredSlots(options.openSlots)
+      const openSlots = this.removeContractRequiredSlots(options.openSlots, options.fieldPath)
       return {
         status: this.resolveNodeStatus(options.statusValue, openSlots),
         openSlots,
@@ -758,8 +865,8 @@ export class SemanticSeedStateBuilderService {
     ]
   }
 
-  private removeContractRequiredSlots(openSlots: SemanticSlotState[]): SemanticSlotState[] {
-    return openSlots.filter(slot => slot.slotKey !== 'contract.required')
+  private removeContractRequiredSlots(openSlots: SemanticSlotState[], fieldPath: string): SemanticSlotState[] {
+    return openSlots.filter(slot => slot.slotKey !== 'contract.required' || slot.fieldPath !== fieldPath)
   }
 
   private resolveActionSide(key: string): 'long' | 'short' | 'unknown' {
