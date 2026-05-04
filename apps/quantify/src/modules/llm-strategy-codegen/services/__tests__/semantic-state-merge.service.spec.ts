@@ -377,6 +377,96 @@ describe('SemanticStateMergeService', () => {
     }))
   })
 
+  it('does not reopen a locked grid trigger from weaker planner micro-slots', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: {
+              sideMode: 'long_only',
+              recycle: true,
+              breakoutAction: 'pause',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            contracts: [{
+              id: 'contract-grid-centered-levels',
+              kind: 'trigger',
+              capabilities: [{
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: {
+                  mode: 'centered_percent_range',
+                  centerTiming: 'deployment',
+                  centerSource: 'last_price',
+                  halfRangePct: 0.4,
+                  gridCount: 10,
+                  spacingMode: 'arithmetic',
+                },
+              }],
+              requires: [],
+              params: {},
+            }],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-04T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'derived-grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: {
+              sideMode: 'long_only',
+              recycle: true,
+              breakoutAction: 'pause',
+            },
+            status: 'open',
+            source: 'derived',
+            openSlots: [{
+              slotKey: 'grid.level_alignment',
+              fieldPath: 'triggers[0].contracts[0].capabilities[0].shape.levelAlignment',
+              status: 'open',
+              priority: 'behavior',
+              questionHint: '请确认中心价格是否必须正好落在网格点上。',
+              affectsExecution: true,
+            }],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-04T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.triggers).toHaveLength(1)
+    expect(merged.triggers[0]).toEqual(expect.objectContaining({
+      id: 'grid-entry',
+      status: 'locked',
+      openSlots: [],
+    }))
+  })
+
   it('matches the same trigger when only one side omits sideScope', () => {
     const merged = service.merge({
       persisted: {
