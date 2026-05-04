@@ -332,6 +332,76 @@ describe('okxClient', () => {
     expect(order.price).toBeCloseTo(74147.2)
   })
 
+  it('normalizes OKX perp limit prices to instrument tick size when creating orders', async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+              tickSz: '0.1',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      const rawBody = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      expect(rawBody).toMatchObject({
+        instId: 'BTC-USDT-SWAP',
+        instType: 'SWAP',
+        side: 'buy',
+        ordType: 'limit',
+        px: '79283.3',
+        sz: '10',
+        tdMode: 'cross',
+      })
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-limit-order-1',
+            sCode: '0',
+            sMsg: '',
+            instId: 'BTC-USDT-SWAP',
+            state: 'live',
+            side: 'buy',
+            ordType: 'limit',
+            px: '79283.3',
+            sz: '10',
+            fillSz: '0',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.1,
+      price: 79283.33333333333,
+      tdMode: 'cross',
+    })
+
+    expect(order.price).toBeCloseTo(79283.3)
+  })
+
   it('uses typed tdMode and positionSide fields when creating OKX perp orders', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)

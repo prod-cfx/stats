@@ -80,6 +80,7 @@ interface OkxInstrumentSpecItem {
   instId: string
   ctVal?: string
   lotSz?: string
+  tickSz?: string
 }
 
 export class OkxClient extends BaseCexClient {
@@ -137,7 +138,7 @@ export class OkxClient extends BaseCexClient {
       if (input.price === undefined) {
         throw new ExchangeError('Limit order requires price')
       }
-      body.px = this.toPrice(input.price)
+      body.px = this.toPrice(input.price, instrumentSpec)
     }
 
     // OKX 所有产品都需要 tdMode：现货使用 cash；永续必须由上游显式传入。
@@ -670,8 +671,13 @@ export class OkxClient extends BaseCexClient {
     return this.formatNumber(steppedContracts)
   }
 
-  private toPrice(value: number): string {
-    return Number(value).toString()
+  private toPrice(value: number, instrumentSpec?: OkxInstrumentSpecItem | null): string {
+    const tickSize = Number.parseFloat(instrumentSpec?.tickSz ?? '')
+    if (!Number.isFinite(tickSize) || tickSize <= 0) {
+      return Number(value).toString()
+    }
+
+    return this.formatNumber(Math.round(Number(value) / tickSize) * tickSize)
   }
 
   private mapOrderFromResponse(

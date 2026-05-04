@@ -100,7 +100,7 @@ function createTradingService() {
     cancelOrder: jest.fn().mockResolvedValue({ id: 'exchange-order-1', status: 'canceled' }),
     placeOrder: jest.fn().mockResolvedValue({
       id: 'exchange-order-created',
-      clientOrderId: 'g-planned-order-1',
+      clientOrderId: 'gplannedorder1',
       symbol: 'BTC/USDT',
       marketType: 'spot',
       side: 'buy',
@@ -167,7 +167,7 @@ describe('GridOrderSyncService', () => {
 
     expect(repository.markOrderSubmitting).toHaveBeenCalledWith({
       id: 'planned-order-1',
-      clientOrderId: 'g-planned-order-1',
+      clientOrderId: 'gplannedorder1',
       rawPayload: { source: 'grid_order_sync' },
     })
     expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', {
@@ -178,7 +178,7 @@ describe('GridOrderSyncService', () => {
       amount: 1.0526315789473684,
       price: 95,
       timeInForce: 'GTC',
-      clientOrderId: 'g-planned-order-1',
+      clientOrderId: 'gplannedorder1',
     }, 'exchange-account-1')
     expect(repository.markOrderOpen).toHaveBeenCalledWith({
       id: 'planned-order-1',
@@ -186,6 +186,31 @@ describe('GridOrderSyncService', () => {
       rawPayload: { orderId: 'exchange-order-created' },
     })
     expect(repository.updateInstanceLastSyncAt).toHaveBeenCalledWith('grid-1')
+  })
+
+  it('keeps generated client order ids within OKX alphanumeric limits', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: '0123456789abcdefghijklmnopqrstuvwxyz---tail',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const service = createService(repository, tradingService)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.markOrderSubmitting).toHaveBeenCalledWith(expect.objectContaining({
+      clientOrderId: 'g0123456789abcdefghijklmnopqrstu',
+    }))
+    expect(tradingService.placeOrder).toHaveBeenCalledWith('user-1', 'okx', 'spot', expect.objectContaining({
+      clientOrderId: 'g0123456789abcdefghijklmnopqrstu',
+    }), 'exchange-account-1')
   })
 
   it('submits perp close orders as reduce-only limit orders', async () => {
@@ -266,7 +291,7 @@ describe('GridOrderSyncService', () => {
 
     expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'order_submit_failed', expect.objectContaining({
       orderId: 'planned-order-1',
-      clientOrderId: 'g-planned-order-1',
+      clientOrderId: 'gplannedorder1',
       exchangeId: 'okx',
       marketType: 'spot',
       symbol: 'BTC/USDT',

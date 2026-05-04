@@ -56,6 +56,7 @@ const LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER = new Set<string>([
   'PARTIALLY_FILLED',
   'CANCELING',
 ])
+const OKX_CLIENT_ORDER_ID_MAX_LENGTH = 32
 
 @Injectable()
 export class GridOrderSyncService {
@@ -247,7 +248,8 @@ export class GridOrderSyncService {
   }
 
   private buildClientOrderId(_instanceId: string, order: RuntimeOrder): string {
-    return `g-${order.id}`
+    const sanitizedOrderId = order.id.replace(/[^a-z0-9]/gi, '')
+    return `g${sanitizedOrderId}`.slice(0, OKX_CLIENT_ORDER_ID_MAX_LENGTH)
   }
 
   private buildCreateOrderInput(
