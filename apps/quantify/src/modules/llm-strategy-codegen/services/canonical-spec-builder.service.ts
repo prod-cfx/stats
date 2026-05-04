@@ -578,14 +578,11 @@ export class CanonicalSpecBuilderService {
       return null
     }
 
-    const lower = this.readShapeNumber(levelSet.capability.shape, 'lower')
-    const upper = this.readShapeNumber(levelSet.capability.shape, 'upper')
+    const projectedLevelSet = this.projectCanonicalOrderProgramLevelSet(levelSet.capability)
     const budgetValue = this.readShapeNumber(budget.capability.shape, 'value')
     const budgetAsset = this.readShapeString(budget.capability.shape, 'asset')
     if (
-      lower === null
-      || upper === null
-      || upper <= lower
+      !projectedLevelSet
       || budgetValue === null
       || budgetValue <= 0
       || !budgetAsset
@@ -597,17 +594,7 @@ export class CanonicalSpecBuilderService {
       id: `contract-order-program-${orderProgram.capability.object}`,
       kind: 'contract_order_program',
       mode: this.resolveContractOrderProgramMode(exposure.capability, state),
-      levelSet: {
-        lower,
-        upper,
-        ...(this.readShapeNumber(levelSet.capability.shape, 'gridCount') !== null
-          ? { gridCount: this.readShapeNumber(levelSet.capability.shape, 'gridCount') ?? undefined }
-          : {}),
-        ...(this.readShapeNumber(levelSet.capability.shape, 'spacingPct') !== null
-          ? { spacingPct: this.readShapeNumber(levelSet.capability.shape, 'spacingPct') ?? undefined }
-          : {}),
-        spacingMode: this.readShapeString(levelSet.capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
-      },
+      levelSet: projectedLevelSet,
       budget: {
         mode: budget.capability.object === 'total_budget' ? 'total_quote' : 'per_order_quote',
         value: budgetValue,
@@ -647,13 +634,67 @@ export class CanonicalSpecBuilderService {
   }
 
   private projectLevelSetCapabilityKey(capability: SemanticCapability): string {
+    const mode = this.readShapeString(capability.shape, 'mode')
+    if (mode === 'centered_percent_range') {
+      return this.stableProjectionKey({
+        mode,
+        centerTiming: this.readShapeString(capability.shape, 'centerTiming') ?? 'deployment',
+        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
+        halfRangePct: this.readShapeNumber(capability.shape, 'halfRangePct'),
+        gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
+        spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
+        spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+      })
+    }
+
     return this.stableProjectionKey({
+      mode: 'static_range',
       lower: this.readShapeNumber(capability.shape, 'lower'),
       upper: this.readShapeNumber(capability.shape, 'upper'),
       gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
       spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
       spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
     })
+  }
+
+  private projectCanonicalOrderProgramLevelSet(
+    capability: SemanticCapability,
+  ): CanonicalOrderProgramIntent['levelSet'] | null {
+    const spacingMode = this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic'
+    const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
+    const spacingPct = this.readShapeNumber(capability.shape, 'spacingPct')
+    const mode = this.readShapeString(capability.shape, 'mode')
+
+    if (mode === 'centered_percent_range') {
+      const halfRangePct = this.readShapeNumber(capability.shape, 'halfRangePct')
+      if (halfRangePct === null || halfRangePct <= 0) {
+        return null
+      }
+
+      return {
+        mode: 'centered_percent_range',
+        centerTiming: this.readShapeString(capability.shape, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
+        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
+        halfRangePct,
+        ...(gridCount !== null ? { gridCount } : {}),
+        ...(spacingPct !== null ? { spacingPct } : {}),
+        spacingMode,
+      }
+    }
+
+    const lower = this.readShapeNumber(capability.shape, 'lower')
+    const upper = this.readShapeNumber(capability.shape, 'upper')
+    if (lower === null || upper === null || upper <= lower) {
+      return null
+    }
+
+    return {
+      lower,
+      upper,
+      ...(gridCount !== null ? { gridCount } : {}),
+      ...(spacingPct !== null ? { spacingPct } : {}),
+      spacingMode,
+    }
   }
 
   private projectLimitLadderCapabilityKey(capability: SemanticCapability): string {

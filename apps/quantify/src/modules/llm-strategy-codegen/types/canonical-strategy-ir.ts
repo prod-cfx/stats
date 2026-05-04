@@ -54,6 +54,7 @@ export interface SeriesDef {
   id: string
   kind:
     | 'PRICE'
+    | 'DEPLOYMENT_PRICE'
     | 'BAR_INDEX'
     | 'CONST'
     | 'MARKET_REGIME'
@@ -109,6 +110,7 @@ export interface PredicateDef {
     | 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ'
     | 'CROSS_OVER' | 'CROSS_UNDER'
     | 'TOUCH_LEVEL_UP' | 'TOUCH_LEVEL_DOWN'
+    | 'WITHIN_LEVEL_SET'
     | 'AND' | 'OR' | 'NOT'
   args: string[]
 }

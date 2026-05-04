@@ -309,7 +309,7 @@ export class SemanticAtomInvariantService {
   ): boolean {
     return candidate.id === expected.irId
       && candidate.kind === 'LIMIT_LADDER'
-      && candidate.activeWhen === expected.activeWhen
+      && this.matchesOrderProgramActiveWhen(candidate.activeWhen, expected.activeWhen)
       && candidate.side === expected.side
       && candidate.sidePolicy === expected.sidePolicy
       && candidate.priceSource === 'level_set'
@@ -320,6 +320,10 @@ export class SemanticAtomInvariantService {
       && candidate.maxWorkingOrders === expected.maxWorkingOrders
       && candidate.group === expected.id
       && this.matchesPositionSizingSnapshot(candidate.quantity, expected.quantity)
+  }
+
+  private matchesOrderProgramActiveWhen(actual: string, expected: string): boolean {
+    return actual === expected || actual.endsWith(`_${expected}`)
   }
 
   private findIrOrderProgramFallbackActions(

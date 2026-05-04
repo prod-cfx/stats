@@ -217,19 +217,16 @@ export class CanonicalSpecV2IrCompilerService {
   ): OrderProgram[] {
     return intents.map(intent => {
       const levelCount = this.resolveIntentLevelCount(intent)
-      const lowerRef = this.ensureConstSeries(context, intent.levelSet.lower)
-      const upperRef = this.ensureConstSeries(context, intent.levelSet.upper)
-      const levelSetRef = this.ensureContractLevelSet(context, intent, levelCount, lowerRef, upperRef)
-      const activeWhen = this.ensureOrderProgramActiveRangePredicate(context, intent, lowerRef, upperRef)
+      const levelSetRefs = this.ensureOrderProgramLevelSet(context, intent, levelCount)
 
       return {
         id: intent.id.replace(/\W+/g, '_'),
         kind: 'LIMIT_LADDER',
-        activeWhen,
+        activeWhen: levelSetRefs.activeWhen,
         side: this.resolveOrderProgramSide(intent.mode),
         sidePolicy: this.resolveOrderProgramSidePolicy(intent.mode),
         priceSource: 'level_set',
-        levelSetRef,
+        levelSetRef: levelSetRefs.levelSetRef,
         tickPolicy: 'round',
         quantity: this.resolveOrderProgramQuantity(intent, levelCount),
         orderType: 'limit',
@@ -243,6 +240,34 @@ export class CanonicalSpecV2IrCompilerService {
     })
   }
 
+  private ensureOrderProgramLevelSet(
+    context: CompileContext,
+    intent: CanonicalOrderProgramIntent,
+    levelCount: number,
+  ): { levelSetRef: string, activeWhen: string } {
+    if (intent.levelSet.mode === 'centered_percent_range') {
+      const centerRef = this.ensureOrderProgramCenterSeries(context, intent)
+      const levelSetRef = this.ensureCenteredContractLevelSet(context, intent, levelCount, centerRef)
+      return {
+        levelSetRef,
+        activeWhen: this.ensureOrderProgramActiveLevelSetPredicate(context, intent, levelSetRef),
+      }
+    }
+
+    const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : null
+    const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : null
+    if (lower === null || upper === null) {
+      throw new Error(`static_order_program_level_set_bounds_required:${intent.id}`)
+    }
+
+    const lowerRef = this.ensureConstSeries(context, lower)
+    const upperRef = this.ensureConstSeries(context, upper)
+    return {
+      levelSetRef: this.ensureContractLevelSet(context, intent, levelCount, lowerRef, upperRef),
+      activeWhen: this.ensureOrderProgramActiveRangePredicate(context, intent, lowerRef, upperRef),
+    }
+  }
+
   private ensureContractLevelSet(
     context: CompileContext,
     intent: CanonicalOrderProgramIntent,
@@ -252,11 +277,13 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     const spacingMode = intent.levelSet.spacingMode === 'geometric' ? 'GEOMETRIC_LEVEL_SET' : 'ARITHMETIC_LEVEL_SET'
     const spacing = this.resolveOrderProgramSpacing(intent, levelCount)
+    const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : 0
+    const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : lower
     const id = [
       intent.id,
       intent.levelSet.spacingMode,
-      this.normalizeNumberToken(intent.levelSet.lower),
-      this.normalizeNumberToken(intent.levelSet.upper),
+      this.normalizeNumberToken(lower),
+      this.normalizeNumberToken(upper),
       levelCount,
       this.normalizeNumberToken(spacing.value),
     ].join('_').replace(/\W+/g, '_')
@@ -281,6 +308,43 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
+  private ensureCenteredContractLevelSet(
+    context: CompileContext,
+    intent: CanonicalOrderProgramIntent,
+    levelCount: number,
+    centerRef: string,
+  ): string {
+    const spacingMode = intent.levelSet.spacingMode === 'geometric' ? 'GEOMETRIC_LEVEL_SET' : 'ARITHMETIC_LEVEL_SET'
+    const spacing = this.resolveOrderProgramSpacing(intent, levelCount)
+    const levelsBelowCenter = Math.floor((levelCount - 1) / 2)
+    const levelsAboveCenter = Math.max(0, levelCount - 1 - levelsBelowCenter)
+    const id = [
+      intent.id,
+      intent.levelSet.mode,
+      intent.levelSet.centerTiming ?? 'deployment',
+      intent.levelSet.centerSource ?? 'last_price',
+      this.normalizeNumberToken(intent.levelSet.halfRangePct ?? 0),
+      intent.levelSet.spacingMode,
+      levelCount,
+      this.normalizeNumberToken(spacing.value),
+    ].join('_').replace(/\W+/g, '_')
+
+    if (!context.levelSetMap.has(id)) {
+      context.levelSetMap.set(id, {
+        id,
+        kind: spacingMode,
+        anchorRef: centerRef,
+        spacing,
+        levelsPerSide: {
+          down: levelsBelowCenter,
+          up: levelsAboveCenter,
+        },
+      })
+    }
+
+    return id
+  }
+
   private ensureOrderProgramActiveRangePredicate(
     context: CompileContext,
     intent: CanonicalOrderProgramIntent,
@@ -292,6 +356,16 @@ export class CanonicalSpecV2IrCompilerService {
     const aboveLower = this.upsertPredicate(context.predicateMap, `${seed}_active_lower`, 'GTE', [closeRef, lowerRef])
     const belowUpper = this.upsertPredicate(context.predicateMap, `${seed}_active_upper`, 'LTE', [closeRef, upperRef])
     return this.upsertPredicate(context.predicateMap, `${seed}_active_range`, 'AND', [aboveLower, belowUpper])
+  }
+
+  private ensureOrderProgramActiveLevelSetPredicate(
+    context: CompileContext,
+    intent: CanonicalOrderProgramIntent,
+    levelSetRef: string,
+  ): string {
+    const closeRef = this.ensurePriceSeries(context, 'close')
+    const seed = intent.id.replace(/\W+/g, '_')
+    return this.upsertPredicate(context.predicateMap, `${seed}_active_level_set`, 'WITHIN_LEVEL_SET', [closeRef, levelSetRef])
   }
 
   private resolveOrderProgramSpacing(
@@ -306,17 +380,63 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     if (intent.levelSet.spacingMode === 'geometric') {
-      const ratio = Math.pow(intent.levelSet.upper / intent.levelSet.lower, 1 / Math.max(1, levelCount - 1)) - 1
+      if (intent.levelSet.mode === 'centered_percent_range') {
+        return {
+          mode: 'pct',
+          value: this.resolveCenteredOrderProgramSpacingPct(intent, levelCount),
+        }
+      }
+
+      const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : 1
+      const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : lower
+      const ratio = Math.pow(upper / lower, 1 / Math.max(1, levelCount - 1)) - 1
       return {
         mode: 'pct',
         value: Number((ratio * 100).toFixed(8)),
       }
     }
 
+    if (intent.levelSet.mode === 'centered_percent_range') {
+      return {
+        mode: 'pct',
+        value: this.resolveCenteredOrderProgramSpacingPct(intent, levelCount),
+      }
+    }
+
+    const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : 0
+    const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : lower
     return {
       mode: 'absolute',
-      value: Number(((intent.levelSet.upper - intent.levelSet.lower) / Math.max(1, levelCount - 1)).toFixed(8)),
+      value: Number(((upper - lower) / Math.max(1, levelCount - 1)).toFixed(8)),
     }
+  }
+
+  private resolveCenteredOrderProgramSpacingPct(
+    intent: CanonicalOrderProgramIntent,
+    levelCount: number,
+  ): number {
+    const halfRangePct = typeof intent.levelSet.halfRangePct === 'number' ? intent.levelSet.halfRangePct : 0
+    const levelsPerWiderSide = Math.max(1, Math.ceil((levelCount - 1) / 2))
+    return Number((halfRangePct / levelsPerWiderSide).toFixed(8))
+  }
+
+  private ensureOrderProgramCenterSeries(
+    context: CompileContext,
+    intent: CanonicalOrderProgramIntent,
+  ): string {
+    const centerSource = intent.levelSet.centerSource ?? 'last_price'
+    if (intent.levelSet.centerTiming !== 'runtime') {
+      return this.ensureDeploymentPriceSeries(context, this.resolveOrderProgramCenterField(centerSource))
+    }
+
+    return this.ensurePriceSeries(context, this.resolveOrderProgramCenterField(centerSource))
+  }
+
+  private resolveOrderProgramCenterField(centerSource: string): NonNullable<SeriesDef['field']> {
+    if (centerSource === 'open') return 'open'
+    if (centerSource === 'high') return 'high'
+    if (centerSource === 'low') return 'low'
+    return 'close'
   }
 
   private resolveOrderProgramQuantity(
@@ -992,6 +1112,23 @@ export class CanonicalSpecV2IrCompilerService {
         timeframe,
         field,
         ...(offsetBars > 0 ? { offsetBars } : {}),
+      })
+    }
+    return id
+  }
+
+  private ensureDeploymentPriceSeries(
+    context: CompileContext,
+    field: NonNullable<SeriesDef['field']>,
+    timeframe = context.timeframe,
+  ): string {
+    const id = `deployment_${field}_${timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'DEPLOYMENT_PRICE',
+        timeframe,
+        field,
       })
     }
     return id

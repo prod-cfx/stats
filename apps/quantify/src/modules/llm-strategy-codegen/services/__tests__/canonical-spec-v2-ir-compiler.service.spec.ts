@@ -1,7 +1,7 @@
 import type { CanonicalStrategyIrV1, OrderProgram, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticExpressionOperand, SemanticState } from '../../types/semantic-state'
-import { evaluateExprPool, evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
+import { evaluateExprPool, evaluateGuards, runDecisionPrograms, runOrderPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -186,6 +186,139 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.executionPolicy.timeInForce).toBe('gtc')
     expect(result.ir.portfolio.maxConcurrentPositions).toBeGreaterThan(1)
     expect(result.ir.portfolio.allowPyramiding).toBe(true)
+  })
+
+  it('compiles centered-percent contract order programs into non-empty level-set order programs', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'spot',
+          levelSet: {
+            mode: 'centered_percent_range',
+            centerTiming: 'deployment',
+            centerSource: 'last_price',
+            halfRangePct: 0.4,
+            gridCount: 10,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 10,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        kind: 'ARITHMETIC_LEVEL_SET',
+        anchorRef: 'deployment_close_1m',
+        spacing: { mode: 'pct', value: 0.08 },
+        levelsPerSide: { down: 4, up: 5 },
+      }),
+    ])
+    expect(result.ir.orderPrograms).toEqual([
+      expect.objectContaining({
+        kind: 'LIMIT_LADDER',
+        activeWhen: expect.any(String),
+        sidePolicy: 'spot_grid',
+        priceSource: 'level_set',
+        levelSetRef: expect.any(String),
+        quantity: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+        maxWorkingOrders: 10,
+      }),
+    ])
+
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
+    const exprValues = evaluateExprPool(
+      {
+        bars: [{ open: 100, high: 101, low: 99, close: 100 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99 },
+      } as any,
+      ast.exprPool as any,
+      ast.topology.exprOrder,
+      ast.executionModel as any,
+    )
+    const evaluatedLevels = levelSetExpr ? exprValues[levelSetExpr.id] : null
+    expect(evaluatedLevels).toEqual(expect.objectContaining({
+      levels: expect.arrayContaining([
+        expect.any(Number),
+      ]),
+    }))
+    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(10)
+    expect(Math.min(...(evaluatedLevels as { levels: number[] }).levels)).toBeLessThan(100)
+    expect(Math.max(...(evaluatedLevels as { levels: number[] }).levels)).toBeGreaterThan(100)
+
+    const breachedExprValues = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 100, low: 100, close: 100 },
+          { open: 101, high: 101, low: 101, close: 101 },
+        ],
+        baseTimeframeBar: { close: 101, open: 101, high: 101, low: 101 },
+      } as any,
+      ast.exprPool as any,
+      ast.topology.exprOrder,
+      ast.executionModel as any,
+    )
+    const breachedOrderState = runOrderPrograms(
+      {
+        bars: [
+          { open: 100, high: 100, low: 100, close: 100 },
+          { open: 101, high: 101, low: 101, close: 101 },
+        ],
+        baseTimeframeBar: { close: 101, open: 101, high: 101, low: 101 },
+      } as any,
+      ast.orderPrograms as any,
+      breachedExprValues,
+      {
+        strategyHalt: false,
+        blockNewEntry: false,
+        forceExit: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ast.topology.orderProgramOrder,
+      ast.executionModel as any,
+    )
+    expect(breachedOrderState.workingOrders).toHaveLength(0)
+    expect(breachedOrderState.cancelledProgramIds).toEqual(ast.topology.orderProgramOrder)
   })
 
   it.each([

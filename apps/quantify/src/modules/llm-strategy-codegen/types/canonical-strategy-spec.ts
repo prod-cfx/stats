@@ -50,8 +50,12 @@ export interface CanonicalOrderProgramIntent {
   kind: 'contract_order_program'
   mode: 'spot' | 'perp_long' | 'perp_short' | 'perp_neutral'
   levelSet: {
-    lower: number
-    upper: number
+    mode?: 'static_range' | 'centered_percent_range'
+    lower?: number
+    upper?: number
+    centerTiming?: 'deployment' | 'runtime'
+    centerSource?: string
+    halfRangePct?: number
     gridCount?: number
     spacingPct?: number
     spacingMode: 'arithmetic' | 'geometric'

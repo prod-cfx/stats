@@ -451,6 +451,142 @@ describe('canonicalSpecBuilderService', () => {
     expect(canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))).not.toContain('CLOSE_LONG')
   })
 
+  it('projects centered-percent contract order programs without requiring numeric bounds', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'contract-centered-price-levels',
+          key: 'contract.price_levels.centered',
+          phase: 'entry',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {},
+          contracts: [{
+            id: 'contract-centered-price-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                mode: 'centered_percent_range',
+                centerTiming: 'deployment',
+                centerSource: 'last_price',
+                halfRangePct: 0.4,
+                gridCount: 10,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'contract-limit-ladder',
+          key: 'contract.limit_ladder',
+          status: 'locked',
+          source: 'user_explicit',
+          contracts: [{
+            id: 'contract-limit-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: {
+                orderType: 'limit',
+                timeInForce: 'gtc',
+                recycleOnFill: true,
+                cancelOnStop: true,
+              },
+            }],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+        contracts: [{
+          id: 'contract-capital',
+          kind: 'position',
+          capabilities: [{
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: { value: 10, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      },
+    })
+    state.contextSlots.exchange = {
+      slotKey: 'context.exchange',
+      fieldPath: 'exchange',
+      value: 'okx',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '交易所',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = {
+      slotKey: 'context.symbol',
+      fieldPath: 'symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '交易标的',
+      affectsExecution: true,
+    }
+    state.contextSlots.marketType = {
+      slotKey: 'context.marketType',
+      fieldPath: 'marketType',
+      value: 'spot',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '市场类型',
+      affectsExecution: true,
+    }
+
+    const canonicalSpec = service.buildFromSemanticState(state)
+
+    expect(canonicalSpec.orderPrograms).toHaveLength(1)
+    expect(canonicalSpec.orderPrograms[0]).toEqual(expect.objectContaining({
+      kind: 'contract_order_program',
+      mode: 'spot',
+      levelSet: {
+        mode: 'centered_percent_range',
+        centerTiming: 'deployment',
+        centerSource: 'last_price',
+        halfRangePct: 0.4,
+        gridCount: 10,
+        spacingMode: 'arithmetic',
+      },
+      budget: {
+        mode: 'per_order_quote',
+        value: 10,
+        asset: 'USDT',
+      },
+      orderType: 'limit',
+      recycleOnFill: true,
+      cancelOnStop: true,
+    }))
+  })
+
   it.each([
     [
       'original order',
@@ -1324,12 +1460,24 @@ describe('canonicalSpecBuilderService', () => {
       '在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金',
     )
 
-    expect(semanticPatch.position).toEqual({
+    expect(semanticPatch.position).toEqual(expect.objectContaining({
       mode: 'fixed_ratio',
       value: 0.1,
       sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
       positionMode: 'long_only',
-    })
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'position',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'position_sizing',
+            }),
+          ]),
+        }),
+      ]),
+    }))
   })
 
   it('fills default entry-price basis for stop-loss and take-profit when checklist omits them', () => {

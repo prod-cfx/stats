@@ -118,10 +118,19 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private compileOrderPrograms(ir: CanonicalStrategyIrV1): OrderProgramNode[] {
+    const exprIdIndex = this.buildExprIdIndex(
+      ir,
+      this.orderedSeries(ir),
+      this.orderedLevelSets(ir),
+      this.orderedPredicates(ir),
+    )
     return ir.orderPrograms.map((program, index) => ({
       id: `order_${String(index + 1).padStart(2, '0')}_${program.id}`,
       sourceRef: program.id,
-      payload: program,
+      payload: {
+        ...program,
+        activeWhen: this.exprIdFor(program.activeWhen, exprIdIndex),
+      },
     }))
   }
 
