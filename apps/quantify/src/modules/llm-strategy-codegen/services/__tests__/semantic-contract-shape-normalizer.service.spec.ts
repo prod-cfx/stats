@@ -43,6 +43,27 @@ describe('SemanticContractShapeNormalizerService', () => {
     }])
   })
 
+  it('normalizes centered total range percent into half range percent and preserves density', () => {
+    const result = service.normalizeLevelSetShape({
+      mode: 'centered_percent_range',
+      centerSource: 'last_price',
+      totalRangePct: 10,
+      gridCount: 10,
+    })
+
+    expect(result).toEqual({
+      status: 'valid',
+      shape: {
+        mode: 'centered_percent_range',
+        centerSource: 'last_price',
+        halfRangePct: 5,
+        gridCount: 10,
+        spacingMode: 'arithmetic',
+      },
+      openSlots: [],
+    })
+  })
+
   it('reports a spacing conflict when grid count and absolute spacing disagree', () => {
     const result = service.normalizeLevelSetShape({
       lower: 78800,

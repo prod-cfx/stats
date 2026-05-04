@@ -89,7 +89,7 @@ export class SemanticContractShapeNormalizerService {
     options: ContractShapeNormalizationOptions,
   ): ContractShapeNormalizationResult {
     const centerSource = readShapeString(input, 'centerSource')
-    const halfRangePct = readShapeNumber(input, 'halfRangePct')
+    const halfRangePct = resolveHalfRangePct(input)
     if (centerSource === null || halfRangePct === null || halfRangePct <= 0) {
       return { status: 'invalid', shape: {}, openSlots: [] }
     }
@@ -153,6 +153,17 @@ function hasSpacingConflict(shape: SemanticCapabilityShape, lower: number, upper
   }
 
   return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
+}
+
+function resolveHalfRangePct(shape: SemanticCapabilityShape): number | null {
+  const halfRangePct = readShapeNumber(shape, 'halfRangePct')
+  if (halfRangePct !== null) {
+    return halfRangePct
+  }
+
+  const totalRangePct = readShapeNumber(shape, 'totalRangePct')
+
+  return totalRangePct !== null && totalRangePct > 0 ? totalRangePct / 2 : null
 }
 
 function hasPositiveDensity(shape: SemanticCapabilityShape): boolean {
