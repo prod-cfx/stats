@@ -1736,6 +1736,50 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('marks non-divisible absolute grid spacing as an open spacing conflict', () => {
+    const patch = service.extract('价格区间 78800-81450，每格价格间距 260，每格下单资金 500 USDT，部署后立即创建限价挂单')
+
+    const trigger = patch.triggers?.find(item => item.key === 'grid.range_rebalance')
+    const gridShape = trigger?.contracts?.[0]?.capabilities.find(capability => capability.object === 'level_set')?.shape
+
+    expect(trigger).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'contract.shape.price.level_set.spacing_conflict',
+          fieldPath: 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape',
+          status: 'open',
+          affectsExecution: true,
+          questionHint: '价格区间无法按每格间距整除，请调整间距或格数。',
+        }),
+      ]),
+    }))
+    expect(gridShape).toEqual(expect.objectContaining({
+      mode: 'fixed_range',
+      lower: 78800,
+      upper: 81450,
+      absoluteSpacing: 260,
+    }))
+    expect(gridShape).not.toHaveProperty('gridCount')
+    expect(trigger?.openSlots?.length).toBeGreaterThan(0)
+  })
+
+  it('keeps divisible absolute grid spacing ready with derived grid count', () => {
+    const patch = service.extract('价格区间 78800-81400，每格价格间距 260，每格下单资金 500 USDT，部署后立即创建限价挂单')
+
+    const trigger = patch.triggers?.find(item => item.key === 'grid.range_rebalance')
+    const gridShape = trigger?.contracts?.[0]?.capabilities.find(capability => capability.object === 'level_set')?.shape
+
+    expect(trigger?.openSlots ?? []).toEqual([])
+    expect(gridShape).toEqual(expect.objectContaining({
+      mode: 'fixed_range',
+      lower: 78800,
+      upper: 81400,
+      absoluteSpacing: 260,
+      gridCount: 11,
+    }))
+  })
+
   it('keeps action contracts for fixed-range grid semantics without literal grid wording', () => {
     const patch = service.extract('价格区间 78800-81400，共10格，每格下单资金 500 USDT，部署后立即创建限价挂单')
 

@@ -11,6 +11,7 @@ import type {
   SemanticPositionSizingContract,
   SemanticRiskBasis,
   SemanticRiskBasisSource,
+  SemanticSlotState,
 } from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { PositionSizingContractService } from './position-sizing-contract.service'
@@ -22,6 +23,10 @@ type FixedGridRange = {
   lower: number
   upper: number
 }
+
+const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
+const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
+
 type SemanticAliasContext = {
   bollingerBandParams?: {
     period?: number
@@ -1103,6 +1108,10 @@ export class SemanticSeedExtractorService {
     const absoluteSpacingGridCount = explicitGridCount === null && gridIntervals === null && absoluteSpacing !== null
       ? this.deriveGridCountFromAbsoluteSpacing(fixedRange.lower, fixedRange.upper, absoluteSpacing)
       : null
+    const hasAbsoluteSpacingConflict = explicitGridCount === null
+      && gridIntervals === null
+      && absoluteSpacing !== null
+      && absoluteSpacingGridCount === null
     const shape: SemanticCapabilityShape = {
       mode: 'fixed_range',
       lower: fixedRange.lower,
@@ -1127,6 +1136,12 @@ export class SemanticSeedExtractorService {
       key: 'grid.range_rebalance',
       phase: 'entry',
       sideScope,
+      ...(hasAbsoluteSpacingConflict
+        ? {
+            status: 'open' as const,
+            openSlots: [this.buildLevelSetSpacingConflictOpenSlot()],
+          }
+        : {}),
       params: {
         rangeLower: fixedRange.lower,
         rangeUpper: fixedRange.upper,
@@ -1154,6 +1169,17 @@ export class SemanticSeedExtractorService {
         params: {},
       }],
     })
+  }
+
+  private buildLevelSetSpacingConflictOpenSlot(): SemanticSlotState {
+    return {
+      slotKey: LEVEL_SET_SPACING_CONFLICT_SLOT_KEY,
+      fieldPath: GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH,
+      status: 'open',
+      priority: 'core',
+      questionHint: '价格区间无法按每格间距整除，请调整间距或格数。',
+      affectsExecution: true,
+    }
   }
 
   private hasGridSemantics(segment: string): boolean {
