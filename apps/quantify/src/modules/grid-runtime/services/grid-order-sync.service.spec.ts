@@ -71,6 +71,7 @@ function createRepository() {
     markOrderPlanned: jest.fn().mockResolvedValue(true),
     markOrdersCanceled: jest.fn().mockResolvedValue(1),
     updateInstanceLastSyncAt: jest.fn().mockResolvedValue({ id: 'grid-1' }),
+    appendEvent: jest.fn().mockResolvedValue({ id: 'event-1' }),
     findStrategyAccountForRuntime: jest.fn().mockResolvedValue({ id: 'account-1' }),
     findTradeByExternalTradeId: jest.fn().mockResolvedValue(null),
   }
@@ -758,6 +759,62 @@ describe('GridOrderSyncService', () => {
         args: { exchangeId: 'okx', reason: 'OKX error 51000: Parameter px error' },
       }),
     }))
+  })
+
+  it('keeps runtime running and restores planned order when OKX rate limits submission', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+      createOrder({
+        id: 'planned-order-2',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(new Error('OKX order creation failed: OKX error 50011: Too Many Requests'))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(repository.markOrderSubmitting).toHaveBeenCalledTimes(1)
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith({
+      id: 'planned-order-1',
+      rawPayload: expect.objectContaining({
+        source: 'grid_order_sync',
+        execution: expect.objectContaining({
+          status: 'rate_limited',
+          clientOrderId: submittedClientOrderId,
+          reason: 'OKX order creation failed: OKX error 50011: Too Many Requests',
+        }),
+      }),
+    })
+    expect(repository.appendEvent).toHaveBeenCalledWith({
+      gridRuntimeInstanceId: 'grid-1',
+      eventType: 'runtime_rate_limited',
+      severity: 'warn',
+      status: 'RUNNING',
+      message: 'OKX order creation failed: OKX error 50011: Too Many Requests',
+      payload: expect.objectContaining({
+        orderId: 'planned-order-1',
+        clientOrderId: submittedClientOrderId,
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+      }),
+    })
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
   })
 
   it('cancels a just-created exchange order when local open CAS loses to stop', async () => {

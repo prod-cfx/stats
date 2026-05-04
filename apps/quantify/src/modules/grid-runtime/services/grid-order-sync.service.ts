@@ -55,6 +55,16 @@ interface RuntimeOrder {
   status: string
 }
 
+interface RetryableRateLimitInput {
+  instance: RuntimeInstance
+  order?: RuntimeOrder
+  clientOrderId?: string | null
+  exchangeId: ExchangeId
+  marketType: MarketType
+  reason: string
+  error: unknown
+}
+
 interface RecordedGridFill {
   id: string
   exchangeFillId: string | null
@@ -208,6 +218,19 @@ export class GridOrderSyncService {
       const intent = this.buildOrderIntent(instance, exchangeId, marketType, order)
       const prepared = await this.tradingExecution.prepareIntent(intent, { constraints })
       if (prepared.status !== 'prepared') {
+        const error = 'error' in prepared ? prepared.error : null
+        if (this.isRetryableRateLimitFailure(error, prepared.reason)) {
+          await this.handleRetryableRateLimit({
+            instance,
+            order,
+            clientOrderId: null,
+            exchangeId,
+            marketType,
+            reason: prepared.reason,
+            error,
+          })
+          return
+        }
         await this.txEvents.withAfterCommit(async () =>
           this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
             orderId: order.id,
@@ -259,6 +282,19 @@ export class GridOrderSyncService {
       }
 
       if (submitted.status !== 'submitted') {
+        const error = 'error' in submitted ? submitted.error : null
+        if (this.isRetryableRateLimitFailure(error, submitted.reason)) {
+          await this.handleRetryableRateLimit({
+            instance,
+            order,
+            clientOrderId,
+            exchangeId,
+            marketType,
+            reason: submitted.reason,
+            error,
+          })
+          return
+        }
         await this.txEvents.withAfterCommit(async () =>
           this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
             orderId: order.id,
@@ -330,6 +366,17 @@ export class GridOrderSyncService {
         instance.exchangeAccountId,
       )
     } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      if (this.isRetryableRateLimitFailure(error, reason)) {
+        await this.handleRetryableRateLimit({
+          instance,
+          exchangeId,
+          marketType,
+          reason,
+          error,
+        })
+        return null
+      }
       await this.txEvents.withAfterCommit(async () =>
         this.stateMachine.markReconcileRequired(instance.id, 'order_constraints_unavailable', {
           exchangeId,
@@ -339,6 +386,67 @@ export class GridOrderSyncService {
         }))
       return null
     }
+  }
+
+  private isRetryableRateLimitFailure(error: unknown, reason?: string): boolean {
+    const candidates = [
+      reason,
+      error instanceof Error ? error.message : null,
+      this.getErrorString(error, 'code'),
+      this.getErrorString(error, 'name'),
+    ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+    return candidates.some((value) => {
+      const normalized = value.toLowerCase()
+      return normalized.includes('50011')
+        || normalized.includes('too many requests')
+        || normalized.includes('rate limit')
+        || normalized.includes('ratelimiterror')
+    })
+  }
+
+  private getErrorString(error: unknown, key: string): string | null {
+    if (typeof error !== 'object' || error === null || !(key in error)) return null
+    const value = (error as Record<string, unknown>)[key]
+    return typeof value === 'string' ? value : null
+  }
+
+  private async handleRetryableRateLimit(input: RetryableRateLimitInput): Promise<void> {
+    const serializedError = input.error == null ? null : this.serializeError(input.error)
+    const payload = this.toJsonValue({
+      source: 'grid_order_sync',
+      orderId: input.order?.id ?? null,
+      clientOrderId: input.clientOrderId ?? null,
+      exchangeId: input.exchangeId,
+      marketType: input.marketType,
+      symbol: input.instance.symbol,
+      reason: input.reason,
+      error: serializedError,
+      execution: {
+        status: 'rate_limited',
+        clientOrderId: input.clientOrderId ?? null,
+        reason: input.reason,
+        error: serializedError,
+      },
+    })
+
+    if (input.order && input.clientOrderId) {
+      const order = input.order
+      await this.txEvents.withAfterCommit(async () =>
+        this.repository.markOrderPlanned({
+          id: order.id,
+          rawPayload: payload,
+        }))
+    }
+    await this.txEvents.withAfterCommit(async () =>
+      this.repository.appendEvent({
+        gridRuntimeInstanceId: input.instance.id,
+        eventType: 'runtime_rate_limited',
+        severity: 'warn',
+        status: 'RUNNING',
+        message: input.reason,
+        payload,
+      }))
   }
 
   private buildOrderIntent(
