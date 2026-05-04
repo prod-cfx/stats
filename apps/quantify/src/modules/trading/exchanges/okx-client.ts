@@ -140,7 +140,7 @@ export class OkxClient extends BaseCexClient {
       if (input.price === undefined) {
         throw new ExchangeError('Limit order requires price')
       }
-      submittedPrice = this.toPrice(input.price, instrumentSpec)
+      submittedPrice = this.toPrice(input.price, input.side, instrumentSpec)
       body.px = submittedPrice
     }
 
@@ -674,13 +674,17 @@ export class OkxClient extends BaseCexClient {
     return this.formatNumber(steppedContracts)
   }
 
-  private toPrice(value: number, instrumentSpec?: OkxInstrumentSpecItem | null): string {
+  private toPrice(value: number, side: 'buy' | 'sell', instrumentSpec?: OkxInstrumentSpecItem | null): string {
     const tickSize = Number.parseFloat(instrumentSpec?.tickSz ?? '')
     if (!Number.isFinite(tickSize) || tickSize <= 0) {
       return Number(value).toString()
     }
 
-    return this.formatNumber(Math.round(Number(value) / tickSize) * tickSize)
+    const rawSteps = Number(value) / tickSize
+    const steppedPrice = side === 'buy'
+      ? Math.floor(rawSteps + Number.EPSILON) * tickSize
+      : Math.ceil(rawSteps - Number.EPSILON) * tickSize
+    return this.formatNumberToStepPrecision(steppedPrice, instrumentSpec?.tickSz)
   }
 
   private mapOrderFromResponse(
@@ -746,6 +750,12 @@ export class OkxClient extends BaseCexClient {
 
   private formatNumber(value: number): string {
     return Number(value.toFixed(12)).toString()
+  }
+
+  private formatNumberToStepPrecision(value: number, step?: string): string {
+    const decimalPart = String(step ?? '').split('.')[1] ?? ''
+    const precision = Math.min(decimalPart.replace(/0+$/, '').length, 12)
+    return Number(value.toFixed(precision)).toString()
   }
 
   private async getInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
