@@ -756,6 +756,103 @@ describe('okxClient', () => {
     expect(order.amount).toBeCloseTo(0.0013)
   })
 
+  it('retries OKX perp orders without posSide when account rejects long/short position side', async () => {
+    const submittedBodies: Record<string, unknown>[] = []
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      if (url.pathname === '/api/v5/public/instruments') {
+        return new Response(JSON.stringify({
+          data: [
+            {
+              instId: 'BTC-USDT-SWAP',
+              ctVal: '0.01',
+              lotSz: '0.01',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      const rawBody = typeof init?.body === 'string' ? JSON.parse(init.body) : {}
+      submittedBodies.push(rawBody)
+
+      if (submittedBodies.length === 1) {
+        expect(rawBody).toMatchObject({
+          instId: 'BTC-USDT-SWAP',
+          instType: 'SWAP',
+          side: 'buy',
+          ordType: 'limit',
+          tdMode: 'cross',
+          posSide: 'long',
+        })
+
+        return new Response(JSON.stringify({
+          data: [
+            {
+              ordId: '',
+              sCode: '51000',
+              sMsg: 'Parameter posSide error',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+
+      expect(rawBody).toMatchObject({
+        instId: 'BTC-USDT-SWAP',
+        instType: 'SWAP',
+        side: 'buy',
+        ordType: 'limit',
+        tdMode: 'cross',
+      })
+      expect(rawBody).not.toHaveProperty('posSide')
+
+      return new Response(JSON.stringify({
+        data: [
+          {
+            ordId: 'perp-net-mode-order',
+            sCode: '0',
+            sMsg: '',
+            instId: 'BTC-USDT-SWAP',
+            state: 'live',
+            side: 'buy',
+            ordType: 'limit',
+            px: '79200',
+            sz: '2.14',
+            fillSz: '0',
+          },
+        ],
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    const order = await new OkxClient('perp', {
+      apiKey: 'test-api-key',
+      secret: 'test-secret',
+      passphrase: 'test-passphrase',
+      isTestnet: true,
+    }).createOrder({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.0214,
+      price: 79200,
+      tdMode: 'cross',
+      posSide: 'long',
+    })
+
+    expect(order.id).toBe('perp-net-mode-order')
+    expect(submittedBodies).toHaveLength(2)
+  })
+
   it('preserves OKX perp tdMode, posSide, and reduceOnly order params', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
