@@ -352,12 +352,21 @@ export class PositionSyncService {
     syncExchangeId: ExchangeId,
     syncMarketType: MarketType,
   ): boolean {
-    if (localPos.exchangeId && localPos.exchangeId !== syncExchangeId) {
-      return false
-    }
+    if (localPos.exchangeId) {
+      if (localPos.exchangeId !== syncExchangeId) {
+        return false
+      }
 
-    if (localPos.marketType) {
-      return localPos.marketType === syncMarketType
+      if (localPos.marketType) {
+        return localPos.marketType === syncMarketType
+      }
+
+      const metadataMarket = this.readMetadataMarket(localPos.metadata)
+      if (metadataMarket) {
+        return metadataMarket === `${syncExchangeId}:${syncMarketType}`
+      }
+
+      return true
     }
 
     const metadataMarket = this.readMetadataMarket(localPos.metadata)
@@ -365,7 +374,7 @@ export class PositionSyncService {
       return metadataMarket === `${syncExchangeId}:${syncMarketType}`
     }
 
-    return true
+    return false
   }
 
   private isSpotPosition(

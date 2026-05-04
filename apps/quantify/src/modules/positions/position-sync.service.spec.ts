@@ -276,4 +276,47 @@ describe('positionSyncService', () => {
       quantity: '0.01',
     }))
   })
+
+  it('does not close positions whose exchange ownership is unknown during perp sync', async () => {
+    const positionsRepository = {
+      findOpenByAccount: jest.fn().mockResolvedValue([{
+        id: 'position-unknown-exchange-1',
+        userStrategyAccountId: 'strategy-account-1',
+        symbol: 'BTCUSDT:PERP',
+        positionSide: 'LONG',
+        quantity: '0.01',
+        avgEntryPrice: '95000',
+        exchangeId: null,
+        marketType: 'perp',
+        metadata: null,
+      }]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.localPositions).toBe(0)
+    expect(result.differences).toEqual([])
+    expect(positionsService.recordTrade).not.toHaveBeenCalled()
+  })
 })
