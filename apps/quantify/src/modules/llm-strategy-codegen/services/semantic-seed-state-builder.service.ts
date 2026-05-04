@@ -234,13 +234,20 @@ export class SemanticSeedStateBuilderService {
     }
 
     const openSlots = this.readOpenSlots(update.openSlots)
+    const sizingProvided = this.hasOwnProperty(update, 'sizing')
     const positionMode = this.normalizePositionSideMode(update.positionMode) ?? update.positionMode
     const normalizedMode = this.normalizePositionSizingMode(update.mode)
     const evidence = this.readEvidence(update.evidence)
     const contracts = this.readContracts(update.contracts)
       ?? (this.hasOwnProperty(update, 'contracts')
         ? null
-        : this.synthesizePositionContracts({ sizing, mode: normalizedMode, value: update.value, positionMode }))
+        : this.synthesizePositionContracts({
+          sizing,
+          sizingProvided,
+          mode: normalizedMode,
+          value: update.value,
+          positionMode,
+        }))
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -368,9 +375,7 @@ export class SemanticSeedStateBuilderService {
     }
 
     if (key === 'price.range_position_lte' || key === 'price.range_position_gte') {
-      return this.hasFiniteNumber(params.value)
-        || this.hasFiniteNumber(params.valuePct)
-        || this.hasFiniteNumber(params.threshold)
+      return this.hasPositiveFiniteNumber(params.lookbackBars) && this.hasFiniteNumber(params.thresholdPct)
     }
 
     if (key === 'trend.direction' || key === 'market.regime' || key === 'volatility.state') {
@@ -414,6 +419,10 @@ export class SemanticSeedStateBuilderService {
 
   private isFiniteNonZeroNumber(value: unknown): value is number {
     return this.hasFiniteNumber(value) && value !== 0
+  }
+
+  private hasPositiveFiniteNumber(value: unknown): value is number {
+    return this.hasFiniteNumber(value) && value > 0
   }
 
   private buildTriggerCapability(
@@ -481,6 +490,10 @@ export class SemanticSeedStateBuilderService {
     params: Record<string, unknown>,
     index: number,
   ): SemanticAtomContract[] | null {
+    if (!this.canSynthesizeRiskContract(key, params)) {
+      return null
+    }
+
     const object = this.resolveRiskContractObject(key)
     if (!object) {
       return null
@@ -500,6 +513,25 @@ export class SemanticSeedStateBuilderService {
       },
       params,
     })]
+  }
+
+  private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
+    if (
+      key === 'risk.stop_loss_pct'
+      || key === 'risk.take_profit_pct'
+      || key === 'risk.max_drawdown_pct'
+      || key === 'risk.max_single_loss_pct'
+    ) {
+      return this.hasPositiveFiniteNumber(params.valuePct)
+    }
+
+    if (key === 'risk.condition_expression') {
+      return this.isRecord(params.condition)
+        && this.isRecord(params.effect)
+        && Boolean(this.readTrimmedString(params.scope))
+    }
+
+    return false
   }
 
   private resolveRiskContractObject(key: string): string | null {
@@ -523,11 +555,17 @@ export class SemanticSeedStateBuilderService {
 
   private synthesizePositionContracts(position: {
     sizing: SemanticPositionSizingContract | null
+    sizingProvided: boolean
     mode: string | null
     value: number
     positionMode: string
   }): SemanticAtomContract[] | null {
-    if (!position.mode || !this.isSupportedPositionSideMode(position.positionMode)) {
+    if (
+      !position.mode
+      || !this.hasPositiveFiniteNumber(position.value)
+      || !this.isSupportedPositionSideMode(position.positionMode)
+      || (position.sizingProvided && !position.sizing)
+    ) {
       return null
     }
 

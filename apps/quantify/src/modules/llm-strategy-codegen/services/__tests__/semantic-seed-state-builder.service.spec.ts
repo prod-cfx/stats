@@ -89,9 +89,32 @@ describe('SemanticSeedStateBuilderService', () => {
           fastPeriod: 20,
           slowPeriod: 50,
         },
+      }, {
+        key: 'price.range_position_lte',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          lookbackBars: 20,
+          thresholdPct: 45,
+        },
       }],
       actions: [{ key: 'open_long' }],
-      risk: [{ key: 'risk.max_drawdown_pct', params: { valuePct: 10 } }],
+      risk: [{
+        key: 'risk.max_drawdown_pct',
+        params: { valuePct: 10 },
+      }, {
+        key: 'risk.condition_expression',
+        params: {
+          condition: {
+            kind: 'predicate',
+            left: { kind: 'position', field: 'pnl_pct' },
+            op: 'LTE',
+            right: { kind: 'constant', value: -5 },
+          },
+          effect: { type: 'close_position' },
+          scope: 'current_position',
+        },
+      }],
       position: {
         mode: 'fixed_ratio',
         value: 0.1,
@@ -132,6 +155,15 @@ describe('SemanticSeedStateBuilderService', () => {
         })],
       })],
     }))
+    expect(state?.triggers[3]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({ lookbackBars: 20, thresholdPct: 45 }),
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          shape: expect.objectContaining({ key: 'price.range_position_lte', lookbackBars: 20, thresholdPct: 45 }),
+        })],
+      })],
+    }))
     expect(state?.actions[0]).toEqual(expect.objectContaining({
       status: 'locked',
       source: 'user_explicit',
@@ -157,6 +189,20 @@ describe('SemanticSeedStateBuilderService', () => {
           verb: 'enforce',
           object: 'max_drawdown',
           shape: expect.objectContaining({ key: 'risk.max_drawdown_pct', valuePct: 10 }),
+        })],
+      })],
+    }))
+    expect(state?.risk[1]).toEqual(expect.objectContaining({
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        kind: 'risk',
+        capabilities: [expect.objectContaining({
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'risk_condition',
+          shape: expect.objectContaining({ key: 'risk.condition_expression', scope: 'current_position' }),
         })],
       })],
     }))
@@ -215,6 +261,10 @@ describe('SemanticSeedStateBuilderService', () => {
         key: 'price.percent_change',
         phase: 'entry',
         params: { valuePct: 0 },
+      }, {
+        key: 'price.range_position_lte',
+        phase: 'entry',
+        params: { valuePct: 45 },
       }],
     })
 
@@ -225,6 +275,41 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(state?.triggers[1]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[1].contracts')],
+    }))
+    expect(state?.triggers[2]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('triggers[2].contracts')],
+    }))
+  })
+
+  it('keeps incomplete lightweight risk patches open until required params are supplied', () => {
+    const state = service.build({
+      risk: [{
+        key: 'risk.stop_loss_pct',
+        params: {},
+      }, {
+        key: 'risk.max_drawdown_pct',
+        params: { valuePct: 0 },
+      }, {
+        key: 'risk.condition_expression',
+        params: {
+          condition: { kind: 'predicate' },
+          scope: 'current_position',
+        },
+      }],
+    })
+
+    expect(state?.risk[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('risk[0].contracts')],
+    }))
+    expect(state?.risk[1]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('risk[1].contracts')],
+    }))
+    expect(state?.risk[2]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('risk[2].contracts')],
     }))
   })
 
@@ -285,6 +370,25 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(state?.position).toEqual(expect.objectContaining({
       status: 'open',
       mode: 'rebalance_ratio',
+      positionMode: 'long_only',
+      openSlots: [expectContractRequiredSlot('position.contracts')],
+    }))
+    expect(state?.position?.contracts).toBeUndefined()
+  })
+
+  it('keeps zero-value position updates open until valid sizing is supplied', () => {
+    const state = service.build({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long',
+      },
+    })
+
+    expect(state?.position).toEqual(expect.objectContaining({
+      status: 'open',
+      mode: 'fixed_ratio',
+      value: 0,
       positionMode: 'long_only',
       openSlots: [expectContractRequiredSlot('position.contracts')],
     }))
