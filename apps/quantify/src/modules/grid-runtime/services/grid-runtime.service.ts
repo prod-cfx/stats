@@ -373,6 +373,9 @@ export class GridRuntimeService {
       )
     }
     catch {
+      if (this.normalizeExchangeId(input.exchangeId) === 'okx') {
+        throw this.invalidGridRuntimeConfig('grid_runtime_instrument_constraints_unavailable')
+      }
       return null
     }
     if (
@@ -513,6 +516,10 @@ export class GridRuntimeService {
       return 'perp'
     }
     throw this.invalidGridRuntimeConfig('grid_runtime_invalid_market_type')
+  }
+
+  private normalizeExchangeId(value: string): string {
+    return value.trim().toLowerCase()
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {

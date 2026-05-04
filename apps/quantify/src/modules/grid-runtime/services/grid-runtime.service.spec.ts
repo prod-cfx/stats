@@ -438,6 +438,31 @@ describe('GridRuntimeService', () => {
     expect(repository.createInstanceWithPlan).toHaveBeenCalled()
   })
 
+  it('does not fall back to AST execution constraints when OKX constraints are unavailable', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-okx-no-fallback-1' }) }
+    const tradingService = createTradingService()
+    tradingService.getInstrumentConstraints.mockRejectedValue(new Error('OKX constraints unavailable'))
+    const { service, planner } = createService(repository, { tradingService })
+
+    await expect(service.createFromDeployment({
+      strategyInstanceId: 'strategy-okx-no-fallback-1',
+      publishedSnapshotId: 'snapshot-okx-no-fallback-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      astSnapshot: withExecutionModel(createAstSnapshot(), {
+        tickSize: 0.01,
+        lotSize: 0.000001,
+        minQuantity: 0.0001,
+      }),
+      currentPrice: '100',
+    })).rejects.toThrow('grid_runtime_instrument_constraints_unavailable')
+    expect(planner.planInitialOrders).not.toHaveBeenCalled()
+    expect(repository.createInstanceWithPlan).not.toHaveBeenCalled()
+  })
+
   it('rejects AST fallback when min quantity is missing', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-ast-missing-min-1' }) }
     const tradingService = createTradingService()
