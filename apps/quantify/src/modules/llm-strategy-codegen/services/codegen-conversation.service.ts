@@ -1196,8 +1196,11 @@ export class CodegenConversationService {
       return this.returnPersistedSnapshotResponse(session, sessionUserId)
     }
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
+      ? baseClarificationState
+      : this.resolveSemanticClarificationArtifacts(currentSemanticState).clarificationState
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
-      baseClarificationState,
+      activeClarificationState,
       dto.message,
       dto.clarificationAnswers,
     )
@@ -1210,7 +1213,7 @@ export class CodegenConversationService {
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
       this.applySemanticClarificationAnswers(
         currentSemanticState,
-        baseClarificationState,
+        activeClarificationState,
         effectiveClarificationAnswers,
       ),
     )
@@ -1918,12 +1921,15 @@ export class CodegenConversationService {
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
     const persistedSemanticState = this.readSemanticState(session.semanticState)
+    const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
+      ? baseClarificationState
+      : this.resolveSemanticClarificationArtifacts(persistedSemanticState).clarificationState
     const persistedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
       session.latestSpecDesc,
       this.buildLegacyLogicSnapshotProjectionForCompatibility(persistedSemanticState, {}),
     )
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
-      baseClarificationState,
+      activeClarificationState,
       dto.message,
       dto.clarificationAnswers,
     )
@@ -1933,7 +1939,7 @@ export class CodegenConversationService {
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
       this.applySemanticClarificationAnswers(
         persistedSemanticState,
-        baseClarificationState,
+        activeClarificationState,
         effectiveClarificationAnswers,
       ),
     )
@@ -5923,6 +5929,13 @@ export class CodegenConversationService {
         priority: typeof item.priority === 'number' ? item.priority : this.estimateBlockingReasonPriority(item.reason),
         question: item.question,
       }))
+  }
+
+  private hasPendingBlockingClarification(
+    clarificationState: Pick<StrategyClarificationState, 'status' | 'items'> | null,
+  ): clarificationState is Pick<StrategyClarificationState, 'status' | 'items'> {
+    return clarificationState?.status === 'NEEDS_CLARIFICATION'
+      && clarificationState.items.some(item => item.blocking && item.status === 'pending')
   }
 
   private estimateBlockingReasonPriority(

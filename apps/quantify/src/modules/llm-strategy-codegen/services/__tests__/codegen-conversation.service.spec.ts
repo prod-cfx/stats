@@ -10026,6 +10026,177 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('enters confirm gate after boundary guard clarification closes a real spot grid without legacy entry and exit rules', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            sideMode: 'long_only',
+            breakoutAction: 'pause',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                mode: 'centered_percent_range',
+                centerTiming: 'deployment',
+                centerSource: 'last_trade',
+                halfRangePct: 0.4,
+                gridCount: 10,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-order-program',
+            kind: 'action',
+            capabilities: [
+              {
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+                shape: {
+                  orderType: 'limit',
+                  timeInForce: 'gtc',
+                  recycleOnFill: true,
+                  pairingPolicy: 'adjacent_level',
+                },
+              },
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 10, asset: 'USDT' },
+              },
+            ],
+            requires: [
+              { domain: 'price', verb: 'define', object: 'level_set' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      risk: [
+        {
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'contract.requirement.guard.enforce.boundary_cancel',
+            fieldPath: 'risk[risk-boundary-stop].contracts[risk-contract-boundary-stop].requires.guard.enforce.boundary_cancel',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '当价格突破上下边界后，策略是否停止并撤销未成交订单且不再重新部署/不再创建新网格？',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        asset: 'USDT',
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '1m',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-okx-real-grid-boundary-guard',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'NEEDS_CLARIFICATION', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-okx-real-grid-boundary-guard', {
+      userId: 'u1',
+      message: '当价格突破上下边界时，策略是“停止并撤销未成交订单”后就不再重新部署/不再创建新网格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).not.toContain('补充入场和出场')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(updatePayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-boundary-stop',
+        status: 'locked',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'boundary_cancel',
+            shape: expect.objectContaining({
+              onBreach: 'HALT_STRATEGY',
+              cancelOrders: true,
+              cancelScope: 'unfilled_grid_orders',
+              regrid: false,
+            }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
