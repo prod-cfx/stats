@@ -20,6 +20,7 @@ import type {
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { normalizeRiskSemantic } from './semantic-state-normalization'
+import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 type SemanticPatchRecord = Record<string, unknown>
 type ContextField = 'exchange' | 'symbol' | 'marketType' | 'timeframe'
@@ -534,38 +535,13 @@ export class SemanticSeedStateBuilderService {
     }
 
     if (key === 'risk.condition_expression') {
-      return this.isValidRiskConditionExpression(params.condition)
-        && this.isRecord(params.effect)
-        && Boolean(this.readTrimmedString(params.effect.type))
-        && Boolean(this.readTrimmedString(params.scope))
-    }
-
-    return false
-  }
-
-  private isValidRiskConditionExpression(expression: unknown): boolean {
-    if (!this.isRecord(expression)) {
-      return false
-    }
-
-    if (expression.kind === 'predicate' || expression.kind === 'expression') {
-      return Boolean(this.readTrimmedString(expression.op))
-        && this.isRecord(expression.left)
-        && this.isRecord(expression.right)
-    }
-
-    if (expression.kind === 'AND' || expression.kind === 'OR') {
-      return Array.isArray(expression.children)
-        && expression.children.length > 0
-        && expression.children.every(child => this.isValidRiskConditionExpression(child))
-    }
-
-    if (expression.kind === 'NOT') {
-      if (Array.isArray(expression.children)) {
-        return expression.children.length === 1 && this.isValidRiskConditionExpression(expression.children[0])
-      }
-
-      return this.isValidRiskConditionExpression(expression.child)
+      return validateSemanticRiskContract({
+        key,
+        params: {
+          capabilityStatus: 'recognized_unsupported',
+          ...params,
+        },
+      }).ok
     }
 
     return false

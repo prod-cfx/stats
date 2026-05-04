@@ -315,6 +315,12 @@ describe('SemanticSeedStateBuilderService', () => {
   })
 
   it('keeps incomplete lightweight risk patches open until required params are supplied', () => {
+    const validCondition = {
+      kind: 'predicate',
+      left: { kind: 'position', field: 'pnl_pct' },
+      op: 'LTE',
+      right: { kind: 'constant', value: -5 },
+    }
     const state = service.build({
       risk: [{
         key: 'risk.stop_loss_pct',
@@ -326,6 +332,32 @@ describe('SemanticSeedStateBuilderService', () => {
         key: 'risk.condition_expression',
         params: {
           condition: { kind: 'predicate' },
+          effect: { type: 'close_position' },
+          scope: 'current_position',
+        },
+      }, {
+        key: 'risk.condition_expression',
+        params: {
+          condition: validCondition,
+          effect: { type: 'liquidate_everything' },
+          scope: 'current_position',
+        },
+      }, {
+        key: 'risk.condition_expression',
+        params: {
+          condition: validCondition,
+          effect: { type: 'close_position' },
+          scope: 'planet',
+        },
+      }, {
+        key: 'risk.condition_expression',
+        params: {
+          condition: {
+            kind: 'expression',
+            left: { kind: 'position', field: 'pnl_pct' },
+            op: 'LTE',
+            right: { kind: 'constant', value: -5 },
+          },
           effect: { type: 'close_position' },
           scope: 'current_position',
         },
@@ -343,6 +375,18 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(state?.risk[2]).toEqual(expect.objectContaining({
       status: 'open',
       openSlots: [expectContractRequiredSlot('risk[2].contracts')],
+    }))
+    expect(state?.risk[3]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('risk[3].contracts')],
+    }))
+    expect(state?.risk[4]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('risk[4].contracts')],
+    }))
+    expect(state?.risk[5]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('risk[5].contracts')],
     }))
   })
 

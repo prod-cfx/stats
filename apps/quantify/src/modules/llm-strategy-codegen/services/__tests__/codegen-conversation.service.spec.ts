@@ -3049,7 +3049,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               key: 'risk.condition_expression',
               params: {
                 condition: {
-                  kind: 'expression',
+                  kind: 'predicate',
                   op: 'LTE',
                   left: { kind: 'position', field: 'pnl_pct' },
                   right: { kind: 'constant', value: -12, unit: 'percent' },
@@ -9514,7 +9514,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           id: 'entry-dynamic-grid',
           key: 'price.range_position_lte',
           phase: 'entry',
-          params: { lookbackBars: 36, positionPct: 20 },
+          params: { lookbackBars: 36, thresholdPct: 20 },
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
@@ -9523,7 +9523,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           id: 'exit-dynamic-grid',
           key: 'price.range_position_gte',
           phase: 'exit',
-          params: { lookbackBars: 36, positionPct: 55 },
+          params: { lookbackBars: 36, thresholdPct: 55 },
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
