@@ -4514,11 +4514,44 @@ export class CodegenConversationService {
     if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') return {}
 
     const activeItem = clarificationState.items.find(item => item.blocking && item.status === 'pending')
-    if (!activeItem || (!activeItem.key.startsWith('semantic.') && !activeItem.key.startsWith('grid.'))) return {}
+    if (!activeItem) return {}
+    if (activeItem.key.startsWith('executionContext.')) {
+      return this.canBindFreeformExecutionContextAnswer(activeItem, normalizedMessage)
+        ? { [activeItem.key]: normalizedMessage }
+        : {}
+    }
+    if (!activeItem.key.startsWith('semantic.') && !activeItem.key.startsWith('grid.')) return {}
 
     return {
       [activeItem.key]: normalizedMessage,
     }
+  }
+
+  private canBindFreeformExecutionContextAnswer(
+    item: StrategyClarificationItem,
+    answer: string,
+  ): boolean {
+    const field = item.key.replace(/^executionContext\./u, '')
+    const normalized = answer.trim()
+    if (!normalized) return false
+
+    if (field === 'timeframe') {
+      return /^\d{1,4}\s*(?:m|min|分钟|h|小时|d|天|w|周)$/iu.test(normalized)
+    }
+
+    if (field === 'marketType') {
+      return /^(?:spot|perp|swap|contract)$/iu.test(normalized) || /现货|永续|合约/u.test(normalized)
+    }
+
+    if (field === 'exchange') {
+      return /^(?:okx|binance|hyperliquid)$/iu.test(normalized)
+    }
+
+    if (field === 'symbol') {
+      return /^[A-Z0-9]{2,20}(?:USDT|USDC|USD)$/iu.test(normalized)
+    }
+
+    return false
   }
 
   private readSemanticClarificationPhase(

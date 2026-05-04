@@ -6544,6 +6544,112 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(inferredAnswers).toEqual({})
   })
 
+  it('auto-binds parseable freeform execution-context answers to the active context slot', () => {
+    const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.timeframe',
+            reason: 'missing_timeframe',
+            field: 'timeframe',
+            blocking: true,
+            question: '请确认策略主周期（例如 15m 或 1h）。',
+            status: 'pending',
+          },
+        ],
+      },
+      '1m',
+    )
+
+    expect(inferredAnswers).toEqual({
+      'executionContext.timeframe': '1m',
+    })
+  })
+
+  it('locks an active timeframe slot from a freeform 1m reply before readiness evaluation', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+    })
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
+      id: 's-freeform-timeframe-clarification',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          key: 'executionContext.timeframe',
+          reason: 'missing_timeframe',
+          field: 'timeframe',
+          blocking: true,
+          question: '请确认策略主周期（例如 15m 或 1h）。',
+          status: 'pending',
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          slotId: JSON.stringify(['timeframe', 'contextSlots.timeframe']),
+        }],
+      },
+      constraintPack: {},
+    }))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-freeform-timeframe-clarification', {
+      userId: 'u1',
+      message: '1m',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(updatePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '1m',
+    }))
+    expect(result.assistantPrompt).not.toContain('主周期')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.timeframe',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not auto-bind unparseable freeform answers to execution-context slots', () => {
+    const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+      },
+      'MA50',
+    )
+
+    expect(inferredAnswers).toEqual({})
+  })
+
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
     mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-action-uniqueness',
