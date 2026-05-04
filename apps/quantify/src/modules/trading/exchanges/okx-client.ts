@@ -5,6 +5,7 @@ import type {
   PositionSide,
   TradeMode,
   UnifiedBalance,
+  UnifiedInstrumentConstraints,
   UnifiedOrder,
   UnifiedPosition,
   UnifiedTicker,
@@ -81,6 +82,7 @@ interface OkxInstrumentSpecItem {
   ctVal?: string
   lotSz?: string
   tickSz?: string
+  minSz?: string
 }
 
 export class OkxClient extends BaseCexClient {
@@ -429,6 +431,30 @@ export class OkxClient extends BaseCexClient {
     }
   }
 
+  async fetchInstrumentConstraints(symbol: string): Promise<UnifiedInstrumentConstraints> {
+    const instId = this.toInstrumentId(symbol, this.marketType)
+    const instrumentSpec = await this.fetchInstrumentSpec(instId)
+    if (this.marketType === 'perp' && (!instrumentSpec?.ctVal || !instrumentSpec.lotSz || !instrumentSpec.tickSz)) {
+      throw new ExchangeError(`OKX instrument constraints incomplete for ${instId}`)
+    }
+
+    return {
+      exchangeId: 'okx',
+      marketType: this.marketType,
+      symbol,
+      rawSymbol: instId,
+      priceTickSize: instrumentSpec?.tickSz ?? null,
+      quantityStepSize: instrumentSpec?.lotSz ?? null,
+      minQuantity: instrumentSpec?.minSz ?? null,
+      contractValue: instrumentSpec?.ctVal ?? null,
+      clientOrderId: {
+        maxLength: 32,
+        pattern: '^[A-Za-z0-9]+$',
+      },
+      raw: instrumentSpec ?? { instId },
+    }
+  }
+
   protected async signRequest(
     method: HttpMethod,
     path: string,
@@ -763,6 +789,18 @@ export class OkxClient extends BaseCexClient {
       return null
     }
 
+    const spec = await this.fetchInstrumentSpec(instId)
+    if (!spec?.ctVal) {
+      throw new ExchangeError(`OKX instrument spec missing contract value for ${instId}`)
+    }
+    return spec
+  }
+
+  private async fetchInstrumentSpec(instId: string): Promise<OkxInstrumentSpecItem | null> {
+    if (this.marketType !== 'perp') {
+      return null
+    }
+
     const cached = this.instrumentSpecCache.get(instId)
     if (cached) {
       return cached
@@ -773,11 +811,7 @@ export class OkxClient extends BaseCexClient {
       '/api/v5/public/instruments',
       { instType: 'SWAP', instId },
     ).then((res) => {
-      const spec = res.data[0]
-      if (!spec?.ctVal) {
-        throw new ExchangeError(`OKX instrument spec missing contract value for ${instId}`)
-      }
-      return spec
+      return res.data[0] ?? null
     })
 
     this.instrumentSpecCache.set(instId, promise)

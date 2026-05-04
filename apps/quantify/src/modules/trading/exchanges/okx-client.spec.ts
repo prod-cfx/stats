@@ -9,8 +9,15 @@ describe('okxClient', () => {
     jest.restoreAllMocks()
   })
 
-  function createClient() {
-    return new OkxClient('spot', {
+  function okJson(body: unknown): Response {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+
+  function createClient(options: { marketType?: 'spot' | 'perp' } = {}) {
+    return new OkxClient(options.marketType ?? 'spot', {
       apiKey: 'test-api-key',
       secret: 'test-secret',
       passphrase: 'test-passphrase',
@@ -263,6 +270,45 @@ describe('okxClient', () => {
         total: 4901.58222,
       },
     ])
+  })
+
+  it('returns OKX perp instrument constraints for execution admission', async () => {
+    const requests: Array<{ pathname: string; search: string }> = []
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      requests.push({ pathname: url.pathname, search: url.search })
+      if (url.pathname === '/api/v5/public/instruments') {
+        return okJson({
+          data: [{
+            instId: 'BTC-USDT-SWAP',
+            ctVal: '0.01',
+            lotSz: '1',
+            tickSz: '0.1',
+            minSz: '1',
+          }],
+        })
+      }
+      return okJson({ code: '0', data: [] })
+    }) as typeof fetch
+
+    const constraints = await createClient({ marketType: 'perp' }).fetchInstrumentConstraints?.('BTC/USDT:PERP')
+
+    expect(constraints).toEqual({
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC/USDT:PERP',
+      rawSymbol: 'BTC-USDT-SWAP',
+      priceTickSize: '0.1',
+      quantityStepSize: '1',
+      minQuantity: '1',
+      contractValue: '0.01',
+      clientOrderId: {
+        maxLength: 32,
+        pattern: '^[A-Za-z0-9]+$',
+      },
+      raw: expect.objectContaining({ instId: 'BTC-USDT-SWAP' }),
+    })
+    expect(requests.some(request => request.pathname === '/api/v5/public/instruments')).toBe(true)
   })
 
   it('converts perp base size to contract size when creating orders', async () => {
