@@ -265,6 +265,22 @@ describe('SemanticSeedStateBuilderService', () => {
         key: 'price.range_position_lte',
         phase: 'entry',
         params: { valuePct: 45 },
+      }, {
+        key: 'price.range_position_lte',
+        phase: 'entry',
+        params: { lookbackBars: 20, thresholdPct: 0 },
+      }, {
+        key: 'price.range_position_lte',
+        phase: 'entry',
+        params: { lookbackBars: 20, thresholdPct: -1 },
+      }, {
+        key: 'price.range_position_lte',
+        phase: 'entry',
+        params: { lookbackBars: 20, thresholdPct: 150 },
+      }, {
+        key: 'price.range_position_lte',
+        phase: 'entry',
+        params: { lookbackBars: 20.5, thresholdPct: 45 },
       }],
     })
 
@@ -280,6 +296,22 @@ describe('SemanticSeedStateBuilderService', () => {
       status: 'open',
       openSlots: [expectContractRequiredSlot('triggers[2].contracts')],
     }))
+    expect(state?.triggers[3]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('triggers[3].contracts')],
+    }))
+    expect(state?.triggers[4]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('triggers[4].contracts')],
+    }))
+    expect(state?.triggers[5]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('triggers[5].contracts')],
+    }))
+    expect(state?.triggers[6]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expectContractRequiredSlot('triggers[6].contracts')],
+    }))
   })
 
   it('keeps incomplete lightweight risk patches open until required params are supplied', () => {
@@ -294,6 +326,7 @@ describe('SemanticSeedStateBuilderService', () => {
         key: 'risk.condition_expression',
         params: {
           condition: { kind: 'predicate' },
+          effect: { type: 'close_position' },
           scope: 'current_position',
         },
       }],

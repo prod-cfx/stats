@@ -114,7 +114,7 @@ describe('ConversationSemanticEditService', () => {
           id: 'entry-dynamic-grid',
           key: 'price.range_position_lte',
           phase: 'entry' as const,
-          params: { lookbackBars: 36, positionPct: 20 },
+          params: { lookbackBars: 36, thresholdPct: 20 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -123,7 +123,7 @@ describe('ConversationSemanticEditService', () => {
           id: 'exit-dynamic-grid',
           key: 'price.range_position_gte',
           phase: 'exit' as const,
-          params: { lookbackBars: 36, positionPct: 55 },
+          params: { lookbackBars: 36, thresholdPct: 55 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -648,7 +648,7 @@ describe('ConversationSemanticEditService', () => {
           key: 'price.range_position_lte',
           phase: 'entry' as const,
           sideScope: 'long' as const,
-          params: { lookbackBars: 36, positionPct: 20 },
+          params: { lookbackBars: 36, thresholdPct: 20 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -658,7 +658,7 @@ describe('ConversationSemanticEditService', () => {
           key: 'price.range_position_gte',
           phase: 'exit' as const,
           sideScope: 'long' as const,
-          params: { lookbackBars: 36, positionPct: 55 },
+          params: { lookbackBars: 36, thresholdPct: 55 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -717,11 +717,11 @@ describe('ConversationSemanticEditService', () => {
     expect(next.triggers).toHaveLength(2)
     expect(next.triggers[0]).toEqual(expect.objectContaining({
       id: 'entry-range-lower',
-      params: { lookbackBars: 30, positionPct: 20 },
+      params: { lookbackBars: 30, thresholdPct: 20 },
     }))
     expect(next.triggers[1]).toEqual(expect.objectContaining({
       id: 'exit-range-upper',
-      params: { lookbackBars: 30, positionPct: 55 },
+      params: { lookbackBars: 30, thresholdPct: 55 },
     }))
     expect(next.actions).toEqual(semanticState.actions)
     expect(next.risk).toEqual(semanticState.risk)

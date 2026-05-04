@@ -375,7 +375,7 @@ export class SemanticSeedStateBuilderService {
     }
 
     if (key === 'price.range_position_lte' || key === 'price.range_position_gte') {
-      return this.hasPositiveFiniteNumber(params.lookbackBars) && this.hasFiniteNumber(params.thresholdPct)
+      return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
     }
 
     if (key === 'trend.direction' || key === 'market.regime' || key === 'volatility.state') {
@@ -423,6 +423,14 @@ export class SemanticSeedStateBuilderService {
 
   private hasPositiveFiniteNumber(value: unknown): value is number {
     return this.hasFiniteNumber(value) && value > 0
+  }
+
+  private hasPositiveInteger(value: unknown): value is number {
+    return this.hasPositiveFiniteNumber(value) && Number.isInteger(value)
+  }
+
+  private isPercentThreshold(value: unknown): value is number {
+    return this.hasFiniteNumber(value) && value > 0 && value <= 100
   }
 
   private buildTriggerCapability(
@@ -526,9 +534,38 @@ export class SemanticSeedStateBuilderService {
     }
 
     if (key === 'risk.condition_expression') {
-      return this.isRecord(params.condition)
+      return this.isValidRiskConditionExpression(params.condition)
         && this.isRecord(params.effect)
+        && Boolean(this.readTrimmedString(params.effect.type))
         && Boolean(this.readTrimmedString(params.scope))
+    }
+
+    return false
+  }
+
+  private isValidRiskConditionExpression(expression: unknown): boolean {
+    if (!this.isRecord(expression)) {
+      return false
+    }
+
+    if (expression.kind === 'predicate' || expression.kind === 'expression') {
+      return Boolean(this.readTrimmedString(expression.op))
+        && this.isRecord(expression.left)
+        && this.isRecord(expression.right)
+    }
+
+    if (expression.kind === 'AND' || expression.kind === 'OR') {
+      return Array.isArray(expression.children)
+        && expression.children.length > 0
+        && expression.children.every(child => this.isValidRiskConditionExpression(child))
+    }
+
+    if (expression.kind === 'NOT') {
+      if (Array.isArray(expression.children)) {
+        return expression.children.length === 1 && this.isValidRiskConditionExpression(expression.children[0])
+      }
+
+      return this.isValidRiskConditionExpression(expression.child)
     }
 
     return false
