@@ -392,23 +392,25 @@ export class GridOrderSyncService {
     const candidates = [
       reason,
       error instanceof Error ? error.message : null,
-      this.getErrorString(error, 'code'),
-      this.getErrorString(error, 'name'),
+      this.getErrorText(error, 'code'),
+      this.getErrorText(error, 'name'),
     ].filter((value): value is string => typeof value === 'string' && value.length > 0)
 
     return candidates.some((value) => {
       const normalized = value.toLowerCase()
+      const compact = normalized.replace(/[^a-z0-9]/g, '')
       return normalized.includes('50011')
         || normalized.includes('too many requests')
         || normalized.includes('rate limit')
-        || normalized.includes('ratelimiterror')
+        || compact.includes('ratelimit')
     })
   }
 
-  private getErrorString(error: unknown, key: string): string | null {
+  private getErrorText(error: unknown, key: string): string | null {
     if (typeof error !== 'object' || error === null || !(key in error)) return null
     const value = (error as Record<string, unknown>)[key]
-    return typeof value === 'string' ? value : null
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return null
   }
 
   private async handleRetryableRateLimit(input: RetryableRateLimitInput): Promise<void> {

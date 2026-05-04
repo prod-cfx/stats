@@ -817,6 +817,94 @@ describe('GridOrderSyncService', () => {
     expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps runtime running when submit failure carries numeric OKX rate-limit code', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(Object.assign(new Error('OKX throttled'), { code: 50011 }))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-order-1',
+      rawPayload: expect.objectContaining({
+        execution: expect.objectContaining({
+          status: 'rate_limited',
+          clientOrderId: submittedClientOrderId,
+        }),
+      }),
+    }))
+    expect(repository.appendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'runtime_rate_limited',
+      severity: 'warn',
+      status: 'RUNNING',
+      message: 'OKX throttled',
+      payload: expect.objectContaining({
+        orderId: 'planned-order-1',
+        clientOrderId: submittedClientOrderId,
+        exchangeId: 'okx',
+      }),
+    }))
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps runtime running when submit failure carries RATE_LIMIT code', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'planned-order-1',
+        clientOrderId: null,
+        exchangeOrderId: null,
+        status: 'PLANNED',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    tradingService.placeOrder.mockRejectedValue(Object.assign(new Error('exchange throttled'), { code: 'RATE_LIMIT' }))
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    const submittedClientOrderId = repository.markOrderSubmitting.mock.calls[0]?.[0]?.clientOrderId
+    expect(repository.markOrderPlanned).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'planned-order-1',
+      rawPayload: expect.objectContaining({
+        execution: expect.objectContaining({
+          status: 'rate_limited',
+          clientOrderId: submittedClientOrderId,
+        }),
+      }),
+    }))
+    expect(repository.appendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'runtime_rate_limited',
+      severity: 'warn',
+      status: 'RUNNING',
+      message: 'exchange throttled',
+      payload: expect.objectContaining({
+        orderId: 'planned-order-1',
+        clientOrderId: submittedClientOrderId,
+        exchangeId: 'okx',
+      }),
+    }))
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).toHaveBeenCalledTimes(1)
+  })
+
   it('cancels a just-created exchange order when local open CAS loses to stop', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([
