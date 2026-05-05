@@ -2881,7 +2881,7 @@ export class SemanticSeedExtractorService {
 
     for (const chineseMatch of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
       if (!chineseMatch[1] || !chineseMatch[2]) continue
-      if (this.isIndicatorPeriodTimeframeCandidate(text, chineseMatch.index ?? -1)) continue
+      if (this.isIndicatorPeriodTimeframeCandidate(text, chineseMatch.index ?? -1, chineseMatch[0].length)) continue
 
       const unit = chineseMatch[2]
       const suffix = unit === '分钟' || unit === '分'
@@ -2894,11 +2894,16 @@ export class SemanticSeedExtractorService {
     return null
   }
 
-  private isIndicatorPeriodTimeframeCandidate(text: string, matchIndex: number): boolean {
+  private isIndicatorPeriodTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {
     if (matchIndex < 0) return false
 
     const prefix = text.slice(Math.max(0, matchIndex - 16), matchIndex)
-    return /(?:EMA|SMA|MA|均线)\s*$/iu.test(prefix)
+    if (/(?:EMA|SMA|MA|均线)\s*$/iu.test(prefix)) {
+      return true
+    }
+
+    const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 16)
+    return /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
   }
 
   private extractNumber(text: string, patterns: RegExp[]): number | null {

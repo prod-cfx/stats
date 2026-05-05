@@ -182,12 +182,22 @@ describe('SemanticSeedExtractorService', () => {
     expect(service.extract('均线 20 上穿均线 50 时开多。').contextSlots?.timeframe).toBeUndefined()
   })
 
+  it('does not extract suffix-style moving average periods as timeframe context', () => {
+    expect(service.extract('20日均线上穿50日均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('20 日均线上穿 50 日均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('7日EMA 上穿 21日MA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('50日SMA 下穿 100日SMA 开空，单笔10%').contextSlots?.timeframe).toBeUndefined()
+  })
+
   it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
     expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。').contextSlots).toEqual(expect.objectContaining({
       timeframe: '1h',
     }))
     expect(service.extract('15m 周期，价格区间 79200-80200，采用双向网格').contextSlots).toEqual(expect.objectContaining({
       timeframe: '15m',
+    }))
+    expect(service.extract('4h K线，MA20 上穿 MA50 开多。').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '4h',
     }))
   })
 
