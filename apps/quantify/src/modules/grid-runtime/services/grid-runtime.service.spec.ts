@@ -104,7 +104,23 @@ function createAstSnapshot() {
   }
 }
 
+function centeredLevelsPerSide(gridCount: number): { down: number, up: number } {
+  const down = Math.floor(gridCount / 2)
+  return {
+    down,
+    up: Math.max(0, gridCount - down),
+  }
+}
+
+function centeredSpacingPct(halfRangePct: number, gridCount: number): number {
+  const levelsPerWiderSide = Math.max(1, Math.ceil(gridCount / 2))
+  return Number((halfRangePct / levelsPerWiderSide).toFixed(8))
+}
+
 function createCenteredPercentAstSnapshot() {
+  const gridCount = 10
+  const halfRangePct = 0.4
+
   return {
     executionModel: {
       tickSize: 0.01,
@@ -121,7 +137,7 @@ function createCenteredPercentAstSnapshot() {
         quantity: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
         orderType: 'limit',
         timeInForce: 'gtc',
-        maxWorkingOrders: 10,
+        maxWorkingOrders: gridCount,
         pairingPolicy: 'adjacent_level',
         activeWhen: 'expr_04_active_level_set',
       },
@@ -142,8 +158,8 @@ function createCenteredPercentAstSnapshot() {
         id: 'contract_order_program_limit_ladder_centered_percent_range',
         kind: 'ARITHMETIC_LEVEL_SET',
         anchorRef: 'deployment_close_1m',
-        levelsPerSide: { down: 4, up: 5 },
-        spacing: { mode: 'pct', value: 0.08 },
+        levelsPerSide: centeredLevelsPerSide(gridCount),
+        spacing: { mode: 'pct', value: centeredSpacingPct(halfRangePct, gridCount) },
       },
     }, {
       id: 'expr_04_active_level_set',

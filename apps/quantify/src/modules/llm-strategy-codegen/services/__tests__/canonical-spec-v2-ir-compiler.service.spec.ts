@@ -344,7 +344,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         kind: 'ARITHMETIC_LEVEL_SET',
         anchorRef: 'deployment_close_1m',
         spacing: { mode: 'pct', value: 0.08 },
-        levelsPerSide: { down: 4, up: 5 },
+        levelsPerSide: { down: 5, up: 5 },
       }),
     ])
     expect(result.ir.orderPrograms).toEqual([
@@ -376,7 +376,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         expect.any(Number),
       ]),
     }))
-    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(10)
+    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(11)
     expect(Math.min(...(evaluatedLevels as { levels: number[] }).levels)).toBeLessThan(100)
     expect(Math.max(...(evaluatedLevels as { levels: number[] }).levels)).toBeGreaterThan(100)
 
@@ -406,7 +406,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         levels: expect.arrayContaining([expect.any(Number)]),
       }),
     ])
-    expect(activeOrderState.workingOrders[0]?.levels).toHaveLength(10)
+    expect(activeOrderState.workingOrders[0]?.levels).toHaveLength(11)
 
     const breachedExprValues = evaluateExprPool(
       {

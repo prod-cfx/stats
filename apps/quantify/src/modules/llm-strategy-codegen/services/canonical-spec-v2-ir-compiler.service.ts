@@ -340,8 +340,8 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     const spacingMode = intent.levelSet.spacingMode === 'geometric' ? 'GEOMETRIC_LEVEL_SET' : 'ARITHMETIC_LEVEL_SET'
     const spacing = this.resolveOrderProgramSpacing(intent, levelCount)
-    const levelsBelowCenter = Math.floor((levelCount - 1) / 2)
-    const levelsAboveCenter = Math.max(0, levelCount - 1 - levelsBelowCenter)
+    const levelsBelowCenter = Math.floor(levelCount / 2)
+    const levelsAboveCenter = Math.max(0, levelCount - levelsBelowCenter)
     const id = [
       intent.id,
       intent.levelSet.mode,
@@ -440,7 +440,7 @@ export class CanonicalSpecV2IrCompilerService {
     levelCount: number,
   ): number {
     const halfRangePct = typeof intent.levelSet.halfRangePct === 'number' ? intent.levelSet.halfRangePct : 0
-    const levelsPerWiderSide = Math.max(1, Math.ceil((levelCount - 1) / 2))
+    const levelsPerWiderSide = Math.max(1, Math.ceil(levelCount / 2))
     return Number((halfRangePct / levelsPerWiderSide).toFixed(8))
   }
 
