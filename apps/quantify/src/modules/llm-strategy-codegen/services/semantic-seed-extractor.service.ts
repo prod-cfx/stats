@@ -1940,8 +1940,31 @@ export class SemanticSeedExtractorService {
   ): void {
     if (!/MACD|DIF|DEA/iu.test(segment)) return
 
-    const clauses = this.splitLogicClauses(segment)
     const params = this.extractMacdParams(segment) ?? this.extractMacdParams(contextText)
+    const eventFrames = this.eventFrameParser.parse(segment)
+      .filter(frame => frame.trigger.kind === 'indicator_cross' && frame.trigger.indicator === 'macd')
+
+    if (eventFrames.length > 0) {
+      for (const frame of eventFrames) {
+        this.pushTrigger(triggers, seen, {
+          key: frame.trigger.direction === 'over' ? 'indicator.cross_over' : 'indicator.cross_under',
+          phase: frame.phase,
+          sideScope: frame.sideScope,
+          params: {
+            indicator: 'macd',
+            semantic: frame.trigger.semantic,
+            ...(params ? {
+              fastPeriod: params.fastPeriod,
+              slowPeriod: params.slowPeriod,
+              signalPeriod: params.signalPeriod,
+            } : {}),
+          },
+        })
+      }
+      return
+    }
+
+    const clauses = this.splitLogicClauses(segment)
 
     for (const clause of clauses) {
       if (!/MACD|DIF|DEA/iu.test(clause)) continue

@@ -224,8 +224,15 @@ describe('SemanticSeedExtractorService', () => {
       }),
     ]))
     const macdTriggers = patch.triggers?.filter(trigger => trigger.params?.indicator === 'macd') ?? []
+    expect(macdTriggers).toHaveLength(2)
     expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
     expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
+    expect(macdTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'exit',
+      }),
+    ]))
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
