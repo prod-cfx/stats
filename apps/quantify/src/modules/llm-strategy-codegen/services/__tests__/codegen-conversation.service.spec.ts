@@ -11169,6 +11169,236 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps a real grid executable after position and timeframe slots are closed across turns', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-okx-real-grid-slot-chain' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '建一个 OKX 现货ETH/USDT 真实网格策略。 固定价格区间：以当前价格为中心，上下各 0.4%。 网格数量：10 格。 订单类型：限价单。 成交后在相邻网格自动挂反向单。 价格突破上下边界时停止并撤销未成交订单。 不要用趋势信号触发开仓，部署后立即创建网格挂单。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('单笔仓位大小')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-okx-real-grid-slot-chain',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const afterPosition = await service.continueSession('s-okx-real-grid-slot-chain', {
+      userId: 'u1',
+      message: '10 USDT',
+    })
+    const positionPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(afterPosition.status).toBe('DRAFTING')
+    expect(afterPosition.assistantPrompt).toContain('主周期')
+    expect(positionPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_quote',
+      value: 10,
+      sizing: expect.objectContaining({
+        asset: 'USDT',
+        kind: 'quote',
+        value: 10,
+      }),
+      status: 'locked',
+    }))
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-okx-real-grid-slot-chain',
+      positionPayload,
+      { status: afterPosition.status },
+    ))
+
+    const afterTimeframe = await service.continueSession('s-okx-real-grid-slot-chain', {
+      userId: 'u1',
+      message: '1M',
+    })
+    const timeframePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(afterTimeframe.status).toBe('CONFIRM_GATE')
+    expect(afterTimeframe.assistantPrompt).toContain('入场：区间网格，以部署时当前价为中心上下各 0.4%，共 10 格')
+    expect(afterTimeframe.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单')
+    expect(afterTimeframe.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(afterTimeframe.assistantPrompt).toContain('仓位：10 USDT')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-okx-real-grid-slot-chain',
+      timeframePayload,
+      { status: afterTimeframe.status },
+    ))
+
+    const confirmed = await service.continueSession('s-okx-real-grid-slot-chain', {
+      userId: 'u1',
+      message: '对的',
+    })
+
+    expect(confirmed.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+      's-okx-real-grid-slot-chain',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([expect.objectContaining({ key: 'grid.range_rebalance' })]),
+          actions: expect.arrayContaining([expect.objectContaining({
+            contracts: expect.arrayContaining([expect.objectContaining({
+              capabilities: expect.arrayContaining([expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+              })]),
+            })]),
+          })]),
+          risk: expect.arrayContaining([expect.objectContaining({ key: 'risk.boundary_guard' })]),
+        }),
+      }),
+    )
+  })
+
+  it('keeps centered real-grid generation executable when only atomic action evidence remains', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            sideMode: 'long_only',
+            breakoutAction: 'pause',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                mode: 'centered_percent_range',
+                centerTiming: 'deployment',
+                centerSource: 'last_price',
+                halfRangePct: 0.4,
+                gridIntervals: 10,
+                gridCount: 11,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        {
+          id: 'grid-orders',
+          key: 'place_limit_grid',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      risk: [
+        {
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          params: {},
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [{
+              domain: 'guard',
+              verb: 'enforce',
+              object: 'boundary_cancel',
+              shape: {
+                onBreach: 'HALT_STRATEGY',
+                cancelOrders: true,
+                cancelScope: 'unfilled_grid_orders',
+                regrid: false,
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        exchange: {
+          ...buildLockedMaSemanticState().contextSlots.exchange,
+          value: 'okx',
+        },
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '1m',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-okx-real-grid-atomic-action-only',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    const result = await service.continueSession('s-okx-real-grid-atomic-action-only', {
+      userId: 'u1',
+      message: '逻辑图已确认',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: readFixtureCanonicalDigest(sessionFixture),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+      's-okx-real-grid-atomic-action-only',
+      expect.objectContaining({
+        latestSpecDesc: expect.objectContaining({
+          rules: expect.arrayContaining([expect.objectContaining({
+            condition: expect.objectContaining({
+              children: expect.arrayContaining([expect.objectContaining({
+                key: 'order_program.active_range',
+              })]),
+            }),
+          })]),
+        }),
+      }),
+    )
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
