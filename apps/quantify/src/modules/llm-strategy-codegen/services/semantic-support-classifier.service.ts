@@ -51,7 +51,7 @@ export class SemanticSupportClassifierService {
         return { ...trigger }
       }
 
-      const resolved = this.registry.resolve(trigger.key)
+      const resolved = this.resolveTriggerSupport(trigger)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withSupportMetadata(trigger, resolved)
     })
@@ -143,6 +143,22 @@ export class SemanticSupportClassifierService {
     return withSupportMetadata(position, resolved)
   }
 
+  private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
+    if (isExecutableIndicatorReferenceAlias(trigger)) {
+      return {
+        key: trigger.key,
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['indicator', 'referenceRole', 'reference.period'],
+        defaultableParams: ['confirmationMode'],
+        executableProjection: ['canonical_spec_v1'],
+        openSlots: [],
+      }
+    }
+
+    return this.registry.resolve(trigger.key)
+  }
+
   private collectSupportResult(
     resolved: ResolvedSemanticAtom,
     unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'],
@@ -164,6 +180,26 @@ export class SemanticSupportClassifierService {
       unknownAtoms.push(resolved.key)
     }
   }
+}
+
+function isExecutableIndicatorReferenceAlias(trigger: SemanticTriggerState): boolean {
+  if (trigger.key !== 'indicator.above' && trigger.key !== 'indicator.below') {
+    return false
+  }
+
+  const params = trigger.params
+  const indicator = typeof params.indicator === 'string' ? params.indicator.trim().toLowerCase() : ''
+  const referenceRole = typeof params.referenceRole === 'string' ? params.referenceRole.trim() : ''
+  const referencePeriod = params['reference.period']
+  const hasReferencePeriod = typeof referencePeriod === 'number' && Number.isFinite(referencePeriod) && referencePeriod > 0
+  const hasReferencePeriodOpenSlot = trigger.openSlots.some(slot =>
+    slot.status === 'open'
+    && slot.affectsExecution
+    && /reference\.period/u.test(`${slot.slotKey}.${slot.fieldPath}`),
+  )
+  return (indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
+    && referenceRole.length > 0
+    && (hasReferencePeriod || hasReferencePeriodOpenSlot)
 }
 
 function withSupportMetadata<
