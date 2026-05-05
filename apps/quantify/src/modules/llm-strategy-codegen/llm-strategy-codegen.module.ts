@@ -30,6 +30,7 @@ import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
 import { SemanticAtomRegistryService } from './services/semantic-atom-registry.service'
+import { SemanticClarificationQuestionRendererService } from './services/semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
@@ -90,6 +91,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     StrategyIntentResolutionService,
     StrategySummaryObservationService,
     StrategySummaryBuilderService,
+    SemanticClarificationQuestionRendererService,
     StrategyClarificationRulesService,
     StrategyClarificationQuestionService,
     RecommendationIndexService,

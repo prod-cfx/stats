@@ -107,6 +107,7 @@ import {
   type InferredConfirmationSemanticDefaults,
 } from './inferred-confirmation-classifier.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
+import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 interface GenerationOptions {
@@ -216,6 +217,7 @@ export class CodegenConversationService {
     private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService()),
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
+    private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
@@ -3295,7 +3297,10 @@ export class CodegenConversationService {
       reason,
       field,
       blocking: true,
-      question: slot.questionHint,
+      question: this.semanticQuestionRenderer.render({
+        slotKey: slot.slotKey,
+        fallback: slot.questionHint,
+      }),
       status: 'pending',
       slotId: buildSemanticSlotId(slot),
       slotKey: slot.slotKey,
@@ -7230,7 +7235,14 @@ export class CodegenConversationService {
     return {
       normalizedIntent,
       blocked: nextOpenSlot !== null,
-      ...(nextOpenSlot ? { blockerReason: nextOpenSlot.questionHint } : {}),
+      ...(nextOpenSlot
+        ? {
+            blockerReason: this.semanticQuestionRenderer.render({
+              slotKey: nextOpenSlot.slotKey,
+              fallback: nextOpenSlot.questionHint,
+            }),
+          }
+        : {}),
     }
   }
 

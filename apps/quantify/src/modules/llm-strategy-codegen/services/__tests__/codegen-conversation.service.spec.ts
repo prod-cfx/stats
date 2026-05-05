@@ -4672,7 +4672,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           reason: 'missing_semantic_contract_requirement',
           field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
           blocking: true,
-          question: '请补充 price define level_set 执行合约。',
+          question: '请补充网格价格区间和网格数量或每格间距。',
           status: 'pending',
           slotKey: 'contract.requirement.price.define.level_set',
           fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
@@ -4745,7 +4745,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           reason: 'missing_semantic_contract_requirement',
           field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
           blocking: true,
-          question: '请补充 price define level_set 执行合约。',
+          question: '请补充网格价格区间和网格数量或每格间距。',
           status: 'pending',
         },
         {
@@ -11618,7 +11618,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
-  it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
+  it('surfaces missing level_set contract requirements through semantic open slots instead of legacy blockers', async () => {
     const semanticState = buildLockedMaSemanticState({
       actions: [
         {
@@ -11673,7 +11673,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('price define level_set')
+    expect(result.assistantPrompt).toContain('请补充网格价格区间和网格数量或每格间距。')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
     expect(result.clarificationState.items).toEqual(expect.arrayContaining([

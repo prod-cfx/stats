@@ -17,6 +17,13 @@ describe('SemanticClarificationQuestionRendererService', () => {
     })).toBe('网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。')
   })
 
+  it('renders grid level-set requirement in business language', () => {
+    expect(service.render({
+      slotKey: 'contract.requirement.price.define.level_set',
+      fallback: '请补充 price define level_set 执行合约。',
+    })).toBe('请补充网格价格区间和网格数量或每格间距。')
+  })
+
   it('keeps existing fallback for known non-grid slots', () => {
     expect(service.render({
       slotKey: 'position.sizing',
