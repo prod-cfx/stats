@@ -3897,6 +3897,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           status: 'pending',
           slotKey: 'trigger.entry',
         },
+        {
+          key: 'semantic.contract.requirement.price.define.level_set',
+          reason: 'missing_semantic_contract_requirement',
+          field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+          blocking: true,
+          question: '请补充 price define level_set 执行合约。',
+          status: 'pending',
+          slotKey: 'contract.requirement.price.define.level_set',
+          fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+        },
       ],
     })
 
@@ -3913,8 +3923,60 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           field: 'triggers',
           slotKey: 'trigger.entry',
         }),
+        expect.objectContaining({
+          key: 'semantic.contract.requirement.price.define.level_set',
+          field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+          slotKey: 'contract.requirement.price.define.level_set',
+        }),
       ],
     }))
+  })
+
+  it('uses semantic clarification priorities when building blocking reasons', () => {
+    const blockingReasons = (service as any).buildEffectiveBlockingReasonsFromClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'semantic.trigger.entry',
+          reason: 'missing_semantic_trigger',
+          field: 'triggers',
+          blocking: true,
+          question: '请补充入场触发条件。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.contract.requirement.price.define.level_set',
+          reason: 'missing_semantic_contract_requirement',
+          field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+          blocking: true,
+          question: '请补充 price define level_set 执行合约。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.position.sizing',
+          reason: 'missing_semantic_position_sizing',
+          field: 'position.sizing',
+          blocking: true,
+          question: '请确认仓位 sizing。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.risk.protective_exit',
+          reason: 'missing_semantic_risk',
+          field: 'risk',
+          blocking: true,
+          question: '请确认止损类保护规则。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(blockingReasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.trigger.entry', priority: 90 }),
+      expect.objectContaining({ key: 'semantic.contract.requirement.price.define.level_set', priority: 90 }),
+      expect.objectContaining({ key: 'semantic.position.sizing', priority: 70 }),
+      expect.objectContaining({ key: 'semantic.risk.protective_exit', priority: 70 }),
+    ]))
   })
 
   it('accepts canonical grid sideMode clarification answers on the semantic snapshot path', () => {

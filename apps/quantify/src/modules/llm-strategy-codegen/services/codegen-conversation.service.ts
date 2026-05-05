@@ -4986,6 +4986,7 @@ export class CodegenConversationService {
       if (fieldPath !== undefined && typeof fieldPath !== 'string') return null
       const typedReason = reason as StrategyClarificationItem['reason']
       const typedField = STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
+        || this.isPreservedSemanticClarificationField(field, typedReason)
         ? field as StrategyClarificationItem['field']
         : this.inferClarificationField({
           key,
@@ -5026,6 +5027,38 @@ export class CodegenConversationService {
       items: normalizedItems,
       ...(typeof rawSummary === 'string' && rawSummary.trim() ? { summary: rawSummary.trim() } : {}),
     }
+  }
+
+  private isPreservedSemanticClarificationField(
+    field: unknown,
+    reason: StrategyClarificationItem['reason'],
+  ): field is string {
+    if (typeof field !== 'string' || !field.trim()) {
+      return false
+    }
+
+    if (field === 'triggers' || field === 'actions' || field === 'risk') {
+      return true
+    }
+
+    if (
+      field.startsWith('position.')
+      || field.startsWith('triggers[')
+      || field.startsWith('actions[')
+      || field.startsWith('risk[')
+    ) {
+      return true
+    }
+
+    return reason === 'missing_semantic_contract_requirement'
+      && field.includes('.contracts[')
+      && field.includes('.requires.')
+      && (
+        field.startsWith('triggers[')
+        || field.startsWith('actions[')
+        || field.startsWith('risk[')
+        || field.startsWith('position.')
+      )
   }
 
   private withClarificationSummary(
@@ -6244,6 +6277,16 @@ export class CodegenConversationService {
     if (reason === 'missing_stop_loss_rule' || reason === 'missing_take_profit_rule' || reason === 'grid_params_missing' || reason === 'ambiguous_risk_effect' || reason === 'ambiguous_state_gate') return 70
     if (reason === 'missing_exchange' || reason === 'missing_symbol' || reason === 'missing_market_type' || reason === 'missing_timeframe' || reason === 'missing_position_pct' || reason === 'missing_position_mode') return 60
     if (reason === 'ambiguous_condition_basis') return 50
+    if (
+      reason === 'missing_semantic_trigger'
+      || reason === 'missing_semantic_action'
+      || reason === 'missing_semantic_contract_requirement'
+    ) return 90
+    if (
+      reason === 'missing_semantic_position_sizing'
+      || reason === 'missing_semantic_position_mode'
+      || reason === 'missing_semantic_risk'
+    ) return 70
     return 10
   }
 
