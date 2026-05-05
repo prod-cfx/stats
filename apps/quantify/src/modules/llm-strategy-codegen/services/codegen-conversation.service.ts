@@ -99,6 +99,7 @@ import { SemanticStateMergeService } from './semantic-state-merge.service'
 import { buildNormalizedIntentFromSemanticState, normalizeRiskSemantics } from './semantic-state-normalization'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
+import { PositionSizingContractService } from './position-sizing-contract.service'
 import { UnsupportedFallbackService } from './unsupported-fallback.service'
 import {
   InferredConfirmationClassifierService,
@@ -187,6 +188,7 @@ export class CodegenConversationService {
   private readonly logger = new Logger(CodegenConversationService.name)
   private readonly strictUnsupportedTargets = new Map<string, number>()
   private readonly stateMachine = new CodegenConversationStateMachine()
+  private readonly fallbackPositionSizingContracts = new PositionSizingContractService()
   private readonly inferredConfirmationClassifier: InferredConfirmationClassifierService
 
   constructor(
@@ -6947,12 +6949,18 @@ export class CodegenConversationService {
   }
 
   private extractFallbackPositionPct(message: string): number | null {
-    const match = message.match(/(?:仓位|单笔(?:仓位|资金)?|资金|position|sizing|size)\D{0,16}(\d{1,3}(?:\.\d+)?)\s*%/iu)
-    if (!match?.[1]) {
+    const normalizedMessage = message
+      .replace(/％/gu, '%')
+      .replace(
+        /(?:仓位|单笔(?:仓位|资金)?|资金|position|sizing|size)\s*(?:改成|改为|调整为|设为|换成|为|到)?/giu,
+        '仓位 ',
+      )
+    const parsed = this.fallbackPositionSizingContracts.parse(normalizedMessage)
+    if (parsed?.sizing.kind !== 'ratio') {
       return null
     }
 
-    const value = Number(match[1])
+    const value = parsed.sizing.value * 100
     return Number.isFinite(value) && value > 0 && value <= 100 ? value : null
   }
 

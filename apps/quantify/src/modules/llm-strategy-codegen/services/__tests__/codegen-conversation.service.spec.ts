@@ -1760,6 +1760,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
+  it('parses fullwidth and Chinese percent fallback position modifications', () => {
+    expect((service as any).extractFallbackPositionPct('可以，仓位改成 5％')).toBe(5)
+    expect((service as any).extractFallbackPositionPct('可以，仓位改成百分之五')).toBe(5)
+    expect((service as any).extractFallbackPositionPct('可以，止损改成 5％')).toBeNull()
+  })
+
   it('applies Chinese timeframe fallback modifications', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
