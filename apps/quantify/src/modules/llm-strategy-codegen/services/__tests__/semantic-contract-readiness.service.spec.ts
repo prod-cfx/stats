@@ -140,6 +140,35 @@ describe('SemanticContractReadinessService', () => {
     expect(result.state.triggers[0].openSlots).toEqual([])
   })
 
+  it('keeps unregistered contracts without support metadata out of readiness open slots', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-unregistered',
+        key: 'custom.unregistered.contract',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-unregistered',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [
+            { domain: 'market', verb: 'read', object: 'latest_bar' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([])
+  })
+
   it('does not duplicate existing open slots and preserves the original question hint', () => {
     const state = createSemanticState({
       actions: [{

@@ -214,6 +214,7 @@ export class SemanticContractReadinessService {
 
     const resolved = this.semanticAtomRegistry.resolve(owner.atomKey)
     return resolved.supportStatus === 'recognized_unsupported'
+      || resolved.supportStatus === 'unsupported_unknown'
   }
 }
 

@@ -22,7 +22,7 @@ import type { StrategyBlockingReason, StrategyInferredAssumption } from '../type
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
-import { buildSemanticSlotId, type SemanticActionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
+import { buildSemanticSlotId, type SemanticActionState, type SemanticPositionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
 import type { Prisma } from '@/prisma/prisma.types'
@@ -6558,7 +6558,7 @@ export class CodegenConversationService {
     if (intent.kind === 'reject_fallback') {
       return this.persistUnsupportedFallbackConversationTurn({
         session: args.session,
-        semanticState: this.clearUnsupportedFallback(args.semanticState),
+        semanticState: this.clearRejectedUnsupportedFallbackState(args.semanticState),
         message: args.message,
         assistantPrompt: '好的，这次不改用推荐策略。你可以继续描述一个当前公测支持的入场、出场、风控和仓位组合，我会重新整理逻辑图。',
         userId: args.userId,
@@ -6876,6 +6876,39 @@ export class CodegenConversationService {
           updatedAt: new Date().toISOString(),
         }
       : state
+  }
+
+  private clearRejectedUnsupportedFallbackState(state: SemanticState): SemanticState {
+    return {
+      ...state,
+      triggers: state.triggers.map(trigger => this.supersedeUnsupportedNode(trigger)),
+      actions: state.actions.map(action => this.supersedeUnsupportedNode(action)),
+      risk: state.risk.map(risk => this.supersedeUnsupportedNode(risk)),
+      position: state.position ? this.supersedeUnsupportedNode(state.position) : null,
+      unsupportedFallback: null,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private supersedeUnsupportedNode<
+    T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+  >(node: T): T {
+    if (node.status === 'superseded' || !this.isUnsupportedSupportMetadata(node.support)) {
+      return node
+    }
+
+    return {
+      ...node,
+      status: 'superseded',
+      openSlots: [],
+    }
+  }
+
+  private isUnsupportedSupportMetadata(
+    support: SemanticTriggerState['support'] | undefined,
+  ): boolean {
+    return support?.supportStatus === 'recognized_unsupported'
+      || support?.supportStatus === 'unsupported_unknown'
   }
 
   private buildUnknownSemanticSupportAssistantPrompt(unknownAtoms: readonly string[]): string {

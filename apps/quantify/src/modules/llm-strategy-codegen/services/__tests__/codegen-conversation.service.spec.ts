@@ -1451,6 +1451,109 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
+  it('does not route back to the same unsupported fallback after rejecting it and describing a supported strategy', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'volume.spike',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { multiplier: 2 },
+            },
+          ],
+          actions: [{ key: 'open_long' }],
+          risk: [
+            {
+              key: 'risk.atr_stop',
+              params: { atrPeriod: 14, multiplier: 2 },
+            },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-reject' })
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX BTCUSDT 15m 放量突破开多，用 ATR 止损，仓位 10%',
+    })
+    const created = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-reject',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: created.semanticState,
+        clarificationState: created.clarificationState,
+        constraintPack: created.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+
+    await service.continueSession('s-unsupported-fallback-reject', {
+      userId: 'u1',
+      message: '不改用推荐策略',
+    })
+    const rejectedPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-reject',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: rejectedPayload.semanticState,
+        clarificationState: rejectedPayload.clarificationState,
+        constraintPack: rejectedPayload.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+
+    const result = await service.continueSession('s-unsupported-fallback-reject', {
+      userId: 'u1',
+      message: '改成 RSI 低于 30 开多，高于 70 平仓，止损 5%，止盈 10%，仓位 10%',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const nextState = updatePayload.semanticState as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('当前公测暂未支持生成和回测')
+    expect(nextState.unsupportedFallback ?? null).toBeNull()
+    expect(nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'oscillator.rsi_lte' }),
+      expect.objectContaining({ key: 'oscillator.rsi_gte' }),
+    ]))
+    expect(nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volume.spike', status: 'superseded' }),
+    ]))
+    expect(nextState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.atr_stop', status: 'superseded' }),
+    ]))
+  })
+
   it('rejects engine tests when semantic input is missing', async () => {
     await expect(service.testEngine({
       userId: 'u1',
