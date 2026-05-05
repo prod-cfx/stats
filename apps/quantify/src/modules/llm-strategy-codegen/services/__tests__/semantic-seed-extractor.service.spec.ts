@@ -151,6 +151,57 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('extracts omitted EMA cross-under exit from prior trigger context', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 时开多；下穿时平多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
+  it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
+    const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
   it('does not treat trigger quote prices as position sizing in seed text', () => {
     const patch = service.extract('BTC 跌到 60000 USDT 用 10u 开多')
 

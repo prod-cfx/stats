@@ -15,6 +15,8 @@ import type {
 } from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { PositionSizingContractService } from './position-sizing-contract.service'
+import { SemanticEventFrameParserService } from './semantic-event-frame-parser.service'
+import { SemanticEventFrameProjectorService } from './semantic-event-frame-projector.service'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -45,6 +47,8 @@ type SemanticAliasContext = {
 export class SemanticSeedExtractorService {
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+    private readonly eventFrameParser: SemanticEventFrameParserService = new SemanticEventFrameParserService(),
+    private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
@@ -55,8 +59,15 @@ export class SemanticSeedExtractorService {
 
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
-    const triggers = this.atomizeTriggers(this.extractTriggers(text, aliasContext))
-    const actions = this.atomizeActions(this.extractActions(text, triggers))
+    const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
+    const triggers = this.atomizeTriggers(this.mergeSeedTriggers(
+      eventFramePatch.triggers ?? [],
+      this.extractTriggers(text, aliasContext),
+    ))
+    const actions = this.atomizeActions(this.mergeSeedActions(
+      eventFramePatch.actions ?? [],
+      this.extractActions(text, triggers),
+    ))
     const risk = this.atomizeRisk(this.extractRisk(text))
     const position = this.atomizePosition(this.extractPosition(text, triggers))
 
@@ -79,6 +90,62 @@ export class SemanticSeedExtractorService {
     }
 
     return patch
+  }
+
+  private mergeSeedTriggers(
+    primaryTriggers: readonly SeedTrigger[],
+    secondaryTriggers: readonly SeedTrigger[],
+  ): SeedTrigger[] {
+    const merged: SeedTrigger[] = []
+    const seen = new Set<string>()
+
+    for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
+      const signature = JSON.stringify({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope ?? null,
+        params: this.stableValue(trigger.params ?? {}),
+      })
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      merged.push(trigger)
+    }
+
+    return merged
+  }
+
+  private mergeSeedActions(
+    primaryActions: readonly SeedAction[],
+    secondaryActions: readonly SeedAction[],
+  ): SeedAction[] {
+    const merged: SeedAction[] = []
+    const seen = new Set<string>()
+
+    for (const action of [...primaryActions, ...secondaryActions]) {
+      const signature = JSON.stringify({
+        key: action.key,
+        params: this.stableValue(action.params ?? {}),
+      })
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      merged.push(action)
+    }
+
+    return merged
+  }
+
+  private stableValue(value: unknown): unknown {
+    if (Array.isArray(value)) {
+      return value.map(item => this.stableValue(item))
+    }
+    if (this.isPlainObject(value)) {
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+          .map(([key, item]) => [key, this.stableValue(item)]),
+      )
+    }
+    return value
   }
 
   private atomizeTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
