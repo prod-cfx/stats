@@ -1643,17 +1643,17 @@ export class SemanticSeedExtractorService {
   private pushMarketStateTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (/(?:震荡区间|区间震荡|盘整|range[-_\s]?bound)/iu.test(segment)) {
       this.pushTrigger(triggers, seen, {
-        key: 'market.range',
+        key: 'market.regime',
         phase: 'gate',
-        params: { state: 'range' },
+        params: { value: 'range' },
       })
     }
 
     if (/(?:市场趋势|大趋势|整体趋势|(?:\d{1,2}\s*(?:h|小时|时))?\s*趋势).{0,8}(?:向上|上涨|多头|up|bull)/iu.test(segment)) {
       this.pushTrigger(triggers, seen, {
-        key: 'market.trend',
+        key: 'trend.direction',
         phase: 'gate',
-        params: { state: 'up' },
+        params: { value: 'up' },
       })
     }
 
@@ -2167,6 +2167,8 @@ export class SemanticSeedExtractorService {
     }
 
     for (const clause of this.splitLogicClauses(text)) {
+      if (this.hasNegatedUnsupportedActionContext(clause)) continue
+
       if (/(?:加仓|scale\s*in)/iu.test(clause) && !/(?:DCA|定投|每跌|补仓)/iu.test(clause)) {
         push('action.add_position', { sourceText: clause })
       }
@@ -2183,7 +2185,7 @@ export class SemanticSeedExtractorService {
     text: string,
     triggers: SeedTrigger[],
   ): NonNullable<CodegenSemanticPatch['position']> | null {
-    if (/(?:DCA|定投|补仓|每跌\s*\d+(?:\.\d+)?\s*%)/iu.test(text)) {
+    if (this.hasPositiveDcaScheduleContext(text)) {
       return {
         mode: 'position.dca_schedule',
         value: 1,
@@ -2243,6 +2245,23 @@ export class SemanticSeedExtractorService {
 
   private hasNegatedUnsupportedContext(clause: string): boolean {
     return /(?:不要|不用|无需|不|without|no)\s*.{0,12}(?:放量|成交量|量能|volume|ATR|平均真实波幅|分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(clause)
+  }
+
+  private hasNegatedUnsupportedActionContext(clause: string): boolean {
+    return /(?:不要|不用|无需|不可|不能|禁止|避免|不|without|no)\s*.{0,12}(?:加仓|补仓|反手|scale\s*in|reverse\s+position|flip\s+position)/iu.test(clause)
+  }
+
+  private hasNegatedUnsupportedPositionContext(text: string): boolean {
+    return /(?:不要|不用|无需|不可|不能|禁止|避免|不|without|no)\s*.{0,12}(?:DCA|定投|补仓)/iu.test(text)
+  }
+
+  private hasPositiveDcaScheduleContext(text: string): boolean {
+    return this.splitSegments(text).some(segment =>
+      this.splitLogicClauses(segment).some(clause =>
+        /(?:DCA|定投|补仓|每跌\s*\d+(?:\.\d+)?\s*%)/iu.test(clause)
+        && !this.hasNegatedUnsupportedPositionContext(clause),
+      ),
+    )
   }
 
   private pushTrigger(triggers: SeedTrigger[], seen: Set<string>, trigger: SeedTrigger): void {

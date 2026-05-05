@@ -4,6 +4,7 @@ export interface AtomCoverageGoldenCase {
   name: string
   message: string
   expectedKeys: string[]
+  forbiddenKeys?: string[]
   expectedRoute: SemanticSupportRoute
 }
 
@@ -83,13 +84,15 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     name: 'supported long only trend state gate',
     message: 'OKX 合约 BTCUSDT 1h，市场趋势向上时，MA20 上穿 MA50 开多，MA20 下穿 MA50 平多，单笔 10%，止损 5%。',
-    expectedKeys: ['market.trend', 'indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    expectedKeys: ['trend.direction', 'indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    forbiddenKeys: ['market.trend', 'market.range'],
     expectedRoute: 'projection_gate',
   },
   {
     name: 'supported range state gate',
     message: 'OKX 合约 BTCUSDT 1h，市场处于震荡区间时，RSI14 低于 30 开多，RSI14 高于 70 平多，单笔 10%，止损 5%。',
-    expectedKeys: ['market.range', 'oscillator.rsi_lte', 'oscillator.rsi_gte', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    expectedKeys: ['market.regime', 'oscillator.rsi_lte', 'oscillator.rsi_gte', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    forbiddenKeys: ['market.trend', 'market.range'],
     expectedRoute: 'projection_gate',
   },
   {
@@ -215,7 +218,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     name: 'recognized unsupported multi timeframe',
     message: 'OKX 合约 BTCUSDT 15m，先看 4h 趋势向上，再用 15m MA20 上穿 MA50 开多，单笔 10%。',
-    expectedKeys: ['strategy.multi_timeframe', 'market.trend', 'indicator.cross_over', 'open_long', 'position.fixed_pct', 'unsupported:strategy.multi_timeframe'],
+    expectedKeys: ['strategy.multi_timeframe', 'trend.direction', 'indicator.cross_over', 'open_long', 'position.fixed_pct', 'unsupported:strategy.multi_timeframe'],
+    forbiddenKeys: ['market.trend', 'market.range'],
     expectedRoute: 'unsupported_fallback',
   },
   {
@@ -257,7 +261,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     name: 'combo supported atoms stay projection gate',
     message: 'OKX 合约 BTCUSDT 15m，市场趋势向上且 MA20 上穿 MA50 且 RSI14 低于 35 开多，MA20 下穿 MA50 平多，单笔 10%，止损 5%，止盈 8%。',
-    expectedKeys: ['market.trend', 'indicator.cross_over', 'oscillator.rsi_lte', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'risk.take_profit_pct'],
+    expectedKeys: ['trend.direction', 'indicator.cross_over', 'oscillator.rsi_lte', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'risk.take_profit_pct'],
+    forbiddenKeys: ['market.trend', 'market.range'],
     expectedRoute: 'projection_gate',
   },
   {
@@ -331,6 +336,13 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     message: 'OKX 合约 BTCUSDT 15m，MA20 下穿 MA50 开空，MA20 上穿 MA50 反手做多。',
     expectedKeys: ['indicator.cross_under', 'open_short', 'action.reverse_position', 'unsupported:action.reverse_position'],
     expectedRoute: 'unsupported_fallback',
+  },
+  {
+    name: 'supported existing position gate does not add unsupported scale in',
+    message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，已有仓位不加仓也不开仓，单笔 10%。',
+    expectedKeys: ['indicator.cross_over', 'open_long', 'condition.expression', 'position.fixed_pct'],
+    forbiddenKeys: ['action.add_position', 'unsupported:action.add_position'],
+    expectedRoute: 'projection_gate',
   },
   {
     name: 'unknown unsupported social sentiment',

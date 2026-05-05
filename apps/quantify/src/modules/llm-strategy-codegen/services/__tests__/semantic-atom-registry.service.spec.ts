@@ -41,6 +41,17 @@ describe('SemanticAtomRegistryService', () => {
     })
   })
 
+  it('does not classify legacy market trend and range aliases as executable projection atoms', () => {
+    for (const key of ['market.trend', 'market.range']) {
+      expect(service.get(key)).toMatchObject({
+        key,
+        category: 'trigger',
+        supportStatus: 'recognized_unsupported',
+      })
+      expect(service.get(key).executableProjection).toEqual([])
+    }
+  })
+
   it('classifies current executable trigger atoms as supported executable', () => {
     const executableKeys = [
       'price.percent_change',

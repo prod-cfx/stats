@@ -162,6 +162,27 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it.each([
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不加仓，单笔 10%。',
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不要加仓，单笔 10%。',
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，已有仓位不加仓也不开仓，单笔 10%。',
+  ])('does not emit unsupported add-position for negated scale-in text: %s', (message) => {
+    const patch = service.extract(message)
+
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.add_position' }),
+    ]))
+  })
+
+  it('does not emit unsupported reverse-position or DCA atoms for negated wording', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不要反手，也不要补仓，单笔 10%。')
+
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.reverse_position' }),
+    ]))
+    expect(patch.position?.mode).not.toBe('position.dca_schedule')
+  })
+
   it('extracts position sizing base contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，每次买 0.001 BTC')
 

@@ -68,5 +68,8 @@ describe('atom coverage golden corpus', () => {
     for (const expectedKey of goldenCase.expectedKeys) {
       expect(coverageKeys).toContain(expectedKey)
     }
+    for (const forbiddenKey of goldenCase.forbiddenKeys ?? []) {
+      expect(coverageKeys).not.toContain(forbiddenKey)
+    }
   })
 })
