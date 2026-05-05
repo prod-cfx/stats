@@ -266,7 +266,7 @@ describe('GridRuntimeService', () => {
     const config = (planner as ReturnType<typeof createPlannerMock>).planInitialOrders.mock.calls[0]?.[0]?.config
     expect(config).toEqual(expect.objectContaining({
       mode: 'spot',
-      gridCount: 10,
+      gridCount: 11,
       perOrderQuote: '10',
       quoteAsset: 'USDT',
       baseAsset: 'ETH',

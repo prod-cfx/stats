@@ -187,7 +187,7 @@ export class GridRuntimeService {
     const bounds = this.resolveLevelSetBounds(ast, levelSet, currentPrice)
     const quantity = this.readRecord(program.quantity)
     const sizing = this.resolvePerOrderQuoteSizing(quantity, symbol, fundingSnapshot)
-    const gridCount = this.readNumber(program, 'maxWorkingOrders')
+    const gridCount = this.resolveLevelSetGridCount(levelSet) ?? this.readNumber(program, 'maxWorkingOrders')
 
     if (!bounds || !sizing || gridCount === null) {
       throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
@@ -234,6 +234,17 @@ export class GridRuntimeService {
       lower: Math.min(...levels),
       upper: Math.max(...levels),
     }
+  }
+
+  private resolveLevelSetGridCount(levelSet: Record<string, unknown> | null): number | null {
+    const levelsPerSide = this.readRecord(levelSet?.levelsPerSide)
+    const downLevels = this.readNumber(levelsPerSide, 'down')
+    const upLevels = this.readNumber(levelsPerSide, 'up')
+    if (downLevels === null || upLevels === null || downLevels < 0 || upLevels < 0) {
+      return null
+    }
+
+    return Math.floor(downLevels) + Math.floor(upLevels) + 1
   }
 
   private evaluateLevelSet(
