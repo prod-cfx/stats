@@ -41,8 +41,8 @@ describe('SemanticAtomRegistryService', () => {
     })
   })
 
-  it('does not classify legacy market trend and range aliases as executable projection atoms', () => {
-    for (const key of ['market.trend', 'market.range']) {
+  it('does not classify aliases or compiler-unsupported atoms as executable projection atoms', () => {
+    for (const key of ['market.trend', 'market.range', 'indicator.above', 'indicator.below']) {
       expect(service.get(key)).toMatchObject({
         key,
         category: 'trigger',
@@ -56,8 +56,6 @@ describe('SemanticAtomRegistryService', () => {
     const executableKeys = [
       'price.percent_change',
       'price.detect.indicator_boundary',
-      'indicator.above',
-      'indicator.below',
       'bollinger.touch_upper',
       'bollinger.touch_lower',
       'bollinger.touch_middle',
