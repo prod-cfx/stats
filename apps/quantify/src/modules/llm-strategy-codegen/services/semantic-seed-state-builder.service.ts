@@ -107,7 +107,14 @@ export class SemanticSeedStateBuilderService {
     const sideScope = update.sideScope === 'long' || update.sideScope === 'short' || update.sideScope === 'both'
       ? update.sideScope
       : null
-    const openSlots = this.readOpenSlots(update.openSlots)
+    const openSlots = this.ensureBollingerConfirmationOpenSlot({
+      key,
+      phase,
+      params,
+      openSlots: this.readOpenSlots(update.openSlots),
+      triggerIndex: index,
+      statusValue: update.status,
+    })
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
@@ -864,6 +871,41 @@ export class SemanticSeedStateBuilderService {
     return value
       .map(item => this.toSlotState(item))
       .filter((item): item is SemanticSlotState => item !== null)
+  }
+
+  private ensureBollingerConfirmationOpenSlot(input: {
+    key: string
+    phase: SemanticTriggerState['phase']
+    params: Record<string, unknown>
+    openSlots: SemanticSlotState[]
+    triggerIndex: number
+    statusValue: unknown
+  }): SemanticSlotState[] {
+    if (
+      input.statusValue === 'superseded'
+      || !input.key.startsWith('bollinger.touch_')
+      || typeof input.params.confirmationMode === 'string'
+    ) {
+      return input.openSlots
+    }
+
+    const slotKey = `confirmationMode.${input.phase}`
+    const fieldPath = `triggers[${input.triggerIndex}].params.confirmationMode`
+    if (input.openSlots.some(slot => slot.slotKey === slotKey && slot.fieldPath === fieldPath)) {
+      return input.openSlots
+    }
+
+    return [
+      ...input.openSlots,
+      {
+        slotKey,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: '该触发条件是触碰即触发，还是收盘确认后触发？',
+        affectsExecution: true,
+      },
+    ]
   }
 
   private resolveContractCoverage(options: {

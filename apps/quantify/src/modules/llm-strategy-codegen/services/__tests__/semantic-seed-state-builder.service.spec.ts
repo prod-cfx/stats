@@ -1,7 +1,10 @@
+import { buildSemanticSlotId } from '../../types/semantic-state'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
+import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticSeedStateBuilderService', () => {
   const service = new SemanticSeedStateBuilderService()
+  const reducer = new SemanticStateReducerService()
   const expectContractRequiredSlot = (fieldPath: string) => expect.objectContaining({
     slotKey: 'contract.required',
     fieldPath,
@@ -56,6 +59,50 @@ describe('SemanticSeedStateBuilderService', () => {
         status: 'open',
       })]),
     }))
+  })
+
+  it('creates answerable confirmation slots for synthesized bollinger trigger forks', () => {
+    const state = service.build({
+      triggers: [{
+        id: 'entry-bollinger-upper',
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'short',
+        params: {
+          period: 20,
+          stdDev: 2,
+          band: 'upper',
+        },
+      }],
+    })
+    const slot = {
+      slotKey: 'confirmationMode.entry',
+      fieldPath: 'triggers[0].params.confirmationMode',
+    }
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      params: expect.not.objectContaining({ confirmationMode: expect.anything() }),
+      openSlots: [expect.objectContaining({
+        ...slot,
+        status: 'open',
+      })],
+    }))
+
+    const next = reducer.applyClarificationAnswer({
+      currentState: state!,
+      targetSlotKey: slot.slotKey,
+      targetFieldPath: slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slot),
+      answer: '收盘确认',
+    })
+
+    expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.triggers[0]?.openSlots.find(item =>
+      item.slotKey === slot.slotKey
+      && item.fieldPath === slot.fieldPath
+      && item.status === 'open',
+    )).toBeUndefined()
   })
 
   it('synthesizes contracts for complete lightweight planner patches and keeps them locked', () => {
