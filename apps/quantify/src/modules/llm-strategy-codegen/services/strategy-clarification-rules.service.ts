@@ -421,7 +421,7 @@ export class StrategyClarificationRulesService {
   }
 
   private detectGridItems(input: StrategyClarificationInput): StrategyClarificationItem[] {
-    if (!this.looksLikeGridStrategy(input)) {
+    if (!this.hasLegacyGridChecklistCompatibilitySignal(input)) {
       return []
     }
 
@@ -766,7 +766,7 @@ export class StrategyClarificationRulesService {
     return '主周期'
   }
 
-  private looksLikeGridStrategy(input: StrategyClarificationInput): boolean {
+  private hasLegacyGridChecklistCompatibilitySignal(input: StrategyClarificationInput): boolean {
     if (
       typeof input.grid?.lower === 'number'
       || typeof input.grid?.upper === 'number'
@@ -879,7 +879,7 @@ export class StrategyClarificationRulesService {
   }
 
   private hasSelfContainedGridSemantics(input: StrategyClarificationInput): boolean {
-    if (!this.looksLikeGridStrategy(input)) {
+    if (!this.hasLegacyGridChecklistCompatibilitySignal(input)) {
       return false
     }
 

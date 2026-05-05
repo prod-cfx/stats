@@ -2246,7 +2246,7 @@ describe('canonicalSpecBuilderService', () => {
 
     expect(spec.indicators).toContainEqual({
       kind: 'custom',
-      params: { family: 'grid' },
+      params: { compatibilityFamilyHint: 'grid' },
     })
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -2394,7 +2394,7 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromNormalizedIntent(checklist, normalizedIntent)
 
     expect(spec.indicators).toEqual([
-      { kind: 'custom', params: { family: 'grid' } },
+      { kind: 'custom', params: { compatibilityFamilyHint: 'grid' } },
     ])
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({

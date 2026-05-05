@@ -22,8 +22,18 @@ describe('AI Quant mainflow legacy authority guardrail', () => {
   it('does not use semanticState.families as mainflow evidence', () => {
     const source = readService('codegen-conversation.service.ts')
 
+    expect(source).not.toContain('families.length > 0')
     expect(source).not.toContain('state.families.length > 0')
     expect(source).not.toContain('hasSemanticMainFlowEvidence(state: SemanticState): boolean {\n    return state.families.length > 0')
+  })
+
+  it('does not use grid family detection as mainline clarification authority', () => {
+    const conversationSource = readService('codegen-conversation.service.ts')
+    const clarificationSource = readService('strategy-clarification-rules.service.ts')
+
+    expect(conversationSource).not.toContain('families.length > 0')
+    expect(clarificationSource).not.toContain('families.length > 0')
+    expect(clarificationSource).not.toContain('looksLikeGridStrategy(input)')
   })
 
   it('does not expose canonical compileability wording as user-facing clarification', () => {

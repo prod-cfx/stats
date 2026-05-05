@@ -533,6 +533,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private isOrderProgramShadowRule(rule: CanonicalRuleV2): boolean {
+    // Compatibility routing hint only. Readiness and clarification must be decided before this point by SemanticState contracts and openSlots.
     if (rule.metadata?.normalized?.family === 'grid.range_rebalance') {
       return true
     }
@@ -1680,14 +1681,14 @@ export class CanonicalSpecBuilderService {
     if (hasDonchianBreakout) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'breakout' },
+        params: { compatibilityFamilyHint: 'breakout' },
       })
     }
 
     if (allTexts.some(text => /网格/u.test(text))) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'grid' },
+        params: { compatibilityFamilyHint: 'grid' },
       })
     }
 
@@ -2175,14 +2176,14 @@ export class CanonicalSpecBuilderService {
     if (normalizedIntent.grid) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'grid' },
+        params: { compatibilityFamilyHint: 'grid' },
       })
     }
 
     if (normalizedIntent.triggers.some(trigger => trigger.key === 'price.breakout_up' || trigger.key === 'price.breakout_down')) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'breakout' },
+        params: { compatibilityFamilyHint: 'breakout' },
       })
     }
 
