@@ -71,7 +71,7 @@ export interface NormalizedTriggerAtom extends RecognizedSemanticMetadata {
   key: NormalizedTriggerAtomKey
   phase: NormalizedAtomPhase
   sideScope?: NormalizedAtomSideScope
-  params: Record<string, string | number | boolean>
+  params: Record<string, unknown>
   resolutionHints?: NormalizedTriggerResolutionHints
 }
 
