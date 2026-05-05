@@ -460,7 +460,9 @@ export class SemanticSeedExtractorService {
       this.pushGridTrigger(segment, triggers, seen, text)
       this.pushExecutionTrigger(segment, triggers, seen)
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
+      this.pushMarketStateTriggers(segment, triggers, seen)
       this.pushRecognizedUnsupportedTriggers(segment, triggers, seen)
+      this.pushUnknownUnsupportedTriggers(segment, triggers, seen)
     }
 
     if (!triggers.some(trigger => trigger.key === 'grid.range_rebalance')) {
@@ -531,6 +533,8 @@ export class SemanticSeedExtractorService {
     if (actions.length === 0 && (hasShortTrigger || hasLongTrigger)) {
       push('open_long')
     }
+
+    this.pushRecognizedUnsupportedActions(text, actions, seen)
 
     return actions
   }
@@ -660,6 +664,24 @@ export class SemanticSeedExtractorService {
       })
     }
 
+    const trailingStop = this.extractPercent(text, [
+      /移动止损\s*(\d+(?:\.\d+)?)\s*%/u,
+      /trailing[_\s-]?stop\D{0,8}(\d+(?:\.\d+)?)\s*%/iu,
+    ])
+    if (trailingStop !== null && !/(?:ATR|平均真实波幅).{0,12}(?:移动止损|动态止损|止损|trailing)/iu.test(text)) {
+      risk.push({
+        key: 'risk.trailing_stop_pct',
+        params: {
+          valuePct: trailingStop,
+          direction: 'loss',
+          basis: 'entry_avg_price',
+          basisSource: 'user_explicit',
+          effect: 'close_position',
+          scope: 'current_position',
+        },
+      })
+    }
+
     const strategyHaltLoss = this.extractPercent(text, [
       /持仓亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
       /亏损(?:超过|达到|达|到)\s*(\d+(?:\.\d+)?)\s*%.*(?:暂停策略|停止策略)/u,
@@ -768,6 +790,11 @@ export class SemanticSeedExtractorService {
     text: string,
     triggers: SeedTrigger[],
   ): NonNullable<CodegenSemanticPatch['position']> | null {
+    const unsupportedPosition = this.extractRecognizedUnsupportedPosition(text, triggers)
+    if (unsupportedPosition) {
+      return unsupportedPosition
+    }
+
     const parsed = this.positionSizingContracts.parse(text)
     if (parsed) {
       return {
@@ -1613,6 +1640,48 @@ export class SemanticSeedExtractorService {
     return 'long'
   }
 
+  private pushMarketStateTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (/(?:震荡区间|区间震荡|盘整|range[-_\s]?bound)/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'market.range',
+        phase: 'gate',
+        params: { state: 'range' },
+      })
+    }
+
+    if (/(?:市场趋势|大趋势|整体趋势|(?:\d{1,2}\s*(?:h|小时|时))?\s*趋势).{0,8}(?:向上|上涨|多头|up|bull)/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'market.trend',
+        phase: 'gate',
+        params: { state: 'up' },
+      })
+    }
+
+    for (const clause of this.splitLogicClauses(segment)) {
+      if (!/(?:趋势|trend)/iu.test(clause)) continue
+      const intent = this.resolveTradeIntent(clause)
+      if (!intent) continue
+
+      if (/(?:向上|上涨|走强|多头|up|bull)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'trend.direction',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: { value: 'up' },
+        })
+      }
+
+      if (/(?:转弱|向下|下跌|空头|down|bear)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'trend.direction',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: { value: 'down' },
+        })
+      }
+    }
+  }
+
   private pushRsiTriggers(
     segment: string,
     triggers: SeedTrigger[],
@@ -1950,6 +2019,61 @@ export class SemanticSeedExtractorService {
     for (const clause of this.splitLogicClauses(segment)) {
       if (this.hasNegatedUnsupportedContext(clause)) continue
 
+      if (/(?:动态网格|自适应网格|自动重算网格|重算网格|AI\s*网格)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'grid.dynamic_grid',
+          ...this.resolveUnsupportedTriggerIntent(clause, segment),
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:北京时间|UTC|交易时段|时间窗口|只在).{0,24}(?:\d{1,2}\s*(?:点|:)|开盘|收盘)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'strategy.time_window',
+          phase: 'gate',
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:多周期|多时间框架|multi[-_\s]?timeframe|先看\s*\d{1,2}\s*(?:m|h|d|分钟|小时|天)|\d{1,2}\s*h\s*趋势)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'strategy.multi_timeframe',
+          phase: 'gate',
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:背离|divergence|底背离|顶背离)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'indicator.divergence',
+          ...this.resolveUnsupportedTriggerIntent(clause, segment),
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:头肩|双底|双顶|三角形|楔形|旗形|形态|pattern)/iu.test(clause) && !/(?:截图|screenshot|image)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'price.pattern',
+          ...this.resolveUnsupportedTriggerIntent(clause, segment),
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
       if (/放量|成交量放大|volume\s*spike|量能放大/iu.test(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'volume.spike',
@@ -1983,6 +2107,119 @@ export class SemanticSeedExtractorService {
         })
       }
     }
+  }
+
+  private pushUnknownUnsupportedTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+  ): void {
+    for (const clause of this.splitLogicClauses(segment)) {
+      const intent = this.resolveUnsupportedTriggerIntent(clause, segment)
+      if (/(?:外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'external.signal',
+          ...intent,
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:截图|神秘形态|image|screenshot)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'image.pattern',
+          ...intent,
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:新闻情绪|Twitter|社媒|市场情绪|sentiment|news)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'news.sentiment',
+          ...intent,
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+    }
+  }
+
+  private pushRecognizedUnsupportedActions(text: string, actions: SeedAction[], seen: Set<string>): void {
+    const push = (key: string, params: Record<string, unknown>) => {
+      const action: SeedAction = {
+        key,
+        params,
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+      const signature = JSON.stringify(action)
+      if (seen.has(signature)) return
+      seen.add(signature)
+      actions.push(action)
+    }
+
+    for (const clause of this.splitLogicClauses(text)) {
+      if (/(?:加仓|scale\s*in)/iu.test(clause) && !/(?:DCA|定投|每跌|补仓)/iu.test(clause)) {
+        push('action.add_position', { sourceText: clause })
+      }
+      if (/(?:反手|reverse\s+position|flip\s+position)/iu.test(clause)) {
+        push('action.reverse_position', { sourceText: clause })
+      }
+      if (/(?:暂停交易|停止交易|暂停策略|停止策略|pause\s+trading|halt\s+trading)/iu.test(clause)) {
+        push('action.pause_trading', { sourceText: clause })
+      }
+    }
+  }
+
+  private extractRecognizedUnsupportedPosition(
+    text: string,
+    triggers: SeedTrigger[],
+  ): NonNullable<CodegenSemanticPatch['position']> | null {
+    if (/(?:DCA|定投|补仓|每跌\s*\d+(?:\.\d+)?\s*%)/iu.test(text)) {
+      return {
+        mode: 'position.dca_schedule',
+        value: 1,
+        positionMode: this.resolvePositionMode(text, triggers),
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+    }
+
+    const leverage = this.extractNumber(text, [
+      /(\d+(?:\.\d+)?)\s*(?:倍杠杆|x\s*leverage|X\s*leverage)/u,
+    ])
+    if ((leverage !== null || /杠杆|leverage/iu.test(text)) && !/(?:不使用|不用|无需|无|no)\s*.{0,8}(?:杠杆|leverage)/iu.test(text)) {
+      return {
+        mode: 'position.leverage',
+        value: leverage ?? 1,
+        positionMode: this.resolvePositionMode(text, triggers),
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+    }
+
+    if (/(?:逐仓|全仓|isolated|cross\s+margin)/iu.test(text)) {
+      return {
+        mode: 'position.margin_mode',
+        value: 1,
+        positionMode: this.resolvePositionMode(text, triggers),
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }
+    }
+
+    return null
   }
 
   private resolveUnsupportedTriggerIntent(

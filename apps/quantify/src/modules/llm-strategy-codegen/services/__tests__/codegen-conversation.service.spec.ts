@@ -1394,6 +1394,80 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
+  it('does not partially generate when supported atoms are mixed with recognized unsupported atoms', async () => {
+    const buildFromSemanticStateSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromSemanticState')
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'indicator.cross_over',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+            },
+            {
+              key: 'volume.spike',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { multiplier: 2 },
+            },
+          ],
+          actions: [{ key: 'open_long' }],
+          risk: [{
+            key: 'risk.stop_loss_pct',
+            params: { valuePct: 5 },
+          }],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-mixed-no-partial-generate' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX BTCUSDT 15m，MA20 上穿 MA50 开多，但必须成交量放大，单笔 10%，止损 5%。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const semanticState = createPayload.semanticState as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.scriptCode ?? null).toBeNull()
+    expect(result.specDesc ?? null).toBeNull()
+    expect(result.canonicalDigest ?? null).toBeNull()
+    expect(result.assistantPrompt ?? '').toContain('当前公测暂未支持生成和回测')
+    expect(result.assistantPrompt ?? '').toContain('是否改用这个策略继续')
+    expect(createPayload).toEqual(expect.objectContaining({
+      status: 'DRAFTING',
+      latestDraftCode: null,
+      latestSpecDesc: null,
+    }))
+    expect(semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over' }),
+      expect.objectContaining({
+        key: 'volume.spike',
+        support: expect.objectContaining({ supportStatus: 'recognized_unsupported' }),
+      }),
+    ]))
+    expect(buildFromSemanticStateSpy).not.toHaveBeenCalled()
+    expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+  })
+
   it('keeps unsupported fallback start responses out of the ordinary clarification gate', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
