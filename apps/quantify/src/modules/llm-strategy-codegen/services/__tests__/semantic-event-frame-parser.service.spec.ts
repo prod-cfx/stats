@@ -88,4 +88,17 @@ describe('SemanticEventFrameParserService', () => {
       }),
     ])
   })
+
+  it('treats explicit sell-short wording as short entry instead of close long', () => {
+    const frames = service.parse('EMA7 下穿 EMA21 卖空。')
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        action: { kind: 'open_short' },
+        trigger: expect.objectContaining({ direction: 'under' }),
+      }),
+    ])
+  })
 })
