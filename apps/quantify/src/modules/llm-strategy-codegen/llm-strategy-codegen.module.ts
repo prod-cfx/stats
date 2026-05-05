@@ -33,6 +33,8 @@ import { SemanticAtomRegistryService } from './services/semantic-atom-registry.s
 import { SemanticClarificationQuestionRendererService } from './services/semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
+import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
+import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
@@ -63,8 +65,10 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     CodegenSessionsRepository,
     PublishedStrategySnapshotsRepository,
     StaticGuardrailService,
-    RuntimeGuardrailService,
-    SemanticSeedExtractorService,
+	    RuntimeGuardrailService,
+	    SemanticEventFrameParserService,
+	    SemanticEventFrameProjectorService,
+	    SemanticSeedExtractorService,
     SemanticSeedStateBuilderService,
     SemanticStateMergeService,
     SemanticStateReducerService,

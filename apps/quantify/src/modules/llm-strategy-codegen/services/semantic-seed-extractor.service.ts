@@ -47,11 +47,10 @@ type SemanticAliasContext = {
 
 @Injectable()
 export class SemanticSeedExtractorService {
-  private readonly eventFrameParser = new SemanticEventFrameParserService()
-  private readonly eventFrameProjector = new SemanticEventFrameProjectorService()
-
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+    private readonly eventFrameParser: SemanticEventFrameParserService = new SemanticEventFrameParserService(),
+    private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
