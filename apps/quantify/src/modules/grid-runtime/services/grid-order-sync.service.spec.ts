@@ -121,6 +121,7 @@ function createTradingService() {
         raw: { fillId: 'fill-1' },
       },
     ]),
+    getOrderFills: jest.fn().mockResolvedValue([]),
     cancelOrder: jest.fn().mockResolvedValue({ id: 'exchange-order-1', status: 'canceled' }),
     getPositions: jest.fn().mockResolvedValue([]),
     placeOrder: jest.fn().mockImplementation(async (_userId, _exchangeId, _marketType, input) => ({
@@ -1228,6 +1229,77 @@ describe('GridOrderSyncService', () => {
     expect(txEvents.withAfterCommit).toHaveBeenCalled()
   })
 
+  it('records every exchange fill for one completed order instead of collapsing to the order summary', async () => {
+    const repository = createRepository()
+    const tradingService = createTradingService()
+    tradingService.getOrderFills.mockResolvedValue([
+      {
+        id: 'trade-1',
+        tradeId: 'trade-1',
+        orderId: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        price: 95,
+        amount: 0.4,
+        fee: 0.01,
+        feeCurrency: 'USDT',
+        executedAt: Date.parse('2026-04-29T00:00:30.000Z'),
+        raw: { tradeId: 'trade-1', fillPx: '95', fillSz: '0.4' },
+      },
+      {
+        id: 'trade-2',
+        tradeId: 'trade-2',
+        orderId: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        price: 95.1,
+        amount: 0.6526315789473684,
+        fee: 0.02,
+        feeCurrency: 'USDT',
+        executedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { tradeId: 'trade-2', fillPx: '95.1', fillSz: '0.6526315789473684' },
+      },
+    ])
+    const positionsService = createPositionsService()
+    const service = createService(repository, tradingService, createStateMachine(), createTxEvents(), positionsService)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.getOrderFills).toHaveBeenCalledWith('user-1', 'okx', 'spot', {
+      symbol: 'BTC/USDT',
+      orderId: 'exchange-order-1',
+      clientOrderId: 'grid-1-95-buy',
+    }, 'exchange-account-1')
+    expect(repository.recordFillOnce).toHaveBeenCalledTimes(2)
+    expect(repository.recordFillOnce).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      exchangeFillId: 'trade-1',
+      price: '95',
+      quantity: '0.4',
+      fee: '0.01',
+      filledAt: new Date('2026-04-29T00:00:30.000Z'),
+    }))
+    expect(repository.recordFillOnce).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      exchangeFillId: 'trade-2',
+      price: '95.1',
+      quantity: '0.6526315789473685',
+      fee: '0.02',
+      filledAt: new Date('2026-04-29T00:01:00.000Z'),
+    }))
+    expect(positionsService.recordTrade).toHaveBeenCalledTimes(2)
+    expect(positionsService.recordTrade).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      externalTradeId: 'grid:trade-1',
+      quantity: '0.4',
+    }))
+    expect(positionsService.recordTrade).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      externalTradeId: 'grid:trade-2',
+      quantity: '0.6526315789473685',
+    }))
+  })
+
   it('mirrors newly recorded grid fills into the strategy account trade ledger', async () => {
     const repository = createRepository()
     const tradingService = createTradingService()
@@ -1365,7 +1437,15 @@ describe('GridOrderSyncService', () => {
 
     await service.syncInstance('grid-1')
 
-    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch', expect.objectContaining({
+      mismatches: expect.arrayContaining([
+        expect.objectContaining({
+          gridOrderId: 'order-1',
+          clientOrderId: 'grid-1-95-buy',
+          reason: 'order_contract_mismatch',
+        }),
+      ]),
+    }))
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
   })
 
@@ -1394,7 +1474,15 @@ describe('GridOrderSyncService', () => {
 
     await service.syncInstance('grid-1')
 
-    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch', expect.objectContaining({
+      mismatches: expect.arrayContaining([
+        expect.objectContaining({
+          gridOrderId: 'order-1',
+          clientOrderId: 'grid-1-95-buy',
+          reason: 'order_contract_mismatch',
+        }),
+      ]),
+    }))
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
   })
 
@@ -1487,7 +1575,107 @@ describe('GridOrderSyncService', () => {
 
     await service.syncInstance('grid-1')
 
-    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch')
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch', expect.objectContaining({
+      mismatches: expect.arrayContaining([
+        expect.objectContaining({
+          gridOrderId: 'order-1',
+          clientOrderId: 'grid-1-95-buy',
+          reason: 'order_contract_mismatch',
+        }),
+      ]),
+    }))
+    expect(repository.createPlannedOrder).not.toHaveBeenCalled()
+  })
+
+  it('records matched fills before marking reconcile when another local order mismatches', async () => {
+    const repository = createRepository()
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'mismatch-order',
+        clientOrderId: 'grid-1-95-buy',
+        exchangeOrderId: 'exchange-order-1',
+      }),
+      createOrder({
+        id: 'matched-order',
+        gridLevelId: 'level-0',
+        clientOrderId: 'grid-1-90-buy',
+        exchangeOrderId: 'exchange-order-2',
+        price: { toString: () => '90' },
+        quantity: { toString: () => '0.5' },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getClosedOrders.mockResolvedValue([
+      {
+        id: 'exchange-order-1',
+        clientOrderId: 'grid-1-95-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'sell',
+        type: 'limit',
+        price: 95,
+        amount: 1.0526315789473684,
+        filled: 1.0526315789473684,
+        status: 'closed',
+        createdAt: Date.parse('2026-04-29T00:00:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:01:00.000Z'),
+        raw: { fillId: 'mismatch-fill' },
+      },
+      {
+        id: 'exchange-order-2',
+        clientOrderId: 'grid-1-90-buy',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'limit',
+        price: 90,
+        amount: 0.5,
+        filled: 0.5,
+        status: 'closed',
+        createdAt: Date.parse('2026-04-29T00:02:00.000Z'),
+        updatedAt: Date.parse('2026-04-29T00:03:00.000Z'),
+        raw: { fillId: 'matched-fill' },
+      },
+    ])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(repository.recordFillOnce).toHaveBeenCalledWith(expect.objectContaining({
+      gridOrderId: 'matched-order',
+      exchangeFillId: 'matched-fill',
+      quantity: '0.5',
+    }))
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch', expect.objectContaining({
+      source: 'grid_order_sync',
+      mismatches: [expect.objectContaining({ gridOrderId: 'mismatch-order' })],
+    }))
+  })
+
+  it('keeps RECONCILE_REQUIRED paused but still backfills terminal exchange fills', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      status: 'RECONCILE_REQUIRED',
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({ status: 'PLANNED', clientOrderId: null, exchangeOrderId: null }),
+      createOrder({ id: 'filled-order', status: 'OPEN', clientOrderId: 'grid-1-95-buy', exchangeOrderId: 'exchange-order-1' }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getTicker.mockResolvedValue({ symbol: 'BTC/USDT', last: 120, bid: 119, ask: 121, high: 125, low: 90, volume: 1000, raw: {} })
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect(stateMachine.stop).not.toHaveBeenCalled()
+    expect(repository.recordFillOnce).toHaveBeenCalledWith(expect.objectContaining({
+      gridOrderId: 'filled-order',
+      exchangeFillId: 'fill-1',
+    }))
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
   })
 

@@ -1,9 +1,11 @@
 import type {
   CreateOrderInput,
+  OrderFillsQueryInput,
   OrderQueryInput,
   UnifiedBalance,
   UnifiedInstrumentConstraints,
   UnifiedOrder,
+  UnifiedOrderFill,
   UnifiedPosition,
   UnifiedTicker,
 } from './types'
@@ -31,6 +33,8 @@ export interface IExchangeClient {
   fetchOpenOrders: (symbol?: string) => Promise<UnifiedOrder[]>
 
   fetchClosedOrders: (symbol?: string) => Promise<UnifiedOrder[]>
+
+  fetchOrderFills?: (query: OrderFillsQueryInput) => Promise<UnifiedOrderFill[]>
 
   fetchPositions: () => Promise<UnifiedPosition[]>
 

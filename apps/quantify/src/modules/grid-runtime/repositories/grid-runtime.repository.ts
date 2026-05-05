@@ -254,7 +254,7 @@ export class GridRuntimeRepository {
 
   listActiveInstances(limit: number) {
     return this.txHost.tx.gridRuntimeInstance.findMany({
-      where: { status: { in: ['INITIALIZING', 'RUNNING'] } },
+      where: { status: { in: ['INITIALIZING', 'RUNNING', 'RECONCILE_REQUIRED'] } },
       orderBy: [{ lastSyncAt: 'asc' }, { createdAt: 'asc' }],
       take: limit,
     })
