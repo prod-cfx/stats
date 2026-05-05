@@ -10700,6 +10700,55 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.semanticGraph).toBeNull()
   })
 
+  it('clears stale artifacts when existing sessions route to unknown atom support gate', async () => {
+    const sessionFixture = buildPersistedSessionSnapshot(
+      's-unknown-support-gate-artifacts',
+      {},
+      {
+        userId: 'u1',
+        status: 'REJECTED',
+        semanticState: buildLockedMaSemanticState(),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+        latestDraftCode: 'const oldStrategy = {}',
+        rejectReason: '旧失败原因',
+        validationReport: { ok: false, errors: ['old validation error'] },
+        semanticGraph: { version: 1, nodes: [{ id: 'old-graph' }] },
+      },
+    ) as any
+    const semanticState = {
+      ...buildLockedMaSemanticState(),
+      triggers: [{
+        id: 'unknown-signal',
+        key: 'external.signal',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }
+
+    const result = await (service as any).handleSemanticSupportGateForExistingSession({
+      session: sessionFixture,
+      semanticState,
+      message: '改成外部信号开多',
+      userId: 'u1',
+      constraintPack: (service as any).readConstraintPack({}),
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.response.status).toBe('DRAFTING')
+    expect(result.response.specDesc).toBeNull()
+    expect(result.response.canonicalDigest).toBeNull()
+    expect(result.response.semanticGraph).toBeNull()
+    expect(updatePayload.latestSpecDesc).toBeNull()
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.rejectReason).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticGraph).toBeNull()
+  })
+
   it('replaces a published script when the user pastes corrected script code', async () => {
     const correctedScript = 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy'
     const sessionFixture = buildSemanticEraSessionFixture({

@@ -6543,25 +6543,34 @@ export class CodegenConversationService {
       const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(classification.unknownAtoms)
       const clarificationState = this.resolveSemanticClarificationArtifacts(nextState).clarificationState
       const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
-      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: nextState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: this.appendConversationHistory(
-            args.constraintPack.conversationHistory ?? [],
-            args.message,
-            assistantPrompt,
-          ),
-        },
-        latestSpecDesc: null,
-      }))
+      await this.sessionsRepo.updateSession(args.session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: nextState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: this.appendConversationHistory(
+              args.constraintPack.conversationHistory ?? [],
+              args.message,
+              assistantPrompt,
+            ),
+          },
+          latestSpecDesc: null,
+        }),
+        latestDraftCode: null,
+        rejectReason: null,
+        validationReport: null,
+        semanticGraph: null,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
+        specDesc: null,
+        canonicalDigest: null,
+        semanticGraph: null,
         assistantPrompt,
         clarificationState,
       })
