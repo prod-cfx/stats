@@ -4376,6 +4376,58 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('closes Bollinger confirmation slots from natural touch clarification without repeating the same prompt', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-touch-clarification' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认触发语义。',
+      }),
+    })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 布林带下轨买入 上轨卖出',
+    })
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('触碰即触发，还是收盘确认')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-bollinger-touch-clarification',
+      createdSession,
+    ))
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '继续完善策略。',
+      }),
+    })
+
+    const result = await service.continueSession('s-bollinger-touch-clarification', {
+      userId: 'u1',
+      message: '触碰即触发',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        params: expect.objectContaining({ confirmationMode: 'touch' }),
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({
+            slotKey: expect.stringContaining('confirmationMode'),
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+    expect(result.assistantPrompt).not.toContain('触碰即触发，还是收盘确认')
+  })
+
 
 
 

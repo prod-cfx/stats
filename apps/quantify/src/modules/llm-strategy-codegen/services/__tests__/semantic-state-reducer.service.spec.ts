@@ -815,6 +815,62 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('normalizes 触碰即触发 as touch confirmation for semantic confirmation slots', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-bollinger-lower',
+            key: 'price.detect.indicator_boundary',
+            phase: 'entry',
+            params: {
+              indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+              boundary: 'lower',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'confirmationMode.entry',
+                fieldPath: 'triggers[0].params.confirmationMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '该触发条件是触碰即触发，还是收盘确认后触发？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'confirmationMode.entry',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+      }),
+      answer: '触发条件是触碰即触发',
+      messageIndex: 5,
+    })
+
+    expect(next.triggers[0]?.params.confirmationMode).toBe('touch')
+    expect(next.triggers[0]?.status).toBe('locked')
+    expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'touch',
+      evidence: expect.objectContaining({
+        text: '触发条件是触碰即触发',
+        source: 'user_explicit',
+      }),
+    }))
+  })
+
   it('locks a fixed quote answer for an open position sizing slot', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
@@ -1062,6 +1118,86 @@ describe('SemanticStateReducerService', () => {
       status: 'locked',
       value: 'close_confirm',
     }))
+  })
+
+  it('can apply a canonical confirmation answer to equivalent confirmation slots in one reduction', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-bollinger-lower',
+            key: 'price.detect.indicator_boundary',
+            phase: 'entry',
+            params: {
+              indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+              boundary: 'lower',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'confirmationMode.entry',
+                fieldPath: 'triggers[0].params.confirmationMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '该触发条件是触碰即触发，还是收盘确认后触发？',
+                affectsExecution: true,
+              },
+            ],
+          },
+          {
+            id: 'exit-bollinger-upper',
+            key: 'price.detect.indicator_boundary',
+            phase: 'exit',
+            params: {
+              indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+              boundary: 'upper',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'confirmationMode.exit',
+                fieldPath: 'triggers[1].params.confirmationMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '该触发条件是触碰即触发，还是收盘确认后触发？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'confirmationMode.entry',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+      }),
+      answer: '触碰即触发',
+      messageIndex: 7,
+      applyEquivalentConfirmationSlots: true,
+    })
+
+    expect(next.triggers).toEqual([
+      expect.objectContaining({
+        status: 'locked',
+        params: expect.objectContaining({ confirmationMode: 'touch' }),
+        openSlots: [expect.objectContaining({ status: 'locked', value: 'touch' })],
+      }),
+      expect.objectContaining({
+        status: 'locked',
+        params: expect.objectContaining({ confirmationMode: 'touch' }),
+        openSlots: [expect.objectContaining({ status: 'locked', value: 'touch' })],
+      }),
+    ])
   })
 
   it('normalizes 收盘后触发 as close confirmation instead of touch', () => {

@@ -1633,6 +1633,7 @@ describe('SemanticSeedExtractorService', () => {
         sideScope: 'short',
         params: expect.objectContaining({
           boundaryRole: 'upper',
+          confirmationMode: 'touch',
           indicator: expect.objectContaining({ name: 'bollinger' }),
         }),
       }),
@@ -1642,6 +1643,7 @@ describe('SemanticSeedExtractorService', () => {
         sideScope: 'long',
         params: expect.objectContaining({
           boundaryRole: 'lower',
+          confirmationMode: 'touch',
           indicator: expect.objectContaining({ name: 'bollinger' }),
         }),
       }),

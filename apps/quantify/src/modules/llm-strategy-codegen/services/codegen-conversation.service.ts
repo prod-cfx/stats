@@ -2254,6 +2254,7 @@ export class CodegenConversationService {
           ? buildSemanticSlotId(legacyPositionSizingSlot)
           : item.slotId,
         answer: rawAnswer.trim(),
+        applyEquivalentConfirmationSlots: targetSlotKey.includes('confirmationMode'),
       })
     }
 

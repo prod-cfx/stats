@@ -38,6 +38,7 @@ export class SemanticStateReducerService {
     targetSlotId?: string
     answer: string
     messageIndex?: number
+    applyEquivalentConfirmationSlots?: boolean
   }): SemanticState {
     const nextState: SemanticState = {
       ...input.currentState,
@@ -115,6 +116,9 @@ export class SemanticStateReducerService {
       }
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (input.applyEquivalentConfirmationSlots && reduction.paramKey === 'confirmationMode') {
+        this.applyEquivalentConfirmationSlotReduction(nextState, slot, reduction, answerText, input.messageIndex)
+      }
       break
     }
 
@@ -651,8 +655,8 @@ export class SemanticStateReducerService {
     }
 
     if (slot.slotKey.includes('confirmationMode')) {
-      const confirmationIsClose = /收盘|确认|close/u.test(answerText)
-      const confirmationIsTouch = /盘中|即时|touch/u.test(answerText)
+      const confirmationIsClose = /收盘|闭合|确认后|close|bar\s*close|candle\s*close/iu.test(answerText)
+      const confirmationIsTouch = /触碰|触及|碰到|盘中|即时|实时|touch|intrabar|immediate/iu.test(answerText)
       if (confirmationIsClose === confirmationIsTouch) {
         return null
       }
@@ -696,6 +700,36 @@ export class SemanticStateReducerService {
     }
 
     return null
+  }
+
+  private applyEquivalentConfirmationSlotReduction(
+    state: SemanticState,
+    targetSlot: SemanticSlotState,
+    reduction: SupportedSlotReduction,
+    answerText: string,
+    messageIndex: number | undefined,
+  ): void {
+    for (const trigger of state.triggers) {
+      for (const slot of trigger.openSlots) {
+        if (
+          slot.status !== 'open'
+          || !slot.slotKey.includes('confirmationMode')
+          || buildSemanticSlotId(slot) === buildSemanticSlotId(targetSlot)
+        ) {
+          continue
+        }
+
+        trigger.params.confirmationMode = reduction.paramValue
+        slot.value = reduction.slotValue
+        slot.status = 'locked'
+        slot.evidence = {
+          text: answerText,
+          messageIndex,
+          source: 'user_explicit',
+        }
+      }
+      trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+    }
   }
 
   private reduceSupportedContextSlot(
