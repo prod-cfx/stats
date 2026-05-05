@@ -517,8 +517,8 @@ describe('canonicalSpecV2IrCompilerService', () => {
       const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
       const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
       const ctx = {
-        bars: [{ open: 100, high: 101, low: 99, close: 100 }],
-        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99 },
+        bars: [{ open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99, volume: 1, timestamp: 1 },
       } satisfies EvaluateExprPoolContext
       const exprValues = evaluateExprPool(
         ctx,
