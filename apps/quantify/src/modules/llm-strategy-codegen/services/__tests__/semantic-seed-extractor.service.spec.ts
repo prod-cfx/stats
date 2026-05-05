@@ -861,6 +861,113 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('extracts multi-timeframe EMA state wording into entry trigger atoms', () => {
+    const patch = service.extract('15min 1h 4h 价格都在 ema20 的上方 买入')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+          timeframe: '15m',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+          timeframe: '1h',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+          timeframe: '4h',
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(patch.contextSlots?.timeframe).toBeUndefined()
+  })
+
+  it('extracts follow-up EMA state wording into a complete entry fragment', () => {
+    const patch = service.extract('15min k线在 ema20 上方开多')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+          timeframe: '15m',
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+  })
+
+  it('keeps global timeframe when another timeframe is unrelated to the MA predicate scope', () => {
+    const patch = service.extract('BTCUSDT 15m；如果 1h 趋势向上，价格站上 EMA20 买入')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+        }),
+      }),
+    ]))
+  })
+
+  it('does not bind unrelated conjunction timeframe to the MA predicate scope', () => {
+    const patch = service.extract('BTCUSDT 15m 如果 1h 趋势向上且价格站上 EMA20 买入')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+    ]))
+  })
+
   it('extracts single-trade fund sizing into semantic position sizing', () => {
     const patch = service.extract('在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金')
 
