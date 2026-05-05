@@ -11991,9 +11991,24 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expectedShape: { absoluteSpacing: 100 },
       removedShape: { gridCount: 11 },
     },
+    {
+      name: 'structured keep percent spacing',
+      message: '继续',
+      clarificationAnswers: { 'semantic.contract.shape.price.level_set.spacing_conflict': '保留每格间距' },
+      shape: {
+        lower: 100,
+        upper: 110,
+        gridCount: 20,
+        spacingPct: 0.5,
+        spacingMode: 'arithmetic',
+      },
+      expectedShape: { spacingPct: 0.5 },
+      removedShape: { gridCount: 20 },
+    },
   ])('consumes level_set spacing conflict answer through conversation: $name', async ({
     message,
     clarificationAnswers,
+    shape,
     expectedShape,
     removedShape,
   }) => {
@@ -12027,7 +12042,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               domain: 'price',
               verb: 'define',
               object: 'level_set',
-              shape: {
+              shape: shape ?? {
                 lower: 79200,
                 upper: 80200,
                 gridCount: 11,

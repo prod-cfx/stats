@@ -442,6 +442,45 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     }))
   })
 
+  it('resolves percent spacing conflict by keeping the spacing', () => {
+    const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: {
+          lower: 100,
+          upper: 110,
+          gridCount: 20,
+          spacingPct: 0.5,
+          spacingMode: 'arithmetic',
+        },
+        openSlots: [conflictSlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '保留每格间距',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: conflictSlot.slotKey,
+          fieldPath: conflictSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
+    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      spacingPct: 0.5,
+    }))
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+  })
+
   it('does not consume invalid grid count numbers', () => {
     const state = createSemanticState({
       triggers: [createLevelSetTrigger({
