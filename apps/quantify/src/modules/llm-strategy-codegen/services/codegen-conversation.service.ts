@@ -1312,6 +1312,21 @@ export class CodegenConversationService {
       effectiveClarificationAnswers,
     )
     const baseConstraintPack = this.readConstraintPack(session.constraintPack)
+    const structuredOpenSlotAnswerState = this.resolveStructuredSemanticOpenSlotAnswers(
+      rawSemanticStateAfterAnswers,
+      activeClarificationState,
+      effectiveClarificationAnswers,
+    )
+    if (structuredOpenSlotAnswerState) {
+      return this.continueWithResolvedSemanticOpenSlotAnswer({
+        session,
+        semanticState: structuredOpenSlotAnswerState,
+        message: dto.message,
+        userId: sessionUserId,
+        constraintPack: baseConstraintPack,
+        guideConfig: dto.guideConfig,
+      })
+    }
     const openSlotAnswer = this.semanticOpenSlotAnswerResolver.resolve({
       currentState: rawSemanticStateAfterAnswers,
       message: dto.message,
@@ -2532,6 +2547,64 @@ export class CodegenConversationService {
     }
 
     return nextState
+  }
+
+  private resolveStructuredSemanticOpenSlotAnswers(
+    currentState: SemanticState,
+    clarificationState: StrategyClarificationState | null,
+    answers?: Record<string, string>,
+  ): SemanticState | null {
+    if (!answers || Object.keys(answers).length === 0) {
+      return null
+    }
+
+    let nextState = currentState
+    let consumed = false
+
+    for (const item of clarificationState?.items ?? []) {
+      const rawAnswer = this.readClarificationAnswerForItem(answers, item)
+      if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
+        continue
+      }
+
+      const result = this.semanticOpenSlotAnswerResolver.resolve({
+        currentState: nextState,
+        message: rawAnswer.trim(),
+        clarificationState: {
+          ...clarificationState,
+          items: [item],
+        },
+      })
+      if (!result.consumed) {
+        continue
+      }
+
+      nextState = result.nextState
+      consumed = true
+    }
+
+    return consumed ? nextState : null
+  }
+
+  private readClarificationAnswerForItem(
+    answers: Record<string, string>,
+    item: StrategyClarificationItem,
+  ): string | undefined {
+    const candidateKeys = [
+      item.key,
+      item.field,
+      item.slotId,
+      item.slotKey,
+    ].filter((key): key is string => typeof key === 'string' && key.length > 0)
+
+    for (const key of candidateKeys) {
+      const answer = answers[key]
+      if (typeof answer === 'string') {
+        return answer
+      }
+    }
+
+    return undefined
   }
 
   /**
