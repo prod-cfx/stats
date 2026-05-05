@@ -218,13 +218,30 @@ export function normalizeClarificationGate(input: unknown): LlmClarificationGate
   const summary = typeof gate.summary === 'string' && gate.summary.trim()
     ? gate.summary.trim()
     : null
+  const explicitlyClearUnsupportedFallback =
+    gate.blocked === false
+    && items.every(item => isUnsupportedFallbackClarificationItem(item))
 
   return {
-    blocked: gate.blocked === true || items.length > 0,
+    blocked: gate.blocked === true
+      ? true
+      : (gate.blocked === false && (items.length === 0 || explicitlyClearUnsupportedFallback)
+          ? false
+          : items.length > 0),
     summary,
     items: items as LlmClarificationGate['items'],
     pendingItems: items as LlmClarificationGate['items'],
   }
+}
+
+function isUnsupportedFallbackClarificationItem(input: unknown): boolean {
+  if (!isRecord(input)) {
+    return false
+  }
+
+  return input.field === 'unsupportedFallback'
+    || input.key === 'unsupported-fallback'
+    || input.reason === 'unsupported_semantics'
 }
 
 type DisplayBlockType = DisplayLogicGraph['blocks'][number]['type']
@@ -1830,6 +1847,10 @@ function buildServerTerminalCodegenReply(args: {
       'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
   })
   const reason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+
+  if (typeof response.assistantPrompt === 'string' && response.assistantPrompt.trim()) {
+    return response.assistantPrompt.trim()
+  }
 
   const isTerminalFailure =
     response.status === 'CONSISTENCY_FAILED'

@@ -824,4 +824,68 @@ describe('SemanticSeedStateBuilderService', () => {
       openSlots: [],
     }))
   })
+
+  it('keeps recognized unsupported atoms as semantic atoms without open slot conversion', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'volume.spike',
+        phase: 'entry',
+        params: { sourceText: '放量突破' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }, {
+        key: 'volume.threshold',
+        phase: 'entry',
+        params: { sourceText: '成交量阈值' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }, {
+        key: 'volatility.atr_threshold',
+        phase: 'gate',
+        params: { sourceText: 'ATR threshold filter' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      risk: [{
+        key: 'risk.atr_stop',
+        params: { sourceText: 'ATR 移动止损' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }, {
+        key: 'risk.partial_take_profit',
+        params: { sourceText: '分批止盈' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    })
+
+    expect(state?.triggers).toHaveLength(3)
+    expect(state?.risk).toHaveLength(2)
+    for (const node of [...(state?.triggers ?? []), ...(state?.risk ?? [])]) {
+      expect(node.openSlots).toEqual([])
+      expect(node.contracts).toEqual(expect.arrayContaining([expect.objectContaining({
+        capabilities: expect.any(Array),
+      })]))
+    }
+    expect(state?.triggers[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'volume_condition',
+    }))
+    expect(state?.triggers[1]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'volume_condition',
+    }))
+    expect(state?.triggers[2]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'volatility_condition',
+    }))
+    expect(state?.risk[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'atr_stop',
+    }))
+    expect(state?.risk[1]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'partial_take_profit',
+    }))
+  })
 })

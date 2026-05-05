@@ -79,7 +79,7 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    return {
+    return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
       triggers: triggerUpdates,
@@ -89,7 +89,7 @@ export class SemanticSeedStateBuilderService {
       contextSlots,
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
-    }
+    })
   }
 
   private toTriggerState(update: unknown, index: number): SemanticTriggerState | null {
@@ -382,6 +382,14 @@ export class SemanticSeedStateBuilderService {
       return this.isSupportedBollingerBoundaryParams(params)
     }
 
+    if (
+      key === 'volume.spike'
+      || key === 'volume.threshold'
+      || key === 'volatility.atr_threshold'
+    ) {
+      return true
+    }
+
     if (key === 'price.breakout_up' || key === 'price.breakout_down') {
       return this.hasBreakoutReference(params)
     }
@@ -390,7 +398,13 @@ export class SemanticSeedStateBuilderService {
       return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
     }
 
-    if (key === 'trend.direction' || key === 'market.regime' || key === 'volatility.state') {
+    if (
+      key === 'trend.direction'
+      || key === 'market.trend'
+      || key === 'market.range'
+      || key === 'market.regime'
+      || key === 'volatility.state'
+    ) {
       return Object.keys(params).length > 0
     }
 
@@ -458,6 +472,34 @@ export class SemanticSeedStateBuilderService {
     sideScope: SemanticTriggerState['sideScope'] | null,
     params: Record<string, unknown>,
   ): SemanticCapability {
+    if (key === 'volume.spike' || key === 'volume.threshold') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    if (key === 'volatility.atr_threshold') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
     if (key === 'execution.on_start') {
       return {
         domain: 'order_program',
@@ -543,9 +585,14 @@ export class SemanticSeedStateBuilderService {
   }
 
   private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
+    if (key === 'risk.atr_stop' || key === 'risk.partial_take_profit') {
+      return true
+    }
+
     if (
       key === 'risk.stop_loss_pct'
       || key === 'risk.take_profit_pct'
+      || key === 'risk.trailing_stop_pct'
       || key === 'risk.max_drawdown_pct'
       || key === 'risk.max_single_loss_pct'
     ) {
@@ -572,6 +619,9 @@ export class SemanticSeedStateBuilderService {
     if (key === 'risk.take_profit_pct') {
       return 'take_profit'
     }
+    if (key === 'risk.trailing_stop_pct') {
+      return 'trailing_stop'
+    }
     if (key === 'risk.max_drawdown_pct') {
       return 'max_drawdown'
     }
@@ -581,7 +631,81 @@ export class SemanticSeedStateBuilderService {
     if (key === 'risk.condition_expression') {
       return 'risk_condition'
     }
+    if (key === 'risk.atr_stop') {
+      return 'atr_stop'
+    }
+    if (key === 'risk.partial_take_profit') {
+      return 'partial_take_profit'
+    }
     return null
+  }
+
+  private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {
+    const hasExecutableSemantics = state.triggers.length > 0 || state.actions.length > 0
+    if (!hasExecutableSemantics) {
+      return state
+    }
+
+    const contextSlots = { ...state.contextSlots }
+    let changed = false
+    for (const field of ['exchange', 'symbol', 'marketType', 'timeframe'] as const) {
+      if (contextSlots[field]) continue
+      contextSlots[field] = {
+        slotKey: field,
+        fieldPath: `contextSlots.${field}`,
+        value: null,
+        status: 'open',
+        priority: 'context',
+        questionHint: CONTEXT_QUESTION_HINTS[field],
+        affectsExecution: true,
+      }
+      changed = true
+    }
+
+    if (!state.position && !this.hasContractPerOrderBudget(state.actions)) {
+      return {
+        ...state,
+        contextSlots,
+        position: {
+          mode: 'fixed_ratio',
+          value: 0,
+          sizing: null,
+          positionMode: this.inferPositionModeFromActions(state.actions),
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'position.sizing',
+            fieldPath: 'position.sizing',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+            affectsExecution: true,
+          }],
+        },
+      }
+    }
+
+    return changed ? { ...state, contextSlots } : state
+  }
+
+  private hasContractPerOrderBudget(actions: SemanticActionState[]): boolean {
+    return actions.some(action =>
+      action.contracts?.some(contract =>
+        contract.capabilities.some(capability =>
+          capability.domain === 'capital'
+          && capability.verb === 'allocate'
+          && capability.object === 'per_order_budget',
+        ),
+      ),
+    )
+  }
+
+  private inferPositionModeFromActions(actions: SemanticActionState[]): 'long_only' | 'short_only' | 'long_short' {
+    const hasLong = actions.some(action => action.key.includes('long'))
+    const hasShort = actions.some(action => action.key.includes('short'))
+    if (hasLong && hasShort) return 'long_short'
+    if (hasShort) return 'short_only'
+    return 'long_only'
   }
 
   private synthesizePositionContracts(position: {

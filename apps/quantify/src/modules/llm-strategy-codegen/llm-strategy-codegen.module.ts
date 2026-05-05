@@ -29,10 +29,12 @@ import { RecommendationIndexService } from './services/recommendation-index.serv
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
+import { SemanticAtomRegistryService } from './services/semantic-atom-registry.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
+import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
@@ -49,6 +51,7 @@ import { StrategyIrBuilderService } from './services/strategy-ir-builder.service
 import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canonical-adapter.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
+import { UnsupportedFallbackService } from './services/unsupported-fallback.service'
 
 @Module({
   imports: [PrismaModule, AiModule, AccountStrategyViewModule],
@@ -96,8 +99,11 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CodegenConversationService,
     PositionSizingContractService,
     SemanticAtomContractService,
+    SemanticAtomRegistryService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
+    SemanticSupportClassifierService,
+    UnsupportedFallbackService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })

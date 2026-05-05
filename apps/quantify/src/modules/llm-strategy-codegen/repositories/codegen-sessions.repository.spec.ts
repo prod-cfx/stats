@@ -475,6 +475,168 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     }))
   })
 
+  it('persists pending unsupported fallback in semanticState after session update', async () => {
+    let storedRow: Record<string, unknown> | null = null
+
+    const pickSelected = (row: Record<string, unknown>, select?: Record<string, boolean>) => {
+      const keys = Object.entries(select ?? {})
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => key)
+      return Object.fromEntries(keys.map(key => [key, row[key]]))
+    }
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockImplementation(async (args: { data: Record<string, unknown>; select?: Record<string, boolean> }) => {
+          storedRow = {
+            id: 'session-unsupported-fallback',
+            userId: args.data.userId,
+            status: args.data.status,
+            semanticState: args.data.semanticState ?? null,
+            clarificationState: args.data.clarificationState ?? null,
+            constraintPack: args.data.constraintPack ?? null,
+            latestDraftCode: args.data.latestDraftCode ?? null,
+            latestSpecDesc: args.data.latestSpecDesc ?? null,
+            graphSnapshot: args.data.graphSnapshot ?? null,
+            semanticGraph: args.data.semanticGraph ?? null,
+            validationReport: args.data.validationReport ?? null,
+            compiledIr: args.data.compiledIr ?? null,
+            rejectReason: args.data.rejectReason ?? null,
+            strategyInstanceId: args.data.strategyInstanceId ?? null,
+            createdAt: new Date('2026-04-20T10:00:00.000Z'),
+            updatedAt: new Date('2026-04-20T10:00:00.000Z'),
+          }
+          return pickSelected(storedRow, args.select)
+        }),
+        findUnique: jest.fn().mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+          if (!storedRow) return null
+          return pickSelected(storedRow, args.select)
+        }),
+        update: jest.fn().mockImplementation(async (args: { data: Record<string, unknown>; select?: Record<string, boolean> }) => {
+          if (!storedRow) throw new Error('session row missing')
+          storedRow = {
+            ...storedRow,
+            ...args.data,
+            updatedAt: new Date('2026-04-20T10:05:00.000Z'),
+          }
+          return pickSelected(storedRow, args.select)
+        }),
+      },
+    }
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repository = new CodegenSessionsRepository(txHost as never)
+
+    const baseSemanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-20T10:00:00.000Z',
+    }
+
+    await repository.createSession({
+      userId: 'u-unsupported-fallback',
+      status: 'DRAFTING',
+      semanticState: baseSemanticState as any,
+      clarificationState: { status: 'CLEAR', items: [] } as any,
+      constraintPack: {} as any,
+    } as any)
+
+    const semanticStateWithUnsupportedFallback: SemanticState = {
+      ...baseSemanticState,
+      updatedAt: '2026-04-20T10:05:00.000Z',
+      unsupportedFallback: {
+        status: 'pending',
+        unsupportedAtoms: [
+          {
+            key: 'risk.pause_strategy',
+            displayName: '暂停策略',
+            reasonCode: 'unsupported_risk_effect',
+            publicReason: '当前版本暂不支持自动暂停策略。',
+          },
+        ],
+        recommendedStrategy: {
+          strategyKey: 'price_breakout_with_fixed_risk',
+          description: '用价格突破搭配固定止损作为可执行替代方案。',
+          patch: {
+            triggers: [
+              {
+                key: 'price.breakout',
+                phase: 'entry',
+                params: { direction: 'up', lookbackBars: 20 },
+              },
+            ],
+            risk: [
+              {
+                key: 'risk.percent_stop',
+                params: { valuePct: 2, direction: 'loss', basis: 'entry_avg_price' },
+              },
+            ],
+          },
+        },
+        prompt: '当前暂停策略能力暂不可执行，是否改用价格突破加固定止损？',
+      },
+    }
+
+    await repository.updateSession('session-unsupported-fallback', {
+      semanticState: semanticStateWithUnsupportedFallback as any,
+    } as any)
+    const restored = await repository.findById('session-unsupported-fallback')
+
+    expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        semanticState: expect.objectContaining({
+          unsupportedFallback: expect.objectContaining({
+            status: 'pending',
+          }),
+        }),
+      }),
+      select: expect.objectContaining({
+        semanticState: true,
+      }),
+    }))
+    expect((restored as any)?.semanticState).toEqual(expect.objectContaining({
+      unsupportedFallback: expect.objectContaining({
+        status: 'pending',
+        unsupportedAtoms: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'risk.pause_strategy',
+            reasonCode: 'unsupported_risk_effect',
+          }),
+        ]),
+        recommendedStrategy: expect.objectContaining({
+          strategyKey: 'price_breakout_with_fixed_risk',
+          patch: expect.objectContaining({
+            triggers: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'price.breakout',
+              }),
+            ]),
+            risk: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.percent_stop',
+              }),
+            ]),
+          }),
+        }),
+        prompt: '当前暂停策略能力暂不可执行，是否改用价格突破加固定止损？',
+      }),
+    }))
+  })
+
   it('persists codegen sessions without a checklist column', async () => {
     const semanticState: SemanticState = {
       version: 1,

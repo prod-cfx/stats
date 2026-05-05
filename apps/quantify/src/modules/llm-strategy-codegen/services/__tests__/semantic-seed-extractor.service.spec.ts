@@ -162,6 +162,27 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it.each([
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不加仓，单笔 10%。',
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不要加仓，单笔 10%。',
+    'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，已有仓位不加仓也不开仓，单笔 10%。',
+  ])('does not emit unsupported add-position for negated scale-in text: %s', (message) => {
+    const patch = service.extract(message)
+
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.add_position' }),
+    ]))
+  })
+
+  it('does not emit unsupported reverse-position or DCA atoms for negated wording', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不要反手，也不要补仓，单笔 10%。')
+
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.reverse_position' }),
+    ]))
+    expect(patch.position?.mode).not.toBe('position.dca_schedule')
+  })
+
   it('extracts position sizing base contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，每次买 0.001 BTC')
 
@@ -508,6 +529,105 @@ describe('SemanticSeedExtractorService', () => {
     expect(result.risk).not.toContainEqual(expect.objectContaining({
       key: 'risk.stop_loss_pct',
     }))
+  })
+
+  it('extracts volume spike as recognized unsupported atom instead of generic fallback text', () => {
+    const patch = service.extract('BTCUSDT 15m 放量突破前高做多，止损 5%，单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'volume.spike',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('放量突破') }),
+      }),
+    ]))
+  })
+
+  it('extracts volume threshold as recognized unsupported trigger atom', () => {
+    const patch = service.extract('OKX BTCUSDT 15m，成交量大于过去 20 根均量 2 倍时开多，仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'volume.threshold',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('成交量大于') }),
+      }),
+    ]))
+  })
+
+  it('extracts ATR threshold and filter wording as recognized unsupported trigger atom', () => {
+    const patch = service.extract('OKX BTCUSDT 1h，ATR threshold filter passes when ATR greater than 100, then MA 金叉做多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'volatility.atr_threshold',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR threshold filter') }),
+      }),
+    ]))
+  })
+
+  it('extracts ATR stop as recognized unsupported risk atom', () => {
+    const patch = service.extract('ETHUSDT 1h 均线金叉做多，用 ATR 2 倍移动止损，仓位 10%。')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_stop',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR 2 倍移动止损') }),
+      }),
+    ]))
+  })
+
+  it('extracts English ATR stop wording as recognized unsupported risk atom', () => {
+    const patch = service.extract('ETHUSDT 1h MA cross long with ATR trailing stop and 10% position.')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_stop',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR trailing stop') }),
+      }),
+    ]))
+  })
+
+  it('extracts partial take profit as recognized unsupported risk atom', () => {
+    const patch = service.extract('BTCUSDT 做多后盈利 5% 平一半，盈利 10% 全平，仓位 10%。')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.partial_take_profit',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('平一半') }),
+      }),
+    ]))
+  })
+
+  it('does not treat ATR threshold plus fixed stop loss as ATR stop', () => {
+    const patch = service.extract('OKX BTCUSDT 1h，ATR 大于 100 时做多，止损 5%，仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volatility.atr_threshold' }),
+    ]))
+    expect(patch.risk).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.atr_stop' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct' }),
+    ]))
+  })
+
+  it('does not emit unsupported atoms for negated unsupported wording', () => {
+    const patch = service.extract('OKX BTCUSDT 15m，不要放量过滤，不用 ATR 止损，不分批止盈，只用 MA20 上穿 MA50 做多，止损 5%，仓位 10%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'volume.spike' })]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'volume.threshold' })]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'volatility.atr_threshold' })]))
+    expect(patch.risk).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'risk.atr_stop' })]))
+    expect(patch.risk).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'risk.partial_take_profit' })]))
+  })
+
+  it('preserves trade intent for unsupported volume triggers', () => {
+    const patch = service.extract('OKX BTCUSDT 15m，放量做空，放量平仓。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volume.spike', phase: 'entry', sideScope: 'short' }),
+      expect.objectContaining({ key: 'volume.spike', phase: 'exit' }),
+    ]))
   })
 
   it('keeps halt and stop-loss clauses separate in mixed risk wording', () => {

@@ -148,6 +148,9 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true, nullable: true })
   semanticGraph?: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ description: '不支持语义的推荐替代策略状态', type: 'object', additionalProperties: true, nullable: true })
+  unsupportedFallback?: Record<string, unknown> | null
+
   @ApiPropertyOptional({
     description: '语义图校验结果',
     type: 'object',
