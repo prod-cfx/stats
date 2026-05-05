@@ -152,6 +152,109 @@ strategy
     expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'passed')).toBe(true)
   })
 
+  it('does not require boundary-cancel bridge actions to appear in compiled script actions', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'okx' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'perp' as const,
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      orderPrograms: [{
+        id: 'contract-order-program-limit_ladder',
+        kind: 'contract_order_program' as const,
+        mode: 'perp_neutral' as const,
+        levelSet: {
+          lower: 78800,
+          upper: 81400,
+          gridIntervals: 10,
+          gridCount: 11,
+          absoluteSpacing: 260,
+          spacingMode: 'arithmetic' as const,
+        },
+        budget: {
+          mode: 'per_order_quote' as const,
+          value: 500,
+          asset: 'USDT',
+        },
+        orderType: 'limit' as const,
+        timeInForce: 'gtc' as const,
+        recycleOnFill: true,
+        cancelOnStop: true,
+      }],
+      rules: [{
+        id: 'semantic-boundary-guard-1',
+        phase: 'risk' as const,
+        sideScope: 'both' as const,
+        priority: 110,
+        condition: {
+          kind: 'NOT' as const,
+          children: [{
+            kind: 'atom' as const,
+            key: 'order_program.active_range',
+            params: { programId: 'contract-order-program-limit_ladder' },
+          }],
+        },
+        actions: [{ type: 'BLOCK_NEW_ENTRY' as const }],
+        metadata: {
+          semanticKey: 'risk.boundary_guard',
+          guard: 'boundary_cancel',
+          cancelOrders: true,
+          onBreach: 'HALT_STRATEGY',
+        },
+      }, {
+        id: 'semantic-risk-stop-loss',
+        phase: 'risk' as const,
+        sideScope: 'both' as const,
+        priority: 109,
+        condition: {
+          kind: 'atom' as const,
+          key: 'position_loss_pct',
+          op: 'LTE' as const,
+          value: 5,
+        },
+        actions: [{ type: 'FORCE_EXIT' as const }],
+      }],
+    }
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.specProfile.actions).not.toContain('BLOCK_NEW_ENTRY')
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      key: 'actions.required',
+      status: 'passed',
+    }))
+  })
+
   it('passes when compiled pct-equity sizing is exactly one percent', () => {
     const canonicalSpec = canonicalBuilder.build({
       symbols: ['BTCUSDT'],
