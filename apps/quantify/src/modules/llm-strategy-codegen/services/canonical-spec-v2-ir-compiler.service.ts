@@ -963,6 +963,21 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'indicator.above':
+      case 'indicator.below': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
+        const indicatorRef = this.ensureIndicatorReferenceSeries(context, atom, timeframe)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          atom.key === 'indicator.above' ? 'GTE' : 'LTE',
+          [closeRef, indicatorRef],
+        )
+      }
+
       case 'rsi.threshold_lte':
       case 'rsi.threshold_gte':
       case 'rsi.cross_over':
@@ -1225,6 +1240,27 @@ export class CanonicalSpecV2IrCompilerService {
       })
     }
     return id
+  }
+
+  private ensureIndicatorReferenceSeries(
+    context: CompileContext,
+    atom: CanonicalConditionAtom,
+    timeframe: string,
+  ): string {
+    const indicator = typeof atom.params?.indicator === 'string'
+      ? atom.params.indicator.trim().toLowerCase()
+      : ''
+    const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], context.movingAverage.slow)
+
+    if (indicator === 'ema') {
+      return this.ensureIndicatorSeries(context, 'EMA', period, timeframe)
+    }
+
+    if (indicator === 'ma' || indicator === 'sma' || indicator.length === 0) {
+      return this.ensureIndicatorSeries(context, 'SMA', period, timeframe)
+    }
+
+    throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {
