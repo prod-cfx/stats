@@ -1287,43 +1287,55 @@ describe('SemanticSeedExtractorService', () => {
       }),
       triggers: expect.arrayContaining([
         expect.objectContaining({
-          key: 'bollinger.touch_upper',
+          key: 'price.detect.indicator_boundary',
           phase: 'entry',
           sideScope: 'short',
           params: expect.objectContaining({
-            band: 'upper',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'upper',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_lower',
+          key: 'price.detect.indicator_boundary',
           phase: 'entry',
           sideScope: 'long',
           params: expect.objectContaining({
-            band: 'lower',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'lower',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_middle',
+          key: 'price.detect.indicator_boundary',
           phase: 'exit',
           sideScope: 'long',
           params: expect.objectContaining({
-            band: 'middle',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'middle',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_middle',
+          key: 'price.detect.indicator_boundary',
           phase: 'exit',
           sideScope: 'short',
           params: expect.objectContaining({
-            band: 'middle',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'middle',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
       ]),
@@ -1363,43 +1375,55 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         phase: 'entry',
         sideScope: 'short',
         params: expect.objectContaining({
-          band: 'upper',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         phase: 'entry',
         sideScope: 'long',
         params: expect.objectContaining({
-          band: 'lower',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'long',
         params: expect.objectContaining({
-          band: 'middle',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'short',
         params: expect.objectContaining({
-          band: 'middle',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
     ]))
@@ -1444,26 +1468,38 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
     ]))
     expect(patch.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 20,
-          stdDev: 2,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          }),
         }),
       }),
     ]))
@@ -1474,17 +1510,25 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
     ]))

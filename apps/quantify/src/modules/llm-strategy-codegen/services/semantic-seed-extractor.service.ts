@@ -1062,9 +1062,10 @@ export class SemanticSeedExtractorService {
     return /布林线|布林带|bollinger|通道|channel|上轨|下轨|中轨|上沿|下沿|中线|上边界|下边界|边界/iu.test(segment)
   }
 
-  private resolveIndicatorName(segment: string): 'bollinger' | 'channel' | 'generic_boundary' {
+  private resolveIndicatorName(segment: string, aliasContext?: SemanticAliasContext): 'bollinger' | 'channel' | 'generic_boundary' {
     if (/布林线|布林带|bollinger/iu.test(segment)) return 'bollinger'
     if (/通道|channel/iu.test(segment)) return 'channel'
+    if (aliasContext?.bollingerBandParams && /上轨|下轨|中轨/iu.test(segment)) return 'bollinger'
     return 'generic_boundary'
   }
 
@@ -1084,7 +1085,7 @@ export class SemanticSeedExtractorService {
     if (!this.hasIndicatorBoundaryLanguage(segment)) return
     if (this.isBareBollingerBoundaryAlias(segment, aliasContext) && !this.hasBollingerBandAction(segment)) return
 
-    const indicatorName = this.resolveIndicatorName(segment)
+    const indicatorName = this.resolveIndicatorName(segment, aliasContext)
     const bandParams = indicatorName === 'bollinger'
       ? this.extractBollingerBandParams(segment) ?? aliasContext.bollingerBandParams
       : null

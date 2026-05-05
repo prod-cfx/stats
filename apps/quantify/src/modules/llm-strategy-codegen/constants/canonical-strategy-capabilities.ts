@@ -33,6 +33,7 @@ export const FIRST_WAVE_TRIGGER_ATOMS = [
   'price.range_position_gte',
   'price.breakout_up',
   'price.breakout_down',
+  'price.detect.indicator_boundary',
   'indicator.cross_over',
   'indicator.cross_under',
   'indicator.above',
