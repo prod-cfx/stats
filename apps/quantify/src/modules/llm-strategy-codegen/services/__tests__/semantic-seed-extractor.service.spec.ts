@@ -2388,6 +2388,9 @@ describe('SemanticSeedExtractorService', () => {
         }),
       }),
     ]))
+    const macdTriggers = patch.triggers?.filter(trigger => trigger.params?.indicator === 'macd') ?? []
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
   })
 
   it('keeps MA price-vs-reference periods local to each clause', () => {

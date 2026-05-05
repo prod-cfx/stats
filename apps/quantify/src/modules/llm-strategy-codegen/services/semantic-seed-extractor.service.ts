@@ -101,15 +101,66 @@ export class SemanticSeedExtractorService {
   ): SeedTrigger[] {
     const merged: SeedTrigger[] = []
     const seen = new Set<string>()
+    const looseIndicatorIndex = new Map<string, number>()
 
     for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
       const signature = this.buildTriggerMergeSignature(trigger)
       if (seen.has(signature)) continue
+
+      const looseSignature = this.buildLooseIndicatorCrossMergeSignature(trigger)
+      if (looseSignature) {
+        const existingIndex = looseIndicatorIndex.get(looseSignature)
+        if (existingIndex !== undefined) {
+          const existingTrigger = merged[existingIndex]
+          if (this.canMergeLooseIndicatorCross(existingTrigger, trigger)) {
+            if (this.countIndicatorPeriodParams(trigger) > this.countIndicatorPeriodParams(existingTrigger)) {
+              merged[existingIndex] = trigger
+              seen.add(signature)
+            }
+            continue
+          }
+        }
+        else {
+          looseIndicatorIndex.set(looseSignature, merged.length)
+        }
+      }
+
       seen.add(signature)
       merged.push(trigger)
     }
 
     return merged
+  }
+
+  private buildLooseIndicatorCrossMergeSignature(trigger: SeedTrigger): string | null {
+    if (!this.isIndicatorCrossTrigger(trigger)) {
+      return null
+    }
+
+    return JSON.stringify({
+      key: trigger.key,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      indicator: trigger.params?.indicator,
+      semantic: this.resolveIndicatorCrossSemantic(trigger),
+    })
+  }
+
+  private canMergeLooseIndicatorCross(left: SeedTrigger, right: SeedTrigger): boolean {
+    if (!this.isIndicatorCrossTrigger(left) || !this.isIndicatorCrossTrigger(right)) {
+      return false
+    }
+
+    return this.countIndicatorPeriodParams(left) === 0 || this.countIndicatorPeriodParams(right) === 0
+  }
+
+  private countIndicatorPeriodParams(trigger: SeedTrigger): number {
+    let count = 0
+    if (trigger.params?.fastPeriod !== undefined) count += 1
+    if (trigger.params?.slowPeriod !== undefined) count += 1
+    if (trigger.params?.signalPeriod !== undefined) count += 1
+
+    return count
   }
 
   private buildTriggerMergeSignature(trigger: SeedTrigger): string {
