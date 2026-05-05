@@ -564,6 +564,10 @@ export class SemanticStateProjectionService {
           return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
+        if (trigger.key === 'price.detect.indicator_boundary') {
+          return this.formatIndicatorBoundaryTriggerSummary(trigger)
+        }
+
         return trigger.key
       })
       .filter(item => item.length > 0)
@@ -686,6 +690,74 @@ export class SemanticStateProjectionService {
     const slowLabel = slow === null ? `${label}长周期` : `${label}${slow}`
     const condition = `${fastLabel} ${direction} ${slowLabel}`
     return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+  }
+
+  private formatIndicatorBoundaryTriggerSummary(trigger: SemanticState['triggers'][number]): string {
+    const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
+    const boundaryRole = this.readBoundaryRole(trigger.params.boundaryRole)
+    if (!indicator || !boundaryRole) {
+      return trigger.key
+    }
+
+    const phase = trigger.phase === 'entry' ? '入场' : '出场'
+    const boundaryText = this.formatBoundaryRole(boundaryRole)
+    const actionText = this.formatIndicatorBoundaryActionText(trigger.params.confirmationMode)
+    const condition = indicator.name === 'bollinger'
+      ? `${actionText}布林带 ${this.formatIndicatorPeriodStdDev(indicator)}${boundaryText}`
+      : `${actionText}${indicator.name}${boundaryText}`
+    return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+  }
+
+  private readIndicatorBoundaryIndicator(params: Record<string, unknown>): {
+    name: string
+    period?: number
+    stdDev?: number
+  } | null {
+    const indicator = params.indicator
+    if (!indicator || typeof indicator !== 'object' || Array.isArray(indicator)) {
+      return null
+    }
+
+    const record = indicator as Record<string, unknown>
+    const name = typeof record.name === 'string' ? record.name.trim().toLowerCase() : ''
+    if (!name) {
+      return null
+    }
+
+    return {
+      name,
+      ...(typeof record.period === 'number' && Number.isFinite(record.period) ? { period: record.period } : {}),
+      ...(typeof record.stdDev === 'number' && Number.isFinite(record.stdDev) ? { stdDev: record.stdDev } : {}),
+    }
+  }
+
+  private readBoundaryRole(value: unknown): 'upper' | 'lower' | 'middle' | null {
+    return value === 'upper' || value === 'lower' || value === 'middle' ? value : null
+  }
+
+  private formatBoundaryRole(role: 'upper' | 'lower' | 'middle'): string {
+    if (role === 'upper') return '上轨'
+    if (role === 'lower') return '下轨'
+    return '中轨'
+  }
+
+  private formatIndicatorBoundaryActionText(confirmationMode: unknown): string {
+    if (confirmationMode === 'close_confirm') {
+      return '收盘确认突破'
+    }
+    return '触及'
+  }
+
+  private formatIndicatorPeriodStdDev(indicator: { period?: number, stdDev?: number }): string {
+    if (indicator.period !== undefined && indicator.stdDev !== undefined) {
+      return `${this.formatNumber(indicator.period)} 周期 ${this.formatNumber(indicator.stdDev)} 倍标准差`
+    }
+
+    if (indicator.period !== undefined) {
+      return `${this.formatNumber(indicator.period)} 周期`
+    }
+
+    return ''
   }
 
   private formatActionSuffix(trigger: SemanticState['triggers'][number], conditionText: string): string {
@@ -956,7 +1028,7 @@ export class SemanticStateProjectionService {
     const trigger = this.readShapeString(guard.shape, 'trigger')
     const onBreach = this.readShapeString(guard.shape, 'onBreach')
     const cancelOrders = this.readShapeBoolean(guard.shape, 'cancelOrders')
-    if (trigger !== 'boundary_breach' && !/boundary|breakout|breach|cancel|halt|stop|grid/u.test(guard.object)) {
+    if (!this.isBoundaryGuardCapability(guard.object, trigger)) {
       return ''
     }
 
@@ -965,6 +1037,12 @@ export class SemanticStateProjectionService {
     const cancelText = cancelOrders === true ? `并撤销${cancelScope}` : ''
     const regridText = this.readShapeBoolean(guard.shape, 'regrid') === false ? '，不再重新部署网格' : ''
     return `风控：突破上下边界时${actionText}${cancelText}${regridText}`
+  }
+
+  private isBoundaryGuardCapability(object: string, trigger: string | null): boolean {
+    return trigger === 'boundary_breach'
+      || object === 'boundary_cancel'
+      || /boundary|range|grid/u.test(object)
   }
 
   private describeCancelScope(scope: string | null): string {

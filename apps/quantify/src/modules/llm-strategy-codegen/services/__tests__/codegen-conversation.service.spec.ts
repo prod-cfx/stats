@@ -4428,6 +4428,71 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('触碰即触发，还是收盘确认')
   })
 
+  it('keeps Bollinger boundary atoms readable and preserves stop-loss risk through full clarification', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-boundary-full-clarification' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '继续完善策略。',
+      }),
+    })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 布林带下轨买入 上轨卖出',
+    })
+
+    let sessionPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const continueWith = async (message: string) => {
+      mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+        's-bollinger-boundary-full-clarification',
+        sessionPayload,
+      ))
+      const result = await service.continueSession('s-bollinger-boundary-full-clarification', {
+        userId: 'u1',
+        message,
+      } as ContinueCodegenSessionDto)
+      sessionPayload = {
+        ...sessionPayload,
+        ...(mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any> | undefined ?? {}),
+      }
+      return result
+    }
+
+    await continueWith('触碰即触发')
+    await continueWith('10%')
+    await continueWith('okx')
+    await continueWith('BTCUSDT')
+    await continueWith('合约')
+    await continueWith('15m')
+    const result = await continueWith('5%止损')
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('入场：触及布林带')
+    expect(result.assistantPrompt).toContain('下轨时做多')
+    expect(result.assistantPrompt).toContain('出场：触及布林带')
+    expect(result.assistantPrompt).toContain('上轨时平多')
+    expect(result.assistantPrompt).toContain('止损：价格相对入场均价下跌5% 强制平仓')
+    expect(result.assistantPrompt).toContain('仓位：10%')
+    expect(result.assistantPrompt).not.toContain('price.detect.indicator_boundary')
+    expect(result.assistantPrompt).not.toContain('突破上下边界时执行风控')
+    expect(sessionPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long', status: 'locked' }),
+      expect.objectContaining({ key: 'close_long', status: 'locked' }),
+    ]))
+    expect(sessionPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 5 }),
+        status: 'locked',
+      }),
+    ]))
+    expect(sessionPayload.semanticState.risk).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.boundary_guard' }),
+    ]))
+  })
+
 
 
 
