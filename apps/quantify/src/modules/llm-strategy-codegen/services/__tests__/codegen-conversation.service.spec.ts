@@ -11512,7 +11512,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   })
 
-  it('keeps canonical projection compileability gaps internal when semantic state is ready during confirmGenerate', async () => {
+  it('blocks confirmGenerate when semantic state is ready but canonical projection is not executable', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
         lockedStopLossRisk(),
@@ -11562,10 +11562,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         confirmedCanonicalDigest,
       })
 
-      expect(result.status).toBe('GENERATING')
+      expect(result.status).toBe('DRAFTING')
       expect(result.assistantPrompt ?? '').not.toContain('未识别可编译入场规则')
       expect(result.assistantPrompt ?? '').not.toContain('未识别可编译出场规则')
-      expect(mockRepo.tryMarkGenerating).toHaveBeenCalled()
+      expect(result.assistantPrompt ?? '').toContain('不能稳定投影到可执行入场规则和可执行出场/风控规则')
+      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+      expect(mockRepo.updateSession).toHaveBeenCalledWith(
+        's7-semantic-projection-gap',
+        expect.objectContaining({ status: 'DRAFTING' }),
+      )
     } finally {
       genericGapSpy.mockRestore()
       compileabilitySpy.mockRestore()

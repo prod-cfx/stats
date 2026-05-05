@@ -2093,7 +2093,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (!compileability.canCompile && !semanticReadyForGenerate) {
+    if (!compileability.canCompile) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -2102,14 +2102,18 @@ export class CodegenConversationService {
           ...constraintPack,
           conversationHistory: historyAfterConfirm,
         },
+        latestSpecDesc: specDesc,
       }))
 
       const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: clarificationPrompt || '请先补充未关闭的语义问题，我再继续生成脚本。',
+        assistantPrompt: semanticReadyForGenerate
+          ? this.buildCanonicalProjectionFailureAssistantPrompt(reducedSemanticState, compileability)
+          : (clarificationPrompt || '请先补充未关闭的语义问题，我再继续生成脚本。'),
         clarificationState,
+        specDesc,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -5311,6 +5315,21 @@ export class CodegenConversationService {
     const summary = this.buildSemanticClarificationSummary(semanticState)
     const blocker = normalization.blockerReason ? `当前还缺少：${normalization.blockerReason}` : '当前语义仍未完整。'
     return `我当前理解的策略是：${summary}\n${blocker}`
+  }
+
+  private buildCanonicalProjectionFailureAssistantPrompt(
+    semanticState: SemanticState,
+    compileability: CanonicalCompileabilityReport,
+  ): string {
+    const summary = this.buildSemanticClarificationSummary(semanticState)
+    const missing = [
+      compileability.reasons.includes('canonical_projection_missing_entry_program') ? '可执行入场规则' : null,
+      compileability.reasons.includes('canonical_projection_missing_exit_program') ? '可执行出场/风控规则' : null,
+    ].filter((item): item is string => item !== null)
+    const blocker = missing.length > 0
+      ? `当前还不能稳定投影到${missing.join('和')}。`
+      : '当前还不能稳定投影到可执行规则。'
+    return `我当前理解的策略是：${summary}\n${blocker}请补充更明确的触发或退出条件后，我再继续生成脚本。`
   }
 
   private buildLogicGateAssistantPrompt(
