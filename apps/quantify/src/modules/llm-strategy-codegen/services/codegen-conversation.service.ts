@@ -2093,7 +2093,10 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (!compileability.canCompile) {
+    if (!compileability.canCompile && (
+      !semanticReadyForGenerate
+      || !this.hasLockedGridTrigger(reducedSemanticState)
+    )) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -5315,6 +5318,14 @@ export class CodegenConversationService {
     const summary = this.buildSemanticClarificationSummary(semanticState)
     const blocker = normalization.blockerReason ? `当前还缺少：${normalization.blockerReason}` : '当前语义仍未完整。'
     return `我当前理解的策略是：${summary}\n${blocker}`
+  }
+
+  private hasLockedGridTrigger(semanticState: SemanticState): boolean {
+    return semanticState.triggers.some(trigger =>
+      trigger.key === 'grid.range_rebalance'
+      && trigger.status === 'locked'
+      && trigger.openSlots.length === 0,
+    )
   }
 
   private buildCanonicalProjectionFailureAssistantPrompt(

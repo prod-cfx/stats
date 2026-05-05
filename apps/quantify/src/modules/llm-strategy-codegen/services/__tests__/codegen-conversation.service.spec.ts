@@ -4349,8 +4349,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ reason: 'missing_entry_rules' }),
       expect.objectContaining({ reason: 'missing_exit_rules' }),
     ]))
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('触碰即触发，还是收盘确认')
     expect(result.assistantPrompt).toContain('布林带')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
@@ -4361,14 +4361,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             sideScope: 'short',
           }),
           expect.objectContaining({
-            key: 'bollinger.touch_middle',
-            phase: 'exit',
+            key: 'price.detect.indicator_boundary',
+            phase: 'entry',
             sideScope: 'short',
+            openSlots: expect.arrayContaining([
+              expect.objectContaining({ slotKey: 'confirmationMode.entry' }),
+            ]),
           }),
         ]),
       }),
       clarificationState: expect.objectContaining({
-        status: 'CLEAR',
+        status: 'NEEDS_CLARIFICATION',
       }),
     }))
   })

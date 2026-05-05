@@ -1098,7 +1098,7 @@ export class SemanticSeedExtractorService {
       const intent = this.resolveIndicatorBoundaryTradeIntent(clause, previousEntrySideScope)
       if (!intent) continue
 
-      const confirmationMode = this.extractConfirmationMode(clause)
+      const confirmationMode = this.extractBoundaryConfirmationMode(clause)
         ?? this.extractConfirmationMode(segment)
 
       this.pushTrigger(triggers, seen, {
@@ -2307,6 +2307,15 @@ export class SemanticSeedExtractorService {
   private extractConfirmationMode(segment: string): 'close_confirm' | null {
     if (/收盘|确认|close/u.test(segment)) {
       return 'close_confirm'
+    }
+    return null
+  }
+
+  private extractBoundaryConfirmationMode(segment: string): 'touch' | 'close_confirm' | null {
+    const closeConfirm = this.extractConfirmationMode(segment)
+    if (closeConfirm) return closeConfirm
+    if (/触及|触碰|碰到|回到|达到|到达/u.test(segment)) {
+      return 'touch'
     }
     return null
   }
