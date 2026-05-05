@@ -107,7 +107,14 @@ export class SemanticSeedStateBuilderService {
     const sideScope = update.sideScope === 'long' || update.sideScope === 'short' || update.sideScope === 'both'
       ? update.sideScope
       : null
-    const openSlots = this.readOpenSlots(update.openSlots)
+    const openSlots = this.ensureBollingerConfirmationOpenSlot({
+      key,
+      phase,
+      params,
+      openSlots: this.readOpenSlots(update.openSlots),
+      triggerIndex: index,
+      statusValue: update.status,
+    })
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
@@ -371,6 +378,10 @@ export class SemanticSeedStateBuilderService {
       return this.hasFiniteNumber(params.period) && this.hasFiniteNumber(params.stdDev)
     }
 
+    if (key === 'price.detect.indicator_boundary') {
+      return this.isSupportedBollingerBoundaryParams(params)
+    }
+
     if (key === 'price.breakout_up' || key === 'price.breakout_down') {
       return this.hasBreakoutReference(params)
     }
@@ -412,6 +423,13 @@ export class SemanticSeedStateBuilderService {
     return this.hasFiniteNumber(params.lookbackBars)
       || this.hasFiniteNumber(params.windowBars)
       || this.isRecord(params.expression)
+  }
+
+  private isSupportedBollingerBoundaryParams(params: Record<string, unknown>): boolean {
+    const indicator = params.indicator
+    return this.isRecord(indicator)
+      && indicator.name === 'bollinger'
+      && (params.boundaryRole === 'upper' || params.boundaryRole === 'lower' || params.boundaryRole === 'middle')
   }
 
   private hasFiniteNumber(value: unknown): value is number {
@@ -864,6 +882,57 @@ export class SemanticSeedStateBuilderService {
     return value
       .map(item => this.toSlotState(item))
       .filter((item): item is SemanticSlotState => item !== null)
+  }
+
+  private ensureBollingerConfirmationOpenSlot(input: {
+    key: string
+    phase: SemanticTriggerState['phase']
+    params: Record<string, unknown>
+    openSlots: SemanticSlotState[]
+    triggerIndex: number
+    statusValue: unknown
+  }): SemanticSlotState[] {
+    if (
+      input.statusValue === 'superseded'
+      || !this.requiresBollingerConfirmationMode(input.key, input.params)
+      || typeof input.params.confirmationMode === 'string'
+    ) {
+      return input.openSlots
+    }
+
+    const slotKey = `confirmationMode.${input.phase}`
+    const fieldPath = `triggers[${input.triggerIndex}].params.confirmationMode`
+    if (input.openSlots.some(slot => slot.slotKey === slotKey && slot.fieldPath === fieldPath)) {
+      return input.openSlots
+    }
+
+    return [
+      ...input.openSlots,
+      {
+        slotKey,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: '该触发条件是触碰即触发，还是收盘确认后触发？',
+        affectsExecution: true,
+      },
+    ]
+  }
+
+  private requiresBollingerConfirmationMode(
+    key: string,
+    params: Record<string, unknown>,
+  ): boolean {
+    if (key.startsWith('bollinger.touch_')) {
+      return true
+    }
+
+    if (key !== 'price.detect.indicator_boundary') {
+      return false
+    }
+
+    const indicator = params.indicator
+    return this.isRecord(indicator) && indicator.name === 'bollinger'
   }
 
   private resolveContractCoverage(options: {

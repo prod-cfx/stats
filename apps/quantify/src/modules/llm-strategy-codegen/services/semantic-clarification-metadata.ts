@@ -5,41 +5,48 @@ export function resolveSemanticClarificationMetadata(
 ): Pick<StrategyClarificationItem, 'reason' | 'field'> {
   if (slotKey === 'position.sizing') {
     return {
-      reason: 'missing_position_pct',
-      field: 'riskRules.positionPct',
+      reason: 'missing_semantic_position_sizing',
+      field: 'position.sizing',
     }
   }
 
-  if (slotKey === 'risk.protective_exit') {
+  if (slotKey === 'position.mode' || slotKey === 'exposure.position_mode') {
     return {
-      reason: 'missing_stop_loss_rule',
-      field: 'riskRules.stopLossPct',
+      reason: 'missing_semantic_position_mode',
+      field: 'position.positionMode',
     }
   }
 
-  if (slotKey === 'grid.sideMode') {
+  if (slotKey === 'risk.protective_exit' || slotKey.startsWith('risk.')) {
     return {
-      reason: 'missing_side_scope',
-      field: 'grid.sideMode',
+      reason: 'missing_semantic_risk',
+      field: 'risk',
+    }
+  }
+
+  if (slotKey === 'grid.sideMode' || slotKey.startsWith('action.') || slotKey.includes('order.intent')) {
+    return {
+      reason: 'missing_semantic_action',
+      field: 'actions',
     }
   }
 
   if (slotKey.startsWith('grid.')) {
     return {
-      reason: 'grid_params_missing',
+      reason: 'missing_semantic_contract_requirement',
       field: slotKey,
     }
   }
 
-  if (slotKey.includes('.exit')) {
+  if (slotKey.startsWith('contract.requirement.')) {
     return {
-      reason: 'missing_exit_rules',
-      field: 'exitRules',
+      reason: 'missing_semantic_contract_requirement',
+      field: slotKey,
     }
   }
 
   return {
-    reason: 'missing_entry_rules',
-    field: 'entryRules',
+    reason: 'missing_semantic_trigger',
+    field: 'triggers',
   }
 }

@@ -533,6 +533,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private isOrderProgramShadowRule(rule: CanonicalRuleV2): boolean {
+    // Compatibility routing hint only. Readiness and clarification must be decided before this point by SemanticState contracts and openSlots.
     if (rule.metadata?.normalized?.family === 'grid.range_rebalance') {
       return true
     }
@@ -1680,14 +1681,14 @@ export class CanonicalSpecBuilderService {
     if (hasDonchianBreakout) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'breakout' },
+        params: { compatibilityFamilyHint: 'breakout' },
       })
     }
 
     if (allTexts.some(text => /网格/u.test(text))) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'grid' },
+        params: { compatibilityFamilyHint: 'grid' },
       })
     }
 
@@ -2083,6 +2084,23 @@ export class CanonicalSpecBuilderService {
             },
           })
           break
+        case 'price.detect.indicator_boundary': {
+          const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
+          if (indicator?.name === 'bollinger') {
+            pushIndicator({
+              kind: 'bollingerBands',
+              params: {
+                period: typeof indicator.period === 'number' && Number.isFinite(indicator.period)
+                  ? indicator.period
+                  : DEFAULT_INDICATOR_PARAMS.bollingerBands.period,
+                stdDev: typeof indicator.stdDev === 'number' && Number.isFinite(indicator.stdDev)
+                  ? indicator.stdDev
+                  : DEFAULT_INDICATOR_PARAMS.bollingerBands.stdDev,
+              },
+            })
+          }
+          break
+        }
         case 'oscillator.rsi_gte':
         case 'oscillator.rsi_lte':
           pushIndicator({
@@ -2175,14 +2193,14 @@ export class CanonicalSpecBuilderService {
     if (normalizedIntent.grid) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'grid' },
+        params: { compatibilityFamilyHint: 'grid' },
       })
     }
 
     if (normalizedIntent.triggers.some(trigger => trigger.key === 'price.breakout_up' || trigger.key === 'price.breakout_down')) {
       pushIndicator({
         kind: 'custom',
-        params: { family: 'breakout' },
+        params: { compatibilityFamilyHint: 'breakout' },
       })
     }
 
@@ -2794,25 +2812,36 @@ export class CanonicalSpecBuilderService {
             ...(typeof trigger.params.reference === 'string' ? { reference: trigger.params.reference } : {}),
           },
         }
+      case 'price.detect.indicator_boundary':
+        return this.buildConditionFromIndicatorBoundaryTrigger(trigger)
       case 'bollinger.touch_upper':
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerUpperBreak,
           semanticScope: 'market',
-          op: 'CROSS_OVER',
+          op: trigger.params.confirmationMode === 'touch' ? 'GTE' : 'CROSS_OVER',
+          ...(typeof trigger.params.confirmationMode === 'string'
+            ? { params: { confirmationMode: trigger.params.confirmationMode } }
+            : {}),
         }
       case 'bollinger.touch_lower':
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerLowerBreak,
           semanticScope: 'market',
-          op: 'CROSS_UNDER',
+          op: trigger.params.confirmationMode === 'touch' ? 'LTE' : 'CROSS_UNDER',
+          ...(typeof trigger.params.confirmationMode === 'string'
+            ? { params: { confirmationMode: trigger.params.confirmationMode } }
+            : {}),
         }
       case 'bollinger.touch_middle':
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerMiddleRevert,
           semanticScope: 'market',
+          ...(typeof trigger.params.confirmationMode === 'string'
+            ? { params: { confirmationMode: trigger.params.confirmationMode } }
+            : {}),
         }
       case 'oscillator.rsi_lte':
         return {
@@ -3068,6 +3097,75 @@ export class CanonicalSpecBuilderService {
     }
 
     return DEFAULT_INDICATOR_PARAMS.rsi.period
+  }
+
+  private buildConditionFromIndicatorBoundaryTrigger(
+    trigger: NormalizedTriggerAtom,
+  ): CanonicalConditionNode | null {
+    const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
+    if (indicator?.name !== 'bollinger') {
+      return null
+    }
+
+    const boundaryRole = this.readStringParam(trigger.params.boundaryRole)
+    const confirmationMode = this.readStringParam(trigger.params.confirmationMode)
+    if (boundaryRole === 'upper') {
+      return {
+        kind: 'atom',
+        key: CANONICAL_RULE_KEYS.bollingerUpperBreak,
+        semanticScope: 'market',
+        op: confirmationMode === 'touch' ? 'GTE' : 'CROSS_OVER',
+        ...(confirmationMode ? { params: { confirmationMode } } : {}),
+      }
+    }
+
+    if (boundaryRole === 'lower') {
+      return {
+        kind: 'atom',
+        key: CANONICAL_RULE_KEYS.bollingerLowerBreak,
+        semanticScope: 'market',
+        op: confirmationMode === 'touch' ? 'LTE' : 'CROSS_UNDER',
+        ...(confirmationMode ? { params: { confirmationMode } } : {}),
+      }
+    }
+
+    if (boundaryRole === 'middle') {
+      return {
+        kind: 'atom',
+        key: CANONICAL_RULE_KEYS.bollingerMiddleRevert,
+        semanticScope: 'market',
+        ...(confirmationMode ? { params: { confirmationMode } } : {}),
+      }
+    }
+
+    return null
+  }
+
+  private readIndicatorBoundaryIndicator(
+    params: Record<string, unknown>,
+  ): { name: string; period?: number; stdDev?: number } | null {
+    const rawIndicator = params.indicator
+    if (!rawIndicator || typeof rawIndicator !== 'object' || Array.isArray(rawIndicator)) {
+      return null
+    }
+
+    const indicator = rawIndicator as Record<string, unknown>
+    const rawName = indicator.name
+    if (typeof rawName !== 'string' || rawName.trim().length === 0) {
+      return null
+    }
+
+    const period = indicator.period
+    const stdDev = indicator.stdDev
+    return {
+      name: rawName.trim().toLowerCase(),
+      ...(typeof period === 'number' && Number.isFinite(period) ? { period } : {}),
+      ...(typeof stdDev === 'number' && Number.isFinite(stdDev) ? { stdDev } : {}),
+    }
+  }
+
+  private readStringParam(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
   }
 
   private extractRuleTimeframe(text: string): string | null {

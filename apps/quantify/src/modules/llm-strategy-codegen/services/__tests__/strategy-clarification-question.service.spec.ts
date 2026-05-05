@@ -238,14 +238,14 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).toContain('请确认网格步长')
   })
 
-  it('maps required semantic position and protective risk slots to existing clarification fields', () => {
+  it('maps required semantic position and protective risk slots to atom-native clarification fields', () => {
     expect(resolveSemanticClarificationMetadata('position.sizing')).toEqual({
-      reason: 'missing_position_pct',
-      field: 'riskRules.positionPct',
+      reason: 'missing_semantic_position_sizing',
+      field: 'position.sizing',
     })
     expect(resolveSemanticClarificationMetadata('risk.protective_exit')).toEqual({
-      reason: 'missing_stop_loss_rule',
-      field: 'riskRules.stopLossPct',
+      reason: 'missing_semantic_risk',
+      field: 'risk',
     })
   })
 

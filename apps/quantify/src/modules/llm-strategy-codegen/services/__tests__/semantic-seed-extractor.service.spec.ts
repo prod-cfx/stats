@@ -1211,33 +1211,39 @@ describe('SemanticSeedExtractorService', () => {
       }),
       triggers: expect.arrayContaining([
         expect.objectContaining({
-          key: 'bollinger.touch_upper',
+          key: 'price.detect.indicator_boundary',
           phase: 'entry',
           sideScope: 'short',
           params: expect.objectContaining({
-            band: 'upper',
-            period: 20,
-            stdDev: 2,
+            boundaryRole: 'upper',
             confirmationMode: 'close_confirm',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 20,
+              stdDev: 2,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_lower',
+          key: 'price.detect.indicator_boundary',
           phase: 'entry',
           sideScope: 'long',
           params: expect.objectContaining({
-            band: 'lower',
-            period: 20,
-            stdDev: 2,
-            confirmationMode: 'close_confirm',
+            boundaryRole: 'lower',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 20,
+              stdDev: 2,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_middle',
+          key: 'price.detect.indicator_boundary',
           phase: 'exit',
           sideScope: 'both',
           params: expect.objectContaining({
-            band: 'middle',
+            boundaryRole: 'middle',
+            indicator: expect.objectContaining({ name: 'bollinger' }),
           }),
         }),
       ]),
@@ -1264,7 +1270,9 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('exitRules')
     expect(patch).not.toHaveProperty('riskRules')
     expect(patch).not.toHaveProperty('grid')
-    expect(patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_middle')?.params).not.toHaveProperty('confirmationMode')
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: expect.stringMatching(/^bollinger\.touch_/u) }),
+    ]))
   })
 
   it('binds split Bollinger band aliases back to the declared indicator context', () => {
@@ -1279,43 +1287,55 @@ describe('SemanticSeedExtractorService', () => {
       }),
       triggers: expect.arrayContaining([
         expect.objectContaining({
-          key: 'bollinger.touch_upper',
+          key: 'price.detect.indicator_boundary',
           phase: 'entry',
           sideScope: 'short',
           params: expect.objectContaining({
-            band: 'upper',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'upper',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_lower',
+          key: 'price.detect.indicator_boundary',
           phase: 'entry',
           sideScope: 'long',
           params: expect.objectContaining({
-            band: 'lower',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'lower',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_middle',
+          key: 'price.detect.indicator_boundary',
           phase: 'exit',
           sideScope: 'long',
           params: expect.objectContaining({
-            band: 'middle',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'middle',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
         expect.objectContaining({
-          key: 'bollinger.touch_middle',
+          key: 'price.detect.indicator_boundary',
           phase: 'exit',
           sideScope: 'short',
           params: expect.objectContaining({
-            band: 'middle',
-            period: 5,
-            stdDev: 1,
+            boundaryRole: 'middle',
+            indicator: expect.objectContaining({
+              name: 'bollinger',
+              period: 5,
+              stdDev: 1,
+            }),
           }),
         }),
       ]),
@@ -1355,43 +1375,55 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         phase: 'entry',
         sideScope: 'short',
         params: expect.objectContaining({
-          band: 'upper',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         phase: 'entry',
         sideScope: 'long',
         params: expect.objectContaining({
-          band: 'lower',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'long',
         params: expect.objectContaining({
-          band: 'middle',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'short',
         params: expect.objectContaining({
-          band: 'middle',
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
     ]))
@@ -1436,26 +1468,38 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
     ]))
     expect(patch.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 20,
-          stdDev: 2,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          }),
         }),
       }),
     ]))
@@ -1466,17 +1510,25 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         params: expect.objectContaining({
-          period: 5,
-          stdDev: 1,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 5,
+            stdDev: 1,
+          }),
         }),
       }),
     ]))
@@ -1487,23 +1539,25 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_lower',
+        key: 'price.detect.indicator_boundary',
         phase: 'entry',
         sideScope: 'long',
         params: expect.objectContaining({
-          band: 'lower',
-          period: 30,
-          stdDev: 0.9,
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({
+            name: 'bollinger',
+            period: 30,
+            stdDev: 0.9,
+          }),
         }),
       }),
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'long',
         params: expect.objectContaining({
-          band: 'middle',
-          period: 30,
-          stdDev: 0.9,
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
         }),
       }),
     ]))
@@ -1518,9 +1572,13 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_upper',
+        key: 'price.detect.indicator_boundary',
         phase: 'entry',
         sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
       }),
     ]))
     expect(patch.actions).toEqual(expect.arrayContaining([
@@ -1535,9 +1593,13 @@ describe('SemanticSeedExtractorService', () => {
     const shortPatch = service.extract('做空时价格回到布林带中轨平仓；单笔 10%。')
     expect(shortPatch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
       }),
     ]))
     expect(shortPatch.actions).toEqual(expect.arrayContaining([
@@ -1550,9 +1612,13 @@ describe('SemanticSeedExtractorService', () => {
     const longPatch = service.extract('做多时价格回到布林带中轨平仓；单笔 10%。')
     expect(longPatch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'bollinger.touch_middle',
+        key: 'price.detect.indicator_boundary',
         phase: 'exit',
         sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
       }),
     ]))
   })
@@ -1561,12 +1627,47 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'bollinger.touch_upper', phase: 'entry', sideScope: 'short' }),
-      expect.objectContaining({ key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long' }),
-      expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit', sideScope: 'long' }),
-      expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit', sideScope: 'short' }),
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'upper',
+          confirmationMode: 'touch',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'lower',
+          confirmationMode: 'touch',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
     ]))
     expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: expect.stringMatching(/^bollinger\.touch_/u) }),
       expect.objectContaining({ key: 'indicator.below' }),
     ]))
   })
@@ -2567,16 +2668,289 @@ describe('SemanticSeedExtractorService', () => {
   it('does not inject Bollinger period/stdDev when the band text omits them', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m；突破布林带上轨做空；单笔 10%。')
 
-    const upper = patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_upper')
+    const upper = patch.triggers?.find(trigger => (
+      trigger.key === 'price.detect.indicator_boundary'
+      && trigger.params?.boundaryRole === 'upper'
+    ))
     expect(upper).toEqual(expect.objectContaining({
-      key: 'bollinger.touch_upper',
+      key: 'price.detect.indicator_boundary',
       phase: 'entry',
       sideScope: 'short',
       params: expect.objectContaining({
-        band: 'upper',
+        boundaryRole: 'upper',
+        indicator: expect.objectContaining({ name: 'bollinger' }),
       }),
     }))
-    expect(upper?.params).not.toHaveProperty('period')
-    expect(upper?.params).not.toHaveProperty('stdDev')
+    expect(upper?.params?.indicator).not.toHaveProperty('period')
+    expect(upper?.params?.indicator).not.toHaveProperty('stdDev')
+  })
+
+  it('does not create executable boundary actions without trade intent', () => {
+    const patch = service.extract('价格触及上轨，价格跌破下轨')
+
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'price.detect.indicator_boundary' }),
+    ]))
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_long' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+  })
+
+  it('does not create executable Bollinger actions without trade intent', () => {
+    const patch = service.extract('价格触及布林带上轨，价格跌破布林带下轨')
+    const triggers = patch.triggers ?? []
+
+    expect(triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'bollinger.touch_upper' })]))
+    expect(triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'bollinger.touch_lower' })]))
+    expect(triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'price.detect.indicator_boundary' })]))
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_long' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+  })
+
+  it('uses preceding short entry context for generic middle-boundary exits', () => {
+    const patch = service.extract('突破上边界开空，回到中线平仓')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'generic_boundary' }),
+        }),
+      }),
+    ]))
+  })
+
+  it('uses parsed short entry context for generic middle-boundary exits with entry wording', () => {
+    const patch = service.extract('突破上边界开空入场，回到中线平仓')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'generic_boundary' }),
+        }),
+      }),
+    ]))
+  })
+
+  it('uses preceding short entry context for legacy Bollinger middle exits', () => {
+    const patch = service.extract('突破布林带上轨开空，回到布林带中轨平仓')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+    ]))
+  })
+
+  it('uses parsed short entry context for Bollinger middle exits with entry wording', () => {
+    const patch = service.extract('突破布林带上轨开空入场，回到布林带中轨平仓')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
+  it('prefers universal boundary atoms for explicit comma-separated Bollinger wording', () => {
+    const patch = service.extract('价格触及布林带上轨做空，价格触及布林带下轨做多')
+    const boundaryTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.detect.indicator_boundary') ?? []
+    const legacyBollingerTriggers = patch.triggers?.filter(trigger => trigger.key.startsWith('bollinger.touch_')) ?? []
+
+    expect(legacyBollingerTriggers).toEqual([])
+    expect(boundaryTriggers).toHaveLength(2)
+    expect(boundaryTriggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+    ]))
+    for (const trigger of boundaryTriggers) {
+      expect(trigger.contracts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'price',
+              verb: 'detect',
+              object: 'indicator_boundary',
+            }),
+          ]),
+        }),
+      ]))
+    }
+  })
+
+  it('extracts compact Bollinger boundary wording as one coherent boundary atom per role', () => {
+    const patch = service.extract('15min 布林带下轨做多 上轨平多')
+    const boundaryTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.detect.indicator_boundary') ?? []
+    const legacyBollingerTriggers = patch.triggers?.filter(trigger => trigger.key.startsWith('bollinger.touch_')) ?? []
+
+    expect(legacyBollingerTriggers).toEqual([])
+    expect(boundaryTriggers).toHaveLength(2)
+    expect(boundaryTriggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'upper',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+    ]))
+
+    const signatures = boundaryTriggers.map(trigger => `${trigger.params?.boundaryRole}:${trigger.phase}:${trigger.sideScope}`)
+    expect(new Set(signatures).size).toBe(signatures.length)
+  })
+
+  it.each([
+    ['15min 布林线下轨买入 上轨卖出', ['bollinger', 'lower', 'upper']],
+    ['15min 布林带下轨做多 上轨平多', ['bollinger', 'lower', 'upper']],
+    ['价格碰通道下沿买，上沿卖', ['channel', 'lower', 'upper']],
+    ['突破上边界开空，回到中线平仓', ['generic_boundary', 'upper', 'middle']],
+    ['RSI 低于30买入，高于70卖出', ['rsi', 'lower_threshold', 'upper_threshold']],
+    ['均线金叉买入，死叉卖出', ['moving_average', 'cross_up', 'cross_down']],
+    ['前高突破买入，跌破前低卖出', ['previous_extrema', 'previous_high', 'previous_low']],
+    ['上涨2%开多，回撤1%平仓', ['percent_change', 'up', 'drawdown']],
+  ])('extracts atomic semantics for %s', (message, expectedTokens) => {
+    const patch = service.extract(message)
+    const executableNodes = [
+      ...(patch.triggers ?? []),
+      ...(patch.actions ?? []),
+      ...(patch.risk ?? []),
+      ...(patch.position ? [patch.position] : []),
+    ]
+    const serialized = JSON.stringify(executableNodes)
+
+    expect(executableNodes.length).toBeGreaterThan(0)
+    for (const token of expectedTokens) {
+      expect(serialized).toContain(token)
+    }
+    for (const node of executableNodes) {
+      expect(node.contracts?.length ?? 0).toBeGreaterThan(0)
+    }
+  })
+
+  it.each([
+    [
+      '15min 布林线下轨买入 上轨卖出',
+      [
+        { indicatorName: 'bollinger', boundaryRole: 'lower', phase: 'entry', sideScope: 'long' },
+        { indicatorName: 'bollinger', boundaryRole: 'upper', phase: 'exit', sideScope: 'long' },
+      ],
+    ],
+    [
+      '15min 布林带下轨做多 上轨平多',
+      [
+        { indicatorName: 'bollinger', boundaryRole: 'lower', phase: 'entry', sideScope: 'long' },
+        { indicatorName: 'bollinger', boundaryRole: 'upper', phase: 'exit', sideScope: 'long' },
+      ],
+    ],
+    [
+      '价格碰通道下沿买，上沿卖',
+      [
+        { indicatorName: 'channel', boundaryRole: 'lower', phase: 'entry', sideScope: 'long' },
+        { indicatorName: 'channel', boundaryRole: 'upper', phase: 'exit', sideScope: 'long' },
+      ],
+    ],
+    [
+      '突破上边界开空，回到中线平仓',
+      [
+        { indicatorName: 'generic_boundary', boundaryRole: 'upper', phase: 'entry', sideScope: 'short' },
+        { indicatorName: 'generic_boundary', boundaryRole: 'middle', phase: 'exit', sideScope: 'short' },
+      ],
+    ],
+  ])('extracts structured indicator boundary atoms for %s', (message, expectedBoundaries) => {
+    const patch = service.extract(message)
+    const boundaryTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.detect.indicator_boundary') ?? []
+
+    expect(boundaryTriggers).toHaveLength(expectedBoundaries.length)
+    for (const boundary of expectedBoundaries) {
+      expect(boundaryTriggers).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          phase: boundary.phase,
+          sideScope: boundary.sideScope,
+          params: expect.objectContaining({
+            boundaryRole: boundary.boundaryRole,
+            indicator: expect.objectContaining({
+              name: boundary.indicatorName,
+            }),
+          }),
+          contracts: expect.arrayContaining([
+            expect.objectContaining({
+              capabilities: expect.arrayContaining([
+                expect.objectContaining({
+                  domain: 'price',
+                  verb: 'detect',
+                  object: 'indicator_boundary',
+                }),
+              ]),
+            }),
+          ]),
+        }),
+      ]))
+    }
   })
 })

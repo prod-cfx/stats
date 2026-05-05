@@ -1258,7 +1258,11 @@ export class CodegenConversationService {
       currentState: preMergedSemanticState,
       plan,
     })
-    const reducedSemanticState = this.normalizeSemanticContractReadiness(plannedSemanticState)
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.withRequiredSemanticOpenSlots(plannedSemanticState, preMergedLogicSnapshot, {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
+      }),
+    )
     const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
@@ -1986,7 +1990,6 @@ export class CodegenConversationService {
         },
       ),
     )
-    const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, baseLogicSnapshot)
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       semanticArtifacts.clarificationState,
@@ -2090,8 +2093,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalLogicSnapshot)
-    if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
+    const projectionLoss = this.evaluateSemanticProjectionLoss(reducedSemanticState, canonicalSpec)
+    if (projectionLoss.blocked || (!compileability.canCompile && (
+      !semanticReadyForGenerate
+      || !this.hasProjectedGridRules(canonicalSpec)
+    ))) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -2100,14 +2106,20 @@ export class CodegenConversationService {
           ...constraintPack,
           conversationHistory: historyAfterConfirm,
         },
+        latestSpecDesc: specDesc,
       }))
 
       const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildCanonicalProjectionFailureAssistantPrompt(compileability),
+        assistantPrompt: projectionLoss.blocked
+          ? this.buildSemanticProjectionLossAssistantPrompt(reducedSemanticState, projectionLoss)
+          : semanticReadyForGenerate
+          ? this.buildCanonicalProjectionFailureAssistantPrompt(reducedSemanticState, compileability)
+          : (clarificationPrompt || '请先补充未关闭的语义问题，我再继续生成脚本。'),
         clarificationState,
+        specDesc,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -2242,6 +2254,7 @@ export class CodegenConversationService {
           ? buildSemanticSlotId(legacyPositionSizingSlot)
           : item.slotId,
         answer: rawAnswer.trim(),
+        applyEquivalentConfirmationSlots: targetSlotKey.includes('confirmationMode'),
       })
     }
 
@@ -2330,8 +2343,7 @@ export class CodegenConversationService {
       checklist,
     )
     const stateWithExecutableAtomSlots = this.ensureExecutableAtomSlots(stateWithExplicitDeterministicRisk)
-    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.families.length > 0
-      || stateWithExplicitDeterministicRisk.triggers.length > 0
+    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.triggers.length > 0
       || stateWithExplicitDeterministicRisk.actions.length > 0
 
     if (!hasExecutableSemantics) {
@@ -2386,13 +2398,18 @@ export class CodegenConversationService {
 
   private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
     return (
-      !this.hasSemanticMainFlowEvidence(state)
-      && (state.risk.length > 0 || state.position !== null)
+      state.triggers.length === 0
+      && state.actions.length === 0
+      && (state.risk.length > 0 || state.position !== null || this.hasExecutionContextEvidence(state))
     ) || (
       state.actions.length > 0
       && state.triggers.length === 0
       && !this.hasCompleteOrderProgramSemantics(state)
     )
+  }
+
+  private hasExecutionContextEvidence(state: SemanticState): boolean {
+    return Object.values(state.contextSlots).some(slot => slot !== null)
   }
 
   private hasLockedTriggerPhase(
@@ -3238,9 +3255,10 @@ export class CodegenConversationService {
   }
 
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
-    return state.families.length > 0
-      || state.triggers.length > 0
+    return state.triggers.length > 0
       || state.actions.length > 0
+      || state.risk.length > 0
+      || state.position !== null
   }
 
   private mergePersistedBlockingClarificationItems(
@@ -4985,7 +5003,7 @@ export class CodegenConversationService {
       if (slotKey !== undefined && typeof slotKey !== 'string') return null
       if (fieldPath !== undefined && typeof fieldPath !== 'string') return null
       const typedReason = reason as StrategyClarificationItem['reason']
-      const typedField = STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
+      const typedField = this.isPreservedClarificationField(field, typedReason)
         ? field as StrategyClarificationItem['field']
         : this.inferClarificationField({
           key,
@@ -5028,6 +5046,63 @@ export class CodegenConversationService {
     }
   }
 
+  private isPreservedClarificationField(
+    field: unknown,
+    reason: StrategyClarificationItem['reason'],
+  ): field is string {
+    if (typeof field !== 'string' || !field.trim()) {
+      return false
+    }
+
+    if (this.isDynamicSemanticContractRequirementField(field)) {
+      return reason === 'missing_semantic_contract_requirement'
+    }
+
+    if (this.isSemanticClarificationField(field)) {
+      return this.isSemanticClarificationReason(reason)
+    }
+
+    return STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
+  }
+
+  private isSemanticClarificationReason(reason: StrategyClarificationItem['reason']): boolean {
+    if (
+      reason === 'missing_semantic_trigger'
+      || reason === 'missing_semantic_action'
+      || reason === 'missing_semantic_risk'
+      || reason === 'missing_semantic_position_sizing'
+      || reason === 'missing_semantic_position_mode'
+      || reason === 'missing_semantic_contract_requirement'
+    ) {
+      return true
+    }
+
+    return false
+  }
+
+  private isSemanticClarificationField(field: string): boolean {
+    return field === 'triggers'
+      || field === 'actions'
+      || field === 'risk'
+      || field.startsWith('position.')
+      || field.startsWith('triggers[')
+      || field.startsWith('actions[')
+      || field.startsWith('risk[')
+      || field.startsWith('contract.requirement.')
+      || this.isDynamicSemanticContractRequirementField(field)
+  }
+
+  private isDynamicSemanticContractRequirementField(field: string): boolean {
+    return field.includes('.contracts[')
+      && field.includes('.requires.')
+      && (
+        field.startsWith('triggers[')
+        || field.startsWith('actions[')
+        || field.startsWith('risk[')
+        || field.startsWith('position.')
+      )
+  }
+
   private withClarificationSummary(
     clarificationState: StrategyClarificationState | null | undefined,
     checklist: StrategyLogicSnapshot,
@@ -5064,7 +5139,6 @@ export class CodegenConversationService {
       this.clarificationRules.detectFromAmbiguities({
         executionContext,
         atomicResolution,
-        checklist,
       }),
       checklist,
     ) as StrategyClarificationStateWithSummary
@@ -5248,6 +5322,98 @@ export class CodegenConversationService {
     const summary = this.buildSemanticClarificationSummary(semanticState)
     const blocker = normalization.blockerReason ? `当前还缺少：${normalization.blockerReason}` : '当前语义仍未完整。'
     return `我当前理解的策略是：${summary}\n${blocker}`
+  }
+
+  private hasProjectedGridRules(canonicalSpec: {
+    rules: Array<{ phase: string; condition?: unknown }>
+    orderPrograms?: unknown[]
+  }): boolean {
+    if (Array.isArray(canonicalSpec.orderPrograms) && canonicalSpec.orderPrograms.length > 0) {
+      return true
+    }
+
+    let hasGridEntry = false
+    let hasGridExit = false
+    for (const rule of canonicalSpec.rules) {
+      if (!this.conditionContainsAtomKey(rule.condition, 'grid.range_rebalance')) continue
+      if (rule.phase === 'entry') hasGridEntry = true
+      if (rule.phase === 'exit' || rule.phase === 'rebalance') hasGridExit = true
+    }
+    return hasGridEntry && hasGridExit
+  }
+
+  private evaluateSemanticProjectionLoss(
+    semanticState: SemanticState,
+    canonicalSpec: { rules: Array<{ metadata?: Record<string, unknown> }> },
+  ): { blocked: boolean; reasons: string[] } {
+    const reasons: string[] = []
+    const projectedSemanticKeys = new Set<string>()
+    for (const rule of canonicalSpec.rules) {
+      const semanticKey = rule.metadata?.semanticKey
+      if (typeof semanticKey === 'string') {
+        projectedSemanticKeys.add(semanticKey)
+      }
+    }
+
+    for (const risk of semanticState.risk) {
+      if (risk.status !== 'locked' || risk.openSlots.length > 0) continue
+      if (
+        risk.key === 'risk.condition_expression'
+        && risk.params.capabilityStatus !== 'supported'
+      ) {
+        reasons.push(`unsupported:${risk.key}`)
+        continue
+      }
+      if (risk.key === 'risk.condition_expression' && !projectedSemanticKeys.has(risk.key)) {
+        reasons.push(`unprojected:${risk.key}`)
+      }
+    }
+
+    return {
+      blocked: reasons.length > 0,
+      reasons,
+    }
+  }
+
+  private conditionContainsAtomKey(condition: unknown, key: string): boolean {
+    if (!condition || typeof condition !== 'object' || Array.isArray(condition)) {
+      return false
+    }
+    const node = condition as Record<string, unknown>
+    if (node.kind === 'atom') {
+      return node.key === key
+    }
+    if ((node.kind === 'AND' || node.kind === 'OR' || node.kind === 'NOT') && Array.isArray(node.children)) {
+      return node.children.some(child => this.conditionContainsAtomKey(child, key))
+    }
+    return false
+  }
+
+  private buildCanonicalProjectionFailureAssistantPrompt(
+    semanticState: SemanticState,
+    compileability: CanonicalCompileabilityReport,
+  ): string {
+    const summary = this.buildSemanticClarificationSummary(semanticState)
+    const missing = [
+      compileability.reasons.includes('canonical_projection_missing_entry_program') ? '可执行入场规则' : null,
+      compileability.reasons.includes('canonical_projection_missing_exit_program') ? '可执行出场/风控规则' : null,
+    ].filter((item): item is string => item !== null)
+    const blocker = missing.length > 0
+      ? `当前还不能稳定投影到${missing.join('和')}。`
+      : '当前还不能稳定投影到可执行规则。'
+    return `我当前理解的策略是：${summary}\n${blocker}请补充更明确的触发或退出条件后，我再继续生成脚本。`
+  }
+
+  private buildSemanticProjectionLossAssistantPrompt(
+    semanticState: SemanticState,
+    projectionLoss: { reasons: string[] },
+  ): string {
+    const summary = this.buildSemanticClarificationSummary(semanticState)
+    const hasUnsupported = projectionLoss.reasons.some(reason => reason.startsWith('unsupported:'))
+    const blocker = hasUnsupported
+      ? '当前有已识别但执行层暂不支持的语义。'
+      : '当前有已识别语义尚未稳定投影到可执行规则。'
+    return `我当前理解的策略是：${summary}\n${blocker}请调整为当前支持的触发、风控或执行条件后，我再继续生成脚本。`
   }
 
   private buildLogicGateAssistantPrompt(
@@ -5742,10 +5908,10 @@ export class CodegenConversationService {
 
     const reasons: string[] = []
     if (entryRuleCount === 0) {
-      reasons.push('未识别可编译入场规则')
+      reasons.push('canonical_projection_missing_entry_program')
     }
     if (exitRuleCount === 0) {
-      reasons.push('未识别可编译出场规则')
+      reasons.push('canonical_projection_missing_exit_program')
     }
 
     return {
@@ -6139,10 +6305,6 @@ export class CodegenConversationService {
     })
   }
 
-  private buildCanonicalProjectionFailureAssistantPrompt(report: CanonicalCompileabilityReport): string {
-    return `语义已记录，但 canonical 投影暂时未生成可执行脚本结构。系统已保留当前逻辑图，请重试或继续补充更具体的执行语义。（entryRules=${report.entryRuleCount}, exitRules=${report.exitRuleCount}）`
-  }
-
   private buildStrategyDecision(input: {
     checklist: StrategyLogicSnapshot
     semanticState?: SemanticState
@@ -6244,6 +6406,16 @@ export class CodegenConversationService {
     if (reason === 'missing_stop_loss_rule' || reason === 'missing_take_profit_rule' || reason === 'grid_params_missing' || reason === 'ambiguous_risk_effect' || reason === 'ambiguous_state_gate') return 70
     if (reason === 'missing_exchange' || reason === 'missing_symbol' || reason === 'missing_market_type' || reason === 'missing_timeframe' || reason === 'missing_position_pct' || reason === 'missing_position_mode') return 60
     if (reason === 'ambiguous_condition_basis') return 50
+    if (
+      reason === 'missing_semantic_trigger'
+      || reason === 'missing_semantic_action'
+      || reason === 'missing_semantic_contract_requirement'
+    ) return 90
+    if (
+      reason === 'missing_semantic_position_sizing'
+      || reason === 'missing_semantic_position_mode'
+      || reason === 'missing_semantic_risk'
+    ) return 70
     return 10
   }
 

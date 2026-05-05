@@ -1,4 +1,5 @@
 import { buildSemanticSlotId } from '../../types/semantic-state'
+import { StrategyIntentResolutionService } from '../strategy-intent-resolution.service'
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 
 describe('strategyClarificationRulesService', () => {
@@ -31,13 +32,6 @@ describe('strategyClarificationRulesService', () => {
           relations: [],
         },
         ambiguities: [],
-      },
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        market: {
-          marketType: 'perp',
-        },
       },
     })
 
@@ -83,15 +77,6 @@ describe('strategyClarificationRulesService', () => {
         },
         ambiguities: [],
       },
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['3 分钟内跌 1% 买入'],
-        exitRules: ['5 分钟内涨 2% 卖出'],
-        riskRules: {
-          marketType: 'perp',
-        },
-      },
     })
 
     expect(state).toEqual({
@@ -134,11 +119,35 @@ describe('strategyClarificationRulesService', () => {
         },
         ambiguities: [],
       },
-      checklist: {
-        riskRules: {
-          stopLossPct: 5,
-          takeProfitPct: 10,
+    })
+
+    expect(state).toEqual({
+      status: 'CLEAR',
+      items: [],
+    })
+  })
+
+  it('does not derive mainline clarification from checklist completeness when semantic ambiguities are clear', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
         },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [],
       },
     })
 
@@ -146,6 +155,24 @@ describe('strategyClarificationRulesService', () => {
       status: 'CLEAR',
       items: [],
     })
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_position_pct' }),
+    ]))
+  })
+
+  it('keeps checklist detection only behind the compatibility method', () => {
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
+      entryRules: [],
+      exitRules: [],
+      riskRules: {},
+    } as any)
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
   })
 
   it('turns atomic semantic forks into blocking clarification items', () => {
@@ -177,9 +204,6 @@ describe('strategyClarificationRulesService', () => {
           },
         ],
       },
-      checklist: {
-        entryRules: ['触及布林带上轨后收盘确认做空'],
-      },
     })
 
     expect(state.status).toBe('NEEDS_CLARIFICATION')
@@ -192,6 +216,121 @@ describe('strategyClarificationRulesService', () => {
         status: 'pending',
       }),
     ]))
+  })
+
+  it('emits answerable semantic slot identity for atomic semantic forks when metadata is available', () => {
+    const slot = {
+      slotKey: 'confirmationMode.entry',
+      fieldPath: 'triggers[0].params.confirmationMode',
+    }
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [
+          {
+            kind: 'atomic_semantic_fork',
+            field: 'trigger.confirmation',
+            message: '存在触碰即触发与收盘确认触发两种合法解释',
+            choices: ['touch', 'close_confirm'],
+            slotKey: slot.slotKey,
+            fieldPath: slot.fieldPath,
+            slotId: buildSemanticSlotId(slot),
+          },
+        ],
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual([
+      expect.objectContaining({
+        key: 'semantic.confirmationMode.entry',
+        reason: 'missing_semantic_trigger',
+        field: 'triggers',
+        allowedAnswers: ['touch', 'close_confirm'],
+        slotKey: slot.slotKey,
+        fieldPath: slot.fieldPath,
+        slotId: buildSemanticSlotId(slot),
+        blocking: true,
+        status: 'pending',
+      }),
+    ])
+  })
+
+  it('keeps resolver-produced atomic forks answerable through semantic slots', () => {
+    const resolution = new StrategyIntentResolutionService().resolve({
+      normalizedIntent: {
+        families: ['single-leg'],
+        triggers: [
+          {
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+            params: {
+              band: 'upper',
+              period: 20,
+              stdDev: 2,
+            },
+            resolutionHints: {
+              confirmation: 'ambiguous_touch_or_close_confirm',
+            },
+            closureStatus: 'open',
+            unresolvedSlots: [],
+          },
+        ],
+        actions: [{ key: 'open_short' }],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 10,
+          positionMode: 'short_only',
+        },
+        grid: null,
+        stateHints: [],
+        unresolved: [],
+        normalizationNotes: [],
+      },
+    })
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: resolution,
+    })
+
+    expect(state.items).toEqual([
+      expect.objectContaining({
+        key: 'semantic.confirmationMode.entry',
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+        slotId: buildSemanticSlotId({
+          slotKey: 'confirmationMode.entry',
+          fieldPath: 'triggers[0].params.confirmationMode',
+        }),
+      }),
+    ])
   })
 
   it('preserves scoped semantic keys when surfacing open semantic slots', () => {
@@ -242,10 +381,6 @@ describe('strategyClarificationRulesService', () => {
             }),
           },
         ],
-      },
-      checklist: {
-        entryRules: ['价格突破长期均线时买入'],
-        exitRules: ['跌破短期均线时卖出'],
       },
     })
 
@@ -312,22 +447,13 @@ describe('strategyClarificationRulesService', () => {
           },
         ],
       },
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        riskRules: {
-          exchange: 'okx',
-          marketType: 'perp',
-          positionPct: 10,
-        },
-      },
     })
 
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic.grid.sideMode',
-        reason: 'missing_side_scope',
-        field: 'grid.sideMode',
+        reason: 'missing_semantic_action',
+        field: 'actions',
         slotKey: 'grid.sideMode',
       }),
     ]))
@@ -338,7 +464,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('detects missing side scope for upper-band breakout entry rule', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       entryRules: ['突破布林带上轨交易'],
     })
 
@@ -354,7 +480,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('detects entry action uniqueness conflict when one rule includes long and short actions', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       entryRules: ['突破后同时做多和做空'],
     })
 
@@ -370,7 +496,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('detects ambiguous risk effect when risk text contains force-exit and reduce-position alternatives', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       riskRules: {
         earlyStop: '价格连续3根K线在轨外时全平或减仓',
       },
@@ -389,7 +515,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks short-side bollinger strategy when marketType is missing', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -409,7 +535,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks long-side strategy when marketType is missing', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['跌破布林带下轨时做多'],
@@ -429,7 +555,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks short-side strategy with spot marketType as invalid spot-short combo', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -449,7 +575,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not block long-only spot strategy as invalid spot-short combo', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['跌破布林带下轨时做多'],
@@ -464,7 +590,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks conflicting market scope when session merges two different exchanges', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['跌破布林带下轨时做多'],
@@ -495,7 +621,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('ignores stale market scope conflicts whose values normalize to the same meaning', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['跌破布林带下轨时做多'],
@@ -529,7 +655,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks short-side strategy when exchange is missing', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -549,7 +675,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not emit market blockers before action uniqueness is resolved', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破后同时做多和做空'],
@@ -570,7 +696,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks early-stop rule when action is ambiguous between close and reduce', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       riskRules: {
         earlyStop: '价格连续3根K线在轨外时提前止损或减仓',
       },
@@ -590,7 +716,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks generation when symbol, timeframe, and sizing are still missing', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       entryRules: ['收盘价突破布林带上轨时做空'],
       exitRules: ['价格回到布林带中轨时平仓'],
       riskRules: { exchange: 'okx', marketType: 'perp', stopLossPct: 5 },
@@ -605,7 +731,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks missing required rule buckets and market sizing fields even when entry rules are absent', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       riskRules: { exchange: 'okx', marketType: 'perp' },
     })
 
@@ -622,7 +748,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks percentage rules that omit comparison basis', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['3m', '15m'],
       entryRules: ['3 分钟内跌 1% 买入'],
@@ -651,7 +777,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not ask basis for defaulted stop-loss and take-profit percentages', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['ETHUSDT'],
       timeframes: ['15m'],
       entryRules: ['15 分钟上涨 1% 买入'],
@@ -676,7 +802,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not create legacy basis clarification when semantic risk basis is normalized', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       riskRules: {
         stopLossPct: 5,
         stopLossBasis: 'entry_avg_price',
@@ -689,7 +815,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('keeps drawdown-style risk rules basis-gated because they lack a safe default', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨做空'],
@@ -703,7 +829,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks sequence, take-profit, and drawdown basis gaps beyond simple rise fall percentages', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['连续 3 根 K 线累计回撤 2% 后买入'],
@@ -726,7 +852,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not block percentage rules that already state an explicit basis in text', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['3m', '15m'],
       entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
@@ -749,7 +875,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('treats stop-loss and take-profit semantics in exit rules as satisfying required buckets', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -768,7 +894,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not basis-gate defaulted stop-loss and take-profit semantics carried by exit rules', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -791,7 +917,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('returns CLEAR for unambiguous rules', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -814,7 +940,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks grid strategies missing stepPct while treating low-buy-high-sell wording as explicit closed-loop direction semantics', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['做一个 60000 到 80000 的网格策略'],
@@ -837,7 +963,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('blocks vague state gates until they map to the minimal whitelist', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['在合适的趋势里开启网格'],
@@ -873,7 +999,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not emit legacy exit and risk blockers for closed-loop grid wording', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
       exitRules: [],
@@ -888,7 +1014,7 @@ describe('strategyClarificationRulesService', () => {
   })
 
   it('does not emit legacy timeframe blockers for closed-loop grid wording', () => {
-    const state = service.detect({
+    const state = service.detectLegacyChecklistForCompatibilityOnly({
       symbols: ['BTCUSDT'],
       entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
       exitRules: [],

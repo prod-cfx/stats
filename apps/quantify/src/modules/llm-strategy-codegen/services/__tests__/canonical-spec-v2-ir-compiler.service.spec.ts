@@ -1864,6 +1864,83 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles touch-confirmed Bollinger outer bands as comparisons without making middle reverts unconditional', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-touch-upper',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.upper_break',
+              semanticScope: 'market',
+              op: 'GTE',
+              params: { confirmationMode: 'touch' },
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-touch-middle',
+            phase: 'exit',
+            sideScope: 'short',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.middle_revert',
+              semanticScope: 'market',
+              params: { confirmationMode: 'touch' },
+            },
+            actions: [{ type: 'CLOSE_SHORT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))',
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        operator: 'OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,20,2)),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2)))',
+      }),
+    ]))
+    expect(result.graphSnapshot.trigger).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'exit',
+        operator: 'OR(GTE(CLOSE,MID_BAND(CLOSE,20,2)),LTE(CLOSE,MID_BAND(CLOSE,20,2)))',
+      }),
+    ]))
+  })
+
   it('compiles RSI threshold rules into RSI series and graph operators', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

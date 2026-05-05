@@ -23,7 +23,7 @@ export class StrategyIrCanonicalAdapterService {
       indicators: [
         {
           kind: 'custom',
-          params: { family: 'grid' },
+          params: { compatibilityFamilyHint: 'grid' },
         },
       ],
       sizing: this.resolveSizing(strategyIr),

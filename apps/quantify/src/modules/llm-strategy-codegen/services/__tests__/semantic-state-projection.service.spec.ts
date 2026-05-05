@@ -851,6 +851,96 @@ describe('SemanticStateProjectionService', () => {
     expect(result.summary).not.toContain('price.breakout_up')
   })
 
+  it('renders universal indicator-boundary atoms as readable trigger and action semantics', () => {
+    const result = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-bollinger-upper-short',
+          key: 'price.detect.indicator_boundary',
+          phase: 'entry',
+          sideScope: 'short',
+          params: {
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+            boundaryRole: 'upper',
+            confirmationMode: 'touch',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-bollinger-lower-long',
+          key: 'price.detect.indicator_boundary',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+            boundaryRole: 'lower',
+            confirmationMode: 'touch',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle-long',
+          key: 'price.detect.indicator_boundary',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+            boundaryRole: 'middle',
+            confirmationMode: 'touch',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle-short',
+          key: 'price.detect.indicator_boundary',
+          phase: 'exit',
+          sideScope: 'short',
+          params: {
+            indicator: { name: 'bollinger', period: 20, stdDev: 2 },
+            boundaryRole: 'middle',
+            confirmationMode: 'touch',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-short', key: 'close_short', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'both',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    })
+
+    expect(result.summary).toContain('入场：触及布林带 20 周期 2 倍标准差上轨时做空开仓')
+    expect(result.summary).toContain('入场：触及布林带 20 周期 2 倍标准差下轨时做多开仓')
+    expect(result.summary).toContain('出场：触及布林带 20 周期 2 倍标准差中轨时平多')
+    expect(result.summary).toContain('出场：触及布林带 20 周期 2 倍标准差中轨时平空')
+    expect(result.summary).not.toContain('price.detect.indicator_boundary')
+  })
+
   it('surfaces unsupported open work as a blocking fallback next question instead of hiding it', () => {
     const result = service.buildClarificationView({
       version: 1,

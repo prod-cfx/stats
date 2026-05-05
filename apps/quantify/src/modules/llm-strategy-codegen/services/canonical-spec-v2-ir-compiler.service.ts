@@ -1075,7 +1075,7 @@ export class CanonicalSpecV2IrCompilerService {
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
-          atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER',
+          atom.op ?? (atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER'),
           [closeRef, bandRef],
         )
       }
@@ -1817,10 +1817,14 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'bollinger.upper_break':
-        return `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+        return condition.op === 'GTE'
+          ? `GTE(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+          : `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
 
       case 'bollinger.lower_break':
-        return `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+        return condition.op === 'LTE'
+          ? `LTE(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+          : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
 
       case 'bollinger.middle_revert':
         return `OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`

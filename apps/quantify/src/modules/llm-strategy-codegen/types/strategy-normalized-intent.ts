@@ -15,6 +15,7 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'price.range_position_gte',
   'price.breakout_up',
   'price.breakout_down',
+  'price.detect.indicator_boundary',
   'indicator.cross_over',
   'indicator.cross_under',
   'indicator.above',
@@ -70,7 +71,7 @@ export interface NormalizedTriggerAtom extends RecognizedSemanticMetadata {
   key: NormalizedTriggerAtomKey
   phase: NormalizedAtomPhase
   sideScope?: NormalizedAtomSideScope
-  params: Record<string, string | number | boolean>
+  params: Record<string, unknown>
   resolutionHints?: NormalizedTriggerResolutionHints
 }
 

@@ -445,7 +445,12 @@ describe('semantic-only strategy regression verification', () => {
     const longOnlyState: SemanticState = {
       ...semanticState,
       triggers: semanticState.triggers.filter(trigger =>
-        trigger.key === 'bollinger.touch_lower' || trigger.key === 'bollinger.touch_middle',
+        (
+          trigger.key === 'price.detect.indicator_boundary'
+          && (trigger.params.boundaryRole === 'lower' || trigger.params.boundaryRole === 'middle')
+        )
+        || trigger.key === 'bollinger.touch_lower'
+        || trigger.key === 'bollinger.touch_middle',
       ).map(trigger => ({
         ...trigger,
         sideScope: 'long',
@@ -826,6 +831,7 @@ describe('semantic-only strategy regression verification', () => {
       'price.range_position_gte',
       'price.breakout_up',
       'price.breakout_down',
+      'price.detect.indicator_boundary',
       'indicator.cross_over',
       'indicator.cross_under',
       'indicator.above',

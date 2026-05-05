@@ -1044,6 +1044,88 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).toContain('出场：15m 价格回到布林带中轨(MA20)时平多；15m 价格回到布林带中轨(MA20)时平空')
   })
 
+  it('treats executable semantics as mainflow evidence but not families or context-only slots', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+    const emptyState = (service as any).createEmptySemanticState()
+
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      families: ['single-leg'],
+    })).toBe(false)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      contextSlots: {
+        ...emptyState.contextSlots,
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'perp',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })).toBe(false)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      triggers: [{
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    })).toBe(true)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      actions: [{ id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+    })).toBe(true)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      risk: [lockedStopLossRisk()],
+    })).toBe(true)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    })).toBe(true)
+  })
+
   it('preserves generic close wording from exit evidence instead of forcing side-specific labels', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
@@ -1538,11 +1620,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'position.sizing',
-        reason: 'missing_position_pct',
+        reason: 'missing_semantic_position_sizing',
       }),
       expect.objectContaining({
         slotKey: 'risk.protective_exit',
-        reason: 'missing_stop_loss_rule',
+        reason: 'missing_semantic_risk',
       }),
     ]))
     expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
@@ -1704,7 +1786,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'position.sizing',
-        reason: 'missing_position_pct',
+        reason: 'missing_semantic_position_sizing',
       }),
     ]))
   })
@@ -3000,7 +3082,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        reason: 'missing_stop_loss_rule',
+        reason: 'missing_semantic_risk',
         slotKey: 'risk.protective_exit',
       }),
     ]))
@@ -3607,7 +3689,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: expect.arrayContaining([
           expect.objectContaining({
-            reason: 'missing_stop_loss_rule',
+            reason: 'missing_semantic_risk',
             slotKey: 'risk.protective_exit',
             fieldPath: 'risk[protective].params',
           }),
@@ -3875,6 +3957,136 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('preserves atom-native semantic clarification fields when reading persisted state', () => {
+    const clarificationState = (service as any).readClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'semantic.position.sizing',
+          reason: 'missing_semantic_position_sizing',
+          field: 'position.sizing',
+          blocking: true,
+          question: '请确认仓位 sizing。',
+          status: 'pending',
+          slotKey: 'position.sizing',
+        },
+        {
+          key: 'semantic.trigger.entry',
+          reason: 'missing_semantic_trigger',
+          field: 'triggers',
+          blocking: true,
+          question: '请确认入场触发条件。',
+          status: 'pending',
+          slotKey: 'trigger.entry',
+        },
+        {
+          key: 'semantic.contract.requirement.price.define.level_set',
+          reason: 'missing_semantic_contract_requirement',
+          field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+          blocking: true,
+          question: '请补充 price define level_set 执行合约。',
+          status: 'pending',
+          slotKey: 'contract.requirement.price.define.level_set',
+          fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+        },
+      ],
+    })
+
+    expect(clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'semantic.position.sizing',
+          field: 'position.sizing',
+          slotKey: 'position.sizing',
+        }),
+        expect.objectContaining({
+          key: 'semantic.trigger.entry',
+          field: 'triggers',
+          slotKey: 'trigger.entry',
+        }),
+        expect.objectContaining({
+          key: 'semantic.contract.requirement.price.define.level_set',
+          field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+          slotKey: 'contract.requirement.price.define.level_set',
+        }),
+      ],
+    }))
+  })
+
+  it('does not preserve atom-native fields for legacy clarification reasons on readback', () => {
+    const clarificationState = (service as any).readClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'executionContext.marketType',
+          reason: 'missing_market_type',
+          field: 'actions',
+          blocking: true,
+          question: '请确认市场类型（现货或合约/perp）。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(clarificationState).toEqual(expect.objectContaining({
+      items: [
+        expect.objectContaining({
+          key: 'executionContext.marketType',
+          reason: 'missing_market_type',
+          field: 'marketType',
+        }),
+      ],
+    }))
+  })
+
+  it('uses semantic clarification priorities when building blocking reasons', () => {
+    const blockingReasons = (service as any).buildEffectiveBlockingReasonsFromClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'semantic.trigger.entry',
+          reason: 'missing_semantic_trigger',
+          field: 'triggers',
+          blocking: true,
+          question: '请补充入场触发条件。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.contract.requirement.price.define.level_set',
+          reason: 'missing_semantic_contract_requirement',
+          field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
+          blocking: true,
+          question: '请补充 price define level_set 执行合约。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.position.sizing',
+          reason: 'missing_semantic_position_sizing',
+          field: 'position.sizing',
+          blocking: true,
+          question: '请确认仓位 sizing。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.risk.protective_exit',
+          reason: 'missing_semantic_risk',
+          field: 'risk',
+          blocking: true,
+          question: '请确认止损类保护规则。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(blockingReasons).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.trigger.entry', priority: 90 }),
+      expect.objectContaining({ key: 'semantic.contract.requirement.price.define.level_set', priority: 90 }),
+      expect.objectContaining({ key: 'semantic.position.sizing', priority: 70 }),
+      expect.objectContaining({ key: 'semantic.risk.protective_exit', priority: 70 }),
+    ]))
+  })
+
   it('accepts canonical grid sideMode clarification answers on the semantic snapshot path', () => {
     const nextSemanticState = (service as any).applySemanticClarificationAnswers(
       {
@@ -4137,8 +4349,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ reason: 'missing_entry_rules' }),
       expect.objectContaining({ reason: 'missing_exit_rules' }),
     ]))
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('触碰即触发，还是收盘确认')
     expect(result.assistantPrompt).toContain('布林带')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
@@ -4149,16 +4361,136 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             sideScope: 'short',
           }),
           expect.objectContaining({
-            key: 'bollinger.touch_middle',
-            phase: 'exit',
+            key: 'price.detect.indicator_boundary',
+            phase: 'entry',
             sideScope: 'short',
+            openSlots: expect.arrayContaining([
+              expect.objectContaining({ slotKey: 'confirmationMode.entry' }),
+            ]),
           }),
         ]),
       }),
       clarificationState: expect.objectContaining({
-        status: 'CLEAR',
+        status: 'NEEDS_CLARIFICATION',
       }),
     }))
+  })
+
+  it('closes Bollinger confirmation slots from natural touch clarification without repeating the same prompt', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-touch-clarification' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认触发语义。',
+      }),
+    })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 布林带下轨买入 上轨卖出',
+    })
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('触碰即触发，还是收盘确认')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-bollinger-touch-clarification',
+      createdSession,
+    ))
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '继续完善策略。',
+      }),
+    })
+
+    const result = await service.continueSession('s-bollinger-touch-clarification', {
+      userId: 'u1',
+      message: '触碰即触发',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        params: expect.objectContaining({ confirmationMode: 'touch' }),
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({
+            slotKey: expect.stringContaining('confirmationMode'),
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+    expect(result.assistantPrompt).not.toContain('触碰即触发，还是收盘确认')
+  })
+
+  it('keeps Bollinger boundary atoms readable and preserves stop-loss risk through full clarification', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-boundary-full-clarification' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '继续完善策略。',
+      }),
+    })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 布林带下轨买入 上轨卖出',
+    })
+
+    let sessionPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const continueWith = async (message: string) => {
+      mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+        's-bollinger-boundary-full-clarification',
+        sessionPayload,
+      ))
+      const result = await service.continueSession('s-bollinger-boundary-full-clarification', {
+        userId: 'u1',
+        message,
+      } as ContinueCodegenSessionDto)
+      sessionPayload = {
+        ...sessionPayload,
+        ...(mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any> | undefined ?? {}),
+      }
+      return result
+    }
+
+    await continueWith('触碰即触发')
+    await continueWith('10%')
+    await continueWith('okx')
+    await continueWith('BTCUSDT')
+    await continueWith('合约')
+    await continueWith('15m')
+    const result = await continueWith('5%止损')
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('入场：触及布林带')
+    expect(result.assistantPrompt).toContain('下轨时做多')
+    expect(result.assistantPrompt).toContain('出场：触及布林带')
+    expect(result.assistantPrompt).toContain('上轨时平多')
+    expect(result.assistantPrompt).toContain('止损：价格相对入场均价下跌5% 强制平仓')
+    expect(result.assistantPrompt).toContain('仓位：10%')
+    expect(result.assistantPrompt).not.toContain('price.detect.indicator_boundary')
+    expect(result.assistantPrompt).not.toContain('突破上下边界时执行风控')
+    expect(sessionPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long', status: 'locked' }),
+      expect.objectContaining({ key: 'close_long', status: 'locked' }),
+    ]))
+    expect(sessionPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 5 }),
+        status: 'locked',
+      }),
+    ]))
+    expect(sessionPayload.semanticState.risk).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.boundary_guard' }),
+    ]))
   })
 
 
@@ -4694,7 +5026,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('keeps legacy completeness blockers when semantic evidence is risk-only', () => {
+  it('keeps semantic trigger blockers when semantic evidence is risk-only', () => {
     const semanticState = {
       version: 1,
       families: [],
@@ -4726,8 +5058,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('NEEDS_CLARIFICATION')
     expect(result.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ reason: 'missing_entry_rules' }),
-      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_semantic_trigger', slotKey: 'trigger.entry' }),
+      expect.objectContaining({ reason: 'missing_semantic_trigger', slotKey: 'trigger.exit' }),
     ]))
   })
 
@@ -4798,7 +5130,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       items: expect.arrayContaining([
         expect.objectContaining({
           key: 'semantic.trigger.exit',
-          reason: 'missing_exit_rules',
+          reason: 'missing_semantic_trigger',
           slotKey: 'trigger.exit',
         }),
       ]),
@@ -5486,11 +5818,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'position.sizing',
-        reason: 'missing_position_pct',
+        reason: 'missing_semantic_position_sizing',
       }),
       expect.objectContaining({
         slotKey: 'risk.protective_exit',
-        reason: 'missing_stop_loss_rule',
+        reason: 'missing_semantic_risk',
       }),
     ]))
     expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
@@ -10319,6 +10651,107 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
   })
 
+  it('Bollinger-line follow-up flow stays in atomic semantic questions instead of legacy compileability prompts', async () => {
+    const semanticState = buildLockedBollingerSemanticState({
+      contextSlots: {
+        ...buildLockedBollingerSemanticState().contextSlots,
+        exchange: {
+          ...buildLockedBollingerSemanticState().contextSlots.exchange,
+          status: 'open',
+          value: null,
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-bollinger-line-atomic-follow-up',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-bollinger-line-atomic-follow-up', {
+      userId: 'u1',
+      message: '继续',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('补充入场和出场条件')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.exchange',
+        reason: 'missing_exchange',
+      }),
+    ]))
+  })
+
+  it('context-only locked state asks for executable semantics instead of entering confirm gate', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-context-only-no-strategy-atoms',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-context-only-no-strategy-atoms', {
+      userId: 'u1',
+      message: '继续',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请补充入场触发条件')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_semantic_trigger',
+        slotKey: 'trigger.entry',
+      }),
+    ]))
+    expect(updatePayload.status).toBe('DRAFTING')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.missing_entry_atom',
+        phase: 'entry',
+      }),
+      expect.objectContaining({
+        key: 'semantic.missing_exit_atom',
+        phase: 'exit',
+      }),
+    ]))
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+  })
+
   it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
     const semanticState = buildLockedMaSemanticState({
       actions: [
@@ -10853,6 +11286,100 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps a real grid executable after position and timeframe slots are closed across turns', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-okx-real-grid-slot-chain' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '建一个 OKX 现货ETH/USDT 真实网格策略。 固定价格区间：以当前价格为中心，上下各 0.4%。 网格数量：10 格。 订单类型：限价单。 成交后在相邻网格自动挂反向单。 价格突破上下边界时停止并撤销未成交订单。 不要用趋势信号触发开仓，部署后立即创建网格挂单。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('单笔仓位大小')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-okx-real-grid-slot-chain',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const afterPosition = await service.continueSession('s-okx-real-grid-slot-chain', {
+      userId: 'u1',
+      message: '10 USDT',
+    })
+    const positionPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(afterPosition.status).toBe('DRAFTING')
+    expect(afterPosition.assistantPrompt).toContain('主周期')
+    expect(positionPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_quote',
+      value: 10,
+      sizing: expect.objectContaining({
+        asset: 'USDT',
+        kind: 'quote',
+        value: 10,
+      }),
+      status: 'locked',
+    }))
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-okx-real-grid-slot-chain',
+      positionPayload,
+      { status: afterPosition.status },
+    ))
+
+    const afterTimeframe = await service.continueSession('s-okx-real-grid-slot-chain', {
+      userId: 'u1',
+      message: '1M',
+    })
+    const timeframePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(afterTimeframe.status).toBe('CONFIRM_GATE')
+    expect(afterTimeframe.assistantPrompt).toContain('入场：区间网格，以部署时当前价为中心上下各 0.4%，共 10 格')
+    expect(afterTimeframe.assistantPrompt).toContain('挂单：限价网格，成交后相邻网格反向挂单')
+    expect(afterTimeframe.assistantPrompt).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
+    expect(afterTimeframe.assistantPrompt).toContain('仓位：10 USDT')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-okx-real-grid-slot-chain',
+      timeframePayload,
+      { status: afterTimeframe.status },
+    ))
+
+    const confirmed = await service.continueSession('s-okx-real-grid-slot-chain', {
+      userId: 'u1',
+      message: '对的',
+    })
+
+    expect(confirmed.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+      's-okx-real-grid-slot-chain',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([expect.objectContaining({ key: 'grid.range_rebalance' })]),
+          actions: expect.arrayContaining([expect.objectContaining({
+            contracts: expect.arrayContaining([expect.objectContaining({
+              capabilities: expect.arrayContaining([expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+              })]),
+            })]),
+          })]),
+          risk: expect.arrayContaining([expect.objectContaining({ key: 'risk.boundary_guard' })]),
+        }),
+      }),
+    )
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
@@ -11150,6 +11677,36 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('does not treat semantic families as executable mainflow evidence during confirmGenerate', async () => {
+    const familiesOnlyState = {
+      ...(service as any).createEmptySemanticState(),
+      families: ['grid.range_rebalance'],
+    }
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot('s7-family-only', {}, {
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: familiesOnlyState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestSpecDesc: null,
+    }))
+
+    const result = await service.continueSession('s7-family-only', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildSemanticOnlyCanonicalDigest(familiesOnlyState),
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).not.toHaveBeenCalledWith(
+      's7-family-only',
+      expect.objectContaining({ status: 'GENERATING' }),
+    )
+  })
+
   it('does not block confirmGenerate with the legacy entry and exit completion prompt when the semantic snapshot is complete and the canonical spec can compile', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
@@ -11199,7 +11756,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   })
 
-  it('reports canonical projection failure without legacy entry and exit wording during confirmGenerate', async () => {
+  it('blocks confirmGenerate when semantic state is ready but canonical projection is not executable', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
         lockedStopLossRisk(),
@@ -11235,7 +11792,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         canCompile: false,
         entryRuleCount: 0,
         exitRuleCount: 0,
-        reasons: ['未识别可编译入场规则', '未识别可编译出场规则'],
+        reasons: ['canonical_projection_missing_entry_program', 'canonical_projection_missing_exit_program'],
       })
     const genericGapSpy = jest
       .spyOn(CodegenConversationService.prototype as any, 'hasUnresolvedGenericCompileabilityGap')
@@ -11250,13 +11807,72 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       })
 
       expect(result.status).toBe('DRAFTING')
-      expect(result.assistantPrompt).toContain('canonical 投影')
-      expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
-      expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+      expect(result.assistantPrompt ?? '').not.toContain('未识别可编译入场规则')
+      expect(result.assistantPrompt ?? '').not.toContain('未识别可编译出场规则')
+      expect(result.assistantPrompt ?? '').toContain('不能稳定投影到可执行入场规则和可执行出场/风控规则')
       expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+      expect(mockRepo.updateSession).toHaveBeenCalledWith(
+        's7-semantic-projection-gap',
+        expect.objectContaining({ status: 'DRAFTING' }),
+      )
     } finally {
       genericGapSpy.mockRestore()
       compileabilitySpy.mockRestore()
+      readCanonicalDigestSpy.mockRestore()
+    }
+  })
+
+  it('blocks confirmGenerate when a locked semantic risk atom is recognized but unsupported by projection', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        lockedStopLossRisk(),
+        {
+          id: 'risk-unsupported-pause',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct' },
+              right: { kind: 'constant', value: -12, unit: 'percent' },
+            },
+            effect: { type: 'pause_strategy' },
+            scope: 'strategy',
+            capabilityStatus: 'recognized_unsupported',
+            unsupportedReason: 'risk_expression_compiler_not_available',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-unsupported-risk-projection',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    const confirmedCanonicalDigest = buildSemanticOnlyCanonicalDigest(persistedSemanticState)
+    const readCanonicalDigestSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedCanonicalDigest)
+
+    try {
+      const result = await service.continueSession('s7-unsupported-risk-projection', {
+        userId: 'u1',
+        message: '确认逻辑图',
+        confirmGenerate: true,
+        confirmedCanonicalDigest,
+      })
+
+      expect(result.status).toBe('DRAFTING')
+      expect(result.assistantPrompt ?? '').toContain('执行层暂不支持')
+      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    } finally {
       readCanonicalDigestSpy.mockRestore()
     }
   })

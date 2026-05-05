@@ -53,7 +53,7 @@ describe('strategyIrCanonicalAdapterService', () => {
       indicators: expect.arrayContaining([
         expect.objectContaining({
           kind: 'custom',
-          params: { family: 'grid' },
+          params: { compatibilityFamilyHint: 'grid' },
         }),
       ]),
       metadata: {

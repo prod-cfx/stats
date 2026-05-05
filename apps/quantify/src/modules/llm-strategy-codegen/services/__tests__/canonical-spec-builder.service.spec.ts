@@ -1327,7 +1327,11 @@ describe('canonicalSpecBuilderService', () => {
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         sideScope: 'short',
-        condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+        condition: expect.objectContaining({
+          key: 'bollinger.upper_break',
+          op: 'GTE',
+          params: { confirmationMode: 'touch' },
+        }),
       }),
     ]))
   })
@@ -2246,7 +2250,7 @@ describe('canonicalSpecBuilderService', () => {
 
     expect(spec.indicators).toContainEqual({
       kind: 'custom',
-      params: { family: 'grid' },
+      params: { compatibilityFamilyHint: 'grid' },
     })
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -2394,7 +2398,7 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromNormalizedIntent(checklist, normalizedIntent)
 
     expect(spec.indicators).toEqual([
-      { kind: 'custom', params: { family: 'grid' } },
+      { kind: 'custom', params: { compatibilityFamilyHint: 'grid' } },
     ])
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
