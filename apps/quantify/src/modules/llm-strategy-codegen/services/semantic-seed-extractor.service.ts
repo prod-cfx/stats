@@ -1038,7 +1038,7 @@ export class SemanticSeedExtractorService {
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_middle',
           phase: 'exit',
-          sideScope: this.resolveBollingerMiddleSideScope(clause),
+          sideScope: this.resolveBollingerMiddleSideScope(clause, segment),
           params: {
             band: 'middle',
             ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
@@ -1170,9 +1170,11 @@ export class SemanticSeedExtractorService {
     return match?.[0] ?? 'boundary'
   }
 
-  private resolveBollingerMiddleSideScope(clause: string): 'long' | 'short' | 'both' {
+  private resolveBollingerMiddleSideScope(clause: string, context = clause): 'long' | 'short' | 'both' {
     if (/平空|买回空单|买回平空|做空.*平仓|空单.*平仓/u.test(clause)) return 'short'
     if (/平多|卖出多单|卖出平多|做多.*平仓|多单.*平仓/u.test(clause)) return 'long'
+    const contextualSideScope = this.resolveSingleEntrySideScope(context)
+    if (contextualSideScope) return contextualSideScope
     return 'both'
   }
 

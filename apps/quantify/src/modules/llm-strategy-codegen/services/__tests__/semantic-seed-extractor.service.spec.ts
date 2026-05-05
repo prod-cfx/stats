@@ -2632,6 +2632,28 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('uses preceding short entry context for legacy Bollinger middle exits', () => {
+    const patch = service.extract('突破布林带上轨开空，回到布林带中轨平仓')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          band: 'middle',
+        }),
+      }),
+    ]))
+  })
+
   it('extracts compact Bollinger boundary wording as one coherent boundary atom per role', () => {
     const patch = service.extract('15min 布林带下轨做多 上轨平多')
     const boundaryTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.detect.indicator_boundary') ?? []
