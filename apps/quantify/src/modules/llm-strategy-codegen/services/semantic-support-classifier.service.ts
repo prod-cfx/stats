@@ -53,7 +53,7 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.registry.resolve(trigger.key)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return { ...trigger, support: toSupportMetadata(resolved) }
+      return withSupportMetadata(trigger, resolved)
     })
 
     const actions = state.actions.map((action) => {
@@ -63,7 +63,7 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.registry.resolve(action.key)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return { ...action, support: toSupportMetadata(resolved) }
+      return withSupportMetadata(action, resolved)
     })
 
     const risk = state.risk.map((riskState) => {
@@ -73,7 +73,7 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.registry.resolve(riskState.key)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return { ...riskState, support: toSupportMetadata(resolved) }
+      return withSupportMetadata(riskState, resolved)
     })
 
     const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms)
@@ -140,7 +140,7 @@ export class SemanticSupportClassifierService {
 
     const resolved = this.registry.resolve(toPositionAtomKey(position.mode))
     this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-    return { ...position, support: toSupportMetadata(resolved) }
+    return withSupportMetadata(position, resolved)
   }
 
   private collectSupportResult(
@@ -166,6 +166,14 @@ export class SemanticSupportClassifierService {
   }
 }
 
+function withSupportMetadata<
+  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+>(node: T, resolved: ResolvedSemanticAtom): T {
+  return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
+    ? { ...node }
+    : { ...node, support: toSupportMetadata(resolved) }
+}
+
 function toPositionAtomKey(mode: string): string {
   if (mode === 'fixed_ratio') {
     return 'position.fixed_pct'
@@ -188,9 +196,9 @@ function toSupportMetadata(resolved: ResolvedSemanticAtom): SemanticAtomSupportM
 
   return {
     supportStatus: resolved.supportStatus,
-    unsupportedReasonCode: unsupported?.reasonCode,
-    unsupportedDisplayName: unsupported?.displayName,
-    replacementStrategyKey: replacement?.strategyKey,
+    ...(unsupported?.reasonCode ? { unsupportedReasonCode: unsupported.reasonCode } : {}),
+    ...(unsupported?.displayName ? { unsupportedDisplayName: unsupported.displayName } : {}),
+    ...(replacement?.strategyKey ? { replacementStrategyKey: replacement.strategyKey } : {}),
   }
 }
 

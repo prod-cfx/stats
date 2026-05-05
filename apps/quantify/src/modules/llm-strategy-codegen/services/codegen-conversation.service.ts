@@ -76,11 +76,13 @@ import { canonicalizeStrategySymbolInput, isEquivalentMarketScopeValue } from '.
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SemanticContractReadinessService } from './semantic-contract-readiness.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SemanticSeedStateBuilderService } from './semantic-seed-state-builder.service'
 import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
+import { SemanticSupportClassifierService } from './semantic-support-classifier.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -97,6 +99,7 @@ import { SemanticStateMergeService } from './semantic-state-merge.service'
 import { buildNormalizedIntentFromSemanticState, normalizeRiskSemantics } from './semantic-state-normalization'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
+import { UnsupportedFallbackService } from './unsupported-fallback.service'
 import {
   InferredConfirmationClassifierService,
   type InferredConfirmationDecisionKey,
@@ -208,6 +211,8 @@ export class CodegenConversationService {
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
     private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
     private readonly semanticSeedStateBuilder: SemanticSeedStateBuilderService = new SemanticSeedStateBuilderService(),
+    private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService()),
+    private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
@@ -237,18 +242,76 @@ export class CodegenConversationService {
       currentState: seedSemanticState,
       plan,
     })
-    initialSemanticState = this.normalizeSemanticContractReadiness(initialSemanticState)
-    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(initialSemanticState, {})
+    const initialSupportGate = this.semanticSupportClassifier.classify(initialSemanticState)
+    initialSemanticState = initialSupportGate.state
+    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       dto.initialMessage,
       initialSemanticState,
       undefined,
     )
-    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialConstraintPack = {
       ...createDefaultConstraintPack(guidePrompt),
       recommendationStyle,
     }
+    if (initialSupportGate.route === 'unsupported_fallback') {
+      const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(initialSupportGate.unsupportedAtoms)
+      initialSemanticState = this.withUnsupportedFallback(initialSemanticState, unsupportedFallback)
+      const clarificationState = this.resolveSemanticClarificationArtifacts(initialSemanticState).clarificationState
+      const session = await this.sessionsRepo.createSession({
+        userId: sessionUserId,
+        status: 'DRAFTING',
+        semanticState: initialSemanticState as unknown as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+        constraintPack: {
+          ...initialConstraintPack,
+          conversationHistory: this.appendConversationHistory([], dto.initialMessage, unsupportedFallback.prompt),
+        } as unknown as Prisma.InputJsonValue,
+        latestDraftCode: null,
+        latestSpecDesc: null,
+        rejectReason: null,
+        strategyInstanceId: null,
+      } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: unsupportedFallback.prompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+    if (initialSupportGate.route === 'unknown_unsupported') {
+      const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(initialSupportGate.unknownAtoms)
+      initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
+      const clarificationState = this.resolveSemanticClarificationArtifacts(initialSemanticState).clarificationState
+      const session = await this.sessionsRepo.createSession({
+        userId: sessionUserId,
+        status: 'DRAFTING',
+        semanticState: initialSemanticState as unknown as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+        constraintPack: {
+          ...initialConstraintPack,
+          conversationHistory: this.appendConversationHistory([], dto.initialMessage, assistantPrompt),
+        } as unknown as Prisma.InputJsonValue,
+        latestDraftCode: null,
+        latestSpecDesc: null,
+        rejectReason: null,
+        strategyInstanceId: null,
+      } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+    initialSemanticState = this.normalizeSemanticContractReadiness(initialSemanticState)
+    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(initialSemanticState, {})
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(initialSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
     const normalization = semanticArtifacts.normalization
@@ -1123,6 +1186,16 @@ export class CodegenConversationService {
       })
     }
     const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    const unsupportedFallbackResponse = await this.handlePendingUnsupportedFallback({
+      session,
+      semanticState: currentSemanticState,
+      message: dto.message,
+      userId: sessionUserId,
+      guideConfig: dto.guideConfig,
+    })
+    if (unsupportedFallbackResponse) {
+      return unsupportedFallbackResponse
+    }
     if (dto.confirmGenerate !== true && this.isLikelyUserSubmittedScriptCode(dto.message)) {
       return this.handleUserSubmittedScriptCode(session, dto.message, sessionUserId)
     }
@@ -1222,15 +1295,29 @@ export class CodegenConversationService {
     const hasStructuredClarificationAnswers = Boolean(
       effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
     )
+    const rawSemanticStateAfterAnswers = this.applySemanticClarificationAnswers(
+      currentSemanticState,
+      activeClarificationState,
+      effectiveClarificationAnswers,
+    )
+    const baseConstraintPack = this.readConstraintPack(session.constraintPack)
+    const preReadinessSupportGateResponse = await this.handleSemanticSupportGateForExistingSession({
+      session,
+      semanticState: rawSemanticStateAfterAnswers,
+      message: dto.message,
+      userId: sessionUserId,
+      constraintPack: baseConstraintPack,
+      guidePrompt: this.mergeGuidePromptConfig(baseConstraintPack.guidePrompt, dto.guideConfig),
+      recommendationStyle: baseConstraintPack.recommendationStyle,
+    })
+    if (preReadinessSupportGateResponse.response) {
+      return preReadinessSupportGateResponse.response
+    }
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
-      this.applySemanticClarificationAnswers(
-        currentSemanticState,
-        activeClarificationState,
-        effectiveClarificationAnswers,
-      ),
+      preReadinessSupportGateResponse.semanticState,
     )
     const inferredConfirmation = await this.withConfirmedInferredDecisionKeys(
-      this.readConstraintPack(session.constraintPack),
+      baseConstraintPack,
       semanticStateAfterAnswers,
       dto.message,
       {
@@ -1258,8 +1345,24 @@ export class CodegenConversationService {
       currentState: preMergedSemanticState,
       plan,
     })
+    const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
+      session,
+      semanticState: plannedSemanticState,
+      message: dto.message,
+      userId: sessionUserId,
+      constraintPack,
+      guidePrompt,
+      recommendationStyle: this.inferRecommendationStyleFromSemanticContext(
+        dto.message,
+        plannedSemanticState,
+        constraintPack.recommendationStyle,
+      ),
+    })
+    if (supportGateResponse.response) {
+      return supportGateResponse.response
+    }
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(plannedSemanticState, preMergedLogicSnapshot, {
+      this.withRequiredSemanticOpenSlots(supportGateResponse.semanticState, preMergedLogicSnapshot, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
       }),
     )
@@ -1953,13 +2056,25 @@ export class CodegenConversationService {
     const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
       ? inferredSemanticClarificationAnswers
       : dto.clarificationAnswers
-    const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
-      this.applySemanticClarificationAnswers(
-        persistedSemanticState,
-        activeClarificationState,
-        effectiveClarificationAnswers,
-      ),
+    const rawSemanticStateAfterAnswers = this.applySemanticClarificationAnswers(
+      persistedSemanticState,
+      activeClarificationState,
+      effectiveClarificationAnswers,
     )
+    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
+      session,
+      semanticState: rawSemanticStateAfterAnswers,
+      message: dto.message,
+      userId: sessionUserId,
+      constraintPack,
+      guidePrompt: constraintPack.guidePrompt,
+      recommendationStyle: constraintPack.recommendationStyle,
+    })
+    if (supportGateResponse.response) {
+      return supportGateResponse.response
+    }
+    const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(supportGateResponse.semanticState)
     const confirmationBaseLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(
       semanticStateAfterAnswers,
       persistedLogicSnapshot,
@@ -2019,7 +2134,6 @@ export class CodegenConversationService {
       clarificationState.status === 'NEEDS_CLARIFICATION'
       && clarificationState.items.some(item => item.blocking && item.status === 'pending')
     const clarificationPrompt = semanticArtifacts.clarificationPrompt
-    const constraintPack = this.readConstraintPack(session.constraintPack)
     const historyAfterConfirm = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
@@ -6343,6 +6457,432 @@ export class CodegenConversationService {
 
   private normalizeSemanticContractReadiness(state: SemanticState): SemanticState {
     return this.semanticContractReadiness.normalize(state).state
+  }
+
+  private async handleSemanticSupportGateForExistingSession(args: {
+    session: PersistedConversationSessionForContinue
+    semanticState: SemanticState
+    message: string
+    userId: string
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+    guidePrompt?: GuidePromptConfig
+    recommendationStyle?: RecommendationStyle
+  }): Promise<{ semanticState: SemanticState; response: CodegenSessionResponseDto | null }> {
+    const classification = this.semanticSupportClassifier.classify(args.semanticState)
+    if (classification.route === 'unsupported_fallback') {
+      const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(classification.unsupportedAtoms)
+      const nextState = this.withUnsupportedFallback(classification.state, unsupportedFallback)
+      const clarificationState = this.resolveSemanticClarificationArtifacts(nextState).clarificationState
+      const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        semanticState: nextState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: this.appendConversationHistory(
+            args.constraintPack.conversationHistory ?? [],
+            args.message,
+            unsupportedFallback.prompt,
+          ),
+        },
+        latestSpecDesc: null,
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: unsupportedFallback.prompt,
+        clarificationState,
+      })
+      return {
+        semanticState: nextState,
+        response: await this.returnPersistedSessionResponse(args.session.id, args.userId, response),
+      }
+    }
+
+    if (classification.route === 'unknown_unsupported') {
+      const nextState = this.clearUnsupportedFallback(classification.state)
+      const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(classification.unknownAtoms)
+      const clarificationState = this.resolveSemanticClarificationArtifacts(nextState).clarificationState
+      const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        semanticState: nextState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: this.appendConversationHistory(
+            args.constraintPack.conversationHistory ?? [],
+            args.message,
+            assistantPrompt,
+          ),
+        },
+        latestSpecDesc: null,
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      })
+      return {
+        semanticState: nextState,
+        response: await this.returnPersistedSessionResponse(args.session.id, args.userId, response),
+      }
+    }
+
+    return {
+      semanticState: this.clearUnsupportedFallback(classification.state),
+      response: null,
+    }
+  }
+
+  private async handlePendingUnsupportedFallback(args: {
+    session: PersistedConversationSessionForContinue
+    semanticState: SemanticState
+    message: string
+    userId: string
+    guideConfig?: CodegenGuideConfigDto
+  }): Promise<CodegenSessionResponseDto | null> {
+    const pendingFallback = args.semanticState.unsupportedFallback
+    if (pendingFallback?.status !== 'pending') {
+      return null
+    }
+
+    const intent = this.unsupportedFallback.classifyConfirmation(args.message)
+    const constraintPack = this.readConstraintPack(args.session.constraintPack)
+    if (intent.kind === 'reject_fallback') {
+      return this.persistUnsupportedFallbackConversationTurn({
+        session: args.session,
+        semanticState: this.clearUnsupportedFallback(args.semanticState),
+        message: args.message,
+        assistantPrompt: '好的，这次不改用推荐策略。你可以继续描述一个当前公测支持的入场、出场、风控和仓位组合，我会重新整理逻辑图。',
+        userId: args.userId,
+        constraintPack,
+      })
+    }
+
+    if (intent.kind === 'unclear') {
+      return this.persistUnsupportedFallbackConversationTurn({
+        session: args.session,
+        semanticState: args.semanticState,
+        message: args.message,
+        assistantPrompt: `请确认是否改用推荐策略：${pendingFallback.recommendedStrategy.description}。也可以直接说明要改哪个周期或仓位。`,
+        userId: args.userId,
+        constraintPack,
+      })
+    }
+
+    const replacementPatchResult = this.buildUnsupportedFallbackReplacementPatch(
+      args.semanticState,
+      pendingFallback.recommendedStrategy.patch,
+      intent.kind === 'modify_fallback' ? intent.message : undefined,
+    )
+    if (intent.kind === 'modify_fallback' && replacementPatchResult.modifiedFields.length === 0) {
+      return this.persistUnsupportedFallbackConversationTurn({
+        session: args.session,
+        semanticState: args.semanticState,
+        message: args.message,
+        assistantPrompt: '我可以先按推荐策略继续，并支持把周期改成 15m/1h/4h/日线，或把仓位改成例如 5%。请确认要改用，或说明具体周期/仓位。',
+        userId: args.userId,
+        constraintPack,
+      })
+    }
+
+    const replacementSeedState = this.mergeSemanticPatchIntoState(
+      this.createEmptySemanticState(),
+      replacementPatchResult.patch,
+    )
+    const replacementState = buildReplacementSemanticState({
+      previous: args.semanticState,
+      next: replacementSeedState,
+    })
+    return this.persistUnsupportedFallbackReplacement({
+      session: args.session,
+      semanticState: replacementState,
+      message: args.message,
+      userId: args.userId,
+      constraintPack,
+      guideConfig: args.guideConfig,
+      prefix: replacementPatchResult.modifiedFields.length > 0
+        ? `已改用推荐策略，并调整${replacementPatchResult.modifiedFields.join('、')}。`
+        : '已改用推荐策略。',
+    })
+  }
+
+  private async persistUnsupportedFallbackConversationTurn(args: {
+    session: PersistedConversationSessionForContinue
+    semanticState: SemanticState
+    message: string
+    assistantPrompt: string
+    userId: string
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+  }): Promise<CodegenSessionResponseDto> {
+    const clarificationState = this.resolveSemanticClarificationArtifacts(args.semanticState).clarificationState
+    await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+      status: 'DRAFTING',
+      semanticState: args.semanticState,
+      clarificationState,
+      constraintPack: {
+        ...args.constraintPack,
+        conversationHistory: this.appendConversationHistory(
+          args.constraintPack.conversationHistory ?? [],
+          args.message,
+          args.assistantPrompt,
+        ),
+      },
+    }))
+
+    const response = this.finalizeSessionResponse({
+      id: args.session.id,
+      status: 'DRAFTING',
+      missingFields: [],
+      assistantPrompt: args.assistantPrompt,
+      clarificationState,
+    })
+    return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+  }
+
+  private async persistUnsupportedFallbackReplacement(args: {
+    session: PersistedConversationSessionForContinue
+    semanticState: SemanticState
+    message: string
+    userId: string
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+    guideConfig?: CodegenGuideConfigDto
+    prefix: string
+  }): Promise<CodegenSessionResponseDto> {
+    const supportGate = this.semanticSupportClassifier.classify(args.semanticState)
+    if (supportGate.route === 'unsupported_fallback' || supportGate.route === 'unknown_unsupported') {
+      const gated = await this.handleSemanticSupportGateForExistingSession({
+        session: args.session,
+        semanticState: args.semanticState,
+        message: args.message,
+        userId: args.userId,
+        constraintPack: args.constraintPack,
+        guidePrompt: args.constraintPack.guidePrompt,
+        recommendationStyle: args.constraintPack.recommendationStyle,
+      })
+      if (gated.response) return gated.response
+    }
+
+    const supportedState = {
+      ...supportGate.state,
+      unsupportedFallback: null,
+      updatedAt: new Date().toISOString(),
+    }
+    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(supportedState, {})
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.withRequiredSemanticOpenSlots(supportedState, checklist, {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(supportedState.position),
+      }),
+    )
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const clarificationState = semanticArtifacts.clarificationState
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const decision = this.buildStrategyDecision({
+      checklist: this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {}),
+      semanticState: reducedSemanticState,
+      clarification: semanticArtifacts,
+      effectiveBlockingReasons: semanticArtifacts.blockingReasons,
+      constraintPack: args.constraintPack,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : semanticArtifacts.clarificationPrompt
+    const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+      semanticState: reducedSemanticState,
+      clarificationState,
+      normalization,
+      decisionKind: decision.kind,
+      semanticReadyForGenerate,
+    })
+    const assistantPrompt = `${args.prefix}${
+      deterministicAuthority === 'clarification'
+        ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        : deterministicAuthority === 'decision'
+          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          : deterministicAuthority === 'normalization'
+            ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+            : deterministicAuthority === 'confirm_gate'
+              ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
+              : '我已重新整理成当前可测试的策略，请继续补充入场、出场、风控或仓位。'
+    }`
+    const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+    const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+      args.message,
+      reducedSemanticState,
+      args.constraintPack.recommendationStyle,
+    )
+    const nextConstraintPack = this.withGuidePrompt(args.constraintPack, guidePrompt, recommendationStyle)
+
+    await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+      status: targetStatus,
+      semanticState: reducedSemanticState,
+      clarificationState,
+      constraintPack: {
+        ...nextConstraintPack,
+        conversationHistory: this.appendConversationHistory(
+          args.constraintPack.conversationHistory ?? [],
+          args.message,
+          assistantPrompt,
+        ),
+      },
+      latestSpecDesc: specDesc,
+    }))
+
+    const response = this.finalizeSessionResponse({
+      id: args.session.id,
+      status: targetStatus,
+      missingFields: [],
+      ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'decision'
+        ? {
+            specDesc,
+            canonicalDigest,
+          }
+        : {}),
+      ...(deterministicAuthority === 'normalization' ? { specDesc } : {}),
+      assistantPrompt,
+      clarificationState,
+    })
+    return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+  }
+
+  private buildUnsupportedFallbackReplacementPatch(
+    semanticState: SemanticState,
+    patch: CodegenSemanticPatch,
+    modificationMessage?: string,
+  ): { patch: CodegenSemanticPatch; modifiedFields: string[] } {
+    const nextPatch = this.cloneSemanticPatch(patch)
+    nextPatch.contextSlots = {
+      ...this.readContextPatchFromSemanticState(semanticState),
+      ...(nextPatch.contextSlots ?? {}),
+    }
+    const modifiedFields: string[] = []
+
+    if (modificationMessage) {
+      const timeframe = this.extractFallbackTimeframe(modificationMessage)
+      if (timeframe) {
+        nextPatch.contextSlots = {
+          ...(nextPatch.contextSlots ?? {}),
+          timeframe,
+        }
+        modifiedFields.push(`周期为 ${timeframe}`)
+      }
+
+      const positionPct = this.extractFallbackPositionPct(modificationMessage)
+      if (positionPct !== null) {
+        const value = positionPct / 100
+        nextPatch.position = {
+          ...(nextPatch.position ?? {
+            mode: 'fixed_ratio',
+            value,
+            positionMode: 'long_only',
+          }),
+          mode: 'fixed_ratio',
+          value,
+          sizing: { kind: 'ratio', value, unit: 'ratio' },
+        }
+        modifiedFields.push(`仓位为 ${positionPct}%`)
+      }
+    }
+
+    return { patch: nextPatch, modifiedFields }
+  }
+
+  private cloneSemanticPatch(patch: CodegenSemanticPatch): CodegenSemanticPatch {
+    return JSON.parse(JSON.stringify(patch)) as CodegenSemanticPatch
+  }
+
+  private readContextPatchFromSemanticState(state: SemanticState): Record<string, string | number | boolean | null> {
+    const contextPatch: Record<string, string | number | boolean | null> = {}
+    const fields = ['exchange', 'symbol', 'marketType', 'timeframe'] as const
+    for (const field of fields) {
+      const value = this.readSemanticContextValue(state.contextSlots[field])
+      if (value !== null) {
+        contextPatch[field] = value
+      }
+    }
+
+    return contextPatch
+  }
+
+  private extractFallbackTimeframe(message: string): string | null {
+    const normalized = message.trim().toLowerCase()
+    if (/日线|日k|1d/u.test(normalized)) {
+      return '1d'
+    }
+
+    const match = normalized.match(/(\d{1,3})\s*(m|min|分钟|分|h|小时|d|天|日)\b/u)
+    if (!match?.[1] || !match[2]) {
+      return null
+    }
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    const unit = match[2]
+    if (unit === 'm' || unit === 'min' || unit === '分钟' || unit === '分') {
+      return `${value}m`
+    }
+    if (unit === 'h' || unit === '小时') {
+      return `${value}h`
+    }
+
+    return `${value}d`
+  }
+
+  private extractFallbackPositionPct(message: string): number | null {
+    const match = message.match(/(?:仓位\D{0,12})?(\d{1,3}(?:\.\d+)?)\s*%/u)
+    if (!match?.[1]) {
+      return null
+    }
+
+    const value = Number(match[1])
+    return Number.isFinite(value) && value > 0 && value <= 100 ? value : null
+  }
+
+  private withUnsupportedFallback(
+    state: SemanticState,
+    unsupportedFallback: NonNullable<SemanticState['unsupportedFallback']>,
+  ): SemanticState {
+    return {
+      ...state,
+      unsupportedFallback,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private clearUnsupportedFallback(state: SemanticState): SemanticState {
+    return state.unsupportedFallback
+      ? {
+          ...state,
+          unsupportedFallback: null,
+          updatedAt: new Date().toISOString(),
+        }
+      : state
+  }
+
+  private buildUnknownSemanticSupportAssistantPrompt(unknownAtoms: readonly string[]): string {
+    const atomText = unknownAtoms.length > 0
+      ? `：${unknownAtoms.join('、')}`
+      : ''
+    return `当前还没把该描述映射到可支持交易原子语义${atomText}。请更明确描述入场、出场、风控、仓位，我再继续整理成可测试策略。`
   }
 
   private isNonBlockingRiskBasisDefault(

@@ -1312,6 +1312,145 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload).not.toHaveProperty('checklist')
   })
 
+  it('routes recognized unsupported atoms to pending fallback before readiness', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'volume.spike',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { multiplier: 2 },
+            },
+          ],
+          actions: [{ key: 'open_long' }],
+          risk: [
+            {
+              key: 'risk.atr_stop',
+              params: { atrPeriod: 14, multiplier: 2 },
+            },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-start' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX BTCUSDT 15m 放量突破开多，用 ATR 止损，仓位 10%',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const semanticState = createPayload.semanticState as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt ?? '').toContain('当前公测暂未支持生成和回测')
+    expect(result.assistantPrompt ?? '').toContain('是否改用这个策略继续')
+    expect(createPayload).toEqual(expect.objectContaining({
+      status: 'DRAFTING',
+      latestDraftCode: null,
+      latestSpecDesc: null,
+    }))
+    expect(semanticState.unsupportedFallback).toEqual(expect.objectContaining({
+      status: 'pending',
+      recommendedStrategy: expect.objectContaining({
+        strategyKey: 'price_breakout_with_fixed_risk',
+      }),
+    }))
+    expect(semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'volume.spike',
+        openSlots: [],
+        support: expect.objectContaining({ supportStatus: 'recognized_unsupported' }),
+      }),
+    ]))
+    expect(semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_stop',
+        openSlots: [],
+        support: expect.objectContaining({ supportStatus: 'recognized_unsupported' }),
+      }),
+    ]))
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+  })
+
+  it('accepts pending unsupported fallback wording and re-enters executable main flow', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          risk: [
+            {
+              key: 'risk.partial_take_profit',
+              params: { levels: [{ valuePct: 5, reducePct: 50 }] },
+            },
+          ],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-accept' })
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX BTCUSDT 15m 分批止盈，仓位 10%',
+    })
+    const created = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-accept',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: created.semanticState,
+        clarificationState: created.clarificationState,
+        constraintPack: created.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+    mockAi.chat.mockClear()
+
+    const result = await service.continueSession('s-unsupported-fallback-accept', {
+      userId: 'u1',
+      message: '确认，可以等等',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const nextState = updatePayload.semanticState as Record<string, any>
+
+    expect(result.status).not.toBe('GENERATING')
+    expect(result.assistantPrompt ?? '').not.toContain('暂未支持')
+    expect(nextState.unsupportedFallback).toBeNull()
+    expect(nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over' }),
+      expect.objectContaining({ key: 'indicator.cross_under' }),
+    ]))
+    expect(nextState.risk).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.partial_take_profit' }),
+    ]))
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+  })
+
   it('rejects engine tests when semantic input is missing', async () => {
     await expect(service.testEngine({
       userId: 'u1',

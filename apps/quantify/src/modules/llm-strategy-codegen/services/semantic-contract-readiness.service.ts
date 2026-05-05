@@ -10,7 +10,9 @@ import type {
   SemanticSlotState,
   SemanticState,
 } from '../types/semantic-state'
+import type { SemanticAtomSupportMetadata } from '../types/semantic-atom-support'
 import { buildSemanticSlotId } from '../types/semantic-state'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 
@@ -31,6 +33,8 @@ export interface SemanticContractReadinessNormalizationResult {
 interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
+  atomKey: string
+  support?: SemanticAtomSupportMetadata
   status: SemanticNodeStatus
   contracts: SemanticAtomContract[]
 }
@@ -45,14 +49,23 @@ export class SemanticContractReadinessService {
   constructor(
     private readonly semanticAtomContractService: SemanticAtomContractService = new SemanticAtomContractService(),
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
+    private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
   ) {}
 
   normalize(state: SemanticState): SemanticContractReadinessNormalizationResult {
     const activeOwners = collectActiveContractOwners(state)
-    const providerNormalization = this.normalizeProviderContracts(activeOwners)
+    const unsupportedOrUnknownOwnerKeys = new Set(
+      activeOwners
+        .filter(owner => this.isUnsupportedOrUnknownOwner(owner))
+        .map(owner => ownerKey(owner.ownerKind, owner.ownerId)),
+    )
+    const supportedOwners = activeOwners.filter(owner =>
+      !unsupportedOrUnknownOwnerKeys.has(ownerKey(owner.ownerKind, owner.ownerId)),
+    )
+    const providerNormalization = this.normalizeProviderContracts(supportedOwners)
     const providerContracts = providerNormalization.contracts
     const resolution = this.semanticAtomContractService.resolve(providerContracts)
-    const missingRequirements = this.collectMissingRequirements(activeOwners, resolution.capabilities)
+    const missingRequirements = this.collectMissingRequirements(supportedOwners, resolution.capabilities)
     const slotsByOwnerKey = mergeSlotMaps(
       providerNormalization.shapeSlotsByOwnerKey,
       buildMissingRequirementSlots(missingRequirements),
@@ -74,7 +87,9 @@ export class SemanticContractReadinessService {
           ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
           : null,
       },
-      ready: missingRequirements.length === 0 && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey),
+      ready: unsupportedOrUnknownOwnerKeys.size === 0
+        && missingRequirements.length === 0
+        && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey),
       missingRequirements,
     }
   }
@@ -188,6 +203,18 @@ export class SemanticContractReadinessService {
 
     return true
   }
+
+  private isUnsupportedOrUnknownOwner(owner: SemanticContractOwnerRef): boolean {
+    if (
+      owner.support?.supportStatus === 'recognized_unsupported'
+      || owner.support?.supportStatus === 'unsupported_unknown'
+    ) {
+      return true
+    }
+
+    const resolved = this.semanticAtomRegistry.resolve(owner.atomKey)
+    return resolved.supportStatus === 'recognized_unsupported'
+  }
 }
 
 function readShapeString(shape: SemanticCapability['shape'], key: string): string | null {
@@ -207,6 +234,8 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       owners.push({
         ownerKind: 'trigger',
         ownerId: trigger.id,
+        atomKey: trigger.key,
+        support: trigger.support,
         status: trigger.status,
         contracts: trigger.contracts,
       })
@@ -218,6 +247,8 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       owners.push({
         ownerKind: 'action',
         ownerId: action.id,
+        atomKey: action.key,
+        support: action.support,
         status: action.status,
         contracts: action.contracts,
       })
@@ -229,6 +260,8 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       owners.push({
         ownerKind: 'risk',
         ownerId: risk.id,
+        atomKey: risk.key,
+        support: risk.support,
         status: risk.status,
         contracts: risk.contracts,
       })
@@ -239,6 +272,8 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     owners.push({
       ownerKind: 'position',
       ownerId: positionOwnerId(),
+      atomKey: toPositionAtomKey(state.position.mode),
+      support: state.position.support,
       status: state.position.status,
       contracts: state.position.contracts,
     })
@@ -418,4 +453,20 @@ function ownerKey(ownerKind: SemanticContractOwnerKind, ownerId: string): string
 
 function positionOwnerId(): string {
   return 'position'
+}
+
+function toPositionAtomKey(mode: string): string {
+  if (mode === 'fixed_ratio') {
+    return 'position.fixed_pct'
+  }
+
+  if (mode === 'fixed_quote') {
+    return 'position.fixed_notional'
+  }
+
+  if (mode === 'fixed_qty') {
+    return 'position.fixed_quantity'
+  }
+
+  return mode
 }
