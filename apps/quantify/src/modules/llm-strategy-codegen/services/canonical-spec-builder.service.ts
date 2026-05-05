@@ -6,7 +6,6 @@ import type {
   SemanticExpression,
   SemanticExpressionOperand,
   SemanticPositionState,
-  SemanticActionState,
   SemanticRiskState,
   SemanticSlotState,
   SemanticState,
@@ -603,17 +602,11 @@ export class CanonicalSpecBuilderService {
     const contracts = this.collectContracts(state)
     const resolution = this.contracts.resolve(contracts)
     if (!resolution.canCompileOrderProgram) {
-      const synthesized = this.synthesizeGridOrderProgramFromAtomicState(state)
-      return synthesized ? [synthesized] : []
+      return []
     }
 
     const intent = this.toCanonicalOrderProgramIntent(resolution.capabilities, state)
-    if (intent) {
-      return [intent]
-    }
-
-    const synthesized = this.synthesizeGridOrderProgramFromAtomicState(state)
-    return synthesized ? [synthesized] : []
+    return intent ? [intent] : []
   }
 
   private collectContracts(state: SemanticState): SemanticAtomContract[] {
@@ -841,91 +834,6 @@ export class CanonicalSpecBuilderService {
     }
 
     return null
-  }
-
-  private synthesizeGridOrderProgramFromAtomicState(
-    state: SemanticState,
-  ): CanonicalOrderProgramIntent | null {
-    const gridLevelSet = this.resolveGridLevelSetCapability(state)
-    const gridAction = this.resolveGridOrderAction(state.actions)
-    if (!gridLevelSet || !gridAction) {
-      return null
-    }
-
-    const projectedLevelSet = this.projectCanonicalOrderProgramLevelSet(gridLevelSet)
-    const projectedBudget = this.projectCanonicalOrderProgramBudget(null, state)
-    if (!projectedLevelSet || !projectedBudget) {
-      return null
-    }
-
-    const orderProgram = this.findActionCapability(gridAction, 'order_program', 'maintain', 'limit_ladder')
-    return {
-      id: 'contract-order-program-limit_ladder',
-      kind: 'contract_order_program',
-      mode: this.resolveContractOrderProgramMode(null, state),
-      levelSet: projectedLevelSet,
-      budget: projectedBudget,
-      orderType: 'limit',
-      timeInForce: 'gtc',
-      recycleOnFill: orderProgram
-        ? this.readShapeBoolean(orderProgram.shape, 'recycleOnFill') ?? true
-        : true,
-      cancelOnStop: orderProgram
-        ? this.readShapeBoolean(orderProgram.shape, 'cancelOnStop') ?? true
-        : true,
-    }
-  }
-
-  private resolveGridLevelSetCapability(state: SemanticState): SemanticCapability | null {
-    const capabilities = state.triggers
-      .filter(trigger =>
-        trigger.status === 'locked'
-        && trigger.key === 'grid.range_rebalance'
-        && trigger.openSlots.every(slot => slot.status !== 'open'),
-      )
-      .flatMap(trigger => trigger.contracts ?? [])
-      .flatMap(contract => contract.capabilities)
-
-    const levelSet = this.resolveUniqueCapability(
-      capabilities,
-      'price',
-      'define',
-      ['level_set'],
-      capability => this.projectLevelSetCapabilityKey(capability),
-    )
-    return levelSet.status === 'ok' ? levelSet.capability : null
-  }
-
-  private resolveGridOrderAction(actions: readonly SemanticActionState[]): SemanticActionState | null {
-    const candidates = actions.filter(action =>
-      action.status === 'locked'
-      && (action.openSlots ?? []).every(slot => slot.status !== 'open')
-      && (
-        action.key === 'place_limit_grid'
-        || action.key === 'open_long'
-        || action.key === 'open_short'
-      ),
-    )
-    if (candidates.length === 0) {
-      return null
-    }
-
-    return candidates.find(action => action.key === 'place_limit_grid') ?? candidates[0]
-  }
-
-  private findActionCapability(
-    action: SemanticActionState,
-    domain: SemanticCapability['domain'],
-    verb: string,
-    object: string,
-  ): SemanticCapability | null {
-    return (action.contracts ?? [])
-      .flatMap(contract => contract.capabilities)
-      .find(capability =>
-        capability.domain === domain
-        && capability.verb === verb
-        && capability.object === object,
-      ) ?? null
   }
 
   private projectLimitLadderCapabilityKey(capability: SemanticCapability): string {

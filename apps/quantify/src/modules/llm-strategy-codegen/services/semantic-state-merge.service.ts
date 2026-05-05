@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 
 import type {
   SemanticActionState,
+  SemanticAtomContract,
   SemanticContextSlotState,
   SemanticPositionState,
   SemanticRiskState,
@@ -63,6 +64,7 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedTrigger.params, ...persistedTrigger.params }
           : { ...persistedTrigger.params, ...derivedTrigger.params },
+        contracts: this.mergeContracts(persistedTrigger.contracts, derivedTrigger.contracts),
         openSlots: this.mergeOpenSlotsForMatchedNodes(
           persistedTrigger,
           derivedTrigger,
@@ -137,6 +139,7 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedAction.params, ...persistedAction.params }
           : { ...persistedAction.params, ...derivedAction.params },
+        contracts: this.mergeContracts(persistedAction.contracts, derivedAction.contracts),
         openSlots: this.mergeOpenSlotsForMatchedNodes(
           persistedAction,
           derivedAction,
@@ -185,6 +188,7 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedRisk.params, ...persistedRisk.params }
           : { ...persistedRisk.params, ...derivedRisk.params },
+        contracts: this.mergeContracts(persistedRisk.contracts, derivedRisk.contracts),
         openSlots: this.mergeOpenSlotsForMatchedNodes(
           persistedRisk,
           derivedRisk,
@@ -220,7 +224,167 @@ export class SemanticStateMergeService {
       ...weaker,
       ...stronger,
       value: stronger.value ?? weaker.value,
+      contracts: this.mergeContracts(persisted.contracts, derived.contracts),
       evidence: stronger.evidence ?? weaker.evidence,
+    }
+  }
+
+  private mergeContracts(
+    persisted: SemanticAtomContract[] | undefined,
+    derived: SemanticAtomContract[] | undefined,
+  ): SemanticAtomContract[] | undefined {
+    const next: SemanticAtomContract[] = []
+    for (const contract of [...(persisted ?? []), ...(derived ?? [])]) {
+      const matchIndex = next.findIndex(candidate => this.isSameContractIdentity(candidate, contract))
+      if (matchIndex < 0) {
+        next.push(this.cloneContract(contract))
+        continue
+      }
+
+      next[matchIndex] = this.mergeContract(next[matchIndex]!, contract)
+    }
+
+    return next.length > 0 ? next : undefined
+  }
+
+  private isSameContractIdentity(
+    left: SemanticAtomContract,
+    right: SemanticAtomContract,
+  ): boolean {
+    if (left.id === right.id) {
+      return true
+    }
+    if (left.kind !== right.kind) {
+      return false
+    }
+
+    const leftSemanticKeys = this.collectContractSemanticKeys(left)
+    const rightSemanticKeys = this.collectContractSemanticKeys(right)
+    return [...leftSemanticKeys].some(key => rightSemanticKeys.has(key))
+  }
+
+  private mergeContract(
+    left: SemanticAtomContract,
+    right: SemanticAtomContract,
+  ): SemanticAtomContract {
+    return {
+      ...left,
+      ...right,
+      capabilities: this.mergeContractCapabilities(left.capabilities, right.capabilities),
+      requires: this.mergeContractRequirements(left.requires, right.requires),
+      effects: this.mergeContractEffects(left.effects, right.effects),
+      params: {
+        ...left.params,
+        ...right.params,
+      },
+    }
+  }
+
+  private collectContractSemanticKeys(contract: SemanticAtomContract): Set<string> {
+    return new Set([
+      ...contract.capabilities.map(capability => this.semanticTupleKey(capability)),
+      ...contract.requires.map(requirement => this.semanticTupleKey(requirement)),
+      ...(contract.effects ?? []).map(effect => this.semanticTupleKey(effect)),
+    ])
+  }
+
+  private semanticTupleKey(tuple: { domain: string, verb: string, object: string }): string {
+    return `${tuple.domain}:${tuple.verb}:${tuple.object}`
+  }
+
+  private mergeContractCapabilities(
+    left: SemanticAtomContract['capabilities'],
+    right: SemanticAtomContract['capabilities'],
+  ): SemanticAtomContract['capabilities'] {
+    const next: Array<SemanticAtomContract['capabilities'][number]> = []
+    for (const capability of [...left, ...right]) {
+      const matchIndex = next.findIndex(candidate =>
+        candidate.domain === capability.domain
+        && candidate.verb === capability.verb
+        && candidate.object === capability.object,
+      )
+      if (matchIndex < 0) {
+        next.push({
+          ...capability,
+          shape: { ...capability.shape },
+        })
+        continue
+      }
+
+      next[matchIndex] = {
+        ...next[matchIndex]!,
+        ...capability,
+        shape: {
+          ...next[matchIndex]!.shape,
+          ...capability.shape,
+        },
+      }
+    }
+    return next
+  }
+
+  private mergeContractRequirements(
+    left: SemanticAtomContract['requires'],
+    right: SemanticAtomContract['requires'],
+  ): SemanticAtomContract['requires'] {
+    const next: Array<SemanticAtomContract['requires'][number]> = []
+    for (const requirement of [...left, ...right]) {
+      if (next.some(candidate =>
+        candidate.domain === requirement.domain
+        && candidate.verb === requirement.verb
+        && candidate.object === requirement.object,
+      )) {
+        continue
+      }
+      next.push({ ...requirement })
+    }
+    return next
+  }
+
+  private mergeContractEffects(
+    left: SemanticAtomContract['effects'],
+    right: SemanticAtomContract['effects'],
+  ): SemanticAtomContract['effects'] {
+    const next: Array<NonNullable<SemanticAtomContract['effects']>[number]> = []
+    for (const effect of [...(left ?? []), ...(right ?? [])]) {
+      const matchIndex = next.findIndex(candidate =>
+        candidate.domain === effect.domain
+        && candidate.verb === effect.verb
+        && candidate.object === effect.object,
+      )
+      if (matchIndex < 0) {
+        next.push({
+          ...effect,
+          shape: effect.shape ? { ...effect.shape } : undefined,
+        })
+        continue
+      }
+
+      next[matchIndex] = {
+        ...next[matchIndex]!,
+        ...effect,
+        shape: {
+          ...next[matchIndex]!.shape,
+          ...effect.shape,
+        },
+      }
+    }
+    return next.length > 0 ? next : undefined
+  }
+
+  private cloneContract(contract: SemanticAtomContract): SemanticAtomContract {
+    return {
+      ...contract,
+      capabilities: contract.capabilities.map(capability => ({
+        ...capability,
+        shape: capability.shape ? { ...capability.shape } : undefined,
+      })),
+      requires: contract.requires.map(requirement => ({ ...requirement })),
+      effects: contract.effects?.map(effect => ({
+        ...effect,
+        shape: effect.shape ? { ...effect.shape } : undefined,
+      })),
+      params: { ...contract.params },
     }
   }
 

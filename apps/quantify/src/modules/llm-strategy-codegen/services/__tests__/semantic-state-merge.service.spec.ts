@@ -49,6 +49,293 @@ describe('SemanticStateMergeService', () => {
     }))
   })
 
+  it('preserves persisted atom contracts when a weaker derived patch omits or clears them', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: { sideMode: 'long_only' },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            contracts: [{
+              id: 'contract-grid-levels',
+              kind: 'trigger',
+              capabilities: [{
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: {
+                  mode: 'centered_percent_range',
+                  centerTiming: 'deployment',
+                  centerSource: 'last_price',
+                  halfRangePct: 0.4,
+                  gridIntervals: 10,
+                  gridCount: 11,
+                  spacingMode: 'arithmetic',
+                },
+              }],
+              requires: [],
+              params: {},
+            }],
+          },
+        ],
+        actions: [
+          {
+            id: 'open-grid',
+            key: 'open_long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            contracts: [{
+              id: 'contract-grid-ladder',
+              kind: 'action',
+              capabilities: [
+                {
+                  domain: 'order_program',
+                  verb: 'maintain',
+                  object: 'limit_ladder',
+                  shape: { orderType: 'limit', timeInForce: 'gtc', recycleOnFill: true },
+                },
+                {
+                  domain: 'capital',
+                  verb: 'allocate',
+                  object: 'per_order_budget',
+                  shape: { value: 10, asset: 'USDT' },
+                },
+              ],
+              requires: [],
+              params: {},
+            }],
+          },
+        ],
+        risk: [
+          {
+            id: 'risk-boundary',
+            key: 'risk.boundary_guard',
+            params: {},
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            contracts: [{
+              id: 'contract-boundary-stop',
+              kind: 'risk',
+              capabilities: [{
+                domain: 'guard',
+                verb: 'enforce',
+                object: 'boundary_cancel',
+                shape: { onBreach: 'HALT_STRATEGY', cancelOrders: true },
+              }],
+              requires: [],
+              params: {},
+            }],
+          },
+        ],
+        position: {
+          mode: 'fixed_quote',
+          value: 10,
+          positionMode: 'long_only',
+          sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-position-sizing',
+            kind: 'position',
+            capabilities: [{
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'position_sizing',
+              shape: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-05T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [{
+          id: 'derived-grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { sideMode: 'long_only' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [],
+        }],
+        actions: [{
+          id: 'derived-open-grid',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [],
+        }],
+        risk: [{
+          id: 'derived-risk-boundary',
+          key: 'risk.boundary_guard',
+          params: {},
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [],
+        }],
+        position: {
+          mode: 'fixed_quote',
+          value: 10,
+          positionMode: 'long_only',
+          sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [],
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-05T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.triggers[0]?.contracts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+        })]),
+      }),
+    ]))
+    expect(merged.actions[0]?.contracts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        capabilities: expect.arrayContaining([
+          expect.objectContaining({
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+          }),
+          expect.objectContaining({
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: expect.objectContaining({ value: 10, asset: 'USDT' }),
+          }),
+        ]),
+      }),
+    ]))
+    expect(merged.risk[0]?.contracts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
+          domain: 'guard',
+          verb: 'enforce',
+          object: 'boundary_cancel',
+        })]),
+      }),
+    ]))
+    expect(merged.position?.contracts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
+          domain: 'capital',
+          verb: 'allocate',
+          object: 'position_sizing',
+        })]),
+      }),
+    ]))
+  })
+
+  it('coalesces atom contracts that share semantic capability or requirement keys', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [],
+          contracts: [{
+            id: 'risk-contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [],
+            requires: [
+              { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
+            ],
+            params: {},
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-05T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'derived-risk-boundary-stop',
+          key: 'risk.boundary_guard',
+          params: {},
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-boundary-stop',
+            kind: 'risk',
+            capabilities: [{
+              domain: 'guard',
+              verb: 'enforce',
+              object: 'boundary_cancel',
+              shape: {
+                onBreach: 'HALT_STRATEGY',
+                cancelOrders: true,
+                cancelScope: 'unfilled_grid_orders',
+                regrid: false,
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-05T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.risk[0]?.contracts).toHaveLength(1)
+    expect(merged.risk[0]?.contracts?.[0]).toEqual(expect.objectContaining({
+      capabilities: [expect.objectContaining({
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'boundary_cancel',
+      })],
+      requires: [expect.objectContaining({
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'boundary_cancel',
+      })],
+    }))
+  })
+
   it('preserves locked grid atoms when the current round only contributes a timeframe context slot', () => {
     const merged = service.merge({
       persisted: {
