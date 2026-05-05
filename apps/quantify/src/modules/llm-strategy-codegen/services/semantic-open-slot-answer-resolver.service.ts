@@ -234,20 +234,23 @@ function findClarificationTargetSlot(
   slots: readonly OpenLevelSetSlotRef[],
   pendingItems: ReturnType<typeof readPendingClarificationItems>,
 ): OpenLevelSetSlotRef | null {
-  for (const item of pendingItems) {
-    const bySlotId = typeof item.slotId === 'string'
-      ? slots.find(ref => buildSemanticSlotId(ref.slot) === item.slotId)
-      : undefined
-    if (bySlotId) {
-      return bySlotId
-    }
+  const activeItem = pendingItems[0]
+  if (!activeItem) {
+    return null
+  }
 
-    const byIdentity = typeof item.slotKey === 'string' && typeof item.fieldPath === 'string'
-      ? slots.find(ref => ref.slot.slotKey === item.slotKey && ref.slot.fieldPath === item.fieldPath)
-      : undefined
-    if (byIdentity) {
-      return byIdentity
-    }
+  const bySlotId = typeof activeItem.slotId === 'string'
+    ? slots.find(ref => buildSemanticSlotId(ref.slot) === activeItem.slotId)
+    : undefined
+  if (bySlotId) {
+    return bySlotId
+  }
+
+  const byIdentity = typeof activeItem.slotKey === 'string' && typeof activeItem.fieldPath === 'string'
+    ? slots.find(ref => ref.slot.slotKey === activeItem.slotKey && ref.slot.fieldPath === activeItem.fieldPath)
+    : undefined
+  if (byIdentity) {
+    return byIdentity
   }
 
   return null
