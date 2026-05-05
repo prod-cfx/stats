@@ -517,7 +517,55 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private resolveIntentLevelCount(intent: CanonicalOrderProgramIntent): number {
-    return Math.max(2, Math.floor(intent.levelSet.gridCount ?? 2))
+    const explicitGridCount = this.toPositiveInteger(intent.levelSet.gridCount)
+    if (explicitGridCount !== null) {
+      return Math.max(2, explicitGridCount)
+    }
+
+    const derivedGridCount = this.deriveLevelCountFromSpacing(intent)
+    if (derivedGridCount !== null) {
+      return Math.max(2, derivedGridCount)
+    }
+
+    return 2
+  }
+
+  private deriveLevelCountFromSpacing(intent: CanonicalOrderProgramIntent): number | null {
+    if (intent.levelSet.mode === 'centered_percent_range') {
+      const halfRangePct = typeof intent.levelSet.halfRangePct === 'number' ? intent.levelSet.halfRangePct : null
+      const spacingPct = typeof intent.levelSet.spacingPct === 'number' ? intent.levelSet.spacingPct : null
+      if (halfRangePct === null || spacingPct === null || halfRangePct <= 0 || spacingPct <= 0) {
+        return null
+      }
+
+      return Math.floor((halfRangePct * 2) / spacingPct) + 1
+    }
+
+    const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : null
+    const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : null
+    if (lower === null || upper === null || upper <= lower) {
+      return null
+    }
+
+    const absoluteSpacing = typeof intent.levelSet.absoluteSpacing === 'number' ? intent.levelSet.absoluteSpacing : null
+    if (absoluteSpacing !== null && absoluteSpacing > 0) {
+      return Math.floor((upper - lower) / absoluteSpacing) + 1
+    }
+
+    const spacingPct = typeof intent.levelSet.spacingPct === 'number' ? intent.levelSet.spacingPct : null
+    if (spacingPct === null || spacingPct <= 0 || lower <= 0) {
+      return null
+    }
+
+    return Math.floor(Math.log(upper / lower) / Math.log(1 + spacingPct / 100)) + 1
+  }
+
+  private toPositiveInteger(value: number | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    return Math.floor(value)
   }
 
   private resolveOrderProgramPositionMode(

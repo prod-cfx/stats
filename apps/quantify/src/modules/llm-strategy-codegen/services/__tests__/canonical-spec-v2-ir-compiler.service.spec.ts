@@ -259,6 +259,66 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(first.ir.orderPrograms[0]?.levelSetRef).not.toBe(second.ir.orderPrograms[0]?.levelSetRef)
   })
 
+  it('derives fixed-range level count from absolute spacing when grid count is absent', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'perp_neutral',
+          levelSet: {
+            lower: 79200,
+            upper: 80200,
+            absoluteSpacing: 100,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 20,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', baseTimeframe: '15m', positionPct: 10 },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        spacing: { mode: 'absolute', value: 100 },
+        levelsPerSide: { down: 0, up: 10 },
+      }),
+    ])
+    expect(result.ir.orderPrograms[0]).toEqual(expect.objectContaining({
+      maxWorkingOrders: 11,
+    }))
+  })
+
   it('keeps contract order programs exclusive from legacy grid decision rules', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
