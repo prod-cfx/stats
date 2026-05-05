@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common'
 
+import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityShape,
+  SemanticContextSlotState,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -14,10 +16,15 @@ import type {
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
+import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const REQUIREMENT_LEVEL_SET_SLOT_KEY = 'contract.requirement.price.define.level_set'
 const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
+const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
+const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
+const MISSING_ENTRY_TRIGGER_KEY = 'semantic.missing_entry_atom'
+const MISSING_EXIT_TRIGGER_KEY = 'semantic.missing_exit_atom'
 
 type LevelSetDensityAnswer = Partial<{
   gridIntervals: number
@@ -27,6 +34,9 @@ type LevelSetDensityAnswer = Partial<{
 }>
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
+type FulfilledTriggerPhase = 'entry' | 'exit'
+type FragmentTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
+type FragmentAction = NonNullable<CodegenSemanticPatch['actions']>[number]
 
 interface SemanticOpenSlotAnswerResolverInput {
   currentState: SemanticState
@@ -62,32 +72,242 @@ interface OwnerSlotUpdateResult<T> {
 export class SemanticOpenSlotAnswerResolverService {
   constructor(
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
+    private readonly seedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
   ) {}
 
   resolve(input: SemanticOpenSlotAnswerResolverInput): SemanticOpenSlotAnswerResolverResult {
     const answer = parseLevelSetDensityAnswer(input.message)
-    if (!answer) {
-      return { consumed: false, nextState: input.currentState }
+    if (answer) {
+      const openSlot = findOpenLevelSetSlot(input.currentState, input.clarificationState)
+      if (openSlot) {
+        const nextState = applyLevelSetDensityAnswer(input.currentState, openSlot, answer, this.shapeNormalizer)
+        if (nextState !== input.currentState) {
+          return {
+            consumed: true,
+            nextState,
+            answer,
+            closedSlotKeys: [openSlot.slot.slotKey],
+            closedSlots: [{ slotKey: openSlot.slot.slotKey, fieldPath: openSlot.slot.fieldPath }],
+          }
+        }
+      }
     }
 
-    const openSlot = findOpenLevelSetSlot(input.currentState, input.clarificationState)
-    if (!openSlot) {
-      return { consumed: false, nextState: input.currentState }
-    }
-
-    const nextState = applyLevelSetDensityAnswer(input.currentState, openSlot, answer, this.shapeNormalizer)
-    if (nextState === input.currentState) {
-      return { consumed: false, nextState: input.currentState }
-    }
-
-    return {
-      consumed: true,
-      nextState,
-      answer,
-      closedSlotKeys: [openSlot.slot.slotKey],
-      closedSlots: [{ slotKey: openSlot.slot.slotKey, fieldPath: openSlot.slot.fieldPath }],
-    }
+    return fulfillSemanticFragment(input.currentState, this.seedExtractor.extract(input.message))
   }
+}
+
+function fulfillSemanticFragment(
+  state: SemanticState,
+  patch: CodegenSemanticPatch,
+): SemanticOpenSlotAnswerResolverResult {
+  const patchTriggers = patch.triggers ?? []
+  const entryTriggers = patchTriggers.filter(trigger => trigger.phase === 'entry')
+  const exitTriggers = patchTriggers.filter(trigger => trigger.phase === 'exit')
+  const fulfilledPhases: FulfilledTriggerPhase[] = []
+
+  if (hasOpenSlot(state, ENTRY_TRIGGER_SLOT_KEY) && entryTriggers.some(isCompleteFragmentNode)) {
+    fulfilledPhases.push('entry')
+  }
+
+  if (hasOpenSlot(state, EXIT_TRIGGER_SLOT_KEY) && exitTriggers.some(isCompleteFragmentNode)) {
+    fulfilledPhases.push('exit')
+  }
+
+  if (fulfilledPhases.length === 0) {
+    return { consumed: false, nextState: state }
+  }
+
+  return {
+    consumed: true,
+    nextState: mergeFragmentPatch(state, patch, fulfilledPhases),
+    answer: {},
+    closedSlotKeys: fulfilledPhases.map(triggerPhaseSlotKey),
+    closedSlots: fulfilledPhases.map(phase => ({
+      slotKey: triggerPhaseSlotKey(phase),
+      fieldPath: triggerPhaseFieldPath(phase),
+    })),
+  }
+}
+
+function hasOpenSlot(state: SemanticState, slotKey: string): boolean {
+  return state.triggers.some(trigger => trigger.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || state.actions.some(action => (action.openSlots ?? []).some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || state.risk.some(risk => risk.openSlots.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+    || Boolean(state.position?.openSlots?.some(slot => slot.slotKey === slotKey && slot.status === 'open'))
+}
+
+function mergeFragmentPatch(
+  state: SemanticState,
+  patch: CodegenSemanticPatch,
+  fulfilledPhases: readonly FulfilledTriggerPhase[],
+): SemanticState {
+  const missingTriggerKeys = new Set<string>(fulfilledPhases.map(missingTriggerKeyForPhase))
+  const existingTriggerIds = new Set(state.triggers.map(trigger => trigger.id))
+  const existingActionIds = new Set(state.actions.map(action => action.id))
+  const nextTriggers = [
+    ...state.triggers.filter(trigger => !(missingTriggerKeys.has(trigger.key) && trigger.status === 'open')),
+    ...(patch.triggers ?? []).map((trigger, index): SemanticTriggerState => {
+      const id = ensureUniqueId(
+        trigger.id ?? `semantic-fragment-trigger-${trigger.phase}-${slugifyFragmentId(trigger.key)}-${index + 1}`,
+        existingTriggerIds,
+      )
+
+      return {
+        id,
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        params: trigger.params ?? {},
+        status: resolveFragmentNodeStatus(trigger),
+        source: 'user_explicit',
+        evidence: trigger.evidence,
+        openSlots: trigger.openSlots ?? [],
+        contracts: trigger.contracts,
+        support: trigger.support,
+      }
+    }),
+  ]
+  const existingActionKeys = new Set(state.actions.map(action => action.key))
+  const nextActions = [
+    ...state.actions,
+    ...(patch.actions ?? [])
+      .filter(action => !existingActionKeys.has(action.key))
+      .map((action, index): SemanticActionState => {
+        const id = ensureUniqueId(
+          action.id ?? `semantic-fragment-action-${slugifyFragmentId(action.key)}-${index + 1}`,
+          existingActionIds,
+        )
+
+        return {
+          id,
+          key: action.key,
+          params: action.params,
+          status: resolveFragmentNodeStatus(action),
+          source: 'user_explicit',
+          evidence: action.evidence,
+          openSlots: action.openSlots ?? [],
+          contracts: action.contracts,
+          support: action.support,
+        }
+      }),
+  ]
+
+  return {
+    ...state,
+    triggers: nextTriggers,
+    actions: nextActions,
+    contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots),
+  }
+}
+
+function triggerPhaseSlotKey(phase: FulfilledTriggerPhase): typeof ENTRY_TRIGGER_SLOT_KEY | typeof EXIT_TRIGGER_SLOT_KEY {
+  return phase === 'entry' ? ENTRY_TRIGGER_SLOT_KEY : EXIT_TRIGGER_SLOT_KEY
+}
+
+function triggerPhaseFieldPath(phase: FulfilledTriggerPhase): 'triggers[entry]' | 'triggers[exit]' {
+  return phase === 'entry' ? 'triggers[entry]' : 'triggers[exit]'
+}
+
+function missingTriggerKeyForPhase(phase: FulfilledTriggerPhase): typeof MISSING_ENTRY_TRIGGER_KEY | typeof MISSING_EXIT_TRIGGER_KEY {
+  return phase === 'entry' ? MISSING_ENTRY_TRIGGER_KEY : MISSING_EXIT_TRIGGER_KEY
+}
+
+function isCompleteFragmentNode(node: FragmentTrigger | FragmentAction): boolean {
+  return !hasOpenStatusSlot(node.openSlots ?? [])
+}
+
+function resolveFragmentNodeStatus(node: FragmentTrigger | FragmentAction): SemanticTriggerState['status'] {
+  if (hasOpenStatusSlot(node.openSlots ?? [])) {
+    return node.status === 'open' ? node.status : 'open'
+  }
+
+  return node.status ?? 'locked'
+}
+
+function hasOpenStatusSlot(slots: readonly SemanticSlotState[]): boolean {
+  return slots.some(slot => slot.status === 'open')
+}
+
+function mergeFragmentContextSlots(
+  current: SemanticContextSlotState,
+  patchContextSlots: CodegenSemanticPatch['contextSlots'],
+): SemanticContextSlotState {
+  if (!patchContextSlots) {
+    return current
+  }
+
+  return {
+    exchange: mergeFragmentContextSlot('exchange', current.exchange, patchContextSlots.exchange),
+    symbol: mergeFragmentContextSlot('symbol', current.symbol, patchContextSlots.symbol),
+    marketType: mergeFragmentContextSlot('marketType', current.marketType, patchContextSlots.marketType),
+    timeframe: mergeFragmentContextSlot('timeframe', current.timeframe, patchContextSlots.timeframe),
+  }
+}
+
+function mergeFragmentContextSlot(
+  field: keyof SemanticContextSlotState,
+  current: SemanticSlotState | null,
+  value: string | number | boolean | null | undefined,
+): SemanticSlotState | null {
+  if (current?.status === 'locked' || value === undefined || value === null) {
+    return current
+  }
+
+  return createLockedContextSlot(field, value)
+}
+
+function createLockedContextSlot(
+  field: keyof SemanticContextSlotState,
+  value: string | number | boolean | null | undefined,
+): SemanticSlotState | null {
+  if (value === undefined || value === null) {
+    return null
+  }
+
+  return {
+    slotKey: field,
+    fieldPath: `contextSlots.${field}`,
+    value,
+    status: 'locked',
+    priority: 'context',
+    questionHint: contextQuestionHint(field),
+    affectsExecution: true,
+    evidence: {
+      text: String(value),
+      source: 'user_explicit',
+    },
+  }
+}
+
+function contextQuestionHint(field: keyof SemanticContextSlotState): string {
+  const hints = {
+    exchange: '请选择交易所。',
+    symbol: '请选择标的。',
+    marketType: '请选择市场类型。',
+    timeframe: '请选择时间周期。',
+  } satisfies Record<keyof SemanticContextSlotState, string>
+
+  return hints[field]
+}
+
+function ensureUniqueId(baseId: string, existingIds: Set<string>): string {
+  let id = baseId
+  let suffix = 2
+  while (existingIds.has(id)) {
+    id = `${baseId}-${suffix}`
+    suffix += 1
+  }
+  existingIds.add(id)
+  return id
+}
+
+function slugifyFragmentId(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')
+    || 'atom'
 }
 
 function parseLevelSetDensityAnswer(message: string): LevelSetDensityAnswer | null {
@@ -392,12 +612,12 @@ function updateLevelSetContracts(
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): { contracts?: SemanticAtomContract[]; updated: boolean; fieldPath: string; hasConflict: boolean } {
   if (!contracts?.length) {
-    return { contracts, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
+    return { contracts: contracts ? [...contracts] : undefined, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
   }
 
   const target = parseTargetCapabilityPath(consumedSlot.fieldPath, consumedSlot.slotKey)
   if (!target) {
-    return { contracts, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
+    return { contracts: [...contracts], updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
   }
 
   let updated = false
