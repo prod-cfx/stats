@@ -73,33 +73,6 @@ describe('GridOrderPlannerService', () => {
     ])
   })
 
-  it('plans one adjacent inverse order per level for neutral contract grids', () => {
-    const plan = service.planInitialOrders({
-      config: { ...baseConfig, mode: 'perp_neutral', pairingPolicy: 'adjacent_level' },
-      currentPrice: '100',
-    })
-
-    expect(plan.orders).toEqual([
-      expect.objectContaining({ levelIndex: 0, side: 'buy', role: 'open_long', price: '90' }),
-      expect.objectContaining({ levelIndex: 1, side: 'buy', role: 'open_long', price: '95' }),
-      expect.objectContaining({ levelIndex: 3, side: 'sell', role: 'open_short', price: '105' }),
-      expect.objectContaining({ levelIndex: 4, side: 'sell', role: 'open_short', price: '110' }),
-    ])
-  })
-
-  it('caps adjacent-level initial orders by grid count when price points exceed grid slots', () => {
-    const plan = service.planInitialOrders({
-      config: { ...baseConfig, mode: 'perp_neutral', pairingPolicy: 'adjacent_level', gridCount: 10, pricePointCount: 11 },
-      currentPrice: '101',
-    })
-
-    expect(plan.levels).toHaveLength(11)
-    expect(plan.orders).toHaveLength(10)
-    expect(plan.orders).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ price: '90' }),
-    ]))
-  })
-
   it('derives each price from lower plus step times index without floating accumulation', () => {
     const plan = service.planInitialOrders({
       config: {

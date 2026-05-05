@@ -32,7 +32,7 @@ export class GridOrderPlannerService {
     return {
       config: input.config,
       levels,
-      orders: this.limitInitialOrders(input.config, orders, currentPrice),
+      orders,
     }
   }
 
@@ -58,7 +58,7 @@ export class GridOrderPlannerService {
     price: Prisma.Decimal,
     comparisonToCurrent: number,
   ): GridPlannedOrder[] {
-    const specs = this.orderSpecsForMode(config.mode, comparisonToCurrent, config.pairingPolicy)
+    const specs = this.orderSpecsForMode(config.mode, comparisonToCurrent)
 
     return specs.flatMap(({ side, role }) => {
       const quantity = this.normalizeQuantity(this.decimal(config.perOrderQuote).div(price), config)
@@ -82,30 +82,9 @@ export class GridOrderPlannerService {
     })
   }
 
-  private limitInitialOrders(
-    config: GridRuntimeConfigSnapshot,
-    orders: GridPlannedOrder[],
-    currentPrice: Prisma.Decimal,
-  ): GridPlannedOrder[] {
-    if (config.pairingPolicy !== 'adjacent_level' || orders.length <= config.gridCount) {
-      return orders
-    }
-
-    return [...orders]
-      .sort((left, right) => {
-        const leftDistance = this.decimal(left.price).minus(currentPrice).abs()
-        const rightDistance = this.decimal(right.price).minus(currentPrice).abs()
-        const distanceComparison = leftDistance.comparedTo(rightDistance)
-        return distanceComparison !== 0 ? distanceComparison : left.levelIndex - right.levelIndex
-      })
-      .slice(0, config.gridCount)
-      .sort((left, right) => left.levelIndex - right.levelIndex)
-  }
-
   private orderSpecsForMode(
     mode: GridRuntimeConfigSnapshot['mode'],
     comparisonToCurrent: number,
-    pairingPolicy?: GridRuntimeConfigSnapshot['pairingPolicy'],
   ): Array<{ side: GridOrderSide, role: GridOrderRole }> {
     const belowCurrent = comparisonToCurrent < 0
 
@@ -121,12 +100,6 @@ export class GridOrderPlannerService {
           ? [{ side: 'buy', role: 'close_short' }]
           : [{ side: 'sell', role: 'open_short' }]
       case 'perp_neutral':
-        if (pairingPolicy === 'adjacent_level') {
-          return belowCurrent
-            ? [{ side: 'buy', role: 'open_long' }]
-            : [{ side: 'sell', role: 'open_short' }]
-        }
-
         return belowCurrent
           ? [
               { side: 'buy', role: 'open_long' },
