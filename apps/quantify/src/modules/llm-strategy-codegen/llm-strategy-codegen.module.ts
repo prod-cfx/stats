@@ -34,6 +34,7 @@ import { SemanticContractReadinessService } from './services/semantic-contract-r
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
+import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
@@ -100,6 +101,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     SemanticAtomRegistryService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
+    SemanticSupportClassifierService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })

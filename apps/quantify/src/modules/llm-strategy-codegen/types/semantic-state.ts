@@ -1,3 +1,5 @@
+import type { SemanticAtomSupportMetadata, UnsupportedFallbackState } from './semantic-atom-support'
+
 export type SemanticNodeStatus = 'open' | 'locked' | 'superseded'
 export type SemanticSource = 'user_explicit' | 'inferred' | 'derived'
 export type SemanticPriority = 'core' | 'behavior' | 'risk' | 'context'
@@ -104,6 +106,7 @@ export interface SemanticTriggerState {
   openSlots: SemanticSlotState[]
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
+  support?: SemanticAtomSupportMetadata
 }
 
 export interface SemanticActionState {
@@ -116,6 +119,7 @@ export interface SemanticActionState {
   openSlots?: SemanticSlotState[]
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
+  support?: SemanticAtomSupportMetadata
 }
 
 export type SemanticRiskBasis =
@@ -169,6 +173,7 @@ export interface SemanticRiskState {
   openSlots: SemanticSlotState[]
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
+  support?: SemanticAtomSupportMetadata
 }
 
 export type SemanticPositionSizingContract =
@@ -186,6 +191,7 @@ export interface SemanticPositionState {
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
   contracts?: SemanticAtomContract[]
+  support?: SemanticAtomSupportMetadata
 }
 
 export interface SemanticState {
@@ -199,4 +205,5 @@ export interface SemanticState {
   normalizationNotes: string[]
   updatedAt: string
   updatedTurnId?: string
+  unsupportedFallback?: UnsupportedFallbackState | null
 }

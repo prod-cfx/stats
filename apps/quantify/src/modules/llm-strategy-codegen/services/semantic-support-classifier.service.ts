@@ -1,0 +1,247 @@
+import { Injectable } from '@nestjs/common'
+
+import type {
+  SemanticActionState,
+  SemanticPositionState,
+  SemanticRiskState,
+  SemanticSlotState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../types/semantic-state'
+import type {
+  SemanticAtomDefinition,
+  SemanticAtomReplacementStrategy,
+  SemanticAtomSupportMetadata,
+  SemanticAtomUnsupportedMetadata,
+} from '../types/semantic-atom-support'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
+
+export type SemanticSupportRoute =
+  | 'projection_gate'
+  | 'open_slots'
+  | 'unsupported_fallback'
+  | 'unknown_unsupported'
+
+export interface SemanticSupportClassification {
+  route: SemanticSupportRoute
+  state: SemanticState
+  unsupportedAtoms: Array<{
+    key: string
+    displayName: string
+    reasonCode: string
+    publicReason: string
+    replacementStrategyKey?: string
+  }>
+  unknownAtoms: string[]
+  openSlots: SemanticSlotState[]
+}
+
+type ResolvedSemanticAtom = ReturnType<SemanticAtomRegistryService['resolve']>
+
+@Injectable()
+export class SemanticSupportClassifierService {
+  constructor(private readonly registry: SemanticAtomRegistryService) {}
+
+  classify(state: SemanticState): SemanticSupportClassification {
+    const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
+    const unknownAtoms: string[] = []
+
+    const triggers = state.triggers.map((trigger) => {
+      if (trigger.status === 'superseded') {
+        return { ...trigger }
+      }
+
+      const resolved = this.registry.resolve(trigger.key)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      return { ...trigger, support: toSupportMetadata(resolved) }
+    })
+
+    const actions = state.actions.map((action) => {
+      if (action.status === 'superseded') {
+        return { ...action }
+      }
+
+      const resolved = this.registry.resolve(action.key)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      return { ...action, support: toSupportMetadata(resolved) }
+    })
+
+    const risk = state.risk.map((riskState) => {
+      if (riskState.status === 'superseded') {
+        return { ...riskState }
+      }
+
+      const resolved = this.registry.resolve(riskState.key)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      return { ...riskState, support: toSupportMetadata(resolved) }
+    })
+
+    const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms)
+    const nextState: SemanticState = {
+      ...state,
+      triggers,
+      actions,
+      risk,
+      position,
+    }
+
+    if (unsupportedAtoms.length > 0) {
+      return {
+        route: 'unsupported_fallback',
+        state: nextState,
+        unsupportedAtoms,
+        unknownAtoms: [],
+        openSlots: [],
+      }
+    }
+
+    if (unknownAtoms.length > 0) {
+      return {
+        route: 'unknown_unsupported',
+        state: nextState,
+        unsupportedAtoms: [],
+        unknownAtoms,
+        openSlots: [],
+      }
+    }
+
+    const openSlots = collectOpenSlots(nextState)
+    if (openSlots.length > 0) {
+      return {
+        route: 'open_slots',
+        state: nextState,
+        unsupportedAtoms: [],
+        unknownAtoms: [],
+        openSlots,
+      }
+    }
+
+    return {
+      route: 'projection_gate',
+      state: nextState,
+      unsupportedAtoms: [],
+      unknownAtoms: [],
+      openSlots: [],
+    }
+  }
+
+  private classifyPosition(
+    position: SemanticPositionState | null,
+    unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'],
+    unknownAtoms: string[],
+  ): SemanticPositionState | null {
+    if (!position) {
+      return null
+    }
+
+    if (position.status === 'superseded') {
+      return { ...position }
+    }
+
+    const resolved = this.registry.resolve(toPositionAtomKey(position.mode))
+    this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+    return { ...position, support: toSupportMetadata(resolved) }
+  }
+
+  private collectSupportResult(
+    resolved: ResolvedSemanticAtom,
+    unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'],
+    unknownAtoms: string[],
+  ): void {
+    if (resolved.supportStatus === 'recognized_unsupported') {
+      const unsupported = readUnsupportedMetadata(resolved)
+      unsupportedAtoms.push({
+        key: resolved.key,
+        displayName: unsupported?.displayName ?? resolved.key,
+        reasonCode: unsupported?.reasonCode ?? 'recognized_unsupported',
+        publicReason: unsupported?.publicReason ?? '当前语义原子暂未支持生成和回测。',
+        replacementStrategyKey: readReplacement(resolved)?.strategyKey,
+      })
+      return
+    }
+
+    if (resolved.supportStatus === 'unsupported_unknown') {
+      unknownAtoms.push(resolved.key)
+    }
+  }
+}
+
+function toPositionAtomKey(mode: string): string {
+  if (mode === 'fixed_ratio') {
+    return 'position.fixed_pct'
+  }
+
+  if (mode === 'fixed_quote') {
+    return 'position.fixed_notional'
+  }
+
+  if (mode === 'fixed_qty') {
+    return 'position.fixed_quantity'
+  }
+
+  return mode
+}
+
+function toSupportMetadata(resolved: ResolvedSemanticAtom): SemanticAtomSupportMetadata {
+  const unsupported = readUnsupportedMetadata(resolved)
+  const replacement = readReplacement(resolved)
+
+  return {
+    supportStatus: resolved.supportStatus,
+    unsupportedReasonCode: unsupported?.reasonCode,
+    unsupportedDisplayName: unsupported?.displayName,
+    replacementStrategyKey: replacement?.strategyKey,
+  }
+}
+
+function collectOpenSlots(state: SemanticState): SemanticSlotState[] {
+  return [
+    ...state.triggers.flatMap(trigger => readNodeOpenSlots(trigger)),
+    ...state.actions.flatMap(action => readNodeOpenSlots(action)),
+    ...state.risk.flatMap(risk => readNodeOpenSlots(risk)),
+    ...readNodeOpenSlots(state.position),
+    ...Object.values(state.contextSlots).filter(isOpenSlot),
+  ]
+}
+
+function readNodeOpenSlots(
+  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | null,
+): SemanticSlotState[] {
+  if (!node || node.status === 'superseded') {
+    return []
+  }
+
+  return (node.openSlots ?? []).filter(isOpenSlot)
+}
+
+function isOpenSlot(slot: SemanticSlotState | null): slot is SemanticSlotState {
+  return slot?.status === 'open'
+}
+
+function readUnsupportedMetadata(resolved: ResolvedSemanticAtom): SemanticAtomUnsupportedMetadata | undefined {
+  if (hasUnsupportedMetadata(resolved)) {
+    return resolved.unsupported
+  }
+
+  return undefined
+}
+
+function readReplacement(resolved: ResolvedSemanticAtom): SemanticAtomReplacementStrategy | undefined {
+  if (hasReplacement(resolved)) {
+    return resolved.replacement
+  }
+
+  return undefined
+}
+
+function hasUnsupportedMetadata(
+  resolved: ResolvedSemanticAtom,
+): resolved is SemanticAtomDefinition & { unsupported: SemanticAtomUnsupportedMetadata } {
+  return 'unsupported' in resolved && resolved.unsupported !== undefined
+}
+
+function hasReplacement(
+  resolved: ResolvedSemanticAtom,
+): resolved is SemanticAtomDefinition & { replacement: SemanticAtomReplacementStrategy } {
+  return 'replacement' in resolved && resolved.replacement !== undefined
+}
