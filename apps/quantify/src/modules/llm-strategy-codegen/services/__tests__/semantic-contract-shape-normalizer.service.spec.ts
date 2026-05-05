@@ -124,4 +124,26 @@ describe('SemanticContractShapeNormalizerService', () => {
       }),
     ])
   })
+
+  it('accepts rounded percent spacing when it matches the grid count within business tolerance', () => {
+    const result = service.normalizeLevelSetShape({
+      lower: 100,
+      upper: 110,
+      gridCount: 20,
+      spacingPct: 0.503,
+    })
+
+    expect(result).toEqual({
+      status: 'valid',
+      shape: {
+        mode: 'fixed_range',
+        lower: 100,
+        upper: 110,
+        gridCount: 20,
+        spacingPct: 0.503,
+        spacingMode: 'arithmetic',
+      },
+      openSlots: [],
+    })
+  })
 })

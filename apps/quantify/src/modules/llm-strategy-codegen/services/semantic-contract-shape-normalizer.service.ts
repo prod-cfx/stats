@@ -17,7 +17,8 @@ export interface ContractShapeNormalizationResult {
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
-const SPACING_CONFLICT_TOLERANCE = 1e-8
+const ABSOLUTE_SPACING_CONFLICT_TOLERANCE = 1e-8
+const PERCENT_SPACING_CONFLICT_TOLERANCE = 1e-3
 
 @Injectable()
 export class SemanticContractShapeNormalizerService {
@@ -160,7 +161,7 @@ function hasSpacingConflict(shape: SemanticCapabilityShape, lower: number, upper
   }
 
   if (absoluteSpacing !== null) {
-    return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
+    return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > ABSOLUTE_SPACING_CONFLICT_TOLERANCE
   }
 
   if (spacingPct === null || lower <= 0) {
@@ -169,7 +170,7 @@ function hasSpacingConflict(shape: SemanticCapabilityShape, lower: number, upper
 
   const expectedSpacingPct = (Math.pow(upper / lower, 1 / (gridCount - 1)) - 1) * 100
 
-  return Math.abs(expectedSpacingPct - spacingPct) > SPACING_CONFLICT_TOLERANCE
+  return Math.abs(expectedSpacingPct - spacingPct) > PERCENT_SPACING_CONFLICT_TOLERANCE
 }
 
 function resolveHalfRangePct(shape: SemanticCapabilityShape): number | null {
