@@ -1916,6 +1916,84 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('lets a pending unsupported fallback reply describe a new supported strategy without explicit rejection', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'volume.spike',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { multiplier: 2 },
+            },
+          ],
+          actions: [{ key: 'open_long' }],
+          risk: [
+            {
+              key: 'risk.atr_stop',
+              params: { atrPeriod: 14, multiplier: 2 },
+            },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-new-seed' })
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX BTCUSDT 15m 放量突破开多，用 ATR 止损，仓位 10%',
+    })
+    const created = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-new-seed',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: created.semanticState,
+        clarificationState: created.clarificationState,
+        constraintPack: created.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+
+    const result = await service.continueSession('s-unsupported-fallback-new-seed', {
+      userId: 'u1',
+      message: '那改成 RSI 低于 30 开多，高于 70 平仓，止损 5%，止盈 10%，仓位 10%',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const nextState = updatePayload.semanticState as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('是否改用这个策略继续')
+    expect(nextState.unsupportedFallback ?? null).toBeNull()
+    expect(nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'oscillator.rsi_lte' }),
+      expect.objectContaining({ key: 'oscillator.rsi_gte' }),
+    ]))
+  })
+
   it('rejects engine tests when semantic input is missing', async () => {
     await expect(service.testEngine({
       userId: 'u1',

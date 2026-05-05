@@ -1189,16 +1189,17 @@ export class CodegenConversationService {
         args: { sessionId },
       })
     }
-    const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
-    const unsupportedFallbackResponse = await this.handlePendingUnsupportedFallback({
+    let currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    const unsupportedFallbackOutcome = await this.handlePendingUnsupportedFallback({
       session,
       semanticState: currentSemanticState,
       message: dto.message,
       userId: sessionUserId,
       guideConfig: dto.guideConfig,
     })
-    if (unsupportedFallbackResponse) {
-      return unsupportedFallbackResponse
+    currentSemanticState = unsupportedFallbackOutcome.semanticState
+    if (unsupportedFallbackOutcome.response) {
+      return unsupportedFallbackOutcome.response
     }
     if (dto.confirmGenerate !== true && this.isLikelyUserSubmittedScriptCode(dto.message)) {
       return this.handleUserSubmittedScriptCode(session, dto.message, sessionUserId)
@@ -6598,34 +6599,48 @@ export class CodegenConversationService {
     message: string
     userId: string
     guideConfig?: CodegenGuideConfigDto
-  }): Promise<CodegenSessionResponseDto | null> {
+  }): Promise<{ semanticState: SemanticState; response: CodegenSessionResponseDto | null }> {
     const pendingFallback = args.semanticState.unsupportedFallback
     if (pendingFallback?.status !== 'pending') {
-      return null
+      return { semanticState: args.semanticState, response: null }
     }
 
     const intent = this.unsupportedFallback.classifyConfirmation(args.message)
     const constraintPack = this.readConstraintPack(args.session.constraintPack)
     if (intent.kind === 'reject_fallback') {
-      return this.persistUnsupportedFallbackConversationTurn({
-        session: args.session,
-        semanticState: this.clearRejectedUnsupportedFallbackState(args.semanticState),
-        message: args.message,
-        assistantPrompt: '好的，这次不改用推荐策略。你可以继续描述一个当前公测支持的入场、出场、风控和仓位组合，我会重新整理逻辑图。',
-        userId: args.userId,
-        constraintPack,
-      })
+      const semanticState = this.clearRejectedUnsupportedFallbackState(args.semanticState)
+      return {
+        semanticState,
+        response: await this.persistUnsupportedFallbackConversationTurn({
+          session: args.session,
+          semanticState,
+          message: args.message,
+          assistantPrompt: '好的，这次不改用推荐策略。你可以继续描述一个当前公测支持的入场、出场、风控和仓位组合，我会重新整理逻辑图。',
+          userId: args.userId,
+          constraintPack,
+        }),
+      }
     }
 
     if (intent.kind === 'unclear') {
-      return this.persistUnsupportedFallbackConversationTurn({
-        session: args.session,
+      return {
         semanticState: args.semanticState,
-        message: args.message,
-        assistantPrompt: `请确认是否改用推荐策略：${pendingFallback.recommendedStrategy.description}。也可以直接说明要改哪个周期或仓位。`,
-        userId: args.userId,
-        constraintPack,
-      })
+        response: await this.persistUnsupportedFallbackConversationTurn({
+          session: args.session,
+          semanticState: args.semanticState,
+          message: args.message,
+          assistantPrompt: `请确认是否改用推荐策略：${pendingFallback.recommendedStrategy.description}。也可以直接说明要改哪个周期或仓位。`,
+          userId: args.userId,
+          constraintPack,
+        }),
+      }
+    }
+
+    if (this.shouldRoutePendingFallbackReplyToMainFlow(args.message)) {
+      return {
+        semanticState: this.clearRejectedUnsupportedFallbackState(args.semanticState),
+        response: null,
+      }
     }
 
     const replacementPatchResult = this.buildUnsupportedFallbackReplacementPatch(
@@ -6634,14 +6649,17 @@ export class CodegenConversationService {
       intent.kind === 'modify_fallback' ? intent.message : undefined,
     )
     if (intent.kind === 'modify_fallback' && replacementPatchResult.modifiedFields.length === 0) {
-      return this.persistUnsupportedFallbackConversationTurn({
-        session: args.session,
+      return {
         semanticState: args.semanticState,
-        message: args.message,
-        assistantPrompt: '我可以先按推荐策略继续，并支持把周期改成 15m/1h/4h/日线，或把仓位改成例如 5%。请确认要改用，或说明具体周期/仓位。',
-        userId: args.userId,
-        constraintPack,
-      })
+        response: await this.persistUnsupportedFallbackConversationTurn({
+          session: args.session,
+          semanticState: args.semanticState,
+          message: args.message,
+          assistantPrompt: '我可以先按推荐策略继续，并支持把周期改成 15m/1h/4h/日线，或把仓位改成例如 5%。请确认要改用，或说明具体周期/仓位。',
+          userId: args.userId,
+          constraintPack,
+        }),
+      }
     }
 
     const replacementSeedState = this.mergeSemanticPatchIntoState(
@@ -6652,17 +6670,43 @@ export class CodegenConversationService {
       previous: args.semanticState,
       next: replacementSeedState,
     })
-    return this.persistUnsupportedFallbackReplacement({
-      session: args.session,
+    return {
       semanticState: replacementState,
-      message: args.message,
-      userId: args.userId,
-      constraintPack,
-      guideConfig: args.guideConfig,
-      prefix: replacementPatchResult.modifiedFields.length > 0
-        ? `已改用推荐策略，并调整${replacementPatchResult.modifiedFields.join('、')}。`
-        : '已改用推荐策略。',
-    })
+      response: await this.persistUnsupportedFallbackReplacement({
+        session: args.session,
+        semanticState: replacementState,
+        message: args.message,
+        userId: args.userId,
+        constraintPack,
+        guideConfig: args.guideConfig,
+        prefix: replacementPatchResult.modifiedFields.length > 0
+          ? `已改用推荐策略，并调整${replacementPatchResult.modifiedFields.join('、')}。`
+          : '已改用推荐策略。',
+      }),
+    }
+  }
+
+  private shouldRoutePendingFallbackReplyToMainFlow(message: string): boolean {
+    const normalized = message.trim()
+    if (!/(?:改成|改为|换成|重新|做一个|用)/u.test(normalized)) {
+      return false
+    }
+
+    const seedState = this.mergeSemanticPatchIntoState(
+      this.createEmptySemanticState(),
+      this.extractSemanticPatchFromMessage(normalized),
+    )
+    const hasExtractedStrategy = seedState.triggers.length > 0
+      && seedState.actions.length > 0
+      && (seedState.risk.length > 0 || seedState.position !== null)
+    if (hasExtractedStrategy) {
+      return true
+    }
+
+    const hasKnownTrigger = /(?:\bRSI\b|\bMACD\b|\bEMA\b|\bSMA\b|\bMA\b|均线|布林|突破|跌破|通道|价格)/iu.test(normalized)
+    const hasAction = /(?:开多|开空|平多|平空|平仓|买入|卖出|做多|做空)/u.test(normalized)
+    const hasRiskOrPosition = /(?:止损|止盈|仓位|单笔|资金|杠杆)/u.test(normalized)
+    return hasKnownTrigger && hasAction && hasRiskOrPosition
   }
 
   private async persistUnsupportedFallbackConversationTurn(args: {
