@@ -31,6 +31,9 @@ describe('AI Quant mainflow legacy authority guardrail', () => {
 
     expect(source).not.toContain("reasons.push('未识别可编译入场规则')")
     expect(source).not.toContain("reasons.push('未识别可编译出场规则')")
+    expect(source).not.toContain("reasons.push('missing_compilable_entry_rule')")
+    expect(source).not.toContain("reasons.push('missing_compilable_exit_rule')")
     expect(source).not.toContain('buildCanonicalProjectionFailureAssistantPrompt(compileability)')
+    expect(source).not.toContain('assistantPrompt: this.buildSemanticProjectionRepairPrompt(compileability)')
   })
 })

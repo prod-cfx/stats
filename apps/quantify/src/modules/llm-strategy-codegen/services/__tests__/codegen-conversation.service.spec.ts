@@ -1044,6 +1044,45 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).toContain('出场：15m 价格回到布林带中轨(MA20)时平多；15m 价格回到布林带中轨(MA20)时平空')
   })
 
+  it('treats risk, position, and context slots as semantic mainflow evidence but not families as mainflow evidence', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+    const emptyState = (service as any).createEmptySemanticState()
+
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      families: ['single-leg'],
+    })).toBe(false)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      risk: [lockedStopLossRisk()],
+    })).toBe(true)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    })).toBe(true)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      contextSlots: {
+        ...emptyState.contextSlots,
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+      },
+    })).toBe(true)
+  })
+
   it('preserves generic close wording from exit evidence instead of forcing side-specific labels', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
@@ -10449,6 +10488,52 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
   })
 
+  it('Bollinger-line follow-up flow stays in atomic semantic questions instead of legacy compileability prompts', async () => {
+    const semanticState = buildLockedBollingerSemanticState({
+      contextSlots: {
+        ...buildLockedBollingerSemanticState().contextSlots,
+        exchange: {
+          ...buildLockedBollingerSemanticState().contextSlots.exchange,
+          status: 'open',
+          value: null,
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-bollinger-line-atomic-follow-up',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-bollinger-line-atomic-follow-up', {
+      userId: 'u1',
+      message: '继续',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('补充入场和出场条件')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.exchange',
+        reason: 'missing_exchange',
+      }),
+    ]))
+  })
+
   it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
     const semanticState = buildLockedMaSemanticState({
       actions: [
@@ -11329,7 +11414,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   })
 
-  it('reports canonical projection failure without legacy entry and exit wording during confirmGenerate', async () => {
+  it('keeps canonical projection compileability gaps internal when semantic state is ready during confirmGenerate', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
         lockedStopLossRisk(),
@@ -11365,7 +11450,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         canCompile: false,
         entryRuleCount: 0,
         exitRuleCount: 0,
-        reasons: ['未识别可编译入场规则', '未识别可编译出场规则'],
+        reasons: ['canonical_projection_missing_entry_program', 'canonical_projection_missing_exit_program'],
       })
     const genericGapSpy = jest
       .spyOn(CodegenConversationService.prototype as any, 'hasUnresolvedGenericCompileabilityGap')
@@ -11379,11 +11464,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         confirmedCanonicalDigest,
       })
 
-      expect(result.status).toBe('DRAFTING')
-      expect(result.assistantPrompt).toContain('canonical 投影')
-      expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
-      expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
-      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+      expect(result.status).toBe('GENERATING')
+      expect(result.assistantPrompt ?? '').not.toContain('未识别可编译入场规则')
+      expect(result.assistantPrompt ?? '').not.toContain('未识别可编译出场规则')
+      expect(mockRepo.tryMarkGenerating).toHaveBeenCalled()
     } finally {
       genericGapSpy.mockRestore()
       compileabilitySpy.mockRestore()

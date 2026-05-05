@@ -1986,7 +1986,6 @@ export class CodegenConversationService {
         },
       ),
     )
-    const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, baseLogicSnapshot)
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       semanticArtifacts.clarificationState,
@@ -2090,8 +2089,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalLogicSnapshot)
-    if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
+    if (!compileability.canCompile && !semanticReadyForGenerate) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -2106,7 +2104,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildSemanticProjectionRepairPrompt(compileability),
+        assistantPrompt: clarificationPrompt || '请先补充未关闭的语义问题，我再继续生成脚本。',
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -2385,7 +2383,8 @@ export class CodegenConversationService {
 
   private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
     return (
-      !this.hasSemanticMainFlowEvidence(state)
+      state.triggers.length === 0
+      && state.actions.length === 0
       && (state.risk.length > 0 || state.position !== null)
     ) || (
       state.actions.length > 0
@@ -3239,6 +3238,9 @@ export class CodegenConversationService {
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
     return state.triggers.length > 0
       || state.actions.length > 0
+      || state.risk.length > 0
+      || state.position !== null
+      || Object.values(state.contextSlots).some(slot => slot !== null)
   }
 
   private mergePersistedBlockingClarificationItems(
@@ -5796,10 +5798,10 @@ export class CodegenConversationService {
 
     const reasons: string[] = []
     if (entryRuleCount === 0) {
-      reasons.push('missing_compilable_entry_rule')
+      reasons.push('canonical_projection_missing_entry_program')
     }
     if (exitRuleCount === 0) {
-      reasons.push('missing_compilable_exit_rule')
+      reasons.push('canonical_projection_missing_exit_program')
     }
 
     return {
@@ -6191,10 +6193,6 @@ export class CodegenConversationService {
       persisted: currentState,
       derived: this.buildFallbackSemanticStateForLegacyCompatibility(checklist),
     })
-  }
-
-  private buildSemanticProjectionRepairPrompt(report: CanonicalCompileabilityReport): string {
-    return `语义已记录，但 canonical 投影暂时未生成可执行脚本结构。系统已保留当前逻辑图，请重试或继续补充更具体的执行语义。（entryRules=${report.entryRuleCount}, exitRules=${report.exitRuleCount}）`
   }
 
   private buildStrategyDecision(input: {
