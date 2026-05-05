@@ -182,6 +182,7 @@ export class SemanticSupportClassifierService {
   }
 }
 
+// MA/SMA/EMA price-vs-reference aliases are projection-supported; non-MA static compares remain recognized unsupported.
 function isExecutableIndicatorReferenceAlias(trigger: SemanticTriggerState): boolean {
   if (trigger.key !== 'indicator.above' && trigger.key !== 'indicator.below') {
     return false

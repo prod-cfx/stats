@@ -238,6 +238,48 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.state.triggers.map(trigger => trigger.support)).toEqual([undefined, undefined])
   })
 
+  it('routes executable EMA compare triggers with per-trigger timeframe to projection', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry-ema',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ema',
+          referenceRole: 'long_term',
+          'reference.period': 20,
+          timeframe: '15m',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      risk: [{
+        id: 'sl',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.unknownAtoms).toEqual([])
+    expect(result.state.triggers[0].support).toBeUndefined()
+  })
+
   it('keeps unsupported fallback precedence over execution open slots', () => {
     const executionSlot = {
       slotKey: 'volume.multiplier',
