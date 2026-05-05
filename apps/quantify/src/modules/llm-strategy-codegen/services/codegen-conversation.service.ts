@@ -6887,7 +6887,7 @@ export class CodegenConversationService {
   }
 
   private extractFallbackPositionPct(message: string): number | null {
-    const match = message.match(/(?:仓位\D{0,12})?(\d{1,3}(?:\.\d+)?)\s*%/u)
+    const match = message.match(/(?:仓位|单笔(?:仓位|资金)?|资金|position|sizing|size)\D{0,16}(\d{1,3}(?:\.\d+)?)\s*%/iu)
     if (!match?.[1]) {
       return null
     }
