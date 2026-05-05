@@ -1754,12 +1754,28 @@ export class CodegenConversationService {
         currentState: seedSemanticState,
         plan,
       })
-      const replacementState = this.normalizeSemanticContractReadiness(
-        buildReplacementSemanticState({
-          previous: args.currentSemanticState,
-          next: plannedSemanticState,
-        }),
+      const replacementCandidateState = buildReplacementSemanticState({
+        previous: args.currentSemanticState,
+        next: plannedSemanticState,
+      })
+      const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
+      const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+        args.decision.seedText,
+        replacementCandidateState,
+        constraintPack.recommendationStyle,
       )
+      const supportGate = await this.handleSemanticSupportGateForExistingSession({
+        session: args.session,
+        semanticState: replacementCandidateState,
+        message: args.message,
+        userId: args.userId,
+        constraintPack,
+        guidePrompt,
+        recommendationStyle,
+      })
+      if (supportGate.response) return supportGate.response
+
+      const replacementState = this.normalizeSemanticContractReadiness(supportGate.semanticState)
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState)
       const clarificationState = semanticArtifacts.clarificationState
       const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
@@ -1772,12 +1788,6 @@ export class CodegenConversationService {
       })
       const canonicalDigest = this.readCanonicalDigest(specDesc)
       const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(replacementState, {})
-      const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
-      const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
-        args.decision.seedText,
-        replacementState,
-        constraintPack.recommendationStyle,
-      )
       const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
       const strategyDecision = this.buildStrategyDecision({
         checklist: canonicalLogicSnapshot,
@@ -1900,12 +1910,28 @@ export class CodegenConversationService {
     const pendingEditBeforePatch = readPendingSemanticEdit(args.currentSemanticState)
     const shouldRestorePublishedOnCancel = pendingEditBeforePatch?.resumeStatusOnCancel === 'PUBLISHED'
       && args.decision.patch.operations.some((operation) => operation.op === 'cancel_pending_edit')
-    const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.conversationSemanticEdit.applyPatch(
-        args.currentSemanticState,
-        args.decision.patch,
-      ),
+    const patchedSemanticState = this.conversationSemanticEdit.applyPatch(
+      args.currentSemanticState,
+      args.decision.patch,
     )
+    const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+      args.message,
+      patchedSemanticState,
+      constraintPack.recommendationStyle,
+    )
+    const supportGate = await this.handleSemanticSupportGateForExistingSession({
+      session: args.session,
+      semanticState: patchedSemanticState,
+      message: args.message,
+      userId: args.userId,
+      constraintPack,
+      guidePrompt,
+      recommendationStyle,
+    })
+    if (supportGate.response) return supportGate.response
+
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(supportGate.semanticState)
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
@@ -1918,12 +1944,6 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
-    const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
-    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
-      args.message,
-      reducedSemanticState,
-      constraintPack.recommendationStyle,
-    )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
     const strategyDecision = this.buildStrategyDecision({
       checklist: canonicalLogicSnapshot,

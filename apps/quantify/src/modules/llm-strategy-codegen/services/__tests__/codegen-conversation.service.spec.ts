@@ -7214,8 +7214,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       ],
     })
-    expect(result.specDesc).toBeNull()
-    expect(result.canonicalDigest).toBeNull()
+    expect(result.specDesc ?? null).toBeNull()
+    expect(result.canonicalDigest ?? null).toBeNull()
     expect(result.semanticGraph).toBeNull()
   })
 
@@ -10518,6 +10518,78 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     expect(result.assistantPrompt).not.toContain('当前可直接修改交易标的')
+  })
+
+  it('routes unsupported atoms from whole-strategy replacement edits to fallback before projection', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-rejected-unsupported-replacement',
+      userId: 'u1',
+      status: 'REJECTED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const rejectedStrategy = {}',
+      rejectReason: '旧代码生成失败',
+      validationReport: { ok: false, errors: ['old validation error'] },
+      semanticGraph: { version: 1, nodes: [{ id: 'old-graph' }] },
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为 ATR 止损策略。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'indicator.cross_over',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+            },
+          ],
+          actions: [{ key: 'open_long' }],
+          risk: [
+            {
+              key: 'risk.atr_stop',
+              params: { atrPeriod: 14, multiplier: 2 },
+            },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          context: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-rejected-unsupported-replacement', {
+      userId: 'u1',
+      message: '之前策略不对，重新做一个带 ATR 止损的策略',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('ATR 动态止损')
+    expect(result.assistantPrompt).toContain('是否改用这个策略继续')
+    expect(result.specDesc ?? null).toBeNull()
+    expect(result.canonicalDigest ?? null).toBeNull()
+    expect(result.unsupportedFallback).toEqual(expect.objectContaining({
+      status: 'pending',
+    }))
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.unsupportedFallback).toEqual(expect.objectContaining({
+      status: 'pending',
+    }))
+    expect(updatePayload.latestSpecDesc).toBeNull()
+    expect(updatePayload.semanticGraph).toBeUndefined()
   })
 
   it('replaces a published script when the user pastes corrected script code', async () => {
