@@ -9,6 +9,7 @@ import type {
   OrderIntent,
   PreparedOrderIntent,
   TradingExecutionConstraints,
+  TradingExecutionPrepareOptions,
   TradingExecutionPrepareResult,
   TradingExecutionResult,
   TradingExecutionSubmitPreparedResult,
@@ -30,24 +31,29 @@ export class TradingExecutionService {
     return submitted
   }
 
-  async prepareIntent(intent: OrderIntent): Promise<TradingExecutionPrepareResult> {
+  async prepareIntent(intent: OrderIntent, options: TradingExecutionPrepareOptions = {}): Promise<TradingExecutionPrepareResult> {
     const shape = this.admissionGate.evaluateIntentShape(intent)
     if (shape.ok === false) {
       return { status: 'rejected', intent, reason: shape.reason }
     }
 
     let constraints: TradingExecutionConstraints
-    try {
-      constraints = await this.tradingService.getInstrumentConstraints(
-        intent.userId,
-        intent.exchangeId,
-        intent.marketType,
-        intent.symbol,
-        intent.exchangeAccountId ?? undefined,
-      )
+    if (options.constraints) {
+      constraints = options.constraints
     }
-    catch (error) {
-      return { status: 'waiting_constraints', intent, reason: this.errorReason(error), error }
+    else {
+      try {
+        constraints = await this.tradingService.getInstrumentConstraints(
+          intent.userId,
+          intent.exchangeId,
+          intent.marketType,
+          intent.symbol,
+          intent.exchangeAccountId ?? undefined,
+        )
+      }
+      catch (error) {
+        return { status: 'waiting_constraints', intent, reason: this.errorReason(error), error }
+      }
     }
 
     let clientOrderId: string

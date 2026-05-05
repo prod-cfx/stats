@@ -34,6 +34,10 @@ export interface OrderIntent {
 
 export type TradingExecutionConstraints = UnifiedInstrumentConstraints
 
+export interface TradingExecutionPrepareOptions {
+  constraints?: TradingExecutionConstraints
+}
+
 export interface NormalizedOrderIntent {
   request: CreateOrderInput
   normalizedPrice?: string
