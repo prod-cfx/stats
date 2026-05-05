@@ -7,6 +7,8 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
+type EvaluateExprPoolContext = Parameters<typeof evaluateExprPool>[0]
+
 function findSeries(
   series: CanonicalStrategyIrV1['signalCatalog']['series'],
   matcher: (item: SeriesDef) => boolean,
@@ -514,11 +516,12 @@ describe('canonicalSpecV2IrCompilerService', () => {
 
       const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
       const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
+      const ctx = {
+        bars: [{ open: 100, high: 101, low: 99, close: 100 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99 },
+      } satisfies EvaluateExprPoolContext
       const exprValues = evaluateExprPool(
-        {
-          bars: [{ open: 100, high: 101, low: 99, close: 100 }],
-          baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99 },
-        } as any,
+        ctx,
         ast.exprPool as any,
         ast.topology.exprOrder,
         ast.executionModel as any,
