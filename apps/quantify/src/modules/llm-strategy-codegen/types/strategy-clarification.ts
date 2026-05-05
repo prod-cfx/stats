@@ -42,6 +42,11 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'timeframe',
   'marketType',
   'positionMode',
+  'position.sizing',
+  'position.positionMode',
+  'triggers',
+  'actions',
+  'risk',
   'riskRules.positionPct',
   'riskRules.stopLossPct',
   'riskRules.takeProfitPct',
@@ -61,6 +66,11 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'grid.stepPct',
   'grid.sideMode',
   'trigger.confirmation',
+  'contract.requirement.price.define.level_set',
+  'contract.requirement.capital.allocate.per_order_budget',
+  'contract.requirement.market.read.latest_bar',
+  'contract.requirement.guard.enforce.boundary_cancel',
+  'contract.requirement.exposure.set.position_mode',
 ] as const
 type StrategyClarificationFieldLiteral = typeof STRATEGY_CLARIFICATION_FIELDS[number]
 export type StrategyClarificationField = StrategyClarificationFieldLiteral | (string & {})

@@ -1538,11 +1538,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'position.sizing',
-        reason: 'missing_position_pct',
+        reason: 'missing_semantic_position_sizing',
       }),
       expect.objectContaining({
         slotKey: 'risk.protective_exit',
-        reason: 'missing_stop_loss_rule',
+        reason: 'missing_semantic_risk',
       }),
     ]))
     expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
@@ -1704,7 +1704,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'position.sizing',
-        reason: 'missing_position_pct',
+        reason: 'missing_semantic_position_sizing',
       }),
     ]))
   })
@@ -3000,7 +3000,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        reason: 'missing_stop_loss_rule',
+        reason: 'missing_semantic_risk',
         slotKey: 'risk.protective_exit',
       }),
     ]))
@@ -3607,7 +3607,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: expect.arrayContaining([
           expect.objectContaining({
-            reason: 'missing_stop_loss_rule',
+            reason: 'missing_semantic_risk',
             slotKey: 'risk.protective_exit',
             fieldPath: 'risk[protective].params',
           }),
@@ -3870,6 +3870,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           key: 'grid.range.upper',
           field: 'grid.range.upper',
           slotKey: 'grid.range.upper',
+        }),
+      ],
+    }))
+  })
+
+  it('preserves atom-native semantic clarification fields when reading persisted state', () => {
+    const clarificationState = (service as any).readClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'semantic.position.sizing',
+          reason: 'missing_semantic_position_sizing',
+          field: 'position.sizing',
+          blocking: true,
+          question: '请确认仓位 sizing。',
+          status: 'pending',
+          slotKey: 'position.sizing',
+        },
+        {
+          key: 'semantic.trigger.entry',
+          reason: 'missing_semantic_trigger',
+          field: 'triggers',
+          blocking: true,
+          question: '请确认入场触发条件。',
+          status: 'pending',
+          slotKey: 'trigger.entry',
+        },
+      ],
+    })
+
+    expect(clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'semantic.position.sizing',
+          field: 'position.sizing',
+          slotKey: 'position.sizing',
+        }),
+        expect.objectContaining({
+          key: 'semantic.trigger.entry',
+          field: 'triggers',
+          slotKey: 'trigger.entry',
         }),
       ],
     }))
@@ -4694,7 +4736,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('keeps legacy completeness blockers when semantic evidence is risk-only', () => {
+  it('keeps semantic trigger blockers when semantic evidence is risk-only', () => {
     const semanticState = {
       version: 1,
       families: [],
@@ -4726,8 +4768,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('NEEDS_CLARIFICATION')
     expect(result.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ reason: 'missing_entry_rules' }),
-      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_semantic_trigger', slotKey: 'trigger.entry' }),
+      expect.objectContaining({ reason: 'missing_semantic_trigger', slotKey: 'trigger.exit' }),
     ]))
   })
 
@@ -4798,7 +4840,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       items: expect.arrayContaining([
         expect.objectContaining({
           key: 'semantic.trigger.exit',
-          reason: 'missing_exit_rules',
+          reason: 'missing_semantic_trigger',
           slotKey: 'trigger.exit',
         }),
       ]),
@@ -5486,11 +5528,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         slotKey: 'position.sizing',
-        reason: 'missing_position_pct',
+        reason: 'missing_semantic_position_sizing',
       }),
       expect.objectContaining({
         slotKey: 'risk.protective_exit',
-        reason: 'missing_stop_loss_rule',
+        reason: 'missing_semantic_risk',
       }),
     ]))
     expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
