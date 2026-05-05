@@ -37,7 +37,8 @@ export class GridOrderPlannerService {
   }
 
   private buildLevels(config: GridRuntimeConfigSnapshot): GridLevelPlan[] {
-    return Array.from({ length: config.gridCount }, (_, levelIndex) => {
+    const pricePointCount = this.resolvePricePointCount(config)
+    return Array.from({ length: pricePointCount }, (_, levelIndex) => {
       const price = this.normalizePrice(this.derivePrice(config, levelIndex), config)
       return {
         levelIndex,
@@ -128,11 +129,12 @@ export class GridOrderPlannerService {
   private derivePrice(config: GridRuntimeConfigSnapshot, levelIndex: number): Prisma.Decimal {
     const lower = this.decimal(config.lowerPrice)
     const upper = this.decimal(config.upperPrice)
+    const pricePointCount = this.resolvePricePointCount(config)
     if (config.spacingMode === 'geometric') {
-      const ratio = upper.div(lower).pow(new Prisma.Decimal(levelIndex).div(config.gridCount - 1))
+      const ratio = upper.div(lower).pow(new Prisma.Decimal(levelIndex).div(pricePointCount - 1))
       return lower.times(ratio)
     }
-    const step = upper.minus(lower).div(config.gridCount - 1)
+    const step = upper.minus(lower).div(pricePointCount - 1)
 
     return lower.plus(step.times(levelIndex))
   }
@@ -148,6 +150,9 @@ export class GridOrderPlannerService {
     if (!Number.isInteger(config.gridCount) || config.gridCount < 2) {
       throw new Error('grid_runtime_invalid_grid_count')
     }
+    if (!Number.isInteger(this.resolvePricePointCount(config)) || this.resolvePricePointCount(config) < 2) {
+      throw new Error('grid_runtime_invalid_grid_count')
+    }
     if (!perOrderQuote.isPositive()) {
       throw new Error('grid_runtime_invalid_per_order_quote')
     }
@@ -155,6 +160,10 @@ export class GridOrderPlannerService {
 
   private decimal(value: string): Prisma.Decimal {
     return new Prisma.Decimal(value)
+  }
+
+  private resolvePricePointCount(config: GridRuntimeConfigSnapshot): number {
+    return config.pricePointCount ?? config.gridCount
   }
 
   private normalizePrice(value: Prisma.Decimal, config: GridRuntimeConfigSnapshot): Prisma.Decimal {

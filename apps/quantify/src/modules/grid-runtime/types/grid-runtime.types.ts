@@ -11,6 +11,7 @@ export interface GridRuntimeConfigSnapshot {
   lowerPrice: string
   upperPrice: string
   gridCount: number
+  pricePointCount?: number
   perOrderQuote: string
   quoteAsset: string
   baseAsset: string

@@ -268,7 +268,8 @@ describe('GridRuntimeService', () => {
     const config = created?.configSnapshot as Record<string, unknown>
     expect(config).toEqual(expect.objectContaining({
       mode: 'spot',
-      gridCount: 11,
+      gridCount: 10,
+      pricePointCount: 11,
       perOrderQuote: '10',
       quoteAsset: 'USDT',
       baseAsset: 'ETH',
