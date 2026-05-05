@@ -156,6 +156,30 @@ describe('SemanticSupportClassifierService', () => {
     ])
   })
 
+  it('routes previous high low extrema atoms to recognized unsupported fallback', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'previous-extrema',
+        key: 'price.previous_extrema',
+        phase: 'entry',
+        params: { reference: 'previous_high', event: 'breakout_up' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }))
+
+    expect(result.route).toBe('unsupported_fallback')
+    expect(result.unsupportedAtoms).toEqual([
+      expect.objectContaining({
+        key: 'price.previous_extrema',
+        displayName: '前高/前低突破',
+      }),
+    ])
+    expect(result.unknownAtoms).toEqual([])
+  })
+
   it('keeps unsupported fallback precedence over execution open slots', () => {
     const executionSlot = {
       slotKey: 'volume.multiplier',

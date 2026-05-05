@@ -131,6 +131,7 @@ const ATOMS: SemanticAtomDefinition[] = [
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
   unsupported('indicator.below', 'trigger', '指标静态低于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态低于条件当前公测暂未支持生成和回测。'),
+  unsupported('price.previous_extrema', 'trigger', '前高/前低突破', 'previous_extrema_public_beta_unsupported', '前高/前低结构识别当前公测暂未支持生成和回测。'),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   unsupported('volume.threshold', 'trigger', '成交量阈值', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),

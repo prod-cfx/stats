@@ -42,7 +42,7 @@ describe('SemanticAtomRegistryService', () => {
   })
 
   it('does not classify aliases or compiler-unsupported atoms as executable projection atoms', () => {
-    for (const key of ['market.trend', 'market.range', 'indicator.above', 'indicator.below']) {
+    for (const key of ['market.trend', 'market.range', 'indicator.above', 'indicator.below', 'price.previous_extrema']) {
       expect(service.get(key)).toMatchObject({
         key,
         category: 'trigger',

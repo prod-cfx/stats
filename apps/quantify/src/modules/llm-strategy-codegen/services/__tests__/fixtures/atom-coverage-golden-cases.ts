@@ -235,6 +235,12 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
+    name: 'recognized unsupported previous high low extrema',
+    message: 'OKX 合约 BTCUSDT 15m，前高突破买入，跌破前低卖出，单笔 10%。',
+    expectedKeys: ['price.previous_extrema', 'open_long', 'close_long', 'position.fixed_pct', 'unsupported:price.previous_extrema'],
+    expectedRoute: 'unsupported_fallback',
+  },
+  {
     name: 'recognized unsupported pause trading',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，连续亏损三次后暂停交易一天，单笔 10%。',
     expectedKeys: ['indicator.cross_over', 'open_long', 'action.pause_trading', 'position.fixed_pct', 'unsupported:action.pause_trading'],
