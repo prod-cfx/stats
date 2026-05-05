@@ -200,6 +200,20 @@ export class SemanticSeedExtractorService {
       }
     }
 
+    if (trigger.key === 'price.detect.indicator_boundary') {
+      return {
+        domain: 'price',
+        verb: 'detect',
+        object: 'indicator_boundary',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
     return {
       domain: 'price',
       verb: 'detect',
@@ -385,6 +399,7 @@ export class SemanticSeedExtractorService {
       this.pushMovingAverageCrossTrigger(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen, aliasContext)
       this.pushBollingerTriggers(segment, triggers, seen, aliasContext)
+      this.pushIndicatorBoundaryTriggers(segment, triggers, seen, aliasContext)
       this.pushRsiTriggers(segment, triggers, seen, aliasContext)
       this.pushMacdTriggers(segment, triggers, seen, text)
       this.pushPartialBreakoutTriggers(segment, triggers, seen)
@@ -755,6 +770,19 @@ export class SemanticSeedExtractorService {
     seen: Set<string>,
   ): void {
     for (const clause of this.splitLogicClauses(segment)) {
+      const previousExtrema = this.extractPreviousExtremaReference(clause)
+      if (previousExtrema) {
+        const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+        if (intent) {
+          this.pushTrigger(triggers, seen, {
+            key: 'price.previous_extrema',
+            phase: intent.phase,
+            sideScope: intent.sideScope,
+            params: previousExtrema,
+          })
+        }
+      }
+
       const expression = this.extractPreviousBarExtremaExpression(clause)
       if (!expression) continue
 
@@ -768,6 +796,26 @@ export class SemanticSeedExtractorService {
         params: { expression },
       })
     }
+  }
+
+  private extractPreviousExtremaReference(clause: string): { indicator: 'previous_extrema'; reference: 'previous_high' | 'previous_low'; event: 'breakout_up' | 'breakout_down' } | null {
+    if (/前高/u.test(clause) && /突破|升破|上破|高于|超过/u.test(clause)) {
+      return {
+        indicator: 'previous_extrema',
+        reference: 'previous_high',
+        event: 'breakout_up',
+      }
+    }
+
+    if (/前低/u.test(clause) && /跌破|下破|失守|低于/u.test(clause)) {
+      return {
+        indicator: 'previous_extrema',
+        reference: 'previous_low',
+        event: 'breakout_down',
+      }
+    }
+
+    return null
   }
 
   private extractPreviousBarExtremaExpression(clause: string): SemanticExpression | null {
@@ -1001,6 +1049,93 @@ export class SemanticSeedExtractorService {
     }
   }
 
+  private hasIndicatorBoundaryLanguage(segment: string): boolean {
+    return /布林线|布林带|bollinger|通道|channel|上轨|下轨|中轨|上沿|下沿|中线|上边界|下边界|边界/iu.test(segment)
+  }
+
+  private resolveIndicatorName(segment: string): 'bollinger' | 'channel' | 'generic_boundary' {
+    if (/布林线|布林带|bollinger/iu.test(segment)) return 'bollinger'
+    if (/通道|channel/iu.test(segment)) return 'channel'
+    return 'generic_boundary'
+  }
+
+  private resolveBoundaryRole(clause: string): 'upper' | 'lower' | 'middle' | null {
+    if (/上轨|上沿|上边界|upper/iu.test(clause)) return 'upper'
+    if (/下轨|下沿|下边界|lower/iu.test(clause)) return 'lower'
+    if (/中轨|中线|middle|midline/iu.test(clause)) return 'middle'
+    return null
+  }
+
+  private pushIndicatorBoundaryTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    aliasContext: SemanticAliasContext,
+  ): void {
+    if (!this.hasIndicatorBoundaryLanguage(segment)) return
+    if (this.isBareBollingerBoundaryAlias(segment, aliasContext) && !this.hasBollingerBandAction(segment)) return
+
+    const indicatorName = this.resolveIndicatorName(segment)
+    const bandParams = indicatorName === 'bollinger'
+      ? this.extractBollingerBandParams(segment) ?? aliasContext.bollingerBandParams
+      : null
+
+    for (const clause of this.splitIndicatorBoundaryClauses(segment)) {
+      const boundaryRole = this.resolveBoundaryRole(clause)
+      if (!boundaryRole) continue
+
+      const intent = this.resolveTradeIntent(clause)
+      const phase = intent?.phase ?? (boundaryRole === 'middle' ? 'exit' : 'entry')
+      const sideScope = intent?.sideScope
+        ?? (boundaryRole === 'upper'
+            ? 'short'
+            : boundaryRole === 'lower'
+              ? 'long'
+              : 'both')
+
+      this.pushTrigger(triggers, seen, {
+        key: 'price.detect.indicator_boundary',
+        phase,
+        sideScope,
+        params: {
+          indicator: {
+            name: indicatorName,
+            sourceText: this.extractIndicatorSourceText(clause),
+            ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+            ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
+          },
+          boundaryRole,
+          event: this.extractConfirmationMode(clause) ?? 'touch_or_cross',
+          sourceText: clause,
+        },
+      })
+    }
+  }
+
+  private isBareBollingerBoundaryAlias(segment: string, aliasContext: SemanticAliasContext): boolean {
+    return Boolean(aliasContext.bollingerBandParams)
+      && !/布林线|布林带|bollinger|通道|channel|上边界|下边界|边界/iu.test(segment)
+      && /上轨|下轨|中轨/iu.test(segment)
+  }
+
+  private splitIndicatorBoundaryClauses(segment: string): string[] {
+    return this.splitCommaClauses(segment).flatMap((clause) => {
+      const matches = Array.from(clause.matchAll(/(?:上轨|下轨|中轨|上沿|下沿|中线|上边界|下边界|边界|upper|lower|middle|midline)/giu))
+      if (matches.length <= 1) return [clause]
+
+      return matches.map((match, index) => {
+        const start = match.index ?? 0
+        const end = matches[index + 1]?.index ?? clause.length
+        return clause.slice(start, end).trim()
+      }).filter(Boolean)
+    })
+  }
+
+  private extractIndicatorSourceText(clause: string): string {
+    const match = clause.match(/布林线|布林带|bollinger|通道|channel|上轨|下轨|中轨|上沿|下沿|中线|上边界|下边界|边界/iu)
+    return match?.[0] ?? 'boundary'
+  }
+
   private resolveBollingerMiddleSideScope(clause: string): 'long' | 'short' | 'both' {
     if (/平空|买回空单|买回平空|做空.*平仓|空单.*平仓/u.test(clause)) return 'short'
     if (/平多|卖出多单|卖出平多|做多.*平仓|多单.*平仓/u.test(clause)) return 'long'
@@ -1013,7 +1148,7 @@ export class SemanticSeedExtractorService {
       : [segment]
 
     for (const clause of clauses) {
-      const cross = this.parseMovingAverageCrossClause(clause)
+      const cross = this.parseMovingAverageCrossClause(clause) ?? this.parseGenericMovingAverageCrossClause(clause, segment)
       if (!cross) continue
 
       const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
@@ -1026,6 +1161,7 @@ export class SemanticSeedExtractorService {
           sideScope: intent.sideScope,
           params: {
             indicator: cross.indicator,
+            semantic: cross.direction === 'up' ? 'cross_up' : 'cross_down',
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
@@ -1039,12 +1175,24 @@ export class SemanticSeedExtractorService {
           sideScope: intent.sideScope,
           params: {
             indicator: cross.indicator,
+            semantic: cross.direction === 'up' ? 'cross_up' : 'cross_down',
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
         })
       }
     }
+  }
+
+  private parseGenericMovingAverageCrossClause(
+    clause: string,
+    segment: string,
+  ): { indicator: 'moving_average'; direction: 'up' | 'down'; fastPeriod?: number; slowPeriod?: number } | null {
+    const hasMovingAverageContext = /均线|moving\s*average/iu.test(clause) || /均线|moving\s*average/iu.test(segment)
+    if (!hasMovingAverageContext) return null
+    if (/金叉/u.test(clause)) return { indicator: 'moving_average', direction: 'up' }
+    if (/死叉/u.test(clause)) return { indicator: 'moving_average', direction: 'down' }
+    return null
   }
 
   private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>, context = segment): void {
@@ -1321,7 +1469,7 @@ export class SemanticSeedExtractorService {
     const segmentPeriod = this.extractLastRsiPeriod(segment) ?? aliasContext.rsi?.period ?? 14
 
     for (const clause of clauses) {
-      if (!/RSI/iu.test(clause)) continue
+      if (!/RSI/iu.test(clause) && !/RSI/iu.test(segment)) continue
       const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
       if (!intent) continue
 
@@ -1338,6 +1486,7 @@ export class SemanticSeedExtractorService {
             indicator: 'rsi',
             period,
             value: threshold,
+            thresholdRole: 'upper_threshold',
           },
         })
         continue
@@ -1352,6 +1501,7 @@ export class SemanticSeedExtractorService {
             indicator: 'rsi',
             period,
             value: threshold,
+            thresholdRole: 'lower_threshold',
           },
         })
         continue
@@ -1365,6 +1515,7 @@ export class SemanticSeedExtractorService {
           params: {
             period,
             value: threshold,
+            thresholdRole: 'upper_threshold',
           },
         })
         continue
@@ -1378,6 +1529,7 @@ export class SemanticSeedExtractorService {
           params: {
             period,
             value: threshold,
+            thresholdRole: 'lower_threshold',
           },
         })
       }
@@ -1604,7 +1756,7 @@ export class SemanticSeedExtractorService {
       sideScope: intent.sideScope,
       params: {
         direction,
-        valuePct: direction === 'down' ? -Math.abs(valuePct) : Math.abs(valuePct),
+        valuePct: direction === 'up' ? Math.abs(valuePct) : -Math.abs(valuePct),
         basis,
         ...(window ? { window } : {}),
       },
@@ -1619,7 +1771,7 @@ export class SemanticSeedExtractorService {
     const clauses = rawClauses
       .filter(Boolean)
       .filter(clause => /%|百分/u.test(clause))
-      .filter(clause => /(上涨|下跌|涨|跌|回落|回调|反弹)/u.test(clause))
+      .filter(clause => /(上涨|下跌|涨|跌|回撤|回落|回调|反弹)/u.test(clause))
       .filter(clause => /(买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空)/u.test(clause))
       .filter(clause => !/(止损|止盈|亏损|盈利)/u.test(clause))
 
@@ -1809,10 +1961,11 @@ export class SemanticSeedExtractorService {
   private hasExplicitPriceChangeContext(segment: string): boolean {
     return /(相对|上一根|前一根|前收盘|收盘价|开仓均价|入场价|成本价|持仓盈亏|盈亏|pnl|收益率)/iu.test(segment)
       || /(?:\d{1,2}\s*(?:m|h|d|分钟|分|小时|时|天|日)).*(?:上涨|下跌|涨|跌).*(?:%|百分)/iu.test(segment)
+      || (/(?:上涨|下跌|涨|跌|回撤|回落|回调|反弹).*(?:%|百分)/u.test(segment) && this.hasExecutableTradeIntent(segment))
   }
 
   private hasExplicitPriceChangeDirection(segment: string): boolean {
-    return /(上涨|下跌|涨|跌|回落|回调|反弹)/u.test(segment)
+    return /(上涨|下跌|涨|跌|回撤|回落|回调|反弹)/u.test(segment)
   }
 
   private hasExecutableTradeIntent(segment: string): boolean {
@@ -1823,7 +1976,10 @@ export class SemanticSeedExtractorService {
     return /(触及|突破|回到|回归|跌破|上穿|下穿|站上|失守|高于|低于)/u.test(segment)
   }
 
-  private resolvePercentDirection(segment: string): 'up' | 'down' | null {
+  private resolvePercentDirection(segment: string): 'up' | 'down' | 'drawdown' | null {
+    if (/回撤/u.test(segment)) {
+      return 'drawdown'
+    }
     if (/(下跌|跌|回落|回调)/u.test(segment)) {
       return 'down'
     }

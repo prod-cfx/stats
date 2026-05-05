@@ -2579,4 +2579,32 @@ describe('SemanticSeedExtractorService', () => {
     expect(upper?.params).not.toHaveProperty('period')
     expect(upper?.params).not.toHaveProperty('stdDev')
   })
+
+  it.each([
+    ['15min 布林线下轨买入 上轨卖出', ['bollinger', 'lower', 'upper']],
+    ['15min 布林带下轨做多 上轨平多', ['bollinger', 'lower', 'upper']],
+    ['价格碰通道下沿买，上沿卖', ['channel', 'lower', 'upper']],
+    ['突破上边界开空，回到中线平仓', ['generic_boundary', 'upper', 'middle']],
+    ['RSI 低于30买入，高于70卖出', ['rsi', 'lower_threshold', 'upper_threshold']],
+    ['均线金叉买入，死叉卖出', ['moving_average', 'cross_up', 'cross_down']],
+    ['前高突破买入，跌破前低卖出', ['previous_extrema', 'previous_high', 'previous_low']],
+    ['上涨2%开多，回撤1%平仓', ['percent_change', 'up', 'drawdown']],
+  ])('extracts atomic semantics for %s', (message, expectedTokens) => {
+    const patch = service.extract(message)
+    const executableNodes = [
+      ...(patch.triggers ?? []),
+      ...(patch.actions ?? []),
+      ...(patch.risk ?? []),
+      ...(patch.position ? [patch.position] : []),
+    ]
+    const serialized = JSON.stringify(executableNodes)
+
+    expect(executableNodes.length).toBeGreaterThan(0)
+    for (const token of expectedTokens) {
+      expect(serialized).toContain(token)
+    }
+    for (const node of executableNodes) {
+      expect(node.contracts?.length ?? 0).toBeGreaterThan(0)
+    }
+  })
 })
