@@ -17,6 +17,10 @@ export interface ContractShapeNormalizationResult {
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const SPACING_CONFLICT_TOLERANCE = 1e-8
+const QUESTION_HINT_BY_SLOT_KEY: Record<string, string> = {
+  [DENSITY_SLOT_KEY]: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+  [SPACING_CONFLICT_SLOT_KEY]: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+}
 
 @Injectable()
 export class SemanticContractShapeNormalizerService {
@@ -124,7 +128,7 @@ export class SemanticContractShapeNormalizerService {
       status: 'open',
       priority: 'core',
       affectsExecution: true,
-      questionHint: '请补充价格层级集合的密度或修正冲突配置。',
+      questionHint: QUESTION_HINT_BY_SLOT_KEY[slotKey] ?? '请补充价格层级集合的密度或修正冲突配置。',
     }
   }
 }

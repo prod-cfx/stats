@@ -39,7 +39,7 @@ describe('SemanticContractShapeNormalizerService', () => {
       status: 'open',
       priority: 'core',
       affectsExecution: true,
-      questionHint: expect.any(String),
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
     }])
   })
 
@@ -79,6 +79,7 @@ describe('SemanticContractShapeNormalizerService', () => {
         status: 'open',
         priority: 'core',
         affectsExecution: true,
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
       }),
     ])
   })
