@@ -70,6 +70,37 @@ describe('SemanticEventFrameParserService', () => {
     ])
   })
 
+  it('splits moving-average golden-cross buy and death-cross sell in one sentence', () => {
+    const frames = service.parse('EMA7 和 EMA21 金叉买入死叉卖出。')
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        trigger: expect.objectContaining({
+          kind: 'indicator_cross',
+          indicator: 'ema',
+          direction: 'over',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+        action: { kind: 'open_long' },
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        trigger: expect.objectContaining({
+          kind: 'indicator_cross',
+          indicator: 'ema',
+          direction: 'under',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+        action: { kind: 'close_long' },
+      }),
+    ])
+  })
+
   it('keeps explicit short entry and short exit actions', () => {
     const frames = service.parse('EMA7 下穿 EMA21 做空；EMA7 上穿 EMA21 平空。')
 

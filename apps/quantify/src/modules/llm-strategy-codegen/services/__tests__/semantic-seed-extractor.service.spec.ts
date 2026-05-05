@@ -3216,4 +3216,33 @@ describe('SemanticSeedExtractorService', () => {
       }),
     ]))
   })
+
+  it('extracts moving-average compact golden-cross buy and death-cross sell as separate events', () => {
+    const patch = service.extract('EMA7 和 EMA21 金叉买入死叉卖出；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
+  })
 })
