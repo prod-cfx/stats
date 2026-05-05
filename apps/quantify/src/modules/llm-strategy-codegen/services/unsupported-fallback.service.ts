@@ -16,7 +16,7 @@ interface UnsupportedAtomInput {
 
 const DEFAULT_FALLBACK_ATOM_KEY = 'risk.atr_stop'
 
-const CHINESE_NEGATIVE_TERMS = ['不要', '算了', '等支持再说', '不改', '先不', '取消', '不可以', '不确认']
+const CHINESE_NEGATIVE_TERMS = ['不要', '算了', '等支持再说', '不改', '先不', '取消', '不可以', '不确认', '不好']
 const CHINESE_ACCEPT_TERMS = ['确认', '可以', '好', '就这个', '继续', '先测试这个', '用这个']
 const CHINESE_MODIFY_TERMS = ['改成', '换成', '不过', '但是', '但', '仓位', '周期', '标的', '交易所']
 

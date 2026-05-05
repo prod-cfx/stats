@@ -37,7 +37,7 @@ describe('UnsupportedFallbackService', () => {
     expect(service.classifyConfirmation('不改推荐策略，周期还是 1h')).toEqual({ kind: 'reject_fallback' })
   })
 
-  it.each(['不可以', '还不可以', '不确认'])('does not accept negative Chinese wording: %s', (message) => {
+  it.each(['不可以', '还不可以', '不确认', '不好'])('does not accept negative Chinese wording: %s', (message) => {
     expect(service.classifyConfirmation(message)).toEqual({ kind: 'reject_fallback' })
   })
 
