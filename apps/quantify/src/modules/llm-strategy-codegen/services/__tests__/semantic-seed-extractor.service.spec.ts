@@ -1216,7 +1216,7 @@ describe('SemanticSeedExtractorService', () => {
           sideScope: 'short',
           params: expect.objectContaining({
             boundaryRole: 'upper',
-            event: 'close_confirm',
+            confirmationMode: 'close_confirm',
             indicator: expect.objectContaining({
               name: 'bollinger',
               period: 20,

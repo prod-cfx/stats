@@ -3099,12 +3099,14 @@ export class CanonicalSpecBuilderService {
     }
 
     const boundaryRole = this.readStringParam(trigger.params.boundaryRole)
+    const confirmationMode = this.readStringParam(trigger.params.confirmationMode)
     if (boundaryRole === 'upper') {
       return {
         kind: 'atom',
         key: CANONICAL_RULE_KEYS.bollingerUpperBreak,
         semanticScope: 'market',
-        op: 'CROSS_OVER',
+        op: confirmationMode === 'touch' ? 'GTE' : 'CROSS_OVER',
+        ...(confirmationMode ? { params: { confirmationMode } } : {}),
       }
     }
 
@@ -3113,7 +3115,8 @@ export class CanonicalSpecBuilderService {
         kind: 'atom',
         key: CANONICAL_RULE_KEYS.bollingerLowerBreak,
         semanticScope: 'market',
-        op: 'CROSS_UNDER',
+        op: confirmationMode === 'touch' ? 'LTE' : 'CROSS_UNDER',
+        ...(confirmationMode ? { params: { confirmationMode } } : {}),
       }
     }
 
@@ -3122,6 +3125,7 @@ export class CanonicalSpecBuilderService {
         kind: 'atom',
         key: CANONICAL_RULE_KEYS.bollingerMiddleRevert,
         semanticScope: 'market',
+        ...(confirmationMode ? { params: { confirmationMode } } : {}),
       }
     }
 

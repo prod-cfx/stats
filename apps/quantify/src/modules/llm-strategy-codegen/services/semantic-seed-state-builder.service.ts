@@ -883,7 +883,7 @@ export class SemanticSeedStateBuilderService {
   }): SemanticSlotState[] {
     if (
       input.statusValue === 'superseded'
-      || !input.key.startsWith('bollinger.touch_')
+      || !this.requiresBollingerConfirmationMode(input.key, input.params)
       || typeof input.params.confirmationMode === 'string'
     ) {
       return input.openSlots
@@ -906,6 +906,22 @@ export class SemanticSeedStateBuilderService {
         affectsExecution: true,
       },
     ]
+  }
+
+  private requiresBollingerConfirmationMode(
+    key: string,
+    params: Record<string, unknown>,
+  ): boolean {
+    if (key.startsWith('bollinger.touch_')) {
+      return true
+    }
+
+    if (key !== 'price.detect.indicator_boundary') {
+      return false
+    }
+
+    const indicator = params.indicator
+    return this.isRecord(indicator) && indicator.name === 'bollinger'
   }
 
   private resolveContractCoverage(options: {

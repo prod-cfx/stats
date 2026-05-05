@@ -83,10 +83,10 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(state?.triggers[0]).toEqual(expect.objectContaining({
       status: 'open',
       params: expect.not.objectContaining({ confirmationMode: expect.anything() }),
-      openSlots: [expect.objectContaining({
+      openSlots: expect.arrayContaining([expect.objectContaining({
         ...slot,
         status: 'open',
-      })],
+      })]),
     }))
 
     const next = reducer.applyClarificationAnswer({
@@ -98,6 +98,53 @@ describe('SemanticSeedStateBuilderService', () => {
     })
 
     expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.triggers[0]?.openSlots.find(item =>
+      item.slotKey === slot.slotKey
+      && item.fieldPath === slot.fieldPath
+      && item.status === 'open',
+    )).toBeUndefined()
+  })
+
+  it('creates answerable confirmation slots for universal bollinger boundary atoms', () => {
+    const state = service.build({
+      triggers: [{
+        id: 'entry-bollinger-boundary',
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'short',
+        params: {
+          indicator: {
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          },
+          boundaryRole: 'upper',
+        },
+      }],
+    })
+    const slot = {
+      slotKey: 'confirmationMode.entry',
+      fieldPath: 'triggers[0].params.confirmationMode',
+    }
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      params: expect.not.objectContaining({ confirmationMode: expect.anything() }),
+      openSlots: expect.arrayContaining([expect.objectContaining({
+        ...slot,
+        status: 'open',
+      })]),
+    }))
+
+    const next = reducer.applyClarificationAnswer({
+      currentState: state!,
+      targetSlotKey: slot.slotKey,
+      targetFieldPath: slot.fieldPath,
+      targetSlotId: buildSemanticSlotId(slot),
+      answer: '盘中触碰就触发',
+    })
+
+    expect(next.triggers[0]?.params.confirmationMode).toBe('touch')
     expect(next.triggers[0]?.openSlots.find(item =>
       item.slotKey === slot.slotKey
       && item.fieldPath === slot.fieldPath

@@ -1098,6 +1098,9 @@ export class SemanticSeedExtractorService {
       const intent = this.resolveIndicatorBoundaryTradeIntent(clause, previousEntrySideScope)
       if (!intent) continue
 
+      const confirmationMode = this.extractConfirmationMode(clause)
+        ?? this.extractConfirmationMode(segment)
+
       this.pushTrigger(triggers, seen, {
         key: 'price.detect.indicator_boundary',
         phase: intent.phase,
@@ -1110,7 +1113,7 @@ export class SemanticSeedExtractorService {
             ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
           },
           boundaryRole,
-          event: this.extractConfirmationMode(clause) ?? 'touch_or_cross',
+          ...(confirmationMode ? { confirmationMode } : {}),
           sourceText: clause,
         },
       })
