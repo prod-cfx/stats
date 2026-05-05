@@ -56,11 +56,8 @@ export class SemanticEventFrameParserService {
 
   private expandCompactCrosses(sentence: string): string {
     return sentence.replace(
-      /(MACD\s*)金叉(买入|买|开多|做多)死叉(卖出|卖|平多)/giu,
-      '$1金叉$2，$1死叉$3',
-    ).replace(
-      /((?:EMA|MA)\s*\d+\s*(?:和|与|及|\/|、)\s*(?:EMA|MA)\s*\d+\s*)金叉(买入|买|开多|做多)死叉(卖出|卖|平多)/giu,
-      '$1金叉$2，$1死叉$3',
+      /([^，,；;。]{1,80}?)金叉(买入|买|开多|做多)死叉(卖出|卖|平多)/giu,
+      '$1金叉$2，死叉$3',
     )
   }
 
