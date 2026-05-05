@@ -1864,7 +1864,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
-  it('compiles touch-confirmed Bollinger boundary rules as comparisons instead of crosses', () => {
+  it('compiles touch-confirmed Bollinger outer bands as comparisons without making middle reverts unconditional', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
     const result = compiler.compile({
@@ -1928,6 +1928,12 @@ describe('canonicalSpecV2IrCompilerService', () => {
         phase: 'entry',
         operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))',
       }),
+      expect.objectContaining({
+        phase: 'exit',
+        operator: 'OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,20,2)),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2)))',
+      }),
+    ]))
+    expect(result.graphSnapshot.trigger).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         phase: 'exit',
         operator: 'OR(GTE(CLOSE,MID_BAND(CLOSE,20,2)),LTE(CLOSE,MID_BAND(CLOSE,20,2)))',

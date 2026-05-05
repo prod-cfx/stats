@@ -1082,11 +1082,6 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'bollinger.middle_revert': {
         const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
-        if (atom.params?.confirmationMode === 'touch') {
-          const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_gte`, 'GTE', [closeRef, midRef])
-          const under = this.upsertPredicate(context.predicateMap, `${seed}_middle_lte`, 'LTE', [closeRef, midRef])
-          return this.upsertPredicate(context.predicateMap, `${seed}_middle_revert`, 'OR', [over, under])
-        }
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
         const under = this.upsertPredicate(context.predicateMap, `${seed}_middle_under`, 'CROSS_UNDER', [closeRef, midRef])
         return this.upsertPredicate(context.predicateMap, `${seed}_middle_revert`, 'OR', [over, under])
@@ -1832,9 +1827,6 @@ export class CanonicalSpecV2IrCompilerService {
           : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
 
       case 'bollinger.middle_revert':
-        if (condition.params?.confirmationMode === 'touch') {
-          return `OR(GTE(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),LTE(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`
-        }
         return `OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`
 
       case 'bollinger.bars_outside': {
