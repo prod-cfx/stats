@@ -98,6 +98,45 @@ describe('TradingExecutionService', () => {
     expect(tradingService.placeOrder).not.toHaveBeenCalled()
   })
 
+  it('fetches constraints when preparing without preloaded constraints', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const result = await service.prepareIntent(intent)
+
+    expect(result.status).toBe('prepared')
+    expect(tradingService.getInstrumentConstraints).toHaveBeenCalledTimes(1)
+    expect(tradingService.getInstrumentConstraints).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'perp',
+      'BTC/USDT:PERP',
+      'exchange-account-1',
+    )
+  })
+
+  it('uses preloaded constraints when preparing an intent', async () => {
+    const tradingService = createTradingServiceMock()
+    const service = createService(tradingService)
+
+    const result = await service.prepareIntent(intent, { constraints })
+
+    expect(result.status).toBe('prepared')
+    if (result.status !== 'prepared') throw new Error('expected prepared result')
+    expect(tradingService.getInstrumentConstraints).not.toHaveBeenCalled()
+    expect(result.constraints).toBe(constraints)
+    expect(result.normalized.clientOrderId).toEqual(expect.stringMatching(/^g[A-Za-z0-9]+$/u))
+    expect(result.normalized.request).toEqual(expect.objectContaining({
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'buy',
+      type: 'limit',
+      amount: 0.1,
+      price: 79200,
+      clientOrderId: result.normalized.clientOrderId,
+    }))
+  })
+
   it('submits a prepared intent with the prepared client order id', async () => {
     const tradingService = createTradingServiceMock()
     const service = createService(tradingService)
