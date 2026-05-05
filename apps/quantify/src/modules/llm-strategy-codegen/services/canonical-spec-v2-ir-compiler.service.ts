@@ -550,7 +550,7 @@ export class CanonicalSpecV2IrCompilerService {
         return null
       }
 
-      return Math.floor((halfRangePct * 2) / spacingPct) + 1
+      return Math.floor((halfRangePct * 2) / spacingPct)
     }
 
     const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : null
