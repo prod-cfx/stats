@@ -1,4 +1,5 @@
 import { buildSemanticSlotId } from '../../types/semantic-state'
+import { StrategyIntentResolutionService } from '../strategy-intent-resolution.service'
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 
 describe('strategyClarificationRulesService', () => {
@@ -31,13 +32,6 @@ describe('strategyClarificationRulesService', () => {
           relations: [],
         },
         ambiguities: [],
-      },
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        market: {
-          marketType: 'perp',
-        },
       },
     })
 
@@ -83,15 +77,6 @@ describe('strategyClarificationRulesService', () => {
         },
         ambiguities: [],
       },
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['3 分钟内跌 1% 买入'],
-        exitRules: ['5 分钟内涨 2% 卖出'],
-        riskRules: {
-          marketType: 'perp',
-        },
-      },
     })
 
     expect(state).toEqual({
@@ -134,12 +119,6 @@ describe('strategyClarificationRulesService', () => {
         },
         ambiguities: [],
       },
-      checklist: {
-        riskRules: {
-          stopLossPct: 5,
-          takeProfitPct: 10,
-        },
-      },
     })
 
     expect(state).toEqual({
@@ -169,11 +148,6 @@ describe('strategyClarificationRulesService', () => {
           relations: [],
         },
         ambiguities: [],
-      },
-      checklist: {
-        entryRules: [],
-        exitRules: [],
-        riskRules: {},
       },
     })
 
@@ -244,6 +218,121 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('emits answerable semantic slot identity for atomic semantic forks when metadata is available', () => {
+    const slot = {
+      slotKey: 'confirmationMode.entry',
+      fieldPath: 'triggers[0].params.confirmationMode',
+    }
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [
+          {
+            kind: 'atomic_semantic_fork',
+            field: 'trigger.confirmation',
+            message: '存在触碰即触发与收盘确认触发两种合法解释',
+            choices: ['touch', 'close_confirm'],
+            slotKey: slot.slotKey,
+            fieldPath: slot.fieldPath,
+            slotId: buildSemanticSlotId(slot),
+          },
+        ],
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual([
+      expect.objectContaining({
+        key: 'semantic.confirmationMode.entry',
+        reason: 'missing_semantic_trigger',
+        field: 'triggers',
+        allowedAnswers: ['touch', 'close_confirm'],
+        slotKey: slot.slotKey,
+        fieldPath: slot.fieldPath,
+        slotId: buildSemanticSlotId(slot),
+        blocking: true,
+        status: 'pending',
+      }),
+    ])
+  })
+
+  it('keeps resolver-produced atomic forks answerable through semantic slots', () => {
+    const resolution = new StrategyIntentResolutionService().resolve({
+      normalizedIntent: {
+        families: ['single-leg'],
+        triggers: [
+          {
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+            params: {
+              band: 'upper',
+              period: 20,
+              stdDev: 2,
+            },
+            resolutionHints: {
+              confirmation: 'ambiguous_touch_or_close_confirm',
+            },
+            closureStatus: 'open',
+            unresolvedSlots: [],
+          },
+        ],
+        actions: [{ key: 'open_short' }],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 10,
+          positionMode: 'short_only',
+        },
+        grid: null,
+        stateHints: [],
+        unresolved: [],
+        normalizationNotes: [],
+      },
+    })
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: resolution,
+    })
+
+    expect(state.items).toEqual([
+      expect.objectContaining({
+        key: 'semantic.confirmationMode.entry',
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+        slotId: buildSemanticSlotId({
+          slotKey: 'confirmationMode.entry',
+          fieldPath: 'triggers[0].params.confirmationMode',
+        }),
+      }),
+    ])
+  })
+
   it('preserves scoped semantic keys when surfacing open semantic slots', () => {
     const state = service.detectFromAmbiguities({
       executionContext: {
@@ -292,10 +381,6 @@ describe('strategyClarificationRulesService', () => {
             }),
           },
         ],
-      },
-      checklist: {
-        entryRules: ['价格突破长期均线时买入'],
-        exitRules: ['跌破短期均线时卖出'],
       },
     })
 
@@ -361,15 +446,6 @@ describe('strategyClarificationRulesService', () => {
             }),
           },
         ],
-      },
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        riskRules: {
-          exchange: 'okx',
-          marketType: 'perp',
-          positionPct: 10,
-        },
       },
     })
 

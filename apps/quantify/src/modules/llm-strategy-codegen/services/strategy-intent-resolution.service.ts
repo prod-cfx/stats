@@ -42,8 +42,8 @@ export class StrategyIntentResolutionService {
 
   private resolveSingleLegIntent(normalizedIntent: StrategyNormalizedIntent): AtomicIntentResolution {
     const ambiguities: StrategyAmbiguity[] = []
-    const triggers = normalizedIntent.triggers.flatMap((trigger) => {
-      const resolution = this.resolveTrigger(trigger)
+    const triggers = normalizedIntent.triggers.flatMap((trigger, triggerIndex) => {
+      const resolution = this.resolveTrigger(trigger, triggerIndex)
       ambiguities.push(...resolution.ambiguities)
       return resolution.triggers
     })
@@ -73,6 +73,7 @@ export class StrategyIntentResolutionService {
 
   private resolveTrigger(
     trigger: NormalizedTriggerAtom,
+    triggerIndex: number,
   ): Pick<AtomicIntentResolution, 'ambiguities'> & Pick<AtomicIntent, 'triggers'> {
     const openSlotAmbiguities = (trigger.unresolvedSlots ?? []).map(slot => this.toOpenSemanticSlot({
       slot,
@@ -81,7 +82,7 @@ export class StrategyIntentResolutionService {
     }))
 
     if (trigger.key.startsWith('bollinger.touch_')) {
-      const resolution = this.resolveBollingerTrigger(trigger)
+      const resolution = this.resolveBollingerTrigger(trigger, triggerIndex)
       return {
         triggers: resolution.triggers,
         ambiguities: [...openSlotAmbiguities, ...resolution.ambiguities],
@@ -123,9 +124,13 @@ export class StrategyIntentResolutionService {
 
   private resolveBollingerTrigger(
     trigger: NormalizedTriggerAtom,
+    triggerIndex: number,
   ): Pick<AtomicIntentResolution, 'ambiguities'> & Pick<AtomicIntent, 'triggers'> {
     const confirmation = trigger.resolutionHints?.confirmation ?? 'ambiguous_touch_or_close_confirm'
     if (confirmation === 'ambiguous_touch_or_close_confirm') {
+      const phase = trigger.phase === 'exit' ? 'exit' : 'entry'
+      const slotKey = `confirmationMode.${phase}`
+      const fieldPath = `triggers[${triggerIndex}].params.confirmationMode`
       return {
         triggers: [],
         ambiguities: [
@@ -134,6 +139,11 @@ export class StrategyIntentResolutionService {
             field: 'trigger.confirmation',
             message: '存在触碰即触发与收盘确认触发两种合法解释',
             choices: ['touch', 'close_confirm'],
+            question: '该触发条件是触碰即触发，还是收盘确认后触发？',
+            priority: 10,
+            slotKey,
+            fieldPath,
+            slotId: buildSemanticSlotId({ slotKey, fieldPath }),
           },
         ],
       }

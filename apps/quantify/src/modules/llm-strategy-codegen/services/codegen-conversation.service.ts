@@ -5119,7 +5119,6 @@ export class CodegenConversationService {
       this.clarificationRules.detectFromAmbiguities({
         executionContext,
         atomicResolution,
-        checklist,
       }),
       checklist,
     ) as StrategyClarificationStateWithSummary

@@ -29,7 +29,6 @@ export class StrategyClarificationRulesService {
   detectFromAmbiguities(input: {
     executionContext: StrategyExecutionContextResolution
     atomicResolution: AtomicIntentResolution
-    checklist?: StrategyClarificationInput | null
   }): StrategyClarificationState {
     const items: StrategyClarificationItem[] = [
       ...this.fromExecutionContextAmbiguities(input.executionContext),
@@ -161,6 +160,27 @@ export class StrategyClarificationRulesService {
 
       if (ambiguity.kind !== 'atomic_semantic_fork') {
         return []
+      }
+
+      if (ambiguity.slotKey && ambiguity.fieldPath) {
+        const semanticMetadata = resolveSemanticClarificationMetadata(ambiguity.slotKey)
+
+        return [{
+          key: `semantic.${ambiguity.slotKey}`,
+          reason: semanticMetadata.reason,
+          field: semanticMetadata.field,
+          ...(ambiguity.choices?.length ? { allowedAnswers: ambiguity.choices } : {}),
+          ...(typeof ambiguity.priority === 'number' ? { priority: ambiguity.priority } : {}),
+          blocking: true,
+          question: ambiguity.question ?? this.renderAtomicForkQuestion(ambiguity),
+          status: 'pending',
+          slotId: ambiguity.slotId ?? buildSemanticSlotId({
+            slotKey: ambiguity.slotKey,
+            fieldPath: ambiguity.fieldPath,
+          }),
+          slotKey: ambiguity.slotKey,
+          fieldPath: ambiguity.fieldPath,
+        }]
       }
 
       return [{
