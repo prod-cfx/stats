@@ -467,6 +467,7 @@ export interface LlmCodegenSessionResponse {
   consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
   semanticGraph?: LlmSemanticGraph | null
+  unsupportedFallback?: LlmUnsupportedFallback | null
   validationReport?: LlmSemanticGraphValidationReport | null
   strategyInstanceId?: string | null
   rejectReason?: string | null
@@ -478,6 +479,13 @@ export interface LlmCodegenSessionResponse {
   publishedSnapshotDeploymentExecutionDefaults?: AccountAiQuantDeploymentExecutionConfig | null
   publishedSnapshotDeploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
+}
+
+export interface LlmUnsupportedFallback {
+  status?: string
+  unsupportedAtoms?: Array<Record<string, unknown>>
+  recommendedStrategy?: Record<string, unknown> | null
+  prompt?: string
 }
 
 export interface AiQuantConversationLastBacktestRef {
@@ -515,9 +523,11 @@ export interface AiQuantConversationResponse {
   consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
   semanticGraph?: LlmSemanticGraph | null
+  unsupportedFallback?: LlmUnsupportedFallback | null
   validationReport?: LlmSemanticGraphValidationReport | null
   strategyInstanceId?: string | null
   rejectReason?: string | null
+  assistantPrompt?: string
   clarificationGate?: LlmClarificationGate | null
   publicationGate?: LlmPublicationGate | null
   publishedSnapshotStrategyConfig?: AccountAiQuantPublishedStrategyConfig | null

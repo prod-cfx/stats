@@ -219,6 +219,56 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.logicGraph?.status).toBe('confirmed')
   })
 
+  it('maps unsupported fallback assistantPrompt as a normal assistant message without blocking clarification', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-unsupported-fallback',
+      conversationTitle: 'unsupported fallback',
+      status: 'DRAFTING',
+      conversationMessages: [
+        { role: 'user', content: '用 ATR 止损做突破策略' },
+      ],
+      assistantPrompt: '当前公测暂未支持 ATR 止损。是否改用固定止损突破策略继续？',
+      unsupportedFallback: {
+        status: 'pending',
+        prompt: '当前公测暂未支持 ATR 止损。是否改用固定止损突破策略继续？',
+        recommendedStrategy: {
+          strategyKey: 'price_breakout_with_fixed_risk',
+          description: '固定止损突破策略',
+        },
+      },
+      clarificationGate: {
+        blocked: false,
+        summary: null,
+        items: [{
+          key: 'unsupported-fallback',
+          field: 'unsupportedFallback',
+          reason: 'unsupported_semantics',
+          question: '是否改用固定止损突破策略继续？',
+          blocking: true,
+          status: 'pending',
+        }],
+        pendingItems: [{
+          key: 'unsupported-fallback',
+          field: 'unsupportedFallback',
+          reason: 'unsupported_semantics',
+          question: '是否改用固定止损突破策略继续？',
+          blocking: true,
+          status: 'pending',
+        }],
+      },
+      activeCodegenSessionId: 'session-unsupported-fallback',
+      updatedAt: '2026-05-01T00:00:00.000Z',
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.clarificationGate?.blocked).toBe(false)
+    expect(conversation.pendingCanonicalDigest).toBeNull()
+    expect(conversation.messages.at(-1)).toEqual(expect.objectContaining({
+      role: 'assistant',
+      content: expect.stringContaining('ATR'),
+    }))
+    expect(conversation.messages.at(-1)?.content).toContain('是否改用')
+  })
+
   it('restores backtest summary from lastBacktestRef when publishedSnapshotId matches', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-1',

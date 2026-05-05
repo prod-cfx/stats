@@ -279,6 +279,7 @@ export class CodegenConversationService {
         missingFields: [],
         assistantPrompt: unsupportedFallback.prompt,
         clarificationState,
+        unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -3719,6 +3720,7 @@ export class CodegenConversationService {
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
     semanticGraph?: Prisma.JsonValue | null
+    semanticState?: Prisma.JsonValue | null
     constraintPack?: Prisma.JsonValue | null
     rejectReason: string | null
     createdAt: Date
@@ -3759,6 +3761,7 @@ export class CodegenConversationService {
       ? sessionSpecDesc.publishedSnapshotId
       : null
     const constraintPack = this.readConstraintPack(session.constraintPack ?? null)
+    const semanticState = this.readSemanticState(session.semanticState)
     const conversationMessages = this.toConversationMessages(constraintPack.conversationHistory)
     const conversationTitle = this.deriveConversationTitle(conversationMessages)
     const effectivePublishedSnapshotId = session.status === 'PUBLISHED'
@@ -3796,6 +3799,9 @@ export class CodegenConversationService {
       specDesc: effectiveSpecDesc,
       canonicalDigest: this.readCanonicalDigest(effectiveSpecDesc),
       semanticGraph: this.readJsonRecord(session.semanticGraph) ?? this.readJsonRecord(latestSnapshot?.semanticGraph),
+      unsupportedFallback: semanticState.unsupportedFallback
+        ? semanticState.unsupportedFallback as unknown as Record<string, unknown>
+        : null,
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       publicationGate:
@@ -3856,6 +3862,7 @@ export class CodegenConversationService {
       canonicalDigest: snapshot?.canonicalDigest ?? null,
       specDesc: snapshot?.specDesc ?? null,
       semanticGraph: snapshot?.semanticGraph ?? null,
+      unsupportedFallback: snapshot?.unsupportedFallback ?? null,
       validationReport: snapshot?.validationReport ?? null,
       clarificationGate: snapshot?.clarificationGate ?? null,
       publicationGate: snapshot?.publicationGate ?? null,
@@ -3869,6 +3876,7 @@ export class CodegenConversationService {
       publishedSnapshotCompatibilityMetadata: snapshot?.publishedSnapshotCompatibilityMetadata ?? null,
       strategyInstanceId: snapshot?.strategyInstanceId ?? null,
       rejectReason: snapshot?.rejectReason ?? null,
+      assistantPrompt: snapshot?.assistantPrompt,
     }
   }
 
@@ -4717,6 +4725,7 @@ export class CodegenConversationService {
       latestDraftCode: Prisma.JsonValue | null
       latestSpecDesc: Prisma.JsonValue | null
       constraintPack?: Prisma.JsonValue | null
+      semanticState?: Prisma.JsonValue | null
       rejectReason: string | null
       createdAt: Date
       updatedAt: Date
@@ -6495,6 +6504,7 @@ export class CodegenConversationService {
         missingFields: [],
         assistantPrompt: unsupportedFallback.prompt,
         clarificationState,
+        unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
       })
       return {
         semanticState: nextState,
@@ -6643,6 +6653,9 @@ export class CodegenConversationService {
       missingFields: [],
       assistantPrompt: args.assistantPrompt,
       clarificationState,
+      unsupportedFallback: args.semanticState.unsupportedFallback
+        ? args.semanticState.unsupportedFallback as unknown as Record<string, unknown>
+        : null,
     })
     return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
   }

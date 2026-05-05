@@ -780,4 +780,36 @@ describe('QuantChatPanel range settings', () => {
     )
     expect(container.querySelector('[data-testid="clarification-freeform-input"]')).toBeNull()
   })
+
+  it('renders unsupported fallback copy as ordinary assistant text', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[
+            {
+              id: 'm1',
+              role: 'assistant',
+              content: '当前公测暂未支持 ATR 止损。是否改用固定止损突破策略继续？',
+            },
+          ]}
+          paramSchema={null}
+          paramValues={{}}
+          clarificationGate={{
+            blocked: false,
+            items: [],
+            pendingItems: [],
+          }}
+          onClarificationAnswer={() => {}}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('当前公测暂未支持 ATR 止损')
+    expect(container.textContent).toContain('是否改用')
+    expect(container.querySelector('[data-testid="clarification-freeform-input"]')).toBeNull()
+  })
 })

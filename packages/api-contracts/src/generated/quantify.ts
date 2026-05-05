@@ -1263,6 +1263,7 @@ const AiQuantConversationResponseDto = z
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
     semanticGraph: z.object({}).partial().passthrough().optional(),
+    unsupportedFallback: z.object({}).partial().passthrough().nullish(),
     validationReport: z.object({}).partial().passthrough().optional(),
     clarificationGate: z.object({}).partial().passthrough().optional(),
     publicationGate: z.object({}).partial().passthrough().optional(),
@@ -1276,6 +1277,7 @@ const AiQuantConversationResponseDto = z
     publishedSnapshotCompatibilityMetadata: z.object({}).partial().passthrough().nullish(),
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
+    assistantPrompt: z.string().optional(),
   })
   .passthrough()
 const RecoverAiQuantEditConversationRequestDto = z
@@ -1398,6 +1400,7 @@ const CodegenSessionResponseDto = z
     specDesc: z.object({}).partial().passthrough().nullish(),
     canonicalDigest: z.string().nullish(),
     semanticGraph: z.object({}).partial().passthrough().nullish(),
+    unsupportedFallback: z.object({}).partial().passthrough().nullish(),
     validationReport: z.object({}).partial().passthrough().nullish(),
     strategyInstanceId: z.string().nullish(),
     createdAt: z.string().optional(),

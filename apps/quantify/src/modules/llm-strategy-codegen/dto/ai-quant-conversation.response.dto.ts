@@ -129,6 +129,9 @@ export class AiQuantConversationResponseDto {
   @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true })
   semanticGraph?: CodegenSessionResponseDto['semanticGraph']
 
+  @ApiPropertyOptional({ description: '不支持语义的推荐替代策略状态', type: 'object', additionalProperties: true, nullable: true })
+  unsupportedFallback?: CodegenSessionResponseDto['unsupportedFallback']
+
   @ApiPropertyOptional({ description: '语义图校验结果', type: 'object', additionalProperties: true })
   validationReport?: CodegenSessionResponseDto['validationReport']
 
@@ -167,4 +170,7 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: '终态失败原因' })
   rejectReason?: string | null
+
+  @ApiPropertyOptional({ description: '引导提示' })
+  assistantPrompt?: string
 }

@@ -1360,6 +1360,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt ?? '').toContain('当前公测暂未支持生成和回测')
     expect(result.assistantPrompt ?? '').toContain('是否改用这个策略继续')
+    expect((result as { unsupportedFallback?: unknown }).unsupportedFallback).toEqual(expect.objectContaining({
+      status: 'pending',
+      recommendedStrategy: expect.objectContaining({
+        strategyKey: 'price_breakout_with_fixed_risk',
+      }),
+    }))
     expect(createPayload).toEqual(expect.objectContaining({
       status: 'DRAFTING',
       latestDraftCode: null,
@@ -1418,9 +1424,65 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       blocked: false,
       pendingItems: [],
     }))
+    expect((result as { unsupportedFallback?: unknown }).unsupportedFallback).toEqual(expect.objectContaining({
+      status: 'pending',
+    }))
     expect(createPayload.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
       items: [],
+    }))
+  })
+
+  it('exposes pending unsupported fallback from persisted session snapshots', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-unsupported-fallback-snapshot',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      semanticGraph: null,
+      semanticState: {
+        version: 1,
+        families: [],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {},
+        normalizationNotes: [],
+        updatedAt: '2026-05-01T00:00:00.000Z',
+        unsupportedFallback: {
+          status: 'pending',
+          prompt: '当前公测暂未支持 ATR 止损，是否改用这个策略继续？',
+          recommendedStrategy: {
+            strategyKey: 'price_breakout_with_fixed_risk',
+            description: '价格突破后用固定比例止损止盈',
+          },
+        },
+      },
+      clarificationState: {
+        status: 'CLEAR',
+        items: [],
+      },
+      rejectReason: null,
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    })
+
+    const result = await service.getSession('s-unsupported-fallback-snapshot', 'u1')
+
+    expect((result as { unsupportedFallback?: unknown }).unsupportedFallback).toEqual(expect.objectContaining({
+      status: 'pending',
+      prompt: expect.stringContaining('ATR'),
+      recommendedStrategy: expect.objectContaining({
+        strategyKey: 'price_breakout_with_fixed_risk',
+      }),
+    }))
+    expect((result as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+      pendingItems: [],
     }))
   })
 
