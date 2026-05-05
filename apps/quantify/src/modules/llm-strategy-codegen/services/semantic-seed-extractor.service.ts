@@ -1004,11 +1004,11 @@ export class SemanticSeedExtractorService {
       const intent = this.resolveTradeIntent(clause)
 
       if (/上轨/u.test(clause)) {
-        if (isAliasClause && !intent) continue
+        if (!intent) continue
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_upper',
-          phase: intent?.phase ?? 'entry',
-          sideScope: intent?.sideScope ?? 'short',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
           params: {
             band: 'upper',
             ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
@@ -1019,11 +1019,11 @@ export class SemanticSeedExtractorService {
       }
 
       if (/下轨/u.test(clause)) {
-        if (isAliasClause && !intent) continue
+        if (!intent) continue
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_lower',
-          phase: intent?.phase ?? 'entry',
-          sideScope: intent?.sideScope ?? 'long',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
           params: {
             band: 'lower',
             ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
@@ -1034,7 +1034,7 @@ export class SemanticSeedExtractorService {
       }
 
       if (/中轨/u.test(clause)) {
-        if (isAliasClause && !intent) continue
+        if (!intent) continue
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_middle',
           phase: 'exit',
@@ -1085,7 +1085,7 @@ export class SemanticSeedExtractorService {
       const boundaryRole = this.resolveBoundaryRole(clause)
       if (!boundaryRole) continue
 
-      const intent = this.resolveIndicatorBoundaryTradeIntent(clause)
+      const intent = this.resolveIndicatorBoundaryTradeIntent(clause, segment)
       if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
@@ -1107,11 +1107,31 @@ export class SemanticSeedExtractorService {
     }
   }
 
-  private resolveIndicatorBoundaryTradeIntent(clause: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+  private resolveIndicatorBoundaryTradeIntent(
+    clause: string,
+    context: string,
+  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
     const intent = this.resolveTradeIntent(clause)
-    if (intent) return intent
+    if (intent) {
+      const contextualSideScope = intent.phase === 'exit' && !this.hasExplicitTradeSide(clause)
+        ? this.resolveSingleEntrySideScope(context)
+        : null
+      return contextualSideScope ? { ...intent, sideScope: contextualSideScope } : intent
+    }
     if (/(?:买)(?!回)/u.test(clause)) return { phase: 'entry', sideScope: 'long' }
     if (/卖/u.test(clause)) return { phase: 'exit', sideScope: 'long' }
+    return null
+  }
+
+  private hasExplicitTradeSide(clause: string): boolean {
+    return /做空|开空|空单|short|平空|买回空单|买回平空|做多|开多|多单|long|平多|卖出多单|卖出平多|买入|卖出/u.test(clause)
+  }
+
+  private resolveSingleEntrySideScope(context: string): 'long' | 'short' | null {
+    const hasShortEntry = /做空|开空|空单|short/u.test(context)
+    const hasLongEntry = /做多|开多|买入|入场|long/u.test(context)
+    if (hasShortEntry && !hasLongEntry) return 'short'
+    if (hasLongEntry && !hasShortEntry) return 'long'
     return null
   }
 

@@ -2594,6 +2594,44 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('does not create executable Bollinger actions without trade intent', () => {
+    const patch = service.extract('价格触及布林带上轨，价格跌破布林带下轨')
+    const triggers = patch.triggers ?? []
+
+    expect(triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'bollinger.touch_upper' })]))
+    expect(triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'bollinger.touch_lower' })]))
+    expect(triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'price.detect.indicator_boundary' })]))
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_long' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+  })
+
+  it('uses preceding short entry context for generic middle-boundary exits', () => {
+    const patch = service.extract('突破上边界开空，回到中线平仓')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          boundaryRole: 'middle',
+          indicator: expect.objectContaining({ name: 'generic_boundary' }),
+        }),
+      }),
+    ]))
+  })
+
   it('extracts compact Bollinger boundary wording as one coherent boundary atom per role', () => {
     const patch = service.extract('15min 布林带下轨做多 上轨平多')
     const boundaryTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.detect.indicator_boundary') ?? []
@@ -2678,7 +2716,7 @@ describe('SemanticSeedExtractorService', () => {
       '突破上边界开空，回到中线平仓',
       [
         { indicatorName: 'generic_boundary', boundaryRole: 'upper', phase: 'entry', sideScope: 'short' },
-        { indicatorName: 'generic_boundary', boundaryRole: 'middle', phase: 'exit', sideScope: 'long' },
+        { indicatorName: 'generic_boundary', boundaryRole: 'middle', phase: 'exit', sideScope: 'short' },
       ],
     ],
   ])('extracts structured indicator boundary atoms for %s', (message, expectedBoundaries) => {
