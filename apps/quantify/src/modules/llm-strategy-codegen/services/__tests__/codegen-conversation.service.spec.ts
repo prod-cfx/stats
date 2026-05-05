@@ -5828,6 +5828,96 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('fulfills missing entry atom from follow-up EMA state fragment', async () => {
+    const semanticState = {
+      version: 1,
+      families: [],
+      triggers: [{
+        id: 'semantic-missing-entry-atom',
+        key: 'semantic.missing_entry_atom',
+        phase: 'entry',
+        params: {},
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'trigger.entry',
+          fieldPath: 'triggers[entry]',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请补充入场触发条件。',
+          affectsExecution: true,
+        }],
+      }],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所。', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择标的。', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型。', affectsExecution: true },
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-05T00:00:00.000Z',
+    }
+    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+      id: 's-follow-up-entry-fragment',
+      semanticState,
+      status: 'DRAFTING',
+    }))
+
+    const result = await service.continueSession('s-follow-up-entry-fragment', {
+      userId: 'u1',
+      message: '15min k线在 ema20 上方开多',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+  })
+
+  it('does not ask for entry trigger when first-turn multi-timeframe EMA wording has an entry atom', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-first-turn-mtf-ema' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 1h 4h 价格都在 ema20 的上方 买入',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+    ]))
+    expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+  })
+
   it('prunes missing exit placeholders when a later turn supplies complete order-program contracts', () => {
     const stateWithRiskOnly = (service as any).withRequiredSemanticOpenSlots({
       version: 1,
