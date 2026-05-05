@@ -992,9 +992,11 @@ export class SemanticSeedExtractorService {
     const hasExplicitBollinger = /布林带/u.test(segment)
     if (!hasExplicitBollinger && !aliasContext.bollingerBandParams) return
     if (hasExplicitBollinger && this.hasMultipleBoundaryRolesInOneCommaClause(segment)) return
+    if (this.shouldPreferUniversalBoundaryTriggersForBollinger(segment)) return
 
     const clauses = this.splitCommaClauses(segment)
     const segmentBandParams = this.extractBollingerBandParams(segment) ?? aliasContext.bollingerBandParams
+    let previousEntrySideScope: 'long' | 'short' | null = null
 
     for (const clause of clauses) {
       const isAliasClause = !/布林带/u.test(clause)
@@ -1016,6 +1018,9 @@ export class SemanticSeedExtractorService {
             ...(confirmationMode ? { confirmationMode } : {}),
           },
         })
+        if (intent.phase === 'entry') {
+          previousEntrySideScope = intent.sideScope
+        }
       }
 
       if (/下轨/u.test(clause)) {
@@ -1031,6 +1036,9 @@ export class SemanticSeedExtractorService {
             ...(confirmationMode ? { confirmationMode } : {}),
           },
         })
+        if (intent.phase === 'entry') {
+          previousEntrySideScope = intent.sideScope
+        }
       }
 
       if (/中轨/u.test(clause)) {
@@ -1038,7 +1046,7 @@ export class SemanticSeedExtractorService {
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_middle',
           phase: 'exit',
-          sideScope: this.resolveBollingerMiddleSideScope(clause, segment),
+          sideScope: this.resolveBollingerMiddleSideScope(clause, previousEntrySideScope),
           params: {
             band: 'middle',
             ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
@@ -1081,11 +1089,12 @@ export class SemanticSeedExtractorService {
       ? this.extractBollingerBandParams(segment) ?? aliasContext.bollingerBandParams
       : null
 
+    let previousEntrySideScope: 'long' | 'short' | null = null
     for (const clause of this.splitIndicatorBoundaryClauses(segment)) {
       const boundaryRole = this.resolveBoundaryRole(clause)
       if (!boundaryRole) continue
 
-      const intent = this.resolveIndicatorBoundaryTradeIntent(clause, segment)
+      const intent = this.resolveIndicatorBoundaryTradeIntent(clause, previousEntrySideScope)
       if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
@@ -1104,22 +1113,38 @@ export class SemanticSeedExtractorService {
           sourceText: clause,
         },
       })
+      if (intent.phase === 'entry' && intent.sideScope !== 'both') {
+        previousEntrySideScope = intent.sideScope
+      }
     }
   }
 
   private resolveIndicatorBoundaryTradeIntent(
     clause: string,
-    context: string,
-  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+    previousEntrySideScope: 'long' | 'short' | null,
+  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' | 'both' } | null {
+    const explicitCloseSideScope = this.resolveExplicitCloseSideScope(clause)
+    if (explicitCloseSideScope) return { phase: 'exit', sideScope: explicitCloseSideScope }
+
     const intent = this.resolveTradeIntent(clause)
     if (intent) {
-      const contextualSideScope = intent.phase === 'exit' && !this.hasExplicitTradeSide(clause)
-        ? this.resolveSingleEntrySideScope(context)
-        : null
-      return contextualSideScope ? { ...intent, sideScope: contextualSideScope } : intent
+      if (intent.phase === 'exit' && !this.hasExplicitTradeSide(clause)) {
+        return {
+          ...intent,
+          sideScope: previousEntrySideScope ?? 'both',
+        }
+      }
+      return intent
     }
     if (/(?:买)(?!回)/u.test(clause)) return { phase: 'entry', sideScope: 'long' }
     if (/卖/u.test(clause)) return { phase: 'exit', sideScope: 'long' }
+    return null
+  }
+
+  private resolveExplicitCloseSideScope(clause: string): 'long' | 'short' | null {
+    if (!/平仓|平多|平空|离场|出场/u.test(clause)) return null
+    if (/平空|买回空单|买回平空|空单|做空|开空|short/u.test(clause)) return 'short'
+    if (/平多|卖出多单|卖出平多|多单|做多|开多|long/u.test(clause)) return 'long'
     return null
   }
 
@@ -1127,18 +1152,21 @@ export class SemanticSeedExtractorService {
     return /做空|开空|空单|short|平空|买回空单|买回平空|做多|开多|多单|long|平多|卖出多单|卖出平多|买入|卖出/u.test(clause)
   }
 
-  private resolveSingleEntrySideScope(context: string): 'long' | 'short' | null {
-    const hasShortEntry = /做空|开空|空单|short/u.test(context)
-    const hasLongEntry = /做多|开多|买入|入场|long/u.test(context)
-    if (hasShortEntry && !hasLongEntry) return 'short'
-    if (hasLongEntry && !hasShortEntry) return 'long'
-    return null
-  }
-
   private isBareBollingerBoundaryAlias(segment: string, aliasContext: SemanticAliasContext): boolean {
     return Boolean(aliasContext.bollingerBandParams)
       && !/布林线|布林带|bollinger|通道|channel|上边界|下边界|边界/iu.test(segment)
       && /上轨|下轨|中轨/iu.test(segment)
+  }
+
+  private shouldPreferUniversalBoundaryTriggersForBollinger(segment: string): boolean {
+    const clauses = this.splitCommaClauses(segment)
+    if (clauses.length < 2) return false
+    const explicitBollingerBoundaryClauses = clauses.filter(clause => (
+      /布林带|bollinger/iu.test(clause)
+      && this.resolveBoundaryRole(clause) !== null
+      && this.resolveTradeIntent(clause) !== null
+    ))
+    return explicitBollingerBoundaryClauses.length >= 2
   }
 
   private hasMultipleBoundaryRolesInOneCommaClause(segment: string): boolean {
@@ -1170,11 +1198,13 @@ export class SemanticSeedExtractorService {
     return match?.[0] ?? 'boundary'
   }
 
-  private resolveBollingerMiddleSideScope(clause: string, context = clause): 'long' | 'short' | 'both' {
+  private resolveBollingerMiddleSideScope(
+    clause: string,
+    previousEntrySideScope: 'long' | 'short' | null = null,
+  ): 'long' | 'short' | 'both' {
     if (/平空|买回空单|买回平空|做空.*平仓|空单.*平仓/u.test(clause)) return 'short'
     if (/平多|卖出多单|卖出平多|做多.*平仓|多单.*平仓/u.test(clause)) return 'long'
-    const contextualSideScope = this.resolveSingleEntrySideScope(context)
-    if (contextualSideScope) return contextualSideScope
+    if (previousEntrySideScope) return previousEntrySideScope
     return 'both'
   }
 
@@ -2197,10 +2227,10 @@ export class SemanticSeedExtractorService {
     ))
 
     if (!reference) {
-      return triggers
+      return this.removeLegacyBollingerTriggersWithUniversalBoundaryEquivalent(triggers)
     }
 
-    return triggers.map((trigger) => {
+    const harmonized = triggers.map((trigger) => {
       if (!trigger.key.startsWith('bollinger.touch_')) {
         return trigger
       }
@@ -2213,6 +2243,51 @@ export class SemanticSeedExtractorService {
         },
       }
     })
+    return this.removeLegacyBollingerTriggersWithUniversalBoundaryEquivalent(harmonized)
+  }
+
+  private removeLegacyBollingerTriggersWithUniversalBoundaryEquivalent(triggers: SeedTrigger[]): SeedTrigger[] {
+    const universalBollingerBoundaries = new Set(
+      triggers
+        .filter(trigger => (
+          trigger.key === 'price.detect.indicator_boundary'
+          && this.isPlainObject(trigger.params?.indicator)
+          && trigger.params.indicator.name === 'bollinger'
+          && typeof trigger.params.boundaryRole === 'string'
+        ))
+        .map(trigger => JSON.stringify([
+          trigger.params?.boundaryRole,
+          trigger.phase,
+          trigger.sideScope ?? null,
+        ])),
+    )
+    if (universalBollingerBoundaries.size === 0) return triggers
+
+    return triggers.filter((trigger) => {
+      const boundaryRole = this.resolveLegacyBollingerBoundaryRole(trigger.key)
+      if (!boundaryRole) return true
+      if (boundaryRole === 'middle') {
+        return !triggers.some(candidate => (
+          candidate.key === 'price.detect.indicator_boundary'
+          && candidate.phase === trigger.phase
+          && candidate.params?.boundaryRole === 'middle'
+          && this.isPlainObject(candidate.params.indicator)
+          && candidate.params.indicator.name === 'bollinger'
+        ))
+      }
+      return !universalBollingerBoundaries.has(JSON.stringify([
+        boundaryRole,
+        trigger.phase,
+        trigger.sideScope ?? null,
+      ]))
+    })
+  }
+
+  private resolveLegacyBollingerBoundaryRole(key: string): 'upper' | 'lower' | 'middle' | null {
+    if (key === 'bollinger.touch_upper') return 'upper'
+    if (key === 'bollinger.touch_lower') return 'lower'
+    if (key === 'bollinger.touch_middle') return 'middle'
+    return null
   }
 
   private resolvePercentBasis(segment: string): 'prev_close' | 'entry_avg_price' | 'position_pnl' {
