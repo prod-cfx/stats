@@ -11976,6 +11976,296 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('scopes structured level_set resolution so position 10% and density 20格 close their own slots', async () => {
+    const densitySlot = {
+      slotKey: 'contract.shape.price.level_set.density',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [densitySlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: null,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const densityKey = 'semantic.contract.shape.price.level_set.density'
+    const positionKey = 'semantic.position.sizing'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: positionKey,
+          field: positionSlot.fieldPath,
+          fieldPath: positionSlot.fieldPath,
+          slotKey: positionSlot.slotKey,
+          slotId: buildSemanticSlotId(positionSlot as any),
+          status: 'pending',
+          blocking: true,
+          priority: 70,
+          prompt: positionSlot.questionHint,
+          reason: 'missing_semantic_position_sizing',
+        },
+        {
+          key: densityKey,
+          field: densitySlot.fieldPath,
+          fieldPath: densitySlot.fieldPath,
+          slotKey: densitySlot.slotKey,
+          slotId: buildSemanticSlotId(densitySlot as any),
+          status: 'pending',
+          blocking: true,
+          priority: 90,
+          prompt: densitySlot.questionHint,
+          reason: 'missing_semantic_contract_requirement',
+        },
+      ],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-grid-density-and-position-structured-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner should not see mixed structured answers',
+      }),
+    })
+
+    await service.continueSession('s-grid-density-and-position-structured-answer', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        [positionKey]: '10%',
+        [densityKey]: '20格',
+      },
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const levelSetShape = updatePayload.semanticState.triggers[0].contracts[0].capabilities[0].shape
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      status: 'locked',
+      openSlots: [],
+    }))
+    expect(levelSetShape).toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+    expect(levelSetShape).not.toEqual(expect.objectContaining({
+      spacingPct: 10,
+    }))
+    expect(updatePayload.semanticState.triggers[0].openSlots).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+      }),
+    ]))
+  })
+
+  it('does not consume level_set density from a position-only structured 10% answer', async () => {
+    const densitySlot = {
+      slotKey: 'contract.shape.price.level_set.density',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [densitySlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: null,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const positionKey = 'semantic.position.sizing'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [{
+        key: positionKey,
+        field: positionSlot.fieldPath,
+        fieldPath: positionSlot.fieldPath,
+        slotKey: positionSlot.slotKey,
+        slotId: buildSemanticSlotId(positionSlot as any),
+        status: 'pending',
+        blocking: true,
+        priority: 70,
+        prompt: positionSlot.questionHint,
+        reason: 'missing_semantic_position_sizing',
+      }],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-grid-density-position-only-structured-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '请继续补充网格数量。',
+      }),
+    })
+
+    await service.continueSession('s-grid-density-position-only-structured-answer', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        [positionKey]: '10%',
+      },
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const levelSetShape = updatePayload.semanticState.triggers[0].contracts[0].capabilities[0].shape
+
+    expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      status: 'locked',
+    }))
+    expect(levelSetShape).not.toEqual(expect.objectContaining({
+      spacingPct: 10,
+    }))
+    expect(levelSetShape).not.toEqual(expect.objectContaining({
+      gridCount: expect.any(Number),
+    }))
+    expect(updatePayload.semanticState.triggers[0].openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+      }),
+    ]))
+  })
+
   it('keeps OKX spot ETH grid with complete contracts out of legacy entry and exit blockers', async () => {
     const semanticState = buildLockedMaSemanticState({
       families: ['grid.range_rebalance'],

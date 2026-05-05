@@ -163,6 +163,14 @@ const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
 const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
+const STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS = new Set([
+  'contract.shape.price.level_set.density',
+  'contract.requirement.price.define.level_set',
+])
+const STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS = new Set([
+  ...STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS,
+  'contract.shape.price.level_set.spacing_conflict',
+])
 const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
@@ -2562,6 +2570,11 @@ export class CodegenConversationService {
     let consumed = false
 
     for (const item of clarificationState?.items ?? []) {
+      const targetSlot = this.findStructuredLevelSetOpenSlot(nextState, item)
+      if (!targetSlot || !STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS.has(targetSlot.slotKey)) {
+        continue
+      }
+
       const rawAnswer = this.readClarificationAnswerForItem(answers, item)
       if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
         continue
@@ -2572,7 +2585,13 @@ export class CodegenConversationService {
         message: rawAnswer.trim(),
         clarificationState: {
           ...clarificationState,
-          items: [item],
+          items: [{
+            ...item,
+            status: 'pending',
+            slotKey: targetSlot.slotKey,
+            fieldPath: targetSlot.fieldPath,
+            slotId: buildSemanticSlotId(targetSlot),
+          }],
         },
       })
       if (!result.consumed) {
@@ -2584,6 +2603,71 @@ export class CodegenConversationService {
     }
 
     return consumed ? nextState : null
+  }
+
+  private findStructuredLevelSetOpenSlot(
+    semanticState: SemanticState,
+    item: StrategyClarificationItem,
+  ): SemanticSlotState | null {
+    const itemSlotKey = this.readStructuredLevelSetSlotKey(item)
+    if (itemSlotKey && !STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS.has(itemSlotKey)) {
+      return null
+    }
+
+    const openSlots = this.collectStructuredLevelSetOpenSlots(semanticState)
+    const bySlotId = typeof item.slotId === 'string'
+      ? openSlots.find(slot => buildSemanticSlotId(slot) === item.slotId)
+      : undefined
+    if (bySlotId) {
+      return bySlotId
+    }
+
+    const itemFieldPath = typeof item.fieldPath === 'string'
+      ? item.fieldPath
+      : typeof item.field === 'string' ? item.field : undefined
+    if (itemSlotKey && itemFieldPath) {
+      return openSlots.find(slot => slot.slotKey === itemSlotKey && slot.fieldPath === itemFieldPath) ?? null
+    }
+
+    if (itemSlotKey) {
+      return openSlots.find(slot => slot.slotKey === itemSlotKey) ?? null
+    }
+
+    return null
+  }
+
+  private collectStructuredLevelSetOpenSlots(semanticState: SemanticState): SemanticSlotState[] {
+    const slots: SemanticSlotState[] = []
+    for (const trigger of semanticState.triggers) {
+      slots.push(...trigger.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+    for (const action of semanticState.actions) {
+      slots.push(...(action.openSlots ?? []).filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+    for (const risk of semanticState.risk) {
+      slots.push(...risk.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+    if (semanticState.position?.openSlots?.length) {
+      slots.push(...semanticState.position.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+
+    return slots
+  }
+
+  private isStructuredLevelSetOpenSlot(slot: SemanticSlotState): boolean {
+    return slot.status === 'open' && STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS.has(slot.slotKey)
+  }
+
+  private readStructuredLevelSetSlotKey(item: StrategyClarificationItem): string | null {
+    if (typeof item.slotKey === 'string' && item.slotKey.length > 0) {
+      return item.slotKey
+    }
+
+    if (typeof item.key === 'string' && item.key.startsWith('semantic.')) {
+      return item.key.replace(/^semantic\./u, '')
+    }
+
+    return null
   }
 
   private readClarificationAnswerForItem(
