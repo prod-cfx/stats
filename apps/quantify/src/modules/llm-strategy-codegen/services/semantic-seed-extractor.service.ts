@@ -45,10 +45,11 @@ type SemanticAliasContext = {
 
 @Injectable()
 export class SemanticSeedExtractorService {
+  private readonly eventFrameParser = new SemanticEventFrameParserService()
+  private readonly eventFrameProjector = new SemanticEventFrameProjectorService()
+
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
-    private readonly eventFrameParser: SemanticEventFrameParserService = new SemanticEventFrameParserService(),
-    private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
@@ -100,18 +101,49 @@ export class SemanticSeedExtractorService {
     const seen = new Set<string>()
 
     for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
-      const signature = JSON.stringify({
-        key: trigger.key,
-        phase: trigger.phase,
-        sideScope: trigger.sideScope ?? null,
-        params: this.stableValue(trigger.params ?? {}),
-      })
+      const signature = this.buildTriggerMergeSignature(trigger)
       if (seen.has(signature)) continue
       seen.add(signature)
       merged.push(trigger)
     }
 
     return merged
+  }
+
+  private buildTriggerMergeSignature(trigger: SeedTrigger): string {
+    if (this.isIndicatorCrossTrigger(trigger)) {
+      return JSON.stringify({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope ?? null,
+        params: this.stableValue({
+          indicator: trigger.params?.indicator,
+          semantic: this.resolveIndicatorCrossSemantic(trigger),
+          fastPeriod: trigger.params?.fastPeriod,
+          slowPeriod: trigger.params?.slowPeriod,
+          signalPeriod: trigger.params?.signalPeriod,
+        }),
+      })
+    }
+
+    return JSON.stringify({
+      key: trigger.key,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      params: this.stableValue(trigger.params ?? {}),
+    })
+  }
+
+  private isIndicatorCrossTrigger(trigger: SeedTrigger): boolean {
+    return (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under')
+      && typeof trigger.params?.indicator === 'string'
+  }
+
+  private resolveIndicatorCrossSemantic(trigger: SeedTrigger): string {
+    if (trigger.params?.semantic === 'cross_up' || trigger.params?.semantic === 'cross_down') {
+      return trigger.params.semantic
+    }
+    return trigger.key === 'indicator.cross_over' ? 'cross_up' : 'cross_down'
   }
 
   private mergeSeedActions(
