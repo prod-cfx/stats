@@ -3014,7 +3014,7 @@ export class CodegenConversationService {
     if (item.reason === 'conflicting_market_scope') {
       const field = item.field
       if (field === 'exchange' || field === 'symbol' || field === 'marketType' || field === 'timeframe') {
-        return field
+        return field as keyof SemanticState['contextSlots']
       }
     }
 
