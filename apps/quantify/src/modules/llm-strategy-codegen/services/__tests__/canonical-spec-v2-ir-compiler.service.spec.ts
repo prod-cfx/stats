@@ -286,7 +286,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
           mode: 'perp_neutral',
           levelSet: {
             lower: 79200,
-            upper: 80200,
+            upper: 80250,
             absoluteSpacing: 100,
             spacingMode: 'arithmetic',
           },

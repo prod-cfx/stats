@@ -403,6 +403,18 @@ export class CanonicalSpecV2IrCompilerService {
     intent: CanonicalOrderProgramIntent,
     levelCount: number,
   ): LevelSetDef['spacing'] {
+    if (
+      intent.levelSet.mode !== 'centered_percent_range'
+      && typeof intent.levelSet.absoluteSpacing === 'number'
+      && Number.isFinite(intent.levelSet.absoluteSpacing)
+      && intent.levelSet.absoluteSpacing > 0
+    ) {
+      return {
+        mode: 'absolute',
+        value: intent.levelSet.absoluteSpacing,
+      }
+    }
+
     if (typeof intent.levelSet.spacingPct === 'number' && Number.isFinite(intent.levelSet.spacingPct)) {
       return {
         mode: 'pct',
