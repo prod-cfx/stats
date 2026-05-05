@@ -232,7 +232,7 @@ describe('GridRuntimeService', () => {
     )
   })
 
-  it('creates a grid runtime plan from centered-percent deployment price order programs', async () => {
+  it('integrates compiler centered-percent AST into an 11-point grid runtime plan', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-centered-1' }) }
     const tradingService = createTradingService()
     tradingService.getInstrumentConstraints.mockResolvedValue({
