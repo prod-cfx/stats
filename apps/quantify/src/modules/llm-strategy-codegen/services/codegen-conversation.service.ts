@@ -166,10 +166,10 @@ const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
 const STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS = new Set([
   'contract.shape.price.level_set.density',
   'contract.requirement.price.define.level_set',
+  'contract.shape.price.level_set.spacing_conflict',
 ])
 const STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS = new Set([
   ...STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS,
-  'contract.shape.price.level_set.spacing_conflict',
 ])
 const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
 
