@@ -107,7 +107,7 @@ export class SemanticContractShapeNormalizerService {
       shape.centerTiming = centerTiming
     }
 
-    if (options.requireDensity === true && !hasPositiveGridCount(shape)) {
+    if (options.requireDensity === true && !hasPositiveDensity(shape)) {
       return {
         status: 'open',
         shape,

@@ -64,6 +64,27 @@ describe('SemanticContractShapeNormalizerService', () => {
     })
   })
 
+  it('accepts percent spacing as density for centered percent ranges', () => {
+    const result = service.normalizeLevelSetShape({
+      mode: 'centered_percent_range',
+      centerSource: 'last_price',
+      totalRangePct: 10,
+      spacingPct: 0.5,
+    }, { requireDensity: true })
+
+    expect(result).toEqual({
+      status: 'valid',
+      shape: {
+        mode: 'centered_percent_range',
+        centerSource: 'last_price',
+        halfRangePct: 5,
+        spacingPct: 0.5,
+        spacingMode: 'arithmetic',
+      },
+      openSlots: [],
+    })
+  })
+
   it('reports a spacing conflict when grid count and absolute spacing disagree', () => {
     const result = service.normalizeLevelSetShape({
       lower: 78800,
