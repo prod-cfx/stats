@@ -3695,10 +3695,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'market.scope',
-            field: 'marketType',
-            reason: 'conflicting_market_scope',
-            question: '你要做现货还是合约？现货不能做空。',
+            key: 'legacy.exitRules',
+            field: 'exitRules',
+            reason: 'missing_exit_rules',
+            question: '请补充出场规则。',
             blocking: true,
             status: 'pending',
           },
@@ -4975,6 +4975,67 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       question: '现货不能做空，请确认市场类型。',
       status: 'pending',
     }, semanticState)).toBe(false)
+  })
+
+  it('keeps spot-short safety blockers when semantic main-flow evidence exists', () => {
+    const semanticState = buildLockedMaSemanticState({
+      actions: [
+        { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+      ],
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+      },
+    })
+
+    const result = (service as any).buildClarificationFromSemanticState(semanticState, {
+      entryRules: ['做空 BTCUSDT'],
+      exitRules: ['平仓'],
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+      },
+    }, { preserveLegacyFallback: false })
+
+    expect(result.status).toBe('NEEDS_CLARIFICATION')
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'invalid_spot_short_combo', blocking: true }),
+    ]))
+  })
+
+  it('keeps action-only semantic patches blocked by missing executable trigger atoms', () => {
+    const result = (service as any).withRequiredSemanticOpenSlots({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [{
+        id: 'action-open-long',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      risk: [lockedStopLossRisk()],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {})
+
+    expect(result.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom' }),
+      expect.objectContaining({ key: 'semantic.missing_exit_atom' }),
+    ]))
   })
 
   it('deduplicates fallback execution-context items when semantic context slots are already present', () => {

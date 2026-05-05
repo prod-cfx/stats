@@ -478,7 +478,7 @@ describe('canonicalSpecBuilderService', () => {
                 mode: 'centered_percent_range',
                 centerTiming: 'deployment',
                 centerSource: 'last_price',
-                halfRangePct: 0.4,
+                totalRangePct: 0.8,
                 gridIntervals: 10,
                 gridCount: 11,
                 spacingMode: 'arithmetic',

@@ -2385,8 +2385,14 @@ export class CodegenConversationService {
   }
 
   private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
-    return !this.hasSemanticMainFlowEvidence(state)
+    return (
+      !this.hasSemanticMainFlowEvidence(state)
       && (state.risk.length > 0 || state.position !== null)
+    ) || (
+      state.actions.length > 0
+      && state.triggers.length === 0
+      && !this.hasCompleteOrderProgramSemantics(state)
+    )
   }
 
   private hasLockedTriggerPhase(
@@ -2997,7 +3003,7 @@ export class CodegenConversationService {
       || item.reason === 'missing_timeframe'
       || item.reason === 'missing_execution_context'
       || item.key.startsWith('executionContext.')
-    if (!isMissingExecutionContextReason && item.reason !== 'conflicting_market_scope') {
+    if (!isMissingExecutionContextReason) {
       return null
     }
 
@@ -3009,13 +3015,6 @@ export class CodegenConversationService {
       || candidate === 'timeframe'
     ) {
       return candidate
-    }
-
-    if (item.reason === 'conflicting_market_scope') {
-      const field = item.field
-      if (field === 'exchange' || field === 'symbol' || field === 'marketType' || field === 'timeframe') {
-        return field as keyof SemanticState['contextSlots']
-      }
     }
 
     return null
@@ -3188,16 +3187,54 @@ export class CodegenConversationService {
   ): StrategyClarificationStateWithSummary {
     const normalizedSemanticState = this.ensureExecutableAtomSlots(semanticState)
     const rawFallbackState = this.resolveClarificationArtifacts(fallbackLogicSnapshot).clarificationState
+    const semanticSafetyItems = this.buildSemanticSafetyClarificationItems(normalizedSemanticState)
     const fallbackState = options?.preserveLegacyFallback === true
       || !this.hasSemanticMainFlowEvidence(normalizedSemanticState)
       ? rawFallbackState
       : {
           ...rawFallbackState,
-          items: [],
-          status: 'CLEAR' as const,
+          items: [
+            ...rawFallbackState.items.filter(item => this.isSafetyClarificationItem(item)),
+            ...semanticSafetyItems,
+          ],
+          status: rawFallbackState.items.some(item => this.isSafetyClarificationItem(item)) || semanticSafetyItems.length > 0
+            ? 'NEEDS_CLARIFICATION' as const
+            : 'CLEAR' as const,
         }
 
     return this.mergeSemanticClarificationState(normalizedSemanticState, fallbackState)
+  }
+
+  private isSafetyClarificationItem(item: StrategyClarificationItem): boolean {
+    return item.blocking
+      && (item.reason === 'invalid_spot_short_combo' || item.reason === 'conflicting_market_scope')
+  }
+
+  private buildSemanticSafetyClarificationItems(state: SemanticState): StrategyClarificationItem[] {
+    const marketType = this.readSemanticContextValue(state.contextSlots.marketType)
+    if (marketType !== 'spot') {
+      return []
+    }
+
+    const hasShortIntent = state.actions.some(action =>
+      action.status === 'locked'
+      && (action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short'),
+    ) || state.triggers.some(trigger =>
+      trigger.status === 'locked'
+      && (trigger.sideScope === 'short' || trigger.sideScope === 'both'),
+    )
+    if (!hasShortIntent) {
+      return []
+    }
+
+    return [{
+      key: 'market.marketType',
+      field: 'marketType',
+      reason: 'invalid_spot_short_combo',
+      question: '现货不支持做空，请确认要改为合约，还是移除做空相关规则。',
+      blocking: true,
+      status: 'pending',
+    }]
   }
 
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {

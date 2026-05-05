@@ -625,6 +625,26 @@ describe('semantic-only strategy regression verification', () => {
         },
       }),
     ])
+    expect(result.canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'semantic-boundary-guard-1',
+        phase: 'risk',
+        condition: expect.objectContaining({ kind: 'NOT' }),
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+        metadata: expect.objectContaining({
+          semanticKey: 'risk.boundary_guard',
+          guard: 'boundary_cancel',
+          onBreach: 'HALT_STRATEGY',
+        }),
+      }),
+    ]))
+    expect((result.publishedSnapshot.compiledIr as any).riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        onBreach: 'HALT_STRATEGY',
+      }),
+    ]))
     expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining([
       'FORCE_EXIT',
     ]))

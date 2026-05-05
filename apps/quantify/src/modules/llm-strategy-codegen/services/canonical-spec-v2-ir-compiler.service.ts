@@ -52,6 +52,7 @@ interface CompileContext {
   seriesMap: Map<string, SeriesDef>
   levelSetMap: Map<string, LevelSetDef>
   predicateMap: Map<string, PredicateDef>
+  orderProgramActivePredicateMap: Map<string, string>
   movingAverage: {
     kind: 'EMA' | 'SMA'
     fast: number
@@ -120,6 +121,7 @@ export class CanonicalSpecV2IrCompilerService {
       seriesMap,
       levelSetMap,
       predicateMap,
+      orderProgramActivePredicateMap: new Map(),
       movingAverage: this.resolveMovingAverageConfig(input.canonicalSpec),
       rsi: this.resolveRsiConfig(input.canonicalSpec),
       macd: this.resolveMacdConfig(input.canonicalSpec),
@@ -242,9 +244,12 @@ export class CanonicalSpecV2IrCompilerService {
     return intents.map(intent => {
       const levelCount = this.resolveIntentLevelCount(intent)
       const levelSetRefs = this.ensureOrderProgramLevelSet(context, intent, levelCount)
+      const compiledId = intent.id.replace(/\W+/g, '_')
+      context.orderProgramActivePredicateMap.set(intent.id, levelSetRefs.activeWhen)
+      context.orderProgramActivePredicateMap.set(compiledId, levelSetRefs.activeWhen)
 
       return {
-        id: intent.id.replace(/\W+/g, '_'),
+        id: compiledId,
         kind: 'LIMIT_LADDER',
         activeWhen: levelSetRefs.activeWhen,
         side: this.resolveOrderProgramSide(intent.mode),
@@ -1005,6 +1010,15 @@ export class CanonicalSpecV2IrCompilerService {
           atom.op === 'GTE' ? 'TOUCH_LEVEL_UP' : 'TOUCH_LEVEL_DOWN',
           [closeRef, levelSetId],
         )
+      }
+
+      case 'order_program.active_range': {
+        const programId = typeof atom.params?.programId === 'string' ? atom.params.programId : null
+        const activePredicate = programId ? context.orderProgramActivePredicateMap.get(programId) : null
+        if (!activePredicate) {
+          throw new Error(`order_program_active_range_not_found:${programId ?? 'unknown'}`)
+        }
+        return activePredicate
       }
 
       case 'breakout.channel_high_break':

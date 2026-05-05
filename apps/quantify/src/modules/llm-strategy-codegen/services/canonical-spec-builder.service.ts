@@ -32,6 +32,7 @@ import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
+import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 interface StrategyLogicSnapshotInput {
@@ -65,6 +66,7 @@ export class CanonicalSpecBuilderService {
   constructor(
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
+    private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
   ) {}
 
   build(checklist: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
@@ -494,7 +496,10 @@ export class CanonicalSpecBuilderService {
 
     const orderPrograms = this.buildContractOrderPrograms(state)
     const rules = this.filterOrderProgramShadowRules(
-      this.buildRulesFromSemanticState(state, sizing),
+      [
+        ...this.buildRulesFromSemanticState(state, sizing),
+        ...this.buildBoundaryGuardRulesFromSemanticState(state, orderPrograms),
+      ],
       orderPrograms,
     )
     const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
@@ -533,6 +538,51 @@ export class CanonicalSpecBuilderService {
     }
 
     return this.conditionContainsAtom(rule.condition, 'grid.range_rebalance')
+  }
+
+  private buildBoundaryGuardRulesFromSemanticState(
+    state: SemanticState,
+    orderPrograms: CanonicalOrderProgramIntent[],
+  ): CanonicalRuleV2[] {
+    if (orderPrograms.length === 0) {
+      return []
+    }
+
+    const hasBoundaryCancel = state.risk.some(risk =>
+      risk.status === 'locked'
+      && risk.contracts?.some(contract =>
+        contract.capabilities.some(capability =>
+          capability.domain === 'guard'
+          && capability.verb === 'enforce'
+          && capability.object === 'boundary_cancel',
+        ),
+      ),
+    )
+    if (!hasBoundaryCancel) {
+      return []
+    }
+
+    return orderPrograms.map((program, index): CanonicalRuleV2 => ({
+      id: `semantic-boundary-guard-${index + 1}`,
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 110 - index,
+      condition: {
+        kind: 'NOT',
+        children: [{
+          kind: 'atom',
+          key: 'order_program.active_range',
+          params: { programId: program.id },
+        }],
+      },
+      actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      metadata: {
+        semanticKey: 'risk.boundary_guard',
+        guard: 'boundary_cancel',
+        cancelOrders: true,
+        onBreach: 'HALT_STRATEGY',
+      },
+    }))
   }
 
   private conditionContainsAtom(condition: CanonicalRuleV2['condition'], key: string): boolean {
@@ -645,7 +695,7 @@ export class CanonicalSpecBuilderService {
     const candidates = capabilities.filter(capability =>
       capability.domain === domain
       && capability.verb === verb
-      && objects.includes(capability.object),
+          && objects.includes(capability.object),
     )
     if (candidates.length === 0) {
       return { status: 'ok', capability: null }
@@ -661,54 +711,67 @@ export class CanonicalSpecBuilderService {
     return { status: 'ok', capability: first }
   }
 
+  private normalizeLevelSetCapability(capability: SemanticCapability): SemanticCapability {
+    if (capability.domain !== 'price' || capability.verb !== 'define' || capability.object !== 'level_set') {
+      return capability
+    }
+
+    const result = this.shapeNormalizer.normalizeLevelSetShape(capability.shape)
+    return result.status === 'valid'
+      ? { ...capability, shape: result.shape }
+      : capability
+  }
+
   private projectLevelSetCapabilityKey(capability: SemanticCapability): string {
-    const mode = this.readShapeString(capability.shape, 'mode')
+    const normalizedCapability = this.normalizeLevelSetCapability(capability)
+    const mode = this.readShapeString(normalizedCapability.shape, 'mode')
     if (mode === 'centered_percent_range') {
       return this.stableProjectionKey({
         mode,
-        centerTiming: this.readShapeString(capability.shape, 'centerTiming') ?? 'deployment',
-        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
-        halfRangePct: this.readShapeNumber(capability.shape, 'halfRangePct'),
-        gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),
-        gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
-        absoluteSpacing: this.readShapeNumber(capability.shape, 'absoluteSpacing'),
-        spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
-        spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+        centerTiming: this.readShapeString(normalizedCapability.shape, 'centerTiming') ?? 'deployment',
+        centerSource: this.readShapeString(normalizedCapability.shape, 'centerSource') ?? 'last_price',
+        halfRangePct: this.readShapeNumber(normalizedCapability.shape, 'halfRangePct'),
+        gridIntervals: this.readShapeNumber(normalizedCapability.shape, 'gridIntervals'),
+        gridCount: this.readShapeNumber(normalizedCapability.shape, 'gridCount'),
+        absoluteSpacing: this.readShapeNumber(normalizedCapability.shape, 'absoluteSpacing'),
+        spacingPct: this.readShapeNumber(normalizedCapability.shape, 'spacingPct'),
+        spacingMode: this.readShapeString(normalizedCapability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
       })
     }
 
     return this.stableProjectionKey({
-      mode: 'static_range',
-      lower: this.readShapeNumber(capability.shape, 'lower'),
-      upper: this.readShapeNumber(capability.shape, 'upper'),
-      gridIntervals: this.readShapeNumber(capability.shape, 'gridIntervals'),
-      gridCount: this.readShapeNumber(capability.shape, 'gridCount'),
-      absoluteSpacing: this.readShapeNumber(capability.shape, 'absoluteSpacing'),
-      spacingPct: this.readShapeNumber(capability.shape, 'spacingPct'),
-      spacingMode: this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
+    mode: 'static_range',
+      lower: this.readShapeNumber(normalizedCapability.shape, 'lower'),
+      upper: this.readShapeNumber(normalizedCapability.shape, 'upper'),
+      gridIntervals: this.readShapeNumber(normalizedCapability.shape, 'gridIntervals'),
+      gridCount: this.readShapeNumber(normalizedCapability.shape, 'gridCount'),
+      absoluteSpacing: this.readShapeNumber(normalizedCapability.shape, 'absoluteSpacing'),
+      spacingPct: this.readShapeNumber(normalizedCapability.shape, 'spacingPct'),
+      spacingMode: this.readShapeString(normalizedCapability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic',
     })
   }
 
   private projectCanonicalOrderProgramLevelSet(
     capability: SemanticCapability,
   ): CanonicalOrderProgramIntent['levelSet'] | null {
-    const spacingMode = this.readShapeString(capability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic'
-    const gridIntervals = this.readShapeNumber(capability.shape, 'gridIntervals')
-    const gridCount = this.readShapeNumber(capability.shape, 'gridCount')
-    const absoluteSpacing = this.readShapeNumber(capability.shape, 'absoluteSpacing')
-    const spacingPct = this.readShapeNumber(capability.shape, 'spacingPct')
-    const mode = this.readShapeString(capability.shape, 'mode')
+    const normalizedCapability = this.normalizeLevelSetCapability(capability)
+    const spacingMode = this.readShapeString(normalizedCapability.shape, 'spacingMode') === 'geometric' ? 'geometric' : 'arithmetic'
+    const gridIntervals = this.readShapeNumber(normalizedCapability.shape, 'gridIntervals')
+    const gridCount = this.readShapeNumber(normalizedCapability.shape, 'gridCount')
+    const absoluteSpacing = this.readShapeNumber(normalizedCapability.shape, 'absoluteSpacing')
+    const spacingPct = this.readShapeNumber(normalizedCapability.shape, 'spacingPct')
+    const mode = this.readShapeString(normalizedCapability.shape, 'mode')
 
     if (mode === 'centered_percent_range') {
-      const halfRangePct = this.readShapeNumber(capability.shape, 'halfRangePct')
+      const halfRangePct = this.readShapeNumber(normalizedCapability.shape, 'halfRangePct')
       if (halfRangePct === null || halfRangePct <= 0) {
         return null
       }
 
       return {
         mode: 'centered_percent_range',
-        centerTiming: this.readShapeString(capability.shape, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
-        centerSource: this.readShapeString(capability.shape, 'centerSource') ?? 'last_price',
+        centerTiming: this.readShapeString(normalizedCapability.shape, 'centerTiming') === 'runtime' ? 'runtime' : 'deployment',
+        centerSource: this.readShapeString(normalizedCapability.shape, 'centerSource') ?? 'last_price',
         halfRangePct,
         ...(gridIntervals !== null ? { gridIntervals } : {}),
         ...(gridCount !== null ? { gridCount } : {}),
@@ -718,8 +781,8 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    const lower = this.readShapeNumber(capability.shape, 'lower')
-    const upper = this.readShapeNumber(capability.shape, 'upper')
+    const lower = this.readShapeNumber(normalizedCapability.shape, 'lower')
+    const upper = this.readShapeNumber(normalizedCapability.shape, 'upper')
     if (lower === null || upper === null || upper <= lower) {
       return null
     }

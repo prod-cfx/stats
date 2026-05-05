@@ -134,11 +134,13 @@ function withFiniteDensityFields(
   shape: SemanticCapabilityShape,
 ): SemanticCapabilityShape {
   const gridCount = readShapeNumber(input, 'gridCount')
+  const gridIntervals = readShapeNumber(input, 'gridIntervals')
   const absoluteSpacing = readShapeNumber(input, 'absoluteSpacing')
   const spacingPct = readShapeNumber(input, 'spacingPct')
 
   return {
     ...shape,
+    ...(gridIntervals !== null ? { gridIntervals } : {}),
     ...(gridCount !== null ? { gridCount } : {}),
     ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
     ...(spacingPct !== null ? { spacingPct } : {}),
