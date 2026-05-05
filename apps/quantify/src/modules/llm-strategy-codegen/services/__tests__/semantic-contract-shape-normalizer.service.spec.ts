@@ -104,4 +104,24 @@ describe('SemanticContractShapeNormalizerService', () => {
       }),
     ])
   })
+
+  it('reports a spacing conflict when grid count and percent spacing disagree', () => {
+    const result = service.normalizeLevelSetShape({
+      lower: 100,
+      upper: 110,
+      gridCount: 20,
+      spacingPct: 0.5,
+    })
+
+    expect(result.status).toBe('conflict')
+    expect(result.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        status: 'open',
+        priority: 'core',
+        affectsExecution: true,
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+      }),
+    ])
+  })
 })

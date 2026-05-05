@@ -154,11 +154,22 @@ function withFiniteDensityFields(
 function hasSpacingConflict(shape: SemanticCapabilityShape, lower: number, upper: number): boolean {
   const gridCount = readShapeNumber(shape, 'gridCount')
   const absoluteSpacing = readShapeNumber(shape, 'absoluteSpacing')
-  if (gridCount === null || absoluteSpacing === null || gridCount <= 1) {
+  const spacingPct = readShapeNumber(shape, 'spacingPct')
+  if (gridCount === null || gridCount <= 1) {
     return false
   }
 
-  return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
+  if (absoluteSpacing !== null) {
+    return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
+  }
+
+  if (spacingPct === null || lower <= 0) {
+    return false
+  }
+
+  const expectedSpacingPct = (Math.pow(upper / lower, 1 / (gridCount - 1)) - 1) * 100
+
+  return Math.abs(expectedSpacingPct - spacingPct) > SPACING_CONFLICT_TOLERANCE
 }
 
 function resolveHalfRangePct(shape: SemanticCapabilityShape): number | null {
