@@ -108,6 +108,7 @@ import {
 } from './inferred-confirmation-classifier.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
+import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 interface GenerationOptions {
@@ -218,6 +219,7 @@ export class CodegenConversationService {
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+    private readonly semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService = new SemanticOpenSlotAnswerResolverService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
@@ -1310,6 +1312,21 @@ export class CodegenConversationService {
       effectiveClarificationAnswers,
     )
     const baseConstraintPack = this.readConstraintPack(session.constraintPack)
+    const openSlotAnswer = this.semanticOpenSlotAnswerResolver.resolve({
+      currentState: rawSemanticStateAfterAnswers,
+      message: dto.message,
+      clarificationState: activeClarificationState,
+    })
+    if (openSlotAnswer.consumed) {
+      return this.continueWithResolvedSemanticOpenSlotAnswer({
+        session,
+        semanticState: openSlotAnswer.nextState,
+        message: dto.message,
+        userId: sessionUserId,
+        constraintPack: baseConstraintPack,
+        guideConfig: dto.guideConfig,
+      })
+    }
     const preReadinessSupportGateResponse = await this.handleSemanticSupportGateForExistingSession({
       session,
       semanticState: rawSemanticStateAfterAnswers,
@@ -1581,6 +1598,119 @@ export class CodegenConversationService {
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+  }
+
+  private async continueWithResolvedSemanticOpenSlotAnswer(args: {
+    session: PersistedConversationSessionForContinue
+    semanticState: SemanticState
+    message: string
+    userId: string
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+    guideConfig?: CodegenGuideConfigDto
+  }): Promise<CodegenSessionResponseDto> {
+    const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+      args.message,
+      args.semanticState,
+      args.constraintPack.recommendationStyle,
+    )
+    const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
+      session: args.session,
+      semanticState: args.semanticState,
+      message: args.message,
+      userId: args.userId,
+      constraintPack: args.constraintPack,
+      guidePrompt,
+      recommendationStyle,
+    })
+    if (supportGateResponse.response) {
+      return supportGateResponse.response
+    }
+
+    const semanticStateAfterSupport = this.normalizeSemanticContractReadiness(supportGateResponse.semanticState)
+    const logicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticStateAfterSupport, {})
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, logicSnapshot, {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterSupport.position),
+      }),
+    )
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const clarificationState = semanticArtifacts.clarificationState
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const nextConstraintPack = this.withGuidePrompt(args.constraintPack, guidePrompt, recommendationStyle)
+    const decision = this.buildStrategyDecision({
+      checklist: this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {}),
+      semanticState: reducedSemanticState,
+      clarification: semanticArtifacts,
+      effectiveBlockingReasons: semanticArtifacts.blockingReasons,
+      constraintPack: nextConstraintPack,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : semanticArtifacts.clarificationPrompt
+    const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+      semanticState: reducedSemanticState,
+      clarificationState,
+      normalization,
+      decisionKind: decision.kind,
+      semanticReadyForGenerate,
+    })
+    const assistantPrompt = deterministicAuthority === 'clarification'
+      ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+      : deterministicAuthority === 'decision'
+        ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+        : deterministicAuthority === 'normalization'
+          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+          : deterministicAuthority === 'confirm_gate'
+            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
+            : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
+    const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+    const historyAfterOpenSlotAnswer = this.appendConversationHistory(
+      args.constraintPack.conversationHistory ?? [],
+      args.message,
+      assistantPrompt,
+    )
+    const terminalPlannerEditArtifactReset = this.stateMachine.isTerminalStatus(args.session.status)
+      ? this.buildSemanticEditArtifactReset(reducedSemanticState)
+      : {}
+
+    await this.sessionsRepo.updateSession(args.session.id, {
+      ...this.stateMachine.buildConversationUpdate({
+        status: targetStatus,
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterOpenSlotAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }),
+      ...terminalPlannerEditArtifactReset,
+    } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+
+    const response = this.finalizeSessionResponse({
+      id: args.session.id,
+      status: targetStatus,
+      missingFields: [],
+      ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'decision'
+        ? {
+            specDesc,
+            canonicalDigest,
+          }
+        : {}),
+      ...(deterministicAuthority === 'normalization' ? { specDesc } : {}),
+      assistantPrompt,
+      clarificationState,
+    })
+    return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
   }
 
   private async handleUserSubmittedScriptCode(

@@ -33,6 +33,7 @@ import { SemanticAtomRegistryService } from './services/semantic-atom-registry.s
 import { SemanticClarificationQuestionRendererService } from './services/semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
+import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
@@ -104,6 +105,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticAtomRegistryService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
+    SemanticOpenSlotAnswerResolverService,
     SemanticSupportClassifierService,
     UnsupportedFallbackService,
   ],
