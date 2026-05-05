@@ -85,22 +85,22 @@ export class SemanticSupportClassifierService {
       position,
     }
 
+    if (unknownAtoms.length > 0) {
+      return {
+        route: 'unknown_unsupported',
+        state: nextState,
+        unsupportedAtoms,
+        unknownAtoms,
+        openSlots: [],
+      }
+    }
+
     if (unsupportedAtoms.length > 0) {
       return {
         route: 'unsupported_fallback',
         state: nextState,
         unsupportedAtoms,
         unknownAtoms: [],
-        openSlots: [],
-      }
-    }
-
-    if (unknownAtoms.length > 0) {
-      return {
-        route: 'unknown_unsupported',
-        state: nextState,
-        unsupportedAtoms: [],
-        unknownAtoms,
         openSlots: [],
       }
     }

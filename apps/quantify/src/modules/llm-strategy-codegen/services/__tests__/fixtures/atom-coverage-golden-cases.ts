@@ -284,6 +284,12 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unknown_unsupported',
   },
   {
+    name: 'combo recognized unsupported plus unknown keeps unknown precedence',
+    message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时成交量放大，并参考 KOL 口令强弱决定是否交易，单笔 10%。',
+    expectedKeys: ['indicator.cross_over', 'volume.spike', 'external.signal', 'unsupported:volume.spike', 'unknown:external.signal'],
+    expectedRoute: 'unknown_unsupported',
+  },
+  {
     name: 'supported market regime trend direction',
     message: 'OKX 合约 BTCUSDT 1h，趋势向上时开多，趋势转弱时平多，单笔 10%，止损 5%。',
     expectedKeys: ['trend.direction', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],

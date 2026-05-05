@@ -201,6 +201,39 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.openSlots).toEqual([])
   })
 
+  it('keeps unknown atom precedence when mixed with recognized unsupported atoms', () => {
+    const result = service.classify(baseState({
+      triggers: [
+        {
+          id: 'volume',
+          key: 'volume.spike',
+          phase: 'entry',
+          params: { multiplier: 2 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'unknown',
+          key: 'external.signal',
+          phase: 'entry',
+          params: {},
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }))
+
+    expect(result.route).toBe('unknown_unsupported')
+    expect(result.unknownAtoms).toEqual(['external.signal'])
+    expect(result.unsupportedAtoms).toEqual([
+      expect.objectContaining({ key: 'volume.spike' }),
+    ])
+    expect(result.openSlots).toEqual([])
+  })
+
   it('routes supported atom combinations with existing open slots to clarification', () => {
     const slot = {
       slotKey: 'indicator.fastPeriod',
