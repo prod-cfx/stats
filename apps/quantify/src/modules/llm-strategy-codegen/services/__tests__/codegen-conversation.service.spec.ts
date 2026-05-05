@@ -12806,6 +12806,112 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-density' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 上用 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，单笔 10%',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-bidirectional-grid-density',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-bidirectional-grid-density', {
+      userId: 'u1',
+      message: '10格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
+  it('keeps bidirectional fixed grid spacing-conflict answers out of generic contract-required prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-spacing-conflict' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，每格间距 0.1%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量和每格间距')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-bidirectional-grid-spacing-conflict',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-bidirectional-grid-spacing-conflict', {
+      userId: 'u1',
+      message: '每格间距',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.spacing_conflict' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ spacingPct: 0.1 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
   it('preserves a complete real-grid seed when the user only answers the missing timeframe slot', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({

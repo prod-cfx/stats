@@ -106,6 +106,9 @@ function parseLevelSetSpacingConflictAnswer(message: string): LevelSetSpacingCon
   if (/保留|按|用|使用|选择|选/u.test(text) && /每格|间距|步长/u.test(text)) {
     return { resolveConflictBy: 'spacing' }
   }
+  if (/^(?:每格间距|每格|间距|步长)$/u.test(text)) {
+    return { resolveConflictBy: 'spacing' }
+  }
 
   return null
 }

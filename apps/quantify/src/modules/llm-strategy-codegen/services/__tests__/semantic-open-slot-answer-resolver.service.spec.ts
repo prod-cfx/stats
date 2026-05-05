@@ -442,6 +442,45 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     }))
   })
 
+  it('resolves spacing conflict from a bare spacing choice answer', () => {
+    const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: {
+          lower: 79200,
+          upper: 80200,
+          gridCount: 20,
+          absoluteSpacing: 100,
+          spacingMode: 'arithmetic',
+        },
+        openSlots: [conflictSlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '每格间距',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: conflictSlot.slotKey,
+          fieldPath: conflictSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
+    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      absoluteSpacing: 100,
+    }))
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+  })
+
   it('resolves percent spacing conflict by keeping the spacing', () => {
     const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
     const state = createSemanticState({
