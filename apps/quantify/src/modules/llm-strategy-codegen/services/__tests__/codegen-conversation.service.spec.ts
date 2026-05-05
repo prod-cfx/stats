@@ -1366,7 +1366,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect((result as { unsupportedFallback?: unknown }).unsupportedFallback).toEqual(expect.objectContaining({
       status: 'pending',
       recommendedStrategy: expect.objectContaining({
-        strategyKey: 'price_breakout_with_fixed_risk',
+        strategyKey: 'ma_cross_with_fixed_risk',
       }),
     }))
     expect(createPayload).toEqual(expect.objectContaining({
@@ -1377,7 +1377,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(semanticState.unsupportedFallback).toEqual(expect.objectContaining({
       status: 'pending',
       recommendedStrategy: expect.objectContaining({
-        strategyKey: 'price_breakout_with_fixed_risk',
+        strategyKey: 'ma_cross_with_fixed_risk',
       }),
     }))
     expect(semanticState.triggers).toEqual(expect.arrayContaining([
@@ -1534,7 +1534,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           status: 'pending',
           prompt: '当前公测暂未支持 ATR 止损，是否改用这个策略继续？',
           recommendedStrategy: {
-            strategyKey: 'price_breakout_with_fixed_risk',
+            strategyKey: 'ma_cross_with_fixed_risk',
             description: '价格突破后用固定比例止损止盈',
           },
         },
@@ -1554,7 +1554,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'pending',
       prompt: expect.stringContaining('ATR'),
       recommendedStrategy: expect.objectContaining({
-        strategyKey: 'price_breakout_with_fixed_risk',
+        strategyKey: 'ma_cross_with_fixed_risk',
       }),
     }))
     expect((result as any).clarificationGate).toEqual(expect.objectContaining({

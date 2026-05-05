@@ -70,7 +70,7 @@ const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
 }
 
 const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {
-  strategyKey: 'price_breakout_with_fixed_risk',
+  strategyKey: 'ma_cross_with_fixed_risk',
   description: 'MA20 上穿 MA50 开多，MA20 下穿 MA50 平仓，5% 止损，10% 止盈，单笔 10% 仓位。',
   patch: DEFAULT_REPLACEMENT_PATCH,
 }

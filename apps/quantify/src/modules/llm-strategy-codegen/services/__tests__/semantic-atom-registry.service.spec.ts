@@ -27,7 +27,7 @@ describe('SemanticAtomRegistryService', () => {
         reasonCode: 'volume_condition_public_beta_unsupported',
       },
       replacement: {
-        strategyKey: 'price_breakout_with_fixed_risk',
+        strategyKey: 'ma_cross_with_fixed_risk',
       },
     })
     expect(service.get('risk.atr_stop')).toMatchObject({
