@@ -239,14 +239,29 @@ export class GridRuntimeService {
   }
 
   private resolveLevelSetPricePointCount(levelSet: Record<string, unknown> | null): number | null {
-    const levelsPerSide = this.readRecord(levelSet?.levelsPerSide)
-    const downLevels = this.readNumber(levelsPerSide, 'down')
-    const upLevels = this.readNumber(levelsPerSide, 'up')
-    if (downLevels === null || upLevels === null || downLevels < 0 || upLevels < 0) {
+    if (!levelSet || !('levelsPerSide' in levelSet)) {
       return null
     }
 
-    return Math.floor(downLevels) + Math.floor(upLevels) + 1
+    const levelsPerSide = this.readRecord(levelSet?.levelsPerSide)
+    if (!levelsPerSide) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
+    }
+
+    const downLevels = this.readNumber(levelsPerSide, 'down')
+    const upLevels = this.readNumber(levelsPerSide, 'up')
+    if (
+      downLevels === null
+      || upLevels === null
+      || !Number.isInteger(downLevels)
+      || !Number.isInteger(upLevels)
+      || downLevels < 0
+      || upLevels < 0
+    ) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
+    }
+
+    return downLevels + upLevels + 1
   }
 
   private evaluateLevelSet(

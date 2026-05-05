@@ -288,6 +288,27 @@ describe('GridRuntimeService', () => {
     expect(created?.levels.map((level: { price: string }) => level.price)).toContain('100')
   })
 
+  it('rejects invalid level-set side counts instead of falling back to maxWorkingOrders', async () => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-invalid-levels-1' }) }
+    const astSnapshot = createAstSnapshot()
+    astSnapshot.exprPool[0]!.payload.levelsPerSide = { down: 1.5, up: 2 }
+    const { service, planner } = createService(repository)
+
+    await expect(service.createFromDeployment({
+      strategyInstanceId: 'strategy-invalid-levels-1',
+      publishedSnapshotId: 'snapshot-invalid-levels-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      astSnapshot,
+      currentPrice: '100',
+    })).rejects.toThrow('grid_runtime_invalid_order_program')
+    expect(planner.planInitialOrders).not.toHaveBeenCalled()
+    expect(repository.createInstanceWithPlan).not.toHaveBeenCalled()
+  })
+
   it('creates a perpetual neutral grid runtime plan from pct-equity order programs', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-perp-1' }) }
     const tradingService = createTradingService()
