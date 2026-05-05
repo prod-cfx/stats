@@ -1,4 +1,4 @@
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedInstrumentConstraints, UnifiedOrder, UnifiedOrderFill } from '@/modules/trading/core/types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class
 import { TradingService } from '@/modules/trading/trading.service'
 import { PositionSide, TradeSide } from '@ai/shared'
@@ -36,6 +36,7 @@ interface RuntimeInstance {
   exchangeId: string
   marketType: string
   symbol: string
+  status?: string
   configSnapshot: unknown
   levels: RuntimeLevel[]
 }
@@ -55,10 +56,29 @@ interface RuntimeOrder {
   status: string
 }
 
+interface RetryableRateLimitInput {
+  instance: RuntimeInstance
+  order?: RuntimeOrder
+  clientOrderId?: string | null
+  exchangeId: ExchangeId
+  marketType: MarketType
+  reason: string
+  error: unknown
+}
+
 interface RecordedGridFill {
   id: string
   exchangeFillId: string | null
   tradeId: string | null
+}
+
+interface GridSyncMismatch {
+  reason: string
+  gridOrderId: string
+  clientOrderId: string | null
+  exchangeOrderId: string
+  local: JsonLike
+  exchange: JsonLike
 }
 
 type JsonLike = string | number | boolean | null | JsonLike[] | { [key: string]: JsonLike }
@@ -69,6 +89,10 @@ const LOCAL_STATUSES_WITH_POSSIBLE_LIVE_EXCHANGE_ORDER = new Set<string>([
   'PARTIALLY_FILLED',
   'CANCELING',
 ])
+
+const GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE: Partial<Record<ExchangeId, number>> = {
+  okx: 3,
+}
 
 @Injectable()
 export class GridOrderSyncService {
@@ -90,24 +114,32 @@ export class GridOrderSyncService {
 
     const exchangeId = instance.exchangeId as ExchangeId
     const marketType = instance.marketType as MarketType
-    const openOrdersBeforeSubmit = await this.tradingService.getOpenOrders(
-      instance.userId,
-      exchangeId,
-      marketType,
-      instance.symbol,
-      instance.exchangeAccountId,
-    )
-    if (await this.stopForBoundaryBreak(instance, config, orders, openOrdersBeforeSubmit)) return
+    const strategyControlsEnabled = instance.status !== 'RECONCILE_REQUIRED'
+    if (strategyControlsEnabled) {
+      const openOrdersBeforeSubmit = await this.tradingService.getOpenOrders(
+        instance.userId,
+        exchangeId,
+        marketType,
+        instance.symbol,
+        instance.exchangeAccountId,
+      )
+      if (await this.stopForBoundaryBreak(instance, config, orders, openOrdersBeforeSubmit)) return
+    }
+
+    const openOrdersTask = strategyControlsEnabled
+      ? this.submitPlannedOrders(instance, orders, exchangeId, marketType).then(() =>
+          this.tradingService.getOpenOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
+        )
+      : this.tradingService.getOpenOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId)
 
     const [openOrders, closedOrders] = await Promise.all([
-      this.submitPlannedOrders(instance, orders, exchangeId, marketType).then(() =>
-        this.tradingService.getOpenOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
-      ),
+      openOrdersTask,
       this.tradingService.getClosedOrders(instance.userId, exchangeId, marketType, instance.symbol, instance.exchangeAccountId),
     ])
 
     await this.txEvents.withAfterCommit(async () => {
       const exchangeOrdersByClientId = this.indexExchangeOrders([...openOrders, ...closedOrders])
+      const mismatches: GridSyncMismatch[] = []
       for (const order of orders) {
         if (!order.clientOrderId) continue
 
@@ -115,8 +147,8 @@ export class GridOrderSyncService {
         if (!exchangeOrder) continue
 
         if (!this.matchesLocalOrder(order, exchangeOrder, instance)) {
-          await this.stateMachine.markReconcileRequired(instance.id, 'exchange_mismatch')
-          return
+          mismatches.push(this.buildOrderMismatch(order, exchangeOrder))
+          continue
         }
 
         await this.repository.updateOrderFromExchange({
@@ -129,8 +161,16 @@ export class GridOrderSyncService {
         })
 
         if (this.shouldRecordTerminalFill(exchangeOrder)) {
-          await this.recordFillAndPlanInverse(instance, config, order, exchangeOrder)
+          const shouldPlanInverse = this.canPlanInverseOrders(instance)
+          await this.recordOrderFillsAndPlanInverse(instance, config, order, exchangeOrder, shouldPlanInverse)
         }
+      }
+
+      if (mismatches.length > 0) {
+        await this.stateMachine.markReconcileRequired(instance.id, 'exchange_mismatch', this.toJsonValue({
+          source: 'grid_order_sync',
+          mismatches,
+        }))
       }
 
       await this.repository.updateInstanceLastSyncAt(instance.id)
@@ -190,10 +230,32 @@ export class GridOrderSyncService {
     marketType: MarketType,
   ): Promise<void> {
     const plannedOrders = this.filterSubmittablePlannedOrders(orders)
+    if (plannedOrders.length === 0) return
+
+    const submissionLimit = this.resolveSubmissionLimit(exchangeId)
+    const constraints = await this.loadSubmissionConstraints(instance, exchangeId, marketType)
+    if (!constraints) return
+
+    let submittedOrderCount = 0
     for (const order of plannedOrders) {
+      if (submissionLimit != null && submittedOrderCount >= submissionLimit) break
+
       const intent = this.buildOrderIntent(instance, exchangeId, marketType, order)
-      const prepared = await this.tradingExecution.prepareIntent(intent)
+      const prepared = await this.tradingExecution.prepareIntent(intent, { constraints })
       if (prepared.status !== 'prepared') {
+        const error = 'error' in prepared ? prepared.error : null
+        if (this.isRetryableRateLimitFailure(exchangeId, error, prepared.reason)) {
+          await this.handleRetryableRateLimit({
+            instance,
+            order,
+            clientOrderId: null,
+            exchangeId,
+            marketType,
+            reason: prepared.reason,
+            error,
+          })
+          return
+        }
         await this.txEvents.withAfterCommit(async () =>
           this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
             orderId: order.id,
@@ -245,6 +307,19 @@ export class GridOrderSyncService {
       }
 
       if (submitted.status !== 'submitted') {
+        const error = 'error' in submitted ? submitted.error : null
+        if (this.isRetryableRateLimitFailure(exchangeId, error, submitted.reason)) {
+          await this.handleRetryableRateLimit({
+            instance,
+            order,
+            clientOrderId,
+            exchangeId,
+            marketType,
+            reason: submitted.reason,
+            error,
+          })
+          return
+        }
         await this.txEvents.withAfterCommit(async () =>
           this.stateMachine.markReconcileRequired(instance.id, 'order_submit_failed', {
             orderId: order.id,
@@ -271,7 +346,10 @@ export class GridOrderSyncService {
           rawPayload: this.executionPayload(submitted),
         })
       })
-      if (markedOpen) continue
+      if (markedOpen) {
+        submittedOrderCount += 1
+        continue
+      }
 
       try {
         await this.tradingService.cancelOrder(
@@ -293,6 +371,149 @@ export class GridOrderSyncService {
 
   private filterSubmittablePlannedOrders(orders: RuntimeOrder[]): RuntimeOrder[] {
     return orders.filter(order => order.status === 'PLANNED')
+  }
+
+  private resolveSubmissionLimit(exchangeId: ExchangeId): number | null {
+    return GRID_ORDER_SUBMISSIONS_PER_SYNC_BY_EXCHANGE[exchangeId] ?? null
+  }
+
+  private async loadSubmissionConstraints(
+    instance: RuntimeInstance,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+  ): Promise<UnifiedInstrumentConstraints | null> {
+    try {
+      return await this.tradingService.getInstrumentConstraints(
+        instance.userId,
+        exchangeId,
+        marketType,
+        instance.symbol,
+        instance.exchangeAccountId,
+      )
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      if (this.isRetryableRateLimitFailure(exchangeId, error, reason)) {
+        await this.handleRetryableRateLimit({
+          instance,
+          exchangeId,
+          marketType,
+          reason,
+          error,
+        })
+        return null
+      }
+      await this.txEvents.withAfterCommit(async () =>
+        this.stateMachine.markReconcileRequired(instance.id, 'order_constraints_unavailable', {
+          exchangeId,
+          marketType,
+          symbol: instance.symbol,
+          error: this.serializeError(error),
+        }))
+      return null
+    }
+  }
+
+  private isRetryableRateLimitFailure(exchangeId: ExchangeId, error: unknown, reason?: string): boolean {
+    if (exchangeId !== 'okx') return false
+
+    const candidates = [
+      reason,
+      error instanceof Error ? error.message : null,
+      this.getErrorText(error, 'code'),
+      this.getErrorText(error, 'name'),
+      this.getNestedErrorText(error, ['args', 'reason']),
+      this.getNestedErrorText(error, ['args', 'code']),
+      this.getNestedErrorText(error, ['response', 'args', 'reason']),
+      this.getNestedErrorText(error, ['response', 'args', 'code']),
+      this.getHttpResponseText(error, ['args', 'reason']),
+      this.getHttpResponseText(error, ['args', 'code']),
+    ].filter((value): value is string => typeof value === 'string' && value.length > 0)
+
+    return candidates.some((value) => {
+      const normalized = value.toLowerCase()
+      const compact = normalized.replace(/[^a-z0-9]/g, '')
+      return normalized.includes('50011')
+        || normalized.includes('too many requests')
+        || normalized.includes('rate limit')
+        || compact.includes('ratelimit')
+    })
+  }
+
+  private getErrorText(error: unknown, key: string): string | null {
+    if (typeof error !== 'object' || error === null || !(key in error)) return null
+    const value = (error as Record<string, unknown>)[key]
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return null
+  }
+
+  private getNestedErrorText(error: unknown, path: string[]): string | null {
+    const value = this.readNestedValue(error, path)
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return null
+  }
+
+  private getHttpResponseText(error: unknown, path: string[]): string | null {
+    if (typeof error !== 'object' || error === null || !('getResponse' in error)) return null
+    const getResponse = (error as { getResponse?: unknown }).getResponse
+    if (typeof getResponse !== 'function') return null
+    const value = this.readNestedValue(getResponse.call(error), path)
+    if (typeof value === 'string' || typeof value === 'number') return String(value)
+    return null
+  }
+
+  private readNestedValue(source: unknown, path: string[]): unknown {
+    let current = source
+    for (const key of path) {
+      if (typeof current !== 'object' || current === null || !(key in current)) return null
+      current = (current as Record<string, unknown>)[key]
+    }
+    return current
+  }
+
+  private async handleRetryableRateLimit(input: RetryableRateLimitInput): Promise<boolean> {
+    const serializedError = input.error == null ? null : this.serializeError(input.error)
+    const payloadInput = {
+      source: 'grid_order_sync',
+      orderId: input.order?.id ?? null,
+      clientOrderId: input.clientOrderId ?? null,
+      status: 'rate_limited',
+      exchangeId: input.exchangeId,
+      marketType: input.marketType,
+      symbol: input.instance.symbol,
+      reason: input.reason,
+      error: serializedError,
+      execution: {
+        status: 'rate_limited',
+        clientOrderId: input.clientOrderId ?? null,
+        reason: input.reason,
+        error: serializedError,
+      },
+    }
+    const payload = this.toJsonValue(payloadInput)
+
+    if (input.order && input.clientOrderId) {
+      const order = input.order
+      const restored = await this.txEvents.withAfterCommit(async () =>
+        this.repository.markOrderPlanned({
+          id: order.id,
+          rawPayload: payload,
+        }))
+      if (!restored) {
+        await this.txEvents.withAfterCommit(async () =>
+          this.stateMachine.markReconcileRequired(input.instance.id, 'order_rate_limit_restore_state_race', payload))
+        return false
+      }
+    }
+    await this.txEvents.withAfterCommit(async () =>
+      this.repository.appendEvent({
+        gridRuntimeInstanceId: input.instance.id,
+        eventType: 'runtime_rate_limited',
+        severity: 'warn',
+        status: 'RUNNING',
+        message: input.reason,
+        payload,
+      }))
+    return true
   }
 
   private buildOrderIntent(
@@ -407,28 +628,44 @@ export class GridOrderSyncService {
     })
   }
 
+  private async recordOrderFillsAndPlanInverse(
+    instance: RuntimeInstance,
+    config: GridRuntimeConfigSnapshot,
+    order: RuntimeOrder,
+    exchangeOrder: UnifiedOrder,
+    shouldPlanInverse: boolean,
+  ): Promise<void> {
+    const fills = await this.loadExchangeFills(instance, order, exchangeOrder)
+    for (const fill of fills) {
+      await this.recordFillAndPlanInverse(instance, config, order, exchangeOrder, fill, shouldPlanInverse)
+    }
+  }
+
   private async recordFillAndPlanInverse(
     instance: RuntimeInstance,
     config: GridRuntimeConfigSnapshot,
     order: RuntimeOrder,
     exchangeOrder: UnifiedOrder,
+    fill: UnifiedOrderFill,
+    shouldPlanInverse: boolean,
   ): Promise<void> {
-    const exchangeFillId = this.extractExchangeFillId(exchangeOrder)
+    const exchangeFillId = fill.id
     const recorded = await this.repository.recordFillOnce({
       gridRuntimeInstanceId: instance.id,
       gridOrderId: order.id,
       exchangeFillId,
-      tradeId: this.getRawString(exchangeOrder.raw, 'tradeId'),
+      tradeId: fill.tradeId ?? null,
       side: order.side as GridOrderSide,
-      price: exchangeOrder.price == null ? this.decimalToString(order.price) : String(exchangeOrder.price),
-      quantity: String(exchangeOrder.filled),
-      ...this.extractOrderFee(exchangeOrder),
-      filledAt: new Date(exchangeOrder.updatedAt ?? exchangeOrder.createdAt),
-      rawPayload: this.toJsonValue(exchangeOrder.raw),
+      price: String(fill.price),
+      quantity: String(fill.amount),
+      fee: fill.fee == null ? null : String(fill.fee),
+      feeCurrency: fill.feeCurrency ?? null,
+      filledAt: new Date(fill.executedAt),
+      rawPayload: this.toJsonValue(fill.raw),
     })
-    const mirrored = await this.mirrorFillToStrategyLedger(instance, order, exchangeOrder, recorded.fill as RecordedGridFill, exchangeFillId)
+    const mirrored = await this.mirrorFillToStrategyLedger(instance, order, exchangeOrder, fill, recorded.fill as RecordedGridFill, exchangeFillId)
     if (!mirrored) return
-    if (!recorded.newlyRecorded) return
+    if (!recorded.newlyRecorded || !shouldPlanInverse) return
 
     const level = this.findInverseLevel(instance, order)
     if (!level) {
@@ -445,15 +682,53 @@ export class GridOrderSyncService {
       orderType: config.orderType,
       timeInForce: config.timeInForce,
       price: this.decimalToString(level.price),
-      quantity: String(exchangeOrder.filled),
+      quantity: String(fill.amount),
       rawPayload: { source: 'grid_order_sync', pairedFromOrderId: order.id },
     })
+  }
+
+  private async loadExchangeFills(
+    instance: RuntimeInstance,
+    order: RuntimeOrder,
+    exchangeOrder: UnifiedOrder,
+  ): Promise<UnifiedOrderFill[]> {
+    const fills = await this.tradingService.getOrderFills(
+      instance.userId,
+      instance.exchangeId as ExchangeId,
+      instance.marketType as MarketType,
+      {
+        symbol: instance.symbol,
+        orderId: exchangeOrder.id,
+        clientOrderId: order.clientOrderId ?? undefined,
+      },
+      instance.exchangeAccountId,
+    )
+    if (fills.length > 0) return fills
+
+    const fee = this.extractOrderFee(exchangeOrder)
+    const parsedFee = fee.fee == null ? undefined : Number(fee.fee)
+    return [{
+      id: this.extractExchangeFillId(exchangeOrder),
+      tradeId: this.getRawString(exchangeOrder.raw, 'tradeId') ?? undefined,
+      orderId: exchangeOrder.id,
+      clientOrderId: exchangeOrder.clientOrderId,
+      symbol: exchangeOrder.symbol,
+      marketType: exchangeOrder.marketType,
+      side: exchangeOrder.side,
+      price: exchangeOrder.price ?? Number(this.decimalToString(order.price)),
+      amount: exchangeOrder.filled,
+      fee: Number.isFinite(parsedFee) ? parsedFee : undefined,
+      feeCurrency: fee.feeCurrency ?? undefined,
+      executedAt: exchangeOrder.updatedAt ?? exchangeOrder.createdAt,
+      raw: exchangeOrder.raw,
+    }]
   }
 
   private async mirrorFillToStrategyLedger(
     instance: RuntimeInstance,
     order: RuntimeOrder,
     exchangeOrder: UnifiedOrder,
+    exchangeFill: UnifiedOrderFill,
     fill: RecordedGridFill,
     exchangeFillId: string,
   ): Promise<boolean> {
@@ -470,7 +745,6 @@ export class GridOrderSyncService {
     const existingTrade = await this.repository.findTradeByExternalTradeId(account.id, externalTradeId)
     if (existingTrade) return true
 
-    const fee = this.extractOrderFee(exchangeOrder)
     try {
       await this.positionsService.recordTrade({
         userStrategyAccountId: account.id,
@@ -478,14 +752,14 @@ export class GridOrderSyncService {
         market: `${instance.exchangeId}:${instance.marketType}`,
         side: order.side === 'buy' ? TradeSide.BUY : TradeSide.SELL,
         positionSide: this.resolvePositionSide(instance, order),
-        price: exchangeOrder.price == null ? this.decimalToString(order.price) : String(exchangeOrder.price),
-        quantity: String(exchangeOrder.filled),
-        fee: fee.fee ?? '0',
-        feeCurrency: fee.feeCurrency ?? undefined,
+        price: String(exchangeFill.price),
+        quantity: String(exchangeFill.amount),
+        fee: exchangeFill.fee == null ? '0' : String(exchangeFill.fee),
+        feeCurrency: exchangeFill.feeCurrency ?? undefined,
         orderId: exchangeOrder.id,
         externalTradeId,
         provider: instance.exchangeId,
-        executedAt: new Date(exchangeOrder.updatedAt ?? exchangeOrder.createdAt).toISOString(),
+        executedAt: new Date(exchangeFill.executedAt).toISOString(),
         metadata: {
           source: 'grid-runtime',
           gridRuntimeInstanceId: instance.id,
@@ -530,6 +804,10 @@ export class GridOrderSyncService {
     return exchangeOrder.filled > 0 && (exchangeOrder.status === 'closed' || exchangeOrder.status === 'canceled')
   }
 
+  private canPlanInverseOrders(instance: RuntimeInstance): boolean {
+    return instance.status == null || instance.status === 'INITIALIZING' || instance.status === 'RUNNING'
+  }
+
   private indexExchangeOrders(orders: UnifiedOrder[]): Map<string, UnifiedOrder> {
     const result = new Map<string, UnifiedOrder>()
     for (const order of orders) {
@@ -548,6 +826,29 @@ export class GridOrderSyncService {
       && this.decimalEquals(exchangeOrder.price, order.price)
       && this.decimalEquals(exchangeOrder.amount, order.quantity)
     )
+  }
+
+  private buildOrderMismatch(order: RuntimeOrder, exchangeOrder: UnifiedOrder): GridSyncMismatch {
+    return {
+      reason: 'order_contract_mismatch',
+      gridOrderId: order.id,
+      clientOrderId: order.clientOrderId,
+      exchangeOrderId: exchangeOrder.id,
+      local: this.toJsonCompatible({
+        side: order.side,
+        type: order.orderType,
+        price: this.decimalToString(order.price),
+        quantity: this.decimalToString(order.quantity),
+      }),
+      exchange: this.toJsonCompatible({
+        side: exchangeOrder.side,
+        type: exchangeOrder.type,
+        price: exchangeOrder.price,
+        amount: exchangeOrder.amount,
+        filled: exchangeOrder.filled,
+        status: exchangeOrder.status,
+      }),
+    }
   }
 
   private normalizeSymbol(symbol: string): string {

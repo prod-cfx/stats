@@ -52,6 +52,7 @@ interface CompileContext {
   seriesMap: Map<string, SeriesDef>
   levelSetMap: Map<string, LevelSetDef>
   predicateMap: Map<string, PredicateDef>
+  orderProgramActivePredicateMap: Map<string, string>
   movingAverage: {
     kind: 'EMA' | 'SMA'
     fast: number
@@ -120,6 +121,7 @@ export class CanonicalSpecV2IrCompilerService {
       seriesMap,
       levelSetMap,
       predicateMap,
+      orderProgramActivePredicateMap: new Map(),
       movingAverage: this.resolveMovingAverageConfig(input.canonicalSpec),
       rsi: this.resolveRsiConfig(input.canonicalSpec),
       macd: this.resolveMacdConfig(input.canonicalSpec),
@@ -133,9 +135,9 @@ export class CanonicalSpecV2IrCompilerService {
     const guards: RiskGuard[] = []
 
     for (const rule of input.canonicalSpec.rules) {
-      const guard = this.tryCompileRiskGuard(rule, context)
-      if (guard) {
-        guards.push(guard)
+      const compiledGuards = this.tryCompileRiskGuards(rule, context)
+      if (compiledGuards.length > 0) {
+        guards.push(...compiledGuards)
         continue
       }
 
@@ -242,9 +244,12 @@ export class CanonicalSpecV2IrCompilerService {
     return intents.map(intent => {
       const levelCount = this.resolveIntentLevelCount(intent)
       const levelSetRefs = this.ensureOrderProgramLevelSet(context, intent, levelCount)
+      const compiledId = intent.id.replace(/\W+/g, '_')
+      context.orderProgramActivePredicateMap.set(intent.id, levelSetRefs.activeWhen)
+      context.orderProgramActivePredicateMap.set(compiledId, levelSetRefs.activeWhen)
 
       return {
-        id: intent.id.replace(/\W+/g, '_'),
+        id: compiledId,
         kind: 'LIMIT_LADDER',
         activeWhen: levelSetRefs.activeWhen,
         side: this.resolveOrderProgramSide(intent.mode),
@@ -310,6 +315,7 @@ export class CanonicalSpecV2IrCompilerService {
       this.normalizeNumberToken(upper),
       levelCount,
       this.normalizeNumberToken(spacing.value),
+      ...this.normalizedLevelSetShapeTokens(intent),
     ].join('_').replace(/\W+/g, '_')
 
     if (!context.levelSetMap.has(id)) {
@@ -351,6 +357,7 @@ export class CanonicalSpecV2IrCompilerService {
       intent.levelSet.spacingMode,
       levelCount,
       this.normalizeNumberToken(spacing.value),
+      ...this.normalizedLevelSetShapeTokens(intent),
     ].join('_').replace(/\W+/g, '_')
 
     if (!context.levelSetMap.has(id)) {
@@ -433,6 +440,17 @@ export class CanonicalSpecV2IrCompilerService {
       mode: 'absolute',
       value: Number(((upper - lower) / Math.max(1, levelCount - 1)).toFixed(8)),
     }
+  }
+
+  private normalizedLevelSetShapeTokens(intent: CanonicalOrderProgramIntent): string[] {
+    return [
+      typeof intent.levelSet.gridIntervals === 'number' && Number.isFinite(intent.levelSet.gridIntervals)
+        ? `intervals_${this.normalizeNumberToken(intent.levelSet.gridIntervals)}`
+        : null,
+      typeof intent.levelSet.absoluteSpacing === 'number' && Number.isFinite(intent.levelSet.absoluteSpacing)
+        ? `absolute_${this.normalizeNumberToken(intent.levelSet.absoluteSpacing)}`
+        : null,
+    ].filter((token): token is string => token !== null)
   }
 
   private resolveCenteredOrderProgramSpacingPct(
@@ -994,6 +1012,15 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'order_program.active_range': {
+        const programId = typeof atom.params?.programId === 'string' ? atom.params.programId : null
+        const activePredicate = programId ? context.orderProgramActivePredicateMap.get(programId) : null
+        if (!activePredicate) {
+          throw new Error(`order_program_active_range_not_found:${programId ?? 'unknown'}`)
+        }
+        return activePredicate
+      }
+
       case 'breakout.channel_high_break':
       case 'breakout.channel_low_break': {
         const closeRef = this.ensurePriceSeries(context, 'close')
@@ -1496,6 +1523,48 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  private tryCompileRiskGuards(rule: CanonicalRuleV2, context: CompileContext): RiskGuard[] {
+    const boundaryCancelGuards = this.tryCompileBoundaryCancelGuards(rule, context)
+    if (boundaryCancelGuards.length > 0) {
+      return boundaryCancelGuards
+    }
+
+    const guard = this.tryCompileRiskGuard(rule, context)
+    return guard ? [guard] : []
+  }
+
+  private tryCompileBoundaryCancelGuards(rule: CanonicalRuleV2, context: CompileContext): RiskGuard[] {
+    if (
+      rule.phase !== 'risk'
+      || rule.condition.kind === 'atom'
+      || rule.metadata?.guard !== 'boundary_cancel'
+      || rule.metadata?.cancelOrders !== true
+    ) {
+      return []
+    }
+
+    const predicateRef = this.compileCondition(rule.condition, context, rule.id)
+    const baseGuard = {
+      kind: 'EXPRESSION_GUARD' as const,
+      scope: 'strategy' as const,
+      appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+      predicateRef,
+    }
+
+    return [
+      {
+        ...baseGuard,
+        id: `guard_${rule.id}_halt`,
+        onBreach: 'HALT_STRATEGY',
+      },
+      {
+        ...baseGuard,
+        id: `guard_${rule.id}_cancel_orders`,
+        onBreach: 'CANCEL_ORDER_PROGRAMS',
+      },
+    ]
   }
 
   private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {

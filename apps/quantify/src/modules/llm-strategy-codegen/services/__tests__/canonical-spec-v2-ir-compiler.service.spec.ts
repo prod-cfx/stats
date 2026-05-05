@@ -199,6 +199,66 @@ describe('canonicalSpecV2IrCompilerService', () => {
     }
   })
 
+  it('distinguishes normalized level-set shapes in downstream level-set refs', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const buildSpec = (absoluteSpacing: number): CanonicalStrategySpecV2 => ({
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'perp_neutral',
+          levelSet: {
+            lower: 60000,
+            upper: 80000,
+            gridIntervals: 10,
+            gridCount: 11,
+            absoluteSpacing,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 20,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    })
+
+    const first = compiler.compile({
+      canonicalSpec: buildSpec(2000),
+      fallback: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', baseTimeframe: '15m', positionPct: 10 },
+    })
+    const second = compiler.compile({
+      canonicalSpec: buildSpec(2500),
+      fallback: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', baseTimeframe: '15m', positionPct: 10 },
+    })
+
+    expect(first.ir.orderPrograms[0]?.levelSetRef).toContain('absolute_2000')
+    expect(second.ir.orderPrograms[0]?.levelSetRef).toContain('absolute_2500')
+    expect(first.ir.orderPrograms[0]?.levelSetRef).not.toBe(second.ir.orderPrograms[0]?.levelSetRef)
+  })
+
   it('keeps contract order programs exclusive from legacy grid decision rules', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

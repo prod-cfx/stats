@@ -265,7 +265,7 @@ describe('SemanticAtomInvariantService', () => {
           domain: 'price',
           verb: 'define',
           object: 'level_set',
-          shape: { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
+          shape: { lower: 60000, upper: 80000, gridIntervals: 10, gridCount: 11, absoluteSpacing: 2000, spacingMode: 'arithmetic' },
         },
       ],
       requires: [],
@@ -964,11 +964,40 @@ describe('SemanticAtomInvariantService', () => {
 
     expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms : []).toHaveLength(1)
     expect(ir.orderPrograms).toHaveLength(1)
+    expect(ir.orderPrograms[0]?.maxWorkingOrders).toBe(11)
     expect(ast.orderPrograms).toHaveLength(1)
     expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic_contract.order_program',
         status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when canonical contract order program drops normalized absolute spacing', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    if (canonicalSpec.version !== 2) {
+      throw new Error('expected canonical spec v2')
+    }
+    const driftedCanonicalSpec: CanonicalStrategySpec = {
+      ...canonicalSpec,
+      orderPrograms: canonicalSpec.orderPrograms?.map(program => ({
+        ...program,
+        levelSet: {
+          ...program.levelSet,
+          absoluteSpacing: 2500,
+        },
+      })),
+    }
+
+    const checks = service.validate({ semanticState: state, canonicalSpec: driftedCanonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'failed',
         level: 'critical',
       }),
     ]))
@@ -983,12 +1012,18 @@ describe('SemanticAtomInvariantService', () => {
         centerTiming: 'deployment',
         centerSource: 'last_price',
         halfRangePct: 0.4,
-        gridCount: 10,
+        gridIntervals: 10,
+        gridCount: 11,
         spacingMode: 'arithmetic',
       }
     }
     if (state.position?.contracts?.[0]?.capabilities[0]) {
       state.position.contracts[0].capabilities[0].shape = { value: 10, asset: 'USDT' }
+      state.position = {
+        ...state.position,
+        value: 10,
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      }
     }
     state.contextSlots.symbol = { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'ETHUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true }
     state.contextSlots.marketType = { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'spot', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true }
@@ -1001,10 +1036,102 @@ describe('SemanticAtomInvariantService', () => {
     expect(ir.orderPrograms).toHaveLength(1)
     expect(ast.orderPrograms).toHaveLength(1)
     expect(ast.topology.orderProgramOrder).toHaveLength(1)
-    expect(checks).not.toEqual(expect.arrayContaining([
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when centered-percent canonical density drifts from semantic grid intervals', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const levelSet = state.triggers[0]?.contracts?.[0]?.capabilities[0]
+    if (levelSet) {
+      levelSet.shape = {
+        mode: 'centered_percent_range',
+        centerTiming: 'deployment',
+        centerSource: 'last_price',
+        halfRangePct: 0.4,
+        gridIntervals: 10,
+        gridCount: 11,
+        spacingMode: 'arithmetic',
+      }
+    }
+    if (state.position?.contracts?.[0]?.capabilities[0]) {
+      state.position.contracts[0].capabilities[0].shape = { value: 10, asset: 'USDT' }
+      state.position = {
+        ...state.position,
+        value: 10,
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      }
+    }
+    state.contextSlots.symbol = { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'ETHUSDT', status: 'locked', priority: 'context', questionHint: '请选择交易标的', affectsExecution: true }
+    state.contextSlots.marketType = { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'spot', status: 'locked', priority: 'context', questionHint: '请选择市场类型', affectsExecution: true }
+    state.contextSlots.timeframe = { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '1m', status: 'locked', priority: 'context', questionHint: '请选择周期', affectsExecution: true }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    if (canonicalSpec.version !== 2) {
+      throw new Error('expected canonical spec v2')
+    }
+    const driftedCanonicalSpec: CanonicalStrategySpec = {
+      ...canonicalSpec,
+      orderPrograms: canonicalSpec.orderPrograms?.map(program => ({
+        ...program,
+        levelSet: {
+          ...program.levelSet,
+          gridIntervals: 9,
+        },
+      })),
+    }
+
+    const checks = service.validate({ semanticState: state, canonicalSpec: driftedCanonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic_contract.order_program',
         status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('does not collapse conflicting level_set contracts that only differ by absolute spacing', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const canonicalState = buildContractOrderProgramSemanticState()
+    const triggerContract = state.triggers[0]?.contracts?.[0]
+    if (triggerContract) {
+      state.triggers[0] = {
+        ...state.triggers[0]!,
+        contracts: [
+          triggerContract,
+          {
+            ...triggerContract,
+            id: 'trigger-grid-range-different-spacing',
+            capabilities: triggerContract.capabilities.map(capability =>
+              capability.object === 'level_set'
+                ? {
+                    ...capability,
+                    shape: {
+                      ...capability.shape,
+                      absoluteSpacing: 2500,
+                    },
+                  }
+                : capability,
+            ),
+          },
+        ],
+      }
+    }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(canonicalState)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
         level: 'critical',
       }),
     ]))

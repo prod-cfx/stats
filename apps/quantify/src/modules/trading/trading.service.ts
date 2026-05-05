@@ -2,9 +2,11 @@ import type {
   CreateOrderInput,
   ExchangeId,
   MarketType,
+  OrderFillsQueryInput,
   UnifiedBalance,
   UnifiedInstrumentConstraints,
   UnifiedOrder,
+  UnifiedOrderFill,
   UnifiedPosition,
   UnifiedTicker,
 } from './core/types'
@@ -159,6 +161,39 @@ export class TradingService {
       }
       throw new ExchangeOperationFailedException({
         operation: 'fetch closed orders',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async getOrderFills(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    query: OrderFillsQueryInput,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrderFill[]> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+    if (!client.fetchOrderFills) return []
+
+    try {
+      return await client.fetchOrderFills(query)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch order fills', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch order fills',
         exchangeId,
         reason: (error as Error).message,
       })

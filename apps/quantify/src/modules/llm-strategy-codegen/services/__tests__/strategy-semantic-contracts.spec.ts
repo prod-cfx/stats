@@ -48,6 +48,25 @@ describe('strategySemanticContracts', () => {
     ]))
   })
 
+  it.each(['price.range_position_lte', 'price.range_position_gte'])(
+    'uses thresholdPct metadata for %s trigger contracts',
+    (semanticKey) => {
+      const contract = resolveSemanticContract(semanticKey)
+
+      expect(contract.requiredParams).toEqual(['lookbackBars', 'thresholdPct'])
+      expect(contract.editableSlots).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'range.lookback',
+          paramPaths: ['lookbackBars', 'period', 'window', 'length'],
+        }),
+        expect.objectContaining({
+          slotKey: 'range.thresholdPct',
+          paramPaths: ['thresholdPct'],
+        }),
+      ]))
+    },
+  )
+
   it('accepts close greater than open predicate expressions', () => {
     expect(validateSemanticExpressionContract({
       kind: 'predicate',
@@ -239,6 +258,17 @@ describe('strategySemanticContracts', () => {
       key: 'risk.stop_loss_pct',
       params: { valuePct: 5 },
     })).toEqual({ ok: true })
+  })
+
+  it.each([
+    ['risk.max_drawdown_pct'],
+    ['risk.max_single_loss_pct'],
+  ])('accepts percent-based %s risk contracts', (key) => {
+    expect(resolveSemanticContract(key).requiredParams).toEqual(['valuePct'])
+    expect(validateSemanticRiskContract({
+      key,
+      params: { valuePct: 12 },
+    } as never)).toEqual({ ok: true })
   })
 
   it('accepts normalized stop loss risk params with default basis metadata', () => {

@@ -18,7 +18,9 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { normalizeRiskSemantic } from './semantic-state-normalization'
+import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 type SemanticPatchRecord = Record<string, unknown>
 type ContextField = 'exchange' | 'symbol' | 'marketType' | 'timeframe'
@@ -32,6 +34,9 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
   marketType: '请确认市场类型（现货或合约/perp）。',
   timeframe: '请确认策略主周期（例如 15m 或 1h）。',
 }
+const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
+const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
+const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 
 @Injectable()
 export class SemanticSeedStateBuilderService {
@@ -98,24 +103,37 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
+    const params = this.normalizeTriggerParams(key, this.readParams(update.params))
+    const sideScope = update.sideScope === 'long' || update.sideScope === 'short' || update.sideScope === 'both'
+      ? update.sideScope
+      : null
     const openSlots = this.readOpenSlots(update.openSlots)
-    const status = this.resolveNodeStatus(update.status, openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
+      ?? (this.hasOwnProperty(update, 'contracts')
+        ? null
+        : this.synthesizeTriggerContracts(key, phase, sideScope, params, index))
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `triggers[${index}].contracts`,
+      priority: 'core',
+    })
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-trigger-${index + 1}`,
       key,
       phase,
-      params: this.normalizeTriggerParams(key, this.readParams(update.params)),
-      ...(update.sideScope === 'long' || update.sideScope === 'short' || update.sideScope === 'both'
-        ? { sideScope: update.sideScope }
+      params,
+      ...(sideScope
+        ? { sideScope }
         : {}),
-      status,
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
@@ -134,16 +152,27 @@ export class SemanticSeedStateBuilderService {
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const openSlots = this.readOpenSlots(update.openSlots)
+    const params = this.readParams(update.params)
     const contracts = this.readContracts(update.contracts)
+      ?? (this.hasOwnProperty(update, 'contracts')
+        ? null
+        : this.synthesizeActionContracts(key, params, index))
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `actions[${index}].contracts`,
+      priority: 'behavior',
+    })
 
     return {
       id: this.readTrimmedString(update.id) ?? `planner-action-${index + 1}`,
       key,
-      ...(this.isRecord(update.params) ? { params: { ...update.params } } : {}),
-      status: this.resolveNodeStatus(update.status, openSlots),
+      ...(this.isRecord(update.params) ? { params } : {}),
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
@@ -162,16 +191,27 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
+    const params = this.readParams(update.params)
     const contracts = this.readContracts(update.contracts)
+      ?? (this.hasOwnProperty(update, 'contracts')
+        ? null
+        : this.synthesizeRiskContracts(key, params, index))
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `risk[${index}].contracts`,
+      priority: 'risk',
+    })
 
     const risk: SemanticRiskState = {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
       key,
-      params: this.readParams(update.params),
-      status: this.resolveNodeStatus(update.status, openSlots),
+      params,
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
@@ -195,19 +235,37 @@ export class SemanticSeedStateBuilderService {
     }
 
     const openSlots = this.readOpenSlots(update.openSlots)
-    const positionMode = update.positionMode === 'both' ? 'long_short' : update.positionMode
+    const sizingProvided = this.hasOwnProperty(update, 'sizing')
+    const positionMode = this.normalizePositionSideMode(update.positionMode) ?? update.positionMode
+    const normalizedMode = this.normalizePositionSizingMode(update.mode)
     const evidence = this.readEvidence(update.evidence)
     const contracts = this.readContracts(update.contracts)
+      ?? (this.hasOwnProperty(update, 'contracts')
+        ? null
+        : this.synthesizePositionContracts({
+          sizing,
+          sizingProvided,
+          mode: normalizedMode,
+          value: update.value,
+          positionMode,
+        }))
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: 'position.contracts',
+      priority: 'behavior',
+    })
 
     return {
       ...(sizing ? { sizing } : {}),
-      mode: update.mode,
+      mode: normalizedMode ?? update.mode,
       value: update.value,
       positionMode,
-      status: this.resolveNodeStatus(update.status, openSlots),
+      status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
-      openSlots,
+      openSlots: contractCoverage.openSlots,
       ...(contracts ? { contracts } : {}),
     }
   }
@@ -241,6 +299,325 @@ export class SemanticSeedStateBuilderService {
     }
 
     return null
+  }
+
+  private normalizePositionSizingMode(mode: string): string | null {
+    if (SYNTHESIZABLE_POSITION_MODES.has(mode)) {
+      return mode
+    }
+
+    return null
+  }
+
+  private normalizePositionSideMode(positionMode: string): string | null {
+    if (positionMode === 'long' || positionMode === 'long_only') {
+      return 'long_only'
+    }
+    if (positionMode === 'short' || positionMode === 'short_only') {
+      return 'short_only'
+    }
+    if (positionMode === 'both' || positionMode === 'long_short') {
+      return 'long_short'
+    }
+    return null
+  }
+
+  private isSupportedPositionSideMode(positionMode: string): boolean {
+    return positionMode === 'long_only' || positionMode === 'short_only' || positionMode === 'long_short'
+  }
+
+  private synthesizeTriggerContracts(
+    key: string,
+    phase: SemanticTriggerState['phase'],
+    sideScope: SemanticTriggerState['sideScope'] | null,
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract[] | null {
+    if (!this.canSynthesizeTriggerContract(key, params)) {
+      return null
+    }
+
+    return [this.buildAtomContract({
+      id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'trigger',
+      capability: this.buildTriggerCapability(key, phase, sideScope, params),
+      params,
+    })]
+  }
+
+  private canSynthesizeTriggerContract(key: string, params: Record<string, unknown>): boolean {
+    if (key === 'condition.expression') {
+      return this.isRecord(params.expression)
+    }
+
+    if (key === 'price.percent_change') {
+      return this.isFiniteNonZeroNumber(params.valuePct)
+    }
+
+    if (key === 'indicator.cross_over' || key === 'indicator.cross_under') {
+      return this.hasIndicatorIdentity(params)
+        && (this.hasFiniteNumber(params.fastPeriod) || this.hasFiniteNumber(params.slowPeriod))
+    }
+
+    if (key === 'indicator.above' || key === 'indicator.below') {
+      return this.hasIndicatorIdentity(params) && this.hasIndicatorReference(params)
+    }
+
+    if (key === 'oscillator.rsi_gte' || key === 'oscillator.rsi_lte') {
+      return this.hasFiniteNumber(params.value)
+    }
+
+    if (key === 'bollinger.touch_upper' || key === 'bollinger.touch_lower' || key === 'bollinger.touch_middle') {
+      return this.hasFiniteNumber(params.period) && this.hasFiniteNumber(params.stdDev)
+    }
+
+    if (key === 'price.breakout_up' || key === 'price.breakout_down') {
+      return this.hasBreakoutReference(params)
+    }
+
+    if (key === 'price.range_position_lte' || key === 'price.range_position_gte') {
+      return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
+    }
+
+    if (key === 'trend.direction' || key === 'market.regime' || key === 'volatility.state') {
+      return Object.keys(params).length > 0
+    }
+
+    return key === 'execution.on_start' && SYNTHESIZABLE_TRIGGER_KEYS.has(key)
+  }
+
+  private hasIndicatorIdentity(params: Record<string, unknown>): boolean {
+    return Boolean(this.readTrimmedString(params.indicator))
+  }
+
+  private hasIndicatorReference(params: Record<string, unknown>): boolean {
+    if (
+      this.hasFiniteNumber(params.period)
+      || this.hasFiniteNumber(params.fastPeriod)
+      || this.hasFiniteNumber(params.slowPeriod)
+      || this.hasFiniteNumber(params['reference.period'])
+    ) {
+      return true
+    }
+
+    return this.isRecord(params.reference) && this.hasFiniteNumber(params.reference.period)
+  }
+
+  private hasBreakoutReference(params: Record<string, unknown>): boolean {
+    const reference = this.readTrimmedString(params.reference)
+    if (reference && reference !== 'unknown') {
+      return true
+    }
+
+    return this.hasFiniteNumber(params.lookbackBars)
+      || this.hasFiniteNumber(params.windowBars)
+      || this.isRecord(params.expression)
+  }
+
+  private hasFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value)
+  }
+
+  private isFiniteNonZeroNumber(value: unknown): value is number {
+    return this.hasFiniteNumber(value) && value !== 0
+  }
+
+  private hasPositiveFiniteNumber(value: unknown): value is number {
+    return this.hasFiniteNumber(value) && value > 0
+  }
+
+  private hasPositiveInteger(value: unknown): value is number {
+    return this.hasPositiveFiniteNumber(value) && Number.isInteger(value)
+  }
+
+  private isPercentThreshold(value: unknown): value is number {
+    return this.hasFiniteNumber(value) && value > 0 && value <= 100
+  }
+
+  private buildTriggerCapability(
+    key: string,
+    phase: SemanticTriggerState['phase'],
+    sideScope: SemanticTriggerState['sideScope'] | null,
+    params: Record<string, unknown>,
+  ): SemanticCapability {
+    if (key === 'execution.on_start') {
+      return {
+        domain: 'order_program',
+        verb: 'schedule',
+        object: 'execution_trigger',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    return {
+      domain: 'price',
+      verb: 'detect',
+      object: 'signal_condition',
+      shape: this.toCapabilityShape({
+        key,
+        phase,
+        sideScope: sideScope ?? null,
+        ...params,
+      }),
+    }
+  }
+
+  private synthesizeActionContracts(
+    key: string,
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract[] | null {
+    if (!SYNTHESIZABLE_ACTION_KEYS.has(key)) {
+      return null
+    }
+
+    return [this.buildAtomContract({
+      id: `contract-seed-action-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'action',
+      capability: {
+        domain: 'order_program',
+        verb: 'execute',
+        object: 'order_action',
+        shape: this.toCapabilityShape({
+          key,
+          side: this.resolveActionSide(key),
+          intent: this.resolveActionIntent(key),
+          ...params,
+        }),
+      },
+      params,
+    })]
+  }
+
+  private synthesizeRiskContracts(
+    key: string,
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract[] | null {
+    if (!this.canSynthesizeRiskContract(key, params)) {
+      return null
+    }
+
+    const object = this.resolveRiskContractObject(key)
+    if (!object) {
+      return null
+    }
+
+    return [this.buildAtomContract({
+      id: `contract-seed-risk-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'risk',
+      capability: {
+        domain: 'guard',
+        verb: 'enforce',
+        object,
+        shape: this.toCapabilityShape({
+          key,
+          ...params,
+        }),
+      },
+      params,
+    })]
+  }
+
+  private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
+    if (
+      key === 'risk.stop_loss_pct'
+      || key === 'risk.take_profit_pct'
+      || key === 'risk.max_drawdown_pct'
+      || key === 'risk.max_single_loss_pct'
+    ) {
+      return this.hasPositiveFiniteNumber(params.valuePct)
+    }
+
+    if (key === 'risk.condition_expression') {
+      return validateSemanticRiskContract({
+        key,
+        params: {
+          capabilityStatus: 'recognized_unsupported',
+          ...params,
+        },
+      }).ok
+    }
+
+    return false
+  }
+
+  private resolveRiskContractObject(key: string): string | null {
+    if (key === 'risk.stop_loss_pct') {
+      return 'stop_loss'
+    }
+    if (key === 'risk.take_profit_pct') {
+      return 'take_profit'
+    }
+    if (key === 'risk.max_drawdown_pct') {
+      return 'max_drawdown'
+    }
+    if (key === 'risk.max_single_loss_pct') {
+      return 'max_single_loss'
+    }
+    if (key === 'risk.condition_expression') {
+      return 'risk_condition'
+    }
+    return null
+  }
+
+  private synthesizePositionContracts(position: {
+    sizing: SemanticPositionSizingContract | null
+    sizingProvided: boolean
+    mode: string | null
+    value: number
+    positionMode: string
+  }): SemanticAtomContract[] | null {
+    if (
+      !position.mode
+      || !this.hasPositiveFiniteNumber(position.value)
+      || !this.isSupportedPositionSideMode(position.positionMode)
+      || (position.sizingProvided && !position.sizing)
+    ) {
+      return null
+    }
+
+    return [this.buildAtomContract({
+      id: 'contract-seed-position-sizing',
+      kind: 'position',
+      capability: {
+        domain: 'capital',
+        verb: 'allocate',
+        object: 'position_sizing',
+        shape: this.toCapabilityShape({
+          sizing: position.sizing,
+          mode: position.mode,
+          value: position.value,
+          positionMode: position.positionMode,
+        }),
+      },
+      params: {
+        sizing: position.sizing,
+        mode: position.mode,
+        value: position.value,
+        positionMode: position.positionMode,
+      },
+    })]
+  }
+
+  private buildAtomContract(input: {
+    id: string
+    kind: SemanticAtomContract['kind']
+    capability: SemanticCapability
+    params: Record<string, unknown>
+  }): SemanticAtomContract {
+    return {
+      id: input.id,
+      kind: input.kind,
+      capabilities: [input.capability],
+      requires: [],
+      params: input.params,
+    }
   }
 
   private readContracts(value: unknown): SemanticAtomContract[] | null {
@@ -489,6 +866,134 @@ export class SemanticSeedStateBuilderService {
       .filter((item): item is SemanticSlotState => item !== null)
   }
 
+  private resolveContractCoverage(options: {
+    contracts: SemanticAtomContract[] | null
+    openSlots: SemanticSlotState[]
+    statusValue: unknown
+    fieldPath: string
+    priority: SemanticPriority
+  }): { status: SemanticNodeStatus, openSlots: SemanticSlotState[] } {
+    if (options.statusValue === 'superseded') {
+      return {
+        status: 'superseded',
+        openSlots: this.removeContractRequiredSlots(options.openSlots, options.fieldPath),
+      }
+    }
+
+    if (options.contracts) {
+      const openSlots = this.removeContractRequiredSlots(options.openSlots, options.fieldPath)
+      return {
+        status: this.resolveNodeStatus(options.statusValue, openSlots),
+        openSlots,
+      }
+    }
+
+    return {
+      status: 'open',
+      openSlots: this.appendContractRequiredSlot(options.openSlots, options.fieldPath, options.priority),
+    }
+  }
+
+  private appendContractRequiredSlot(
+    openSlots: SemanticSlotState[],
+    fieldPath: string,
+    priority: SemanticPriority,
+  ): SemanticSlotState[] {
+    if (openSlots.some(slot => slot.slotKey === 'contract.required' && slot.fieldPath === fieldPath)) {
+      return openSlots
+    }
+
+    return [
+      ...openSlots,
+      {
+        slotKey: 'contract.required',
+        fieldPath,
+        status: 'open',
+        priority,
+        questionHint: '请补充该原子的执行合约。',
+        affectsExecution: true,
+      },
+    ]
+  }
+
+  private removeContractRequiredSlots(openSlots: SemanticSlotState[], fieldPath: string): SemanticSlotState[] {
+    return openSlots.filter(slot => slot.slotKey !== 'contract.required' || slot.fieldPath !== fieldPath)
+  }
+
+  private resolveActionSide(key: string): 'long' | 'short' | 'unknown' {
+    if (key.includes('long')) {
+      return 'long'
+    }
+    if (key.includes('short')) {
+      return 'short'
+    }
+    return 'unknown'
+  }
+
+  private resolveActionIntent(key: string): 'open' | 'close' | 'unknown' {
+    if (key.startsWith('open_')) {
+      return 'open'
+    }
+    if (key.startsWith('close_')) {
+      return 'close'
+    }
+    return 'unknown'
+  }
+
+  private toCapabilityShape(input: Record<string, unknown>): SemanticCapabilityShape {
+    const shape: SemanticCapabilityShape = {}
+    for (const [key, value] of Object.entries(input)) {
+      const normalizedValue = this.toCapabilityShapeValue(value)
+      if (normalizedValue !== undefined) {
+        shape[key] = normalizedValue
+      }
+    }
+    return shape
+  }
+
+  private toCapabilityShapeValue(
+    value: unknown,
+  ): string | number | boolean | null | SemanticCapabilityShape | SemanticCapabilityShape[] | undefined {
+    if (value === null) {
+      return null
+    }
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return Number.isNaN(value) ? undefined : value
+    }
+    if (Array.isArray(value)) {
+      return value
+        .map(item => this.toCapabilityArrayItem(item))
+        .filter((item): item is SemanticCapabilityShape => item !== undefined)
+    }
+    if (this.isRecord(value)) {
+      return this.toCapabilityShape(value)
+    }
+    return undefined
+  }
+
+  private toCapabilityArrayItem(value: unknown): SemanticCapabilityShape | undefined {
+    const normalizedValue = this.toCapabilityShapeValue(value)
+    if (normalizedValue === undefined) {
+      return undefined
+    }
+    if (
+      normalizedValue === null
+      || typeof normalizedValue === 'string'
+      || typeof normalizedValue === 'number'
+      || typeof normalizedValue === 'boolean'
+    ) {
+      return { value: normalizedValue }
+    }
+    if (Array.isArray(normalizedValue)) {
+      return { items: normalizedValue }
+    }
+    return normalizedValue
+  }
+
+  private slugifyContractId(value: string): string {
+    return value.replace(/[^a-z0-9]+/giu, '-').replace(/^-|-$/gu, '').toLowerCase() || 'atom'
+  }
+
   private toSlotState(
     value: unknown,
     defaults?: {
@@ -648,5 +1153,9 @@ export class SemanticSeedStateBuilderService {
 
   private isRecord(value: unknown): value is SemanticPatchRecord {
     return Boolean(value && typeof value === 'object' && !Array.isArray(value))
+  }
+
+  private hasOwnProperty(value: SemanticPatchRecord, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(value, key)
   }
 }

@@ -12,6 +12,7 @@ import type {
 } from '../types/semantic-state'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
+import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 
@@ -34,20 +35,28 @@ interface SemanticContractOwnerRef {
   contracts: SemanticAtomContract[]
 }
 
+interface NormalizedProviderContracts {
+  contracts: SemanticAtomContract[]
+  shapeSlotsByOwnerKey: Map<string, SemanticSlotState[]>
+}
+
 @Injectable()
 export class SemanticContractReadinessService {
   constructor(
     private readonly semanticAtomContractService: SemanticAtomContractService = new SemanticAtomContractService(),
+    private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
   ) {}
 
   normalize(state: SemanticState): SemanticContractReadinessNormalizationResult {
     const activeOwners = collectActiveContractOwners(state)
-    const providerContracts = activeOwners
-      .filter(owner => owner.status === 'locked')
-      .flatMap(owner => owner.contracts)
+    const providerNormalization = this.normalizeProviderContracts(activeOwners)
+    const providerContracts = providerNormalization.contracts
     const resolution = this.semanticAtomContractService.resolve(providerContracts)
     const missingRequirements = this.collectMissingRequirements(activeOwners, resolution.capabilities)
-    const slotsByOwnerKey = buildMissingRequirementSlots(missingRequirements)
+    const slotsByOwnerKey = mergeSlotMaps(
+      providerNormalization.shapeSlotsByOwnerKey,
+      buildMissingRequirementSlots(missingRequirements),
+    )
 
     return {
       state: {
@@ -65,9 +74,64 @@ export class SemanticContractReadinessService {
           ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
           : null,
       },
-      ready: missingRequirements.length === 0,
+      ready: missingRequirements.length === 0 && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey),
       missingRequirements,
     }
+  }
+
+  private normalizeProviderContracts(
+    activeOwners: readonly SemanticContractOwnerRef[],
+  ): NormalizedProviderContracts {
+    const shapeSlotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+    const contracts: SemanticAtomContract[] = []
+
+    for (const owner of activeOwners) {
+      for (const contract of owner.contracts) {
+        const capabilities = contract.capabilities.flatMap((capability) => {
+          const normalizedCapability = this.normalizeProviderCapability(owner, contract, capability)
+
+          if (normalizedCapability.openSlots.length) {
+            const key = ownerKey(owner.ownerKind, owner.ownerId)
+            const slots = shapeSlotsByOwnerKey.get(key) ?? []
+            slots.push(...normalizedCapability.openSlots)
+            shapeSlotsByOwnerKey.set(key, slots)
+          }
+
+          return normalizedCapability.capability ? [normalizedCapability.capability] : []
+        })
+
+        if (owner.status === 'locked') {
+          contracts.push({
+            ...contract,
+            capabilities,
+          })
+        }
+      }
+    }
+
+    return { contracts, shapeSlotsByOwnerKey }
+  }
+
+  private normalizeProviderCapability(
+    owner: SemanticContractOwnerRef,
+    contract: SemanticAtomContract,
+    capability: SemanticCapability,
+  ): { capability: SemanticCapability | null; openSlots: SemanticSlotState[] } {
+    if (capability.domain === 'price' && capability.verb === 'define' && capability.object === 'level_set') {
+      const result = this.shapeNormalizer.normalizeLevelSetShape(capability.shape, {
+        requireDensity: true,
+        fieldPath: buildCapabilityShapeFieldPath(owner, contract, capability),
+      })
+
+      return {
+        capability: result.status === 'valid'
+          ? { ...capability, shape: result.shape }
+          : null,
+        openSlots: result.openSlots,
+      }
+    }
+
+    return { capability, openSlots: [] }
   }
 
   private collectMissingRequirements(
@@ -107,27 +171,11 @@ export class SemanticContractReadinessService {
     requirement: SemanticRequirement,
   ): boolean {
     if (requirement.domain === 'price' && requirement.verb === 'define' && requirement.object === 'level_set') {
-      const lower = readShapeNumber(capability.shape, 'lower')
-      const upper = readShapeNumber(capability.shape, 'upper')
-      if (lower !== null && upper !== null && upper > lower) {
-        return true
-      }
-
-      if (readShapeString(capability.shape, 'mode') === 'centered_percent_range') {
-        const halfRangePct = readShapeNumber(capability.shape, 'halfRangePct')
-        const gridCount = readShapeNumber(capability.shape, 'gridCount')
-        return readShapeString(capability.shape, 'centerSource') !== null
-          && (halfRangePct === null || halfRangePct > 0)
-          && (gridCount === null || gridCount > 0)
-      }
-
-      return false
+      return this.shapeNormalizer.normalizeLevelSetShape(capability.shape, { requireDensity: true }).status === 'valid'
     }
 
     if (requirement.domain === 'capital' && requirement.verb === 'allocate' && requirement.object === 'per_order_budget') {
-      const value = readShapeNumber(capability.shape, 'value')
-      const asset = readShapeString(capability.shape, 'asset')
-      return value !== null && value > 0 && asset !== null
+      return this.shapeNormalizer.isValidPerOrderBudgetShape(capability.shape)
     }
 
     if (requirement.domain === 'exposure' && requirement.verb === 'set' && requirement.object === 'position_mode') {
@@ -135,30 +183,16 @@ export class SemanticContractReadinessService {
     }
 
     if (requirement.domain === 'guard' && requirement.verb === 'enforce' && isBoundaryCancelRequirement(requirement.object)) {
-      const onBreach = readShapeString(capability.shape, 'onBreach')
-      const cancelOrders = readShapeBoolean(capability.shape, 'cancelOrders')
-      const cancelScope = readShapeString(capability.shape, 'cancelScope')
-
-      return onBreach !== null && (cancelOrders === false || cancelScope !== null)
+      return this.shapeNormalizer.isValidBoundaryCancelShape(capability.shape)
     }
 
     return true
   }
 }
 
-function readShapeNumber(shape: SemanticCapability['shape'], key: string): number | null {
-  const value = shape[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
 function readShapeString(shape: SemanticCapability['shape'], key: string): string | null {
   const value = shape[key]
   return typeof value === 'string' && value.trim() ? value : null
-}
-
-function readShapeBoolean(shape: SemanticCapability['shape'], key: string): boolean | null {
-  const value = shape[key]
-  return typeof value === 'boolean' ? value : null
 }
 
 function isBoundaryCancelRequirement(object: string): boolean {
@@ -229,6 +263,33 @@ function buildMissingRequirementSlots(
   return slotsByOwnerKey
 }
 
+function mergeSlotMaps(
+  ...slotMaps: readonly Map<string, SemanticSlotState[]>[]
+): Map<string, SemanticSlotState[]> {
+  const merged = new Map<string, SemanticSlotState[]>()
+
+  for (const slotMap of slotMaps) {
+    for (const [key, slots] of slotMap) {
+      merged.set(key, [
+        ...(merged.get(key) ?? []),
+        ...slots,
+      ])
+    }
+  }
+
+  return merged
+}
+
+function hasOpenSlots(slotsByOwnerKey: Map<string, SemanticSlotState[]>): boolean {
+  for (const slots of slotsByOwnerKey.values()) {
+    if (slots.length) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function toOpenSlot(requirement: MissingSemanticContractRequirement): SemanticSlotState {
   const capabilityKey = `${requirement.domain}.${requirement.verb}.${requirement.object}`
 
@@ -254,7 +315,7 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status
   const missingSlotIds = new Set(missingSlots.map(slot => buildSemanticSlotId(slot)))
   const currentOpenSlots = owner.openSlots ?? []
   const openSlots = currentOpenSlots.filter(slot =>
-    !isContractRequirementSlot(slot) || missingSlotIds.has(buildSemanticSlotId(slot)),
+    !isManagedContractReadinessSlot(slot) || missingSlotIds.has(buildSemanticSlotId(slot)),
   )
 
   if (!missingSlots.length) {
@@ -298,8 +359,8 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status
   }
 }
 
-function isContractRequirementSlot(slot: SemanticSlotState): boolean {
-  return slot.slotKey.startsWith('contract.requirement.')
+function isManagedContractReadinessSlot(slot: SemanticSlotState): boolean {
+  return slot.slotKey.startsWith('contract.requirement.') || slot.slotKey.startsWith('contract.shape.')
 }
 
 function buildRequirementFieldPath(
@@ -311,6 +372,20 @@ function buildRequirementFieldPath(
   }
 
   return `${ownerCollection(requirement.ownerKind)}[${requirement.ownerId}].contracts[${requirement.contractId}].requires.${capabilityKey}`
+}
+
+function buildCapabilityShapeFieldPath(
+  owner: SemanticContractOwnerRef,
+  contract: SemanticAtomContract,
+  capability: SemanticCapability,
+): string {
+  const capabilityKey = `${capability.domain}.${capability.verb}.${capability.object}`
+
+  if (owner.ownerKind === 'position') {
+    return `position.contracts[${contract.id}].capabilities[${capabilityKey}].shape`
+  }
+
+  return `${ownerCollection(owner.ownerKind)}[${owner.ownerId}].contracts[${contract.id}].capabilities[${capabilityKey}].shape`
 }
 
 function ownerCollection(ownerKind: Exclude<SemanticContractOwnerKind, 'position'>): 'triggers' | 'actions' | 'risk' {
