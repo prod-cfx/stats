@@ -2879,15 +2879,26 @@ export class SemanticSeedExtractorService {
       return `${compactMatch[1]}${compactMatch[2].toLowerCase()}`
     }
 
-    const chineseMatch = text.match(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/u)
-    if (!chineseMatch?.[1] || !chineseMatch[2]) return null
-    const unit = chineseMatch[2]
-    const suffix = unit === '分钟' || unit === '分'
-      ? 'm'
-      : unit === '小时' || unit === '时'
-        ? 'h'
-        : 'd'
-    return `${chineseMatch[1]}${suffix}`
+    for (const chineseMatch of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+      if (!chineseMatch[1] || !chineseMatch[2]) continue
+      if (this.isIndicatorPeriodTimeframeCandidate(text, chineseMatch.index ?? -1)) continue
+
+      const unit = chineseMatch[2]
+      const suffix = unit === '分钟' || unit === '分'
+        ? 'm'
+        : unit === '小时' || unit === '时'
+          ? 'h'
+          : 'd'
+      return `${chineseMatch[1]}${suffix}`
+    }
+    return null
+  }
+
+  private isIndicatorPeriodTimeframeCandidate(text: string, matchIndex: number): boolean {
+    if (matchIndex < 0) return false
+
+    const prefix = text.slice(Math.max(0, matchIndex - 16), matchIndex)
+    return /(?:EMA|SMA|MA|均线)\s*$/iu.test(prefix)
   }
 
   private extractNumber(text: string, patterns: RegExp[]): number | null {

@@ -154,6 +154,7 @@ describe('SemanticSeedExtractorService', () => {
   it('extracts omitted EMA cross-under exit from prior trigger context', () => {
     const patch = service.extract('EMA7 上穿 EMA21 时开多；下穿时平多。')
 
+    expect(patch.contextSlots?.timeframe).toBeUndefined()
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.cross_over',
@@ -172,6 +173,22 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
+  })
+
+  it('does not extract indicator periods followed by 时 as timeframe context', () => {
+    expect(service.extract('EMA7 上穿 EMA21 时开多。').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('MA20 上穿 MA50 时开多。').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('SMA20 上穿 SMA50 时开多。').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('均线 20 上穿均线 50 时开多。').contextSlots?.timeframe).toBeUndefined()
+  })
+
+  it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
+    expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '1h',
+    }))
+    expect(service.extract('15m 周期，价格区间 79200-80200，采用双向网格').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '15m',
+    }))
   })
 
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {

@@ -377,7 +377,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     name: 'open slots ema omitted exit trigger keeps close long',
     message: 'EMA7 上穿 EMA21 时开多；下穿 时平多。',
-    expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'context.timeframe', 'open_slot:exchange', 'open_slot:symbol', 'open_slot:marketType', 'open_slot:position.sizing'],
+    expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'open_slot:exchange', 'open_slot:symbol', 'open_slot:marketType', 'open_slot:timeframe', 'open_slot:position.sizing'],
+    forbiddenKeys: ['context.timeframe'],
     expectedRoute: 'open_slots',
   },
   {
