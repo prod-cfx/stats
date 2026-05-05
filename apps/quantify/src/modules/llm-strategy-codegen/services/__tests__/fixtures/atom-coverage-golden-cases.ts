@@ -375,6 +375,25 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
+    name: 'open slots ema omitted exit trigger keeps close long',
+    message: 'EMA7 上穿 EMA21 时开多；下穿 时平多。',
+    expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'context.timeframe', 'open_slot:exchange', 'open_slot:symbol', 'open_slot:marketType', 'open_slot:position.sizing'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    name: 'open slots macd golden cross buy death cross sell keeps exit binding',
+    message: 'OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。',
+    expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'context.exchange', 'context.symbol', 'context.timeframe', 'open_slot:marketType', 'open_slot:position.sizing'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    name: 'open slots bidirectional fixed range grid asks density',
+    message: '15m 周期，价格区间 79200-80200，采用双向网格',
+    expectedKeys: ['grid.range_rebalance', 'open_long', 'close_long', 'open_short', 'close_short', 'context.timeframe', 'open_slot:contract.shape.price.level_set.density'],
+    forbiddenKeys: ['open_slot:contract.shape.price.level_set.spacing_conflict'],
+    expectedRoute: 'open_slots',
+  },
+  {
     name: 'open slots missing position only',
     message: 'OKX 合约 BTCUSDT 15m，EMA7 上穿 EMA21 做多，EMA7 下穿 EMA21 平多。',
     expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'open_slot:position.sizing'],

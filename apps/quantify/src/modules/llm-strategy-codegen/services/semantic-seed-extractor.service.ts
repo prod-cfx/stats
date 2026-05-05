@@ -26,6 +26,7 @@ type FixedGridRange = {
   upper: number
 }
 
+const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
 const REDUCED_INDICATOR_CROSS_SIGNATURE_INDICATORS = new Set(['ma', 'ema', 'moving_average', 'macd'])
@@ -1545,6 +1546,10 @@ export class SemanticSeedExtractorService {
       && gridIntervals === null
       && absoluteSpacing !== null
       && absoluteSpacingGridCount === null
+    const hasMissingDensity = explicitGridCount === null
+      && gridIntervals === null
+      && absoluteSpacing === null
+      && stepPct === null
     const shape: SemanticCapabilityShape = {
       mode: 'fixed_range',
       lower: fixedRange.lower,
@@ -1569,10 +1574,14 @@ export class SemanticSeedExtractorService {
       key: 'grid.range_rebalance',
       phase: 'entry',
       sideScope,
-      ...(hasAbsoluteSpacingConflict
+      ...(hasAbsoluteSpacingConflict || hasMissingDensity
         ? {
             status: 'open' as const,
-            openSlots: [this.buildLevelSetSpacingConflictOpenSlot()],
+            openSlots: [
+              hasAbsoluteSpacingConflict
+                ? this.buildLevelSetSpacingConflictOpenSlot()
+                : this.buildLevelSetDensityOpenSlot(),
+            ],
           }
         : {}),
       params: {
@@ -1602,6 +1611,17 @@ export class SemanticSeedExtractorService {
         params: {},
       }],
     })
+  }
+
+  private buildLevelSetDensityOpenSlot(): SemanticSlotState {
+    return {
+      slotKey: LEVEL_SET_DENSITY_SLOT_KEY,
+      fieldPath: GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH,
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
   }
 
   private buildLevelSetSpacingConflictOpenSlot(): SemanticSlotState {
