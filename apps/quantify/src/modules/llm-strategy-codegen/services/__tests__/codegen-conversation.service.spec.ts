@@ -11463,6 +11463,36 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('does not treat semantic families as executable mainflow evidence during confirmGenerate', async () => {
+    const familiesOnlyState = {
+      ...(service as any).createEmptySemanticState(),
+      families: ['grid.range_rebalance'],
+    }
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot('s7-family-only', {}, {
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: familiesOnlyState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestSpecDesc: null,
+    }))
+
+    const result = await service.continueSession('s7-family-only', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildSemanticOnlyCanonicalDigest(familiesOnlyState),
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).not.toHaveBeenCalledWith(
+      's7-family-only',
+      expect.objectContaining({ status: 'GENERATING' }),
+    )
+  })
+
   it('does not block confirmGenerate with the legacy entry and exit completion prompt when the semantic snapshot is complete and the canonical spec can compile', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
