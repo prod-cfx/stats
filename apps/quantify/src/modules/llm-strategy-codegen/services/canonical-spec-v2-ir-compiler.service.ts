@@ -135,9 +135,9 @@ export class CanonicalSpecV2IrCompilerService {
     const guards: RiskGuard[] = []
 
     for (const rule of input.canonicalSpec.rules) {
-      const guard = this.tryCompileRiskGuard(rule, context)
-      if (guard) {
-        guards.push(guard)
+      const compiledGuards = this.tryCompileRiskGuards(rule, context)
+      if (compiledGuards.length > 0) {
+        guards.push(...compiledGuards)
         continue
       }
 
@@ -1523,6 +1523,48 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  private tryCompileRiskGuards(rule: CanonicalRuleV2, context: CompileContext): RiskGuard[] {
+    const boundaryCancelGuards = this.tryCompileBoundaryCancelGuards(rule, context)
+    if (boundaryCancelGuards.length > 0) {
+      return boundaryCancelGuards
+    }
+
+    const guard = this.tryCompileRiskGuard(rule, context)
+    return guard ? [guard] : []
+  }
+
+  private tryCompileBoundaryCancelGuards(rule: CanonicalRuleV2, context: CompileContext): RiskGuard[] {
+    if (
+      rule.phase !== 'risk'
+      || rule.condition.kind === 'atom'
+      || rule.metadata?.guard !== 'boundary_cancel'
+      || rule.metadata?.cancelOrders !== true
+    ) {
+      return []
+    }
+
+    const predicateRef = this.compileCondition(rule.condition, context, rule.id)
+    const baseGuard = {
+      kind: 'EXPRESSION_GUARD' as const,
+      scope: 'strategy' as const,
+      appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+      predicateRef,
+    }
+
+    return [
+      {
+        ...baseGuard,
+        id: `guard_${rule.id}_halt`,
+        onBreach: 'HALT_STRATEGY',
+      },
+      {
+        ...baseGuard,
+        id: `guard_${rule.id}_cancel_orders`,
+        onBreach: 'CANCEL_ORDER_PROGRAMS',
+      },
+    ]
   }
 
   private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {

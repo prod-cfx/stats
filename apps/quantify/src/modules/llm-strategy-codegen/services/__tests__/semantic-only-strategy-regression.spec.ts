@@ -644,6 +644,11 @@ describe('semantic-only strategy regression verification', () => {
         scope: 'strategy',
         onBreach: 'HALT_STRATEGY',
       }),
+      expect.objectContaining({
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        onBreach: 'CANCEL_ORDER_PROGRAMS',
+      }),
     ]))
     expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining([
       'FORCE_EXIT',
