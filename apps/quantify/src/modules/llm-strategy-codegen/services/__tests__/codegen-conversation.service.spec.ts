@@ -1358,6 +1358,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const semanticState = createPayload.semanticState as Record<string, any>
 
     expect(result.status).toBe('DRAFTING')
+    expect(result.specDesc).toBeNull()
+    expect(result.canonicalDigest).toBeNull()
+    expect(result.semanticGraph).toBeNull()
     expect(result.assistantPrompt ?? '').toContain('当前公测暂未支持生成和回测')
     expect(result.assistantPrompt ?? '').toContain('是否改用这个策略继续')
     expect((result as { unsupportedFallback?: unknown }).unsupportedFallback).toEqual(expect.objectContaining({
@@ -10683,8 +10686,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('ATR 动态止损')
     expect(result.assistantPrompt).toContain('是否改用这个策略继续')
-    expect(result.specDesc ?? null).toBeNull()
-    expect(result.canonicalDigest ?? null).toBeNull()
+    expect(result.specDesc).toBeNull()
+    expect(result.canonicalDigest).toBeNull()
+    expect(result.semanticGraph).toBeNull()
     expect(result.unsupportedFallback).toEqual(expect.objectContaining({
       status: 'pending',
     }))
