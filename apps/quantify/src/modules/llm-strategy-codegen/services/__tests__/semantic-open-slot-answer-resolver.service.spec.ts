@@ -404,6 +404,50 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       nextState: openState,
     })
   })
+
+  it('does not fallback to a level set slot when another clarification item is active', () => {
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    } satisfies SemanticSlotState
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
+        openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
+      })],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '10%',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(positionSlot),
+          slotKey: positionSlot.slotKey,
+          fieldPath: positionSlot.fieldPath,
+        }],
+      },
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
+    })
+  })
 })
 
 function expectConsumed(

@@ -154,12 +154,17 @@ function hasDensityAnswer(answer: LevelSetDensityAnswer): boolean {
 
 function findOpenLevelSetSlot(state: SemanticState, clarificationState: unknown): OpenLevelSetSlotRef | null {
   const slots = collectOpenLevelSetSlots(state)
-  const clarificationTarget = findClarificationTargetSlot(slots, clarificationState)
+  const pendingItems = readPendingClarificationItems(clarificationState)
+  const clarificationTarget = findClarificationTargetSlot(slots, pendingItems)
   if (clarificationTarget) {
     return clarificationTarget
   }
 
-  return slots[0] ?? null
+  if (pendingItems.length > 0) {
+    return null
+  }
+
+  return slots.length === 1 ? slots[0] : null
 }
 
 function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
@@ -201,9 +206,9 @@ function findOpenSlots(slots: readonly SemanticSlotState[]): SemanticSlotState[]
 
 function findClarificationTargetSlot(
   slots: readonly OpenLevelSetSlotRef[],
-  clarificationState: unknown,
+  pendingItems: ReturnType<typeof readPendingClarificationItems>,
 ): OpenLevelSetSlotRef | null {
-  for (const item of readPendingClarificationItems(clarificationState)) {
+  for (const item of pendingItems) {
     const bySlotId = typeof item.slotId === 'string'
       ? slots.find(ref => buildSemanticSlotId(ref.slot) === item.slotId)
       : undefined
