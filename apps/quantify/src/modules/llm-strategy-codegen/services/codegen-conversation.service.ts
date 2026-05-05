@@ -1258,7 +1258,11 @@ export class CodegenConversationService {
       currentState: preMergedSemanticState,
       plan,
     })
-    const reducedSemanticState = this.normalizeSemanticContractReadiness(plannedSemanticState)
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.withRequiredSemanticOpenSlots(plannedSemanticState, preMergedLogicSnapshot, {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
+      }),
+    )
     const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
@@ -2385,12 +2389,16 @@ export class CodegenConversationService {
     return (
       state.triggers.length === 0
       && state.actions.length === 0
-      && (state.risk.length > 0 || state.position !== null)
+      && (state.risk.length > 0 || state.position !== null || this.hasExecutionContextEvidence(state))
     ) || (
       state.actions.length > 0
       && state.triggers.length === 0
       && !this.hasCompleteOrderProgramSemantics(state)
     )
+  }
+
+  private hasExecutionContextEvidence(state: SemanticState): boolean {
+    return Object.values(state.contextSlots).some(slot => slot !== null)
   }
 
   private hasLockedTriggerPhase(
@@ -3240,7 +3248,6 @@ export class CodegenConversationService {
       || state.actions.length > 0
       || state.risk.length > 0
       || state.position !== null
-      || Object.values(state.contextSlots).some(slot => slot !== null)
   }
 
   private mergePersistedBlockingClarificationItems(

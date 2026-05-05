@@ -1044,7 +1044,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).toContain('出场：15m 价格回到布林带中轨(MA20)时平多；15m 价格回到布林带中轨(MA20)时平空')
   })
 
-  it('treats risk, position, and context slots as semantic mainflow evidence but not families as mainflow evidence', () => {
+  it('treats executable semantics as mainflow evidence but not families or context-only slots', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
     const emptyState = (service as any).createEmptySemanticState()
 
@@ -1052,6 +1052,64 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ...emptyState,
       families: ['single-leg'],
     })).toBe(false)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      contextSlots: {
+        ...emptyState.contextSlots,
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'perp',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })).toBe(false)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      triggers: [{
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    })).toBe(true)
+    expect((service as any).hasSemanticMainFlowEvidence({
+      ...emptyState,
+      actions: [{ id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+    })).toBe(true)
     expect((service as any).hasSemanticMainFlowEvidence({
       ...emptyState,
       risk: [lockedStopLossRisk()],
@@ -1064,21 +1122,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         positionMode: 'long_only',
         status: 'locked',
         source: 'user_explicit',
-      },
-    })).toBe(true)
-    expect((service as any).hasSemanticMainFlowEvidence({
-      ...emptyState,
-      contextSlots: {
-        ...emptyState.contextSlots,
-        symbol: {
-          slotKey: 'symbol',
-          fieldPath: 'contextSlots.symbol',
-          status: 'locked',
-          priority: 'context',
-          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
-          affectsExecution: true,
-          value: 'BTCUSDT',
-        },
       },
     })).toBe(true)
   })
@@ -10532,6 +10575,61 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         reason: 'missing_exchange',
       }),
     ]))
+  })
+
+  it('context-only locked state asks for executable semantics instead of entering confirm gate', async () => {
+    const semanticState = buildLockedMaSemanticState({
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-context-only-no-strategy-atoms',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-context-only-no-strategy-atoms', {
+      userId: 'u1',
+      message: '继续',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请补充入场触发条件')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
+    expect(result.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_semantic_trigger',
+        slotKey: 'trigger.entry',
+      }),
+    ]))
+    expect(updatePayload.status).toBe('DRAFTING')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.missing_entry_atom',
+        phase: 'entry',
+      }),
+      expect.objectContaining({
+        key: 'semantic.missing_exit_atom',
+        phase: 'exit',
+      }),
+    ]))
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
   it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
