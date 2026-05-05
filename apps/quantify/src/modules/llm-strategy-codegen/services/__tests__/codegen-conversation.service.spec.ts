@@ -3642,7 +3642,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   })
 
-  it('keeps confirmGenerate blocked when legacy clarification blockers remain after semantic slots are closed', async () => {
+  it('does not let legacy clarification blockers keep confirmGenerate blocked after semantic slots are closed', async () => {
     const activeGateSpy = jest.spyOn(service as any, 'resolveActiveGateMissingFields').mockReturnValue(['entryRules'])
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [lockedStopLossRisk()],
@@ -3716,18 +3716,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(activeGateSpy).not.toHaveBeenCalled()
-    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('请先澄清这条规则')
-    expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'NEEDS_CLARIFICATION',
-      items: expect.arrayContaining([
-        expect.objectContaining({
-          reason: 'conflicting_market_scope',
-          status: 'pending',
-          blocking: true,
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+      's-confirm-semantic-legacy-blocker',
+      expect.objectContaining({
+        status: 'GENERATING',
+        clarificationState: expect.objectContaining({
+          status: 'CLEAR',
+          items: [],
         }),
-      ]),
+      }),
+    )
+    expect(result.status).toBe('GENERATING')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+      items: [],
     }))
   })
 
@@ -4579,6 +4581,461 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         question: '请确认每格步长（例如 0.5%）。',
       }),
     ])
+  })
+
+  it('does not let legacy fallback clarification decide semantic main-flow readiness', () => {
+    const semanticState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          sideScope: 'both',
+          params: {
+            sideMode: 'bidirectional',
+            recycle: true,
+            breakoutAction: 'pause',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [
+            {
+              id: 'contract-grid-levels',
+              kind: 'trigger',
+              capabilities: [
+                {
+                  domain: 'price',
+                  verb: 'define',
+                  object: 'level_set',
+                  shape: {
+                    mode: 'static_range',
+                    lower: 78800,
+                    upper: 81400,
+                    gridIntervals: 10,
+                    gridCount: 11,
+                    absoluteSpacing: 260,
+                    spacingMode: 'arithmetic',
+                  },
+                },
+              ],
+              requires: [],
+              params: {},
+            },
+          ],
+        },
+      ],
+      actions: [
+        { id: 'grid-orders', key: 'place_limit_grid', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 500,
+        positionMode: 'bidirectional',
+        sizing: { kind: 'quote', value: 500, asset: 'USDT' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'perp',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }
+
+    const result = (service as any).buildClarificationFromSemanticState(semanticState, {
+      entryRules: ['在合适的趋势里开启网格'],
+      exitRules: [],
+      riskRules: {},
+    }, { preserveLegacyFallback: false })
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+      items: [],
+    }))
+  })
+
+  it('keeps legacy completeness blockers when semantic evidence is risk-only', () => {
+    const semanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [lockedStopLossRisk()],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }
+
+    const result = (service as any).buildClarificationFromSemanticState(semanticState, {
+      entryRules: [],
+      exitRules: [],
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        stopLossPct: 5,
+      },
+    }, { preserveLegacyFallback: false })
+
+    expect(result.status).toBe('NEEDS_CLARIFICATION')
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+    ]))
+  })
+
+  it('keeps missing executable atoms as semantic slots across partial semantic turns', () => {
+    const stateWithRiskOnly = (service as any).withRequiredSemanticOpenSlots({
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [lockedStopLossRisk()],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {})
+
+    expect(stateWithRiskOnly.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.missing_entry_atom',
+        phase: 'entry',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'trigger.entry', status: 'open' }),
+        ]),
+      }),
+      expect.objectContaining({
+        key: 'semantic.missing_exit_atom',
+        phase: 'exit',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'trigger.exit', status: 'open' }),
+        ]),
+      }),
+    ]))
+
+    const stateAfterEntryOnly = (service as any).withRequiredSemanticOpenSlots({
+      ...stateWithRiskOnly,
+      triggers: [
+        ...stateWithRiskOnly.triggers,
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma', referenceRole: 'short_term' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    }, {})
+    const clarification = (service as any).buildClarificationFromSemanticState(stateAfterEntryOnly, {
+      entryRules: ['价格突破均线时买入'],
+      exitRules: [],
+      riskRules: { stopLossPct: 5 },
+    }, { preserveLegacyFallback: false })
+
+    expect(stateAfterEntryOnly.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom' }),
+    ]))
+    expect(stateAfterEntryOnly.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_exit_atom' }),
+    ]))
+    expect(clarification).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'semantic.trigger.exit',
+          reason: 'missing_exit_rules',
+          slotKey: 'trigger.exit',
+        }),
+      ]),
+    }))
+    expect(clarification.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.trigger.entry' }),
+    ]))
+  })
+
+  it('prunes missing exit placeholders when a later turn supplies complete order-program contracts', () => {
+    const stateWithRiskOnly = (service as any).withRequiredSemanticOpenSlots({
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [lockedStopLossRisk()],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {})
+
+    const stateAfterGrid = (service as any).withRequiredSemanticOpenSlots({
+      ...stateWithRiskOnly,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        ...stateWithRiskOnly.triggers,
+        {
+          id: 'grid-range',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          sideScope: 'both',
+          params: {
+            sideMode: 'bidirectional',
+            recycle: true,
+            breakoutAction: 'pause',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                mode: 'fixed_range',
+                lower: 78800,
+                upper: 81400,
+                gridIntervals: 10,
+                gridCount: 11,
+                absoluteSpacing: 260,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [{
+        id: 'grid-orders',
+        key: 'place_limit_grid',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-grid-ladder',
+          kind: 'action',
+          capabilities: [
+            {
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: {
+                orderType: 'limit',
+                recycleOnFill: true,
+                pairingPolicy: 'adjacent_level',
+              },
+            },
+            {
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: {
+                value: 500,
+                asset: 'USDT',
+              },
+            },
+          ],
+          requires: [],
+          params: {},
+        }],
+      }],
+      position: {
+        mode: 'fixed_quote',
+        value: 500,
+        positionMode: 'bidirectional',
+        sizing: { kind: 'quote', value: 500, asset: 'USDT' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'perp',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    }, {})
+
+    expect(stateAfterGrid.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom' }),
+      expect.objectContaining({ key: 'semantic.missing_exit_atom' }),
+    ]))
+    expect((service as any).findNextOpenSemanticSlot(stateAfterGrid)).toBeNull()
+  })
+
+  it('does not resolve spot-short blockers just because marketType context is locked', () => {
+    const semanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        marketType: {
+          ...buildLockedMaSemanticState().contextSlots.marketType,
+          value: 'spot',
+        },
+      },
+    })
+
+    expect((service as any).isResolvedBySemanticState({
+      key: 'market.marketType',
+      reason: 'invalid_spot_short_combo',
+      field: 'marketType',
+      blocking: true,
+      question: '现货不能做空，请确认市场类型。',
+      status: 'pending',
+    }, semanticState)).toBe(false)
+  })
+
+  it('deduplicates fallback execution-context items when semantic context slots are already present', () => {
+    const result = (service as any).mergeSemanticClarificationState({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          question: '请确认交易所（binance / okx / hyperliquid）。',
+          status: 'pending',
+        },
+      ],
+      summary: '已识别部分条件，但仍未完整。',
+    })
+
+    const exchangeItems = result.items.filter(item => item.key === 'executionContext.exchange')
+    expect(exchangeItems).toHaveLength(1)
   })
 
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {

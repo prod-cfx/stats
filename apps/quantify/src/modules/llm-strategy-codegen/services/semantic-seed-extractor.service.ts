@@ -1225,6 +1225,7 @@ export class SemanticSeedExtractorService {
     return this.extractNumber(segment, [
       /每格(?:价格)?(?:间距|距离)\s*[:：]?\s*(\d+(?:\.\d+)?)(?![\d.])(?!\s*%)\s*(?:USDT|USDC|USD|U|u|刀)?/u,
       /每一格(?:价格)?(?:间距|距离)\s*[:：]?\s*(\d+(?:\.\d+)?)(?![\d.])(?!\s*%)\s*(?:USDT|USDC|USD|U|u|刀)?/u,
+      /单格(?:价格)?(?:间距|距离)\s*[:：]?\s*(\d+(?:\.\d+)?)(?![\d.])(?!\s*%)\s*(?:USDT|USDC|USD|U|u|刀)?/u,
     ])
   }
 

@@ -511,6 +511,129 @@ describe('semantic-only strategy regression verification', () => {
 
   it.each([
     {
+      sessionId: 'fixed-range-grid-contract-user-wording',
+      message: '在 OKX 交易 BTCUSDT 永续合约，15m 周期，做固定区间双向网格。价格区间 78800-81400，共 10 格，按等距价格网格划分，每格价格间距 260 USDT，每格下单资金 500 USDT。部署后立即创建限价网格挂单，成交后在相邻网格自动挂反向单。价格突破上下边界时停止策略并撤销未成交网格订单。按入场均价亏损 5% 止损，盈利 10% 止盈。',
+    },
+    {
+      sessionId: 'fixed-range-grid-contract-synonym-wording',
+      message: 'OKX BTCUSDT perp 15m，在 78800 到 81400 区间运行多空双向网格，分成 10 格，单格间距 260U，单格预算 500U；用限价挂单，成交后相邻价位反向补单；越过上下边界就停用策略并撤销未成交订单；亏损 5% 止损，盈利 10% 止盈。',
+    },
+  ])('publishes $sessionId through fixed-range grid contracts, not checklist templates', async ({ sessionId, message }) => {
+    const result = await generateAndPublish(sessionId, buildSemanticStateFromMessage(message))
+
+    expect(result.semanticState.contextSlots).toEqual(expect.objectContaining({
+      exchange: expect.objectContaining({ value: 'okx', status: 'locked' }),
+      symbol: expect.objectContaining({ value: 'BTCUSDT', status: 'locked' }),
+      marketType: expect.objectContaining({ value: 'perp', status: 'locked' }),
+      timeframe: expect.objectContaining({ value: '15m', status: 'locked' }),
+    }))
+    expect(result.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        sideScope: 'both',
+        status: 'locked',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'trigger',
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'price',
+                verb: 'define',
+                object: 'level_set',
+                shape: expect.objectContaining({
+                  mode: 'fixed_range',
+                  lower: 78800,
+                  upper: 81400,
+                  gridIntervals: 10,
+                  gridCount: 11,
+                  absoluteSpacing: 260,
+                  spacingMode: 'arithmetic',
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(result.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'open_long',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'action',
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+                shape: expect.objectContaining({
+                  orderType: 'limit',
+                  recycleOnFill: true,
+                  pairingPolicy: 'adjacent_level',
+                }),
+              }),
+              expect.objectContaining({
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 500, asset: 'USDT' },
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(result.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.boundary_guard',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'risk',
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'guard',
+                verb: 'enforce',
+                object: 'boundary_cancel',
+                shape: expect.objectContaining({
+                  onBreach: 'HALT_STRATEGY',
+                  cancelOrders: true,
+                  regrid: false,
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+      expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 10 }) }),
+    ]))
+    expect(result.canonicalSpec.orderPrograms).toEqual([
+      expect.objectContaining({
+        kind: 'contract_order_program',
+        mode: 'perp_neutral',
+        levelSet: expect.objectContaining({
+          lower: 78800,
+          upper: 81400,
+          gridIntervals: 10,
+          gridCount: 11,
+          absoluteSpacing: 260,
+        }),
+        budget: {
+          mode: 'per_order_quote',
+          value: 500,
+          asset: 'USDT',
+        },
+      }),
+    ])
+    expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining([
+      'FORCE_EXIT',
+    ]))
+    expect(result.publishedSnapshot.scriptSnapshot).toEqual(expect.stringContaining('const ORDER_PROGRAMS = [{'))
+    expect(result.publishedSnapshot.scriptSnapshot).toEqual(expect.stringContaining('const DECISION_PROGRAMS = ['))
+  })
+
+  it.each([
+    {
       sessionId: 'official-grid-range-position-publish',
       message: '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建网格区间策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。',
       keys: ['price.range_position_lte', 'price.range_position_gte', 'position_loss_pct', 'risk.take_profit_pct'],
