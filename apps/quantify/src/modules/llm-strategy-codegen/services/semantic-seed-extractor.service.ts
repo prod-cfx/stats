@@ -28,6 +28,7 @@ type FixedGridRange = {
 
 const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
+const REDUCED_INDICATOR_CROSS_SIGNATURE_INDICATORS = new Set(['ma', 'ema', 'moving_average', 'macd'])
 
 type SemanticAliasContext = {
   bollingerBandParams?: {
@@ -137,6 +138,7 @@ export class SemanticSeedExtractorService {
   private isIndicatorCrossTrigger(trigger: SeedTrigger): boolean {
     return (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under')
       && typeof trigger.params?.indicator === 'string'
+      && REDUCED_INDICATOR_CROSS_SIGNATURE_INDICATORS.has(trigger.params.indicator)
   }
 
   private resolveIndicatorCrossSemantic(trigger: SeedTrigger): string {

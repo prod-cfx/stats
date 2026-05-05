@@ -2295,6 +2295,19 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('preserves distinct RSI cross thresholds as separate trigger atoms', () => {
+    const patch = service.extract('RSI14 从 30 下方向上穿回 30 时买入；RSI14 从 50 下方向上穿回 50 时买入。')
+    const rsiCrossOverTriggers = patch.triggers?.filter(trigger =>
+      trigger.key === 'indicator.cross_over'
+      && trigger.phase === 'entry'
+      && trigger.sideScope === 'long'
+      && trigger.params?.indicator === 'rsi',
+    ) ?? []
+
+    expect(rsiCrossOverTriggers).toHaveLength(2)
+    expect(rsiCrossOverTriggers.map(trigger => trigger.params?.value).sort()).toEqual([30, 50])
+  })
+
   it('extracts breakout-tracking semantics from the official breakout template', () => {
     const patch = service.extract('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。入场规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；出场规则：价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，止损 3%，止盈 0.6%。')
 
