@@ -6503,20 +6503,26 @@ export class CodegenConversationService {
       const nextState = this.withUnsupportedFallback(classification.state, unsupportedFallback)
       const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
-      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: nextState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: this.appendConversationHistory(
-            args.constraintPack.conversationHistory ?? [],
-            args.message,
-            unsupportedFallback.prompt,
-          ),
-        },
-        latestSpecDesc: null,
-      }))
+      await this.sessionsRepo.updateSession(args.session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: nextState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: this.appendConversationHistory(
+              args.constraintPack.conversationHistory ?? [],
+              args.message,
+              unsupportedFallback.prompt,
+            ),
+          },
+          latestSpecDesc: null,
+        }),
+        latestDraftCode: null,
+        rejectReason: null,
+        validationReport: null,
+        semanticGraph: null,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: args.session.id,

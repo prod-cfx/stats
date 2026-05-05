@@ -10589,7 +10589,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'pending',
     }))
     expect(updatePayload.latestSpecDesc).toBeNull()
-    expect(updatePayload.semanticGraph).toBeUndefined()
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.rejectReason).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticGraph).toBeNull()
   })
 
   it('replaces a published script when the user pastes corrected script code', async () => {
