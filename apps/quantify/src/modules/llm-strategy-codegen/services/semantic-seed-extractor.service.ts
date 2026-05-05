@@ -991,6 +991,7 @@ export class SemanticSeedExtractorService {
   ): void {
     const hasExplicitBollinger = /布林带/u.test(segment)
     if (!hasExplicitBollinger && !aliasContext.bollingerBandParams) return
+    if (hasExplicitBollinger && this.hasMultipleBoundaryRolesInOneCommaClause(segment)) return
 
     const clauses = this.splitCommaClauses(segment)
     const segmentBandParams = this.extractBollingerBandParams(segment) ?? aliasContext.bollingerBandParams
@@ -1084,19 +1085,13 @@ export class SemanticSeedExtractorService {
       const boundaryRole = this.resolveBoundaryRole(clause)
       if (!boundaryRole) continue
 
-      const intent = this.resolveTradeIntent(clause)
-      const phase = intent?.phase ?? (boundaryRole === 'middle' ? 'exit' : 'entry')
-      const sideScope = intent?.sideScope
-        ?? (boundaryRole === 'upper'
-            ? 'short'
-            : boundaryRole === 'lower'
-              ? 'long'
-              : 'both')
+      const intent = this.resolveIndicatorBoundaryTradeIntent(clause)
+      if (!intent) continue
 
       this.pushTrigger(triggers, seen, {
         key: 'price.detect.indicator_boundary',
-        phase,
-        sideScope,
+        phase: intent.phase,
+        sideScope: intent.sideScope,
         params: {
           indicator: {
             name: indicatorName,
@@ -1112,10 +1107,29 @@ export class SemanticSeedExtractorService {
     }
   }
 
+  private resolveIndicatorBoundaryTradeIntent(clause: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+    const intent = this.resolveTradeIntent(clause)
+    if (intent) return intent
+    if (/(?:买)(?!回)/u.test(clause)) return { phase: 'entry', sideScope: 'long' }
+    if (/卖/u.test(clause)) return { phase: 'exit', sideScope: 'long' }
+    return null
+  }
+
   private isBareBollingerBoundaryAlias(segment: string, aliasContext: SemanticAliasContext): boolean {
     return Boolean(aliasContext.bollingerBandParams)
       && !/布林线|布林带|bollinger|通道|channel|上边界|下边界|边界/iu.test(segment)
       && /上轨|下轨|中轨/iu.test(segment)
+  }
+
+  private hasMultipleBoundaryRolesInOneCommaClause(segment: string): boolean {
+    return this.splitCommaClauses(segment).some((clause) => {
+      const roles = new Set(
+        Array.from(clause.matchAll(/上轨|下轨|中轨|上沿|下沿|中线|上边界|下边界|upper|lower|middle|midline/giu))
+          .map(match => this.resolveBoundaryRole(match[0]))
+          .filter((role): role is 'upper' | 'lower' | 'middle' => role !== null),
+      )
+      return roles.size > 1
+    })
   }
 
   private splitIndicatorBoundaryClauses(segment: string): string[] {
@@ -1161,7 +1175,7 @@ export class SemanticSeedExtractorService {
           sideScope: intent.sideScope,
           params: {
             indicator: cross.indicator,
-            semantic: cross.direction === 'up' ? 'cross_up' : 'cross_down',
+            semantic: 'cross_up',
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
@@ -1175,7 +1189,7 @@ export class SemanticSeedExtractorService {
           sideScope: intent.sideScope,
           params: {
             indicator: cross.indicator,
-            semantic: cross.direction === 'up' ? 'cross_up' : 'cross_down',
+            semantic: 'cross_down',
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
