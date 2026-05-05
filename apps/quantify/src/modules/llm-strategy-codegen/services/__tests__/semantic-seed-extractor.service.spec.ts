@@ -521,6 +521,22 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('extracts volume threshold as recognized unsupported trigger atom', () => {
+    const patch = service.extract('OKX BTCUSDT 15m，成交量大于过去 20 根均量 2 倍时开多，仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volume.threshold' }),
+    ]))
+  })
+
+  it('extracts ATR threshold and filter wording as recognized unsupported trigger atom', () => {
+    const patch = service.extract('OKX BTCUSDT 1h，ATR threshold filter passes when ATR greater than 100, then MA 金叉做多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volatility.atr_threshold' }),
+    ]))
+  })
+
   it('extracts ATR stop as recognized unsupported risk atom', () => {
     const patch = service.extract('ETHUSDT 1h 均线金叉做多，用 ATR 2 倍移动止损，仓位 10%。')
 
@@ -529,6 +545,14 @@ describe('SemanticSeedExtractorService', () => {
         key: 'risk.atr_stop',
         params: expect.objectContaining({ sourceText: expect.any(String) }),
       }),
+    ]))
+  })
+
+  it('extracts English ATR stop wording as recognized unsupported risk atom', () => {
+    const patch = service.extract('ETHUSDT 1h MA cross long with ATR trailing stop and 10% position.')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.atr_stop' }),
     ]))
   })
 

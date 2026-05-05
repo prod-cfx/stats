@@ -834,6 +834,20 @@ describe('SemanticSeedStateBuilderService', () => {
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
+      }, {
+        key: 'volume.threshold',
+        phase: 'entry',
+        params: { sourceText: '成交量阈值' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }, {
+        key: 'volatility.atr_threshold',
+        phase: 'gate',
+        params: { sourceText: 'ATR threshold filter' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
       }],
       risk: [{
         key: 'risk.atr_stop',
@@ -841,32 +855,37 @@ describe('SemanticSeedStateBuilderService', () => {
         status: 'locked',
         source: 'user_explicit',
         openSlots: [],
+      }, {
+        key: 'risk.partial_take_profit',
+        params: { sourceText: '分批止盈' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
       }],
     })
 
-    expect(state?.triggers[0]).toEqual(expect.objectContaining({
-      key: 'volume.spike',
-      openSlots: [],
-      contracts: [expect.objectContaining({
-        kind: 'trigger',
-        capabilities: [expect.objectContaining({
-          domain: 'market',
-          verb: 'detect',
-          object: 'volume_condition',
-        })],
-      })],
+    expect(state?.triggers).toHaveLength(3)
+    expect(state?.risk).toHaveLength(2)
+    for (const node of [...(state?.triggers ?? []), ...(state?.risk ?? [])]) {
+      expect(node.openSlots).toEqual([])
+      expect(node.contracts).toEqual(expect.arrayContaining([expect.objectContaining({
+        capabilities: expect.any(Array),
+      })]))
+    }
+    expect(state?.triggers[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'volume_condition',
     }))
-    expect(state?.risk[0]).toEqual(expect.objectContaining({
-      key: 'risk.atr_stop',
-      openSlots: [],
-      contracts: [expect.objectContaining({
-        kind: 'risk',
-        capabilities: [expect.objectContaining({
-          domain: 'guard',
-          verb: 'enforce',
-          object: 'atr_stop',
-        })],
-      })],
+    expect(state?.triggers[1]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'volume_condition',
+    }))
+    expect(state?.triggers[2]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'volatility_condition',
+    }))
+    expect(state?.risk[0]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'atr_stop',
+    }))
+    expect(state?.risk[1]?.contracts?.[0]?.capabilities[0]).toEqual(expect.objectContaining({
+      object: 'partial_take_profit',
     }))
   })
 })

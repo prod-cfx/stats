@@ -696,7 +696,7 @@ export class SemanticSeedExtractorService {
   }
 
   private pushRecognizedUnsupportedRisk(text: string, risk: SeedRisk[]): void {
-    if (/(?:ATR|平均真实波幅).*(?:止损|移动止损|动态止损)/iu.test(text)) {
+    if (/(?:ATR|平均真实波幅).*(?:止损|移动止损|动态止损|(?:moving|dynamic|trailing)?\s*stop)/iu.test(text)) {
       this.pushRisk(risk, {
         key: 'risk.atr_stop',
         params: { sourceText: 'atr stop' },
@@ -1960,7 +1960,7 @@ export class SemanticSeedExtractorService {
       })
     }
 
-    if (/(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于)/iu.test(segment)) {
+    if (/(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于|threshold|filter|greater\s+than|less\s+than|gte|lte)/iu.test(segment)) {
       this.pushTrigger(triggers, seen, {
         key: 'volatility.atr_threshold',
         phase: 'gate',
