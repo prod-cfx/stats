@@ -1,6 +1,9 @@
 import type { SemanticCapabilityShape, SemanticSlotState, SemanticState } from '../../types/semantic-state'
 import { buildSemanticSlotId } from '../../types/semantic-state'
-import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
+import {
+  SemanticOpenSlotAnswerResolverService,
+  type SemanticOpenSlotAnswerResolverResult,
+} from '../semantic-open-slot-answer-resolver.service'
 
 describe('SemanticOpenSlotAnswerResolverService', () => {
   const service = new SemanticOpenSlotAnswerResolverService()
@@ -18,7 +21,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '20格',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20 })
     expect(result.nextState.triggers[0]).toEqual(expect.objectContaining({
       status: 'locked',
@@ -64,7 +67,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '20 个网格',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20 })
     expect(result.nextState.actions[0]).toEqual(expect.objectContaining({
       status: 'locked',
@@ -88,7 +91,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '每格 100 USDT',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ absoluteSpacing: 100 })
     expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       absoluteSpacing: 100,
@@ -109,7 +112,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '0.5%间距',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ spacingPct: 0.5 })
     expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       spacingPct: 0.5,
@@ -130,7 +133,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '20格，每格100 USDT',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20, absoluteSpacing: 100 })
     expect(result.nextState.triggers[0]).toEqual(expect.objectContaining({
       status: 'open',
@@ -194,7 +197,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       },
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual({
       lower: 100,
       upper: 200,
@@ -240,7 +243,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       },
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ gridCount: 20 })
     expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridCount: 20,
@@ -284,7 +287,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       },
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.nextState.triggers[0].openSlots).toEqual([siblingSlot])
     expect(result.nextState.triggers[0].status).toBe('open')
   })
@@ -306,9 +309,9 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     const countResult = service.resolve({ currentState: countState, message: '网格数量 20' })
     const intervalResult = service.resolve({ currentState: intervalState, message: '20个间隔' })
 
-    expect(countResult.consumed).toBe(true)
+    expectConsumed(countResult)
     expect(countResult.answer).toEqual({ gridCount: 20 })
-    expect(intervalResult.consumed).toBe(true)
+    expectConsumed(intervalResult)
     expect(intervalResult.answer).toEqual({ gridIntervals: 20, gridCount: 21 })
     expect(intervalResult.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
       gridIntervals: 20,
@@ -329,7 +332,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '11格，每格100 USDT',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.nextState.triggers[0].status).toBe('locked')
     expect(result.nextState.triggers[0].openSlots).toEqual([])
     expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
@@ -351,7 +354,7 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
       message: '间距50',
     })
 
-    expect(result.consumed).toBe(true)
+    expectConsumed(result)
     expect(result.answer).toEqual({ absoluteSpacing: 50 })
     expect(result.nextState.triggers[0].status).toBe('open')
     expect(result.nextState.triggers[0].openSlots).toEqual([
@@ -402,6 +405,12 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     })
   })
 })
+
+function expectConsumed(
+  result: SemanticOpenSlotAnswerResolverResult,
+): asserts result is Extract<SemanticOpenSlotAnswerResolverResult, { consumed: true }> {
+  expect(result.consumed).toBe(true)
+}
 
 function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {
   return {

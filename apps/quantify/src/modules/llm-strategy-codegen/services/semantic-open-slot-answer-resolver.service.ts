@@ -392,12 +392,12 @@ function updateLevelSetContracts(
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): { contracts?: SemanticAtomContract[]; updated: boolean; fieldPath: string; hasConflict: boolean } {
   if (!contracts?.length) {
-    return { contracts, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
+    return { contracts: undefined, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
   }
 
   const target = parseTargetCapabilityPath(consumedSlot.fieldPath, consumedSlot.slotKey)
   if (!target) {
-    return { contracts, updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
+    return { contracts: [...contracts], updated: false, fieldPath: consumedSlot.fieldPath, hasConflict: false }
   }
 
   let updated = false
