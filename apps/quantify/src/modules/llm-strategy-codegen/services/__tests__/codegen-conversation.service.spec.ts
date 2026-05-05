@@ -11976,6 +11976,152 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it.each([
+    {
+      name: 'freeform keep grid count',
+      message: '保留网格数量',
+      clarificationAnswers: undefined,
+      expectedShape: { gridCount: 11 },
+      removedShape: { absoluteSpacing: 100 },
+    },
+    {
+      name: 'structured keep spacing',
+      message: '继续',
+      clarificationAnswers: { 'semantic.contract.shape.price.level_set.spacing_conflict': '保留每格间距' },
+      expectedShape: { absoluteSpacing: 100 },
+      removedShape: { gridCount: 11 },
+    },
+  ])('consumes level_set spacing conflict answer through conversation: $name', async ({
+    message,
+    clarificationAnswers,
+    expectedShape,
+    removedShape,
+  }) => {
+    const conflictSlot = {
+      slotKey: 'contract.shape.price.level_set.spacing_conflict',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [conflictSlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                gridCount: 11,
+                absoluteSpacing: 100,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        asset: 'USDT',
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const clarificationKey = 'semantic.contract.shape.price.level_set.spacing_conflict'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [{
+        key: clarificationKey,
+        field: conflictSlot.fieldPath,
+        fieldPath: conflictSlot.fieldPath,
+        slotKey: conflictSlot.slotKey,
+        slotId: buildSemanticSlotId(conflictSlot as any),
+        status: 'pending',
+        blocking: true,
+        priority: 90,
+        prompt: conflictSlot.questionHint,
+        reason: 'missing_semantic_contract_requirement',
+      }],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: `s-grid-spacing-conflict-${message}`,
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner should not see spacing conflict answers',
+      }),
+    })
+
+    const result = await service.continueSession(`s-grid-spacing-conflict-${message}`, {
+      userId: 'u1',
+      message,
+      ...(clarificationAnswers ? { clarificationAnswers } : {}),
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const levelSetShape = updatePayload.semanticState.triggers[0].contracts[0].capabilities[0].shape
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(levelSetShape).toEqual(expect.objectContaining(expectedShape))
+    expect(levelSetShape).not.toEqual(expect.objectContaining(removedShape))
+    expect(updatePayload.semanticState.triggers[0].openSlots).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        status: 'open',
+      }),
+    ]))
+    expect(result.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('scopes structured level_set resolution so position 10% and density 20格 close their own slots', async () => {
     const densitySlot = {
       slotKey: 'contract.shape.price.level_set.density',
