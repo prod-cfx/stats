@@ -16,9 +16,13 @@ interface UnsupportedAtomInput {
 
 const DEFAULT_FALLBACK_ATOM_KEY = 'risk.atr_stop'
 
-const REJECT_PATTERN = /不要|算了|等支持再说|不改|先不|取消|\bno\b|wait\s+for\s+support/
-const ACCEPT_PATTERN = /确认|可以|好|就这个|继续|先测试这个|用这个|\bok\b|\byes\b|\bcontinue\b/
-const MODIFY_PATTERN = /改成|换成|不过|但是|但|仓位|周期|标的|交易所|\bchange\b|\bswitch\b|\bbut\b|\bhowever\b|\bposition\b|\btimeframe\b|\bsymbol\b|\bexchange\b/
+const CHINESE_NEGATIVE_TERMS = ['不要', '算了', '等支持再说', '不改', '先不', '取消', '不可以', '不确认']
+const CHINESE_ACCEPT_TERMS = ['确认', '可以', '好', '就这个', '继续', '先测试这个', '用这个']
+const CHINESE_MODIFY_TERMS = ['改成', '换成', '不过', '但是', '但', '仓位', '周期', '标的', '交易所']
+
+const ENGLISH_REJECT_PATTERN = /\b(nope|no)\b|wait\s+for\s+support/
+const ENGLISH_ACCEPT_PATTERN = /\b(ok|yes|continue)\b/
+const ENGLISH_MODIFY_PATTERN = /\b(change|switch|but|however|position|timeframe|symbol|exchange)\b/
 
 @Injectable()
 export class UnsupportedFallbackService {
@@ -27,13 +31,13 @@ export class UnsupportedFallbackService {
   buildPendingFallback(unsupportedAtoms: UnsupportedAtomInput[]): UnsupportedFallbackState {
     const replacement = this.resolveReplacement(unsupportedAtoms[0]?.key)
     const unsupportedAtomCopies = unsupportedAtoms.map(atom => ({ ...atom }))
-    const names = unsupportedAtomCopies.map(atom => atom.displayName).join('、')
+    const names = [...new Set(unsupportedAtomCopies.map(atom => atom.displayName))].join('、')
     const publicReasons = [...new Set(unsupportedAtomCopies.map(atom => atom.publicReason))]
 
     return {
       status: 'pending',
       unsupportedAtoms: unsupportedAtomCopies,
-      recommendedStrategy: replacement,
+      recommendedStrategy: cloneReplacement(replacement),
       prompt: [
         `我听懂了，你要的是 ${names}。`,
         ...publicReasons,
@@ -49,16 +53,15 @@ export class UnsupportedFallbackService {
       return { kind: 'unclear' }
     }
 
-    if (REJECT_PATTERN.test(normalizedMessage)) {
-      return { kind: 'reject_fallback' }
-    }
-
-    const hasAccept = ACCEPT_PATTERN.test(normalizedMessage)
-    if (hasAccept && MODIFY_PATTERN.test(normalizedMessage)) {
+    if (hasModifyIntent(normalizedMessage)) {
       return { kind: 'modify_fallback', message }
     }
 
-    if (hasAccept) {
+    if (hasRejectIntent(normalizedMessage)) {
+      return { kind: 'reject_fallback' }
+    }
+
+    if (hasAcceptIntent(normalizedMessage)) {
       return { kind: 'accept_fallback' }
     }
 
@@ -94,4 +97,42 @@ function hasReplacement(value: unknown): value is { replacement: SemanticAtomRep
 
   const replacement = value.replacement
   return Boolean(replacement && typeof replacement === 'object' && 'description' in replacement && 'patch' in replacement)
+}
+
+function hasModifyIntent(message: string): boolean {
+  return includesAny(message, CHINESE_MODIFY_TERMS) || ENGLISH_MODIFY_PATTERN.test(message)
+}
+
+function hasRejectIntent(message: string): boolean {
+  return includesAny(message, CHINESE_NEGATIVE_TERMS) || hasEnglishRejectIntent(message)
+}
+
+function hasAcceptIntent(message: string): boolean {
+  return includesChineseAccept(message) || ENGLISH_ACCEPT_PATTERN.test(message)
+}
+
+function includesChineseAccept(message: string): boolean {
+  return CHINESE_ACCEPT_TERMS.some((term) => {
+    if (!message.includes(term)) {
+      return false
+    }
+
+    return !message.includes(`不${term}`)
+  })
+}
+
+function includesAny(message: string, terms: string[]): boolean {
+  return terms.some(term => message.includes(term))
+}
+
+function cloneReplacement(replacement: SemanticAtomReplacementStrategy): SemanticAtomReplacementStrategy {
+  return JSON.parse(JSON.stringify(replacement)) as SemanticAtomReplacementStrategy
+}
+
+function hasEnglishRejectIntent(message: string): boolean {
+  if (message.includes('no problem')) {
+    return false
+  }
+
+  return ENGLISH_REJECT_PATTERN.test(message)
 }
