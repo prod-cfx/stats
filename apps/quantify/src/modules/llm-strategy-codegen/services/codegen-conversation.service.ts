@@ -2106,7 +2106,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildCanonicalProjectionFailureAssistantPrompt(compileability),
+        assistantPrompt: this.buildSemanticProjectionRepairPrompt(compileability),
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -2330,8 +2330,7 @@ export class CodegenConversationService {
       checklist,
     )
     const stateWithExecutableAtomSlots = this.ensureExecutableAtomSlots(stateWithExplicitDeterministicRisk)
-    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.families.length > 0
-      || stateWithExplicitDeterministicRisk.triggers.length > 0
+    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.triggers.length > 0
       || stateWithExplicitDeterministicRisk.actions.length > 0
 
     if (!hasExecutableSemantics) {
@@ -3238,8 +3237,7 @@ export class CodegenConversationService {
   }
 
   private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
-    return state.families.length > 0
-      || state.triggers.length > 0
+    return state.triggers.length > 0
       || state.actions.length > 0
   }
 
@@ -5799,10 +5797,10 @@ export class CodegenConversationService {
 
     const reasons: string[] = []
     if (entryRuleCount === 0) {
-      reasons.push('未识别可编译入场规则')
+      reasons.push('missing_compilable_entry_rule')
     }
     if (exitRuleCount === 0) {
-      reasons.push('未识别可编译出场规则')
+      reasons.push('missing_compilable_exit_rule')
     }
 
     return {
@@ -6196,7 +6194,7 @@ export class CodegenConversationService {
     })
   }
 
-  private buildCanonicalProjectionFailureAssistantPrompt(report: CanonicalCompileabilityReport): string {
+  private buildSemanticProjectionRepairPrompt(report: CanonicalCompileabilityReport): string {
     return `语义已记录，但 canonical 投影暂时未生成可执行脚本结构。系统已保留当前逻辑图，请重试或继续补充更具体的执行语义。（entryRules=${report.entryRuleCount}, exitRules=${report.exitRuleCount}）`
   }
 
