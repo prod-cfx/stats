@@ -445,6 +445,90 @@ describe('canonicalSpecV2IrCompilerService', () => {
   })
 
   it.each([
+    { gridCount: 9, levelsPerSide: { down: 4, up: 5 }, levelLength: 10, spacing: 0.08 },
+    { gridCount: 2, levelsPerSide: { down: 1, up: 1 }, levelLength: 3, spacing: 0.4 },
+  ])(
+    'compiles centered-percent gridCount $gridCount as interval count',
+    ({ gridCount, levelsPerSide, levelLength, spacing }) => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '1m',
+        },
+        indicators: [],
+        sizing: null,
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1m'],
+        },
+        rules: [],
+        orderPrograms: [
+          {
+            id: 'contract-order-program-grid',
+            kind: 'contract_order_program',
+            mode: 'spot',
+            levelSet: {
+              mode: 'centered_percent_range',
+              centerTiming: 'deployment',
+              centerSource: 'last_price',
+              halfRangePct: 0.4,
+              gridCount,
+              spacingMode: 'arithmetic',
+            },
+            budget: {
+              mode: 'per_order_quote',
+              value: 10,
+              asset: 'USDT',
+            },
+            orderType: 'limit',
+            timeInForce: 'gtc',
+            recycleOnFill: true,
+            cancelOnStop: true,
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+      const result = compiler.compile({
+        canonicalSpec,
+        fallback: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '1m',
+          positionPct: 10,
+        },
+      })
+
+      expect(result.ir.signalCatalog.levelSets).toEqual([
+        expect.objectContaining({
+          spacing: { mode: 'pct', value: spacing },
+          levelsPerSide,
+        }),
+      ])
+
+      const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+      const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
+      const exprValues = evaluateExprPool(
+        {
+          bars: [{ open: 100, high: 101, low: 99, close: 100 }],
+          baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99 },
+        } as any,
+        ast.exprPool as any,
+        ast.topology.exprOrder,
+        ast.executionModel as any,
+      )
+      const evaluatedLevels = levelSetExpr ? exprValues[levelSetExpr.id] : null
+      expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(levelLength)
+    },
+  )
+
+  it.each([
     [
       { mode: 'QUOTE', value: 10 },
       { mode: 'fixed_quote', value: 10 },
