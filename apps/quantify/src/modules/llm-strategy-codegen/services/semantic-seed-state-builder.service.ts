@@ -382,6 +382,14 @@ export class SemanticSeedStateBuilderService {
       return this.isSupportedBollingerBoundaryParams(params)
     }
 
+    if (
+      key === 'volume.spike'
+      || key === 'volume.threshold'
+      || key === 'volatility.atr_threshold'
+    ) {
+      return true
+    }
+
     if (key === 'price.breakout_up' || key === 'price.breakout_down') {
       return this.hasBreakoutReference(params)
     }
@@ -458,6 +466,34 @@ export class SemanticSeedStateBuilderService {
     sideScope: SemanticTriggerState['sideScope'] | null,
     params: Record<string, unknown>,
   ): SemanticCapability {
+    if (key === 'volume.spike' || key === 'volume.threshold') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    if (key === 'volatility.atr_threshold') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
     if (key === 'execution.on_start') {
       return {
         domain: 'order_program',
@@ -543,6 +579,10 @@ export class SemanticSeedStateBuilderService {
   }
 
   private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
+    if (key === 'risk.atr_stop' || key === 'risk.partial_take_profit') {
+      return true
+    }
+
     if (
       key === 'risk.stop_loss_pct'
       || key === 'risk.take_profit_pct'
@@ -580,6 +620,12 @@ export class SemanticSeedStateBuilderService {
     }
     if (key === 'risk.condition_expression') {
       return 'risk_condition'
+    }
+    if (key === 'risk.atr_stop') {
+      return 'atr_stop'
+    }
+    if (key === 'risk.partial_take_profit') {
+      return 'partial_take_profit'
     }
     return null
   }

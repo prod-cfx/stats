@@ -7,6 +7,7 @@ import type {
   SemanticSlotState,
   SemanticSource,
 } from './semantic-state'
+import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
 
 export type CodegenSemanticTriggerParams = Record<string, unknown> & {
   expression?: SemanticExpression
@@ -18,6 +19,7 @@ export interface CodegenSemanticNodeEnvelope {
   source?: SemanticSource
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
+  support?: SemanticAtomSupportMetadata
 }
 
 export interface CodegenSemanticPatch {

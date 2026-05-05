@@ -510,6 +510,36 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('extracts volume spike as recognized unsupported atom instead of generic fallback text', () => {
+    const patch = service.extract('BTCUSDT 15m 放量突破前高做多，止损 5%，单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'volume.spike',
+        params: expect.objectContaining({ sourceText: expect.any(String) }),
+      }),
+    ]))
+  })
+
+  it('extracts ATR stop as recognized unsupported risk atom', () => {
+    const patch = service.extract('ETHUSDT 1h 均线金叉做多，用 ATR 2 倍移动止损，仓位 10%。')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_stop',
+        params: expect.objectContaining({ sourceText: expect.any(String) }),
+      }),
+    ]))
+  })
+
+  it('extracts partial take profit as recognized unsupported risk atom', () => {
+    const patch = service.extract('BTCUSDT 做多后盈利 5% 平一半，盈利 10% 全平，仓位 10%。')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.partial_take_profit' }),
+    ]))
+  })
+
   it('keeps halt and stop-loss clauses separate in mixed risk wording', () => {
     const result = service.extract('亏损 5% 暂停策略，并且止损 3%')
 

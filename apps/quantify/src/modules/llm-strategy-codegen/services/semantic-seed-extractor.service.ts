@@ -214,6 +214,34 @@ export class SemanticSeedExtractorService {
       }
     }
 
+    if (trigger.key === 'volume.spike' || trigger.key === 'volume.threshold') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_condition',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'volatility.atr_threshold') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
     return {
       domain: 'price',
       verb: 'detect',
@@ -259,6 +287,30 @@ export class SemanticSeedExtractorService {
         domain: 'guard',
         verb: 'enforce',
         object: 'take_profit',
+        shape: this.toCapabilityShape({
+          key: risk.key,
+          ...risk.params,
+        }),
+      }
+    }
+
+    if (risk.key === 'risk.atr_stop') {
+      return {
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'atr_stop',
+        shape: this.toCapabilityShape({
+          key: risk.key,
+          ...risk.params,
+        }),
+      }
+    }
+
+    if (risk.key === 'risk.partial_take_profit') {
+      return {
+        domain: 'guard',
+        verb: 'enforce',
+        object: 'partial_take_profit',
         shape: this.toCapabilityShape({
           key: risk.key,
           ...risk.params,
@@ -408,6 +460,7 @@ export class SemanticSeedExtractorService {
       this.pushGridTrigger(segment, triggers, seen, text)
       this.pushExecutionTrigger(segment, triggers, seen)
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
+      this.pushRecognizedUnsupportedTriggers(segment, triggers, seen)
     }
 
     if (!triggers.some(trigger => trigger.key === 'grid.range_rebalance')) {
@@ -637,7 +690,31 @@ export class SemanticSeedExtractorService {
       risk.push(boundaryGuard)
     }
 
+    this.pushRecognizedUnsupportedRisk(text, risk)
+
     return risk
+  }
+
+  private pushRecognizedUnsupportedRisk(text: string, risk: SeedRisk[]): void {
+    if (/(?:ATR|平均真实波幅).*(?:止损|移动止损|动态止损)/iu.test(text)) {
+      this.pushRisk(risk, {
+        key: 'risk.atr_stop',
+        params: { sourceText: 'atr stop' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+    }
+
+    if (/(?:分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(text)) {
+      this.pushRisk(risk, {
+        key: 'risk.partial_take_profit',
+        params: { sourceText: 'partial take profit' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+    }
   }
 
   private extractBoundaryGuardRisk(text: string): SeedRisk | null {
@@ -1856,11 +1933,56 @@ export class SemanticSeedExtractorService {
     return matches.length > 0 ? matches : [segment]
   }
 
+  private pushRecognizedUnsupportedTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+  ): void {
+    if (/放量|成交量放大|volume\s*spike|量能放大/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'volume.spike',
+        phase: 'entry',
+        params: { sourceText: 'volume spike condition' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+    }
+
+    if (/成交量.*(?:大于|超过|高于|阈值)|volume.*(?:gte|threshold)/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'volume.threshold',
+        phase: 'entry',
+        params: { sourceText: 'volume threshold condition' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+    }
+
+    if (/(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于)/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'volatility.atr_threshold',
+        phase: 'gate',
+        params: { sourceText: 'atr volatility condition' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+    }
+  }
+
   private pushTrigger(triggers: SeedTrigger[], seen: Set<string>, trigger: SeedTrigger): void {
     const signature = JSON.stringify([trigger.key, trigger.phase, trigger.sideScope ?? null, trigger.params])
     if (seen.has(signature)) return
     seen.add(signature)
     triggers.push(trigger)
+  }
+
+  private pushRisk(risk: SeedRisk[], riskItem: SeedRisk): void {
+    const signature = JSON.stringify([riskItem.key, riskItem.params])
+    if (risk.some(item => JSON.stringify([item.key, item.params]) === signature)) return
+    risk.push(riskItem)
   }
 
   private resolvePositionMode(text: string, triggers: SeedTrigger[]): 'long_only' | 'short_only' | 'long_short' {
