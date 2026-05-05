@@ -140,6 +140,63 @@ describe('SemanticContractReadinessService', () => {
     expect(result.state.triggers[0].openSlots).toEqual([])
   })
 
+  it('does not let stale unsupported metadata block currently supported registry atoms', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-supported',
+        key: 'grid.price_levels',
+        phase: 'gate',
+        params: {},
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        support: {
+          supportStatus: 'recognized_unsupported',
+          unsupportedReasonCode: 'old_grid_unsupported',
+          unsupportedDisplayName: '旧网格元数据',
+        },
+        contracts: [{
+          id: 'trigger-contract-levels',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: { lower: 100, upper: 110, gridCount: 10 },
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+        support: { supportStatus: 'unsupported_unknown' },
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [
+            { domain: 'price', verb: 'define', object: 'level_set' },
+          ],
+          params: {},
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+    }))
+  })
+
   it('keeps unregistered contracts without support metadata out of readiness open slots', () => {
     const state = createSemanticState({
       triggers: [{

@@ -1388,6 +1388,124 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
+  it('keeps unsupported fallback start responses out of the ordinary clarification gate', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [{
+            key: 'volume.spike',
+            phase: 'entry',
+            sideScope: 'long',
+            params: { multiplier: 2 },
+          }],
+          actions: [{ key: 'open_long' }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-start-clear' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '放量突破就开多',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').toContain('是否改用这个策略继续')
+    expect((result as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+      pendingItems: [],
+    }))
+    expect(createPayload.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+      items: [],
+    }))
+  })
+
+  it('keeps unclear and rejected pending fallback replies out of the ordinary clarification gate', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [{
+            key: 'volume.spike',
+            phase: 'entry',
+            sideScope: 'long',
+            params: { multiplier: 2 },
+          }],
+          actions: [{ key: 'open_long' }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-pending-clear' })
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '放量突破就开多',
+    })
+    const created = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-pending-clear',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: created.semanticState,
+        clarificationState: created.clarificationState,
+        constraintPack: created.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+
+    const unclearResult = await service.continueSession('s-unsupported-fallback-pending-clear', {
+      userId: 'u1',
+      message: '再说一下',
+    })
+    const unclearPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect((unclearResult as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+      pendingItems: [],
+    }))
+    expect(unclearPayload.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+      items: [],
+    }))
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-pending-clear',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: unclearPayload.semanticState,
+        clarificationState: unclearPayload.clarificationState,
+        constraintPack: unclearPayload.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+
+    const rejectedResult = await service.continueSession('s-unsupported-fallback-pending-clear', {
+      userId: 'u1',
+      message: '不改推荐策略，周期还是 1h',
+    })
+    const rejectedPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(rejectedResult.assistantPrompt ?? '').toContain('不改用推荐策略')
+    expect((rejectedResult as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+      pendingItems: [],
+    }))
+    expect(rejectedPayload.semanticState.unsupportedFallback).toBeNull()
+    expect(rejectedPayload.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+      items: [],
+    }))
+  })
+
   it('accepts pending unsupported fallback wording and re-enters executable main flow', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({

@@ -56,6 +56,39 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.unknownAtoms).toEqual([])
   })
 
+  it('uses registry support status as authoritative over stale unsupported metadata', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: {
+          supportStatus: 'recognized_unsupported',
+          unsupportedReasonCode: 'old_metadata',
+          unsupportedDisplayName: '旧 unsupported 元数据',
+        },
+      }],
+      actions: [{
+        id: 'open',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'unsupported_unknown' },
+      }],
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.unknownAtoms).toEqual([])
+    expect(result.state.triggers[0].support).toBeUndefined()
+    expect(result.state.actions[0].support).toBeUndefined()
+  })
+
   it('ignores non-execution open slots when classifying supported strategies', () => {
     const nonExecutionSlot = {
       slotKey: 'display.label',

@@ -257,7 +257,7 @@ export class CodegenConversationService {
     if (initialSupportGate.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(initialSupportGate.unsupportedAtoms)
       initialSemanticState = this.withUnsupportedFallback(initialSemanticState, unsupportedFallback)
-      const clarificationState = this.resolveSemanticClarificationArtifacts(initialSemanticState).clarificationState
+      const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const session = await this.sessionsRepo.createSession({
         userId: sessionUserId,
         status: 'DRAFTING',
@@ -6472,7 +6472,7 @@ export class CodegenConversationService {
     if (classification.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(classification.unsupportedAtoms)
       const nextState = this.withUnsupportedFallback(classification.state, unsupportedFallback)
-      const clarificationState = this.resolveSemanticClarificationArtifacts(nextState).clarificationState
+      const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -6622,7 +6622,7 @@ export class CodegenConversationService {
     userId: string
     constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
   }): Promise<CodegenSessionResponseDto> {
-    const clarificationState = this.resolveSemanticClarificationArtifacts(args.semanticState).clarificationState
+    const clarificationState = this.buildUnsupportedFallbackClarificationState()
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'DRAFTING',
       semanticState: args.semanticState,
@@ -6916,6 +6916,14 @@ export class CodegenConversationService {
       ? `：${unknownAtoms.join('、')}`
       : ''
     return `当前还没把该描述映射到可支持交易原子语义${atomText}。请更明确描述入场、出场、风控、仓位，我再继续整理成可测试策略。`
+  }
+
+  private buildUnsupportedFallbackClarificationState(): StrategyClarificationStateWithSummary {
+    return {
+      status: 'CLEAR',
+      items: [],
+      summary: null,
+    }
   }
 
   private isNonBlockingRiskBasisDefault(

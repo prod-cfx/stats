@@ -169,9 +169,20 @@ export class SemanticSupportClassifierService {
 function withSupportMetadata<
   T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
 >(node: T, resolved: ResolvedSemanticAtom): T {
-  return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
-    ? { ...node }
+  return isSupportedAtom(resolved)
+    ? withoutSupportMetadata(node)
     : { ...node, support: toSupportMetadata(resolved) }
+}
+
+function isSupportedAtom(resolved: ResolvedSemanticAtom): boolean {
+  return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
+}
+
+function withoutSupportMetadata<
+  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+>(node: T): T {
+  const { support: _support, ...nextNode } = node
+  return nextNode as T
 }
 
 function toPositionAtomKey(mode: string): string {

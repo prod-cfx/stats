@@ -53,15 +53,21 @@ export class UnsupportedFallbackService {
       return { kind: 'unclear' }
     }
 
+    const hasReject = hasRejectIntent(normalizedMessage)
+    const hasAccept = hasAcceptIntent(normalizedMessage)
+    if (hasReject && !hasAccept) {
+      return { kind: 'reject_fallback' }
+    }
+
     if (hasModifyIntent(normalizedMessage)) {
       return { kind: 'modify_fallback', message }
     }
 
-    if (hasRejectIntent(normalizedMessage)) {
+    if (hasReject) {
       return { kind: 'reject_fallback' }
     }
 
-    if (hasAcceptIntent(normalizedMessage)) {
+    if (hasAccept) {
       return { kind: 'accept_fallback' }
     }
 

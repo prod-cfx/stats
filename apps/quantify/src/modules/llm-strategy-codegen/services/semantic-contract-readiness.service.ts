@@ -205,6 +205,15 @@ export class SemanticContractReadinessService {
   }
 
   private isUnsupportedOrUnknownOwner(owner: SemanticContractOwnerRef): boolean {
+    const resolved = this.semanticAtomRegistry.resolve(owner.atomKey)
+    if (isSupportedAtom(resolved)) {
+      return false
+    }
+
+    if (isUnsupportedOrUnknownSupportStatus(resolved.supportStatus)) {
+      return true
+    }
+
     if (
       owner.support?.supportStatus === 'recognized_unsupported'
       || owner.support?.supportStatus === 'unsupported_unknown'
@@ -212,10 +221,16 @@ export class SemanticContractReadinessService {
       return true
     }
 
-    const resolved = this.semanticAtomRegistry.resolve(owner.atomKey)
-    return resolved.supportStatus === 'recognized_unsupported'
-      || resolved.supportStatus === 'unsupported_unknown'
+    return false
   }
+}
+
+function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resolve']>): boolean {
+  return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
+}
+
+function isUnsupportedOrUnknownSupportStatus(status: ReturnType<SemanticAtomRegistryService['resolve']>['supportStatus']): boolean {
+  return status === 'recognized_unsupported' || status === 'unsupported_unknown'
 }
 
 function readShapeString(shape: SemanticCapability['shape'], key: string): string | null {
