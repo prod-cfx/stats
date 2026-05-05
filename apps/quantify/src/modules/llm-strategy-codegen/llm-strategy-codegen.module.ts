@@ -51,6 +51,7 @@ import { StrategyIrBuilderService } from './services/strategy-ir-builder.service
 import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canonical-adapter.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
+import { UnsupportedFallbackService } from './services/unsupported-fallback.service'
 
 @Module({
   imports: [PrismaModule, AiModule, AccountStrategyViewModule],
@@ -102,6 +103,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
     SemanticSupportClassifierService,
+    UnsupportedFallbackService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })
