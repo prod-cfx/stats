@@ -7,6 +7,8 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
+type EvaluateExprPoolContext = Parameters<typeof evaluateExprPool>[0]
+
 function findSeries(
   series: CanonicalStrategyIrV1['signalCatalog']['series'],
   matcher: (item: SeriesDef) => boolean,
@@ -404,7 +406,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         kind: 'ARITHMETIC_LEVEL_SET',
         anchorRef: 'deployment_close_1m',
         spacing: { mode: 'pct', value: 0.08 },
-        levelsPerSide: { down: 4, up: 5 },
+        levelsPerSide: { down: 5, up: 5 },
       }),
     ])
     expect(result.ir.orderPrograms).toEqual([
@@ -436,7 +438,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         expect.any(Number),
       ]),
     }))
-    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(10)
+    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(11)
     expect(Math.min(...(evaluatedLevels as { levels: number[] }).levels)).toBeLessThan(100)
     expect(Math.max(...(evaluatedLevels as { levels: number[] }).levels)).toBeGreaterThan(100)
 
@@ -466,7 +468,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
         levels: expect.arrayContaining([expect.any(Number)]),
       }),
     ])
-    expect(activeOrderState.workingOrders[0]?.levels).toHaveLength(10)
+    expect(activeOrderState.workingOrders[0]?.levels).toHaveLength(11)
 
     const breachedExprValues = evaluateExprPool(
       {
@@ -503,6 +505,91 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(breachedOrderState.workingOrders).toHaveLength(0)
     expect(breachedOrderState.cancelledProgramIds).toEqual(ast.topology.orderProgramOrder)
   })
+
+  it.each([
+    { gridCount: 9, levelsPerSide: { down: 4, up: 5 }, levelLength: 10, spacing: 0.08 },
+    { gridCount: 2, levelsPerSide: { down: 1, up: 1 }, levelLength: 3, spacing: 0.4 },
+  ])(
+    'compiles centered-percent gridCount $gridCount as interval count',
+    ({ gridCount, levelsPerSide, levelLength, spacing }) => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '1m',
+        },
+        indicators: [],
+        sizing: null,
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1m'],
+        },
+        rules: [],
+        orderPrograms: [
+          {
+            id: 'contract-order-program-grid',
+            kind: 'contract_order_program',
+            mode: 'spot',
+            levelSet: {
+              mode: 'centered_percent_range',
+              centerTiming: 'deployment',
+              centerSource: 'last_price',
+              halfRangePct: 0.4,
+              gridCount,
+              spacingMode: 'arithmetic',
+            },
+            budget: {
+              mode: 'per_order_quote',
+              value: 10,
+              asset: 'USDT',
+            },
+            orderType: 'limit',
+            timeInForce: 'gtc',
+            recycleOnFill: true,
+            cancelOnStop: true,
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+      const result = compiler.compile({
+        canonicalSpec,
+        fallback: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '1m',
+          positionPct: 10,
+        },
+      })
+
+      expect(result.ir.signalCatalog.levelSets).toEqual([
+        expect.objectContaining({
+          spacing: { mode: 'pct', value: spacing },
+          levelsPerSide,
+        }),
+      ])
+
+      const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+      const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
+      const ctx = {
+        bars: [{ open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99, volume: 1, timestamp: 1 },
+      } satisfies EvaluateExprPoolContext
+      const exprValues = evaluateExprPool(
+        ctx,
+        ast.exprPool as any,
+        ast.topology.exprOrder,
+        ast.executionModel as any,
+      )
+      const evaluatedLevels = levelSetExpr ? exprValues[levelSetExpr.id] : null
+      expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(levelLength)
+    },
+  )
 
   it.each([
     [

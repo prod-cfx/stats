@@ -1,5 +1,8 @@
 import { GridRuntimeService } from './grid-runtime.service'
 import { GridOrderPlannerService } from './grid-order-planner.service'
+import { CanonicalSpecV2IrCompilerService } from '../../llm-strategy-codegen/services/canonical-spec-v2-ir-compiler.service'
+import { CanonicalStrategyAstCompilerService } from '../../llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import type { CanonicalStrategySpecV2 } from '../../llm-strategy-codegen/types/canonical-strategy-spec'
 
 function asDependency<T>(value: Partial<T>): T {
   return value as T
@@ -105,52 +108,63 @@ function createAstSnapshot() {
 }
 
 function createCenteredPercentAstSnapshot() {
-  return {
-    executionModel: {
-      tickSize: 0.01,
-      pricePrecision: 2,
-      quantityPrecision: 6,
+  const gridCount = 10
+  const halfRangePct = 0.4
+  const canonicalSpec = {
+    version: 2,
+    market: {
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      marketType: 'spot',
+      defaultTimeframe: '1m',
     },
-    orderPrograms: [{
-      payload: {
-        id: 'contract_order_program_limit_ladder',
-        kind: 'LIMIT_LADDER',
-        priceSource: 'level_set',
-        levelSetRef: 'expr_03_centered_levels',
-        sidePolicy: 'spot_grid',
-        quantity: { mode: 'fixed_quote', value: 10, asset: 'USDT' },
+    indicators: [],
+    sizing: null,
+    executionPolicy: {
+      signalTiming: 'BAR_CLOSE',
+      fillTiming: 'NEXT_BAR_OPEN',
+    },
+    dataRequirements: {
+      requiredTimeframes: ['1m'],
+    },
+    rules: [],
+    orderPrograms: [
+      {
+        id: 'contract-order-program-grid',
+        kind: 'contract_order_program',
+        mode: 'spot',
+        levelSet: {
+          mode: 'centered_percent_range',
+          centerTiming: 'deployment',
+          centerSource: 'last_price',
+          halfRangePct,
+          gridCount,
+          spacingMode: 'arithmetic',
+        },
+        budget: {
+          mode: 'per_order_quote',
+          value: 10,
+          asset: 'USDT',
+        },
         orderType: 'limit',
         timeInForce: 'gtc',
-        maxWorkingOrders: 10,
-        pairingPolicy: 'adjacent_level',
-        activeWhen: 'expr_04_active_level_set',
+        recycleOnFill: true,
+        cancelOnStop: true,
       },
-    }],
-    exprPool: [{
-      id: 'expr_01_close_1m',
-      sourceRef: 'close_1m',
-      payload: { kind: 'PRICE', field: 'close', timeframe: '1m' },
-    }, {
-      id: 'expr_02_deployment_close_1m',
-      sourceRef: 'deployment_close_1m',
-      payload: { kind: 'DEPLOYMENT_PRICE', field: 'close', timeframe: '1m' },
-    }, {
-      id: 'expr_03_centered_levels',
-      sourceRef: 'contract_order_program_limit_ladder_centered_percent_range',
-      deps: ['expr_02_deployment_close_1m'],
-      payload: {
-        id: 'contract_order_program_limit_ladder_centered_percent_range',
-        kind: 'ARITHMETIC_LEVEL_SET',
-        anchorRef: 'deployment_close_1m',
-        levelsPerSide: { down: 4, up: 5 },
-        spacing: { mode: 'pct', value: 0.08 },
-      },
-    }, {
-      id: 'expr_04_active_level_set',
-      sourceRef: 'contract_order_program_limit_ladder_active_level_set',
-      payload: { kind: 'WITHIN_LEVEL_SET' },
-    }],
-  }
+    ],
+  } satisfies CanonicalStrategySpecV2
+
+  const result = new CanonicalSpecV2IrCompilerService().compile({
+    canonicalSpec,
+    fallback: {
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1m',
+      positionPct: 10,
+    },
+  })
+
+  return new CanonicalStrategyAstCompilerService().compile(result.ir)
 }
 
 function withExecutionModel<T extends Record<string, unknown>>(astSnapshot: T, executionModel: Record<string, unknown>): T {
@@ -218,7 +232,7 @@ describe('GridRuntimeService', () => {
     )
   })
 
-  it('creates a grid runtime plan from centered-percent deployment price order programs', async () => {
+  it('integrates compiler centered-percent AST into an 11-point grid runtime plan', async () => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-centered-1' }) }
     const tradingService = createTradingService()
     tradingService.getInstrumentConstraints.mockResolvedValue({
@@ -233,7 +247,10 @@ describe('GridRuntimeService', () => {
       clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
       raw: {},
     })
-    const { service, planner } = createService(repository, { tradingService })
+    const { service } = createService(repository, {
+      planner: new GridOrderPlannerService(),
+      tradingService,
+    })
 
     await service.createFromDeployment({
       strategyInstanceId: 'strategy-centered-1',
@@ -247,10 +264,12 @@ describe('GridRuntimeService', () => {
       currentPrice: '100',
     })
 
-    const config = (planner as ReturnType<typeof createPlannerMock>).planInitialOrders.mock.calls[0]?.[0]?.config
+    const created = repository.createInstanceWithPlan.mock.calls[0]?.[0]
+    const config = created?.configSnapshot as Record<string, unknown>
     expect(config).toEqual(expect.objectContaining({
       mode: 'spot',
       gridCount: 10,
+      pricePointCount: 11,
       perOrderQuote: '10',
       quoteAsset: 'USDT',
       baseAsset: 'ETH',
@@ -259,14 +278,39 @@ describe('GridRuntimeService', () => {
       spacingMode: 'arithmetic',
       spacingValue: '0.08',
       pairingPolicy: 'adjacent_level',
-      activeWhen: 'expr_04_active_level_set',
+      activeWhen: expect.any(String),
       tickSize: '0.01',
       lotSize: '0.000001',
-      quantityPrecision: 6,
-      pricePrecision: 2,
     }))
     expect(Number(config.lowerPrice)).toBeLessThan(100)
     expect(Number(config.upperPrice)).toBeGreaterThan(100)
+    expect(created?.levels).toHaveLength(11)
+    expect(created?.levels.map((level: { price: string }) => level.price)).toContain('100')
+  })
+
+  it.each([
+    { down: 1.5, up: 2 },
+    { down: 0, up: 0 },
+  ])('rejects invalid level-set side counts $down/$up instead of falling back to maxWorkingOrders', async (levelsPerSide) => {
+    const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-invalid-levels-1' }) }
+    const astSnapshot = createAstSnapshot()
+    const levelSetPayload = astSnapshot.exprPool[0]!.payload as Record<string, unknown>
+    levelSetPayload.levelsPerSide = levelsPerSide
+    const { service, planner } = createService(repository)
+
+    await expect(service.createFromDeployment({
+      strategyInstanceId: 'strategy-invalid-levels-1',
+      publishedSnapshotId: 'snapshot-invalid-levels-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      astSnapshot,
+      currentPrice: '100',
+    })).rejects.toThrow('grid_runtime_invalid_order_program')
+    expect(planner.planInitialOrders).not.toHaveBeenCalled()
+    expect(repository.createInstanceWithPlan).not.toHaveBeenCalled()
   })
 
   it('creates a perpetual neutral grid runtime plan from pct-equity order programs', async () => {

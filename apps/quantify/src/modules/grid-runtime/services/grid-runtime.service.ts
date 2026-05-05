@@ -188,6 +188,7 @@ export class GridRuntimeService {
     const quantity = this.readRecord(program.quantity)
     const sizing = this.resolvePerOrderQuoteSizing(quantity, symbol, fundingSnapshot)
     const gridCount = this.readNumber(program, 'maxWorkingOrders')
+    const pricePointCount = this.resolveLevelSetPricePointCount(levelSet) ?? gridCount
 
     if (!bounds || !sizing || gridCount === null) {
       throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
@@ -198,6 +199,7 @@ export class GridRuntimeService {
       lowerPrice: this.formatNumber(bounds.lower),
       upperPrice: this.formatNumber(bounds.upper),
       gridCount: Math.max(2, Math.floor(gridCount)),
+      ...(pricePointCount !== null ? { pricePointCount } : {}),
       perOrderQuote: this.formatNumber(sizing.perOrderQuote),
       quoteAsset: sizing.quoteAsset,
       baseAsset: this.resolveBaseAsset(symbol, sizing.quoteAsset),
@@ -234,6 +236,37 @@ export class GridRuntimeService {
       lower: Math.min(...levels),
       upper: Math.max(...levels),
     }
+  }
+
+  private resolveLevelSetPricePointCount(levelSet: Record<string, unknown> | null): number | null {
+    if (!levelSet || !('levelsPerSide' in levelSet)) {
+      return null
+    }
+
+    const levelsPerSide = this.readRecord(levelSet?.levelsPerSide)
+    if (!levelsPerSide) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
+    }
+
+    const downLevels = this.readNumber(levelsPerSide, 'down')
+    const upLevels = this.readNumber(levelsPerSide, 'up')
+    if (
+      downLevels === null
+      || upLevels === null
+      || !Number.isInteger(downLevels)
+      || !Number.isInteger(upLevels)
+      || downLevels < 0
+      || upLevels < 0
+    ) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
+    }
+
+    const pricePointCount = downLevels + upLevels + 1
+    if (pricePointCount < 2) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
+    }
+
+    return pricePointCount
   }
 
   private evaluateLevelSet(
