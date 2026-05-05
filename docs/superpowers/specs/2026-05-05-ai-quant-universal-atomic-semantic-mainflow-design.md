@@ -21,6 +21,11 @@ The product requirement is broader:
 - executable readiness must come from atom contracts;
 - strategy family names must never decide mainline readiness.
 
+This is a launch-blocking convergence requirement. The implementation must not
+stop at the next failing wording. It must remove or quarantine every remaining
+mainline decision point that still uses strategy family, legacy checklist
+completion, or family-specific template completeness as semantic authority.
+
 ## Goal
 
 Make this structure the only AI strategy semantic main data flow:
@@ -79,6 +84,12 @@ clarifies, confirms, generates, publishes, or deploys a user strategy.
 7. If atomic semantics are complete but canonical projection cannot compile, that
    is an internal projection coverage failure, not a user-facing request for
    more strategy rules.
+8. Any code path that still emits user-facing strategy-family, checklist
+   completion, or legacy compileability blockers in a mainline session is a
+   release blocker.
+9. Compatibility code must be explicitly named, isolated, and tested as
+   compatibility-only. Silent fallback from atomic mainline into compatibility
+   behavior is forbidden.
 
 ## Current Failure Pattern
 
@@ -119,6 +130,34 @@ recognized phrase
  -> missing one family field
  -> drop atoms or ask legacy checklist questions
 ```
+
+## Residual Legacy Audit Requirement
+
+Before implementation changes are considered complete, the codebase must have an
+explicit audit of remaining old-authority paths. The audit must classify every
+match into one of these buckets:
+
+1. **Deleted from mainline**: the code path no longer influences recognition,
+   clarification, readiness, confirmation, generation, publication, or deploy.
+2. **Converted to atom/contract/openSlot**: the code now creates or updates
+   `triggers/actions/risk/position/contextSlots`.
+3. **Compatibility-only**: the code is reachable only for explicit legacy
+   sessions, migration, display projection, or old fixtures.
+4. **Internal diagnostic only**: the code can fail builds, tests, or engineering
+   diagnostics, but cannot ask the user for more strategy text.
+
+The audit must include at least these categories:
+
+- strategy-family names and family-specific template checks;
+- legacy `entryRules`, `exitRules`, and `riskRules` readiness checks;
+- `missing_position_pct`, `missing_position_mode`, and related checklist
+  clarification reasons;
+- user-facing compileability messages such as `未识别可编译入场规则`;
+- canonical projection failures that currently become user clarification;
+- parser branches that drop a recognized phrase because a family template is
+  incomplete.
+
+Any unclassified match blocks release.
 
 ## Atomic Semantics
 
@@ -299,6 +338,10 @@ Clarification is generated only from:
 The question service may rank questions for UX, but it must not invent
 checklist-era blockers.
 
+If an existing checklist-era reason is still needed for compatibility, it must
+be produced from an already-created owner atom open slot and carry evidence that
+points back to that atom. It must not originate from checklist completeness.
+
 ### 5. Ready And Confirm
 
 The confirmation gate is reached when:
@@ -339,6 +382,11 @@ are first converted into atomic patches.
 When checklist data and atomic semantic state conflict, atomic semantic state
 wins.
 
+Compatibility entry points must be visibly named as compatibility code. Examples
+of acceptable naming include `legacy`, `compatibility`, or
+`nonSemanticCompatibilityOnly`. Compatibility code must not be imported by a
+mainline service without an explicit guard that proves the session is legacy.
+
 ## Error Handling
 
 User-facing clarification should name the missing atom slot, not an abstract
@@ -367,6 +415,28 @@ diagnostics with enough atom/contract evidence to fix the compiler path.
   requirements.
 - Strategy family labels do not participate in readiness decisions.
 - Legacy compileability blockers are not emitted after atomic readiness is clear.
+- A mainline session cannot call compatibility-only readiness or clarification
+  code.
+- A recognized phrase cannot be discarded because a family-specific parser lacks
+  one field.
+- Every user-facing clarification item has an owner `openSlot`, owner atom path,
+  or context slot path.
+
+### Residual Legacy Negative Tests
+
+Add negative tests around the old failure modes so they cannot return:
+
+- no mainline prompt contains `未识别可编译入场规则` or `未识别可编译出场规则`;
+- no mainline next action uses `compileability` as a user clarification key;
+- no mainline readiness branch depends on `entryRules.length`,
+  `exitRules.length`, strategy family names, or family-specific template
+  completeness;
+- no mainline code path asks the user to identify a strategy type;
+- no mainline code path converts a canonical projection miss into a request for
+  more entry / exit rule text.
+
+These tests should fail loudly during launch verification if old authority leaks
+back into the mainflow.
 
 ### Cross-Expression Regression Matrix
 
@@ -422,6 +492,13 @@ Expected behavior:
    compileability blockers.
 7. Cross-expression tests prove that the system is not only fixed for grid or
    Bollinger wording.
+8. A residual legacy audit classifies every old-authority match as deleted,
+   converted, compatibility-only, or internal diagnostic only.
+9. CI or targeted regression tests fail if mainline code reintroduces
+   strategy-family, checklist-completion, or compileability clarification
+   authority.
+10. The screenshot flow and the cross-expression matrix all keep previously
+    recognized atoms across follow-up answers.
 
 ## Implementation Notes
 
@@ -442,6 +519,13 @@ tightened:
 - canonical builders and compilers should consume contracts as capability
   sources.
 
+The implementation plan should begin with a residual-authority inventory before
+editing behavior. That inventory should use targeted searches and tests to find
+all mainline references to strategy family, checklist completion, and
+compileability clarification. Only after the inventory is classified should the
+behavior changes be made. This prevents another narrow fix that solves the
+current probe while leaving the next expression path broken.
+
 ## Review Checklist
 
 - No section depends on a strategy family as a source of truth.
@@ -449,3 +533,5 @@ tightened:
 - Legacy checklist is explicitly compatibility-only.
 - The design covers the Bollinger probe without making Bollinger special.
 - The design is broad enough for other natural-language strategy expressions.
+- The design treats residual old-authority paths as release blockers, not
+  follow-up cleanup.
