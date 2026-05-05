@@ -215,7 +215,7 @@ function readNodeOpenSlots(
 }
 
 function isOpenSlot(slot: SemanticSlotState | null): slot is SemanticSlotState {
-  return slot?.status === 'open'
+  return slot?.status === 'open' && slot.affectsExecution === true
 }
 
 function readUnsupportedMetadata(resolved: ResolvedSemanticAtom): SemanticAtomUnsupportedMetadata | undefined {

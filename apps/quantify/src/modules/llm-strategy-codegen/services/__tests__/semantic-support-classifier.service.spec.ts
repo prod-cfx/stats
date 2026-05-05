@@ -56,6 +56,50 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.unknownAtoms).toEqual([])
   })
 
+  it('ignores non-execution open slots when classifying supported strategies', () => {
+    const nonExecutionSlot = {
+      slotKey: 'display.label',
+      fieldPath: 'triggers.entry.display.label',
+      status: 'open' as const,
+      priority: 'context' as const,
+      questionHint: '补充展示标签',
+      affectsExecution: false,
+    }
+
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [nonExecutionSlot],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      risk: [{
+        id: 'sl',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.openSlots).toEqual([])
+  })
+
   it('blocks the whole strategy when one atom is recognized unsupported', () => {
     const result = service.classify(baseState({
       triggers: [{
@@ -77,6 +121,33 @@ describe('SemanticSupportClassifierService', () => {
         displayName: '成交量放大',
       }),
     ])
+  })
+
+  it('keeps unsupported fallback precedence over execution open slots', () => {
+    const executionSlot = {
+      slotKey: 'volume.multiplier',
+      fieldPath: 'triggers.volume.params.multiplier',
+      status: 'open' as const,
+      priority: 'core' as const,
+      questionHint: '请选择放大量倍数',
+      affectsExecution: true,
+    }
+
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'volume',
+        key: 'volume.spike',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [executionSlot],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }))
+
+    expect(result.route).toBe('unsupported_fallback')
+    expect(result.openSlots).toEqual([])
   })
 
   it('blocks unknown atom combinations without treating them as open slots', () => {
