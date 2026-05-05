@@ -378,6 +378,10 @@ export class SemanticSeedStateBuilderService {
       return this.hasFiniteNumber(params.period) && this.hasFiniteNumber(params.stdDev)
     }
 
+    if (key === 'price.detect.indicator_boundary') {
+      return this.isSupportedBollingerBoundaryParams(params)
+    }
+
     if (key === 'price.breakout_up' || key === 'price.breakout_down') {
       return this.hasBreakoutReference(params)
     }
@@ -419,6 +423,13 @@ export class SemanticSeedStateBuilderService {
     return this.hasFiniteNumber(params.lookbackBars)
       || this.hasFiniteNumber(params.windowBars)
       || this.isRecord(params.expression)
+  }
+
+  private isSupportedBollingerBoundaryParams(params: Record<string, unknown>): boolean {
+    const indicator = params.indicator
+    return this.isRecord(indicator)
+      && indicator.name === 'bollinger'
+      && (params.boundaryRole === 'upper' || params.boundaryRole === 'lower' || params.boundaryRole === 'middle')
   }
 
   private hasFiniteNumber(value: unknown): value is number {

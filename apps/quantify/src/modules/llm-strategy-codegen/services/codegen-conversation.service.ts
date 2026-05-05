@@ -2093,10 +2093,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (!compileability.canCompile && (
+    const projectionLoss = this.evaluateSemanticProjectionLoss(reducedSemanticState, canonicalSpec)
+    if (projectionLoss.blocked || (!compileability.canCompile && (
       !semanticReadyForGenerate
-      || !this.hasLockedGridTrigger(reducedSemanticState)
-    )) {
+      || !this.hasProjectedGridRules(canonicalSpec)
+    ))) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -2112,7 +2113,9 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: semanticReadyForGenerate
+        assistantPrompt: projectionLoss.blocked
+          ? this.buildSemanticProjectionLossAssistantPrompt(reducedSemanticState, projectionLoss)
+          : semanticReadyForGenerate
           ? this.buildCanonicalProjectionFailureAssistantPrompt(reducedSemanticState, compileability)
           : (clarificationPrompt || '请先补充未关闭的语义问题，我再继续生成脚本。'),
         clarificationState,
@@ -5320,12 +5323,69 @@ export class CodegenConversationService {
     return `我当前理解的策略是：${summary}\n${blocker}`
   }
 
-  private hasLockedGridTrigger(semanticState: SemanticState): boolean {
-    return semanticState.triggers.some(trigger =>
-      trigger.key === 'grid.range_rebalance'
-      && trigger.status === 'locked'
-      && trigger.openSlots.length === 0,
-    )
+  private hasProjectedGridRules(canonicalSpec: {
+    rules: Array<{ phase: string; condition?: unknown }>
+    orderPrograms?: unknown[]
+  }): boolean {
+    if (Array.isArray(canonicalSpec.orderPrograms) && canonicalSpec.orderPrograms.length > 0) {
+      return true
+    }
+
+    let hasGridEntry = false
+    let hasGridExit = false
+    for (const rule of canonicalSpec.rules) {
+      if (!this.conditionContainsAtomKey(rule.condition, 'grid.range_rebalance')) continue
+      if (rule.phase === 'entry') hasGridEntry = true
+      if (rule.phase === 'exit' || rule.phase === 'rebalance') hasGridExit = true
+    }
+    return hasGridEntry && hasGridExit
+  }
+
+  private evaluateSemanticProjectionLoss(
+    semanticState: SemanticState,
+    canonicalSpec: { rules: Array<{ metadata?: Record<string, unknown> }> },
+  ): { blocked: boolean; reasons: string[] } {
+    const reasons: string[] = []
+    const projectedSemanticKeys = new Set<string>()
+    for (const rule of canonicalSpec.rules) {
+      const semanticKey = rule.metadata?.semanticKey
+      if (typeof semanticKey === 'string') {
+        projectedSemanticKeys.add(semanticKey)
+      }
+    }
+
+    for (const risk of semanticState.risk) {
+      if (risk.status !== 'locked' || risk.openSlots.length > 0) continue
+      if (
+        risk.key === 'risk.condition_expression'
+        && risk.params.capabilityStatus !== 'supported'
+      ) {
+        reasons.push(`unsupported:${risk.key}`)
+        continue
+      }
+      if (risk.key === 'risk.condition_expression' && !projectedSemanticKeys.has(risk.key)) {
+        reasons.push(`unprojected:${risk.key}`)
+      }
+    }
+
+    return {
+      blocked: reasons.length > 0,
+      reasons,
+    }
+  }
+
+  private conditionContainsAtomKey(condition: unknown, key: string): boolean {
+    if (!condition || typeof condition !== 'object' || Array.isArray(condition)) {
+      return false
+    }
+    const node = condition as Record<string, unknown>
+    if (node.kind === 'atom') {
+      return node.key === key
+    }
+    if ((node.kind === 'AND' || node.kind === 'OR' || node.kind === 'NOT') && Array.isArray(node.children)) {
+      return node.children.some(child => this.conditionContainsAtomKey(child, key))
+    }
+    return false
   }
 
   private buildCanonicalProjectionFailureAssistantPrompt(
@@ -5341,6 +5401,18 @@ export class CodegenConversationService {
       ? `当前还不能稳定投影到${missing.join('和')}。`
       : '当前还不能稳定投影到可执行规则。'
     return `我当前理解的策略是：${summary}\n${blocker}请补充更明确的触发或退出条件后，我再继续生成脚本。`
+  }
+
+  private buildSemanticProjectionLossAssistantPrompt(
+    semanticState: SemanticState,
+    projectionLoss: { reasons: string[] },
+  ): string {
+    const summary = this.buildSemanticClarificationSummary(semanticState)
+    const hasUnsupported = projectionLoss.reasons.some(reason => reason.startsWith('unsupported:'))
+    const blocker = hasUnsupported
+      ? '当前有已识别但执行层暂不支持的语义。'
+      : '当前有已识别语义尚未稳定投影到可执行规则。'
+    return `我当前理解的策略是：${summary}\n${blocker}请调整为当前支持的触发、风控或执行条件后，我再继续生成脚本。`
   }
 
   private buildLogicGateAssistantPrompt(

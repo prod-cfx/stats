@@ -1327,7 +1327,11 @@ describe('canonicalSpecBuilderService', () => {
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         sideScope: 'short',
-        condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+        condition: expect.objectContaining({
+          key: 'bollinger.upper_break',
+          op: 'GTE',
+          params: { confirmationMode: 'touch' },
+        }),
       }),
     ]))
   })

@@ -11611,6 +11611,61 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   })
 
+  it('blocks confirmGenerate when a locked semantic risk atom is recognized but unsupported by projection', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        lockedStopLossRisk(),
+        {
+          id: 'risk-unsupported-pause',
+          key: 'risk.condition_expression',
+          params: {
+            condition: {
+              kind: 'predicate',
+              op: 'LTE',
+              left: { kind: 'position', field: 'pnl_pct' },
+              right: { kind: 'constant', value: -12, unit: 'percent' },
+            },
+            effect: { type: 'pause_strategy' },
+            scope: 'strategy',
+            capabilityStatus: 'recognized_unsupported',
+            unsupportedReason: 'risk_expression_compiler_not_available',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-unsupported-risk-projection',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    const confirmedCanonicalDigest = buildSemanticOnlyCanonicalDigest(persistedSemanticState)
+    const readCanonicalDigestSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedCanonicalDigest)
+
+    try {
+      const result = await service.continueSession('s7-unsupported-risk-projection', {
+        userId: 'u1',
+        message: '确认逻辑图',
+        confirmGenerate: true,
+        confirmedCanonicalDigest,
+      })
+
+      expect(result.status).toBe('DRAFTING')
+      expect(result.assistantPrompt ?? '').toContain('执行层暂不支持')
+      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    } finally {
+      readCanonicalDigestSpy.mockRestore()
+    }
+  })
+
   it('persists updated semanticState when confirmGenerate closes a semantic slot before GENERATING', async () => {
     const persistedChecklist = completeChecklist({
       entryRules: ['价格突破长期均线时买入'],

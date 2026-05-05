@@ -2819,20 +2819,29 @@ export class CanonicalSpecBuilderService {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerUpperBreak,
           semanticScope: 'market',
-          op: 'CROSS_OVER',
+          op: trigger.params.confirmationMode === 'touch' ? 'GTE' : 'CROSS_OVER',
+          ...(typeof trigger.params.confirmationMode === 'string'
+            ? { params: { confirmationMode: trigger.params.confirmationMode } }
+            : {}),
         }
       case 'bollinger.touch_lower':
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerLowerBreak,
           semanticScope: 'market',
-          op: 'CROSS_UNDER',
+          op: trigger.params.confirmationMode === 'touch' ? 'LTE' : 'CROSS_UNDER',
+          ...(typeof trigger.params.confirmationMode === 'string'
+            ? { params: { confirmationMode: trigger.params.confirmationMode } }
+            : {}),
         }
       case 'bollinger.touch_middle':
         return {
           kind: 'atom',
           key: CANONICAL_RULE_KEYS.bollingerMiddleRevert,
           semanticScope: 'market',
+          ...(typeof trigger.params.confirmationMode === 'string'
+            ? { params: { confirmationMode: trigger.params.confirmationMode } }
+            : {}),
         }
       case 'oscillator.rsi_lte':
         return {
