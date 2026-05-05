@@ -199,7 +199,7 @@ export class GridRuntimeService {
       lowerPrice: this.formatNumber(bounds.lower),
       upperPrice: this.formatNumber(bounds.upper),
       gridCount: Math.max(2, Math.floor(gridCount)),
-      ...(pricePointCount !== null ? { pricePointCount: Math.max(2, Math.floor(pricePointCount)) } : {}),
+      ...(pricePointCount !== null ? { pricePointCount } : {}),
       perOrderQuote: this.formatNumber(sizing.perOrderQuote),
       quoteAsset: sizing.quoteAsset,
       baseAsset: this.resolveBaseAsset(symbol, sizing.quoteAsset),
@@ -261,7 +261,12 @@ export class GridRuntimeService {
       throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
     }
 
-    return downLevels + upLevels + 1
+    const pricePointCount = downLevels + upLevels + 1
+    if (pricePointCount < 2) {
+      throw this.invalidGridRuntimeConfig('grid_runtime_invalid_order_program')
+    }
+
+    return pricePointCount
   }
 
   private evaluateLevelSet(

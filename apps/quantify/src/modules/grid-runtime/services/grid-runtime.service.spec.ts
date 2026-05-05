@@ -288,11 +288,14 @@ describe('GridRuntimeService', () => {
     expect(created?.levels.map((level: { price: string }) => level.price)).toContain('100')
   })
 
-  it('rejects invalid level-set side counts instead of falling back to maxWorkingOrders', async () => {
+  it.each([
+    { down: 1.5, up: 2 },
+    { down: 0, up: 0 },
+  ])('rejects invalid level-set side counts $down/$up instead of falling back to maxWorkingOrders', async (levelsPerSide) => {
     const repository = { createInstanceWithPlan: jest.fn().mockResolvedValue({ id: 'grid-runtime-invalid-levels-1' }) }
     const astSnapshot = createAstSnapshot()
     const levelSetPayload = astSnapshot.exprPool[0]!.payload as Record<string, unknown>
-    levelSetPayload.levelsPerSide = { down: 1.5, up: 2 }
+    levelSetPayload.levelsPerSide = levelsPerSide
     const { service, planner } = createService(repository)
 
     await expect(service.createFromDeployment({
