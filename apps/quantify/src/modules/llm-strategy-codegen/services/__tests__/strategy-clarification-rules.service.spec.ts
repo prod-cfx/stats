@@ -326,8 +326,8 @@ describe('strategyClarificationRulesService', () => {
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic.grid.sideMode',
-        reason: 'missing_side_scope',
-        field: 'grid.sideMode',
+        reason: 'missing_semantic_action',
+        field: 'actions',
         slotKey: 'grid.sideMode',
       }),
     ]))

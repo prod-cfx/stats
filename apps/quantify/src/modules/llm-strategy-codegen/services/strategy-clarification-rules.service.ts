@@ -895,6 +895,16 @@ export class StrategyClarificationRulesService {
     if (reason === 'missing_stop_loss_rule' || reason === 'missing_take_profit_rule' || reason === 'grid_params_missing' || reason === 'ambiguous_risk_effect' || reason === 'ambiguous_state_gate') return 70
     if (reason === 'missing_exchange' || reason === 'missing_symbol' || reason === 'missing_market_type' || reason === 'missing_timeframe' || reason === 'missing_position_pct' || reason === 'missing_position_mode') return 60
     if (reason === 'ambiguous_condition_basis') return 50
+    if (
+      reason === 'missing_semantic_trigger'
+      || reason === 'missing_semantic_action'
+      || reason === 'missing_semantic_contract_requirement'
+    ) return 90
+    if (
+      reason === 'missing_semantic_position_sizing'
+      || reason === 'missing_semantic_position_mode'
+      || reason === 'missing_semantic_risk'
+    ) return 70
     return 10
   }
 
