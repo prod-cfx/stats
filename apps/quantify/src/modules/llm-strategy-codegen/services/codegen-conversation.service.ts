@@ -6865,17 +6865,18 @@ export class CodegenConversationService {
       return '1d'
     }
 
-    const match = normalized.match(/(\d{1,3})\s*(m|min|分钟|分|h|小时|d|天|日)\b/u)
-    if (!match?.[1] || !match[2]) {
+    const match = normalized.match(/(?:(\d{1,3})\s*(m|min|h|d)\b)|(?:(\d{1,3})\s*(分钟|分|小时|天|日))/u)
+    const rawValue = match?.[1] ?? match?.[3]
+    const unit = match?.[2] ?? match?.[4]
+    if (!rawValue || !unit) {
       return null
     }
 
-    const value = Number(match[1])
+    const value = Number(rawValue)
     if (!Number.isFinite(value) || value <= 0) {
       return null
     }
 
-    const unit = match[2]
     if (unit === 'm' || unit === 'min' || unit === '分钟' || unit === '分') {
       return `${value}m`
     }

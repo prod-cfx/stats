@@ -1757,6 +1757,59 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
+  it('applies Chinese timeframe fallback modifications', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          risk: [{ key: 'risk.atr_stop', params: { atrPeriod: 14, multiplier: 2 } }],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '1h',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-chinese-timeframe' })
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX BTCUSDT 1h ATR 动态止损，仓位 10%',
+    })
+    const created = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-unsupported-fallback-chinese-timeframe',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: created.semanticState,
+        clarificationState: created.clarificationState,
+        constraintPack: created.constraintPack,
+        latestSpecDesc: null,
+      },
+    ))
+    mockAi.chat.mockClear()
+
+    const result = await service.continueSession('s-unsupported-fallback-chinese-timeframe', {
+      userId: 'u1',
+      message: '可以，周期改成 15分钟',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const nextState = updatePayload.semanticState as Record<string, any>
+
+    expect(result.assistantPrompt).toContain('周期为 15m')
+    expect(nextState.unsupportedFallback).toBeNull()
+    expect(nextState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '15m',
+    }))
+    expect(mockAi.chat).not.toHaveBeenCalled()
+  })
+
   it('does not route back to the same unsupported fallback after rejecting it and describing a supported strategy', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
