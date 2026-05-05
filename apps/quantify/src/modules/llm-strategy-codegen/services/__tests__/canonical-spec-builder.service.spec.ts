@@ -2,7 +2,7 @@ import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2ValidatorService } from '../canonical-spec-v2-validator.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
-import type { SemanticExpression, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState } from '../../types/semantic-state'
+import type { SemanticAtomContract, SemanticExpression, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState } from '../../types/semantic-state'
 
 type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY', value: number, asset?: string }
 
@@ -292,7 +292,7 @@ describe('canonicalSpecBuilderService', () => {
           params: {},
           contracts: [{
             id: 'contract-price-levels',
-            kind: 'trigger',
+            kind: 'trigger' as const,
             capabilities: [{
               domain: 'price',
               verb: 'define',
@@ -300,7 +300,9 @@ describe('canonicalSpecBuilderService', () => {
               shape: {
                 lower: 60000,
                 upper: 80000,
-                gridCount: 100,
+                gridIntervals: 10,
+                gridCount: 11,
+                absoluteSpacing: 2000,
                 spacingMode: 'arithmetic',
               },
             }],
@@ -436,7 +438,9 @@ describe('canonicalSpecBuilderService', () => {
       levelSet: {
         lower: 60000,
         upper: 80000,
-        gridCount: 100,
+        gridIntervals: 10,
+        gridCount: 11,
+        absoluteSpacing: 2000,
         spacingMode: 'arithmetic',
       },
       budget: {
@@ -474,8 +478,9 @@ describe('canonicalSpecBuilderService', () => {
                 mode: 'centered_percent_range',
                 centerTiming: 'deployment',
                 centerSource: 'last_price',
-                halfRangePct: 0.4,
-                gridCount: 10,
+                totalRangePct: 0.8,
+                gridIntervals: 10,
+                gridCount: 11,
                 spacingMode: 'arithmetic',
               },
             }],
@@ -573,7 +578,8 @@ describe('canonicalSpecBuilderService', () => {
         centerTiming: 'deployment',
         centerSource: 'last_price',
         halfRangePct: 0.4,
-        gridCount: 10,
+        gridIntervals: 10,
+        gridCount: 11,
         spacingMode: 'arithmetic',
       },
       budget: {
@@ -602,6 +608,13 @@ describe('canonicalSpecBuilderService', () => {
         { lower: 60000, upper: 80000, gridCount: 100, spacingMode: 'arithmetic' },
       ],
     ],
+    [
+      'different absolute spacing',
+      [
+        { lower: 60000, upper: 80000, gridCount: 11, absoluteSpacing: 2000, spacingMode: 'arithmetic' },
+        { lower: 60000, upper: 80000, gridCount: 11, absoluteSpacing: 2500, spacingMode: 'arithmetic' },
+      ],
+    ],
   ])('rejects conflicting duplicate contract order programs level sets in %s', (_, levelSetShapes) => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({
@@ -614,7 +627,7 @@ describe('canonicalSpecBuilderService', () => {
           source: 'user_explicit',
           openSlots: [],
           params: {},
-          contracts: levelSetShapes.map((shape, index) => ({
+          contracts: levelSetShapes.map((shape, index): SemanticAtomContract => ({
             id: `contract-price-levels-${index + 1}`,
             kind: 'trigger',
             capabilities: [{

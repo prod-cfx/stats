@@ -447,4 +447,21 @@ describe('GridRuntimeRepository', () => {
     expect(transitioned).toBe(false)
     expect(tx.gridRuntimeEvent.create).not.toHaveBeenCalled()
   })
+
+  it('keeps reconcile-required runtimes in the scheduler query for fill backfill', async () => {
+    const tx = {
+      gridRuntimeInstance: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+    }
+    const repo = new GridRuntimeRepository(createTxHost(tx))
+
+    await repo.listActiveInstances(20)
+
+    expect(tx.gridRuntimeInstance.findMany).toHaveBeenCalledWith({
+      where: { status: { in: ['INITIALIZING', 'RUNNING', 'RECONCILE_REQUIRED'] } },
+      orderBy: [{ lastSyncAt: 'asc' }, { createdAt: 'asc' }],
+      take: 20,
+    })
+  })
 })

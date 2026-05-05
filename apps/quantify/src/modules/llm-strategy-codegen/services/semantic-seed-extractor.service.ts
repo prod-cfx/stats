@@ -11,6 +11,7 @@ import type {
   SemanticPositionSizingContract,
   SemanticRiskBasis,
   SemanticRiskBasisSource,
+  SemanticSlotState,
 } from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { PositionSizingContractService } from './position-sizing-contract.service'
@@ -18,6 +19,14 @@ import { PositionSizingContractService } from './position-sizing-contract.servic
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
 type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
+type FixedGridRange = {
+  lower: number
+  upper: number
+}
+
+const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
+const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
+
 type SemanticAliasContext = {
   bollingerBandParams?: {
     period?: number
@@ -381,7 +390,7 @@ export class SemanticSeedExtractorService {
       this.pushPartialBreakoutTriggers(segment, triggers, seen)
       this.pushBreakoutTriggers(segment, triggers, seen)
       this.pushRangePositionTriggers(segment, triggers, seen, text)
-      this.pushGridTrigger(segment, triggers, seen)
+      this.pushGridTrigger(segment, triggers, seen, text)
       this.pushExecutionTrigger(segment, triggers, seen)
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
     }
@@ -413,15 +422,15 @@ export class SemanticSeedExtractorService {
     for (const trigger of triggers) {
       if (trigger.key === 'grid.range_rebalance') {
         if (trigger.sideScope === 'short') {
-          push('open_short', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('open_short', undefined, this.buildGridOrderProgramActionContracts(text, trigger))
           push('close_short')
         } else if (trigger.sideScope === 'both') {
-          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text, trigger))
           push('close_long')
           push('open_short')
           push('close_short')
         } else {
-          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text))
+          push('open_long', undefined, this.buildGridOrderProgramActionContracts(text, trigger))
           push('close_long')
         }
         continue
@@ -458,8 +467,8 @@ export class SemanticSeedExtractorService {
     return actions
   }
 
-  private buildGridOrderProgramActionContracts(text: string): Omit<SeedAction, 'key' | 'params'> | undefined {
-    if (!/网格/u.test(text)) {
+  private buildGridOrderProgramActionContracts(text: string, trigger: SeedTrigger): Omit<SeedAction, 'key' | 'params'> | undefined {
+    if (!this.hasLevelSetContract(trigger) && !this.hasGridSemantics(text)) {
       return undefined
     }
 
@@ -499,9 +508,19 @@ export class SemanticSeedExtractorService {
     }
   }
 
+  private hasLevelSetContract(trigger: SeedTrigger): boolean {
+    return trigger.contracts?.some(contract =>
+      contract.capabilities.some(capability =>
+        capability.domain === 'price'
+        && capability.verb === 'define'
+        && capability.object === 'level_set',
+      ),
+    ) ?? false
+  }
+
   private extractPerGridBudget(text: string): { value: number; asset: 'USDT' | 'USDC' | 'USD' } | null {
-    const match = text.match(/每格(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
-      ?? text.match(/(?:每一格|单格)(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+    const match = text.match(/每格(?:下单)?(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
+      ?? text.match(/(?:每一格|单格)(?:下单)?(?:资金|金额|预算)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U|u|刀)/u)
     if (!match?.[1] || !match[2]) {
       return null
     }
@@ -1028,12 +1047,13 @@ export class SemanticSeedExtractorService {
     }
   }
 
-  private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/网格/u.test(segment)) return
+  private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>, context = segment): void {
+    if (!this.hasGridSemantics(segment)) return
+    const sideScopeContext = `${segment} ${context}`
 
     const centeredRange = this.extractCenteredGridRange(segment)
     if (centeredRange) {
-      const sideScope = this.resolveGridSideScope(segment)
+      const sideScope = this.resolveGridSideScope(sideScopeContext)
       this.pushTrigger(triggers, seen, {
         key: 'grid.range_rebalance',
         phase: 'entry',
@@ -1057,6 +1077,7 @@ export class SemanticSeedExtractorService {
               centerTiming: centeredRange.centerTiming,
               centerSource: centeredRange.centerSource,
               halfRangePct: centeredRange.halfRangePct,
+              ...(centeredRange.gridIntervals !== null ? { gridIntervals: centeredRange.gridIntervals } : {}),
               gridCount: centeredRange.gridCount,
               spacingMode: 'arithmetic',
             },
@@ -1068,28 +1089,71 @@ export class SemanticSeedExtractorService {
       return
     }
 
-    const range = segment.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
+    const fixedRange = this.extractFixedGridRange(segment)
     const stepPct = this.extractPercent(segment, [
       /步长\s*(\d+(?:\.\d+)?)\s*%/u,
       /间距\s*(\d+(?:\.\d+)?)\s*%/u,
+      /按\s*(\d+(?:\.\d+)?)\s*%\s*网格/u,
+      /(\d+(?:\.\d+)?)\s*%\s*网格/u,
       /每一格\s*(?:间距|距离)?\s*(\d+(?:\.\d+)?)\s*%/u,
       /每格\s*(?:间距|距离)?\s*(\d+(?:\.\d+)?)\s*%/u,
       /千分之\s*(\d+(?:\.\d+)?)/u,
     ])
+    const absoluteSpacing = this.extractAbsoluteGridSpacing(segment)
+    const explicitGridCount = this.extractGridLevelCount(segment)
+    const gridIntervals = this.extractGridIntervals(segment)
 
-    if (!range?.[1] || !range[2] || stepPct === null) return
+    if (!fixedRange) return
+
+    const sideScope = this.resolveGridSideScope(sideScopeContext)
+    const absoluteSpacingGridCount = explicitGridCount === null && gridIntervals === null && absoluteSpacing !== null
+      ? this.deriveGridCountFromAbsoluteSpacing(fixedRange.lower, fixedRange.upper, absoluteSpacing)
+      : null
+    const hasAbsoluteSpacingConflict = explicitGridCount === null
+      && gridIntervals === null
+      && absoluteSpacing !== null
+      && absoluteSpacingGridCount === null
+    const shape: SemanticCapabilityShape = {
+      mode: 'fixed_range',
+      lower: fixedRange.lower,
+      upper: fixedRange.upper,
+      spacingMode: 'arithmetic',
+      ...(explicitGridCount !== null ? { gridCount: explicitGridCount } : {}),
+      ...(explicitGridCount === null && gridIntervals !== null
+        ? {
+            gridIntervals,
+            gridCount: gridIntervals + 1,
+          }
+        : {}),
+      ...(absoluteSpacingGridCount !== null ? { gridCount: absoluteSpacingGridCount } : {}),
+      ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
+      ...(stepPct !== null ? { spacingPct: stepPct } : {}),
+    }
+    if (!('gridCount' in shape) && stepPct !== null) {
+      shape.gridCount = this.deriveGridCountFromPercentStep(fixedRange.lower, fixedRange.upper, stepPct)
+    }
 
     this.pushTrigger(triggers, seen, {
       key: 'grid.range_rebalance',
       phase: 'entry',
-      sideScope: this.resolveGridSideScope(segment),
+      sideScope,
+      ...(hasAbsoluteSpacingConflict
+        ? {
+            status: 'open' as const,
+            openSlots: [this.buildLevelSetSpacingConflictOpenSlot()],
+          }
+        : {}),
       params: {
-        rangeLower: Number(range[1]),
-        rangeUpper: Number(range[2]),
-        stepPct,
-        sideMode: /做空/u.test(segment)
+        rangeLower: fixedRange.lower,
+        rangeUpper: fixedRange.upper,
+        ...(stepPct !== null ? { stepPct } : {}),
+        ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
+        ...(explicitGridCount !== null ? { gridCount: explicitGridCount } : {}),
+        ...(explicitGridCount === null && gridIntervals !== null ? { gridIntervals, gridCount: gridIntervals + 1 } : {}),
+        ...(absoluteSpacingGridCount !== null ? { gridCount: absoluteSpacingGridCount } : {}),
+        sideMode: sideScope === 'short'
           ? 'short_only'
-          : (/(?:双向|多空|both|bidirectional)/iu.test(segment) ? 'bidirectional' : 'long_only'),
+          : (sideScope === 'both' ? 'bidirectional' : 'long_only'),
         recycle: true,
         breakoutAction: /停|暂停|停止/u.test(segment) ? 'pause' : 'continue',
       },
@@ -1100,18 +1164,78 @@ export class SemanticSeedExtractorService {
           domain: 'price',
           verb: 'define',
           object: 'level_set',
-          shape: {
-            lower: Number(range[1]),
-            upper: Number(range[2]),
-            gridCount: this.deriveGridCountFromPercentStep(Number(range[1]), Number(range[2]), stepPct),
-            spacingPct: stepPct,
-            spacingMode: 'arithmetic',
-          },
+          shape,
         }],
         requires: [],
         params: {},
       }],
     })
+  }
+
+  private buildLevelSetSpacingConflictOpenSlot(): SemanticSlotState {
+    return {
+      slotKey: LEVEL_SET_SPACING_CONFLICT_SLOT_KEY,
+      fieldPath: GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH,
+      status: 'open',
+      priority: 'core',
+      questionHint: '价格区间无法按每格间距整除，请调整间距或格数。',
+      affectsExecution: true,
+    }
+  }
+
+  private hasGridSemantics(segment: string): boolean {
+    return /网格|每格|每一格|单格|共\s*\d{1,4}\s*格|拆成\s*\d{1,4}\s*份|分成\s*\d{1,4}\s*(?:格|份)/u.test(segment)
+  }
+
+  private extractFixedGridRange(segment: string): FixedGridRange | null {
+    const match = segment.match(/(?:价格区间|固定区间|区间)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(?:-|~|到|至)\s*(\d+(?:\.\d+)?)/u)
+      ?? segment.match(/(\d+(?:\.\d+)?)\s*(?:-|~|到|至)\s*(\d+(?:\.\d+)?)/u)
+
+    if (!match?.[1] || !match[2]) {
+      return null
+    }
+
+    const lower = Number(match[1])
+    const upper = Number(match[2])
+    if (!Number.isFinite(lower) || !Number.isFinite(upper) || lower <= 0 || upper <= lower) {
+      return null
+    }
+
+    return { lower, upper }
+  }
+
+  private extractGridLevelCount(segment: string): number | null {
+    return this.extractPositiveInteger(segment, [
+      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})\s*个/u,
+      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})(?!\s*格)/u,
+      /(\d{1,4})\s*个\s*网格/u,
+    ])
+  }
+
+  private extractGridIntervals(segment: string): number | null {
+    return this.extractPositiveInteger(segment, [
+      /共\s*(\d{1,4})\s*格/u,
+      /网格(?:数量|数)?\s*[:：]?\s*(\d{1,4})\s*格/u,
+      /拆成\s*(\d{1,4})\s*份/u,
+      /分成\s*(\d{1,4})\s*(?:格|份)/u,
+    ])
+  }
+
+  private extractAbsoluteGridSpacing(segment: string): number | null {
+    return this.extractNumber(segment, [
+      /每格(?:价格)?(?:间距|距离)\s*[:：]?\s*(\d+(?:\.\d+)?)(?![\d.])(?!\s*%)\s*(?:USDT|USDC|USD|U|u|刀)?/u,
+      /每一格(?:价格)?(?:间距|距离)\s*[:：]?\s*(\d+(?:\.\d+)?)(?![\d.])(?!\s*%)\s*(?:USDT|USDC|USD|U|u|刀)?/u,
+      /单格(?:价格)?(?:间距|距离)\s*[:：]?\s*(\d+(?:\.\d+)?)(?![\d.])(?!\s*%)\s*(?:USDT|USDC|USD|U|u|刀)?/u,
+    ])
+  }
+
+  private extractPositiveInteger(segment: string, patterns: RegExp[]): number | null {
+    const value = this.extractNumber(segment, patterns)
+    if (value === null || !Number.isInteger(value) || value <= 0) {
+      return null
+    }
+
+    return value
   }
 
   private deriveGridCountFromPercentStep(lower: number, upper: number, stepPct: number): number {
@@ -1127,10 +1251,25 @@ export class SemanticSeedExtractorService {
     return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
   }
 
+  private deriveGridCountFromAbsoluteSpacing(lower: number, upper: number, absoluteSpacing: number): number | null {
+    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(absoluteSpacing) || lower <= 0 || upper <= lower || absoluteSpacing <= 0) {
+      return null
+    }
+
+    const intervals = (upper - lower) / absoluteSpacing
+    const roundedIntervals = Math.round(intervals)
+    if (roundedIntervals < 1 || Math.abs(intervals - roundedIntervals) > 1e-9) {
+      return null
+    }
+
+    return roundedIntervals + 1
+  }
+
   private extractCenteredGridRange(segment: string): {
     centerTiming: 'deployment' | 'runtime'
     centerSource: 'last_trade' | 'last_price' | 'mark_price'
     halfRangePct: number
+    gridIntervals: number | null
     gridCount: number
   } | null {
     if (!/(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark).{0,16}(?:中心|为中心)|(?:中心|为中心).{0,16}(?:当前价|当前价格|最新价|最新成交价|last|标记价|mark)/iu.test(segment)) {
@@ -1142,11 +1281,9 @@ export class SemanticSeedExtractorService {
       /上下\s*各\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /上(?:下)?\s*各\s*(\d+(?:\.\d+)?)\s*%/u,
     ])
-    const gridCount = this.extractNumber(segment, [
-      /共\s*(\d{1,4})\s*格/u,
-      /网格(?:数量|数)?\s*(\d{1,4})\s*格?/u,
-      /(\d{1,4})\s*格/u,
-    ])
+    const gridIntervals = this.extractGridIntervals(segment)
+    const explicitGridCount = this.extractGridLevelCount(segment)
+    const gridCount = gridIntervals !== null ? gridIntervals + 1 : explicitGridCount
     if (halfRangePct === null || halfRangePct <= 0 || gridCount === null || gridCount <= 0) {
       return null
     }
@@ -1157,6 +1294,7 @@ export class SemanticSeedExtractorService {
         ? 'last_trade'
         : (/标记价|mark/iu.test(segment) ? 'mark_price' : 'last_price'),
       halfRangePct,
+      gridIntervals,
       gridCount,
     }
   }

@@ -105,19 +105,19 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
   'price.range_position_lte': {
     semanticKey: 'price.range_position_lte',
     family: 'trigger',
-    requiredParams: ['lookbackBars', 'positionPct'],
+    requiredParams: ['lookbackBars', 'thresholdPct'],
     editableSlots: [
       { slotKey: 'range.lookback', valueShape: 'scalar', unit: 'bars', paramPaths: ['lookbackBars', 'period', 'window', 'length'] },
-      { slotKey: 'range.positionPct', valueShape: 'scalar', unit: 'percent', paramPaths: ['positionPct'] },
+      { slotKey: 'range.thresholdPct', valueShape: 'scalar', unit: 'percent', paramPaths: ['thresholdPct'] },
     ],
   },
   'price.range_position_gte': {
     semanticKey: 'price.range_position_gte',
     family: 'trigger',
-    requiredParams: ['lookbackBars', 'positionPct'],
+    requiredParams: ['lookbackBars', 'thresholdPct'],
     editableSlots: [
       { slotKey: 'range.lookback', valueShape: 'scalar', unit: 'bars', paramPaths: ['lookbackBars', 'period', 'window', 'length'] },
-      { slotKey: 'range.positionPct', valueShape: 'scalar', unit: 'percent', paramPaths: ['positionPct'] },
+      { slotKey: 'range.thresholdPct', valueShape: 'scalar', unit: 'percent', paramPaths: ['thresholdPct'] },
     ],
   },
   'risk.stop_loss_pct': {
@@ -136,6 +136,22 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
     optionalParams: ['basis'],
     editableSlots: [
       { slotKey: 'risk.take_profit', valueShape: 'scalar', unit: 'percent', paramPaths: ['valuePct', 'takeProfitPct', 'pct'] },
+    ],
+  },
+  'risk.max_drawdown_pct': {
+    semanticKey: 'risk.max_drawdown_pct',
+    family: 'risk',
+    requiredParams: ['valuePct'],
+    editableSlots: [
+      { slotKey: 'risk.max_drawdown', valueShape: 'scalar', unit: 'percent', paramPaths: ['valuePct', 'maxDrawdownPct', 'pct'] },
+    ],
+  },
+  'risk.max_single_loss_pct': {
+    semanticKey: 'risk.max_single_loss_pct',
+    family: 'risk',
+    requiredParams: ['valuePct'],
+    editableSlots: [
+      { slotKey: 'risk.max_single_loss', valueShape: 'scalar', unit: 'percent', paramPaths: ['valuePct', 'maxSingleLossPct', 'pct'] },
     ],
   },
   'risk.condition_expression': {
@@ -158,6 +174,8 @@ const SUPPORTED_POSITION_SIDE_MODES = new Set<string>(['long_only', 'short_only'
 const SUPPORTED_RISK_KEYS = new Set<string>([
   'risk.stop_loss_pct',
   'risk.take_profit_pct',
+  'risk.max_drawdown_pct',
+  'risk.max_single_loss_pct',
   'risk.condition_expression',
 ])
 const SUPPORTED_RISK_EFFECT_TYPES = new Set<string>(['close_position', 'reduce_position', 'notify_only', 'pause_strategy'])

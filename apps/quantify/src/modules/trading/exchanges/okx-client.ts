@@ -1,12 +1,14 @@
 import type {
   CreateOrderInput,
   MarketType,
+  OrderFillsQueryInput,
   OrderType,
   PositionSide,
   TradeMode,
   UnifiedBalance,
   UnifiedInstrumentConstraints,
   UnifiedOrder,
+  UnifiedOrderFill,
   UnifiedPosition,
   UnifiedTicker,
 } from '../core/types'
@@ -34,6 +36,21 @@ interface OkxOrderResponse {
   fillPx?: string
   uTime?: string
   cTime?: string
+}
+
+interface OkxFillResponse {
+  instType: string
+  instId: string
+  tradeId?: string
+  ordId: string
+  clOrdId?: string
+  side: string
+  fillPx: string
+  fillSz: string
+  fee?: string
+  feeCcy?: string
+  fillTime?: string
+  ts?: string
 }
 
 interface OkxOrderAck {
@@ -334,6 +351,27 @@ export class OkxClient extends BaseCexClient {
         return this.mapOrderFromResponse(order, resolvedSymbol, instrumentSpec)
       }),
     )
+  }
+
+  async fetchOrderFills(query: OrderFillsQueryInput): Promise<UnifiedOrderFill[]> {
+    const instId = this.toInstrumentId(query.symbol, this.marketType)
+    const instrumentSpec = await this.getInstrumentSpec(instId)
+    const params: Record<string, unknown> = {
+      instType: this.marketType === 'spot' ? 'SPOT' : 'SWAP',
+      instId,
+    }
+    if (query.orderId) params.ordId = query.orderId
+
+    const res = await this.request<{ data: OkxFillResponse[] }>(
+      'GET',
+      '/api/v5/trade/fills-history',
+      params,
+      true,
+    )
+
+    return res.data
+      .filter(fill => query.clientOrderId == null || fill.clOrdId === query.clientOrderId)
+      .map(fill => this.mapFillFromResponse(fill, query.symbol, instrumentSpec))
   }
 
   async fetchPositions(): Promise<UnifiedPosition[]> {
@@ -765,6 +803,30 @@ export class OkxClient extends BaseCexClient {
       createdAt,
       updatedAt,
       raw: order,
+    }
+  }
+
+  private mapFillFromResponse(
+    fill: OkxFillResponse,
+    symbol: string,
+    instrumentSpec?: OkxInstrumentSpecItem | null,
+  ): UnifiedOrderFill {
+    const executedAt = Number.parseInt(fill.fillTime ?? fill.ts ?? '', 10)
+    const fee = fill.fee == null || fill.fee === '' ? undefined : Number.parseFloat(fill.fee)
+    return {
+      id: fill.tradeId || `${fill.ordId}:${fill.fillTime ?? fill.ts ?? fill.fillPx}:${fill.fillSz}`,
+      tradeId: fill.tradeId || undefined,
+      orderId: fill.ordId,
+      clientOrderId: fill.clOrdId || undefined,
+      symbol,
+      marketType: this.marketType,
+      side: fill.side === 'sell' ? 'sell' : 'buy',
+      price: Number.parseFloat(fill.fillPx),
+      amount: this.fromExchangeSize(fill.fillSz, instrumentSpec),
+      fee: Number.isFinite(fee) ? fee : undefined,
+      feeCurrency: fill.feeCcy || undefined,
+      executedAt: Number.isFinite(executedAt) ? executedAt : Date.now(),
+      raw: fill,
     }
   }
 

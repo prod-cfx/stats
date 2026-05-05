@@ -77,6 +77,28 @@ export interface UnifiedOrder {
   raw: unknown
 }
 
+export interface OrderFillsQueryInput {
+  symbol: string
+  orderId?: string
+  clientOrderId?: string
+}
+
+export interface UnifiedOrderFill {
+  id: string
+  tradeId?: string
+  orderId: string
+  clientOrderId?: string
+  symbol: string
+  marketType: MarketType
+  side: OrderSide
+  price: number
+  amount: number
+  fee?: number
+  feeCurrency?: string
+  executedAt: number
+  raw: unknown
+}
+
 export interface UnifiedPosition {
   symbol: string
   marketType: MarketType

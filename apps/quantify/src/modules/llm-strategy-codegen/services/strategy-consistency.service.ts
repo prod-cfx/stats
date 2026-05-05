@@ -698,11 +698,12 @@ export class StrategyConsistencyService {
 
   private specToProfile(spec: CanonicalStrategySpec): StrategySemanticProfile {
     if (spec.version === 2) {
-      const rules = spec.rules.flatMap(rule => this.flattenV2Rule(rule))
+      const profileRules = spec.rules.filter(rule => !this.isBoundaryCancelBridgeRule(rule))
+      const rules = profileRules.flatMap(rule => this.flattenV2Rule(rule))
       return {
         indicators: spec.indicators,
         actions: Array.from(new Set(
-          spec.rules.flatMap(rule => rule.actions.map(action => action.type as CanonicalAction)),
+          profileRules.flatMap(rule => rule.actions.map(action => action.type as CanonicalAction)),
         )),
         ruleMappings: this.toRuleMappings(rules),
         rules,
@@ -1532,6 +1533,13 @@ export class StrategyConsistencyService {
     spec.exits.forEach(rule => register(rule.trigger, rule.action))
 
     return Array.from(mappings.entries()).map(([key, action]) => ({ key, action }))
+  }
+
+  private isBoundaryCancelBridgeRule(rule: CanonicalRuleV2): boolean {
+    return rule.phase === 'risk'
+      && rule.metadata?.guard === 'boundary_cancel'
+      && rule.metadata?.cancelOrders === true
+      && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
   }
 
   private flattenV2Rule(rule: CanonicalRuleV2): StrategySemanticRuleProfile[] {

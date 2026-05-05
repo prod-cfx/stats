@@ -618,7 +618,7 @@ export class CodegenConversationService {
       userId,
       status: 'DRAFTING',
       semanticState: semanticState as unknown as Prisma.InputJsonValue,
-      clarificationState: this.resolveSemanticClarificationArtifacts(semanticState).clarificationState as unknown as Prisma.InputJsonValue,
+      clarificationState: { status: 'CLEAR', items: [] } as Prisma.InputJsonValue,
       constraintPack: constraintPack as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
       latestSpecDesc: recoveredSpecDesc as Prisma.InputJsonValue,
@@ -2329,18 +2329,20 @@ export class CodegenConversationService {
       stateWithExplicitDeterministicPosition,
       checklist,
     )
+    const stateWithExecutableAtomSlots = this.ensureExecutableAtomSlots(stateWithExplicitDeterministicRisk)
     const hasExecutableSemantics = stateWithExplicitDeterministicRisk.families.length > 0
       || stateWithExplicitDeterministicRisk.triggers.length > 0
       || stateWithExplicitDeterministicRisk.actions.length > 0
 
     if (!hasExecutableSemantics) {
       return {
-        ...stateWithExplicitDeterministicRisk,
-        position: this.hasExplicitPositionSizing(checklist) ? stateWithExplicitDeterministicRisk.position : null,
+        ...stateWithExecutableAtomSlots,
+        position: this.hasExplicitPositionSizing(checklist) ? stateWithExecutableAtomSlots.position : null,
       }
     }
 
-    const stateWithPositionSizing = this.ensurePositionSizingSlot(stateWithExplicitDeterministicRisk, checklist, options)
+    const stateWithExecutionContextSlots = this.ensureExecutionContextSlots(stateWithExecutableAtomSlots)
+    const stateWithPositionSizing = this.ensurePositionSizingSlot(stateWithExecutionContextSlots, checklist, options)
 
     if (!this.hasLockedExecutionContext(stateWithPositionSizing)) {
       return {
@@ -2349,6 +2351,114 @@ export class CodegenConversationService {
     }
 
     return this.ensureProtectiveRiskSlot(stateWithPositionSizing)
+  }
+
+  private ensureExecutableAtomSlots(state: SemanticState): SemanticState {
+    const hasMissingExecutableAtomSlots = state.triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger))
+    const shouldCreateMissingExecutableAtomSlots =
+      hasMissingExecutableAtomSlots || this.hasPartialNonExecutableSemanticEvidence(state)
+    if (!shouldCreateMissingExecutableAtomSlots) {
+      return state
+    }
+
+    const hasLockedEntry = this.hasLockedTriggerPhase(state, 'entry')
+    const hasLockedExit = this.hasLockedTriggerPhase(state, 'exit')
+    const hasCompleteOrderProgram = this.hasCompleteOrderProgramSemantics(state)
+    const triggers = state.triggers.filter(trigger =>
+      !this.isMissingExecutableAtomTrigger(trigger)
+      || (trigger.phase === 'entry' && !hasLockedEntry)
+      || (trigger.phase === 'exit' && !hasLockedExit && !hasCompleteOrderProgram),
+    )
+    let changed = triggers.length !== state.triggers.length
+
+    if (!hasLockedEntry && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'entry')) {
+      triggers.push(this.buildMissingExecutableAtomTrigger('entry'))
+      changed = true
+    }
+
+    if (!hasLockedExit && !hasCompleteOrderProgram && !triggers.some(trigger => this.isMissingExecutableAtomTrigger(trigger) && trigger.phase === 'exit')) {
+      triggers.push(this.buildMissingExecutableAtomTrigger('exit'))
+      changed = true
+    }
+
+    return changed ? { ...state, triggers } : state
+  }
+
+  private hasPartialNonExecutableSemanticEvidence(state: SemanticState): boolean {
+    return (
+      !this.hasSemanticMainFlowEvidence(state)
+      && (state.risk.length > 0 || state.position !== null)
+    ) || (
+      state.actions.length > 0
+      && state.triggers.length === 0
+      && !this.hasCompleteOrderProgramSemantics(state)
+    )
+  }
+
+  private hasLockedTriggerPhase(
+    state: SemanticState,
+    phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
+  ): boolean {
+    return state.triggers.some(trigger =>
+      trigger.phase === phase
+      && trigger.status === 'locked'
+      && trigger.openSlots.every(slot => slot.status !== 'open'),
+    )
+  }
+
+  private hasCompleteOrderProgramSemantics(state: SemanticState): boolean {
+    const hasLockedLevelSetProvider = state.triggers.some(trigger =>
+      trigger.status === 'locked'
+      && trigger.openSlots.every(slot => slot.status !== 'open')
+      && trigger.contracts?.some(contract =>
+        contract.capabilities.some(capability =>
+          capability.domain === 'price'
+          && capability.verb === 'define'
+          && capability.object === 'level_set',
+        ),
+      ),
+    )
+    if (!hasLockedLevelSetProvider) {
+      return false
+    }
+
+    return state.actions.some(action =>
+      action.status === 'locked'
+      && (action.openSlots ?? []).every(slot => slot.status !== 'open')
+      && action.contracts?.some(contract =>
+        contract.capabilities.some(capability =>
+          capability.domain === 'order_program'
+          && capability.verb === 'maintain',
+        ),
+      ),
+    )
+  }
+
+  private isMissingExecutableAtomTrigger(trigger: SemanticTriggerState): boolean {
+    return trigger.key === 'semantic.missing_entry_atom'
+      || trigger.key === 'semantic.missing_exit_atom'
+  }
+
+  private buildMissingExecutableAtomTrigger(
+    phase: Extract<SemanticTriggerState['phase'], 'entry' | 'exit'>,
+  ): SemanticTriggerState {
+    const isEntry = phase === 'entry'
+    return {
+      id: `semantic-missing-${phase}-atom`,
+      key: isEntry ? 'semantic.missing_entry_atom' : 'semantic.missing_exit_atom',
+      phase,
+      params: {},
+      status: 'open',
+      source: 'derived',
+      openSlots: [{
+        slotKey: isEntry ? 'trigger.entry' : 'trigger.exit',
+        fieldPath: isEntry ? 'triggers[entry]' : 'triggers[exit]',
+        status: 'open',
+        priority: 'core',
+        questionHint: isEntry ? '请补充入场触发条件。' : '请补充出场触发条件。',
+        affectsExecution: true,
+      }],
+    }
   }
 
   private withDeterministicContextSlots(state: SemanticState, checklist: StrategyLogicSnapshot): SemanticState {
@@ -2375,6 +2485,28 @@ export class CodegenConversationService {
     return changed
       ? { ...state, contextSlots }
       : state
+  }
+
+  private ensureExecutionContextSlots(state: SemanticState): SemanticState {
+    const questionHints = {
+      exchange: '请确认交易所（binance / okx / hyperliquid）。',
+      symbol: '请确认策略交易标的（例如 BTCUSDT）。',
+      marketType: '请确认市场类型（现货或合约/perp）。',
+      timeframe: '请确认策略主周期（例如 15m 或 1h）。',
+    } as const
+    const fields = ['exchange', 'symbol', 'marketType', 'timeframe'] as const
+    let changed = false
+    const contextSlots: SemanticState['contextSlots'] = { ...state.contextSlots }
+
+    for (const field of fields) {
+      if (contextSlots[field]) {
+        continue
+      }
+      contextSlots[field] = this.buildContextSlotState(field, null, questionHints[field])
+      changed = true
+    }
+
+    return changed ? { ...state, contextSlots } : state
   }
 
   private withExplicitDeterministicPositionSizing(
@@ -2750,12 +2882,17 @@ export class CodegenConversationService {
     }
 
     if (nextOpenSlot.priority !== 'context') {
-      const semanticItems = this.listOpenSemanticSlots(semanticState)
+      const openSemanticSlots = this.listOpenSemanticSlots(semanticState)
+      const semanticItems = openSemanticSlots
         .filter(slot => slot.priority !== 'context')
         .map(slot => this.buildSemanticClarificationItem(slot))
-      const semanticItemKeys = new Set(semanticItems.map(item => item.key))
-      const semanticSlotIds = new Set(semanticItems.map(item => item.slotId).filter((slotId): slotId is string => typeof slotId === 'string'))
-      const semanticFieldPaths = new Set(semanticItems.map(item => item.fieldPath).filter((fieldPath): fieldPath is string => typeof fieldPath === 'string'))
+      const semanticContextItems = openSemanticSlots
+        .filter(slot => slot.priority === 'context')
+        .map(slot => this.buildSemanticClarificationItem(slot))
+      const allSemanticItems = [...semanticItems, ...semanticContextItems]
+      const semanticItemKeys = new Set(allSemanticItems.map(item => item.key))
+      const semanticSlotIds = new Set(allSemanticItems.map(item => item.slotId).filter((slotId): slotId is string => typeof slotId === 'string'))
+      const semanticFieldPaths = new Set(allSemanticItems.map(item => item.fieldPath).filter((fieldPath): fieldPath is string => typeof fieldPath === 'string'))
       const remainingPendingItems = fallbackState.status === 'NEEDS_CLARIFICATION'
         ? fallbackState.items.filter(item =>
             item.blocking
@@ -2771,7 +2908,7 @@ export class CodegenConversationService {
 
       return {
         status: 'NEEDS_CLARIFICATION',
-        items: [...semanticItems, ...filteredPendingItems],
+        items: [...allSemanticItems, ...filteredPendingItems],
         summary: clarificationView.summary,
       }
     }
@@ -2840,6 +2977,11 @@ export class CodegenConversationService {
         )
     }
 
+    const contextField = this.resolveContextClarificationField(item)
+    if (contextField) {
+      return this.isLockedContextSlot(semanticState, contextField)
+    }
+
     if (item.reason !== 'ambiguous_state_gate') {
       return false
     }
@@ -2849,6 +2991,47 @@ export class CodegenConversationService {
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
     )
+  }
+
+  private resolveContextClarificationField(
+    item: StrategyClarificationItem,
+  ): keyof SemanticState['contextSlots'] | null {
+    const isMissingExecutionContextReason =
+      item.reason === 'missing_exchange'
+      || item.reason === 'missing_symbol'
+      || item.reason === 'missing_market_type'
+      || item.reason === 'missing_timeframe'
+      || item.reason === 'missing_execution_context'
+      || item.key.startsWith('executionContext.')
+    if (!isMissingExecutionContextReason) {
+      return null
+    }
+
+    const candidate = item.slotKey ?? item.field ?? item.key.replace(/^executionContext\./u, '')
+    if (
+      candidate === 'exchange'
+      || candidate === 'symbol'
+      || candidate === 'marketType'
+      || candidate === 'timeframe'
+    ) {
+      return candidate
+    }
+
+    return null
+  }
+
+  private isLockedContextSlot(
+    semanticState: SemanticState,
+    field: keyof SemanticState['contextSlots'],
+  ): boolean {
+    const slot = semanticState.contextSlots[field]
+    if (!slot || slot.status !== 'locked') {
+      return false
+    }
+
+    return typeof slot.value === 'string'
+      ? slot.value.trim().length > 0
+      : slot.value !== undefined && slot.value !== null
   }
 
   private isPositionSizingClarificationItem(item: StrategyClarificationItem): boolean {
@@ -3002,18 +3185,62 @@ export class CodegenConversationService {
     fallbackLogicSnapshot: StrategyLogicSnapshot,
     options?: { preserveLegacyFallback?: boolean },
   ): StrategyClarificationStateWithSummary {
+    const normalizedSemanticState = this.ensureExecutableAtomSlots(semanticState)
     const rawFallbackState = this.resolveClarificationArtifacts(fallbackLogicSnapshot).clarificationState
+    const semanticSafetyItems = this.buildSemanticSafetyClarificationItems(normalizedSemanticState)
     const fallbackState = options?.preserveLegacyFallback === true
+      || !this.hasSemanticMainFlowEvidence(normalizedSemanticState)
       ? rawFallbackState
       : {
           ...rawFallbackState,
-          items: rawFallbackState.items.filter(item => !this.isLegacyLogicCompletenessItem(item)),
-          status: rawFallbackState.items.some(item => !this.isLegacyLogicCompletenessItem(item))
-            ? rawFallbackState.status
-            : 'CLEAR',
+          items: [
+            ...rawFallbackState.items.filter(item => this.isSafetyClarificationItem(item)),
+            ...semanticSafetyItems,
+          ],
+          status: rawFallbackState.items.some(item => this.isSafetyClarificationItem(item)) || semanticSafetyItems.length > 0
+            ? 'NEEDS_CLARIFICATION' as const
+            : 'CLEAR' as const,
         }
 
-    return this.mergeSemanticClarificationState(semanticState, fallbackState)
+    return this.mergeSemanticClarificationState(normalizedSemanticState, fallbackState)
+  }
+
+  private isSafetyClarificationItem(item: StrategyClarificationItem): boolean {
+    return item.blocking
+      && (item.reason === 'invalid_spot_short_combo' || item.reason === 'conflicting_market_scope')
+  }
+
+  private buildSemanticSafetyClarificationItems(state: SemanticState): StrategyClarificationItem[] {
+    const marketType = this.readSemanticContextValue(state.contextSlots.marketType)
+    if (marketType !== 'spot') {
+      return []
+    }
+
+    const hasShortIntent = state.actions.some(action =>
+      action.status === 'locked'
+      && (action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short'),
+    ) || state.triggers.some(trigger =>
+      trigger.status === 'locked'
+      && (trigger.sideScope === 'short' || trigger.sideScope === 'both'),
+    )
+    if (!hasShortIntent) {
+      return []
+    }
+
+    return [{
+      key: 'market.marketType',
+      field: 'marketType',
+      reason: 'invalid_spot_short_combo',
+      question: '现货不支持做空，请确认要改为合约，还是移除做空相关规则。',
+      blocking: true,
+      status: 'pending',
+    }]
+  }
+
+  private hasSemanticMainFlowEvidence(state: SemanticState): boolean {
+    return state.families.length > 0
+      || state.triggers.length > 0
+      || state.actions.length > 0
   }
 
   private mergePersistedBlockingClarificationItems(

@@ -1478,6 +1478,76 @@ describe('okxClient', () => {
     ])
   })
 
+  it('fetches OKX transaction details as individual fills for an order', async () => {
+    let fillsUrl: URL | undefined
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      fillsUrl = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
+
+      return okJson({
+        data: [
+          {
+            instType: 'SPOT',
+            instId: 'BTC-USDT',
+            tradeId: 'trade-1',
+            ordId: 'closed-order-1',
+            clOrdId: 'grid-client-closed',
+            side: 'buy',
+            fillPx: '71000',
+            fillSz: '0.001',
+            fee: '-0.01',
+            feeCcy: 'USDT',
+            fillTime: '1773829253000',
+          },
+          {
+            instType: 'SPOT',
+            instId: 'BTC-USDT',
+            tradeId: 'trade-2',
+            ordId: 'closed-order-1',
+            clOrdId: 'grid-client-closed',
+            side: 'buy',
+            fillPx: '71010',
+            fillSz: '0.0005',
+            fee: '-0.005',
+            feeCcy: 'USDT',
+            ts: '1773829253570',
+          },
+        ],
+      })
+    }) as typeof fetch
+
+    const fills = await createClient().fetchOrderFills({
+      symbol: 'BTC/USDT',
+      orderId: 'closed-order-1',
+      clientOrderId: 'grid-client-closed',
+    })
+
+    expect(fillsUrl?.pathname).toBe('/api/v5/trade/fills-history')
+    expect(fillsUrl?.searchParams.get('instType')).toBe('SPOT')
+    expect(fillsUrl?.searchParams.get('instId')).toBe('BTC-USDT')
+    expect(fillsUrl?.searchParams.get('ordId')).toBe('closed-order-1')
+    expect(fills).toEqual([
+      expect.objectContaining({
+        id: 'trade-1',
+        tradeId: 'trade-1',
+        orderId: 'closed-order-1',
+        clientOrderId: 'grid-client-closed',
+        price: 71000,
+        amount: 0.001,
+        fee: -0.01,
+        feeCurrency: 'USDT',
+        executedAt: 1773829253000,
+      }),
+      expect.objectContaining({
+        id: 'trade-2',
+        tradeId: 'trade-2',
+        price: 71010,
+        amount: 0.0005,
+        fee: -0.005,
+        executedAt: 1773829253570,
+      }),
+    ])
+  })
+
   it('converts perp position contract sizes back to base sizes', async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
