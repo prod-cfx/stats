@@ -1,0 +1,213 @@
+import { Injectable } from '@nestjs/common'
+
+import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type {
+  SemanticAtomDefinition,
+  SemanticAtomReplacementStrategy,
+} from '../types/semantic-atom-support'
+
+type UnknownSemanticAtomDefinition = Pick<SemanticAtomDefinition, 'category' | 'key' | 'supportStatus'>
+
+const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
+  triggers: [
+    {
+      key: 'indicator.cross_over',
+      phase: 'entry',
+      sideScope: 'long',
+      params: {
+        indicator: 'price',
+        reference: { indicator: 'sma', period: 50 },
+        confirmationMode: 'bar_close',
+      },
+    },
+    {
+      key: 'indicator.cross_under',
+      phase: 'exit',
+      sideScope: 'long',
+      params: {
+        indicator: 'price',
+        reference: { indicator: 'sma', period: 20 },
+        confirmationMode: 'bar_close',
+      },
+    },
+  ],
+  actions: [
+    { key: 'open_long' },
+    { key: 'close_long' },
+  ],
+  risk: [
+    {
+      key: 'risk.stop_loss_pct',
+      params: {
+        valuePct: 5,
+        direction: 'loss',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+    },
+    {
+      key: 'risk.take_profit_pct',
+      params: {
+        valuePct: 10,
+        direction: 'profit',
+        basis: 'entry_avg_price',
+        basisSource: 'system_default',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+    },
+  ],
+  position: {
+    mode: 'fixed_ratio',
+    value: 0.1,
+    positionMode: 'long_only',
+    sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+  },
+}
+
+const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {
+  strategyKey: 'price_breakout_with_fixed_risk',
+  description: '价格突破 MA50 开多，跌破 MA20 平仓，5% 止损，10% 止盈，单笔 10% 仓位。',
+  patch: DEFAULT_REPLACEMENT_PATCH,
+}
+
+const ATOMS: SemanticAtomDefinition[] = [
+  executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
+  executableTrigger('price.breakout_up', ['reference']),
+  executableTrigger('price.breakout_down', ['reference']),
+  executableTrigger('price.range_position_lte', ['lookbackBars', 'thresholdPct']),
+  executableTrigger('price.range_position_gte', ['lookbackBars', 'thresholdPct']),
+  executableTrigger('indicator.cross_over', ['indicator', 'reference']),
+  executableTrigger('indicator.cross_under', ['indicator', 'reference']),
+  executableTrigger('indicator.threshold_gte', ['indicator', 'value']),
+  executableTrigger('indicator.threshold_lte', ['indicator', 'value']),
+  executableTrigger('indicator.boundary_touch', ['indicator', 'boundaryRole']),
+  executableTrigger('indicator.boundary_cross', ['indicator', 'boundaryRole']),
+  executableTrigger('market.trend', ['state']),
+  executableTrigger('market.range', ['state']),
+  executableTrigger('market.volatility_state', ['state']),
+  executableAction('open_long'),
+  executableAction('open_short'),
+  executableAction('close_long'),
+  executableAction('close_short'),
+  executableAction('reduce_long'),
+  executableAction('reduce_short'),
+  executableRisk('risk.stop_loss_pct', ['valuePct']),
+  executableRisk('risk.take_profit_pct', ['valuePct']),
+  executableRisk('risk.trailing_stop_pct', ['valuePct']),
+  executableRisk('risk.max_drawdown_pct', ['valuePct']),
+  executableRisk('risk.max_single_loss_pct', ['valuePct']),
+  executableRisk('risk.cooldown_bars', ['bars']),
+  executablePosition('position.fixed_pct', ['value']),
+  executablePosition('position.fixed_notional', ['value', 'asset']),
+  executablePosition('position.fixed_quantity', ['value', 'asset']),
+  unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
+  unsupported('volume.threshold', 'trigger', '成交量阈值', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
+  unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
+  unsupported('risk.atr_stop', 'risk', 'ATR 动态止损', 'atr_stop_public_beta_unsupported', 'ATR 动态止损当前公测暂未支持生成和回测。'),
+  unsupported('risk.partial_take_profit', 'risk', '分批止盈', 'partial_take_profit_public_beta_unsupported', '多档分批止盈当前公测暂未支持生成和回测。'),
+  unsupported('action.add_position', 'action', '加仓', 'scale_in_public_beta_unsupported', '复杂加仓当前公测暂未支持生成和回测。'),
+  unsupported('action.reverse_position', 'action', '反手', 'reverse_position_public_beta_unsupported', '反手交易当前公测暂未支持生成和回测。'),
+  unsupported('position.dca_schedule', 'position', 'DCA 定投/补仓', 'dca_public_beta_unsupported', 'DCA 定投/补仓当前公测暂未支持生成和回测。'),
+  unsupported('position.leverage', 'position', '策略杠杆声明', 'leverage_contract_public_beta_unsupported', '策略内声明杠杆当前公测暂未支持生成和回测。'),
+  unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
+]
+
+@Injectable()
+export class SemanticAtomRegistryService {
+  private readonly atoms = new Map(ATOMS.map(atom => [atom.key, atom]))
+
+  get(key: string): SemanticAtomDefinition {
+    const atom = this.atoms.get(key)
+    if (!atom) {
+      throw new Error(`semantic_atom_not_registered:${key}`)
+    }
+    return atom
+  }
+
+  resolve(key: string): SemanticAtomDefinition | UnknownSemanticAtomDefinition {
+    return this.atoms.get(key) ?? {
+      key,
+      category: 'unknown',
+      supportStatus: 'unsupported_unknown',
+    }
+  }
+
+  list(): SemanticAtomDefinition[] {
+    return [...this.atoms.values()]
+  }
+}
+
+function executableTrigger(key: string, requiredParams: string[]): SemanticAtomDefinition {
+  return {
+    key,
+    category: 'trigger',
+    supportStatus: 'supported_executable',
+    requiredParams,
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [],
+  }
+}
+
+function executableAction(key: string): SemanticAtomDefinition {
+  return {
+    key,
+    category: 'action',
+    supportStatus: 'supported_executable',
+    requiredParams: [],
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [],
+  }
+}
+
+function executableRisk(key: string, requiredParams: string[]): SemanticAtomDefinition {
+  return {
+    key,
+    category: 'risk',
+    supportStatus: 'supported_executable',
+    requiredParams,
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [],
+  }
+}
+
+function executablePosition(key: string, requiredParams: string[]): SemanticAtomDefinition {
+  return {
+    key,
+    category: 'position',
+    supportStatus: 'supported_executable',
+    requiredParams,
+    defaultableParams: [],
+    executableProjection: ['semantic_position_contract', 'compiled_runtime'],
+    openSlots: [],
+  }
+}
+
+function unsupported(
+  key: string,
+  category: SemanticAtomDefinition['category'],
+  displayName: string,
+  reasonCode: string,
+  publicReason: string,
+): SemanticAtomDefinition {
+  return {
+    key,
+    category,
+    supportStatus: 'recognized_unsupported',
+    requiredParams: [],
+    defaultableParams: [],
+    executableProjection: [],
+    openSlots: [],
+    unsupported: {
+      displayName,
+      reasonCode,
+      publicReason,
+    },
+    replacement: DEFAULT_REPLACEMENT,
+  }
+}
