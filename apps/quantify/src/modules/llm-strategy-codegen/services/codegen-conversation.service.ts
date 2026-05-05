@@ -4985,8 +4985,7 @@ export class CodegenConversationService {
       if (slotKey !== undefined && typeof slotKey !== 'string') return null
       if (fieldPath !== undefined && typeof fieldPath !== 'string') return null
       const typedReason = reason as StrategyClarificationItem['reason']
-      const typedField = STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
-        || this.isPreservedSemanticClarificationField(field, typedReason)
+      const typedField = this.isPreservedClarificationField(field, typedReason)
         ? field as StrategyClarificationItem['field']
         : this.inferClarificationField({
           key,
@@ -5029,7 +5028,7 @@ export class CodegenConversationService {
     }
   }
 
-  private isPreservedSemanticClarificationField(
+  private isPreservedClarificationField(
     field: unknown,
     reason: StrategyClarificationItem['reason'],
   ): field is string {
@@ -5037,21 +5036,46 @@ export class CodegenConversationService {
       return false
     }
 
-    if (field === 'triggers' || field === 'actions' || field === 'risk') {
-      return true
+    if (this.isDynamicSemanticContractRequirementField(field)) {
+      return reason === 'missing_semantic_contract_requirement'
     }
 
+    if (this.isSemanticClarificationField(field)) {
+      return this.isSemanticClarificationReason(reason)
+    }
+
+    return STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
+  }
+
+  private isSemanticClarificationReason(reason: StrategyClarificationItem['reason']): boolean {
     if (
-      field.startsWith('position.')
-      || field.startsWith('triggers[')
-      || field.startsWith('actions[')
-      || field.startsWith('risk[')
+      reason === 'missing_semantic_trigger'
+      || reason === 'missing_semantic_action'
+      || reason === 'missing_semantic_risk'
+      || reason === 'missing_semantic_position_sizing'
+      || reason === 'missing_semantic_position_mode'
+      || reason === 'missing_semantic_contract_requirement'
     ) {
       return true
     }
 
-    return reason === 'missing_semantic_contract_requirement'
-      && field.includes('.contracts[')
+    return false
+  }
+
+  private isSemanticClarificationField(field: string): boolean {
+    return field === 'triggers'
+      || field === 'actions'
+      || field === 'risk'
+      || field.startsWith('position.')
+      || field.startsWith('triggers[')
+      || field.startsWith('actions[')
+      || field.startsWith('risk[')
+      || field.startsWith('contract.requirement.')
+      || this.isDynamicSemanticContractRequirementField(field)
+  }
+
+  private isDynamicSemanticContractRequirementField(field: string): boolean {
+    return field.includes('.contracts[')
       && field.includes('.requires.')
       && (
         field.startsWith('triggers[')

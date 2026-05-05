@@ -25,4 +25,51 @@ describe('resolveSemanticClarificationMetadata', () => {
       field: 'risk',
     })
   })
+
+  it.each([
+    [
+      'position.mode',
+      {
+        reason: 'missing_semantic_position_mode',
+        field: 'position.positionMode',
+      },
+    ],
+    [
+      'exposure.position_mode',
+      {
+        reason: 'missing_semantic_position_mode',
+        field: 'position.positionMode',
+      },
+    ],
+    [
+      'action.entry',
+      {
+        reason: 'missing_semantic_action',
+        field: 'actions',
+      },
+    ],
+    [
+      'entry.order.intent',
+      {
+        reason: 'missing_semantic_action',
+        field: 'actions',
+      },
+    ],
+    [
+      'grid.stepPct',
+      {
+        reason: 'missing_semantic_contract_requirement',
+        field: 'grid.stepPct',
+      },
+    ],
+    [
+      'contract.requirement.price.define.level_set',
+      {
+        reason: 'missing_semantic_contract_requirement',
+        field: 'contract.requirement.price.define.level_set',
+      },
+    ],
+  ])('maps %s to semantic metadata', (slotKey, expected) => {
+    expect(resolveSemanticClarificationMetadata(slotKey)).toEqual(expected)
+  })
 })

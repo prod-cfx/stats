@@ -3932,6 +3932,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not preserve atom-native fields for legacy clarification reasons on readback', () => {
+    const clarificationState = (service as any).readClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'executionContext.marketType',
+          reason: 'missing_market_type',
+          field: 'actions',
+          blocking: true,
+          question: '请确认市场类型（现货或合约/perp）。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(clarificationState).toEqual(expect.objectContaining({
+      items: [
+        expect.objectContaining({
+          key: 'executionContext.marketType',
+          reason: 'missing_market_type',
+          field: 'marketType',
+        }),
+      ],
+    }))
+  })
+
   it('uses semantic clarification priorities when building blocking reasons', () => {
     const blockingReasons = (service as any).buildEffectiveBlockingReasonsFromClarificationState({
       status: 'NEEDS_CLARIFICATION',
