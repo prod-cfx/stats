@@ -12859,15 +12859,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('keeps bidirectional fixed grid spacing-conflict answers out of generic contract-required prompts', async () => {
+  it('keeps complete percent-spaced bidirectional fixed grid out of spacing-conflict prompts', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
         related: true,
-        logicReady: false,
+        logicReady: true,
         assistantPrompt: 'planner fallback should not provide grid clarification wording',
       }),
     })
-    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-spacing-conflict' })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-percent-spacing' })
 
     const started = await service.startSession({
       userId: 'u1',
@@ -12875,26 +12875,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
 
-    expect(started.status).toBe('DRAFTING')
-    expect(started.assistantPrompt).toContain('网格数量和每格间距')
+    expect(started.status).toBe('CONFIRM_GATE')
+    expect(started.assistantPrompt).not.toContain('网格数量和每格间距')
     expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
     expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
-
-    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
-      's-bidirectional-grid-spacing-conflict',
-      createPayload,
-      { status: started.status },
-    ))
-
-    const continued = await service.continueSession('s-bidirectional-grid-spacing-conflict', {
-      userId: 'u1',
-      message: '每格间距',
-    })
-    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
-
-    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
-    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
-    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'grid.range_rebalance',
         openSlots: expect.not.arrayContaining([
@@ -12910,6 +12895,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         })],
       }),
     ]))
+    const gridShape = createPayload.semanticState.triggers
+      ?.find((trigger: { key?: string }) => trigger.key === 'grid.range_rebalance')
+      ?.contracts?.[0]?.capabilities?.find((capability: { object?: string }) => capability.object === 'level_set')
+      ?.shape
+    expect(gridShape).not.toHaveProperty('gridCount')
   })
 
   it('preserves a complete real-grid seed when the user only answers the missing timeframe slot', async () => {

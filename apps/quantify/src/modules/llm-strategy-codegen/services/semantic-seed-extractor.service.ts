@@ -1616,10 +1616,6 @@ export class SemanticSeedExtractorService {
       ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
       ...(stepPct !== null ? { spacingPct: stepPct } : {}),
     }
-    if (!('gridCount' in shape) && stepPct !== null) {
-      shape.gridCount = this.deriveGridCountFromPercentStep(fixedRange.lower, fixedRange.upper, stepPct)
-    }
-
     this.pushTrigger(triggers, seen, {
       key: 'grid.range_rebalance',
       phase: 'entry',
@@ -1738,19 +1734,6 @@ export class SemanticSeedExtractorService {
     }
 
     return value
-  }
-
-  private deriveGridCountFromPercentStep(lower: number, upper: number, stepPct: number): number {
-    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(stepPct) || lower <= 0 || upper <= lower || stepPct <= 0) {
-      return 2
-    }
-
-    const ratio = 1 + stepPct / 100
-    if (ratio <= 1) {
-      return 2
-    }
-
-    return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
   }
 
   private deriveGridCountFromAbsoluteSpacing(lower: number, upper: number, absoluteSpacing: number): number | null {

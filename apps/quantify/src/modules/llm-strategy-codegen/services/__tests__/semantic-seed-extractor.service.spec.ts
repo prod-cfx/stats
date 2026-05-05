@@ -2236,6 +2236,7 @@ describe('SemanticSeedExtractorService', () => {
       ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
       ?.shape
     expect(gridShape).not.toHaveProperty('absoluteSpacing')
+    expect(gridShape).not.toHaveProperty('gridCount')
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contracts: expect.arrayContaining([
@@ -2254,6 +2255,24 @@ describe('SemanticSeedExtractorService', () => {
         ]),
       }),
     ]))
+  })
+
+  it('keeps percent-spaced fixed grid free of synthetic spacing conflicts', () => {
+    const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，每格间距 0.1%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
+    const trigger = patch.triggers?.find(item => item.key === 'grid.range_rebalance')
+    const gridShape = trigger
+      ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
+      ?.shape
+
+    expect(trigger?.openSlots ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'contract.shape.price.level_set.spacing_conflict' }),
+    ]))
+    expect(gridShape).toEqual(expect.objectContaining({
+      lower: 79200,
+      upper: 80200,
+      spacingPct: 0.1,
+    }))
+    expect(gridShape).not.toHaveProperty('gridCount')
   })
 
   it('extracts rolling range-position semantics from the official grid-range template', () => {
