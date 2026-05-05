@@ -70,19 +70,19 @@ export class SemanticEventFrameParserService {
       }
     }
 
+    if (/(做空|开空|卖空|卖出\s*开空)/u.test(clause)) {
+      return {
+        action: { kind: 'open_short' },
+        phase: 'entry',
+        sideScope: 'short',
+      }
+    }
+
     if (/(平多|多头平仓|卖出)/u.test(clause)) {
       return {
         action: { kind: 'close_long' },
         phase: 'exit',
         sideScope: 'long',
-      }
-    }
-
-    if (/(做空|开空|卖空)/u.test(clause)) {
-      return {
-        action: { kind: 'open_short' },
-        phase: 'entry',
-        sideScope: 'short',
       }
     }
 

@@ -3170,4 +3170,50 @@ describe('SemanticSeedExtractorService', () => {
       ]))
     }
   })
+
+  it('does not add close-long semantics for explicit sell then open-short wording', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 卖出开空；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+    ]))
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(patch.actions ?? []).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'open_short',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                shape: expect.objectContaining({
+                  intent: 'open',
+                  side: 'short',
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'close_long',
+      }),
+    ]))
+  })
 })

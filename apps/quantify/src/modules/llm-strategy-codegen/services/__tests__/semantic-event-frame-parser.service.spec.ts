@@ -102,6 +102,19 @@ describe('SemanticEventFrameParserService', () => {
     ])
   })
 
+  it('treats sell then open-short wording as short entry instead of close long', () => {
+    const frames = service.parse('EMA7 上穿 EMA21 卖出开空。')
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        action: { kind: 'open_short' },
+        trigger: expect.objectContaining({ direction: 'over' }),
+      }),
+    ])
+  })
+
   it('inherits omitted exit from moving-average pair golden-cross wording', () => {
     const frames = service.parse('EMA7 和 EMA21 金叉开多；死叉平多。')
 
