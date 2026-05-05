@@ -516,7 +516,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'volume.spike',
-        params: expect.objectContaining({ sourceText: expect.any(String) }),
+        params: expect.objectContaining({ sourceText: expect.stringContaining('放量突破') }),
       }),
     ]))
   })
@@ -525,7 +525,10 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('OKX BTCUSDT 15m，成交量大于过去 20 根均量 2 倍时开多，仓位 10%。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'volume.threshold' }),
+      expect.objectContaining({
+        key: 'volume.threshold',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('成交量大于') }),
+      }),
     ]))
   })
 
@@ -533,7 +536,10 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('OKX BTCUSDT 1h，ATR threshold filter passes when ATR greater than 100, then MA 金叉做多。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'volatility.atr_threshold' }),
+      expect.objectContaining({
+        key: 'volatility.atr_threshold',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR threshold filter') }),
+      }),
     ]))
   })
 
@@ -543,7 +549,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.atr_stop',
-        params: expect.objectContaining({ sourceText: expect.any(String) }),
+        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR 2 倍移动止损') }),
       }),
     ]))
   })
@@ -552,7 +558,10 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('ETHUSDT 1h MA cross long with ATR trailing stop and 10% position.')
 
     expect(patch.risk).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'risk.atr_stop' }),
+      expect.objectContaining({
+        key: 'risk.atr_stop',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR trailing stop') }),
+      }),
     ]))
   })
 
@@ -560,7 +569,43 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('BTCUSDT 做多后盈利 5% 平一半，盈利 10% 全平，仓位 10%。')
 
     expect(patch.risk).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'risk.partial_take_profit' }),
+      expect.objectContaining({
+        key: 'risk.partial_take_profit',
+        params: expect.objectContaining({ sourceText: expect.stringContaining('平一半') }),
+      }),
+    ]))
+  })
+
+  it('does not treat ATR threshold plus fixed stop loss as ATR stop', () => {
+    const patch = service.extract('OKX BTCUSDT 1h，ATR 大于 100 时做多，止损 5%，仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volatility.atr_threshold' }),
+    ]))
+    expect(patch.risk).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.atr_stop' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct' }),
+    ]))
+  })
+
+  it('does not emit unsupported atoms for negated unsupported wording', () => {
+    const patch = service.extract('OKX BTCUSDT 15m，不要放量过滤，不用 ATR 止损，不分批止盈，只用 MA20 上穿 MA50 做多，止损 5%，仓位 10%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'volume.spike' })]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'volume.threshold' })]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'volatility.atr_threshold' })]))
+    expect(patch.risk).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'risk.atr_stop' })]))
+    expect(patch.risk).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'risk.partial_take_profit' })]))
+  })
+
+  it('preserves trade intent for unsupported volume triggers', () => {
+    const patch = service.extract('OKX BTCUSDT 15m，放量做空，放量平仓。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'volume.spike', phase: 'entry', sideScope: 'short' }),
+      expect.objectContaining({ key: 'volume.spike', phase: 'exit' }),
     ]))
   })
 

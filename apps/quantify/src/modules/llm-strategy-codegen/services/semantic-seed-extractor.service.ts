@@ -696,25 +696,34 @@ export class SemanticSeedExtractorService {
   }
 
   private pushRecognizedUnsupportedRisk(text: string, risk: SeedRisk[]): void {
-    if (/(?:ATR|平均真实波幅).*(?:止损|移动止损|动态止损|(?:moving|dynamic|trailing)?\s*stop)/iu.test(text)) {
-      this.pushRisk(risk, {
-        key: 'risk.atr_stop',
-        params: { sourceText: 'atr stop' },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      })
-    }
+    for (const clause of this.splitRiskClauses(text)) {
+      if (this.hasNegatedUnsupportedContext(clause)) continue
 
-    if (/(?:分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(text)) {
-      this.pushRisk(risk, {
-        key: 'risk.partial_take_profit',
-        params: { sourceText: 'partial take profit' },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      })
+      if (this.hasAtrStopSemantics(clause)) {
+        this.pushRisk(risk, {
+          key: 'risk.atr_stop',
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(clause)) {
+        this.pushRisk(risk, {
+          key: 'risk.partial_take_profit',
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
     }
+  }
+
+  private hasAtrStopSemantics(clause: string): boolean {
+    return /(?:ATR|平均真实波幅).{0,12}(?:移动止损|动态止损|止损)/iu.test(clause)
+      || /\bATR\s+(?:(?:moving|dynamic|trailing)\s+)?stop\b/iu.test(clause)
   }
 
   private extractBoundaryGuardRisk(text: string): SeedRisk | null {
@@ -1938,38 +1947,65 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
     seen: Set<string>,
   ): void {
-    if (/放量|成交量放大|volume\s*spike|量能放大/iu.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'volume.spike',
-        phase: 'entry',
-        params: { sourceText: 'volume spike condition' },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      })
+    for (const clause of this.splitLogicClauses(segment)) {
+      if (this.hasNegatedUnsupportedContext(clause)) continue
+
+      if (/放量|成交量放大|volume\s*spike|量能放大/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'volume.spike',
+          ...this.resolveUnsupportedTriggerIntent(clause, segment),
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/成交量.*(?:大于|超过|高于|阈值)|volume.*(?:gte|threshold)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'volume.threshold',
+          ...this.resolveUnsupportedTriggerIntent(clause, segment),
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      if (/(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于|threshold|filter|greater\s+than|less\s+than|gte|lte)/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'volatility.atr_threshold',
+          ...this.resolveUnsupportedTriggerIntent(clause, segment),
+          params: { sourceText: clause },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+    }
+  }
+
+  private resolveUnsupportedTriggerIntent(
+    clause: string,
+    segment: string,
+  ): { phase: SeedTrigger['phase']; sideScope?: SeedTrigger['sideScope'] } {
+    const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+    if (intent) {
+      return {
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+      }
     }
 
-    if (/成交量.*(?:大于|超过|高于|阈值)|volume.*(?:gte|threshold)/iu.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'volume.threshold',
-        phase: 'entry',
-        params: { sourceText: 'volume threshold condition' },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      })
+    if (/(?:过滤|条件|阈值|filter|condition|threshold|大于|小于|高于|超过|gte|lte|greater\s+than|less\s+than)/iu.test(clause)) {
+      return { phase: 'gate' }
     }
 
-    if (/(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于|threshold|filter|greater\s+than|less\s+than|gte|lte)/iu.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'volatility.atr_threshold',
-        phase: 'gate',
-        params: { sourceText: 'atr volatility condition' },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      })
-    }
+    return { phase: 'entry' }
+  }
+
+  private hasNegatedUnsupportedContext(clause: string): boolean {
+    return /(?:不要|不用|无需|不|without|no)\s*.{0,12}(?:放量|成交量|量能|volume|ATR|平均真实波幅|分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(clause)
   }
 
   private pushTrigger(triggers: SeedTrigger[], seen: Set<string>, trigger: SeedTrigger): void {
