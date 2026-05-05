@@ -101,4 +101,38 @@ describe('SemanticEventFrameParserService', () => {
       }),
     ])
   })
+
+  it('inherits omitted exit from moving-average pair golden-cross wording', () => {
+    const frames = service.parse('EMA7 和 EMA21 金叉开多；死叉平多。')
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        action: { kind: 'open_long' },
+        trigger: {
+          kind: 'indicator_cross',
+          indicator: 'ema',
+          direction: 'over',
+          semantic: 'cross_up',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        },
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        action: { kind: 'close_long' },
+        inheritedFrom: 'event-frame-1',
+        trigger: {
+          kind: 'indicator_cross',
+          indicator: 'ema',
+          direction: 'under',
+          semantic: 'cross_down',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        },
+      }),
+    ])
+  })
 })

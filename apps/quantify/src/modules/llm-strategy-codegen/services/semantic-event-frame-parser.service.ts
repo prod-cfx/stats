@@ -154,9 +154,12 @@ export class SemanticEventFrameParserService {
     direction: SemanticEventTrigger['direction'],
   ): SemanticEventTrigger | undefined {
     const match = /\b(EMA|MA)\s*(\d+)\s*(?:上穿|下穿)\s*(EMA|MA)\s*(\d+)/iu.exec(clause)
+      ?? /\b(EMA|MA)\s*(\d+)\s*(?:和|与|及|\/|、)\s*(EMA|MA)\s*(\d+)\s*(?:金叉|死叉)/iu.exec(clause)
     if (!match) return undefined
 
-    const indicator = match[1].toLowerCase() === 'ema' ? 'ema' : 'ma'
+    const indicator = match[1].toLowerCase() === 'ema' || match[3].toLowerCase() === 'ema'
+      ? 'ema'
+      : 'ma'
 
     return {
       kind: 'indicator_cross',
