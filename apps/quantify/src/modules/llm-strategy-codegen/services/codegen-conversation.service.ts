@@ -289,7 +289,7 @@ export class CodegenConversationService {
     if (initialSupportGate.route === 'unknown_unsupported') {
       const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(initialSupportGate.unknownAtoms)
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
-      const clarificationState = this.resolveSemanticClarificationArtifacts(initialSemanticState).clarificationState
+      const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const session = await this.sessionsRepo.createSession({
         userId: sessionUserId,
         status: 'DRAFTING',
@@ -6547,7 +6547,7 @@ export class CodegenConversationService {
     if (classification.route === 'unknown_unsupported') {
       const nextState = this.clearUnsupportedFallback(classification.state)
       const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(classification.unknownAtoms)
-      const clarificationState = this.resolveSemanticClarificationArtifacts(nextState).clarificationState
+      const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
       await this.sessionsRepo.updateSession(args.session.id, {
         ...this.stateMachine.buildConversationUpdate({

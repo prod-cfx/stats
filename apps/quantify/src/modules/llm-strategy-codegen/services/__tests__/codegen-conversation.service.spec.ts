@@ -10753,6 +10753,59 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.semanticGraph).toBeNull()
   })
 
+  it('keeps unknown atom support gate out of execution open-slot clarification', async () => {
+    const contextSlots = buildLockedMaSemanticState().contextSlots
+    const sessionFixture = buildPersistedSessionSnapshot(
+      's-unknown-support-gate-clear',
+      {},
+      {
+        userId: 'u1',
+        status: 'DRAFTING',
+        semanticState: buildLockedMaSemanticState(),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+      },
+    ) as any
+    const semanticState = {
+      ...buildLockedMaSemanticState({
+        contextSlots: {
+          ...contextSlots,
+          exchange: {
+            ...contextSlots.exchange,
+            status: 'open',
+            value: null,
+          },
+        },
+      }),
+      triggers: [{
+        id: 'unknown-signal',
+        key: 'external.signal',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }
+
+    const result = await (service as any).handleSemanticSupportGateForExistingSession({
+      session: sessionFixture,
+      semanticState,
+      message: '用外部 webhook 信号开多',
+      userId: 'u1',
+      constraintPack: (service as any).readConstraintPack({}),
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.response.clarificationState).toEqual(expect.objectContaining({ status: 'CLEAR', items: [] }))
+    expect(result.response.clarificationGate).toEqual(expect.objectContaining({
+      blocked: false,
+      items: [],
+      pendingItems: [],
+    }))
+    expect(updatePayload.clarificationState).toEqual(expect.objectContaining({ status: 'CLEAR', items: [] }))
+  })
+
   it('replaces a published script when the user pastes corrected script code', async () => {
     const correctedScript = 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy'
     const sessionFixture = buildSemanticEraSessionFixture({
