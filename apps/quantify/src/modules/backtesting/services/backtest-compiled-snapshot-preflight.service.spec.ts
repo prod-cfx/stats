@@ -11,8 +11,7 @@ interface BacktestCompiledSnapshotInput {
   compiledManifest?: unknown
 }
 
-function createCompiledSnapshotFixture() {
-  const ir = createIrFixture()
+function createCompiledSnapshotFixture(ir: CanonicalStrategyIrV1 = createIrFixture()) {
   const ast = new CanonicalStrategyAstCompilerService().compile(ir)
   const executionEnvelope = {
     positionMode: 'long_only',
@@ -51,6 +50,18 @@ describe('backtestCompiledSnapshotPreflightService', () => {
         astDigest: fixture.compiledManifest.astDigest.replace('sha256:', ''),
         structuralDigest: fixture.compiledManifest.structuralDigest.replace('sha256:', ''),
       } as unknown as BacktestCompiledSnapshotInput['compiledManifest'],
+    }
+
+    expect(() => service.validate(snapshot)).not.toThrow()
+  })
+
+  it('accepts combination compiled snapshots with manifest IR AST and structural digests', () => {
+    const fixture = createCompiledSnapshotFixture(createCombinationIrFixture())
+    const snapshot: BacktestCompiledSnapshotInput = {
+      ...fixture,
+      irSnapshot: fixture.irSnapshot as unknown as BacktestCompiledSnapshotInput['irSnapshot'],
+      astSnapshot: fixture.astSnapshot as unknown as BacktestCompiledSnapshotInput['astSnapshot'],
+      compiledManifest: fixture.compiledManifest as unknown as BacktestCompiledSnapshotInput['compiledManifest'],
     }
 
     expect(() => service.validate(snapshot)).not.toThrow()
@@ -120,6 +131,92 @@ function createIrFixture(): CanonicalStrategyIrV1 {
     riskPolicy: {
       guards: [
         { id: 'stop_loss_4', kind: 'STOP_LOSS_PCT', scope: 'position', value: 4, onBreach: 'FORCE_EXIT' },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+}
+
+function createCombinationIrFixture(): CanonicalStrategyIrV1 {
+  return {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'3'.repeat(64)}`,
+      specHash: `sha256:${'4'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['1h'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 25 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 15,
+      maxLookback: 15,
+      requiredTimeframes: ['1h'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'bar_index', kind: 'BAR_INDEX' },
+        { id: 'bar_1', kind: 'CONST', value: 1 },
+        { id: 'bar_2', kind: 'CONST', value: 2 },
+        { id: 'zero', kind: 'CONST', value: 0 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_on_first_bar', kind: 'EQ', args: ['bar_index', 'bar_1'] },
+        { id: 'entry_gate_true', kind: 'EQ', args: ['bar_1', 'bar_1'] },
+        { id: 'entry_and', kind: 'AND', args: ['entry_on_first_bar', 'entry_gate_true'] },
+        { id: 'exit_on_second_bar', kind: 'EQ', args: ['bar_index', 'bar_2'] },
+        { id: 'exit_never', kind: 'EQ', args: ['bar_index', 'zero'] },
+        { id: 'exit_or', kind: 'OR', args: ['exit_never', 'exit_on_second_bar'] },
+      ],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_and',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+      {
+        id: 'exit_long',
+        phase: 'exit',
+        when: 'exit_or',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'risk-atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
       ],
     },
     executionPolicy: {
