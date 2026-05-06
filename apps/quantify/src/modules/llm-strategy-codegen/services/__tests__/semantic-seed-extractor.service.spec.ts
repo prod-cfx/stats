@@ -292,6 +292,24 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.contextSlots?.marketType).toBe('perp')
   })
 
+  it('extracts inferred base-only symbols from market-type-prefixed strategy text', () => {
+    const patch = service.extract('OKX 合约 BTC 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；单笔仓位 10%。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      marketType: 'perp',
+      timeframe: '15m',
+      symbol: expect.objectContaining({
+        value: 'BTCUSDT',
+        source: 'inferred',
+        quoteSource: 'default_usdt',
+        base: 'BTC',
+        quote: 'USDT',
+        marketTypeHint: 'perp',
+      }),
+    }))
+  })
+
   it.each([
     ['在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%', 'BTCUSDT', 'BTC'],
     ['在okx交易所 我想买sol 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%', 'SOLUSDT', 'SOL'],

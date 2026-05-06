@@ -2985,6 +2985,13 @@ export class SemanticSeedExtractorService {
       }
     }
 
+    for (const match of text.matchAll(/((?:合约|永续合约|永续|现货|spot|perp|swap|contract)\s+[A-Z][A-Z0-9]{1,19})(?=$|[\s,，、。;；])/giu)) {
+      const candidate = match[1]?.trim()
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+
     for (const match of text.matchAll(/(?:买入|买|卖出|卖|做多|做空|交易|标的|币种)\s*([A-Z][A-Z0-9]{1,19})\b/giu)) {
       const candidate = match[1]?.trim()
       if (candidate) {

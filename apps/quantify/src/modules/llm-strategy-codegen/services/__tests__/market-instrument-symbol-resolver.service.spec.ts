@@ -28,6 +28,8 @@ describe('MarketInstrumentSymbolResolverService', () => {
     ['ETH 永续合约', 'ETHUSDT', 'ETH'],
     ['BTC 永续合约', 'BTCUSDT', 'BTC'],
     ['SOL 永续合约', 'SOLUSDT', 'SOL'],
+    ['合约 BTC', 'BTCUSDT', 'BTC'],
+    ['现货 SOL', 'SOLUSDT', 'SOL'],
     ['以太坊', 'ETHUSDT', 'ETH'],
     ['比特币合约', 'BTCUSDT', 'BTC'],
   ] as const)('resolves inferred USDT symbol text %s', (input, value, base) => {
