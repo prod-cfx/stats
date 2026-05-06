@@ -26,7 +26,7 @@ Already covered by latest `main`:
 
 Remaining implementation focus after the sync:
 
-- Add the new generic strategy building blocks not covered by #965/#966: rolling extrema breakout, RSI two-step sequence, pullback/retest confirmation, consecutive candle sequence, volume relative average, ATR multiple risk, remembered breakout-level stop, logical OR exit grouping, and ambiguous sizing for wording such as `买一点`.
+- Add the new generic strategy building blocks not covered by #965/#966: rolling extrema breakout, RSI two-step sequence, pullback/retest confirmation, consecutive candle sequence, volume relative average, ATR multiple risk, remembered breakout-level stop, logical OR exit grouping, vague percent-change magnitude openSlots for wording such as `大跌`, falling-knife guard risk openSlots for wording such as `不要接飞刀`, and ambiguous sizing for wording such as `买一点`.
 - Extend existing `SemanticOpenSlotAnswerResolverService`, `SemanticMissingPlaceholderReconcilerService`, and `SemanticClarificationQuestionRendererService` only where the new building blocks need owner openSlots. Do not create parallel services.
 - Reuse current per-trigger timeframe support. Do not redo the already-merged multi-timeframe EMA work.
 - Keep Task 5+ focused on canonical predicate graph, script helpers, runtime parity, persistence, and frontend display for the new building blocks.
@@ -191,7 +191,7 @@ describe('atomic contract combination semantics', () => {
     ]))
   })
 
-  it('keeps vague dip-buying semantics and asks for rebound confirmation', () => {
+  it('keeps vague dip-buying semantics and asks for drop, falling-knife, and rebound confirmation', () => {
     const result = buildState('我想在大跌后抄底，但不要接飞刀，反弹确认后再买。')
 
     expect(result.route).toBe('open_slots')
@@ -200,6 +200,12 @@ describe('atomic contract combination semantics', () => {
         key: 'price.percent_change',
         phase: 'gate',
         params: expect.objectContaining({ direction: 'down' }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'trigger.percent_change.magnitude',
+            affectsExecution: true,
+          }),
+        ]),
       }),
       expect.objectContaining({
         key: 'confirmation.rebound',
@@ -207,6 +213,17 @@ describe('atomic contract combination semantics', () => {
         openSlots: expect.arrayContaining([
           expect.objectContaining({
             slotKey: 'trigger.confirmation.rebound_definition',
+            affectsExecution: true,
+          }),
+        ]),
+      }),
+    ]))
+    expect(result.state.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.falling_knife_guard',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'risk.falling_knife_guard.definition',
             affectsExecution: true,
           }),
         ]),
@@ -256,6 +273,10 @@ describe('atomic contract combination semantics', () => {
         params: expect.objectContaining({ value: 65 }),
       }),
     ]))
+    const rsiValues = result.state.triggers
+      .filter((trigger) => trigger.key.includes('rsi') || trigger.params?.indicator === 'rsi')
+      .map((trigger) => trigger.params?.value ?? trigger.params?.threshold)
+    expect(rsiValues).not.toContain(1)
   })
 
   it('extracts Bollinger lower plus volume relative average entry and upper exit', () => {
@@ -381,10 +402,11 @@ it.each([
   'risk.atr_multiple_stop',
   'risk.atr_multiple_take_profit',
   'risk.remembered_level_stop',
+  'risk.falling_knife_guard',
 ])('marks %s as supported by atomic contract execution', (key) => {
   const resolved = service.resolve(key)
 
-  expect(resolved.supportStatus).toBe('supported_executable')
+  expect(resolved.supportStatus).toMatch(/^supported_/u)
   expect(resolved.executableProjection).toContain('canonical_spec_v1')
 })
 ```
@@ -450,6 +472,7 @@ executableTrigger('volume.relative_average', ['lookbackBars', 'multiplier']),
 executableRisk('risk.atr_multiple_stop', ['multiple']),
 executableRisk('risk.atr_multiple_take_profit', ['multiple']),
 executableRisk('risk.remembered_level_stop', ['levelKey']),
+supportedRequiresSlotRisk('risk.falling_knife_guard', ['definition']),
 ```
 
 If `executableRisk()` is not currently present, add the helper near `executableTrigger()`:
@@ -464,6 +487,22 @@ function executableRisk(key: string, requiredParams: string[]): SemanticAtomDefi
     defaultableParams: [],
     executableProjection: ['canonical_spec_v1'],
     openSlots: [],
+  }
+}
+```
+
+If the registry does not yet have a helper for supported atoms that still require owner openSlots, add:
+
+```ts
+function supportedRequiresSlotRisk(key: string, requiredParams: string[]): SemanticAtomDefinition {
+  return {
+    key,
+    category: 'risk',
+    supportStatus: 'supported_requires_slot',
+    requiredParams,
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v1'],
+    openSlots: requiredParams.map((param) => `risk.${key.split('.').at(-1)}.${param}`),
   }
 }
 ```
@@ -568,6 +607,36 @@ it('extracts ATR multiple risk atoms', () => {
     expect.objectContaining({ key: 'risk.atr_multiple_take_profit', params: expect.objectContaining({ multiple: 3 }) }),
   ]))
 })
+
+it('extracts vague dip-buying as semantic open slots before execution context questions', () => {
+  const patch = service.extract('我想在大跌后抄底，但不要接飞刀，反弹确认后再买。')
+
+  expect(patch.triggers).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      key: 'price.percent_change',
+      phase: 'gate',
+      params: expect.objectContaining({ direction: 'down' }),
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({ slotKey: 'trigger.percent_change.magnitude', affectsExecution: true }),
+      ]),
+    }),
+    expect.objectContaining({
+      key: 'confirmation.rebound',
+      phase: 'entry',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({ slotKey: 'trigger.confirmation.rebound_definition', affectsExecution: true }),
+      ]),
+    }),
+  ]))
+  expect(patch.risk).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      key: 'risk.falling_knife_guard',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({ slotKey: 'risk.falling_knife_guard.definition', affectsExecution: true }),
+      ]),
+    }),
+  ]))
+})
 ```
 
 - [ ] **Step 2: Run focused extractor tests and verify they fail**
@@ -586,6 +655,7 @@ In `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-extrac
 
 ```ts
 this.pushRollingExtremaBreakoutTriggers(segment, triggers, seen)
+this.pushVagueDipBuyingTriggers(segment, triggers, seen)
 this.pushSequenceTriggers(segment, triggers, seen, text)
 this.pushVolumeRelativeAverageTriggers(segment, triggers, seen)
 this.pushLogicalOrExitTriggers(segment, triggers, seen, text)
@@ -715,7 +785,58 @@ private pushAtrMultipleRisk(text: string, risk: SeedRisk[]): void {
 }
 ```
 
-- [ ] **Step 7: Implement sequence and confirmation extraction**
+- [ ] **Step 7: Implement vague dip-buying and falling-knife risk extraction**
+
+Add methods that preserve vague user intent as atom-owned openSlots instead of falling through to generic context questions:
+
+```ts
+private pushVagueDipBuyingTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+  const intent = this.resolveTradeIntent(segment) ?? (/抄底|买/u.test(segment) ? { phase: 'gate' as const, sideScope: 'long' as const } : null)
+  if (!intent || !/(大跌|暴跌|急跌|跌很多)/u.test(segment)) return
+
+  this.pushTrigger(triggers, seen, {
+    key: 'price.percent_change',
+    phase: 'gate',
+    sideScope: intent.sideScope,
+    status: 'open',
+    params: { direction: 'down', magnitude: 'unknown' },
+    openSlots: [{
+      slotKey: 'trigger.percent_change.magnitude',
+      fieldPath: `triggers[${triggers.length}].params.magnitude`,
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认“大跌”的判定幅度，例如 4 小时跌幅超过 5% / 最近 20 根 K 线跌幅超过 8%。',
+      affectsExecution: true,
+      evidence: { text: segment, source: 'user_explicit' },
+    }],
+    evidence: { text: segment, source: 'user_explicit' },
+  })
+}
+
+private pushFallingKnifeRisk(segment: string, risk: SeedRisk[]): void {
+  if (!/(不要接飞刀|避免接飞刀|不接飞刀)/u.test(segment)) return
+
+  this.pushRisk(risk, {
+    key: 'risk.falling_knife_guard',
+    params: { definition: 'unknown' },
+    status: 'open',
+    source: 'user_explicit',
+    openSlots: [{
+      slotKey: 'risk.falling_knife_guard.definition',
+      fieldPath: `risk[${risk.length}].params.definition`,
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+      affectsExecution: true,
+      evidence: { text: segment, source: 'user_explicit' },
+    }],
+  })
+}
+```
+
+Call `pushFallingKnifeRisk(segment, risk)` from the existing risk extraction path before fallback risk detection.
+
+- [ ] **Step 8: Implement sequence and confirmation extraction**
 
 Add methods that push `condition.sequence` and `confirmation.rebound`:
 
@@ -786,7 +907,7 @@ private pushSequenceTriggers(segment: string, triggers: SeedTrigger[], seen: Set
 }
 ```
 
-- [ ] **Step 8: Implement ambiguous sizing extraction for “买一点”**
+- [ ] **Step 9: Implement ambiguous sizing extraction for “买一点”**
 
 In `extractPosition()`, before returning `null` for no sizing, add:
 
@@ -813,7 +934,7 @@ if (/(买一点|买一些|小仓位|轻仓|少量)/u.test(text)) {
 
 If the `CodegenSemanticPatch['position']` type does not allow `value: null`, extend it to `number | null` in the corresponding type file and update tests that construct position patches.
 
-- [ ] **Step 9: Run semantic tests**
+- [ ] **Step 10: Run semantic tests**
 
 Run:
 
@@ -824,7 +945,7 @@ dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit extractor normalization**
+- [ ] **Step 11: Commit extractor normalization**
 
 ```bash
 git add apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-extractor.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/semantic-event-frame-parser.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/semantic-event-frame-projector.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-event-frame-parser.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-combination-semantics.spec.ts
@@ -851,7 +972,7 @@ MSG
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-contract-readiness.service.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-question.service.spec.ts`
 
-- [ ] **Step 1: Add readiness tests for rebound and sizing openSlots**
+- [ ] **Step 1: Add readiness tests for rebound, vague drop, falling-knife, and sizing openSlots**
 
 Append to `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-contract-readiness.service.spec.ts`:
 
@@ -902,6 +1023,41 @@ it('keeps ambiguous position sizing as a position-owned blocking open slot', () 
     }),
   ]))
 })
+
+it('keeps vague drop and falling-knife wording as semantic-owned blocking open slots', () => {
+  const state = buildState({
+    triggers: [{
+      key: 'price.percent_change',
+      phase: 'gate',
+      params: { direction: 'down', magnitude: 'unknown' },
+      openSlots: [{
+        slotKey: 'trigger.percent_change.magnitude',
+        fieldPath: 'triggers[0].params.magnitude',
+        status: 'open',
+        priority: 'core',
+        affectsExecution: true,
+      }],
+    }],
+    risk: [{
+      key: 'risk.falling_knife_guard',
+      params: { definition: 'unknown' },
+      openSlots: [{
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk[0].params.definition',
+        status: 'open',
+        priority: 'core',
+        affectsExecution: true,
+      }],
+    }],
+  })
+
+  const result = service.evaluate(state)
+
+  expect(result.blockingOpenSlots).toEqual(expect.arrayContaining([
+    expect.objectContaining({ slotKey: 'trigger.percent_change.magnitude', ownerPath: expect.stringContaining('triggers') }),
+    expect.objectContaining({ slotKey: 'risk.falling_knife_guard.definition', ownerPath: expect.stringContaining('risk') }),
+  ]))
+})
 ```
 
 Use the local helper names in the file. If helper names differ, create inline `SemanticState` fixtures matching the existing test style.
@@ -912,8 +1068,10 @@ Append to `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/str
 
 ```ts
 it.each([
+  ['trigger.percent_change.magnitude', '请确认“大跌”的判定幅度，例如 4 小时跌幅超过 5% / 最近 20 根 K 线跌幅超过 8%。'],
   ['trigger.confirmation.rebound_definition', '请确认反弹确认条件，例如重新站上 MA20 / 收盘价上涨 1% / 下一根 K 线收阳。'],
   ['trigger.confirmation.pullback_hold', '请确认回踩不破的判定方式，例如收盘价不跌破突破位，还是最低价不跌破突破位。'],
+  ['risk.falling_knife_guard.definition', '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。'],
   ['position.sizing', '请确认单笔仓位大小，例如 10% / 10 USDT / 0.001 BTC。'],
 ])('renders business wording for %s', (slotKey, expected) => {
   const question = service.renderOpenSlotQuestion({
@@ -933,10 +1091,21 @@ it.each([
 In `semantic-clarification-metadata.ts`, add explicit mappings:
 
 ```ts
-if (slotKey === 'trigger.confirmation.rebound_definition' || slotKey === 'trigger.confirmation.pullback_hold') {
+if (
+  slotKey === 'trigger.percent_change.magnitude'
+  || slotKey === 'trigger.confirmation.rebound_definition'
+  || slotKey === 'trigger.confirmation.pullback_hold'
+) {
   return {
     reason: 'missing_semantic_trigger',
     field: 'triggers',
+  }
+}
+
+if (slotKey === 'risk.falling_knife_guard.definition') {
+  return {
+    reason: 'missing_risk_atom',
+    field: 'risk',
   }
 }
 ```
@@ -947,13 +1116,17 @@ In `semantic-clarification-question-renderer.service.ts`, extend the existing bu
 
 ```ts
 const SEMANTIC_OPEN_SLOT_QUESTIONS: Record<string, string> = {
+  'trigger.percent_change.magnitude': '请确认“大跌”的判定幅度，例如 4 小时跌幅超过 5% / 最近 20 根 K 线跌幅超过 8%。',
   'trigger.confirmation.rebound_definition': '请确认反弹确认条件，例如重新站上 MA20 / 收盘价上涨 1% / 下一根 K 线收阳。',
   'trigger.confirmation.pullback_hold': '请确认回踩不破的判定方式，例如收盘价不跌破突破位，还是最低价不跌破突破位。',
+  'risk.falling_knife_guard.definition': '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
   'position.sizing': '请确认单笔仓位大小，例如 10% / 10 USDT / 0.001 BTC。',
 }
 ```
 
 Then in the existing render method, return `SEMANTIC_OPEN_SLOT_QUESTIONS[slot.slotKey]` before generic fallback. Keep `strategy-clarification-question.service.ts` as an adapter/caller if the latest main already delegates rendering.
+
+Also verify slot priority ordering: explicit strategy semantic/risk openSlots (`trigger.percent_change.magnitude`, `trigger.confirmation.rebound_definition`, `risk.falling_knife_guard.definition`, `position.sizing`) must be ranked before generic execution context slots such as exchange. This prevents vague strategy 3 from asking “请确认交易所” while unresolved strategy semantics still block execution.
 
 - [ ] **Step 5: Run readiness and clarification tests**
 
