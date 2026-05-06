@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
-import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
+import type { MarketInstrumentQuote, MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import type {
   SemanticActionState,
   SemanticAtomContract,
@@ -29,6 +29,7 @@ const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
 const MISSING_ENTRY_TRIGGER_KEY = 'semantic.missing_entry_atom'
 const MISSING_EXIT_TRIGGER_KEY = 'semantic.missing_exit_atom'
+const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
 type LevelSetDensityAnswer = Partial<{
   gridIntervals: number
@@ -459,9 +460,13 @@ function isMarketInstrumentSymbolResolution(value: PatchContextSlotValue): value
     && (value.source === 'user_explicit' || value.source === 'inferred')
     && typeof value.evidenceText === 'string'
     && typeof value.base === 'string'
-    && (value.quote === 'USDT' || value.quote === 'USDC' || value.quote === 'USD')
+    && isMarketInstrumentQuote(value.quote)
     && (value.quoteSource === 'explicit' || value.quoteSource === 'default_usdt')
     && (value.marketTypeHint === undefined || value.marketTypeHint === 'perp' || value.marketTypeHint === 'spot')
+}
+
+function isMarketInstrumentQuote(value: unknown): value is MarketInstrumentQuote {
+  return typeof value === 'string' && MARKET_INSTRUMENT_QUOTES.includes(value as MarketInstrumentQuote)
 }
 
 function readSymbolEvidence(value: Record<string, unknown>): SemanticEvidence | undefined {

@@ -1091,6 +1091,46 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
     }))
   })
 
+  it('preserves structured symbol fragment evidence for supported stablecoin quotes', () => {
+    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, new StructuredBusdSymbolSeedExtractorService())
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+    }
+
+    const result = structuredSymbolService.resolve({
+      currentState: state,
+      message: 'BTC busd 做多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'BTCBUSD',
+      status: 'locked',
+      evidence: {
+        text: 'BTC busd',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-BTCBUSD',
+          params: expect.objectContaining({
+            symbol: 'BTCBUSD',
+            base: 'BTC',
+            quote: 'BUSD',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
   it.each([
     ['primitive', () => new PrimitiveSymbolSeedExtractorService()],
     ['plain value object', () => new PlainValueSymbolSeedExtractorService()],
@@ -1231,6 +1271,36 @@ class StructuredSymbolSeedExtractorService extends SemanticSeedExtractorService 
           evidenceText: 'ETH usdt',
           base: 'ETH',
           quote: 'USDT',
+          quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class StructuredBusdSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: {
+          value: 'BTCBUSD',
+          source: 'user_explicit',
+          evidenceText: 'BTC busd',
+          base: 'BTC',
+          quote: 'BUSD',
           quoteSource: 'explicit',
         },
       },
