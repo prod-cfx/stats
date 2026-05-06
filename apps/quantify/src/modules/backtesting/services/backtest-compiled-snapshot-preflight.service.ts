@@ -84,8 +84,10 @@ export class BacktestCompiledSnapshotPreflightService {
       astVersion: astSnapshot.astVersion,
       executionModel: astSnapshot.executionModel,
       dataRequirements: astSnapshot.dataRequirements,
+      runtimeRequirements: astSnapshot.runtimeRequirements,
       exprPool: this.projectByOrder(astSnapshot.exprPool, astSnapshot.topology.exprOrder),
       guards: this.projectByOrder(astSnapshot.guards, astSnapshot.topology.guardOrder),
+      riskPredicates: this.projectOptionalByOrder(astSnapshot.riskPredicates, astSnapshot.topology.riskPredicateOrder),
       decisionPrograms: this.projectByOrder(astSnapshot.decisionPrograms, astSnapshot.topology.decisionOrder),
       orderPrograms: this.projectByOrder(astSnapshot.orderPrograms, astSnapshot.topology.orderProgramOrder),
       topology: astSnapshot.topology,
@@ -103,8 +105,10 @@ export class BacktestCompiledSnapshotPreflightService {
     const structuralProjection = {
       executionModel: projection.executionModel,
       dataRequirements: projection.dataRequirements,
+      runtimeRequirements: projection.runtimeRequirements,
       exprPool: projection.exprPool,
       guards: projection.guards,
+      riskPredicates: projection.riskPredicates,
       decisionPrograms: projection.decisionPrograms,
       orderPrograms: projection.orderPrograms,
       topology: projection.topology,
@@ -131,6 +135,14 @@ export class BacktestCompiledSnapshotPreflightService {
     return order
       .map(id => itemIndex.get(id))
       .filter((item): item is T => item !== undefined)
+  }
+
+  private projectOptionalByOrder<T extends { id: string }>(
+    items: T[] | undefined,
+    order: string[] | undefined,
+  ): T[] | undefined {
+    if (!items || !order) return undefined
+    return this.projectByOrder(items, order)
   }
 
   private raiseInvalid(reason: string): never {

@@ -101,6 +101,28 @@ export function lowest(array: number[], period: number): number | null {
 }
 
 /**
+ * 获取最近 N 根 K 线的最高价
+ */
+export function rollingHigh(bars: Bar[], period: number): number | null {
+  if (!Array.isArray(bars) || period <= 0 || bars.length < period) {
+    return null
+  }
+
+  return highest(bars.map(bar => bar.high), period)
+}
+
+/**
+ * 获取最近 N 根 K 线的最低价
+ */
+export function rollingLow(bars: Bar[], period: number): number | null {
+  if (!Array.isArray(bars) || period <= 0 || bars.length < period) {
+    return null
+  }
+
+  return lowest(bars.map(bar => bar.low), period)
+}
+
+/**
  * 判断是否连续上涨
  */
 export function isRising(array: number[], count: number): boolean {

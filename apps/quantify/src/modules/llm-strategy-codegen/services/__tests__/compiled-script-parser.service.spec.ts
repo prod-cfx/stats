@@ -41,6 +41,27 @@ describe('compiledScriptParserService', () => {
     expect(() => parser.parse(tamperedScript)).toThrow('codegen.compiled_script_invalid')
   })
 
+  it('parses compiler.v1 scripts emitted before optional atomic execution constants existed', () => {
+    const emitter = new CompiledScriptEmitterService()
+    const parser = new CompiledScriptParserService()
+    const legacyCompatibleScript = emitter.emit({
+      ast: createAstFixture(),
+      executionEnvelope: createExecutionEnvelope(),
+    })
+      .replace('const RUNTIME_REQUIREMENTS = null as const\n', '')
+      .replace('const RISK_PREDICATES = null as const\n', '')
+
+    const parsed = parser.parse(legacyCompatibleScript)
+
+    expect(parsed).not.toHaveProperty('runtimeRequirements')
+    expect(parsed).not.toHaveProperty('riskPredicates')
+    expect(parsed).toEqual(expect.objectContaining({
+      decisionPrograms: expect.arrayContaining([
+        expect.objectContaining({ sourceRef: 'entry_long' }),
+      ]),
+    }))
+  })
+
   it('round-trips a short-side bollinger middle revert script without reintroducing both close programs', () => {
     const emitter = new CompiledScriptEmitterService()
     const parser = new CompiledScriptParserService()
