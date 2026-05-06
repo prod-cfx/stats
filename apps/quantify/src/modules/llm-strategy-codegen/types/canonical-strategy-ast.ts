@@ -1,4 +1,4 @@
-import type { ActionDef, LevelSetDef, OrderProgram, RiskGuard, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
+import type { ActionDef, LevelSetDef, OrderProgram, RiskGuard, RiskPredicateDef, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
 
 export interface StrategyAstV1 {
   astVersion: 'csa.v1'
@@ -28,11 +28,13 @@ export interface StrategyAstV1 {
   runtimeRequirements?: RuntimeRequirements
   exprPool: ExprNode[]
   guards: GuardProgramNode[]
+  riskPredicates?: RiskPredicateProgramNode[]
   decisionPrograms: DecisionProgramNode[]
   orderPrograms: OrderProgramNode[]
   topology: {
     exprOrder: string[]
     guardOrder: string[]
+    riskPredicateOrder?: string[]
     decisionOrder: string[]
     orderProgramOrder: string[]
   }
@@ -50,6 +52,12 @@ export interface GuardProgramNode {
   id: string
   sourceRef: string
   payload: RiskGuard
+}
+
+export interface RiskPredicateProgramNode {
+  id: string
+  sourceRef: string
+  payload: RiskPredicateDef
 }
 
 export interface DecisionProgramNode {

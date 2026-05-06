@@ -62,4 +62,53 @@ describe('atomic contract canonical IR projection', () => {
     ]))
     expect(ir.runtimeRequirements?.helpers).toEqual(expect.arrayContaining(['atr']))
   })
+
+  it('projects logical any-of into generic anyOf without relying on atomic key allowlists', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [{
+      id: 'entry-logical-any-of',
+      key: 'logical.any_of',
+      phase: 'entry',
+      sideScope: 'long',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params: {
+        items: [
+          {
+            key: 'indicator.above',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'trend',
+              'reference.period': 20,
+            },
+          },
+          {
+            key: 'indicator.below',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'trend',
+              'reference.period': 50,
+            },
+          },
+        ],
+      },
+    }]
+    state.risk = []
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const ir = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec: spec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    }).ir
+
+    const entryBlock = ir.ruleBlocks.find(block => block.phase === 'entry')
+    expect(entryBlock).toBeDefined()
+    const entryPredicate = findPredicate(ir, predicate => predicate.id === entryBlock?.when)
+    expect(entryPredicate.kind).toBe('anyOf')
+  })
 })

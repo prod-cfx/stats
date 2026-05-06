@@ -11,6 +11,7 @@ import type {
 } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
+  CanonicalConditionGroup,
   CanonicalConditionNode,
   CanonicalExpressionCondition,
   CanonicalOrderProgramIntent,
@@ -778,7 +779,7 @@ export class CanonicalSpecV2IrCompilerService {
       return this.upsertPredicate(
         context.predicateMap,
         `${seed}_${condition.kind.toLowerCase()}`,
-        this.shouldUseGenericLogicalPredicate(condition) ? (condition.kind === 'AND' ? 'allOf' : 'anyOf') : condition.kind,
+        this.resolveLogicalPredicateKind(condition),
         childRefs,
       )
     }
@@ -819,25 +820,14 @@ export class CanonicalSpecV2IrCompilerService {
     )
   }
 
-  private shouldUseGenericLogicalPredicate(condition: Extract<CanonicalConditionNode, { kind: 'AND' | 'OR' }>): boolean {
-    return condition.children.some(child => this.conditionContainsAtomicContractPredicate(child))
-  }
+  private resolveLogicalPredicateKind(
+    condition: CanonicalConditionGroup,
+  ): PredicateDef['kind'] {
+    if (condition.predicateForm !== 'generic') {
+      return condition.kind
+    }
 
-  private conditionContainsAtomicContractPredicate(condition: CanonicalConditionNode): boolean {
-    if (condition.kind === 'atom') {
-      return [
-        'volume.relative_average',
-        'price.rolling_extrema_breakout',
-        'condition.sequence',
-        'risk.atr_multiple_stop',
-        'risk.atr_multiple_take_profit',
-        'risk.remembered_level_stop',
-      ].includes(condition.key)
-    }
-    if (condition.kind === 'expression') {
-      return false
-    }
-    return condition.children.some(child => this.conditionContainsAtomicContractPredicate(child))
+    return condition.kind === 'AND' ? 'allOf' : 'anyOf'
   }
 
   private compileExpressionOperand(

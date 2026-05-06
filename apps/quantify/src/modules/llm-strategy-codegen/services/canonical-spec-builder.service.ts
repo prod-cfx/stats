@@ -17,10 +17,12 @@ import type {
   NormalizedGridIntent,
   NormalizedRiskAtom,
   NormalizedTriggerAtom,
+  NormalizedTriggerAtomKey,
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../types/strategy-normalized-intent'
 import {
   buildStrategyRuleDrafts,
   resolveStrategyDefaultTimeframe,
@@ -1092,16 +1094,21 @@ export class CanonicalSpecBuilderService {
         ? first.condition
         : {
             kind: 'AND' as const,
+            predicateForm: 'generic' as const,
             children: group.map(item => item.condition),
           }
       const actions = first.actions
+      const phase = first.trigger.phase
+      if (phase !== 'entry' && phase !== 'exit') {
+        continue
+      }
       for (const ruleVariant of this.splitSemanticRuleVariants(first.trigger, actions)) {
-        counters[first.trigger.phase] += 1
+        counters[phase] += 1
         rules.push({
-          id: `semantic-${first.trigger.phase}-${counters[first.trigger.phase]}`,
-          phase: first.trigger.phase,
+          id: `semantic-${phase}-${counters[phase]}`,
+          phase,
           sideScope: ruleVariant.sideScope,
-          priority: this.resolveSemanticRulePriority(first.trigger.phase, counters[first.trigger.phase]),
+          priority: this.resolveSemanticRulePriority(phase, counters[phase]),
           condition,
           actions: ruleVariant.actions,
         })
@@ -3029,20 +3036,9 @@ export class CanonicalSpecBuilderService {
       case 'logical.any_of': {
         const items = Array.isArray(trigger.params.items) ? trigger.params.items : []
         const children = items
-          .map(item => this.buildConditionFromNormalizedTrigger({
-            key: typeof item === 'object' && item !== null && 'key' in item
-              ? (item as { key: string }).key as NormalizedTriggerAtom['key']
-              : 'unknown',
-            phase: trigger.phase,
-            sideScope: trigger.sideScope,
-            params: typeof item === 'object' && item !== null && 'params' in item
-              ? (item as { params: Record<string, string | number | boolean> }).params
-              : {},
-            closureStatus: 'closed',
-            unresolvedSlots: [],
-          }, defaultTimeframe ?? null))
+          .map(item => this.buildConditionFromLogicalAnyOfItem(item, trigger, defaultTimeframe))
           .filter((condition): condition is CanonicalConditionNode => condition !== null)
-        return children.length > 0 ? { kind: 'OR', children } : null
+        return children.length > 0 ? { kind: 'OR', predicateForm: 'generic', children } : null
       }
       case 'bollinger.touch_upper':
         return {
@@ -3207,6 +3203,37 @@ export class CanonicalSpecBuilderService {
     if (comparator === 'lt') return 'LT'
     if (comparator === 'lte') return 'LTE'
     return 'GT'
+  }
+
+  private buildConditionFromLogicalAnyOfItem(
+    item: unknown,
+    parentTrigger: NormalizedTriggerAtom,
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    if (!item || typeof item !== 'object' || !('key' in item)) {
+      return null
+    }
+
+    const key = (item as { key?: unknown }).key
+    if (!this.isNormalizedTriggerAtomKey(key)) {
+      return null
+    }
+
+    const params = (item as { params?: unknown }).params
+    return this.buildConditionFromNormalizedTrigger({
+      key,
+      phase: parentTrigger.phase,
+      sideScope: parentTrigger.sideScope,
+      params: params && typeof params === 'object' && !Array.isArray(params)
+        ? params as Record<string, unknown>
+        : {},
+      closureStatus: 'closed',
+      unresolvedSlots: [],
+    }, defaultTimeframe)
+  }
+
+  private isNormalizedTriggerAtomKey(value: unknown): value is NormalizedTriggerAtomKey {
+    return typeof value === 'string' && NORMALIZED_TRIGGER_ATOM_KEYS.includes(value as NormalizedTriggerAtomKey)
   }
 
   private buildActionsForNormalizedTrigger(

@@ -18,6 +18,7 @@ export interface CanonicalConditionAtom {
 export interface CanonicalConditionGroup {
   kind: 'AND' | 'OR' | 'NOT'
   children: CanonicalConditionNode[]
+  predicateForm?: 'legacy' | 'generic'
 }
 
 export interface CanonicalExpressionCondition {

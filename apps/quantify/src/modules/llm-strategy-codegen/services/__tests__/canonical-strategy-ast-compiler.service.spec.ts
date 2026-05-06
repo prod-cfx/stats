@@ -319,4 +319,74 @@ describe('canonicalStrategyAstCompilerService', () => {
       expect(exprIds).toContain(program.when)
     }
   })
+
+  it('preserves risk predicates in the AST risk program projection', () => {
+    const compiler = new CanonicalStrategyAstCompilerService()
+
+    const ir: CanonicalStrategyIrV1 = {
+      irVersion: 'csi.v1',
+      source: {
+        graphVersion: 1,
+        graphDigest: 'sha256:11aa',
+        specHash: 'sha256:11aa',
+      },
+      market: {
+        venue: 'okx',
+        instrumentType: 'perpetual',
+        symbol: 'BTCUSDT',
+        timeframes: ['1h'],
+        priceFeed: 'close',
+      },
+      portfolio: {
+        positionMode: 'long_only',
+        sizing: { mode: 'pct_equity', value: 10 },
+        maxConcurrentPositions: 1,
+        allowPyramiding: false,
+        maxPyramidingLayers: 1,
+      },
+      dataRequirements: {
+        warmupBars: 14,
+        maxLookback: 14,
+        requiredTimeframes: ['1h'],
+      },
+      runtimeRequirements: {
+        helpers: ['atr'],
+        stateKeys: [],
+      },
+      signalCatalog: {
+        series: [],
+        levelSets: [],
+        predicates: [],
+      },
+      ruleBlocks: [],
+      orderPrograms: [],
+      riskPolicy: {
+        guards: [],
+        riskPredicates: [
+          { id: 'atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+          { id: 'atr-take-profit', kind: 'atrMultipleTakeProfit', params: { multiple: 3 } },
+        ],
+      },
+      executionPolicy: {
+        signalEvaluation: 'bar_close',
+        fillPolicy: 'next_bar_open',
+        timeframeAlignment: 'strict',
+        orderTypeDefault: 'market',
+        timeInForce: 'gtc',
+        allowPartialFill: false,
+      },
+    }
+
+    const ast = compiler.compile(ir)
+
+    expect(ast.riskPredicates).toEqual([
+      expect.objectContaining({ sourceRef: 'atr-stop', payload: expect.objectContaining({ kind: 'atrMultipleStop' }) }),
+      expect.objectContaining({ sourceRef: 'atr-take-profit', payload: expect.objectContaining({ kind: 'atrMultipleTakeProfit' }) }),
+    ])
+    expect(ast.topology.riskPredicateOrder).toEqual([
+      'risk_predicate_01_atr-stop',
+      'risk_predicate_02_atr-take-profit',
+    ])
+    expect(ast.runtimeRequirements).toEqual({ helpers: ['atr'], stateKeys: [] })
+  })
 })
