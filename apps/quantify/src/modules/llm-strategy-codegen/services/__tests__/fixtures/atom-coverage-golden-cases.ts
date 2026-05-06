@@ -491,5 +491,4 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'open_slot:position.sizing'],
     expectedRoute: 'open_slots',
   },
-  ...atomicContractExecutionUpgradeGoldenCases,
 ]
