@@ -207,9 +207,12 @@ function evaluateLevelSet(
   }
 
   const levels: number[] = []
+  const levelSetKind = node.payload.kind
   for (let index = -downLevels; index <= upLevels; index += 1) {
     const current = spacingMode === 'pct'
-      ? anchor * Math.pow(1 + spacingValue / 100, index)
+      ? levelSetKind === 'GEOMETRIC_LEVEL_SET'
+        ? anchor * Math.pow(1 + spacingValue / 100, index)
+        : anchor + anchor * (spacingValue / 100) * index
       : anchor + spacingValue * index
     if (lower !== null && current < lower) continue
     if (upper !== null && current > upper) break
@@ -547,7 +550,8 @@ function evaluateGenericCompare(
   seriesMemo?: Map<string, number | null>,
 ): boolean {
   const [leftId, rightId] = node.deps ?? []
-  const op = normalizeComparisonOp(readStringParam(node.payload.params, 'op'))
+  const op = readGenericComparisonOp(node.payload.params, 'op', 'GT')
+  if (op === null) return false
 
   switch (op) {
     case 'GTE':
@@ -576,9 +580,8 @@ function evaluateGenericCross(
   seriesMemo?: Map<string, number | null>,
 ): boolean {
   const [leftId, rightId] = node.deps ?? []
-  const direction = normalizeComparisonOp(
-    readStringParam(node.payload.params, 'direction') ?? readStringParam(node.payload.params, 'op'),
-  )
+  const direction = readGenericCrossOp(node.payload.params)
+  if (direction === null) return false
   if (direction === 'CROSS_UNDER') {
     return crossesUnder(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
   }
@@ -597,15 +600,48 @@ function evaluateGenericSequence(
     return stateDecision
   }
 
-  return (node.deps ?? []).every(dep => values[dep] === true)
+  const deps = node.deps ?? []
+  return deps.length > 0 && deps.every(dep => values[dep] === true)
 }
 
-function normalizeComparisonOp(op: string | null): string {
-  if (!op) return 'GT'
+function readGenericComparisonOp(
+  params: Record<string, number | string | boolean> | undefined,
+  key: string,
+  defaultOp: string,
+): string | null {
+  const raw = readStringParam(params, key)
+  if (!raw) return defaultOp
+  return normalizeComparisonOp(raw)
+}
+
+function readGenericCrossOp(
+  params: Record<string, number | string | boolean> | undefined,
+): string | null {
+  const direction = readStringParam(params, 'direction')
+  if (direction) return normalizeComparisonOp(direction)
+
+  const op = readStringParam(params, 'op')
+  if (op) return normalizeComparisonOp(op)
+
+  return 'CROSS_OVER'
+}
+
+function normalizeComparisonOp(op: string): string | null {
   const normalized = op.trim().toUpperCase()
   if (normalized === 'OVER') return 'CROSS_OVER'
   if (normalized === 'UNDER') return 'CROSS_UNDER'
-  return normalized
+  if (
+    normalized === 'GT'
+    || normalized === 'GTE'
+    || normalized === 'LT'
+    || normalized === 'LTE'
+    || normalized === 'EQ'
+    || normalized === 'CROSS_OVER'
+    || normalized === 'CROSS_UNDER'
+  ) {
+    return normalized
+  }
+  return null
 }
 
 function readSemanticRuntimeState(

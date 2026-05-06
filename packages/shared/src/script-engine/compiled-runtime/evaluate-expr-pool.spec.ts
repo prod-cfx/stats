@@ -237,6 +237,94 @@ describe('evaluateExprPool', () => {
     expect(values.any_true).toBe(true)
   })
 
+  it('fails sequence predicates closed when runtime state is empty and no deps exist', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'predicate'
+      sourceRef: string
+      payload: { kind: string, params?: Record<string, string> }
+      deps?: string[]
+    }> = [
+      {
+        id: 'breakout_retest',
+        nodeType: 'predicate',
+        sourceRef: 'condition.sequence',
+        payload: { kind: 'sequence', params: { memoryKey: 'breakout' } },
+        deps: [],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      { bars: [], semanticRuntimeState: { breakout: {} } },
+      exprPool,
+      ['breakout_retest'],
+    )
+
+    expect(values.breakout_retest).toBe(false)
+  })
+
+  it('evaluates sequence predicates from explicit runtime state decisions', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'predicate'
+      sourceRef: string
+      payload: { kind: string, params?: Record<string, string> }
+      deps?: string[]
+    }> = [
+      {
+        id: 'breakout_retest',
+        nodeType: 'predicate',
+        sourceRef: 'condition.sequence',
+        payload: { kind: 'sequence', params: { memoryKey: 'breakout' } },
+        deps: [],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      { bars: [], semanticRuntimeState: { breakout: { confirmed: true } } },
+      exprPool,
+      ['breakout_retest'],
+    )
+
+    expect(values.breakout_retest).toBe(true)
+  })
+
+  it('fails unknown generic compare and cross operators closed', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: { kind: string, value?: number, params?: Record<string, string> }
+      deps?: string[]
+    }> = [
+      { id: 'left', nodeType: 'series', sourceRef: 'left', payload: { kind: 'CONST', value: 3 } },
+      { id: 'right', nodeType: 'series', sourceRef: 'right', payload: { kind: 'CONST', value: 2 } },
+      {
+        id: 'unknown_compare',
+        nodeType: 'predicate',
+        sourceRef: 'unknown_compare',
+        payload: { kind: 'compare', params: { op: 'ABOVEISH' } },
+        deps: ['left', 'right'],
+      },
+      {
+        id: 'unknown_cross',
+        nodeType: 'predicate',
+        sourceRef: 'unknown_cross',
+        payload: { kind: 'cross', params: { direction: 'sideways' } },
+        deps: ['left', 'right'],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      { bars: [] },
+      exprPool,
+      ['left', 'right', 'unknown_compare', 'unknown_cross'],
+    )
+
+    expect(values.unknown_compare).toBe(false)
+    expect(values.unknown_cross).toBe(false)
+  })
+
   it('evaluates generic rolling-high compare predicates against the previous channel', () => {
     const exprPool: Array<{
       id: string

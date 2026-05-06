@@ -6,6 +6,7 @@ import {
   buildCompiledManifest,
   evaluateExprPool,
   evaluateGuards,
+  evaluateRiskPredicates,
   runDecisionPrograms,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
@@ -82,6 +83,7 @@ export class BacktestStrategyAdapterService {
       const exprPool = projection.exprPool as Parameters<typeof evaluateExprPool>[1]
       const executionModel = projection.executionModel as unknown as Parameters<typeof evaluateExprPool>[3]
       const guards = projection.guards as Parameters<typeof evaluateGuards>[1]
+      const riskPredicates = projection.riskPredicates as Parameters<typeof evaluateRiskPredicates>[1]
       const decisionPrograms = projection.decisionPrograms as Parameters<typeof runDecisionPrograms>[1]
       const orderPrograms = projection.orderPrograms as Parameters<typeof runOrderPrograms>[1]
 
@@ -94,11 +96,17 @@ export class BacktestStrategyAdapterService {
             projection.topology.exprOrder,
             executionModel,
           )
-          const guardState = evaluateGuards(
+          const baseGuardState = evaluateGuards(
             ctx,
             guards,
             exprValues,
             projection.topology.guardOrder,
+          )
+          const guardState = evaluateRiskPredicates(
+            ctx,
+            riskPredicates,
+            baseGuardState,
+            projection.topology.riskPredicateOrder,
           )
           const decision = runDecisionPrograms(
             ctx,
