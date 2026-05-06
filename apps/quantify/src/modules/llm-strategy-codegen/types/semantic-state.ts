@@ -5,8 +5,36 @@ export type SemanticSource = 'user_explicit' | 'inferred' | 'derived'
 export type SemanticPriority = 'core' | 'behavior' | 'risk' | 'context'
 export type SemanticExpressionOperator = 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ' | 'CROSS_OVER' | 'CROSS_UNDER'
 export type SemanticExpression = SemanticPredicateExpression | SemanticLogicalExpression
+export type SemanticPredicateJoin = 'allOf' | 'anyOf'
+export type SemanticSequenceKind = 'rsi_reclaim' | 'pullback_reclaim' | 'breakout_retest' | 'consecutive_candles'
 export type SemanticContractKind = 'trigger' | 'action' | 'risk' | 'position' | 'context'
 export type SemanticCapabilityDomain = 'market' | 'price' | 'order_program' | 'capital' | 'exposure' | 'margin' | 'guard'
+
+export interface SemanticSeriesReference {
+  source: 'price' | 'volume' | 'indicator' | 'memory'
+  indicator?: 'ma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr'
+  field?: string
+  period?: number
+  fastPeriod?: number
+  slowPeriod?: number
+  signalPeriod?: number
+  boundaryRole?: string
+  memoryKey?: string
+}
+
+export type SemanticPredicateOperand = SemanticSeriesReference | number | string | boolean | null
+
+export interface SemanticPredicateShape {
+  kind: 'compare' | 'cross' | 'sequence' | 'logical'
+  join?: SemanticPredicateJoin
+  sequenceKind?: SemanticSequenceKind
+  left?: SemanticPredicateOperand
+  right?: SemanticPredicateOperand
+  op?: SemanticExpressionOperator
+  items?: SemanticPredicateShape[]
+  steps?: SemanticPredicateShape[]
+  memoryKey?: string
+}
 
 export interface SemanticPredicateExpression {
   kind: 'predicate'

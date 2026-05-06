@@ -56,6 +56,43 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.unknownAtoms).toEqual([])
   })
 
+  it('routes generic volume and ATR atom combinations to projection', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'volume',
+        key: 'volume.relative_average',
+        phase: 'entry',
+        params: { lookbackBars: 20, multiplier: 1.5 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      risk: [{
+        id: 'atr-stop',
+        key: 'risk.atr_multiple_stop',
+        params: { multiple: 2 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }))
+
+    expect(result.route).not.toBe('unsupported_fallback')
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.unknownAtoms).toEqual([])
+  })
+
   it('uses registry support status as authoritative over stale unsupported metadata', () => {
     const result = service.classify(baseState({
       triggers: [{
