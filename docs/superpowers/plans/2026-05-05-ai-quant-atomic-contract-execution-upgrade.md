@@ -10,6 +10,27 @@
 
 ---
 
+## 2026-05-06 Main Sync Review
+
+Remote `origin/main` was merged into this branch at `0c829758` before implementation. The merge had no file-level conflicts with this plan branch. Main now includes PR #965/#966 work for atom-native normalization and semantic slot fulfillment, so this plan must build on that work instead of recreating it.
+
+Already covered by latest `main`:
+
+- `SemanticOpenSlotAnswerResolverService` exists and handles grid density plus semantic fragment fulfillment.
+- `SemanticMissingPlaceholderReconcilerService` exists and removes/supersedes derived missing entry/exit placeholders after real atoms arrive.
+- `SemanticClarificationQuestionRendererService` exists for business-facing semantic slot wording.
+- `SemanticEventFrameParserService` and `SemanticEventFrameProjectorService` are registered providers.
+- Multi-timeframe EMA/static indicator compare normalization and per-trigger timeframe projection are covered.
+- `indicator.above` / `indicator.below` moving-average compare atoms have support/projection alignment.
+- Canonical spec v2 IR now carries required timeframes from per-trigger params.
+
+Remaining implementation focus after the sync:
+
+- Add the new generic strategy building blocks not covered by #965/#966: rolling extrema breakout, RSI two-step sequence, pullback/retest confirmation, consecutive candle sequence, volume relative average, ATR multiple risk, remembered breakout-level stop, logical OR exit grouping, and ambiguous sizing for wording such as `买一点`.
+- Extend existing `SemanticOpenSlotAnswerResolverService`, `SemanticMissingPlaceholderReconcilerService`, and `SemanticClarificationQuestionRendererService` only where the new building blocks need owner openSlots. Do not create parallel services.
+- Reuse current per-trigger timeframe support. Do not redo the already-merged multi-timeframe EMA work.
+- Keep Task 5+ focused on canonical predicate graph, script helpers, runtime parity, persistence, and frontend display for the new building blocks.
+
 ## File Structure
 
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/types/semantic-state.ts`
@@ -24,6 +45,12 @@
   - Keep existing cross parsing, add generic clause grouping and inherited context support.
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-event-frame-projector.service.ts`
   - Project event frames into atomic trigger/action patches without strategy-family branches.
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-open-slot-answer-resolver.service.ts`
+  - Extend the existing merged resolver for new confirmation/sizing fragments only.
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-missing-placeholder-reconciler.service.ts`
+  - Reuse the existing merged reconciler; adjust only if new trigger phases/keys need placeholder cleanup.
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-question-renderer.service.ts`
+  - Reuse the existing merged renderer for rebound/pullback/sizing wording.
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-atom-registry.service.ts`
   - Mark newly supported generic atoms executable.
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-support-classifier.service.ts`
@@ -75,6 +102,8 @@
   - New frontend display graph tests.
 
 ## Task 1: Add End-to-End Semantic Failing Tests
+
+**Main sync note:** Do not duplicate the already-merged multi-timeframe EMA and open-slot fragment tests from `2026-05-05-ai-quant-atom-native-normalization-and-slot-fulfillment.md`. This task adds coverage only for the broader combination strategy building blocks in the current spec.
 
 **Files:**
 - Create: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-combination-semantics.spec.ts`
@@ -494,6 +523,8 @@ MSG
 
 ## Task 3: Normalize Combination Strategy Text Into Atomic Patches
 
+**Main sync note:** `SemanticOpenSlotAnswerResolverService`, missing placeholder reconciliation, multi-timeframe EMA normalization, and per-trigger timeframe projection already exist in latest `main`. This task should extend `SemanticSeedExtractorService` and the existing event-frame services for new building blocks only; it must not reimplement the merged resolver/reconciler flow.
+
 **Files:**
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-seed-extractor.service.ts`
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-event-frame-parser.service.ts`
@@ -810,9 +841,12 @@ MSG
 
 ## Task 4: Build Contract Readiness and Clarification for New Shapes
 
+**Main sync note:** Latest `main` already introduced `SemanticClarificationQuestionRendererService`. Add mappings there instead of adding a new renderer or putting user-facing text back into `StrategyClarificationRulesService`.
+
 **Files:**
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts`
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/strategy-clarification-question.service.ts`
+- Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-question-renderer.service.ts`
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-metadata.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-contract-readiness.service.spec.ts`
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-question.service.spec.ts`
@@ -909,7 +943,7 @@ if (slotKey === 'trigger.confirmation.rebound_definition' || slotKey === 'trigge
 
 - [ ] **Step 4: Implement question rendering**
 
-In `strategy-clarification-question.service.ts`, add business copy mapping:
+In `semantic-clarification-question-renderer.service.ts`, extend the existing business copy mapping:
 
 ```ts
 const SEMANTIC_OPEN_SLOT_QUESTIONS: Record<string, string> = {
@@ -919,7 +953,7 @@ const SEMANTIC_OPEN_SLOT_QUESTIONS: Record<string, string> = {
 }
 ```
 
-Then in the existing render method, return `SEMANTIC_OPEN_SLOT_QUESTIONS[slot.slotKey]` before generic fallback.
+Then in the existing render method, return `SEMANTIC_OPEN_SLOT_QUESTIONS[slot.slotKey]` before generic fallback. Keep `strategy-clarification-question.service.ts` as an adapter/caller if the latest main already delegates rendering.
 
 - [ ] **Step 5: Run readiness and clarification tests**
 
@@ -935,7 +969,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit readiness changes**
 
 ```bash
-git add apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/strategy-clarification-question.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-metadata.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-contract-readiness.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-question.service.spec.ts
+git add apps/quantify/src/modules/llm-strategy-codegen/services/semantic-contract-readiness.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/strategy-clarification-question.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-question-renderer.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/semantic-clarification-metadata.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-contract-readiness.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-question.service.spec.ts
 git commit -F - <<'MSG'
 feat: clarify atomic contract open slots
 
@@ -948,6 +982,8 @@ MSG
 ```
 
 ## Task 5: Project Atomic Contracts Into Canonical Predicate AST and IR
+
+**Main sync note:** Per-trigger timeframe collection and strict timeframe alignment support are already merged. Keep those paths intact and add only the predicate graph pieces needed for rolling extrema, volume relative average, sequence/retest, remembered levels, logical OR, and ATR risk.
 
 **Files:**
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/types/canonical-strategy-ast.ts`
