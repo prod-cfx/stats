@@ -53,6 +53,7 @@ describe('PositionSizingContractService', () => {
     '价格达到 30000 USDT 买入',
     'ETHBTC 跌到 0.001 BTC 买入',
     '价格到 0.001 BTC 买入',
+    '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出',
   ])('does not parse risk text as position sizing: %s', (text) => {
     expect(service.parse(text)).toBeNull()
   })

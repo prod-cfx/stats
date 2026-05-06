@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Optional } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
   SemanticAtomContract,
@@ -13,7 +13,8 @@ import type {
   SemanticRiskBasisSource,
   SemanticSlotState,
 } from '../types/semantic-state'
-import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
+import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
+import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { SemanticEventFrameParserService } from './semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './semantic-event-frame-projector.service'
@@ -51,6 +52,8 @@ export class SemanticSeedExtractorService {
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
     private readonly eventFrameParser: SemanticEventFrameParserService = new SemanticEventFrameParserService(),
     private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
+    @Optional()
+    private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
@@ -581,6 +584,9 @@ export class SemanticSeedExtractorService {
     const symbol = this.extractSymbol(text)
     if (symbol) {
       contextSlots.symbol = symbol
+      if (symbol.marketTypeHint && !contextSlots.marketType) {
+        contextSlots.marketType = symbol.marketTypeHint
+      }
     }
 
     const timeframes = this.extractAllTimeframes(text)
@@ -3509,13 +3515,79 @@ export class SemanticSeedExtractorService {
     return null
   }
 
-  private extractSymbol(text: string): string | null {
-    const match = text.match(/\b([A-Z0-9]{2,20}(?:[-/]?(?:USDT|USDC|USD))(?:-SWAP|:PERP|:SPOT)?)\b/iu)
-    const explicitSymbol = canonicalizeStrategySymbolInput(match?.[1])
-    if (explicitSymbol) return explicitSymbol
+  private extractSymbol(text: string): MarketInstrumentSymbolResolution | null {
+    for (const candidate of this.extractSymbolCandidates(text)) {
+      const resolution = this.symbolResolver.resolve(candidate)
+      if (resolution && /[A-Z]/iu.test(resolution.base)) {
+        return this.withMarketTypeHint(resolution, candidate)
+      }
+    }
 
-    const baseMatch = text.match(/\b(BTC|ETH|SOL)\b/iu)
-    return baseMatch?.[1] ? `${baseMatch[1].toUpperCase()}USDT` : null
+    return null
+  }
+
+  private extractSymbolCandidates(text: string): string[] {
+    const candidates: string[] = []
+
+    for (const match of text.matchAll(/\b([A-Z0-9]{2,20}(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))(?:-SWAP|:PERP|:SPOT)?)\b/giu)) {
+      const candidate = match[1]?.trim()
+      if (!candidate || !/[A-Z]/iu.test(candidate)) continue
+      candidates.push(candidate)
+    }
+
+    for (const match of text.matchAll(/\b([A-Z][A-Z0-9]{1,19}\s*(?:永续合约|合约))/giu)) {
+      const candidate = match[1]?.trim()
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+
+    for (const match of text.matchAll(/((?:合约|永续合约|永续|现货|spot|perp|swap|contract)\s+[A-Z][A-Z0-9]{1,19})(?=$|[\s,，、。;；])/giu)) {
+      const candidate = match[1]?.trim()
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+
+    for (const match of text.matchAll(/(?:买入|买|卖出|卖|做多|做空|交易|标的|币种)\s*([A-Z][A-Z0-9]{1,19})\b/giu)) {
+      const candidate = match[1]?.trim()
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+
+    const leadingCandidate = /^\s*([A-Z][A-Z0-9]{1,19})(?=$|[\s,，、。])/iu.exec(text)?.[1]?.trim()
+    if (leadingCandidate) {
+      candidates.push(leadingCandidate)
+    }
+
+    for (const match of text.matchAll(/(以太坊|比特币)(?:永续合约|合约)?/gu)) {
+      const candidate = match[0]?.trim()
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+
+    return candidates
+  }
+
+  private withMarketTypeHint(
+    resolution: MarketInstrumentSymbolResolution,
+    evidenceText: string,
+  ): MarketInstrumentSymbolResolution {
+    if (resolution.marketTypeHint) {
+      return resolution
+    }
+
+    const marketTypeHint = this.extractMarketType(evidenceText)
+    if (marketTypeHint !== 'perp' && marketTypeHint !== 'spot') {
+      return resolution
+    }
+
+    return {
+      ...resolution,
+      marketTypeHint,
+    }
   }
 
   private extractFirstTimeframe(text: string): string | null {

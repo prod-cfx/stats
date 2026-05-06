@@ -80,6 +80,7 @@ export interface SemanticSlotState {
   affectsExecution: boolean
   evidence?: SemanticEvidence
   supersedes?: string[]
+  contracts?: SemanticAtomContract[]
 }
 
 export interface SemanticCapabilityShape {

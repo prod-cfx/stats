@@ -6,10 +6,11 @@ import type {
   SemanticEditDecision,
   SemanticEditPatch,
 } from '../types/semantic-edit'
+import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import type { SemanticActionState, SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
-import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
+import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { resolveEditableRangeParamPairs, resolveEditableScalarParamPaths } from './strategy-semantic-contracts'
 
 export interface ConversationSemanticEditDecisionInput {
@@ -23,13 +24,23 @@ type SemanticActionKey = 'open_long' | 'open_short' | 'close_long' | 'close_shor
 
 @Injectable()
 export class ConversationSemanticEditService {
+  constructor(
+    private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+  ) {}
+
   applyPatch(state: SemanticState, patch: SemanticEditPatch): SemanticState {
     return patch.operations.reduce((next, operation) => {
       if (operation.op === 'cancel_pending_edit') {
         return withPendingSemanticEdit(next, null)
       }
       if (operation.op === 'replace_context') {
-        return this.applyContextReplacement(next, operation.field, operation.value)
+        return this.applyContextReplacement(
+          next,
+          operation.field,
+          operation.value,
+          operation.evidenceText,
+          operation.symbolResolution,
+        )
       }
       if (operation.op === 'replace_trigger') {
         return this.applyTriggerReplacement(next, operation.text ?? '')
@@ -301,6 +312,8 @@ export class ConversationSemanticEditService {
     state: SemanticState,
     field: 'symbol' | 'timeframe' | 'exchange' | 'marketType',
     value: string,
+    evidenceText?: string,
+    symbolResolution?: MarketInstrumentSymbolResolution,
   ): SemanticState {
     const questionHints = {
       exchange: '请确认交易所（binance / okx / hyperliquid）。',
@@ -309,25 +322,51 @@ export class ConversationSemanticEditService {
       timeframe: '请确认策略主周期（例如 15m 或 1h）。',
     } as const
 
+    const resolvedSymbol = field === 'symbol'
+      ? this.resolveMatchingSymbolReplacement(value, evidenceText ?? value, symbolResolution)
+      : null
+
     return {
       ...state,
       contextSlots: {
         ...state.contextSlots,
-        [field]: {
-          slotKey: field,
-          fieldPath: `contextSlots.${field}`,
-          value,
-          status: 'locked',
-          priority: 'context',
-          questionHint: questionHints[field],
-          affectsExecution: true,
-          evidence: {
-            text: value,
-            source: 'user_explicit',
-          },
-        },
+        [field]: resolvedSymbol
+          ? this.createLockedSymbolContextSlot(resolvedSymbol, questionHints.symbol)
+          : {
+              slotKey: field,
+              fieldPath: `contextSlots.${field}`,
+              value,
+              status: 'locked',
+              priority: 'context',
+              questionHint: questionHints[field],
+              affectsExecution: true,
+              evidence: {
+                text: value,
+                source: 'user_explicit',
+              },
+            },
       },
       updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private createLockedSymbolContextSlot(
+    resolution: MarketInstrumentSymbolResolution,
+    questionHint: string,
+  ) {
+    return {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: resolution.value,
+      status: 'locked' as const,
+      priority: 'context' as const,
+      questionHint,
+      affectsExecution: true,
+      evidence: {
+        text: resolution.evidenceText,
+        source: resolution.source,
+      },
+      contracts: [this.symbolResolver.buildContextContract(resolution)],
     }
   }
 
@@ -761,25 +800,62 @@ export class ConversationSemanticEditService {
     }
   }
 
-  private extractReplacementSymbol(message: string): string | null {
-    const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
-    const explicitSymbol = canonicalizeStrategySymbolInput(explicitMatch?.[1])
-    if (explicitSymbol) return explicitSymbol
+  private extractReplacementSymbol(message: string): {
+    value: string
+    evidenceText?: string
+    symbolResolution?: MarketInstrumentSymbolResolution
+  } | null {
+    const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9]+(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)/iu.exec(message)
+    const explicitResolution = this.symbolResolver.resolve(explicitMatch?.[1])
+    if (explicitResolution) return this.toReplacementSymbolOperationValue(explicitResolution)
 
-    const valueReplacementMatch = /(?:把\s*)?([A-Za-z0-9:/-]+)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z0-9:/-]+)/iu.exec(message)
-    const fromSymbol = canonicalizeStrategySymbolInput(valueReplacementMatch?.[1])
-    const toSymbol = canonicalizeStrategySymbolInput(valueReplacementMatch?.[2])
-    if (fromSymbol && toSymbol && fromSymbol !== toSymbol) {
-      return toSymbol
+    const valueReplacementMatch = /(?:把\s*)?([A-Za-z0-9]+(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z0-9]+(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)/iu.exec(message)
+    const fromSymbol = this.symbolResolver.resolve(valueReplacementMatch?.[1])
+    const toSymbol = this.symbolResolver.resolve(valueReplacementMatch?.[2])
+    if (fromSymbol && toSymbol && fromSymbol.value !== toSymbol.value) {
+      return this.toReplacementSymbolOperationValue(toSymbol)
     }
     return null
+  }
+
+  private toReplacementSymbolOperationValue(
+    resolution: MarketInstrumentSymbolResolution,
+  ): { value: string, evidenceText?: string, symbolResolution?: MarketInstrumentSymbolResolution } {
+    const shouldCarryResolution = this.shouldCarrySymbolResolution(resolution)
+    return {
+      value: resolution.value,
+      ...(this.shouldCarrySymbolEvidenceText(resolution) ? { evidenceText: resolution.evidenceText } : {}),
+      ...(shouldCarryResolution ? { symbolResolution: resolution } : {}),
+    }
+  }
+
+  private shouldCarrySymbolEvidenceText(resolution: MarketInstrumentSymbolResolution): boolean {
+    return resolution.evidenceText !== resolution.value
+      && (resolution.source === 'inferred' || /\s/u.test(resolution.evidenceText))
+  }
+
+  private shouldCarrySymbolResolution(resolution: MarketInstrumentSymbolResolution): boolean {
+    return Boolean(resolution.venueSymbolHint || resolution.marketTypeHint)
+      || !['USDT', 'USDC', 'USD'].includes(resolution.quote)
+  }
+
+  private resolveMatchingSymbolReplacement(
+    value: string,
+    evidenceText: string,
+    structuredResolution?: MarketInstrumentSymbolResolution,
+  ): MarketInstrumentSymbolResolution | null {
+    const resolution = structuredResolution
+      ?? this.symbolResolver.resolve(evidenceText)
+      ?? this.symbolResolver.resolve(value)
+    if (!resolution || resolution.value !== value) return null
+    return resolution
   }
 
   private extractReplacementContextOperation(
     message: string,
   ): { field: SemanticEditContextField, value: string } | null {
     const symbol = this.extractReplacementSymbol(message)
-    if (symbol) return { field: 'symbol', value: symbol }
+    if (symbol) return { field: 'symbol', ...symbol }
 
     const timeframe = /(?:主周期|周期)\s*(?:改为|改成|换成)\s*([0-9]+[mhdw])/iu.exec(message)?.[1]
     if (timeframe) return { field: 'timeframe', value: timeframe.toLowerCase() }

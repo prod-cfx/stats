@@ -25,10 +25,13 @@ import { ApiError } from '@/lib/errors'
 import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
 import {
   BACKTEST_EXECUTION_PARAM_KEYS,
+  BACKTEST_RANGE_PARAM_KEYS,
+  buildBacktestDraftConfigFromValues,
   hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
   normalizeClarificationGate,
   normalizeParamsFromValues,
+  reconcileBacktestResultWithDraftConfig,
   syncNormalizedSizingParamValues,
 } from './ai-quant-page-conversation'
 import { buildSizingRequestContext } from './semantic-sizing'
@@ -101,6 +104,42 @@ function mergeSnapshotBoundParamValues(input: {
     paramValues: nextValues,
     explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
   }
+}
+
+function buildExplicitBacktestDraftConfigFromValues(values: Record<string, unknown>) {
+  const explicitRangePreset = typeof values.backtestRangePreset === 'string'
+    ? values.backtestRangePreset.trim().toUpperCase()
+    : ''
+  const hasCustomRangeBounds =
+    typeof values.backtestStart === 'string'
+    && values.backtestStart.trim().length > 0
+    && typeof values.backtestEnd === 'string'
+    && values.backtestEnd.trim().length > 0
+  const hasExplicitRange =
+    explicitRangePreset === '7D'
+    || explicitRangePreset === '30D'
+    || explicitRangePreset === '90D'
+    || explicitRangePreset === '1Y'
+    || (explicitRangePreset === 'CUSTOM' && hasCustomRangeBounds)
+  const hasExplicitExecution = BACKTEST_EXECUTION_PARAM_KEYS.every(key => values[key] !== undefined)
+  if (!hasExplicitRange || !hasExplicitExecution) {
+    console.warn('[AiQuantCodegenReconciliation] missing explicit backtest config', {
+      module: 'AiQuantCodegenReconciliation',
+      input: {
+        hasExplicitRange: Boolean(hasExplicitRange),
+        missingRangeKeys: BACKTEST_RANGE_PARAM_KEYS.filter((key) => {
+          if (key === 'backtestRangePreset') return values[key] === undefined
+          if (explicitRangePreset === 'CUSTOM') return values[key] === undefined
+          return false
+        }),
+        missingExecutionKeys: BACKTEST_EXECUTION_PARAM_KEYS.filter(key => values[key] === undefined),
+      },
+      reason: 'missing_explicit_backtest_config',
+    })
+    return null
+  }
+
+  return buildBacktestDraftConfigFromValues(values)
 }
 
 function buildTerminalFailureReply(args: {
@@ -371,6 +410,7 @@ export function applyCodegenResponseToConversationState(args: {
   trimmedMessage: string
   t: (key: string, options?: Record<string, unknown>) => string
   loadingMessageId?: string | null
+  preserveBacktestResultOnSameSnapshot?: boolean
 }): ConversationState {
   const {
     conversation,
@@ -382,6 +422,7 @@ export function applyCodegenResponseToConversationState(args: {
     trimmedMessage,
     t,
     loadingMessageId = null,
+    preserveBacktestResultOnSameSnapshot = false,
   } = args
 
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
@@ -532,6 +573,21 @@ export function applyCodegenResponseToConversationState(args: {
   const nextPublishedScriptGraphVersion = nextPublishedScriptCode
     ? (nextGraph?.version ?? conversation.publishedScriptGraphVersion)
     : null
+  const shouldPreserveBacktestResult =
+    preserveBacktestResultOnSameSnapshot
+    && Boolean(conversation.backtestResult)
+    && normalizePublishedSnapshotId(conversation.publishedSnapshotId) !== null
+    && normalizePublishedSnapshotId(conversation.publishedSnapshotId) === nextPublishedSnapshotId
+  const nextBacktestDraftConfig = shouldPreserveBacktestResult
+    ? buildExplicitBacktestDraftConfigFromValues(normalizedParamValues)
+    : null
+  const nextBacktestResult = shouldPreserveBacktestResult
+    ? reconcileBacktestResultWithDraftConfig({
+        result: conversation.backtestResult,
+        currentBacktestConfig: conversation.backtestDraftConfig,
+        nextBacktestConfig: nextBacktestDraftConfig,
+      })
+    : null
   const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
     ? (response.semanticGraph ?? null)
     : conversation.semanticGraph
@@ -649,7 +705,8 @@ export function applyCodegenResponseToConversationState(args: {
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
     backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
-    backtestResult: null,
+    backtestDraftConfig: shouldPreserveBacktestResult ? nextBacktestDraftConfig : conversation.backtestDraftConfig,
+    backtestResult: nextBacktestResult,
     latestSignalMessage: null,
     messages: nextMessages,
     updatedAt: response.updatedAt ? Date.parse(response.updatedAt) : Date.now(),
@@ -707,6 +764,7 @@ export async function reconcilePersistedActiveCodegenSession(args: {
         backtestCapabilities,
         activeSessionId,
         trimmedMessage: '',
+        preserveBacktestResultOnSameSnapshot: true,
         t,
       })
     }),

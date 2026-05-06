@@ -232,6 +232,191 @@ describe('ConversationSemanticEditService', () => {
     expect(next.triggers).toEqual(state.triggers)
   })
 
+  it('updates symbol context slot from inferred semantic edit', () => {
+    const semanticState = service.createEmptySemanticStateForTest()
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '把交易标的改成 ETH',
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{ op: 'replace_context', field: 'symbol', value: 'ETHUSDT', evidenceText: 'ETH' }],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH',
+        source: 'inferred',
+      },
+      contracts: [
+        expect.objectContaining({
+          kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                symbol: 'ETHUSDT',
+                base: 'ETH',
+                quote: 'USDT',
+                source: 'inferred',
+                quoteSource: 'default_usdt',
+              }),
+            }),
+          ]),
+          params: expect.objectContaining({
+            symbol: 'ETHUSDT',
+            base: 'ETH',
+            quote: 'USDT',
+            source: 'inferred',
+            quoteSource: 'default_usdt',
+          }),
+        }),
+      ],
+    }))
+  })
+
+  it('updates symbol context slot from explicit quote semantic edit', () => {
+    const semanticState = service.createEmptySemanticStateForTest()
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '交易标的改成 ETH usdc',
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{ op: 'replace_context', field: 'symbol', value: 'ETHUSDC', evidenceText: 'ETH usdc' }],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDC',
+      evidence: {
+        text: 'ETH usdc',
+        source: 'user_explicit',
+      },
+      contracts: [
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              shape: expect.objectContaining({
+                symbol: 'ETHUSDC',
+                base: 'ETH',
+                quote: 'USDC',
+                source: 'user_explicit',
+                quoteSource: 'explicit',
+              }),
+            }),
+          ]),
+        }),
+      ],
+    }))
+  })
+
+  it.each([
+    ['交易标的改成 BTCUSDT:PERP', 'BTCUSDT:PERP'],
+    ['ETHUSDT 换成 BTC-USDT-SWAP', 'BTC-USDT-SWAP'],
+  ])('preserves symbol suffix evidence from semantic edit: %s', (message, evidenceText) => {
+    const semanticState = service.createEmptySemanticStateForTest()
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [expect.objectContaining({
+          op: 'replace_context',
+          field: 'symbol',
+          value: 'BTCUSDT',
+          symbolResolution: expect.objectContaining({
+            value: 'BTCUSDT',
+            evidenceText,
+            venueSymbolHint: evidenceText,
+            marketTypeHint: 'perp',
+          }),
+        })],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'BTCUSDT',
+      evidence: {
+        text: evidenceText,
+        source: 'user_explicit',
+      },
+      contracts: [
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              shape: expect.objectContaining({
+                symbol: 'BTCUSDT',
+                venueSymbolHint: evidenceText,
+                marketTypeHint: 'perp',
+              }),
+            }),
+          ]),
+        }),
+      ],
+    }))
+  })
+
+  it('preserves stablecoin quote metadata from symbol semantic edit', () => {
+    const semanticState = service.createEmptySemanticStateForTest()
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '交易标的改成 BTCBUSD',
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [expect.objectContaining({
+          op: 'replace_context',
+          field: 'symbol',
+          value: 'BTCBUSD',
+          symbolResolution: expect.objectContaining({
+            value: 'BTCBUSD',
+            base: 'BTC',
+            quote: 'BUSD',
+          }),
+        })],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.symbol?.contracts?.[0]?.capabilities[0]?.shape).toEqual(expect.objectContaining({
+      symbol: 'BTCBUSD',
+      base: 'BTC',
+      quote: 'BUSD',
+    }))
+  })
+
   it.each([
     ['仓位35%换成20%'],
     ['把仓位35%换成20%'],

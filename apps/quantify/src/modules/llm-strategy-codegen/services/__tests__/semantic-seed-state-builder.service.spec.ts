@@ -145,6 +145,46 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes grid execution contracts for planner grid action keys', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          rangeMin: 2300,
+          rangeMax: 2430,
+          gridCount: 10,
+          sideMode: 'long_only',
+        },
+      }],
+      actions: [{
+        key: 'place_limit_grid',
+        params: {
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+        },
+      }],
+    })
+
+    expect(state?.actions[0]).toEqual(expect.objectContaining({
+      key: 'place_limit_grid',
+      status: 'locked',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        capabilities: expect.arrayContaining([
+          expect.objectContaining({
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+          }),
+        ]),
+      })],
+    }))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
   it('closes synthesized fixed grid density slots from percent spacing answers', () => {
     const state = service.build({
       triggers: [{
@@ -689,6 +729,121 @@ describe('SemanticSeedStateBuilderService', () => {
       slotKey: 'symbol',
       fieldPath: 'contextSlots.symbol',
       status: 'locked',
+    }))
+  })
+
+  it('normalizes string context symbol values through the market instrument resolver', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: 'ETH usdt',
+      },
+      triggers: [{
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: expect.objectContaining({
+        text: 'ETH usdt',
+        source: 'user_explicit',
+      }),
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                base: 'ETH',
+                quote: 'USDT',
+                symbol: 'ETHUSDT',
+                quoteSource: 'explicit',
+              }),
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
+  it('normalizes structured inferred symbol patch values and preserves inferred evidence', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: {
+          value: 'ETH',
+          source: 'inferred',
+          evidenceText: 'ETH',
+          base: 'ETH',
+          quote: 'USDT',
+          quoteSource: 'default_usdt',
+        },
+      },
+      triggers: [{
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.contextSlots.symbol?.value).toBe('ETHUSDT')
+    expect(state?.contextSlots.symbol?.evidence).toEqual(expect.objectContaining({
+      text: 'ETH',
+      source: 'inferred',
+    }))
+  })
+
+  it('normalizes structured symbol patch values with supported stablecoin quotes', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: {
+          value: 'BTCBUSD',
+          source: 'user_explicit',
+          evidenceText: 'BTC busd',
+          base: 'BTC',
+          quote: 'BUSD',
+          quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'BTCBUSD',
+      status: 'locked',
+      evidence: expect.objectContaining({
+        text: 'BTC busd',
+        source: 'user_explicit',
+      }),
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-BTCBUSD',
+          params: expect.objectContaining({
+            symbol: 'BTCBUSD',
+            base: 'BTC',
+            quote: 'BUSD',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
     }))
   })
 

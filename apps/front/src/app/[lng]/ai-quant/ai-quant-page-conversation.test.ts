@@ -1,6 +1,5 @@
-import { describe, expect, it } from '@jest/globals'
-
 import type { ConversationState } from './ai-quant-page-conversation'
+import { describe, expect, it } from '@jest/globals'
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
   buildBacktestSummaryResult,
@@ -68,6 +67,14 @@ describe('ai-quant-page-conversation', () => {
       winRatePct: 0,
       tradeCount: 0,
       openTradeCount: 1,
+    })).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-recovered-stale',
+      maxDrawdownPct: 8,
+      totalReturnPct: 12,
+      winRatePct: 60,
+      tradeCount: 5,
+      recoveryStatus: 'config_changed',
     })).toBe(false)
   })
 
@@ -634,7 +641,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.backtestResult).toBeNull()
   })
 
-  it('does not restore lastBacktestRef when execution config has drifted under the same snapshot', () => {
+  it('restores lastBacktestRef as config_changed when execution config has drifted under the same snapshot', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-1',
       conversationTitle: 'remote',
@@ -696,7 +703,15 @@ describe('ai-quant-page-conversation', () => {
       },
     } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
 
-    expect(conversation.backtestResult).toBeNull()
+    expect(conversation.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-execution-drift',
+      maxDrawdownPct: 8,
+      totalReturnPct: 12,
+      winRatePct: 60,
+      tradeCount: 5,
+      recoveryStatus: 'config_changed',
+    }))
+    expect(isDeployableBacktestResult(conversation.backtestResult)).toBe(false)
   })
 
   it('restores backtest summary using explicit backtestDraftConfig without relying on implicit range defaults', () => {

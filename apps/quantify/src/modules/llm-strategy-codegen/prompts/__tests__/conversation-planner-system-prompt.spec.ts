@@ -33,4 +33,13 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('否则不得重置已有语义')
     expect(prompt).toContain('若编辑意图不完整，只追问缺失的 semantic slot')
   })
+
+  it('requires executable planner action atoms to include semantic contracts', () => {
+    const prompt = buildConversationPlannerSystemPrompt()
+
+    expect(prompt).toContain('任何可执行 action atom 必须携带 contracts/capabilities')
+    expect(prompt).toContain('不得输出缺少执行合约的裸 action')
+    expect(prompt).toContain('place_limit_grid')
+    expect(prompt).toContain('order_program/maintain/limit_ladder')
+  })
 })

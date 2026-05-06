@@ -12,5 +12,17 @@ describe('AI Quant clarification translations', () => {
     expect(enCommon.aiQuant.messages.backtestCapabilityLoadFailed).toBe(
       'Failed to load backtest capabilities. Please try again later.',
     )
+    expect(zhCommon.aiQuant.messages.backtestConfigChanged).toBe(
+      '这是历史回测结果，当前参数已变化，不能直接用于部署，需要重新回测。',
+    )
+    expect(enCommon.aiQuant.messages.backtestConfigChanged).toBe(
+      'This is a historical backtest result. Current parameters have changed, so it cannot be deployed directly. Please run a new backtest.',
+    )
+    expect(zhCommon.aiQuant.messages.backtestDrawdownLimitBypassed).toBe(
+      '当前为模拟部署模式：忽略回撤门槛',
+    )
+    expect(enCommon.aiQuant.messages.backtestDrawdownLimitBypassed).toBe(
+      'Simulation deployment mode: drawdown threshold ignored',
+    )
   })
 })

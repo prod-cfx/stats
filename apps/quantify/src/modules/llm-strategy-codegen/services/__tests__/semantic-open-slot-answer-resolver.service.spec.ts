@@ -210,6 +210,61 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     expect(result.nextState.triggers[1].openSlots).toEqual([])
   })
 
+  it('uses the priority-selected pending clarification target for level set answers', () => {
+    const densitySlot = createOpenSlot(
+      'contract.shape.price.level_set.density',
+      'triggers[trigger-grid-levels].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+    )
+    const exitSlot: SemanticSlotState = {
+      slotKey: 'trigger.exit',
+      fieldPath: 'triggers[exit]',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请补充出场触发条件。',
+      affectsExecution: true,
+    }
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        id: 'trigger-grid-levels',
+        contractId: 'contract-grid-levels',
+        shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
+        openSlots: [densitySlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '20格',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            status: 'pending',
+            reason: 'missing_exit_rules',
+            key: 'exitRules',
+            slotId: buildSemanticSlotId(exitSlot),
+            slotKey: exitSlot.slotKey,
+            fieldPath: exitSlot.fieldPath,
+          },
+          {
+            status: 'pending',
+            reason: 'missing_semantic_contract_requirement',
+            key: 'semantic.grid.density',
+            slotId: buildSemanticSlotId(densitySlot),
+            slotKey: densitySlot.slotKey,
+            fieldPath: densitySlot.fieldPath,
+          },
+        ],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+    expect(result.closedSlots).toEqual([{ slotKey: densitySlot.slotKey, fieldPath: densitySlot.fieldPath }])
+  })
+
   it('updates only the capability targeted by fieldPath when one owner has multiple level sets', () => {
     const targetSlot = createOpenSlot(
       'contract.shape.price.level_set.density',
@@ -661,6 +716,227 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
 describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
   const service = new SemanticOpenSlotAnswerResolverService(undefined, new SemanticSeedExtractorService())
 
+  it('locks an open symbol context slot from an inferred symbol answer', () => {
+    const state = stateWithMissingEntry()
+    state.contextSlots.symbol = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({})
+    expect(result.closedSlotKeys).toEqual(['symbol'])
+    expect(result.closedSlots).toEqual([{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }])
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH',
+        source: 'inferred',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDT',
+          kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                symbol: 'ETHUSDT',
+                base: 'ETH',
+                quote: 'USDT',
+                source: 'inferred',
+                quoteSource: 'default_usdt',
+              }),
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
+  it('locks an open symbol context slot from an explicit usdc symbol answer', () => {
+    const state = stateWithMissingEntry()
+    state.contextSlots.symbol = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH usdc',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDC',
+      status: 'locked',
+      evidence: {
+        text: 'ETH usdc',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDC',
+          params: expect.objectContaining({
+            symbol: 'ETHUSDC',
+            base: 'ETH',
+            quote: 'USDC',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
+  it('locks an open symbol context slot when active clarification targets symbol', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: symbolSlot.slotKey,
+          fieldPath: symbolSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDT',
+      status: 'locked',
+    }))
+  })
+
+  it('locks an open symbol context slot when priority-selected clarification targets symbol after another pending item', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    const exitSlot: SemanticSlotState = {
+      slotKey: 'trigger.exit',
+      fieldPath: 'triggers[exit]',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请补充出场触发条件。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            status: 'pending',
+            reason: 'missing_exit_rules',
+            key: 'exitRules',
+            slotKey: exitSlot.slotKey,
+            fieldPath: exitSlot.fieldPath,
+          },
+          {
+            status: 'pending',
+            reason: 'missing_symbol',
+            key: 'executionContext.symbol',
+            slotKey: symbolSlot.slotKey,
+            fieldPath: symbolSlot.fieldPath,
+          },
+        ],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDT',
+      status: 'locked',
+    }))
+  })
+
+  it('does not consume a symbol context slot answer when active clarification targets another slot', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    const timeframeSlot: SemanticSlotState = {
+      slotKey: 'timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择时间周期。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+    state.contextSlots.timeframe = timeframeSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: timeframeSlot.slotKey,
+          fieldPath: timeframeSlot.fieldPath,
+        }],
+      },
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
+    })
+    expect(state.contextSlots.symbol).toBe(symbolSlot)
+  })
+
   it('consumes a complete entry trigger fragment for a missing entry slot', () => {
     const result = service.resolve({
       currentState: stateWithMissingEntry(),
@@ -812,6 +1088,177 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
       }),
     ]))
   })
+
+  it('locks structured symbol context fragments using their resolved value', () => {
+    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, new StructuredSymbolSeedExtractorService())
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+    }
+
+    const result = structuredSymbolService.resolve({
+      currentState: state,
+      message: 'ETH usdt 做多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH usdt',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDT',
+          kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                symbol: 'ETHUSDT',
+                base: 'ETH',
+                quote: 'USDT',
+                source: 'user_explicit',
+                quoteSource: 'explicit',
+              }),
+            }),
+          ]),
+          params: expect.objectContaining({
+            symbol: 'ETHUSDT',
+            base: 'ETH',
+            quote: 'USDT',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
+  it('preserves structured symbol fragment evidence for supported stablecoin quotes', () => {
+    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, new StructuredBusdSymbolSeedExtractorService())
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+    }
+
+    const result = structuredSymbolService.resolve({
+      currentState: state,
+      message: 'BTC busd 做多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'BTCBUSD',
+      status: 'locked',
+      evidence: {
+        text: 'BTC busd',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-BTCBUSD',
+          params: expect.objectContaining({
+            symbol: 'BTCBUSD',
+            base: 'BTC',
+            quote: 'BUSD',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
+  it.each([
+    ['primitive', () => new PrimitiveSymbolSeedExtractorService()],
+    ['plain value object', () => new PlainValueSymbolSeedExtractorService()],
+  ] as const)('normalizes %s symbol context fragments through the symbol resolver', (_caseName, createSeedExtractor) => {
+    const fragmentSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, createSeedExtractor())
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+    }
+
+    const result = fragmentSymbolService.resolve({
+      currentState: state,
+      message: 'ETH usdt 做多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH usdt',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDT',
+          params: expect.objectContaining({
+            symbol: 'ETHUSDT',
+            base: 'ETH',
+            quote: 'USDT',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
+  it('keeps open non-symbol context slots when fragment value is structured', () => {
+    const nonSymbolObjectService = new SemanticOpenSlotAnswerResolverService(undefined, new NonSymbolObjectSeedExtractorService())
+    const openTimeframeSlot: SemanticSlotState = {
+      slotKey: 'timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择时间周期。',
+      affectsExecution: true,
+    }
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: openTimeframeSlot,
+      },
+    }
+
+    const result = nonSymbolObjectService.resolve({
+      currentState: state,
+      message: 'entry with structured timeframe',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.timeframe).toBe(openTimeframeSlot)
+  })
 })
 
 class IncompleteEntrySeedExtractorService extends SemanticSeedExtractorService {
@@ -865,6 +1312,144 @@ class MixedEntryGateExitSeedExtractorService extends SemanticSeedExtractorServic
         { key: 'open_long', params: {} },
         { key: 'close_long', params: {} },
       ],
+    }
+  }
+}
+
+class StructuredSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: {
+          value: 'ETHUSDT',
+          source: 'user_explicit',
+          evidenceText: 'ETH usdt',
+          base: 'ETH',
+          quote: 'USDT',
+          quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class StructuredBusdSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: {
+          value: 'BTCBUSD',
+          source: 'user_explicit',
+          evidenceText: 'BTC busd',
+          base: 'BTC',
+          quote: 'BUSD',
+          quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class PrimitiveSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: 'ETH usdt',
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class PlainValueSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: {
+          value: 'ETH usdt',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class NonSymbolObjectSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        timeframe: {
+          value: '15m',
+          source: 'user_explicit',
+          evidenceText: '15m',
+          base: 'BTC',
+          quote: 'USDT',
+          quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
     }
   }
 }

@@ -121,6 +121,7 @@ export interface UpdateGridOrderFromExchangeInput {
   exchangeOrderId?: string | null
   status: GridOrderStatus
   filledQuantity: string
+  acceptedQuantity?: string | null
   avgFillPrice?: string | null
   rawPayload?: GridRuntimeJsonValue
 }
@@ -401,6 +402,7 @@ export class GridRuntimeRepository {
       data: {
         exchangeOrderId: input.exchangeOrderId ?? undefined,
         status: input.status,
+        quantity: input.acceptedQuantity == null ? undefined : this.decimal(input.acceptedQuantity),
         filledQuantity: this.decimal(input.filledQuantity),
         avgFillPrice: input.avgFillPrice == null ? null : this.decimal(input.avgFillPrice),
         rawPayload: input.rawPayload,

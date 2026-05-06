@@ -7,6 +7,7 @@ import type {
   SemanticSlotState,
   SemanticSource,
 } from './semantic-state'
+import type { CodegenContextSlotPatchValue } from './market-instrument-symbol'
 import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
 
 export type CodegenSemanticTriggerParams = Record<string, unknown> & {
@@ -23,7 +24,7 @@ export interface CodegenSemanticNodeEnvelope {
 }
 
 export interface CodegenSemanticPatch {
-  contextSlots?: Record<string, string | number | boolean | null>
+  contextSlots?: Record<string, string | number | boolean | null | CodegenContextSlotPatchValue>
   triggers?: Array<CodegenSemanticNodeEnvelope & {
     key: string
     phase: 'entry' | 'exit' | 'risk' | 'gate'

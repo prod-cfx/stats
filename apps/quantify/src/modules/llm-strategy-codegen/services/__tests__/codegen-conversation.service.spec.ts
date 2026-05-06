@@ -6111,6 +6111,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
     expect(result.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
     expect(result.assistantPrompt ?? '').not.toContain('入场：突破 MA20')
+    expect(result.assistantPrompt ?? '').not.toContain('仓位：15 MIN')
     expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'binance',
@@ -6157,9 +6158,77 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
+    expect(createPayload.semanticState.position?.sizing).not.toEqual(expect.objectContaining({
+      kind: 'base',
+      value: 15,
+      asset: 'MIN',
+    }))
     expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
       expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
+    ]))
+  })
+
+  it('preserves multi-timeframe EMA entry atoms when a later turn only answers stop loss', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-mtf-ema-risk-follow-up' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+
+    const fixture = buildSemanticEraSessionFixture({
+      id: 's-mtf-ema-risk-follow-up',
+      semanticState: createPayload.semanticState,
+      status: 'DRAFTING',
+    })
+    mockRepo.findById.mockResolvedValue(fixture)
+
+    const continued = await service.continueSession('s-mtf-ema-risk-follow-up', {
+      userId: 'u1',
+      message: '3%止损',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const semanticState = updatePayload.semanticState
+
+    expect(continued.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+    expect(continued.assistantPrompt ?? '').not.toContain('入场：5m 价格在 EMA20 上方')
+    expect(continued.assistantPrompt ?? '').not.toContain('仓位：15 MIN')
+    expect(semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '5m' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+    ]))
+    expect(semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 3 }),
+      }),
     ]))
   })
 
@@ -13153,6 +13222,97 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps normalized ETHUSDT context symbol through the grid mainflow clarifications', async () => {
+    const expectNoSymbolPrompt = (prompt: string) => {
+      expect(prompt).not.toContain('请确认策略交易标的')
+      expect(prompt).not.toContain('请选择标的')
+      expect(prompt).not.toContain('交易对')
+    }
+
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide symbol clarification wording',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-eth-grid-symbol-mainflow' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'ETH usdt，在 2500 到 3200 之间做多空网格，2倍杠杆，突破区间就停止。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expectNoSymbolPrompt(started.assistantPrompt)
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-eth-grid-symbol-mainflow',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const afterGridCount = await service.continueSession('s-eth-grid-symbol-mainflow', {
+      userId: 'u1',
+      message: '15格',
+    })
+    const gridCountPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(gridCountPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(afterGridCount.assistantPrompt).toContain('请确认单笔仓位大小')
+    expectNoSymbolPrompt(afterGridCount.assistantPrompt)
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-eth-grid-symbol-mainflow',
+      gridCountPayload,
+      { status: afterGridCount.status },
+    ))
+
+    const afterPosition = await service.continueSession('s-eth-grid-symbol-mainflow', {
+      userId: 'u1',
+      message: '100usdt',
+    })
+    const budgetPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(budgetPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(afterPosition.assistantPrompt).toContain('请确认交易所')
+    expectNoSymbolPrompt(afterPosition.assistantPrompt)
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-eth-grid-symbol-mainflow',
+      budgetPayload,
+      { status: afterPosition.status },
+    ))
+
+    const afterExchange = await service.continueSession('s-eth-grid-symbol-mainflow', {
+      userId: 'u1',
+      message: 'okx',
+    })
+    const exchangePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(exchangePayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(exchangePayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'okx',
+    }))
+    expect(afterExchange.status).toBe('DRAFTING')
+    expect(afterExchange.assistantPrompt).toContain('请确认市场类型')
+    expectNoSymbolPrompt(afterExchange.assistantPrompt)
+  })
+
   it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -13206,6 +13366,169 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         openSlots: expect.not.arrayContaining([
           expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
         ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
+  it('keeps fixed range grid planner action keys out of generic contract-required prompts after density reply', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          context: {
+            symbol: 'ETHUSDT',
+          },
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: {
+              rangeMin: 2300,
+              rangeMax: 2430,
+              sideMode: 'long_only',
+            },
+          }],
+          actions: [{
+            key: 'place_limit_grid',
+            params: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+              recycleOnFill: true,
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-fixed-grid-action-density' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '区间网格，ETH,2300-2430',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-fixed-grid-action-density',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-fixed-grid-action-density', {
+      userId: 'u1',
+      message: '10格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'place_limit_grid',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+            }),
+          ]),
+        })],
+      }),
+    ]))
+  })
+
+  it('keeps compact complete fixed range grid action keys out of generic contract-required prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          context: {
+            symbol: 'ETHUSDT',
+          },
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: {
+              rangeMin: 2300,
+              rangeMax: 2430,
+              gridCount: 10,
+              sideMode: 'long_only',
+            },
+          }],
+          actions: [{
+            key: 'place_limit_grid',
+            params: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+              recycleOnFill: true,
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-compact-fixed-grid-action' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '区间网格，ETH,2300-2430,10格',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'place_limit_grid',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+            }),
+          ]),
+        })],
+      }),
+    ]))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
         contracts: [expect.objectContaining({
           capabilities: [expect.objectContaining({
             domain: 'price',

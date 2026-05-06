@@ -162,20 +162,29 @@ export class SemanticStateProjectionService {
     if (!firstTrigger) {
       return null
     }
-    const conditionItems = input.triggers
-      .map((trigger, index): SemanticDisplayConditionItem | null => {
-        const conditionText = this.buildDisplayConditionText(trigger, index === 0 ? input.gateText : null)
-        if (!conditionText) {
-          return null
-        }
 
-        return {
-          kind: 'condition',
-          id: `condition-${trigger.id}`,
-          text: conditionText,
-        }
-      })
-      .filter((item): item is SemanticDisplayConditionItem => Boolean(item))
+    const conditionItems = this.shouldRenderDisplayGroupAsSingleCondition(input.triggers)
+      ? [
+          {
+            kind: 'condition' as const,
+            id: `condition-${firstTrigger.id}`,
+            text: this.buildDisplayConditionText(firstTrigger, input.gateText, input.triggers),
+          },
+        ].filter((item): item is SemanticDisplayConditionItem => item.text.length > 0)
+      : input.triggers
+        .map((trigger, index): SemanticDisplayConditionItem | null => {
+          const conditionText = this.buildDisplayConditionText(trigger, index === 0 ? input.gateText : null)
+          if (!conditionText) {
+            return null
+          }
+
+          return {
+            kind: 'condition',
+            id: `condition-${trigger.id}`,
+            text: conditionText,
+          }
+        })
+        .filter((item): item is SemanticDisplayConditionItem => Boolean(item))
     if (conditionItems.length === 0) {
       return null
     }
@@ -191,8 +200,20 @@ export class SemanticStateProjectionService {
 
   private groupDisplayRuleTriggers(triggers: SemanticState['triggers']): SemanticState['triggers'][] {
     const groups: SemanticState['triggers'][] = []
+    const consumedTriggerIds = new Set<string>()
 
     for (const trigger of triggers) {
+      if (consumedTriggerIds.has(trigger.id)) {
+        continue
+      }
+
+      const groupedTriggers = this.findGroupedDisplayTriggers(triggers, trigger)
+      if (groupedTriggers.length > 1) {
+        groupedTriggers.forEach(groupedTrigger => consumedTriggerIds.add(groupedTrigger.id))
+        groups.push(groupedTriggers)
+        continue
+      }
+
       const previousGroup = groups.at(-1)
       const previousTrigger = previousGroup?.[0]
       if (
@@ -201,13 +222,19 @@ export class SemanticStateProjectionService {
         && this.canMergeDisplayRuleTriggers(previousTrigger, trigger)
       ) {
         previousGroup.push(trigger)
+        consumedTriggerIds.add(trigger.id)
         continue
       }
 
+      consumedTriggerIds.add(trigger.id)
       groups.push([trigger])
     }
 
     return groups
+  }
+
+  private shouldRenderDisplayGroupAsSingleCondition(group: SemanticState['triggers']): boolean {
+    return group.length > 1 && group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))
   }
 
   private canMergeDisplayRuleTriggers(
@@ -301,8 +328,11 @@ export class SemanticStateProjectionService {
   private buildDisplayConditionText(
     trigger: SemanticState['triggers'][number],
     gateText: string | null,
+    groupedTriggers?: Array<SemanticState['triggers'][number]>,
   ): string {
-    const conditionText = trigger.key === 'condition.expression'
+    const conditionText = groupedTriggers && groupedTriggers.length > 1
+      ? this.formatGroupedDisplayTriggerCondition(trigger, groupedTriggers)
+      : trigger.key === 'condition.expression'
       ? this.formatSemanticExpression(trigger.params.expression)
       : this.formatDisplayTriggerCondition(trigger)
     if (!conditionText) {
@@ -319,7 +349,10 @@ export class SemanticStateProjectionService {
     }
 
     const summary = this.buildTriggerSummary([trigger], true)
-    return summary.replace(/^(入场|出场|条件)：/u, '').replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
+    return summary
+      .replace(/^(入场|出场|条件)：/u, '')
+      .replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
+      .trim()
   }
 
   private formatDisplayAtomicTriggerCondition(trigger: SemanticState['triggers'][number]): string {
@@ -488,6 +521,37 @@ export class SemanticStateProjectionService {
       .map(trigger => this.buildDisplayConditionText(trigger, null))
       .filter(text => text.length > 0)
     return gateTexts.length > 0 ? gateTexts.join('，且') : null
+  }
+
+  private findGroupedDisplayTriggers(
+    triggers: SemanticState['triggers'],
+    trigger: SemanticState['triggers'][number],
+  ): Array<SemanticState['triggers'][number]> {
+    if (!this.isGroupableIndicatorCompareTrigger(trigger)) {
+      return [trigger]
+    }
+
+    return triggers.filter(candidate =>
+      candidate.id === trigger.id
+      || (
+        this.isGroupableIndicatorCompareTrigger(candidate)
+        && candidate.phase === trigger.phase
+        && candidate.key === trigger.key
+        && (candidate.sideScope ?? '') === (trigger.sideScope ?? '')
+        && String(candidate.params.indicator ?? 'ma').toLowerCase() === String(trigger.params.indicator ?? 'ma').toLowerCase()
+        && candidate.params['reference.period'] === trigger.params['reference.period']
+      ),
+    )
+  }
+
+  private formatGroupedDisplayTriggerCondition(
+    trigger: SemanticState['triggers'][number],
+    groupedTriggers: Array<SemanticState['triggers'][number]>,
+  ): string {
+    const timeframes = this.uniqueSortedTimeframes(groupedTriggers)
+    return timeframes.length > 1
+      ? `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(trigger)}`
+      : this.formatDisplayTriggerCondition(trigger)
   }
 
   private isDisplayGateCompatibleWithEntry(

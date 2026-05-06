@@ -141,11 +141,12 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
       totalReturnPct: number
       winRatePct: number
       tradeCount: number
+      recoveryStatus?: string
     }
     canDeploy: boolean
   }) => (
     <div data-testid="backtest-summary">
-      {`${result.id}|${result.symbol}|${result.startAt}|${result.endAt}|${result.maxDrawdownPct}|${result.totalReturnPct}|${result.winRatePct}|${result.tradeCount}|${canDeploy ? 'deployable' : 'blocked'}`}
+      {`${result.id}|${result.symbol}|${result.startAt}|${result.endAt}|${result.maxDrawdownPct}|${result.totalReturnPct}|${result.winRatePct}|${result.tradeCount}|${result.recoveryStatus ?? 'fresh'}|${canDeploy ? 'deployable' : 'blocked'}`}
     </div>
   ),
 }))
@@ -1133,7 +1134,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('does not restore server-owned lastBacktestRef when execution config changed under the same snapshot', async () => {
+  it('restores server-owned lastBacktestRef as config_changed when execution config changed under the same snapshot', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock
     listAiQuantConversations.mockResolvedValue([
@@ -1204,7 +1205,10 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
     })
 
-    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+    const summary = container.querySelector('[data-testid="backtest-summary"]')?.textContent
+    expect(summary).toContain('btjob-1')
+    expect(summary).toContain('config_changed')
+    expect(summary).toContain('blocked')
   })
 
   it.each([
