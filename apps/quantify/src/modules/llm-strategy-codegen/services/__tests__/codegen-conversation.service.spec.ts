@@ -5331,7 +5331,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             { key: 'close_long', contracts: null },
             { key: 'close_short', contracts: null },
           ],
-          position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'hedge' },
+          position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
           contextSlots: {
             exchange: 'okx',
             symbol: 'BTCUSDT',
