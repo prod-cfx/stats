@@ -1210,6 +1210,73 @@ describe('signalGeneratorService coordinator behavior', () => {
     })
   })
 
+  it('does not persist mutated semantic state when published runtime returns an error outcome', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          runtimeRequirements: {
+            stateKeys: ['breakout'],
+          },
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest
+      .spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome')
+      .mockImplementation(async (...args: unknown[]) => {
+        const semanticRuntimeState = args[7] as Record<string, Record<string, unknown>>
+        semanticRuntimeState.breakout = { rememberedLevel: 999 }
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_OUTPUT_INVALID',
+          reason: 'invalid output',
+        }
+      })
+    jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.updateStrategyInstanceMetadata).not.toHaveBeenCalled()
+  })
+
   it('creates a signal for a published snapshot runtime OPEN_LONG decision that only has required adapter truth', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({

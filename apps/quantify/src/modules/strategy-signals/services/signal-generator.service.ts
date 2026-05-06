@@ -1519,9 +1519,9 @@ export class SignalGeneratorService {
         semanticRuntimeState,
         runtimePosition,
       )
-      await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
 
       if (runtimeSignalOutcome.kind === 'noop') {
+        await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
         if (!activeRuntimeState) {
           await this.resetStrategyFailure(instance.id)
           this.telemetry.recordGeneration({
@@ -1619,6 +1619,7 @@ export class SignalGeneratorService {
           : undefined,
       )
 
+      await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
       if (!createdSignal.created) {
         await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
       }
