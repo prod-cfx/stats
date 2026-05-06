@@ -292,14 +292,17 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.contextSlots?.marketType).toBe('perp')
   })
 
-  it('extracts inferred base-only symbols from trade-intent strategy text', () => {
-    const patch = service.extract('在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%')
+  it.each([
+    ['在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%', 'BTCUSDT', 'BTC'],
+    ['在okx交易所 我想买sol 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%', 'SOLUSDT', 'SOL'],
+  ] as const)('extracts inferred base-only symbols from trade-intent strategy text: %s', (message, value, base) => {
+    const patch = service.extract(message)
 
     expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({
-      value: 'BTCUSDT',
+      value,
       source: 'inferred',
       quoteSource: 'default_usdt',
-      base: 'BTC',
+      base,
       quote: 'USDT',
     }))
   })

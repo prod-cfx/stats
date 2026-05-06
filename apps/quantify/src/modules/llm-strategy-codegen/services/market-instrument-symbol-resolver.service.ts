@@ -7,7 +7,29 @@ import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 const SUPPORTED_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 const EXPLICIT_SYMBOL_PATTERN = /^([A-Z0-9]{2,20})(?:([-/\s])?(FDUSD|USDT|USDC|BUSD|TUSD|USD))(?:(-SWAP)|:(PERP|SPOT))?$/iu
 
-const BASE_SYMBOL_ALIASES: Readonly<Record<string, 'ETH' | 'BTC'>> = {
+const INFERRED_BASE_PATTERN = /^[A-Z][A-Z0-9]{1,19}$/u
+const BLOCKED_INFERRED_BASE_PATTERN = /^(?:MA|EMA|SMA|MACD|RSI|ATR|KDJ|BOLL|BOLLINGER)\d*$/u
+const BLOCKED_INFERRED_BASES = new Set([
+  ...SUPPORTED_QUOTES,
+  'OKX',
+  'BINANCE',
+  'HYPERLIQUID',
+  'SPOT',
+  'PERP',
+  'SWAP',
+  'CONTRACT',
+  'MA',
+  'EMA',
+  'SMA',
+  'MACD',
+  'RSI',
+  'ATR',
+  'KDJ',
+  'BOLL',
+  'BOLLINGER',
+])
+
+const BASE_SYMBOL_ALIASES: Readonly<Record<string, string>> = {
   ETH: 'ETH',
   BTC: 'BTC',
   以太坊: 'ETH',
@@ -116,16 +138,22 @@ export class MarketInstrumentSymbolResolverService {
     return null
   }
 
-  private resolveBaseAlias(evidenceText: string): 'ETH' | 'BTC' | null {
+  private resolveBaseAlias(evidenceText: string): string | null {
     const normalized = evidenceText.trim().toUpperCase()
 
-    if (normalized === 'ETH' || normalized === 'BTC') {
+    const alias = BASE_SYMBOL_ALIASES[normalized]
+    if (alias) {
+      return alias
+    }
+
+    if (this.isSupportedInferredBase(normalized)) {
       return normalized
     }
 
-    const perpetualMatch = /^([A-Z]{3})\s*永续合约$/u.exec(normalized)
+    const perpetualMatch = /^([A-Z][A-Z0-9]{1,19})\s*(?:永续合约|合约)$/u.exec(normalized)
     if (perpetualMatch) {
-      return BASE_SYMBOL_ALIASES[perpetualMatch[1] ?? ''] ?? null
+      const base = perpetualMatch[1] ?? ''
+      return BASE_SYMBOL_ALIASES[base] ?? (this.isSupportedInferredBase(base) ? base : null)
     }
 
     const chineseMatch = /^(以太坊|比特币)(?:永续合约|合约)?$/u.exec(evidenceText.trim())
@@ -134,6 +162,12 @@ export class MarketInstrumentSymbolResolverService {
     }
 
     return null
+  }
+
+  private isSupportedInferredBase(value: string): boolean {
+    return INFERRED_BASE_PATTERN.test(value)
+      && !BLOCKED_INFERRED_BASES.has(value)
+      && !BLOCKED_INFERRED_BASE_PATTERN.test(value)
   }
 
   private toExplicitSymbolInput(evidenceText: string): string | null {

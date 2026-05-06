@@ -24,8 +24,10 @@ describe('MarketInstrumentSymbolResolverService', () => {
   it.each([
     ['ETH', 'ETHUSDT', 'ETH'],
     ['BTC', 'BTCUSDT', 'BTC'],
+    ['SOL', 'SOLUSDT', 'SOL'],
     ['ETH 永续合约', 'ETHUSDT', 'ETH'],
     ['BTC 永续合约', 'BTCUSDT', 'BTC'],
+    ['SOL 永续合约', 'SOLUSDT', 'SOL'],
     ['以太坊', 'ETHUSDT', 'ETH'],
     ['比特币合约', 'BTCUSDT', 'BTC'],
   ] as const)('resolves inferred USDT symbol text %s', (input, value, base) => {
@@ -63,6 +65,9 @@ describe('MarketInstrumentSymbolResolverService', () => {
   it('does not infer ordinary English as a symbol', () => {
     expect(resolver.resolve('please continue the strategy')).toBeNull()
     expect(resolver.resolve('price above 100 USDT')).toBeNull()
+    expect(resolver.resolve('OKX')).toBeNull()
+    expect(resolver.resolve('RSI')).toBeNull()
+    expect(resolver.resolve('MACD')).toBeNull()
   })
 
   it('builds a market identify instrument context contract', () => {

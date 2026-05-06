@@ -2978,18 +2978,23 @@ export class SemanticSeedExtractorService {
       candidates.push(candidate)
     }
 
-    for (const match of text.matchAll(/\b((?:BTC|ETH)\s*(?:永续合约|合约))/giu)) {
+    for (const match of text.matchAll(/\b([A-Z][A-Z0-9]{1,19}\s*(?:永续合约|合约))/giu)) {
       const candidate = match[1]?.trim()
       if (candidate) {
         candidates.push(candidate)
       }
     }
 
-    for (const match of text.matchAll(/\b(BTC|ETH)\b/giu)) {
+    for (const match of text.matchAll(/(?:买入|买|卖出|卖|做多|做空|交易|标的|币种)\s*([A-Z][A-Z0-9]{1,19})\b/giu)) {
       const candidate = match[1]?.trim()
       if (candidate) {
         candidates.push(candidate)
       }
+    }
+
+    const leadingCandidate = /^\s*([A-Z][A-Z0-9]{1,19})(?=$|[\s,，、。])/iu.exec(text)?.[1]?.trim()
+    if (leadingCandidate) {
+      candidates.push(leadingCandidate)
     }
 
     for (const match of text.matchAll(/(以太坊|比特币)(?:永续合约|合约)?/gu)) {
