@@ -151,7 +151,7 @@ export class SemanticSupportClassifierService {
         supportStatus: 'supported_executable',
         requiredParams: ['indicator', 'referenceRole', 'reference.period'],
         defaultableParams: ['confirmationMode'],
-        executableProjection: ['canonical_spec_v1'],
+        executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
         openSlots: [],
       }
     }
