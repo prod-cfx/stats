@@ -1336,6 +1336,49 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('preserves per-trigger timeframes for multi-timeframe indicator compare triggers', () => {
+    const service = new CanonicalSpecBuilderService()
+    const normalizedIntent = {
+      families: ['single-leg'],
+      triggers: ['15m', '1h', '4h'].map(timeframe => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        closureStatus: 'closed',
+        unresolvedSlots: [],
+        params: {
+          indicator: 'ema',
+          referenceRole: 'long_term',
+          'reference.period': 20,
+          timeframe,
+        },
+      })),
+      actions: [{ key: 'open_long' }],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+      },
+      unresolved: [],
+      normalizationNotes: [],
+    }
+
+    const spec = service.buildFromNormalizedIntent({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    } as any, normalizedIntent as any)
+    const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+
+    expect(entryRules).toHaveLength(3)
+    expect(entryRules.map(rule => rule.condition)).toEqual([
+      expect.objectContaining({ params: expect.objectContaining({ timeframe: '15m' }) }),
+      expect.objectContaining({ params: expect.objectContaining({ timeframe: '1h' }) }),
+      expect.objectContaining({ params: expect.objectContaining({ timeframe: '4h' }) }),
+    ])
+    expect(spec.market.timeframes).toEqual(expect.arrayContaining(['15m', '1h', '4h']))
+  })
+
   it('does not treat a bare asset symbol as a canonical market symbol', () => {
     const service = new CanonicalSpecBuilderService()
 

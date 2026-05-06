@@ -83,6 +83,7 @@ export interface CanonicalStrategySpecV2 {
     marketType: 'spot' | 'perp' | null
     defaultTimeframe?: string | null
     timeframe?: string | null
+    timeframes?: string[]
   }
   indicators: Array<{
     kind: 'bollingerBands' | 'sma' | 'ema' | 'rsi' | 'atr' | 'macd' | 'custom'

@@ -254,7 +254,15 @@ export class SemanticAtomInvariantService {
     const absoluteSpacing = this.readShapeNumber(levelSet.capability.shape, 'absoluteSpacing') ?? undefined
     const spacingPct = this.readShapeNumber(levelSet.capability.shape, 'spacingPct') ?? undefined
     const budgetMode = projectedBudget.budgetMode
-    const maxWorkingOrders = Math.max(2, Math.floor(gridCount ?? 2))
+    const maxWorkingOrders = this.resolveExpectedOrderProgramLevelCount({
+      levelSetMode,
+      lower,
+      upper,
+      halfRangePct,
+      gridCount,
+      absoluteSpacing,
+      spacingPct,
+    })
     const mode = this.resolveContractOrderProgramMode(exposure.capability ?? null, state)
     const budgetPerOrder = budgetMode === 'total_quote'
       ? Number((projectedBudget.budgetValue / maxWorkingOrders).toFixed(8))
@@ -299,6 +307,64 @@ export class SemanticAtomInvariantService {
           },
       maxWorkingOrders,
     }
+  }
+
+  private resolveExpectedOrderProgramLevelCount(input: {
+    levelSetMode: ExpectedOrderProgramContract['levelSetMode']
+    lower?: number
+    upper?: number
+    halfRangePct?: number
+    gridCount?: number
+    absoluteSpacing?: number
+    spacingPct?: number
+  }): number {
+    if (typeof input.gridCount === 'number' && Number.isFinite(input.gridCount) && input.gridCount > 0) {
+      return Math.max(2, Math.floor(input.gridCount))
+    }
+
+    if (input.levelSetMode === 'centered_percent_range') {
+      if (
+        typeof input.halfRangePct === 'number'
+        && Number.isFinite(input.halfRangePct)
+        && input.halfRangePct > 0
+        && typeof input.spacingPct === 'number'
+        && Number.isFinite(input.spacingPct)
+        && input.spacingPct > 0
+      ) {
+        return Math.max(2, Math.floor((input.halfRangePct * 2) / input.spacingPct))
+      }
+
+      return 2
+    }
+
+    if (
+      typeof input.lower !== 'number'
+      || typeof input.upper !== 'number'
+      || !Number.isFinite(input.lower)
+      || !Number.isFinite(input.upper)
+      || input.upper <= input.lower
+    ) {
+      return 2
+    }
+
+    if (
+      typeof input.absoluteSpacing === 'number'
+      && Number.isFinite(input.absoluteSpacing)
+      && input.absoluteSpacing > 0
+    ) {
+      return Math.max(2, Math.floor((input.upper - input.lower) / input.absoluteSpacing) + 1)
+    }
+
+    if (
+      typeof input.spacingPct === 'number'
+      && Number.isFinite(input.spacingPct)
+      && input.spacingPct > 0
+      && input.lower > 0
+    ) {
+      return Math.max(2, Math.floor(Math.log(input.upper / input.lower) / Math.log(1 + input.spacingPct / 100)) + 1)
+    }
+
+    return 2
   }
 
   private projectExpectedOrderProgramBudget(

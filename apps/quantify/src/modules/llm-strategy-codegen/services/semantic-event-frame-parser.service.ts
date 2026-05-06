@@ -56,8 +56,8 @@ export class SemanticEventFrameParserService {
 
   private expandCompactCrosses(sentence: string): string {
     return sentence.replace(
-      /(MACD\s*)金叉(买入|买|开多|做多)死叉(卖出|卖|平多)/giu,
-      '$1金叉$2，$1死叉$3',
+      /([^，,；;。]{1,80}?)金叉(买入|买|开多|做多)死叉(卖出|卖|平多)/giu,
+      '$1金叉$2，死叉$3',
     )
   }
 
@@ -70,19 +70,19 @@ export class SemanticEventFrameParserService {
       }
     }
 
+    if (/(做空|开空|卖空|卖出\s*开空)/u.test(clause)) {
+      return {
+        action: { kind: 'open_short' },
+        phase: 'entry',
+        sideScope: 'short',
+      }
+    }
+
     if (/(平多|多头平仓|卖出)/u.test(clause)) {
       return {
         action: { kind: 'close_long' },
         phase: 'exit',
         sideScope: 'long',
-      }
-    }
-
-    if (/(做空|开空|卖空)/u.test(clause)) {
-      return {
-        action: { kind: 'open_short' },
-        phase: 'entry',
-        sideScope: 'short',
       }
     }
 
@@ -154,9 +154,12 @@ export class SemanticEventFrameParserService {
     direction: SemanticEventTrigger['direction'],
   ): SemanticEventTrigger | undefined {
     const match = /\b(EMA|MA)\s*(\d+)\s*(?:上穿|下穿)\s*(EMA|MA)\s*(\d+)/iu.exec(clause)
+      ?? /\b(EMA|MA)\s*(\d+)\s*(?:和|与|及|\/|、)\s*(EMA|MA)\s*(\d+)\s*(?:金叉|死叉)/iu.exec(clause)
     if (!match) return undefined
 
-    const indicator = match[1].toLowerCase() === 'ema' ? 'ema' : 'ma'
+    const indicator = match[1].toLowerCase() === 'ema' || match[3].toLowerCase() === 'ema'
+      ? 'ema'
+      : 'ma'
 
     return {
       kind: 'indicator_cross',

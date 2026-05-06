@@ -26,6 +26,7 @@ type FixedGridRange = {
   upper: number
 }
 
+const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
 const REDUCED_INDICATOR_CROSS_SIGNATURE_INDICATORS = new Set(['ma', 'ema', 'moving_average', 'macd'])
@@ -46,11 +47,10 @@ type SemanticAliasContext = {
 
 @Injectable()
 export class SemanticSeedExtractorService {
-  private readonly eventFrameParser = new SemanticEventFrameParserService()
-  private readonly eventFrameProjector = new SemanticEventFrameProjectorService()
-
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+    private readonly eventFrameParser: SemanticEventFrameParserService = new SemanticEventFrameParserService(),
+    private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
@@ -100,15 +100,66 @@ export class SemanticSeedExtractorService {
   ): SeedTrigger[] {
     const merged: SeedTrigger[] = []
     const seen = new Set<string>()
+    const looseIndicatorIndex = new Map<string, number>()
 
     for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
       const signature = this.buildTriggerMergeSignature(trigger)
       if (seen.has(signature)) continue
+
+      const looseSignature = this.buildLooseIndicatorCrossMergeSignature(trigger)
+      if (looseSignature) {
+        const existingIndex = looseIndicatorIndex.get(looseSignature)
+        if (existingIndex !== undefined) {
+          const existingTrigger = merged[existingIndex]
+          if (this.canMergeLooseIndicatorCross(existingTrigger, trigger)) {
+            if (this.countIndicatorPeriodParams(trigger) > this.countIndicatorPeriodParams(existingTrigger)) {
+              merged[existingIndex] = trigger
+              seen.add(signature)
+            }
+            continue
+          }
+        }
+        else {
+          looseIndicatorIndex.set(looseSignature, merged.length)
+        }
+      }
+
       seen.add(signature)
       merged.push(trigger)
     }
 
     return merged
+  }
+
+  private buildLooseIndicatorCrossMergeSignature(trigger: SeedTrigger): string | null {
+    if (!this.isIndicatorCrossTrigger(trigger)) {
+      return null
+    }
+
+    return JSON.stringify({
+      key: trigger.key,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      indicator: trigger.params?.indicator,
+      semantic: this.resolveIndicatorCrossSemantic(trigger),
+    })
+  }
+
+  private canMergeLooseIndicatorCross(left: SeedTrigger, right: SeedTrigger): boolean {
+    if (!this.isIndicatorCrossTrigger(left) || !this.isIndicatorCrossTrigger(right)) {
+      return false
+    }
+
+    return this.countIndicatorPeriodParams(left) === 0 || this.countIndicatorPeriodParams(right) === 0
+  }
+
+  private countIndicatorPeriodParams(trigger: SeedTrigger): number {
+    let count = 0
+    if (trigger.params?.fastPeriod !== undefined) count += 1
+    if (trigger.params?.slowPeriod !== undefined) count += 1
+    if (trigger.params?.signalPeriod !== undefined) count += 1
+
+    return count
   }
 
   private buildTriggerMergeSignature(trigger: SeedTrigger): string {
@@ -532,7 +583,10 @@ export class SemanticSeedExtractorService {
       contextSlots.symbol = symbol
     }
 
-    const timeframe = this.extractFirstTimeframe(text)
+    const timeframes = this.extractAllTimeframes(text)
+    const timeframe = this.hasMultiTimeframeMovingAveragePredicateScope(text)
+      ? null
+      : (timeframes[0] ?? this.extractFirstTimeframe(text))
     if (timeframe) {
       contextSlots.timeframe = timeframe
     }
@@ -1144,13 +1198,11 @@ export class SemanticSeedExtractorService {
     const clauses = this.splitCommaClauses(segment)
 
     for (const clause of clauses) {
-      const subClauses = clause.includes('且') || clause.includes('并且') || clause.includes('同时') || clause.includes('并')
-        ? clause.split(/(?:且|并且|同时|并)/u).map(part => part.trim()).filter(Boolean)
-        : [clause]
+      const subClauses = this.splitConjunctionClauses(clause)
 
       for (const subClause of subClauses) {
         if (/布林|bollinger|上轨|下轨|中轨/iu.test(subClause)) continue
-        if (!/(?:MA|EMA)\s*\d+|均线/u.test(subClause)) continue
+        if (!/(?:MA|EMA)\s*\d+|均线/iu.test(subClause)) continue
         if (this.isTrueMovingAverageCrossClause(subClause)?.isCross) continue
         const referencePeriods = Array.from(subClause.matchAll(/(?:MA|EMA)\s*(\d{1,4})/giu))
           .map(match => Number(match[1]))
@@ -1175,23 +1227,41 @@ export class SemanticSeedExtractorService {
         const indicator = hasExplicitEma
           ? 'ema'
           : (hasExplicitMa ? 'ma' : (aliasContext.movingAverage?.indicator ?? 'ma'))
-        const key = /突破|上穿|站上|高于/u.test(subClause)
+        const key = /突破|上穿|站上|高于|上方/u.test(subClause)
           ? 'indicator.above'
-          : (/跌破|下穿|失守|低于/u.test(subClause) ? 'indicator.below' : null)
+          : (/跌破|下穿|失守|低于|下方/u.test(subClause) ? 'indicator.below' : null)
         if (!key) continue
 
+        const timeframes = this.extractAllTimeframes(subClause)
+
         for (const referencePeriod of referencePeriods) {
-          this.pushTrigger(triggers, seen, {
-            key,
-            phase: intent.phase,
-            sideScope: intent.sideScope,
-            params: {
-              indicator,
-              referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
-              'reference.period': referencePeriod,
-              ...(confirmationMode ? { confirmationMode } : {}),
-            },
-          })
+          const params = {
+            indicator,
+            referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
+            'reference.period': referencePeriod,
+            ...(confirmationMode ? { confirmationMode } : {}),
+          }
+          const targetTimeframes = timeframes.length > 0
+            ? timeframes
+            : []
+
+          if (targetTimeframes.length > 0) {
+            for (const timeframe of targetTimeframes) {
+              this.pushTrigger(triggers, seen, {
+                key,
+                phase: intent.phase,
+                sideScope: intent.sideScope,
+                params: { ...params, timeframe },
+              })
+            }
+          } else {
+            this.pushTrigger(triggers, seen, {
+              key,
+              phase: intent.phase,
+              sideScope: intent.sideScope,
+              params,
+            })
+          }
         }
       }
     }
@@ -1545,6 +1615,10 @@ export class SemanticSeedExtractorService {
       && gridIntervals === null
       && absoluteSpacing !== null
       && absoluteSpacingGridCount === null
+    const hasMissingDensity = explicitGridCount === null
+      && gridIntervals === null
+      && absoluteSpacing === null
+      && stepPct === null
     const shape: SemanticCapabilityShape = {
       mode: 'fixed_range',
       lower: fixedRange.lower,
@@ -1561,18 +1635,18 @@ export class SemanticSeedExtractorService {
       ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
       ...(stepPct !== null ? { spacingPct: stepPct } : {}),
     }
-    if (!('gridCount' in shape) && stepPct !== null) {
-      shape.gridCount = this.deriveGridCountFromPercentStep(fixedRange.lower, fixedRange.upper, stepPct)
-    }
-
     this.pushTrigger(triggers, seen, {
       key: 'grid.range_rebalance',
       phase: 'entry',
       sideScope,
-      ...(hasAbsoluteSpacingConflict
+      ...(hasAbsoluteSpacingConflict || hasMissingDensity
         ? {
             status: 'open' as const,
-            openSlots: [this.buildLevelSetSpacingConflictOpenSlot()],
+            openSlots: [
+              hasAbsoluteSpacingConflict
+                ? this.buildLevelSetSpacingConflictOpenSlot()
+                : this.buildLevelSetDensityOpenSlot(),
+            ],
           }
         : {}),
       params: {
@@ -1602,6 +1676,17 @@ export class SemanticSeedExtractorService {
         params: {},
       }],
     })
+  }
+
+  private buildLevelSetDensityOpenSlot(): SemanticSlotState {
+    return {
+      slotKey: LEVEL_SET_DENSITY_SLOT_KEY,
+      fieldPath: GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH,
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
   }
 
   private buildLevelSetSpacingConflictOpenSlot(): SemanticSlotState {
@@ -1668,19 +1753,6 @@ export class SemanticSeedExtractorService {
     }
 
     return value
-  }
-
-  private deriveGridCountFromPercentStep(lower: number, upper: number, stepPct: number): number {
-    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(stepPct) || lower <= 0 || upper <= lower || stepPct <= 0) {
-      return 2
-    }
-
-    const ratio = 1 + stepPct / 100
-    if (ratio <= 1) {
-      return 2
-    }
-
-    return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
   }
 
   private deriveGridCountFromAbsoluteSpacing(lower: number, upper: number, absoluteSpacing: number): number | null {
@@ -1870,8 +1942,31 @@ export class SemanticSeedExtractorService {
   ): void {
     if (!/MACD|DIF|DEA/iu.test(segment)) return
 
-    const clauses = this.splitLogicClauses(segment)
     const params = this.extractMacdParams(segment) ?? this.extractMacdParams(contextText)
+    const eventFrames = this.eventFrameParser.parse(segment)
+      .filter(frame => frame.trigger.kind === 'indicator_cross' && frame.trigger.indicator === 'macd')
+
+    if (eventFrames.length > 0) {
+      for (const frame of eventFrames) {
+        this.pushTrigger(triggers, seen, {
+          key: frame.trigger.direction === 'over' ? 'indicator.cross_over' : 'indicator.cross_under',
+          phase: frame.phase,
+          sideScope: frame.sideScope,
+          params: {
+            indicator: 'macd',
+            semantic: frame.trigger.semantic,
+            ...(params ? {
+              fastPeriod: params.fastPeriod,
+              slowPeriod: params.slowPeriod,
+              signalPeriod: params.signalPeriod,
+            } : {}),
+          },
+        })
+      }
+      return
+    }
+
+    const clauses = this.splitLogicClauses(segment)
 
     for (const clause of clauses) {
       if (!/MACD|DIF|DEA/iu.test(clause)) continue
@@ -2561,6 +2656,11 @@ export class SemanticSeedExtractorService {
     return /(触及|突破|回到|回归|跌破|上穿|下穿|站上|失守|高于|低于)/u.test(segment)
   }
 
+  private hasExecutableConditionOperator(segment: string): boolean {
+    return this.hasBollingerBandAction(segment)
+      || /(上方|下方|之上|之下|大于|小于|超过|少于|>=|<=|>|<)/u.test(segment)
+  }
+
   private resolvePercentDirection(segment: string): 'up' | 'down' | 'drawdown' | null {
     if (/回撤/u.test(segment)) {
       return 'drawdown'
@@ -2836,6 +2936,10 @@ export class SemanticSeedExtractorService {
   }
 
   private extractExchange(text: string): string | null {
+    if (/币安/u.test(text)) return 'binance'
+    if (/欧易/u.test(text)) return 'okx'
+    if (/海伯利安|hyperliquid/iu.test(text)) return 'hyperliquid'
+
     const match = text.match(/\b(OKX|BINANCE|HYPERLIQUID)\b/iu)
     if (!match?.[1]) return null
 
@@ -2854,20 +2958,87 @@ export class SemanticSeedExtractorService {
   }
 
   private extractFirstTimeframe(text: string): string | null {
-    const compactMatch = text.match(/\b(\d{1,2})(m|h|d)\b/iu)
+    const compactMatch = text.match(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/iu)
     if (compactMatch?.[1] && compactMatch[2]) {
-      return `${compactMatch[1]}${compactMatch[2].toLowerCase()}`
+      return `${compactMatch[1]}${this.normalizeTimeframeUnit(compactMatch[2])}`
     }
 
-    const chineseMatch = text.match(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/u)
-    if (!chineseMatch?.[1] || !chineseMatch[2]) return null
-    const unit = chineseMatch[2]
-    const suffix = unit === '分钟' || unit === '分'
-      ? 'm'
-      : unit === '小时' || unit === '时'
-        ? 'h'
-        : 'd'
-    return `${chineseMatch[1]}${suffix}`
+    for (const chineseMatch of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+      if (!chineseMatch[1] || !chineseMatch[2]) continue
+      if (this.isIndicatorPeriodTimeframeCandidate(text, chineseMatch.index ?? -1, chineseMatch[0].length)) continue
+
+      return `${chineseMatch[1]}${this.normalizeTimeframeUnit(chineseMatch[2])}`
+    }
+    return null
+  }
+
+  private hasMultiTimeframeMovingAveragePredicateScope(text: string): boolean {
+    return this.splitSegments(text).some(segment =>
+      this.splitCommaClauses(segment).some(clause =>
+        this.splitConjunctionClauses(clause).some((subClause) => {
+          const timeframes = this.extractAllTimeframes(subClause)
+          return timeframes.length > 1
+            && /(?:MA|EMA)\s*\d+|均线/iu.test(subClause)
+            && /突破|上穿|站上|高于|上方|跌破|下穿|失守|低于|下方/u.test(subClause)
+            && (this.resolveTradeIntent(subClause) ?? this.resolveTradeIntent(clause)) !== null
+        }),
+      ),
+    )
+  }
+
+  private splitConjunctionClauses(clause: string): string[] {
+    if (!/(?:并且|同时|且|并)/u.test(clause)) {
+      return [clause]
+    }
+
+    const subClauses = clause
+      .split(/(?:并且|同时|且|并)/u)
+      .map(part => part.trim())
+      .filter(Boolean)
+
+    return subClauses.length > 0 ? subClauses : [clause]
+  }
+
+  private extractAllTimeframes(text: string): string[] {
+    const values: string[] = []
+    const seen = new Set<string>()
+    const push = (value: string) => {
+      if (seen.has(value)) return
+      seen.add(value)
+      values.push(value)
+    }
+
+    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/giu)) {
+      if (!match[1] || !match[2]) continue
+      push(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`)
+    }
+
+    for (const match of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+      if (!match[1] || !match[2]) continue
+      if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
+      push(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`)
+    }
+
+    return values
+  }
+
+  private normalizeTimeframeUnit(unit: string): 'm' | 'h' | 'd' {
+    const normalizedUnit = unit.toLowerCase()
+    if (normalizedUnit.startsWith('m') || normalizedUnit === '分钟' || normalizedUnit === '分') return 'm'
+    if (normalizedUnit.startsWith('h') || normalizedUnit === '小时' || normalizedUnit === '时') return 'h'
+    return 'd'
+  }
+
+  private isIndicatorPeriodTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {
+    if (matchIndex < 0) return false
+
+    const prefix = text.slice(Math.max(0, matchIndex - 16), matchIndex)
+    if (/(?:EMA|SMA|MA|均线)\s*$/iu.test(prefix)) {
+      return true
+    }
+
+    const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 16)
+    return /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
   }
 
   private extractNumber(text: string, patterns: RegExp[]): number | null {
@@ -2926,7 +3097,37 @@ export class SemanticSeedExtractorService {
 
     const tail = segment.slice(start).trim()
     if (tail) clauses.push(tail)
-    return clauses.length > 0 ? clauses : [segment]
+    const explicitClauses = clauses.length > 0 ? clauses : [segment]
+    return explicitClauses.flatMap(clause => this.splitImplicitTradeClauses(clause))
+  }
+
+  private splitImplicitTradeClauses(clause: string): string[] {
+    const parts: string[] = []
+    let start = 0
+
+    for (const match of clause.matchAll(/\s+/gu)) {
+      const index = match.index ?? -1
+      if (index <= start) continue
+
+      const before = clause.slice(start, index).trim()
+      const after = clause.slice(index + match[0].length).trim()
+      if (!before || !after) continue
+      if (!this.hasExecutableTradeIntent(before)) continue
+      if (!this.looksLikeNewExecutableClause(after)) continue
+
+      parts.push(before)
+      start = index + match[0].length
+    }
+
+    const tail = clause.slice(start).trim()
+    if (tail) parts.push(tail)
+    return parts.length > 0 ? parts : [clause]
+  }
+
+  private looksLikeNewExecutableClause(text: string): boolean {
+    return /^(?:如果|当|若|在)?\s*(?:(?:\d{1,2}\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|分钟|分|小时|时|天|日))|(?:价格|K线|k线|收盘价|开盘价|close|open|MA|EMA|均线|RSI|MACD|布林|bollinger))/iu.test(text)
+      && this.hasExecutableTradeIntent(text)
+      && this.hasExecutableConditionOperator(text)
   }
 
   private isBollingerParamComma(segment: string, commaIndex: number): boolean {

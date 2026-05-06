@@ -39,7 +39,7 @@ describe('SemanticContractShapeNormalizerService', () => {
       status: 'open',
       priority: 'core',
       affectsExecution: true,
-      questionHint: expect.any(String),
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
     }])
   })
 
@@ -64,6 +64,27 @@ describe('SemanticContractShapeNormalizerService', () => {
     })
   })
 
+  it('accepts percent spacing as density for centered percent ranges', () => {
+    const result = service.normalizeLevelSetShape({
+      mode: 'centered_percent_range',
+      centerSource: 'last_price',
+      totalRangePct: 10,
+      spacingPct: 0.5,
+    }, { requireDensity: true })
+
+    expect(result).toEqual({
+      status: 'valid',
+      shape: {
+        mode: 'centered_percent_range',
+        centerSource: 'last_price',
+        halfRangePct: 5,
+        spacingPct: 0.5,
+        spacingMode: 'arithmetic',
+      },
+      openSlots: [],
+    })
+  })
+
   it('reports a spacing conflict when grid count and absolute spacing disagree', () => {
     const result = service.normalizeLevelSetShape({
       lower: 78800,
@@ -79,7 +100,50 @@ describe('SemanticContractShapeNormalizerService', () => {
         status: 'open',
         priority: 'core',
         affectsExecution: true,
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
       }),
     ])
+  })
+
+  it('reports a spacing conflict when grid count and percent spacing disagree', () => {
+    const result = service.normalizeLevelSetShape({
+      lower: 100,
+      upper: 110,
+      gridCount: 20,
+      spacingPct: 0.5,
+    })
+
+    expect(result.status).toBe('conflict')
+    expect(result.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        status: 'open',
+        priority: 'core',
+        affectsExecution: true,
+        questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+      }),
+    ])
+  })
+
+  it('accepts rounded percent spacing when it matches the grid count within business tolerance', () => {
+    const result = service.normalizeLevelSetShape({
+      lower: 100,
+      upper: 110,
+      gridCount: 20,
+      spacingPct: 0.503,
+    })
+
+    expect(result).toEqual({
+      status: 'valid',
+      shape: {
+        mode: 'fixed_range',
+        lower: 100,
+        upper: 110,
+        gridCount: 20,
+        spacingPct: 0.503,
+        spacingMode: 'arithmetic',
+      },
+      openSlots: [],
+    })
   })
 })

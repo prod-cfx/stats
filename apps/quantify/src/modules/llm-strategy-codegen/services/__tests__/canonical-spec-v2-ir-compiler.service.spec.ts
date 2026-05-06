@@ -259,6 +259,66 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(first.ir.orderPrograms[0]?.levelSetRef).not.toBe(second.ir.orderPrograms[0]?.levelSetRef)
   })
 
+  it('derives fixed-range level count from absolute spacing when grid count is absent', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'perp_neutral',
+          levelSet: {
+            lower: 79200,
+            upper: 80250,
+            absoluteSpacing: 100,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 20,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', baseTimeframe: '15m', positionPct: 10 },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        spacing: { mode: 'absolute', value: 100 },
+        levelsPerSide: { down: 0, up: 10 },
+      }),
+    ])
+    expect(result.ir.orderPrograms[0]).toEqual(expect.objectContaining({
+      maxWorkingOrders: 11,
+    }))
+  })
+
   it('keeps contract order programs exclusive from legacy grid decision rules', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -590,6 +650,85 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(levelLength)
     },
   )
+
+  it('derives centered-percent interval count from percent spacing when grid count is absent', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'spot',
+          levelSet: {
+            mode: 'centered_percent_range',
+            centerTiming: 'deployment',
+            centerSource: 'last_price',
+            halfRangePct: 0.4,
+            spacingPct: 0.08,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 10,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        spacing: { mode: 'pct', value: 0.08 },
+        levelsPerSide: { down: 5, up: 5 },
+      }),
+    ])
+
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
+    const exprValues = evaluateExprPool(
+      {
+        bars: [{ open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99, volume: 1, timestamp: 1 },
+      },
+      ast.exprPool as any,
+      ast.topology.exprOrder,
+      ast.executionModel as any,
+    )
+    const evaluatedLevels = levelSetExpr ? exprValues[levelSetExpr.id] : null
+
+    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(11)
+  })
 
   it.each([
     [
@@ -1287,6 +1426,74 @@ describe('canonicalSpecV2IrCompilerService', () => {
     })
 
     expect(result.ir.market.timeframes).toEqual(['3m', '15m'])
+  })
+
+  it('compiles per-trigger timeframe indicator compare atoms into timeframe-specific MA predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+          timeframes: ['15m', '1h', '4h'],
+        },
+        indicators: [{ kind: 'ema', params: { period: 20 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m', '1h', '4h'],
+        },
+        rules: ['15m', '1h', '4h'].map((timeframe, index) => ({
+          id: `entry-ema-above-${timeframe}`,
+          phase: 'entry',
+          priority: 100 - index,
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.above',
+            semanticScope: 'market',
+            op: 'GTE',
+            params: {
+              indicator: 'ema',
+              referenceRole: 'long_term',
+              'reference.period': 20,
+              timeframe,
+            },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        })),
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.market.timeframes).toEqual(['15m', '1h', '4h'])
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'close_15m', kind: 'PRICE', timeframe: '15m' }),
+      expect.objectContaining({ id: 'ema_20_15m', kind: 'EMA', timeframe: '15m' }),
+      expect.objectContaining({ id: 'close_1h', kind: 'PRICE', timeframe: '1h' }),
+      expect.objectContaining({ id: 'ema_20_1h', kind: 'EMA', timeframe: '1h' }),
+      expect.objectContaining({ id: 'close_4h', kind: 'PRICE', timeframe: '4h' }),
+      expect.objectContaining({ id: 'ema_20_4h', kind: 'EMA', timeframe: '4h' }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GTE', args: ['close_15m', 'ema_20_15m'] }),
+      expect.objectContaining({ kind: 'GTE', args: ['close_1h', 'ema_20_1h'] }),
+      expect.objectContaining({ kind: 'GTE', args: ['close_4h', 'ema_20_4h'] }),
+    ]))
   })
 
   it('normalizes position_gain_pct thresholds to runtime percent units', () => {

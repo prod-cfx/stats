@@ -403,6 +403,18 @@ export class CanonicalSpecV2IrCompilerService {
     intent: CanonicalOrderProgramIntent,
     levelCount: number,
   ): LevelSetDef['spacing'] {
+    if (
+      intent.levelSet.mode !== 'centered_percent_range'
+      && typeof intent.levelSet.absoluteSpacing === 'number'
+      && Number.isFinite(intent.levelSet.absoluteSpacing)
+      && intent.levelSet.absoluteSpacing > 0
+    ) {
+      return {
+        mode: 'absolute',
+        value: intent.levelSet.absoluteSpacing,
+      }
+    }
+
     if (typeof intent.levelSet.spacingPct === 'number' && Number.isFinite(intent.levelSet.spacingPct)) {
       return {
         mode: 'pct',
@@ -517,7 +529,55 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private resolveIntentLevelCount(intent: CanonicalOrderProgramIntent): number {
-    return Math.max(2, Math.floor(intent.levelSet.gridCount ?? 2))
+    const explicitGridCount = this.toPositiveInteger(intent.levelSet.gridCount)
+    if (explicitGridCount !== null) {
+      return Math.max(2, explicitGridCount)
+    }
+
+    const derivedGridCount = this.deriveLevelCountFromSpacing(intent)
+    if (derivedGridCount !== null) {
+      return Math.max(2, derivedGridCount)
+    }
+
+    return 2
+  }
+
+  private deriveLevelCountFromSpacing(intent: CanonicalOrderProgramIntent): number | null {
+    if (intent.levelSet.mode === 'centered_percent_range') {
+      const halfRangePct = typeof intent.levelSet.halfRangePct === 'number' ? intent.levelSet.halfRangePct : null
+      const spacingPct = typeof intent.levelSet.spacingPct === 'number' ? intent.levelSet.spacingPct : null
+      if (halfRangePct === null || spacingPct === null || halfRangePct <= 0 || spacingPct <= 0) {
+        return null
+      }
+
+      return Math.floor((halfRangePct * 2) / spacingPct)
+    }
+
+    const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : null
+    const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : null
+    if (lower === null || upper === null || upper <= lower) {
+      return null
+    }
+
+    const absoluteSpacing = typeof intent.levelSet.absoluteSpacing === 'number' ? intent.levelSet.absoluteSpacing : null
+    if (absoluteSpacing !== null && absoluteSpacing > 0) {
+      return Math.floor((upper - lower) / absoluteSpacing) + 1
+    }
+
+    const spacingPct = typeof intent.levelSet.spacingPct === 'number' ? intent.levelSet.spacingPct : null
+    if (spacingPct === null || spacingPct <= 0 || lower <= 0) {
+      return null
+    }
+
+    return Math.floor(Math.log(upper / lower) / Math.log(1 + spacingPct / 100)) + 1
+  }
+
+  private toPositiveInteger(value: number | undefined): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    return Math.floor(value)
   }
 
   private resolveOrderProgramPositionMode(
@@ -963,6 +1023,21 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'indicator.above':
+      case 'indicator.below': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
+        const indicatorRef = this.ensureIndicatorReferenceSeries(context, atom, timeframe)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          atom.key === 'indicator.above' ? 'GTE' : 'LTE',
+          [closeRef, indicatorRef],
+        )
+      }
+
       case 'rsi.threshold_lte':
       case 'rsi.threshold_gte':
       case 'rsi.cross_over':
@@ -1225,6 +1300,27 @@ export class CanonicalSpecV2IrCompilerService {
       })
     }
     return id
+  }
+
+  private ensureIndicatorReferenceSeries(
+    context: CompileContext,
+    atom: CanonicalConditionAtom,
+    timeframe: string,
+  ): string {
+    const indicator = typeof atom.params?.indicator === 'string'
+      ? atom.params.indicator.trim().toLowerCase()
+      : ''
+    const period = this.readNumber([atom.params?.['reference.period'], atom.params?.period], context.movingAverage.slow)
+
+    if (indicator === 'ema') {
+      return this.ensureIndicatorSeries(context, 'EMA', period, timeframe)
+    }
+
+    if (indicator === 'ma' || indicator === 'sma' || indicator.length === 0) {
+      return this.ensureIndicatorSeries(context, 'SMA', period, timeframe)
+    }
+
+    throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {

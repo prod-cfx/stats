@@ -4672,7 +4672,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           reason: 'missing_semantic_contract_requirement',
           field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
           blocking: true,
-          question: '请补充 price define level_set 执行合约。',
+          question: '请补充网格价格区间和网格数量或每格间距。',
           status: 'pending',
           slotKey: 'contract.requirement.price.define.level_set',
           fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
@@ -4745,7 +4745,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           reason: 'missing_semantic_contract_requirement',
           field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].requires.price.define.level_set',
           blocking: true,
-          question: '请补充 price define level_set 执行合约。',
+          question: '请补充网格价格区间和网格数量或每格间距。',
           status: 'pending',
         },
         {
@@ -5825,6 +5825,170 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
     expect(clarification.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.trigger.entry' }),
+    ]))
+  })
+
+  it('fulfills missing entry atom from follow-up EMA state fragment', async () => {
+    const semanticState = {
+      version: 1,
+      families: [],
+      triggers: [{
+        id: 'semantic-missing-entry-atom',
+        key: 'semantic.missing_entry_atom',
+        phase: 'entry',
+        params: {},
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'trigger.entry',
+          fieldPath: 'triggers[entry]',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请补充入场触发条件。',
+          affectsExecution: true,
+        }],
+      }],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所。', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择标的。', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型。', affectsExecution: true },
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-05T00:00:00.000Z',
+    }
+    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+      id: 's-follow-up-entry-fragment',
+      semanticState,
+      status: 'DRAFTING',
+    }))
+
+    const result = await service.continueSession('s-follow-up-entry-fragment', {
+      userId: 'u1',
+      message: '15min k线在 ema20 上方开多',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+  })
+
+  it('does not ask for entry trigger when first-turn multi-timeframe EMA wording has an entry atom', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-first-turn-mtf-ema' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 1h 4h 价格都在 ema20 的上方 买入',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+    ]))
+    expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+  })
+
+  it('keeps space-separated multi-timeframe EMA entry and exit distinct through first-turn conversation state', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-first-turn-space-mtf-ema-exit' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请确认交易所')
+    expect(result.assistantPrompt ?? '').not.toContain('请确认策略主周期')
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
+    expect(result.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+    expect(result.assistantPrompt ?? '').not.toContain('入场：突破 MA20')
+    expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'binance',
+    }))
+    expect(createPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'BTCUSDT',
+    }))
+    expect(createPayload.semanticState.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'perp',
+    }))
+    expect(createPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '5m',
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '5m' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    ]))
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+      expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
     ]))
   })
 
@@ -9737,7 +9901,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
 
-  it('rejects the MA golden case after confirmGenerate instead of publishing through checklist fallback', async () => {
+  it('publishes the MA golden case after confirmGenerate through semantic indicator compare compilation', async () => {
     await startGoldenCase({
       sessionId: 's-golden-ma-publish',
       message: maGoldenCase.message,
@@ -9800,10 +9964,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-golden-ma-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
-      status: 'REJECTED',
-      rejectReason: expect.stringContaining('codegen.canonical_spec_v2_condition_unsupported:indicator.above'),
+      status: 'PUBLISHED',
+      rejectReason: null,
+      latestSpecDesc: expect.objectContaining({
+        canonicalSpec: expect.objectContaining({
+          rules: expect.arrayContaining([
+            expect.objectContaining({
+              condition: expect.objectContaining({ key: 'indicator.above' }),
+            }),
+            expect.objectContaining({
+              condition: expect.objectContaining({ key: 'indicator.below' }),
+            }),
+          ]),
+        }),
+      }),
     }))
-    expect(mockRepo.createVersion).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).toHaveBeenCalled()
   })
 
 
@@ -11618,7 +11794,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
   })
 
-  it('surfaces missing contract requirements through semantic open slots instead of legacy blockers', async () => {
+  it('surfaces missing level_set contract requirements through semantic open slots instead of legacy blockers', async () => {
     const semanticState = buildLockedMaSemanticState({
       actions: [
         {
@@ -11673,7 +11849,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('price define level_set')
+    expect(result.assistantPrompt).toContain('请补充网格价格区间和网格数量或每格间距。')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('未识别可编译出场规则')
     expect(result.clarificationState.items).toEqual(expect.arrayContaining([
@@ -11698,6 +11874,731 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             status: 'open',
           }),
         ]),
+      }),
+    ]))
+  })
+
+  it('consumes a 20格 reply into the active level_set density open slot without planner fallback', async () => {
+    const densitySlot = {
+      slotKey: 'contract.shape.price.level_set.density',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [densitySlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        asset: 'USDT',
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [{
+        key: 'semantic.contract.shape.price.level_set.density',
+        field: densitySlot.fieldPath,
+        fieldPath: densitySlot.fieldPath,
+        slotKey: densitySlot.slotKey,
+        slotId: buildSemanticSlotId(densitySlot as any),
+        status: 'pending',
+        blocking: true,
+        priority: 90,
+        prompt: densitySlot.questionHint,
+        reason: 'missing_semantic_contract_requirement',
+      }],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-grid-density-short-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我会把 20 格理解为新的策略补丁。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-density-short-answer', {
+      userId: 'u1',
+      message: '20格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'grid-range-rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'contract.shape.price.level_set.density',
+            status: 'open',
+          }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({
+              gridCount: 20,
+            }),
+          })],
+        })],
+      }),
+    ]))
+    expect(result.assistantPrompt).not.toContain('请确认网格数量')
+    expect(result.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('consumes structured 20格 clarificationAnswers into the active level_set density open slot without planner fallback', async () => {
+    const densitySlot = {
+      slotKey: 'contract.shape.price.level_set.density',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [densitySlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        asset: 'USDT',
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const clarificationKey = 'semantic.contract.shape.price.level_set.density'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [{
+        key: clarificationKey,
+        field: densitySlot.fieldPath,
+        fieldPath: densitySlot.fieldPath,
+        slotKey: densitySlot.slotKey,
+        slotId: buildSemanticSlotId(densitySlot as any),
+        status: 'pending',
+        blocking: true,
+        priority: 90,
+        prompt: densitySlot.questionHint,
+        reason: 'missing_semantic_contract_requirement',
+      }],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-grid-density-structured-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner should not see this structured answer',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-density-structured-answer', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        [clarificationKey]: '20格',
+      },
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'grid-range-rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'contract.shape.price.level_set.density',
+            status: 'open',
+          }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({
+              gridCount: 20,
+            }),
+          })],
+        })],
+      }),
+    ]))
+    expect(result.assistantPrompt).not.toContain('请确认网格数量')
+    expect(result.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it.each([
+    {
+      name: 'freeform keep grid count',
+      message: '保留网格数量',
+      clarificationAnswers: undefined,
+      expectedShape: { gridCount: 11 },
+      removedShape: { absoluteSpacing: 100 },
+    },
+    {
+      name: 'structured keep spacing',
+      message: '继续',
+      clarificationAnswers: { 'semantic.contract.shape.price.level_set.spacing_conflict': '保留每格间距' },
+      expectedShape: { absoluteSpacing: 100 },
+      removedShape: { gridCount: 11 },
+    },
+    {
+      name: 'structured keep percent spacing',
+      message: '继续',
+      clarificationAnswers: { 'semantic.contract.shape.price.level_set.spacing_conflict': '保留每格间距' },
+      shape: {
+        lower: 100,
+        upper: 110,
+        gridCount: 20,
+        spacingPct: 0.5,
+        spacingMode: 'arithmetic',
+      },
+      expectedShape: { spacingPct: 0.5 },
+      removedShape: { gridCount: 20 },
+    },
+  ])('consumes level_set spacing conflict answer through conversation: $name', async ({
+    message,
+    clarificationAnswers,
+    shape,
+    expectedShape,
+    removedShape,
+  }) => {
+    const conflictSlot = {
+      slotKey: 'contract.shape.price.level_set.spacing_conflict',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '网格数量和每格间距与当前价格区间不一致，请确认保留网格数量还是每格间距。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [conflictSlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: shape ?? {
+                lower: 79200,
+                upper: 80200,
+                gridCount: 11,
+                absoluteSpacing: 100,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        asset: 'USDT',
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const clarificationKey = 'semantic.contract.shape.price.level_set.spacing_conflict'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [{
+        key: clarificationKey,
+        field: conflictSlot.fieldPath,
+        fieldPath: conflictSlot.fieldPath,
+        slotKey: conflictSlot.slotKey,
+        slotId: buildSemanticSlotId(conflictSlot as any),
+        status: 'pending',
+        blocking: true,
+        priority: 90,
+        prompt: conflictSlot.questionHint,
+        reason: 'missing_semantic_contract_requirement',
+      }],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: `s-grid-spacing-conflict-${message}`,
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner should not see spacing conflict answers',
+      }),
+    })
+
+    const result = await service.continueSession(`s-grid-spacing-conflict-${message}`, {
+      userId: 'u1',
+      message,
+      ...(clarificationAnswers ? { clarificationAnswers } : {}),
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const levelSetShape = updatePayload.semanticState.triggers[0].contracts[0].capabilities[0].shape
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(levelSetShape).toEqual(expect.objectContaining(expectedShape))
+    expect(levelSetShape).not.toEqual(expect.objectContaining(removedShape))
+    expect(updatePayload.semanticState.triggers[0].openSlots).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        status: 'open',
+      }),
+    ]))
+    expect(result.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.spacing_conflict',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('scopes structured level_set resolution so position 10% and density 20格 close their own slots', async () => {
+    const densitySlot = {
+      slotKey: 'contract.shape.price.level_set.density',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [densitySlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: null,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const densityKey = 'semantic.contract.shape.price.level_set.density'
+    const positionKey = 'semantic.position.sizing'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: positionKey,
+          field: positionSlot.fieldPath,
+          fieldPath: positionSlot.fieldPath,
+          slotKey: positionSlot.slotKey,
+          slotId: buildSemanticSlotId(positionSlot as any),
+          status: 'pending',
+          blocking: true,
+          priority: 70,
+          prompt: positionSlot.questionHint,
+          reason: 'missing_semantic_position_sizing',
+        },
+        {
+          key: densityKey,
+          field: densitySlot.fieldPath,
+          fieldPath: densitySlot.fieldPath,
+          slotKey: densitySlot.slotKey,
+          slotId: buildSemanticSlotId(densitySlot as any),
+          status: 'pending',
+          blocking: true,
+          priority: 90,
+          prompt: densitySlot.questionHint,
+          reason: 'missing_semantic_contract_requirement',
+        },
+      ],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-grid-density-and-position-structured-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner should not see mixed structured answers',
+      }),
+    })
+
+    await service.continueSession('s-grid-density-and-position-structured-answer', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        [positionKey]: '10%',
+        [densityKey]: '20格',
+      },
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const levelSetShape = updatePayload.semanticState.triggers[0].contracts[0].capabilities[0].shape
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      status: 'locked',
+      openSlots: [],
+    }))
+    expect(levelSetShape).toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+    expect(levelSetShape).not.toEqual(expect.objectContaining({
+      spacingPct: 10,
+    }))
+    expect(updatePayload.semanticState.triggers[0].openSlots).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+      }),
+    ]))
+  })
+
+  it('does not consume level_set density from a position-only structured 10% answer', async () => {
+    const densitySlot = {
+      slotKey: 'contract.shape.price.level_set.density',
+      fieldPath: 'triggers[grid-range-rebalance].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+      affectsExecution: true,
+    }
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    }
+    const semanticState = buildLockedMaSemanticState({
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-range-rebalance',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeMin: 79200,
+            rangeMax: 80200,
+            sideMode: 'both',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [densitySlot],
+          contracts: [{
+            id: 'contract-grid-levels',
+            kind: 'trigger',
+            capabilities: [{
+              domain: 'price',
+              verb: 'define',
+              object: 'level_set',
+              shape: {
+                lower: 79200,
+                upper: 80200,
+                spacingMode: 'arithmetic',
+              },
+            }],
+            requires: [],
+            params: {},
+          }],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [
+        { id: 'risk-stop-loss', key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'risk-take-profit', key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' }, status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: null,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        timeframe: {
+          ...buildLockedMaSemanticState().contextSlots.timeframe,
+          value: '15m',
+        },
+      },
+    })
+    const positionKey = 'semantic.position.sizing'
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [{
+        key: positionKey,
+        field: positionSlot.fieldPath,
+        fieldPath: positionSlot.fieldPath,
+        slotKey: positionSlot.slotKey,
+        slotId: buildSemanticSlotId(positionSlot as any),
+        status: 'pending',
+        blocking: true,
+        priority: 70,
+        prompt: positionSlot.questionHint,
+        reason: 'missing_semantic_position_sizing',
+      }],
+    }
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-grid-density-position-only-structured-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState,
+      clarificationState,
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '请继续补充网格数量。',
+      }),
+    })
+
+    await service.continueSession('s-grid-density-position-only-structured-answer', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        [positionKey]: '10%',
+      },
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const levelSetShape = updatePayload.semanticState.triggers[0].contracts[0].capabilities[0].shape
+
+    expect(updatePayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      status: 'locked',
+    }))
+    expect(levelSetShape).not.toEqual(expect.objectContaining({
+      spacingPct: 10,
+    }))
+    expect(levelSetShape).not.toEqual(expect.objectContaining({
+      gridCount: expect.any(Number),
+    }))
+    expect(updatePayload.semanticState.triggers[0].openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
       }),
     ]))
   })
@@ -12079,6 +12980,179 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         })],
       }),
     ]))
+  })
+
+  it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'both',
+            params: {
+              rangeMin: 79200,
+              rangeMax: 80200,
+              sideMode: 'bidirectional',
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-density' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 上用 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，单笔 10%',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-bidirectional-grid-density',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-bidirectional-grid-density', {
+      userId: 'u1',
+      message: '10格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
+  it('consumes freeform percent spacing for a bare fixed bidirectional grid density slot', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'both',
+            params: {
+              rangeMin: 79200,
+              rangeMax: 80200,
+              sideMode: 'bidirectional',
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bare-bidirectional-grid-density' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15m 周期，价格区间 79200-80200，采用双向网格',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-bare-bidirectional-grid-density',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-bare-bidirectional-grid-density', {
+      userId: 'u1',
+      message: '步长0.5%',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ spacingPct: 0.5 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
+  it('keeps complete percent-spaced bidirectional fixed grid out of spacing-conflict prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-percent-spacing' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，每格间距 0.1%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('CONFIRM_GATE')
+    expect(started.assistantPrompt).not.toContain('网格数量和每格间距')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.spacing_conflict' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ spacingPct: 0.1 }),
+          })],
+        })],
+      }),
+    ]))
+    const gridShape = createPayload.semanticState.triggers
+      ?.find((trigger: { key?: string }) => trigger.key === 'grid.range_rebalance')
+      ?.contracts?.[0]?.capabilities?.find((capability: { object?: string }) => capability.object === 'level_set')
+      ?.shape
+    expect(gridShape).not.toHaveProperty('gridCount')
   })
 
   it('preserves a complete real-grid seed when the user only answers the missing timeframe slot', async () => {

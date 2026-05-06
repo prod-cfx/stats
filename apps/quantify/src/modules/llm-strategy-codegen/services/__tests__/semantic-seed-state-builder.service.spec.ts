@@ -1,10 +1,12 @@
 import { buildSemanticSlotId } from '../../types/semantic-state'
+import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticSeedStateBuilderService', () => {
   const service = new SemanticSeedStateBuilderService()
   const reducer = new SemanticStateReducerService()
+  const openSlotAnswerResolver = new SemanticOpenSlotAnswerResolverService()
   const expectContractRequiredSlot = (fieldPath: string) => expect.objectContaining({
     slotKey: 'contract.required',
     fieldPath,
@@ -103,6 +105,91 @@ describe('SemanticSeedStateBuilderService', () => {
       && item.fieldPath === slot.fieldPath
       && item.status === 'open',
     )).toBeUndefined()
+  })
+
+  it('synthesizes fixed grid level-set contracts with density slots instead of generic contract prompts', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeMin: 79200,
+          rangeMax: 80200,
+          sideMode: 'bidirectional',
+        },
+      }],
+    })
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      key: 'grid.range_rebalance',
+      status: 'open',
+      openSlots: expect.arrayContaining([expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+        questionHint: expect.stringContaining('网格数量或每格间距'),
+      })]),
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: expect.objectContaining({
+            mode: 'fixed_range',
+            lower: 79200,
+            upper: 80200,
+          }),
+        })],
+      })],
+    }))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
+  it('closes synthesized fixed grid density slots from percent spacing answers', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeMin: 79200,
+          rangeMax: 80200,
+          sideMode: 'bidirectional',
+        },
+      }],
+    })
+    const densitySlot = state?.triggers[0]?.openSlots.find(slot =>
+      slot.slotKey === 'contract.shape.price.level_set.density',
+    )
+    expect(densitySlot).toBeDefined()
+
+    const resolved = openSlotAnswerResolver.resolve({
+      currentState: state!,
+      message: '步长0.5%',
+      clarificationState: {
+        items: [{
+          status: 'pending',
+          slotKey: densitySlot!.slotKey,
+          fieldPath: densitySlot!.fieldPath,
+          slotId: buildSemanticSlotId(densitySlot!),
+        }],
+      },
+    })
+    if (!resolved.consumed) {
+      throw new Error('expected grid density answer to be consumed')
+    }
+
+    const shape = resolved.nextState.triggers[0]?.contracts?.[0]?.capabilities[0]?.shape
+
+    expect(shape).toEqual(expect.objectContaining({
+      spacingPct: 0.5,
+    }))
+    expect(resolved.nextState.triggers[0]?.openSlots).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+      }),
+    ]))
   })
 
   it('creates answerable confirmation slots for universal bollinger boundary atoms', () => {
