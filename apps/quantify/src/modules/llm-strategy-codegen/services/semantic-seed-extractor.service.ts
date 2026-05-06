@@ -65,10 +65,12 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
-      eventFramePatch.triggers ?? [],
-      this.extractTriggers(text, aliasContext),
-    ))))
+    const triggers = this.atomizeTriggers(this.removeStaticIndicatorTriggersCoveredBySequences(
+      this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
+        eventFramePatch.triggers ?? [],
+        this.extractTriggers(text, aliasContext),
+      ))),
+    ))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),
@@ -3463,6 +3465,121 @@ export class SemanticSeedExtractorService {
 
   private buildLogicalAnyOfChildSignature(key: string, params: unknown): string {
     return JSON.stringify([key, this.stableValue(params ?? {})])
+  }
+
+  private removeStaticIndicatorTriggersCoveredBySequences(triggers: SeedTrigger[]): SeedTrigger[] {
+    const coveredIndicatorBoundaries = new Set<string>()
+
+    for (const trigger of triggers) {
+      const boundary = this.readSequenceCoveredIndicatorBoundary(trigger)
+      if (boundary) {
+        coveredIndicatorBoundaries.add(boundary)
+      }
+    }
+
+    if (coveredIndicatorBoundaries.size === 0) return triggers
+
+    return triggers.filter((trigger) => {
+      const boundary = this.readStaticIndicatorBoundary(trigger)
+      return !boundary || !coveredIndicatorBoundaries.has(boundary)
+    })
+  }
+
+  private readSequenceCoveredIndicatorBoundary(trigger: SeedTrigger): string | null {
+    if (trigger.key !== 'condition.sequence') return null
+
+    const sequenceKind = trigger.params?.sequenceKind
+    if (sequenceKind !== 'pullback_reclaim' && sequenceKind !== 'rsi_reclaim') {
+      return null
+    }
+
+    if (sequenceKind === 'pullback_reclaim') {
+      const reference = trigger.params?.reference
+      if (!this.isPlainObject(reference)) return null
+      const indicator = typeof reference.indicator === 'string' ? reference.indicator.toLowerCase() : null
+      const period = typeof reference.period === 'number' && Number.isFinite(reference.period) ? reference.period : null
+      if (!indicator || period === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: 'indicator.above',
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator,
+        period,
+      })
+    }
+
+    const threshold = typeof trigger.params?.threshold === 'number' && Number.isFinite(trigger.params.threshold)
+      ? trigger.params.threshold
+      : null
+    if (threshold === null) return null
+
+    return this.buildStaticIndicatorBoundarySignature({
+      key: 'oscillator.rsi_gte',
+      phase: trigger.phase,
+      sideScope: trigger.sideScope,
+      indicator: 'rsi',
+      period: typeof trigger.params?.period === 'number' && Number.isFinite(trigger.params.period)
+        ? trigger.params.period
+        : 14,
+      threshold,
+    })
+  }
+
+  private readStaticIndicatorBoundary(trigger: SeedTrigger): string | null {
+    if (trigger.key === 'indicator.above' || trigger.key === 'indicator.below') {
+      const indicator = typeof trigger.params?.indicator === 'string' ? trigger.params.indicator.toLowerCase() : 'ma'
+      const period = typeof trigger.params?.['reference.period'] === 'number' && Number.isFinite(trigger.params['reference.period'])
+        ? trigger.params['reference.period']
+        : null
+      if (period === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator,
+        period,
+      })
+    }
+
+    if (trigger.key === 'oscillator.rsi_gte' || trigger.key === 'oscillator.rsi_lte') {
+      const threshold = typeof trigger.params?.value === 'number' && Number.isFinite(trigger.params.value)
+        ? trigger.params.value
+        : null
+      if (threshold === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator: 'rsi',
+        period: typeof trigger.params?.period === 'number' && Number.isFinite(trigger.params.period)
+          ? trigger.params.period
+          : 14,
+        threshold,
+      })
+    }
+
+    return null
+  }
+
+  private buildStaticIndicatorBoundarySignature(input: {
+    key: string
+    phase: SeedTrigger['phase']
+    sideScope?: SeedTrigger['sideScope']
+    indicator: string
+    period: number
+    threshold?: number
+  }): string {
+    return JSON.stringify([
+      input.key,
+      input.phase,
+      input.sideScope ?? null,
+      input.indicator,
+      input.period,
+      input.threshold ?? null,
+    ])
   }
 
   private resolveLegacyBollingerBoundaryRole(key: string): 'upper' | 'lower' | 'middle' | null {

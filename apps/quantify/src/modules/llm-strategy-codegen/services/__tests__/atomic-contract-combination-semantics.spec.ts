@@ -122,6 +122,17 @@ describe('atomic contract combination semantics', () => {
         }),
       }),
     })
+    expect(state.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 20,
+        }),
+      }),
+    ]))
     expect(state.contextSlots.symbol).toEqual(expect.objectContaining({ value: 'ETHUSDT', status: 'locked' }))
     expect(state.contextSlots.timeframe).toEqual(expect.objectContaining({ value: '1d', status: 'locked' }))
   })

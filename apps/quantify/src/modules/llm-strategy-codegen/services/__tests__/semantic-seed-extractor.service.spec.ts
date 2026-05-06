@@ -1416,6 +1416,40 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('keeps pullback reclaim as sequence without duplicating a static MA entry boundary', () => {
+    const patch = service.extract('ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          sequenceKind: 'pullback_reclaim',
+          reference: expect.objectContaining({
+            indicator: 'ma',
+            period: 20,
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 20,
+        }),
+      }),
+    ]))
+  })
+
   it('keeps mixed MA filter wording as multiple above atoms without crossover', () => {
     const patch = service.extract('价格上穿 MA50 且高于 MA200 买入；单笔 10%。')
 
