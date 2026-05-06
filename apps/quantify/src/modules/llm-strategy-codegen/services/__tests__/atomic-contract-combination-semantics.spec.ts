@@ -1,0 +1,298 @@
+import type { SemanticSupportClassification } from '../semantic-support-classifier.service'
+import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
+import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
+import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+
+const extractor = new SemanticSeedExtractorService()
+const builder = new SemanticSeedStateBuilderService()
+const classifier = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
+
+interface PipelineResult {
+  state: SemanticState
+  classification: SemanticSupportClassification
+}
+
+function runPipeline(message: string): PipelineResult {
+  const patch = extractor.extract(message)
+  const state = builder.build(patch)
+
+  expect(state).not.toBeNull()
+  if (!state) {
+    throw new Error('semantic_state_build_failed')
+  }
+
+  const classification = classifier.classify(state)
+
+  return {
+    state: classification.state,
+    classification,
+  }
+}
+
+function expectTrigger(
+  state: SemanticState,
+  expected: Partial<SemanticTriggerState> & Pick<SemanticTriggerState, 'key' | 'phase'>,
+): SemanticTriggerState {
+  const trigger = state.triggers.find(candidate => (
+    candidate.key === expected.key
+    && candidate.phase === expected.phase
+    && (!expected.sideScope || candidate.sideScope === expected.sideScope)
+  ))
+
+  expect(trigger).toEqual(expect.objectContaining(expected))
+  if (!trigger) {
+    throw new Error(`semantic_trigger_missing:${expected.key}:${expected.phase}`)
+  }
+
+  return trigger
+}
+
+function expectOpenSlot(classification: SemanticSupportClassification, slotKey: string): void {
+  expect(classification.openSlots).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      slotKey,
+      status: 'open',
+      affectsExecution: true,
+    }),
+  ]))
+}
+
+describe('atomic contract combination semantics', () => {
+  it('extracts rolling extrema breakout entry and exit contracts', () => {
+    const { state } = runPipeline('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓。')
+
+    expect(state.contextSlots.symbol).toEqual(expect.objectContaining({ value: 'BTCUSDT', status: 'locked' }))
+    expect(state.contextSlots.timeframe).toEqual(expect.objectContaining({ value: '4h', status: 'locked' }))
+    expect(state.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expectTrigger(state, {
+      key: 'price.rolling_extrema_breakout',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        extrema: 'high',
+        lookbackBars: 20,
+        event: 'breakout_up',
+      }),
+    })
+    expectTrigger(state, {
+      key: 'price.rolling_extrema_breakout',
+      phase: 'exit',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        extrema: 'low',
+        lookbackBars: 10,
+        event: 'breakout_down',
+      }),
+    })
+  })
+
+  it('extracts MA trend gate and MA20 pullback reclaim entry sequence', () => {
+    const { state } = runPipeline('ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入。')
+
+    expect(state.contextSlots.symbol).toEqual(expect.objectContaining({ value: 'ETHUSDT', status: 'locked' }))
+    expect(state.contextSlots.timeframe).toEqual(expect.objectContaining({ value: '1d', status: 'locked' }))
+    expectTrigger(state, {
+      key: 'condition.expression',
+      phase: 'gate',
+    })
+    expectTrigger(state, {
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        sequenceKind: 'pullback_reclaim',
+        reference: expect.objectContaining({
+          indicator: 'ma',
+          period: 20,
+        }),
+      }),
+    })
+  })
+
+  it('routes dip-buying with falling-knife guard and rebound confirmation through open slots', () => {
+    const { state, classification } = runPipeline('我想在大跌后抄底，但不要接飞刀，反弹确认后再买。')
+
+    expect(classification.route).toBe('open_slots')
+    expectTrigger(state, {
+      key: 'price.percent_change',
+      phase: 'gate',
+      sideScope: 'long',
+      params: expect.objectContaining({ direction: 'down' }),
+    })
+    expectTrigger(state, {
+      key: 'confirmation.rebound',
+      phase: 'entry',
+      sideScope: 'long',
+    })
+    expect(state.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.falling_knife_guard' }),
+    ]))
+    expect(state.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expectOpenSlot(classification, 'trigger.percent_change.magnitude')
+    expectOpenSlot(classification, 'trigger.confirmation.rebound_definition')
+    expectOpenSlot(classification, 'risk.falling_knife_guard.definition')
+  })
+
+  it('extracts consecutive down candles followed by volume rebound with sizing slot', () => {
+    const { state, classification } = runPipeline('BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。')
+
+    expect(classification.route).toBe('open_slots')
+    expectTrigger(state, {
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        sequenceKind: 'consecutive_candles',
+        count: 3,
+        direction: 'down',
+      }),
+    })
+    expectTrigger(state, {
+      key: 'volume.relative_average',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({ event: 'spike' }),
+    })
+    expectTrigger(state, {
+      key: 'confirmation.rebound',
+      phase: 'entry',
+      sideScope: 'long',
+    })
+    expectOpenSlot(classification, 'position.sizing')
+  })
+
+  it('keeps RSI reclaim semantics distinct from MA50 over MA200 gate', () => {
+    const { state, classification } = runPipeline('BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。')
+
+    expect(classification.route).not.toBe('unsupported_fallback')
+    expectTrigger(state, {
+      key: 'condition.expression',
+      phase: 'gate',
+    })
+    expectTrigger(state, {
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        sequenceKind: 'rsi_reclaim',
+        threshold: 35,
+      }),
+    })
+    expectTrigger(state, {
+      key: 'oscillator.rsi_gte',
+      phase: 'exit',
+      sideScope: 'long',
+      params: expect.objectContaining({ value: 65 }),
+    })
+
+    const rsiValues = state.triggers
+      .filter(trigger => trigger.key.includes('rsi'))
+      .map(trigger => trigger.params.value)
+    expect(rsiValues).not.toContain(1)
+  })
+
+  it('combines Bollinger lower boundary entry with relative average volume confirmation', () => {
+    const { state, classification } = runPipeline('ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。')
+
+    expect(classification.route).not.toBe('unsupported_fallback')
+    expectTrigger(state, {
+      key: 'price.detect.indicator_boundary',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        boundaryRole: 'lower',
+        indicator: expect.objectContaining({ name: 'bollinger' }),
+      }),
+    })
+    expectTrigger(state, {
+      key: 'volume.relative_average',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        lookbackBars: 20,
+        multiplier: 1.5,
+      }),
+    })
+    expectTrigger(state, {
+      key: 'price.detect.indicator_boundary',
+      phase: 'exit',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        boundaryRole: 'upper',
+        indicator: expect.objectContaining({ name: 'bollinger' }),
+      }),
+    })
+  })
+
+  it('extracts MA100 gate, MACD entry and logical any-of exits', () => {
+    const { state, classification } = runPipeline('SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。')
+
+    expect(classification.route).not.toBe('unsupported_fallback')
+    expectTrigger(state, {
+      key: 'indicator.above',
+      phase: 'gate',
+      params: expect.objectContaining({
+        indicator: 'price',
+        reference: expect.objectContaining({
+          indicator: 'ma',
+          period: 100,
+        }),
+      }),
+    })
+    expectTrigger(state, {
+      key: 'indicator.cross_over',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({ indicator: 'macd' }),
+    })
+    expectTrigger(state, {
+      key: 'logical.any_of',
+      phase: 'exit',
+      sideScope: 'long',
+    })
+  })
+
+  it('keeps breakout retest sequence and remembered breakout level stop together', () => {
+    const { state, classification } = runPipeline('BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。')
+
+    expect(classification.route).toBe('open_slots')
+    expectTrigger(state, {
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+      params: expect.objectContaining({
+        sequenceKind: 'breakout_retest',
+        lookbackWindow: '24h',
+      }),
+    })
+    expect(state.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.remembered_level_stop',
+        params: expect.objectContaining({ levelKey: 'breakout' }),
+      }),
+    ]))
+  })
+
+  it('extracts ATR multiple stop and take-profit risk semantics', () => {
+    const { state, classification } = runPipeline('ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈')
+
+    expect(classification.route).not.toBe('unsupported_fallback')
+    expect(state.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_stop',
+        params: expect.objectContaining({ multiple: 2 }),
+      }),
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        params: expect.objectContaining({ multiple: 3 }),
+      }),
+    ]))
+  })
+})
