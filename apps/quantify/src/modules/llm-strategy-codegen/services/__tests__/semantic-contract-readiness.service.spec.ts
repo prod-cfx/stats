@@ -991,6 +991,117 @@ describe('SemanticContractReadinessService', () => {
     }))
   })
 
+  it('keeps trigger risk and position owner open slots blocking readiness', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-dip',
+        key: 'price.percent_change',
+        phase: 'gate',
+        params: { direction: 'down' },
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [{
+          slotKey: 'trigger.percent_change.magnitude',
+          fieldPath: 'triggers[price.percent_change].params.valuePct',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请确认“大跌”的判定幅度，例如 4 小时跌幅超过 5% / 最近 20 根 K 线跌幅超过 8%。',
+          affectsExecution: true,
+        }],
+        contracts: [{
+          id: 'trigger-contract-dip',
+          kind: 'trigger',
+          capabilities: [{
+            domain: 'market',
+            verb: 'read',
+            object: 'latest_bar',
+            shape: {},
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      risk: [{
+        id: 'risk-falling-knife',
+        key: 'risk.falling_knife_guard',
+        status: 'open',
+        source: 'user_explicit',
+        params: {},
+        openSlots: [{
+          slotKey: 'risk.falling_knife_guard.definition',
+          fieldPath: 'risk.params.definition',
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+          affectsExecution: true,
+        }],
+        contracts: [{
+          id: 'risk-contract-falling-knife',
+          kind: 'risk',
+          capabilities: [{
+            domain: 'guard',
+            verb: 'enforce',
+            object: 'falling_knife',
+            shape: {},
+          }],
+          requires: [],
+          params: {},
+        }],
+      }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        sizing: null,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'position.sizing',
+          fieldPath: 'position.sizing',
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认单笔仓位大小，例如 10% / 10 USDT / 0.001 BTC。',
+          affectsExecution: true,
+        }],
+        contracts: [{
+          id: 'position-contract-sizing',
+          kind: 'position',
+          capabilities: [{
+            domain: 'exposure',
+            verb: 'set',
+            object: 'position_mode',
+            shape: { mode: 'long_only' },
+          }],
+          requires: [],
+          params: {},
+        }],
+      },
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'trigger.percent_change.magnitude',
+        fieldPath: 'triggers[price.percent_change].params.valuePct',
+      }),
+    ])
+    expect(result.state.risk[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+      }),
+    ])
+    expect(result.state.position?.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        fieldPath: 'position.sizing',
+      }),
+    ])
+  })
+
   it('does not use open atom capabilities to satisfy contract requirements', () => {
     const state = createSemanticState({
       triggers: [{

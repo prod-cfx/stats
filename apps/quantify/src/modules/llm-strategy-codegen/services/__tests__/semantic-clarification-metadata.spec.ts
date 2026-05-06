@@ -27,6 +27,26 @@ describe('resolveSemanticClarificationMetadata', () => {
   })
 
   it.each([
+    'trigger.percent_change.magnitude',
+    'trigger.confirmation.rebound_definition',
+    'trigger.confirmation.pullback_hold',
+    'trigger.volume.relative_average.lookback_bars',
+    'trigger.volume.relative_average.multiplier',
+  ])('maps %s to semantic trigger metadata', (slotKey) => {
+    expect(resolveSemanticClarificationMetadata(slotKey)).toEqual({
+      reason: 'missing_semantic_trigger',
+      field: 'triggers',
+    })
+  })
+
+  it('maps falling knife guard definition to risk atom metadata', () => {
+    expect(resolveSemanticClarificationMetadata('risk.falling_knife_guard.definition')).toEqual({
+      reason: 'missing_risk_atom',
+      field: 'risk',
+    })
+  })
+
+  it.each([
     [
       'position.mode',
       {

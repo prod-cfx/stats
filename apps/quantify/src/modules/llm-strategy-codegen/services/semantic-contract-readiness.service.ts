@@ -70,26 +70,28 @@ export class SemanticContractReadinessService {
       providerNormalization.shapeSlotsByOwnerKey,
       buildMissingRequirementSlots(missingRequirements),
     )
+    const nextState: SemanticState = {
+      ...state,
+      triggers: state.triggers.map(trigger =>
+        mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
+      ),
+      actions: state.actions.map(action =>
+        mergeOwnerOpenSlots(action, slotsByOwnerKey.get(ownerKey('action', action.id))),
+      ),
+      risk: state.risk.map(risk =>
+        mergeOwnerOpenSlots(risk, slotsByOwnerKey.get(ownerKey('risk', risk.id))),
+      ),
+      position: state.position
+        ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
+        : null,
+    }
 
     return {
-      state: {
-        ...state,
-        triggers: state.triggers.map(trigger =>
-          mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
-        ),
-        actions: state.actions.map(action =>
-          mergeOwnerOpenSlots(action, slotsByOwnerKey.get(ownerKey('action', action.id))),
-        ),
-        risk: state.risk.map(risk =>
-          mergeOwnerOpenSlots(risk, slotsByOwnerKey.get(ownerKey('risk', risk.id))),
-        ),
-        position: state.position
-          ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
-          : null,
-      },
+      state: nextState,
       ready: unsupportedOrUnknownOwnerKeys.size === 0
         && missingRequirements.length === 0
-        && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey),
+        && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
+        && !hasBlockingOwnerOpenSlots(nextState),
       missingRequirements,
     }
   }
@@ -339,6 +341,16 @@ function hasOpenSlots(slotsByOwnerKey: Map<string, SemanticSlotState[]>): boolea
   }
 
   return false
+}
+
+function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
+  return state.triggers.some(ownerHasOpenSlot)
+    || state.risk.some(ownerHasOpenSlot)
+    || ownerHasOpenSlot(state.position)
+}
+
+function ownerHasOpenSlot(owner: { openSlots?: SemanticSlotState[] } | null): boolean {
+  return owner?.openSlots?.some(slot => slot.status === 'open' && slot.affectsExecution) ?? false
 }
 
 function toOpenSlot(requirement: MissingSemanticContractRequirement): SemanticSlotState {
