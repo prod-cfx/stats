@@ -8,6 +8,10 @@ import type { StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma
 import { fillPromptTemplate, parseAiSignalResponse } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
+import {
+  buildSemanticRuntimeState,
+  type SemanticRuntimeState,
+} from '@/modules/strategy-runtime/semantic-runtime-state.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { ScriptDebugUtil } from '../utils/script-debug.util'
@@ -25,6 +29,25 @@ export type PublishedRuntimeSignalOutcome =
   | { kind: 'noop'; reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL'; reason: string }
   | { kind: 'missing_required_truth'; reasonCode: string; fields: string[] }
   | { kind: 'unexpected_error'; reasonCode: string; reason: string }
+
+export interface PublishedStrategyRuntimeContextInput {
+  bars: Array<{
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+    timestamp: number
+  }>
+  symbol: string
+  timeframe: AppMarketTimeframe | string
+  indicators: Record<string, number>
+  currentPrice: number
+  timestamp: number
+  params: Record<string, unknown> | null
+  compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
+  semanticRuntimeState?: SemanticRuntimeState
+}
 
 export class SignalGenerationDecisionStage {
   private readonly runtimeSignalIntentAdapter = new RuntimeSignalIntentAdapter()
@@ -61,7 +84,7 @@ export class SignalGenerationDecisionStage {
           }
           promptData = indicators
         } else {
-          const scriptContext = buildStrategyContext({
+          const scriptContext = this.buildPublishedStrategyContext({
             bars: [],
             symbol: symbol.code,
             timeframe,
@@ -406,6 +429,29 @@ export class SignalGenerationDecisionStage {
     }
 
     return adapted
+  }
+
+  buildSemanticRuntimeState(stateKeys: readonly string[]): SemanticRuntimeState {
+    return buildSemanticRuntimeState(stateKeys)
+  }
+
+  buildPublishedStrategyContext(input: PublishedStrategyRuntimeContextInput): ReturnType<typeof buildStrategyContext> & {
+    __compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
+    semanticRuntimeState?: SemanticRuntimeState
+  } {
+    return {
+      ...buildStrategyContext({
+        bars: input.bars,
+        symbol: input.symbol,
+        timeframe: input.timeframe,
+        indicators: input.indicators,
+        currentPrice: input.currentPrice,
+        timestamp: input.timestamp,
+        params: input.params ?? {},
+      }),
+      ...(input.compiledDecisionState ? { __compiledDecisionState: input.compiledDecisionState } : {}),
+      ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
+    }
   }
 
   buildManualFallbackSignal(

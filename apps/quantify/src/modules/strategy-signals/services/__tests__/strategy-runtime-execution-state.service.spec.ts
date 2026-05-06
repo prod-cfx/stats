@@ -690,6 +690,38 @@ describe('strategyRuntimeExecutionStateService', () => {
     })).toEqual([])
   })
 
+  it('resolves atomic semantic runtime state keys from snapshot compatibility metadata', () => {
+    const { service } = createService()
+    const snapshot = {
+      scriptSummary: {
+        compatibilityMetadata: {
+          isLegacySnapshot: false,
+          atomicContractExecution: {
+            schemaVersion: 1,
+            runtimeRequirements: {
+              helpers: ['rollingHigh'],
+              stateKeys: ['breakout'],
+            },
+          },
+        },
+      },
+      astSnapshot: {
+        runtimeRequirements: {
+          helpers: ['ignoredFallback'],
+          stateKeys: ['ignored'],
+        },
+      },
+    }
+
+    expect(service.buildRuntimeRequirementsFromSnapshot(snapshot)).toEqual({
+      helpers: ['rollingHigh'],
+      stateKeys: ['breakout'],
+    })
+    expect(service.buildSemanticRuntimeStateFromSnapshot(snapshot)).toEqual({
+      breakout: {},
+    })
+  })
+
   it('fails closed for legacy runtime semantic snapshot shapes and accepts only canonical semanticKey objects', () => {
     const { service } = createService()
 

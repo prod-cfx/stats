@@ -57,6 +57,11 @@ import { normalizeGatewayBars } from '@/modules/market-data/services/market-data
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
+import {
+  readAtomicRuntimeRequirementsFromSnapshot,
+  type AtomicRuntimeRequirements,
+  type SemanticRuntimeState,
+} from '@/modules/strategy-runtime/semantic-runtime-state.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import {
@@ -99,6 +104,7 @@ interface RuntimeStrategySource {
   provenance: Prisma.JsonObject
   executionSemanticKeys?: string[]
   executionSemantics?: RuntimeExecutionSemantic[]
+  runtimeRequirements?: AtomicRuntimeRequirements | null
 }
 
 interface RuntimeExecutionSemantic {
@@ -419,6 +425,7 @@ export class SignalGeneratorService {
         runtimeProvenance,
         runtimeSource.executionSemanticKeys ?? [],
         runtimeSource.executionSemantics ?? [],
+        runtimeSource.runtimeRequirements?.stateKeys ?? [],
         config,
         options,
       )
@@ -745,6 +752,7 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
     compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> },
+    semanticRuntimeState?: SemanticRuntimeState,
   ): Promise<PublishedRuntimeSignalOutcome> {
     if (!strategy.script || !this.isStrictPublishedCodegenTemplate(strategy)) {
       return {
@@ -764,18 +772,17 @@ export class SignalGeneratorService {
         requireFinalLatestBar: true,
         timeframe,
       })
-      const scriptContext = {
-        ...buildStrategyContext({
-          bars,
-          symbol: symbol.code,
-          timeframe,
-          indicators: {},
-          currentPrice: referencePrice || 0,
-          timestamp: Date.now(),
-          params: this.buildEffectiveParams(strategy, instance),
-        }),
-        ...(compiledDecisionState ? { __compiledDecisionState: compiledDecisionState } : {}),
-      }
+      const scriptContext = this.decisionStage.buildPublishedStrategyContext({
+        bars,
+        symbol: symbol.code,
+        timeframe,
+        indicators: {},
+        currentPrice: referencePrice || 0,
+        timestamp: Date.now(),
+        params: this.buildEffectiveParams(strategy, instance),
+        compiledDecisionState,
+        semanticRuntimeState,
+      })
 
       const compiledAdapter = this.buildCompiledRuntimeAdapter(strategy.script)
       let scriptValue: unknown
@@ -1330,6 +1337,7 @@ export class SignalGeneratorService {
     runtimeProvenance: Prisma.JsonObject,
     executionSemanticKeys: string[],
     executionSemantics: RuntimeExecutionSemantic[],
+    semanticRuntimeStateKeys: string[],
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
   ) {
@@ -1466,6 +1474,9 @@ export class SignalGeneratorService {
     }
 
     await this.markRuntimeExecutionStateRunning(activeRuntimeState)
+    const semanticRuntimeState = semanticRuntimeStateKeys.length > 0
+      ? this.decisionStage.buildSemanticRuntimeState(semanticRuntimeStateKeys)
+      : undefined
     try {
       const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
       const runtimeSignalOutcome = await this.generatePublishedSnapshotRuntimeSignalOutcome(
@@ -1476,6 +1487,7 @@ export class SignalGeneratorService {
         config,
         referencePrice,
         compiledDecisionState,
+        semanticRuntimeState,
       )
 
       if (runtimeSignalOutcome.kind === 'noop') {
@@ -1641,6 +1653,7 @@ export class SignalGeneratorService {
     }
 
     const portfolio = this.readPortfolioSnapshot(snapshot.compiledIr)
+    const runtimeRequirements = this.resolveRuntimeRequirementsFromSnapshot(snapshot)
     return {
       strategy: {
         ...strategy,
@@ -1659,10 +1672,30 @@ export class SignalGeneratorService {
         sourceStrategyTemplateId: snapshot.strategyTemplateId ?? binding.sourceStrategyTemplateId ?? strategy.id,
         executionContentSource: 'PUBLISHED_SNAPSHOT',
         ...(portfolio ? { portfolio: portfolio as Prisma.JsonObject } : {}),
+        ...(runtimeRequirements
+          ? {
+              atomicContractExecution: {
+                schemaVersion: 1,
+                runtimeRequirements: runtimeRequirements as unknown as Prisma.JsonObject,
+              } as Prisma.JsonObject,
+            }
+          : {}),
       },
       executionSemanticKeys: this.runtimeExecutionStateService?.buildExecutionSemanticKeysFromSnapshot(snapshot) ?? [],
       executionSemantics: this.readRuntimeExecutionSemantics(snapshot),
+      runtimeRequirements,
     }
+  }
+
+  private resolveRuntimeRequirementsFromSnapshot(snapshot: unknown): AtomicRuntimeRequirements | null {
+    const service = this.runtimeExecutionStateService as
+      | (StrategyRuntimeExecutionStateService & {
+        buildRuntimeRequirementsFromSnapshot?: (snapshot: unknown) => AtomicRuntimeRequirements | null
+      })
+      | undefined
+
+    return service?.buildRuntimeRequirementsFromSnapshot?.(snapshot)
+      ?? readAtomicRuntimeRequirementsFromSnapshot(snapshot)
   }
 
   private async loadPublishedSnapshotRuntimeState(
