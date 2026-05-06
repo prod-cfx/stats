@@ -24,8 +24,10 @@ export interface CompiledScriptProjection {
   compiledManifest: CompiledStrategyManifest
   executionModel: StrategyAstV1['executionModel'] & CompiledScriptExecutionEnvelope
   dataRequirements: StrategyAstV1['dataRequirements']
+  runtimeRequirements?: StrategyAstV1['runtimeRequirements']
   exprPool: StrategyAstV1['exprPool']
   guards: StrategyAstV1['guards']
+  riskPredicates?: StrategyAstV1['riskPredicates']
   decisionPrograms: StrategyAstV1['decisionPrograms']
   orderPrograms: StrategyAstV1['orderPrograms']
   topology: StrategyAstV1['topology']

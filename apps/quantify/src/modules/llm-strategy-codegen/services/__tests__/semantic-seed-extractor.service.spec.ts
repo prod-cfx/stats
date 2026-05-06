@@ -190,7 +190,7 @@ describe('SemanticSeedExtractorService', () => {
   })
 
   it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
-    expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。').contextSlots).toEqual(expect.objectContaining({
+    expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。').contextSlots).toEqual(expect.objectContaining({
       timeframe: '1h',
     }))
     expect(service.extract('15m 周期，价格区间 79200-80200，采用双向网格').contextSlots).toEqual(expect.objectContaining({
@@ -202,7 +202,7 @@ describe('SemanticSeedExtractorService', () => {
   })
 
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
-    const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。')
+    const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
@@ -694,26 +694,37 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
-  it('extracts volume spike as recognized unsupported atom instead of generic fallback text', () => {
+  it('extracts volume spike as supported relative-average atom instead of generic fallback text', () => {
     const patch = service.extract('BTCUSDT 15m 放量突破前高做多，止损 5%，单笔 10%。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'volume.spike',
-        params: expect.objectContaining({ sourceText: expect.stringContaining('放量突破') }),
+        key: 'volume.relative_average',
+        status: 'open',
+        params: expect.objectContaining({ event: 'spike', comparator: 'gt' }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'trigger.volume.relative_average.lookback_bars' }),
+          expect.objectContaining({ slotKey: 'trigger.volume.relative_average.multiplier' }),
+        ]),
       }),
     ]))
+    const volumeTriggers = patch.triggers?.filter(trigger => trigger.key === 'volume.relative_average') ?? []
+    expect(volumeTriggers).toHaveLength(1)
+    expect(volumeTriggers[0]?.params).not.toEqual(expect.objectContaining({ lookbackBars: 20, multiplier: 1 }))
   })
 
-  it('extracts volume threshold as recognized unsupported trigger atom', () => {
+  it('extracts relative-average volume threshold as supported trigger atom', () => {
     const patch = service.extract('OKX BTCUSDT 15m，成交量大于过去 20 根均量 2 倍时开多，仓位 10%。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'volume.threshold',
-        params: expect.objectContaining({ sourceText: expect.stringContaining('成交量大于') }),
+        key: 'volume.relative_average',
+        params: expect.objectContaining({ lookbackBars: 20, multiplier: 2, comparator: 'gt' }),
       }),
     ]))
+    const volumeTrigger = patch.triggers?.find(trigger => trigger.key === 'volume.relative_average')
+    expect(volumeTrigger?.status).toBeUndefined()
+    expect(volumeTrigger?.openSlots ?? []).toEqual([])
   })
 
   it('extracts ATR threshold and filter wording as recognized unsupported trigger atom', () => {
@@ -784,12 +795,12 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.risk).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'risk.partial_take_profit' })]))
   })
 
-  it('preserves trade intent for unsupported volume triggers', () => {
+  it('preserves trade intent for relative-average volume triggers', () => {
     const patch = service.extract('OKX BTCUSDT 15m，放量做空，放量平仓。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'volume.spike', phase: 'entry', sideScope: 'short' }),
-      expect.objectContaining({ key: 'volume.spike', phase: 'exit' }),
+      expect.objectContaining({ key: 'volume.relative_average', phase: 'entry', sideScope: 'short' }),
+      expect.objectContaining({ key: 'volume.relative_average', phase: 'exit' }),
     ]))
   })
 
@@ -1138,6 +1149,23 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('prefers explicit sizing over ambiguous light-size wording', () => {
+    const patch = service.extract('BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点，单笔 10%。')
+
+    expect(patch.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    }))
+    expect(patch.position?.openSlots ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        status: 'open',
+      }),
+    ]))
+  })
+
   it('does not lock unsupported exchanges into semantic context', () => {
     const patch = service.extract('BYBIT BTCUSDT 15m；价格上穿 MA50 买入；单笔 10%')
 
@@ -1202,6 +1230,34 @@ describe('SemanticSeedExtractorService', () => {
       value: 0.1,
       positionMode: 'long_only',
     }))
+  })
+
+  it('does not extract single-trade sizing percent as price percent change', () => {
+    const patch = service.extract('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓，单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        params: expect.objectContaining({
+          extrema: 'high',
+          lookbackBars: 20,
+          event: 'breakout_up',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.rolling_extrema_breakout',
+        phase: 'exit',
+        params: expect.objectContaining({
+          extrema: 'low',
+          lookbackBars: 10,
+          event: 'breakout_down',
+        }),
+      }),
+    ]))
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'price.percent_change' }),
+    ]))
   })
 
   it('extracts unpunctuated Chinese percent-change clauses independently', () => {
@@ -1357,6 +1413,40 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'indicator.cross_over' }),
       expect.objectContaining({ key: 'indicator.cross_under' }),
+    ]))
+  })
+
+  it('keeps pullback reclaim as sequence without duplicating a static MA entry boundary', () => {
+    const patch = service.extract('ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          sequenceKind: 'pullback_reclaim',
+          reference: expect.objectContaining({
+            indicator: 'ma',
+            period: 20,
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        key: 'condition.expression',
+        phase: 'gate',
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 20,
+        }),
+      }),
     ]))
   })
 
@@ -3529,5 +3619,27 @@ describe('SemanticSeedExtractorService', () => {
     ]))
     expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
     expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
+  })
+
+  it('keeps OR exit children inside logical any-of without standalone exit siblings', () => {
+    const patch = service.extract('SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。')
+    const exitTriggers = patch.triggers?.filter(trigger => trigger.phase === 'exit') ?? []
+
+    expect(exitTriggers).toEqual([
+      expect.objectContaining({
+        key: 'logical.any_of',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({ key: 'indicator.below' }),
+            expect.objectContaining({ key: 'indicator.cross_under' }),
+          ]),
+        }),
+      }),
+    ])
+    expect(exitTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_under', params: expect.objectContaining({ indicator: 'macd' }) }),
+      expect.objectContaining({ key: 'indicator.below' }),
+    ]))
   })
 })

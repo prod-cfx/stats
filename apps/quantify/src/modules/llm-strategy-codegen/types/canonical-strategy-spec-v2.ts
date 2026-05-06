@@ -9,7 +9,9 @@ export interface CanonicalConditionAtom {
   kind: 'atom'
   key: string
   semanticScope?: 'market' | 'position' | 'portfolio'
+  predicateForm?: 'legacy' | 'generic'
   op?: 'EQ' | 'LTE' | 'GTE' | 'CROSS_OVER' | 'CROSS_UNDER'
+    | 'GT' | 'LT'
   value?: number | string | boolean
   params?: Record<string, number | string | boolean>
 }
@@ -17,6 +19,7 @@ export interface CanonicalConditionAtom {
 export interface CanonicalConditionGroup {
   kind: 'AND' | 'OR' | 'NOT'
   children: CanonicalConditionNode[]
+  predicateForm?: 'legacy' | 'generic'
 }
 
 export interface CanonicalExpressionCondition {

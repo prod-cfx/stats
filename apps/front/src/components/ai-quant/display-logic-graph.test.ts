@@ -794,6 +794,48 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('不支持的条件，待补充')
   })
 
+  it('renders server-provided atomic contract display graph without legacy key guessing', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                { kind: 'condition', id: 'condition-bollinger', text: '触及布林带下轨（20, 2）' },
+                { kind: 'condition', id: 'condition-volume', text: '成交量高于过去 20 根均量的 1.5 倍' },
+                { kind: 'action', id: 'action-entry', text: '开多 10%' },
+              ],
+            },
+            {
+              type: 'EXECUTE',
+              items: [
+                { kind: 'execute', id: 'execute-symbol', key: 'symbol', value: 'BTCUSDT', text: '标的: BTCUSDT' },
+              ],
+            },
+          ],
+        },
+        rules: [
+          {
+            id: 'legacy-atomic-key',
+            phase: 'entry',
+            condition: { key: 'price.detect.indicator_boundary' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks).toHaveLength(2)
+    expect(text).toContain('布林带下轨')
+    expect(text).toContain('成交量高于过去 20 根均量的 1.5 倍')
+    expect(text).toContain('开多 10%')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('price.detect.indicator_boundary')
+  })
+
   it('falls back to legacy parsing when server displayLogicGraph has no rule blocks', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

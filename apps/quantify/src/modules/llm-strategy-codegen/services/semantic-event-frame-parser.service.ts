@@ -78,7 +78,7 @@ export class SemanticEventFrameParserService {
       }
     }
 
-    if (/(平多|多头平仓|卖出)/u.test(clause)) {
+    if (/(平多|多头平仓|卖出|卖)/u.test(clause)) {
       return {
         action: { kind: 'close_long' },
         phase: 'exit',

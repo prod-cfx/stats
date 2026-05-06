@@ -12,6 +12,7 @@ import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-s
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
+import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
@@ -120,6 +121,7 @@ export class CompiledPublicationGateService {
     const deploymentExecutionDefaults = this.buildDeploymentExecutionDefaults(input)
     const deploymentExecutionConstraints = this.buildDeploymentExecutionConstraints(input, deploymentExecutionDefaults)
     const astSnapshot = this.buildPublicationAstSnapshot(input.ast)
+    const scriptSummary = this.buildScriptSummaryWithCompatibilityMetadata(input, parsed)
     const semanticStatus = input.semanticConsistencyReport.status
     const consistencyReport = {
       status:
@@ -144,7 +146,7 @@ export class CompiledPublicationGateService {
       consistencyReport,
       userIntentSummary: input.userIntentSummary,
       strategySummary: input.strategySummary,
-      scriptSummary: input.scriptSummary,
+      scriptSummary,
       lockedParams: input.lockedParams,
       snapshotVersion: 3,
       paramsSnapshot: {
@@ -220,6 +222,40 @@ export class CompiledPublicationGateService {
       ...ast,
       ...(runtimeExecutionSemantics.length > 0 ? { runtimeExecutionSemantics } : {}),
     }
+  }
+
+  private buildScriptSummaryWithCompatibilityMetadata(
+    input: PublishCompiledSnapshotInput,
+    parsed: ReturnType<CompiledScriptParserService['parse']>,
+  ): Record<string, unknown> {
+    const runtimeRequirements = normalizeRuntimeRequirements(input.ast.runtimeRequirements)
+      ?? normalizeRuntimeRequirements(input.ir.runtimeRequirements)
+      ?? normalizeRuntimeRequirements(parsed.runtimeRequirements)
+
+    if (!runtimeRequirements) {
+      return input.scriptSummary
+    }
+
+    const existingCompatibilityMetadata = this.readRecord(input.scriptSummary.compatibilityMetadata) ?? {}
+    const existingAtomicContractExecution = this.readRecord(existingCompatibilityMetadata.atomicContractExecution) ?? {}
+
+    return {
+      ...input.scriptSummary,
+      compatibilityMetadata: {
+        ...existingCompatibilityMetadata,
+        atomicContractExecution: {
+          ...existingAtomicContractExecution,
+          schemaVersion: 1,
+          runtimeRequirements,
+        },
+      },
+    }
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   }
 
   private buildRuntimeExecutionSemantics(ast: StrategyAstV1): PublishedRuntimeExecutionSemantic[] {

@@ -14,6 +14,11 @@ import { buildMultiLegStrategyContext } from '@ai/shared/script-engine/helpers/c
 import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { normalizeExactCode, toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
+import {
+  buildSemanticRuntimeState,
+  ensureSemanticRuntimeStateKeys,
+  readAtomicRuntimeRequirementsFromSnapshot,
+} from '@/modules/strategy-runtime/semantic-runtime-state.util'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -148,6 +153,8 @@ export class BacktestRunnerService {
     const historyBarsBySymbolTimeframe = new Map<string, HistorySeries>()
     const pendingOrdersBySymbol = new Map<string, PendingOrder>()
     const compiledDecisionStateBySymbol = new Map<string, CompiledDecisionRuntimeState>()
+    const semanticRuntimeStateBySymbol = new Map<string, StrategyContext['semanticRuntimeState']>()
+    const runtimeRequirements = readAtomicRuntimeRequirementsFromSnapshot(input.strategy)
     const positionRuntimeStateBySymbol = new Map<string, PositionRuntimeState>()
     const orderProgramStatesBySymbol = new Map<string, Map<string, CompiledOrderProgramRuntimeState>>()
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
@@ -195,6 +202,11 @@ export class BacktestRunnerService {
       const position = ledger.getPosition(bar.symbol)
       const compiledDecisionState = this.bumpCompiledDecisionState(compiledDecisionStateBySymbol, bar.symbol)
       const positionRuntimeState = this.syncPositionRuntimeState(positionRuntimeStateBySymbol, position, bar)
+      const semanticRuntimeState = this.resolveSemanticRuntimeState(
+        semanticRuntimeStateBySymbol,
+        bar.symbol,
+        runtimeRequirements?.stateKeys ?? [],
+      )
       const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, input.stateTimeframes)
       const strategyContext = this.buildScriptContext({
         bar,
@@ -210,6 +222,7 @@ export class BacktestRunnerService {
         },
         position,
         positionRuntimeState,
+        semanticRuntimeState,
       })
       const intent = await input.strategy.fn({
         ...strategyContext,
@@ -873,6 +886,7 @@ export class BacktestRunnerService {
     position: StrategyContext['position']
     positionRuntimeState: PositionRuntimeState | null
     compiledDecisionState: CompiledDecisionRuntimeState
+    semanticRuntimeState: StrategyContext['semanticRuntimeState']
     portfolio: StrategyContext['portfolio']
     input: BacktestRunInput
     historyBarsBySymbolTimeframe: Map<string, HistorySeries>
@@ -915,9 +929,27 @@ export class BacktestRunnerService {
       },
       portfolio,
       params: input.input.strategy.params,
+      ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
       __compiledDecisionState: input.compiledDecisionState,
       ...runtimeContext,
     }
+  }
+
+  private resolveSemanticRuntimeState(
+    store: Map<string, StrategyContext['semanticRuntimeState']>,
+    symbol: string,
+    stateKeys: readonly string[],
+  ): StrategyContext['semanticRuntimeState'] {
+    if (stateKeys.length === 0) return undefined
+
+    const existing = store.get(symbol)
+    if (existing) {
+      return ensureSemanticRuntimeStateKeys(existing, stateKeys)
+    }
+
+    const semanticRuntimeState = buildSemanticRuntimeState(stateKeys)
+    store.set(symbol, semanticRuntimeState)
+    return semanticRuntimeState
   }
 
   private bumpCompiledDecisionState(

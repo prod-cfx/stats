@@ -225,6 +225,48 @@ export class SignalGeneratorRepository {
     })
   }
 
+  findOpenPositionForRuntimeContext(input: {
+    strategyId: string
+    strategyInstanceId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    symbol: string
+  }) {
+    return this.txHost.tx.position.findFirst({
+      where: {
+        symbol: input.symbol,
+        exchangeId: input.exchangeId,
+        marketType: input.marketType,
+        status: 'OPEN',
+        account: {
+          strategyId: input.strategyId,
+          user: {
+            strategySubscriptions: {
+              some: {
+                strategyInstanceId: input.strategyInstanceId,
+                status: 'active',
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        positionSide: true,
+        quantity: true,
+        avgEntryPrice: true,
+      },
+    })
+  }
+
+  updateStrategyInstanceMetadata(instanceId: string, metadata: Prisma.InputJsonValue) {
+    return this.txHost.tx.strategyInstance.update({
+      where: { id: instanceId },
+      data: { metadata },
+      select: { id: true },
+    })
+  }
+
   async hasPendingReconcileRequiredEntryExecution(input: {
     strategyId: string
     strategyInstanceId: string

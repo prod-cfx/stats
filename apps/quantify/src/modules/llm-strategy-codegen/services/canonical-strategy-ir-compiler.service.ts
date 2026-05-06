@@ -318,6 +318,11 @@ export class CanonicalStrategyIrCompilerService {
       case 'AND':
       case 'OR':
       case 'NOT':
+      case 'allOf':
+      case 'anyOf':
+      case 'sequence':
+      case 'compare':
+      case 'cross':
         return name
       default:
         return null

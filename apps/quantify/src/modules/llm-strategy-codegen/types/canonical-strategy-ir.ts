@@ -35,10 +35,12 @@ export interface CanonicalStrategyIrV1 {
     levelSets: LevelSetDef[]
     predicates: PredicateDef[]
   }
+  runtimeRequirements?: RuntimeRequirements
   ruleBlocks: RuleBlock[]
   orderPrograms: OrderProgram[]
   riskPolicy: {
     guards: RiskGuard[]
+    riskPredicates?: RiskPredicateDef[]
   }
   executionPolicy: {
     signalEvaluation: 'bar_close'
@@ -64,6 +66,8 @@ export interface SeriesDef {
     | 'RANGE_POSITION_PCT'
     | 'POSITION_AVG_PRICE'
     | 'POSITION_PNL_PCT'
+    | 'VOLUME'
+    | 'SMA_VOLUME'
     | 'BOLLINGER_BARS_OUTSIDE'
     | 'SMA'
     | 'EMA'
@@ -112,7 +116,23 @@ export interface PredicateDef {
     | 'TOUCH_LEVEL_UP' | 'TOUCH_LEVEL_DOWN'
     | 'WITHIN_LEVEL_SET'
     | 'AND' | 'OR' | 'NOT'
+    | 'allOf' | 'anyOf'
+    | 'sequence'
+    | 'compare'
+    | 'cross'
   args: string[]
+  params?: Record<string, number | string | boolean>
+}
+
+export interface RuntimeRequirements {
+  helpers: string[]
+  stateKeys: string[]
+}
+
+export interface RiskPredicateDef {
+  id: string
+  kind: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop'
+  params: Record<string, number | string | boolean>
 }
 
 export interface RuleBlock {

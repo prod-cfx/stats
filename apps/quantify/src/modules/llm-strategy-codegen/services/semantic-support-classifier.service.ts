@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import type {
+  SemanticSlotIdentity,
   SemanticActionState,
   SemanticPositionState,
   SemanticRiskState,
@@ -8,12 +9,14 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import { buildSemanticSlotId } from '../types/semantic-state'
 import type {
   SemanticAtomDefinition,
   SemanticAtomReplacementStrategy,
   SemanticAtomSupportMetadata,
   SemanticAtomUnsupportedMetadata,
 } from '../types/semantic-atom-support'
+import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 
 export type SemanticSupportRoute =
@@ -53,7 +56,7 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.resolveTriggerSupport(trigger)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return withSupportMetadata(trigger, resolved)
+      return withRegistryOpenSlots(withSupportMetadata(trigger, resolved), resolved)
     })
 
     const actions = state.actions.map((action) => {
@@ -63,7 +66,7 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.registry.resolve(action.key)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return withSupportMetadata(action, resolved)
+      return withRegistryOpenSlots(withSupportMetadata(action, resolved), resolved)
     })
 
     const risk = state.risk.map((riskState) => {
@@ -73,7 +76,7 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.registry.resolve(riskState.key)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return withSupportMetadata(riskState, resolved)
+      return withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
     })
 
     const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms)
@@ -140,7 +143,7 @@ export class SemanticSupportClassifierService {
 
     const resolved = this.registry.resolve(toPositionAtomKey(position.mode))
     this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-    return withSupportMetadata(position, resolved)
+    return withRegistryOpenSlots(withSupportMetadata(position, resolved), resolved)
   }
 
   private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
@@ -151,7 +154,7 @@ export class SemanticSupportClassifierService {
         supportStatus: 'supported_executable',
         requiredParams: ['indicator', 'referenceRole', 'reference.period'],
         defaultableParams: ['confirmationMode'],
-        executableProjection: ['canonical_spec_v1'],
+        executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
         openSlots: [],
       }
     }
@@ -220,6 +223,86 @@ function withoutSupportMetadata<
 >(node: T): T {
   const { support: _support, ...nextNode } = node
   return nextNode as T
+}
+
+function withRegistryOpenSlots<
+  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+>(node: T, resolved: ResolvedSemanticAtom): T {
+  if (resolved.supportStatus !== 'supported_requires_slot' || !hasRequiredParamOpenSlotSpecs(resolved)) {
+    return node
+  }
+
+  if (!hasMissingRequiredParam(node, resolved.requiredParams)) {
+    return node
+  }
+
+  const existingSlots = node.openSlots ?? []
+  const existingSlotIds = new Set(existingSlots.map(slot => buildSemanticSlotId(slot)))
+  const registryOpenSlots = resolved.openSlots
+    .filter(slot => !existingSlotIds.has(toSlotId(slot)))
+    .map(slot => toSemanticSupportOpenSlot(slot))
+
+  if (registryOpenSlots.length === 0) {
+    return node
+  }
+
+  return {
+    ...node,
+    openSlots: [...existingSlots, ...registryOpenSlots],
+  }
+}
+
+function toSlotId(slot: SemanticSlotIdentity): string {
+  return buildSemanticSlotId(slot)
+}
+
+function hasRequiredParamOpenSlotSpecs(
+  resolved: ResolvedSemanticAtom,
+): resolved is SemanticAtomDefinition & { openSlots: SemanticAtomDefinition['openSlots'] } {
+  return 'openSlots' in resolved && resolved.openSlots.length > 0
+}
+
+function hasMissingRequiredParam(
+  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+  requiredParams: string[],
+): boolean {
+  if (requiredParams.length === 0 || !hasParams(node)) {
+    return false
+  }
+
+  return requiredParams.some(paramKey => isMissingRequiredParamValue(readParamValue(node.params, paramKey)))
+}
+
+function hasParams(
+  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+): node is SemanticTriggerState | SemanticRiskState | (SemanticActionState & { params: Record<string, unknown> }) {
+  return 'params' in node && node.params !== undefined
+}
+
+function readParamValue(params: Record<string, unknown>, paramKey: string): unknown {
+  if (paramKey in params) {
+    return params[paramKey]
+  }
+
+  return paramKey.split('.').reduce<unknown>((value, key) => {
+    if (!isRecord(value)) {
+      return undefined
+    }
+
+    return value[key]
+  }, params)
+}
+
+function isMissingRequiredParamValue(value: unknown): boolean {
+  if (value === undefined || value === null) {
+    return true
+  }
+
+  return typeof value === 'string' && (value.trim() === '' || value.trim().toLowerCase() === 'unknown')
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function toPositionAtomKey(mode: string): string {

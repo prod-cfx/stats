@@ -50,6 +50,61 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('writes generic risk params from clarification answers', () => {
+    const answer = '下一根 K 线收阳且跌幅停止扩大'
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [{
+          id: 'falling-knife',
+          key: 'risk.falling_knife_guard',
+          params: { definition: 'unknown' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'risk.falling_knife_guard.definition',
+            fieldPath: 'risk.params.definition',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认“不接飞刀”的判定方式。',
+            affectsExecution: true,
+          }],
+        }],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'risk.falling_knife_guard.definition',
+      targetFieldPath: 'risk.params.definition',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+      }),
+      answer,
+      messageIndex: 7,
+    })
+
+    expect(next.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: { definition: answer },
+      openSlots: [expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+        status: 'locked',
+        value: answer,
+        evidence: {
+          text: answer,
+          messageIndex: 7,
+          source: 'user_explicit',
+        },
+      })],
+    }))
+  })
+
   it('turns budget contract requirement clarification answers into structured owner capabilities', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

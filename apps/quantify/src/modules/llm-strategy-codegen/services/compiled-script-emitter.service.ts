@@ -9,6 +9,7 @@ export const FIXED_IMPORT_BLOCK = [
   'import {',
   '  evaluateExprPool,',
   '  evaluateGuards,',
+  '  evaluateRiskPredicates,',
   '  runDecisionPrograms,',
   '  runOrderPrograms,',
   '  buildCompiledManifest,',
@@ -21,11 +22,18 @@ export const FIXED_STRATEGY_WRAPPER = [
   '  onBar(ctx) {',
   '    const exprValues = evaluateExprPool(ctx, EXPR_POOL, TOPOLOGY.exprOrder, EXECUTION_MODEL)',
   '',
-  '    const guardState = evaluateGuards(',
+  '    const baseGuardState = evaluateGuards(',
   '      ctx,',
   '      GUARD_PROGRAMS,',
   '      exprValues,',
   '      TOPOLOGY.guardOrder,',
+  '    )',
+  '',
+  '    const guardState = evaluateRiskPredicates(',
+  '      ctx,',
+  '      RISK_PREDICATES,',
+  '      baseGuardState,',
+  '      TOPOLOGY.riskPredicateOrder,',
   '    )',
   '',
   '    const decision = runDecisionPrograms(',
@@ -79,8 +87,10 @@ export class CompiledScriptEmitterService {
       this.emitConst('COMPILED_MANIFEST', projection.compiledManifest),
       this.emitConst('EXECUTION_MODEL', projection.executionModel),
       this.emitConst('DATA_REQUIREMENTS', projection.dataRequirements),
+      this.emitConst('RUNTIME_REQUIREMENTS', projection.runtimeRequirements ?? null),
       this.emitConst('EXPR_POOL', projection.exprPool),
       this.emitConst('GUARD_PROGRAMS', projection.guards),
+      this.emitConst('RISK_PREDICATES', projection.riskPredicates ?? null),
       this.emitConst('DECISION_PROGRAMS', projection.decisionPrograms),
       this.emitConst('ORDER_PROGRAMS', projection.orderPrograms),
       this.emitConst('TOPOLOGY', projection.topology),
@@ -93,6 +103,7 @@ export class CompiledScriptEmitterService {
   buildProjection(input: EmitCompiledScriptInput): CompiledScriptProjection {
     const exprPool = this.projectByOrder(input.ast.exprPool, input.ast.topology.exprOrder)
     const guards = this.projectByOrder(input.ast.guards, input.ast.topology.guardOrder)
+    const riskPredicates = this.projectOptionalByOrder(input.ast.riskPredicates, input.ast.topology.riskPredicateOrder)
     const decisionPrograms = this.projectByOrder(input.ast.decisionPrograms, input.ast.topology.decisionOrder)
     const orderPrograms = this.projectByOrder(input.ast.orderPrograms, input.ast.topology.orderProgramOrder)
     const executionModel = {
@@ -104,8 +115,10 @@ export class CompiledScriptEmitterService {
       compiledManifest: this.buildCompiledManifest(input.ast, input.executionEnvelope),
       executionModel,
       dataRequirements: input.ast.dataRequirements,
+      ...(input.ast.runtimeRequirements ? { runtimeRequirements: input.ast.runtimeRequirements } : {}),
       exprPool,
       guards,
+      ...(riskPredicates ? { riskPredicates } : {}),
       decisionPrograms,
       orderPrograms,
       topology: input.ast.topology,
@@ -120,8 +133,10 @@ export class CompiledScriptEmitterService {
       astVersion: ast.astVersion,
       executionModel: ast.executionModel,
       dataRequirements: ast.dataRequirements,
+      runtimeRequirements: ast.runtimeRequirements,
       exprPool: this.projectByOrder(ast.exprPool, ast.topology.exprOrder),
       guards: this.projectByOrder(ast.guards, ast.topology.guardOrder),
+      riskPredicates: this.projectOptionalByOrder(ast.riskPredicates, ast.topology.riskPredicateOrder),
       decisionPrograms: this.projectByOrder(ast.decisionPrograms, ast.topology.decisionOrder),
       orderPrograms: this.projectByOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
       topology: ast.topology,
@@ -132,8 +147,10 @@ export class CompiledScriptEmitterService {
         ...executionEnvelope,
       },
       dataRequirements: ast.dataRequirements,
+      runtimeRequirements: ast.runtimeRequirements,
       exprPool: this.projectByOrder(ast.exprPool, ast.topology.exprOrder),
       guards: this.projectByOrder(ast.guards, ast.topology.guardOrder),
+      riskPredicates: this.projectOptionalByOrder(ast.riskPredicates, ast.topology.riskPredicateOrder),
       decisionPrograms: this.projectByOrder(ast.decisionPrograms, ast.topology.decisionOrder),
       orderPrograms: this.projectByOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
       topology: ast.topology,
@@ -160,6 +177,14 @@ export class CompiledScriptEmitterService {
     return order
       .map(id => itemIndex.get(id))
       .filter((item): item is T => item !== undefined)
+  }
+
+  private projectOptionalByOrder<T extends { id: string }>(
+    items: T[] | undefined,
+    order: string[] | undefined,
+  ): T[] | undefined {
+    if (!items || !order) return undefined
+    return this.projectByOrder(items, order)
   }
 }
 

@@ -65,10 +65,14 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.mergeSeedTriggers(
-      eventFramePatch.triggers ?? [],
-      this.extractTriggers(text, aliasContext),
-    ))
+    const triggers = this.atomizeTriggers(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
+      this.removeStaticIndicatorTriggersCoveredBySequences(
+        this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
+          eventFramePatch.triggers ?? [],
+          this.extractTriggers(text, aliasContext),
+        ))),
+      ),
+    )))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),
@@ -252,6 +256,136 @@ export class SemanticSeedExtractorService {
     ))
   }
 
+  private groupEntryConfirmationTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
+    const groups = new Map<string, Array<{ trigger: SeedTrigger, index: number }>>()
+    triggers.forEach((trigger, index) => {
+      if (trigger.phase !== 'entry' || !this.isEntryCombinationAtom(trigger)) {
+        return
+      }
+      const groupKey = `${trigger.phase}:${trigger.sideScope ?? 'long'}`
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), { trigger, index }])
+    })
+
+    const selectedGroups = Array.from(groups.values()).filter((group) => {
+      const hasSequence = group.some(({ trigger }) => trigger.key === 'condition.sequence')
+      const hasSequenceConfirmation = group.some(({ trigger }) => (
+        trigger.key === 'volume.relative_average'
+        || trigger.key === 'confirmation.rebound'
+      ))
+      const hasIndicatorBoundary = group.some(({ trigger }) => trigger.key === 'price.detect.indicator_boundary')
+      const hasVolume = group.some(({ trigger }) => trigger.key === 'volume.relative_average')
+      return group.length > 1 && (
+        (hasSequence && hasSequenceConfirmation)
+        || (hasIndicatorBoundary && hasVolume)
+      )
+    })
+    if (selectedGroups.length === 0) {
+      return triggers
+    }
+
+    const groupIdsByIndex = new Map<number, string>()
+    selectedGroups.forEach((group, groupIndex) => {
+      const groupId = group
+        .map(({ trigger }) => this.readTriggerGroupMarker(trigger))
+        .find((marker): marker is string => Boolean(marker))
+        ?? `entry-atomic-confirmation-${groupIndex + 1}`
+      for (const { index } of group) {
+        groupIdsByIndex.set(index, groupId)
+      }
+    })
+
+    return triggers.map((trigger, index) => {
+      const groupId = groupIdsByIndex.get(index)
+      if (!groupId || this.readTriggerGroupMarker(trigger)) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        params: {
+          ...(trigger.params ?? {}),
+          groupId,
+        },
+      }
+    })
+  }
+
+  private isEntryCombinationAtom(trigger: SeedTrigger): boolean {
+    return trigger.key === 'condition.sequence'
+      || trigger.key === 'volume.relative_average'
+      || trigger.key === 'confirmation.rebound'
+      || trigger.key === 'price.detect.indicator_boundary'
+  }
+
+  private readTriggerGroupMarker(trigger: SeedTrigger): string | null {
+    const params = trigger.params
+    if (!params) return null
+    const marker = params.groupId ?? params.displayGroupId ?? params.logicalGroupId ?? params.combinationId
+    return typeof marker === 'string' && marker.trim().length > 0 ? marker.trim() : null
+  }
+
+  private inheritIndicatorBoundaryConfirmationModes(triggers: SeedTrigger[]): SeedTrigger[] {
+    const groups = new Map<string, Array<{ trigger: SeedTrigger, index: number }>>()
+
+    triggers.forEach((trigger, index) => {
+      if (trigger.key !== 'price.detect.indicator_boundary') {
+        return
+      }
+
+      const indicator = trigger.params?.indicator
+      const indicatorName = this.isPlainObject(indicator) && typeof indicator.name === 'string'
+        ? indicator.name.toLowerCase()
+        : null
+      if (!indicatorName) {
+        return
+      }
+
+      const groupKey = `${indicatorName}:${trigger.sideScope ?? 'both'}`
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), { trigger, index }])
+    })
+
+    if (groups.size === 0) {
+      return triggers
+    }
+
+    const inheritedByIndex = new Map<number, string>()
+    for (const group of groups.values()) {
+      const modes = Array.from(new Set(
+        group
+          .map(({ trigger }) => typeof trigger.params?.confirmationMode === 'string' ? trigger.params.confirmationMode : null)
+          .filter((mode): mode is string => Boolean(mode)),
+      ))
+      if (modes.length !== 1) {
+        continue
+      }
+
+      for (const { trigger, index } of group) {
+        if (typeof trigger.params?.confirmationMode !== 'string') {
+          inheritedByIndex.set(index, modes[0])
+        }
+      }
+    }
+
+    if (inheritedByIndex.size === 0) {
+      return triggers
+    }
+
+    return triggers.map((trigger, index) => {
+      const confirmationMode = inheritedByIndex.get(index)
+      if (!confirmationMode) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        params: {
+          ...(trigger.params ?? {}),
+          confirmationMode,
+        },
+      }
+    })
+  }
+
   private atomizeActions(actions: SeedAction[]): SeedAction[] {
     return actions.map((action, index) => (
       this.hasContracts(action)
@@ -383,11 +517,53 @@ export class SemanticSeedExtractorService {
       }
     }
 
+    if (trigger.key === 'volume.relative_average') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_relative_average',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
     if (trigger.key === 'volatility.atr_threshold') {
       return {
         domain: 'market',
         verb: 'detect',
         object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'condition.sequence') {
+      return {
+        domain: 'price',
+        verb: 'detect',
+        object: 'sequence_condition',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'confirmation.rebound') {
+      return {
+        domain: 'price',
+        verb: 'confirm',
+        object: 'rebound',
         shape: this.toCapabilityShape({
           key: trigger.key,
           phase: trigger.phase,
@@ -610,17 +786,24 @@ export class SemanticSeedExtractorService {
       this.pushNoPositionGateTriggers(segment, triggers, seen, text)
       this.pushPreviousBarExtremaExpressionTriggers(segment, triggers, seen)
       this.pushMovingAverageCrossTrigger(segment, triggers, seen)
+      this.pushMovingAverageGateTriggers(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen, aliasContext)
       this.pushBollingerTriggers(segment, triggers, seen, aliasContext)
       this.pushIndicatorBoundaryTriggers(segment, triggers, seen, aliasContext)
+      this.pushSequenceTriggers(segment, triggers, seen)
       this.pushRsiTriggers(segment, triggers, seen, aliasContext)
       this.pushMacdTriggers(segment, triggers, seen, text)
       this.pushPartialBreakoutTriggers(segment, triggers, seen)
+      this.pushRollingExtremaBreakoutTriggers(segment, triggers, seen)
       this.pushBreakoutTriggers(segment, triggers, seen)
       this.pushRangePositionTriggers(segment, triggers, seen, text)
       this.pushGridTrigger(segment, triggers, seen, text)
       this.pushExecutionTrigger(segment, triggers, seen)
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
+      this.pushVagueDipBuyingTriggers(segment, triggers, seen)
+      this.pushVolumeRelativeAverageTriggers(segment, triggers, seen)
+      this.pushReboundConfirmationTriggers(segment, triggers, seen)
+      this.pushLogicalAnyOfTriggers(segment, triggers, seen)
       this.pushMarketStateTriggers(segment, triggers, seen)
       this.pushRecognizedUnsupportedTriggers(segment, triggers, seen)
       this.pushUnknownUnsupportedTriggers(segment, triggers, seen)
@@ -630,7 +813,7 @@ export class SemanticSeedExtractorService {
       this.pushGridTrigger(text, triggers, seen)
     }
 
-    return this.harmonizeBollingerTriggers(triggers)
+    return this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(triggers))
   }
 
   private extractActions(text: string, triggers: SeedTrigger[]): NonNullable<CodegenSemanticPatch['actions']> {
@@ -873,6 +1056,9 @@ export class SemanticSeedExtractorService {
       risk.push(boundaryGuard)
     }
 
+    this.pushAtrMultipleRisk(text, risk)
+    this.pushRememberedLevelStopRisk(text, risk)
+    this.pushFallingKnifeRisk(text, risk)
     this.pushRecognizedUnsupportedRisk(text, risk)
 
     return risk
@@ -902,6 +1088,85 @@ export class SemanticSeedExtractorService {
         })
       }
     }
+  }
+
+  private pushAtrMultipleRisk(text: string, risk: SeedRisk[]): void {
+    for (const clause of this.splitRiskClauses(text)) {
+      const stopMultiple = this.extractNumber(clause, [
+        /止损.{0,8}(\d+(?:\.\d+)?)\s*倍\s*(?:ATR|平均真实波幅)/iu,
+        /(\d+(?:\.\d+)?)\s*倍\s*(?:ATR|平均真实波幅).{0,8}止损/iu,
+      ])
+      if (stopMultiple !== null) {
+        this.pushRisk(risk, {
+          key: 'risk.atr_multiple_stop',
+          params: {
+            multiple: stopMultiple,
+            basis: 'atr',
+            effect: 'close_position',
+            scope: 'current_position',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+
+      const takeProfitMultiple = this.extractNumber(clause, [
+        /(?:盈利|止盈).{0,12}(\d+(?:\.\d+)?)\s*倍\s*(?:ATR|平均真实波幅)/iu,
+        /(\d+(?:\.\d+)?)\s*倍\s*(?:ATR|平均真实波幅).{0,12}(?:止盈|盈利)/iu,
+      ])
+      if (takeProfitMultiple !== null) {
+        this.pushRisk(risk, {
+          key: 'risk.atr_multiple_take_profit',
+          params: {
+            multiple: takeProfitMultiple,
+            basis: 'atr',
+            effect: 'close_position',
+            scope: 'current_position',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+      }
+    }
+  }
+
+  private pushRememberedLevelStopRisk(text: string, risk: SeedRisk[]): void {
+    if (!/(突破位|突破位置|breakout\s+level)/iu.test(text)) return
+    if (!/(跌回|跌破|下方|止损)/u.test(text)) return
+
+    this.pushRisk(risk, {
+      key: 'risk.remembered_level_stop',
+      params: {
+        levelKey: 'breakout',
+        event: 'breakdown_below',
+        effect: 'close_position',
+        scope: 'current_position',
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    })
+  }
+
+  private pushFallingKnifeRisk(text: string, risk: SeedRisk[]): void {
+    if (!/(接飞刀|飞刀|falling\s+knife)/iu.test(text)) return
+
+    this.pushRisk(risk, {
+      key: 'risk.falling_knife_guard',
+      params: {},
+      status: 'open',
+      source: 'user_explicit',
+      openSlots: [{
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+        status: 'open',
+        priority: 'risk',
+        questionHint: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+        affectsExecution: true,
+      }],
+    })
   }
 
   private hasAtrStopSemantics(clause: string): boolean {
@@ -971,6 +1236,18 @@ export class SemanticSeedExtractorService {
       /(?:可用余额|账户余额|余额)(?:的)?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
     ])
     if (availableBalancePercent === null || availableBalancePercent <= 0 || availableBalancePercent > 100) {
+      if (this.hasAmbiguousSizingText(text)) {
+        return {
+          sizing: null,
+          mode: 'fixed_ratio',
+          value: 0,
+          positionMode: this.resolvePositionMode(text, triggers),
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [this.buildPositionSizingOpenSlot()],
+        }
+      }
+
       return null
     }
 
@@ -980,6 +1257,21 @@ export class SemanticSeedExtractorService {
       mode: 'fixed_ratio',
       value,
       positionMode: this.resolvePositionMode(text, triggers),
+    }
+  }
+
+  private hasAmbiguousSizingText(text: string): boolean {
+    return /买一点|买一些|小仓位|轻仓|少量/u.test(text)
+  }
+
+  private buildPositionSizingOpenSlot(): SemanticSlotState {
+    return {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'risk',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
     }
   }
 
@@ -1195,6 +1487,64 @@ export class SemanticSeedExtractorService {
     return /(?:当前|现在|目前)?(?:没有|无|未持有)(?:持仓|仓位)|(?:空仓|无仓位)/u.test(segment)
   }
 
+  private pushMovingAverageGateTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    for (const clause of this.splitLogicClauses(segment)) {
+      const pair = clause.match(/\b(?:MA|EMA)\s*(\d{1,4})\s*(?:在|位于)?\s*\b(?:MA|EMA)\s*(\d{1,4})\s*(?:上方|之上|高于)/iu)
+      if (pair?.[1] && pair[2]) {
+        const fastPeriod = Number(pair[1])
+        const slowPeriod = Number(pair[2])
+        if (Number.isFinite(fastPeriod) && Number.isFinite(slowPeriod)) {
+          this.pushTrigger(triggers, seen, {
+            key: 'condition.expression',
+            phase: 'gate',
+            sideScope: /只做多|做多|买入/u.test(segment) ? 'long' : undefined,
+            params: {
+              expression: {
+                kind: 'predicate',
+                op: 'GT',
+                left: { kind: 'indicator', name: 'sma', params: { period: fastPeriod } },
+                right: { kind: 'indicator', name: 'sma', params: { period: slowPeriod } },
+              },
+            },
+          })
+        }
+        continue
+      }
+
+      const priceAbove = clause.match(/(?:价格|收盘价)?\s*(?:在|位于)?\s*\b(MA|EMA)\s*(\d{1,4})\s*(?:上方|之上|高于)/iu)
+      if (!priceAbove?.[1] || !priceAbove[2]) continue
+
+      const period = Number(priceAbove[2])
+      if (!Number.isFinite(period)) continue
+
+      const indicator = priceAbove[1].toLowerCase() === 'ema' ? 'ema' : 'ma'
+      const key = /价格|收盘价/u.test(clause) && /MACD|或/u.test(segment)
+        ? 'indicator.above'
+        : 'condition.expression'
+
+      this.pushTrigger(triggers, seen, {
+        key,
+        phase: 'gate',
+        sideScope: /只做多|做多|买入/u.test(segment) ? 'long' : undefined,
+        params: key === 'indicator.above'
+          ? {
+              indicator,
+              referenceRole: period >= 20 ? 'long_term' : 'short_term',
+              'reference.period': period,
+              reference: { indicator, period },
+            }
+          : {
+              expression: {
+                kind: 'predicate',
+                op: 'GT',
+                left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+                right: { kind: 'indicator', name: indicator === 'ema' ? 'ema' : 'sma', params: { period } },
+              },
+            },
+      })
+    }
+  }
+
   private pushMovingAverageTrigger(
     segment: string,
     triggers: SeedTrigger[],
@@ -1207,6 +1557,7 @@ export class SemanticSeedExtractorService {
       const subClauses = this.splitConjunctionClauses(clause)
 
       for (const subClause of subClauses) {
+        if (/(?:或|或者|任一|any\s+of)/iu.test(subClause)) continue
         if (/布林|bollinger|上轨|下轨|中轨/iu.test(subClause)) continue
         if (!/(?:MA|EMA)\s*\d+|均线/iu.test(subClause)) continue
         if (this.isTrueMovingAverageCrossClause(subClause)?.isCross) continue
@@ -1385,7 +1736,8 @@ export class SemanticSeedExtractorService {
       const boundaryRole = this.resolveBoundaryRole(clause)
       if (!boundaryRole) continue
 
-      const intent = this.resolveIndicatorBoundaryTradeIntent(clause, previousEntrySideScope)
+      const intent: { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' | 'both' } | null = this.resolveIndicatorBoundaryTradeIntent(clause, previousEntrySideScope)
+        ?? this.resolveIndicatorBoundaryTradeIntentFromSegment(boundaryRole, segment)
       if (!intent) continue
 
       const confirmationMode = this.extractBoundaryConfirmationMode(clause)
@@ -1432,6 +1784,19 @@ export class SemanticSeedExtractorService {
     }
     if (/(?:买)(?!回)/u.test(clause)) return { phase: 'entry', sideScope: 'long' }
     if (/卖/u.test(clause)) return { phase: 'exit', sideScope: 'long' }
+    return null
+  }
+
+  private resolveIndicatorBoundaryTradeIntentFromSegment(
+    boundaryRole: 'upper' | 'lower' | 'middle',
+    segment: string,
+  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' | 'both' } | null {
+    if (boundaryRole === 'lower' && /下轨.{0,40}买入|买入.{0,40}下轨/u.test(segment)) {
+      return { phase: 'entry', sideScope: 'long' }
+    }
+    if (boundaryRole === 'upper' && /上轨.{0,40}卖出|卖出.{0,40}上轨/u.test(segment)) {
+      return { phase: 'exit', sideScope: 'long' }
+    }
     return null
   }
 
@@ -1542,6 +1907,107 @@ export class SemanticSeedExtractorService {
         })
       }
     }
+  }
+
+  private pushSequenceTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    this.pushPullbackReclaimSequence(segment, triggers, seen)
+    this.pushRsiReclaimSequence(segment, triggers, seen)
+    this.pushConsecutiveCandlesSequence(segment, triggers, seen)
+    this.pushBreakoutRetestSequence(segment, triggers, seen)
+  }
+
+  private pushPullbackReclaimSequence(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    const match = segment.match(/回踩\s*(MA|EMA)\s*(\d{1,4}).{0,16}(?:重新)?(?:站上|上穿|收回|收复)\s*(?:MA|EMA)?\s*\d{0,4}/iu)
+    if (!match?.[1] || !match[2]) return
+
+    const intent = /(?:买入|买|做多|开多)/u.test(segment)
+      ? { phase: 'entry' as const, sideScope: 'long' as const }
+      : (this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const })
+    const period = Number(match[2])
+    if (!Number.isFinite(period)) return
+
+    this.pushTrigger(triggers, seen, {
+      key: 'condition.sequence',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
+      params: {
+        sequenceKind: 'pullback_reclaim',
+        reference: {
+          indicator: match[1].toLowerCase() === 'ema' ? 'ema' : 'ma',
+          period,
+        },
+      },
+    })
+  }
+
+  private pushRsiReclaimSequence(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/RSI/iu.test(segment) || !/(?:跌破|下穿).{0,32}(?:重新)?(?:上穿|穿回|站上)/u.test(segment)) return
+
+    const threshold = this.extractNumber(segment, [
+      /RSI\s*(?:跌破|下穿)\s*(\d+(?:\.\d+)?).{0,24}(?:重新)?(?:上穿|穿回|站上)\s*\1/iu,
+      /RSI.*?(?:跌破|下穿)\s*(\d+(?:\.\d+)?)/iu,
+    ])
+    if (threshold === null) return
+
+    const intent = /(?:买入|买|做多|开多)/u.test(segment)
+      ? { phase: 'entry' as const, sideScope: 'long' as const }
+      : (this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const })
+    this.pushTrigger(triggers, seen, {
+      key: 'condition.sequence',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
+      params: {
+        sequenceKind: 'rsi_reclaim',
+        threshold,
+      },
+    })
+  }
+
+  private pushConsecutiveCandlesSequence(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    const match = segment.match(/连续\s*(\d{1,3}|[一二两三四五六七八九十]+)\s*根.{0,8}K\s*线/u)
+      ?? segment.match(/连续\s*(?:跌|下跌|涨|上涨)\s*(\d{1,3}|[一二两三四五六七八九十]+)\s*根/u)
+    if (!match?.[1] || !/(跌|下跌|涨|上涨)/u.test(segment)) return
+
+    const count = this.parseChineseInteger(match[1])
+    if (count === null) return
+
+    const intent = /(?:买入|买|做多|开多)/u.test(segment)
+      ? { phase: 'entry' as const, sideScope: 'long' as const }
+      : (this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const })
+    this.pushTrigger(triggers, seen, {
+      key: 'condition.sequence',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
+      params: {
+        sequenceKind: 'consecutive_candles',
+        count,
+        direction: /跌|下跌/u.test(segment) ? 'down' : 'up',
+      },
+    })
+  }
+
+  private pushBreakoutRetestSequence(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(突破|升破|上破).{0,32}(回踩|回测)/u.test(segment)) return
+    if (!/(不立刻|不马上|等待|等|再买|买入)/u.test(segment)) return
+
+    const hours = this.extractNumber(segment, [/过去\s*(\d{1,4})\s*(?:小时|h|hour)/iu])
+    const bars = this.extractNumber(segment, [/过去\s*(\d{1,4})\s*根\s*K\s*线/u])
+    const intent = /(?:买入|买|做多|开多)/u.test(segment)
+      ? { phase: 'entry' as const, sideScope: 'long' as const }
+      : (this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const })
+
+    this.pushTrigger(triggers, seen, {
+      key: 'condition.sequence',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
+      status: 'open',
+      params: {
+        sequenceKind: 'breakout_retest',
+        memoryKey: 'breakout',
+        ...(hours !== null ? { lookbackWindow: `${hours}h` } : {}),
+        ...(bars !== null ? { lookbackBars: bars } : {}),
+      },
+    })
   }
 
   private parseGenericMovingAverageCrossClause(
@@ -1873,7 +2339,7 @@ export class SemanticSeedExtractorService {
     const segmentPeriod = this.extractLastRsiPeriod(segment) ?? aliasContext.rsi?.period ?? 14
 
     for (const clause of clauses) {
-      if (!/RSI/iu.test(clause) && !/RSI/iu.test(segment)) continue
+      if (!/RSI/iu.test(clause) && !this.isRsiThresholdAliasClause(clause, segment)) continue
       const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
       if (!intent) continue
 
@@ -2082,6 +2548,51 @@ export class SemanticSeedExtractorService {
     }
   }
 
+  private pushRollingExtremaBreakoutTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(过去|最近)\s*\d{1,4}\s*根\s*K\s*线/u.test(segment)) return
+    if (!/(最高价|最高|高点|最低价|最低|低点)/u.test(segment)) return
+
+    for (const clause of this.splitLogicClauses(segment)) {
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      const highLookback = this.extractNumber(clause, [
+        /(?:突破|升破|上破).{0,8}(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最高价|最高|高点)/u,
+        /(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最高价|最高|高点).{0,8}(?:突破|升破|上破)/u,
+      ])
+      if (highLookback !== null) {
+        this.pushTrigger(triggers, seen, {
+          key: 'price.rolling_extrema_breakout',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            extrema: 'high',
+            lookbackBars: highLookback,
+            event: 'breakout_up',
+          },
+        })
+        continue
+      }
+
+      const lowLookback = this.extractNumber(clause, [
+        /(?:跌破|下破|跌穿|失守).{0,8}(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最低价|最低|低点)/u,
+        /(?:过去|最近)\s*(\d{1,4})\s*根\s*K\s*线(?:最低价|最低|低点).{0,8}(?:跌破|下破|跌穿|失守)/u,
+      ])
+      if (lowLookback !== null) {
+        this.pushTrigger(triggers, seen, {
+          key: 'price.rolling_extrema_breakout',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            extrema: 'low',
+            lookbackBars: lowLookback,
+            event: 'breakout_down',
+          },
+        })
+      }
+    }
+  }
+
   private pushRangePositionTriggers(
     segment: string,
     triggers: SeedTrigger[],
@@ -2156,6 +2667,9 @@ export class SemanticSeedExtractorService {
     contextText: string = segment,
   ): void {
     const clauses = this.splitPercentChangeClauses(segment)
+    if (clauses.length === 0 && this.hasMultiplePercentChangeRawClauses(segment)) {
+      return
+    }
     if (clauses.length > 0 && (clauses.length > 1 || clauses[0] !== segment)) {
       for (const clause of clauses) {
         this.pushPercentChangeTrigger(clause, triggers, seen, contextText)
@@ -2164,6 +2678,7 @@ export class SemanticSeedExtractorService {
     }
 
     if (!/%|百分/u.test(segment)) return
+    if (this.isNonPricePercentContext(segment)) return
     if (!this.hasExplicitPriceChangeContext(segment)) return
     const direction = this.resolvePercentDirection(segment)
     if (!direction) return
@@ -2190,6 +2705,173 @@ export class SemanticSeedExtractorService {
     })
   }
 
+  private pushVagueDipBuyingTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(大跌|暴跌|急跌|下杀|深跌|抄底)/u.test(segment)) return
+    if (!/(买|买入|抄底|做多)/u.test(segment)) return
+
+    this.pushTrigger(triggers, seen, {
+      key: 'price.percent_change',
+      phase: 'gate',
+      sideScope: 'long',
+      status: 'open',
+      source: 'user_explicit',
+      params: {
+        direction: 'down',
+      },
+      openSlots: [{
+        slotKey: 'trigger.percent_change.magnitude',
+        fieldPath: 'triggers[price.percent_change].params.valuePct',
+        status: 'open',
+        priority: 'core',
+        questionHint: '请确认“大跌”的跌幅阈值，例如 3% / 5% / 10%。',
+        affectsExecution: true,
+      }],
+    })
+
+    if (/反弹确认|确认反弹|反弹.{0,8}确认/u.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'confirmation.rebound',
+        phase: 'entry',
+        sideScope: 'long',
+        status: 'open',
+        source: 'user_explicit',
+        params: {},
+        openSlots: [{
+          slotKey: 'trigger.confirmation.rebound_definition',
+          fieldPath: 'triggers[confirmation.rebound].params.definition',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请确认反弹确认方式，例如重新站上 MA20 / 下一根 K 线收阳 / 反弹超过 1%。',
+          affectsExecution: true,
+        }],
+      })
+    }
+  }
+
+  private pushVolumeRelativeAverageTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/成交量|放量|量能|volume/iu.test(segment)) return
+
+    const clauses = this.splitLogicClauses(segment)
+    if (clauses.length > 1) {
+      for (const clause of clauses) {
+        if (/成交量|放量|量能|volume/iu.test(clause)) {
+          this.pushVolumeRelativeAverageTriggers(clause, triggers, seen)
+        }
+      }
+      return
+    }
+
+    const explicitMatch = segment.match(/(?:成交量|量能|volume).{0,12}(?:高于|大于|超过|gt|greater\s+than).{0,12}(?:过去|最近)\s*(\d{1,4})\s*根?(?:K\s*线)?(?:均量|平均量|平均成交量)(?:的)?\s*(\d+(?:\.\d+)?)\s*倍/iu)
+      ?? segment.match(/(?:过去|最近)\s*(\d{1,4})\s*根?(?:K\s*线)?(?:均量|平均量|平均成交量)(?:的)?\s*(\d+(?:\.\d+)?)\s*倍/iu)
+    const intent = /(?:买入|买|做多|开多)/u.test(segment)
+      ? { phase: 'entry' as const, sideScope: 'long' as const }
+      : (this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const })
+
+    if (explicitMatch?.[1] && explicitMatch[2]) {
+      const lookbackBars = Number(explicitMatch[1])
+      const multiplier = Number(explicitMatch[2])
+      if (Number.isFinite(lookbackBars) && Number.isFinite(multiplier)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'volume.relative_average',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            lookbackBars,
+            multiplier,
+            comparator: 'gt',
+          },
+        })
+      }
+      return
+    }
+
+    if (/放量|成交量放大|量能放大|volume\s*spike/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'volume.relative_average',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        status: 'open',
+        source: 'user_explicit',
+        params: {
+          event: 'spike',
+          comparator: 'gt',
+        },
+        openSlots: [
+          {
+            slotKey: 'trigger.volume.relative_average.lookback_bars',
+            fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量比较窗口，例如过去 20 根 K 线均量。',
+            affectsExecution: true,
+          },
+          {
+            slotKey: 'trigger.volume.relative_average.multiplier',
+            fieldPath: 'triggers[volume.relative_average].params.multiplier',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量倍数，例如高于均量 1.5 倍。',
+            affectsExecution: true,
+          },
+        ],
+      })
+    }
+  }
+
+  private pushReboundConfirmationTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/反弹/u.test(segment) || !/(买|买入|做多|开多)/u.test(segment)) return
+    if (/反弹确认|确认反弹|反弹.{0,8}确认/u.test(segment)) return
+
+    const intent = this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const }
+    this.pushTrigger(triggers, seen, {
+      key: 'confirmation.rebound',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
+      params: {},
+    })
+  }
+
+  private pushLogicalAnyOfTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(?:或|或者|任一|any\s+of)/iu.test(segment)) return
+    if (!/(卖出|平仓|平多|出场|离场)/u.test(segment)) return
+
+    const items: Array<Record<string, unknown>> = []
+    const maBreakdown = segment.match(/跌破\s*(MA|EMA)\s*(\d{1,4})/iu)
+    if (maBreakdown?.[1] && maBreakdown[2]) {
+      const referenceIndicator = maBreakdown[1].toLowerCase() === 'ema' ? 'ema' : 'ma'
+      const referencePeriod = Number(maBreakdown[2])
+      items.push({
+        key: 'indicator.below',
+        params: {
+          indicator: referenceIndicator,
+          referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
+          'reference.period': referencePeriod,
+          reference: {
+            indicator: referenceIndicator,
+            period: referencePeriod,
+          },
+        },
+      })
+    }
+    if (/MACD.{0,8}死叉|死叉.{0,8}MACD/iu.test(segment)) {
+      items.push({
+        key: 'indicator.cross_under',
+        params: {
+          indicator: 'macd',
+          semantic: 'cross_down',
+        },
+      })
+    }
+    if (items.length < 2) return
+
+    this.pushTrigger(triggers, seen, {
+      key: 'logical.any_of',
+      phase: 'exit',
+      sideScope: 'long',
+      params: { items },
+    })
+  }
+
   private splitPercentChangeClauses(segment: string): string[] {
     const rawClauses = segment
       .split(/[，,、；;。]|(?:另有|另外|同时|并且|以及)/u)
@@ -2211,6 +2893,19 @@ export class SemanticSeedExtractorService {
       .map(match => match[0].trim())
       .filter(Boolean)
     return matches.length > 0 ? matches : [segment]
+  }
+
+  private hasMultiplePercentChangeRawClauses(segment: string): boolean {
+    return segment
+      .split(/[，,、；;。]|(?:另有|另外|同时|并且|以及)/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+      .length > 1
+  }
+
+  private isNonPricePercentContext(segment: string): boolean {
+    return /(?:单笔|仓位|资金|余额|头寸|下单|投入|使用|用|买一点|买一些|轻仓|小仓位|少量).{0,12}(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)/u.test(segment)
+      || /(?:止损|止盈|亏损|盈利).{0,12}(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)/u.test(segment)
   }
 
   private pushRecognizedUnsupportedTriggers(
@@ -2276,7 +2971,7 @@ export class SemanticSeedExtractorService {
         })
       }
 
-      if (/放量|成交量放大|volume\s*spike|量能放大/iu.test(clause)) {
+      if (/放量|成交量放大|volume\s*spike|量能放大/iu.test(clause) && !this.hasSupportedVolumeRelativeAverageContext(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'volume.spike',
           ...this.resolveUnsupportedTriggerIntent(clause, segment),
@@ -2287,7 +2982,7 @@ export class SemanticSeedExtractorService {
         })
       }
 
-      if (/成交量.*(?:大于|超过|高于|阈值)|volume.*(?:gte|threshold)/iu.test(clause)) {
+      if (/成交量.*(?:大于|超过|高于|阈值)|volume.*(?:gte|threshold)/iu.test(clause) && !this.hasSupportedVolumeRelativeAverageContext(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'volume.threshold',
           ...this.resolveUnsupportedTriggerIntent(clause, segment),
@@ -2449,6 +3144,12 @@ export class SemanticSeedExtractorService {
     return /(?:不要|不用|无需|不|without|no)\s*.{0,12}(?:放量|成交量|量能|volume|ATR|平均真实波幅|分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(clause)
   }
 
+  private hasSupportedVolumeRelativeAverageContext(clause: string): boolean {
+    return /放量|成交量放大|量能放大|volume\s*spike/iu.test(clause)
+      || /(?:成交量|量能|volume).{0,32}(?:过去|最近)\s*\d{1,4}\s*根?(?:K\s*线)?(?:均量|平均量|平均成交量)/iu.test(clause)
+      || /(?:过去|最近)\s*\d{1,4}\s*根?(?:K\s*线)?(?:均量|平均量|平均成交量).{0,32}\d+(?:\.\d+)?\s*倍/iu.test(clause)
+  }
+
   private hasNegatedUnsupportedActionContext(clause: string): boolean {
     return /(?:不要|不用|无需|不可|不能|禁止|避免|不|without|no)\s*.{0,12}(?:加仓|补仓|反手|scale\s*in|reverse\s+position|flip\s+position)/iu.test(clause)
   }
@@ -2542,10 +3243,10 @@ export class SemanticSeedExtractorService {
     if (/做空|开空|空单|short/u.test(segment)) {
       return { phase: 'entry', sideScope: 'short' }
     }
-    if (/卖出/u.test(segment)) {
+    if (/卖出|卖/u.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
-    if (/做多|开多|买入|入场|开仓|long/u.test(segment)) {
+    if (/做多|开多|买入|买|入场|开仓|long/u.test(segment)) {
       return { phase: 'entry', sideScope: 'long' }
     }
     if (/平仓/u.test(segment)) {
@@ -2625,6 +3326,12 @@ export class SemanticSeedExtractorService {
     return withoutPeriod[0] ?? numbers[0] ?? null
   }
 
+  private isRsiThresholdAliasClause(clause: string, segment: string): boolean {
+    if (!/RSI/iu.test(segment)) return false
+    if (/\b(?:MA|EMA)\s*\d{1,4}/iu.test(clause)) return false
+    return /(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)\s*\d+(?:\.\d+)?/u.test(clause)
+  }
+
   private extractMacdParams(text: string): { fastPeriod: number; slowPeriod: number; signalPeriod: number } | null {
     const match = text.match(/MACD\s*(\d{1,3})\s*\/\s*(\d{1,3})\s*\/\s*(\d{1,3})/iu)
     if (!match?.[1] || !match[2] || !match[3]) return null
@@ -2655,7 +3362,7 @@ export class SemanticSeedExtractorService {
   }
 
   private hasExecutableTradeIntent(segment: string): boolean {
-    return /(买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空|多单|空单)/u.test(segment)
+    return /(买入|卖出|买|卖|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空|多单|空单)/u.test(segment)
   }
 
   private hasBollingerBandAction(segment: string): boolean {
@@ -2863,8 +3570,8 @@ export class SemanticSeedExtractorService {
         ...trigger,
         params: {
           ...trigger.params,
-          ...(typeof trigger.params?.period === 'number' ? {} : { period: reference.params.period }),
-          ...(typeof trigger.params?.stdDev === 'number' ? {} : { stdDev: reference.params.stdDev }),
+          ...(typeof trigger.params?.period === 'number' ? {} : { period: reference.params?.period }),
+          ...(typeof trigger.params?.stdDev === 'number' ? {} : { stdDev: reference.params?.stdDev }),
         },
       }
     })
@@ -2906,6 +3613,169 @@ export class SemanticSeedExtractorService {
         trigger.sideScope ?? null,
       ]))
     })
+  }
+
+  private removeLogicalAnyOfExitChildren(triggers: SeedTrigger[]): SeedTrigger[] {
+    const anyOfExitChildren = new Set<string>()
+
+    for (const trigger of triggers) {
+      if (trigger.key !== 'logical.any_of' || trigger.phase !== 'exit') continue
+      const items = trigger.params?.items
+      if (!Array.isArray(items)) continue
+
+      for (const item of items) {
+        if (!this.isPlainObject(item) || typeof item.key !== 'string') continue
+        anyOfExitChildren.add(this.buildLogicalAnyOfChildSignature(item.key, item.params))
+      }
+    }
+
+    if (anyOfExitChildren.size === 0) return triggers
+
+    return triggers.filter((trigger) => {
+      if (trigger.key === 'logical.any_of' || trigger.phase !== 'exit') return true
+      return !anyOfExitChildren.has(this.buildLogicalAnyOfChildSignature(trigger.key, trigger.params))
+    })
+  }
+
+  private buildLogicalAnyOfChildSignature(key: string, params: unknown): string {
+    return JSON.stringify([key, this.stableValue(params ?? {})])
+  }
+
+  private removeStaticIndicatorTriggersCoveredBySequences(triggers: SeedTrigger[]): SeedTrigger[] {
+    const coveredIndicatorBoundaries = new Set<string>()
+
+    for (const trigger of triggers) {
+      const boundary = this.readSequenceCoveredIndicatorBoundary(trigger)
+      if (boundary) {
+        coveredIndicatorBoundaries.add(boundary)
+      }
+    }
+
+    if (coveredIndicatorBoundaries.size === 0) return triggers
+
+    return triggers.filter((trigger) => {
+      const boundary = this.readStaticIndicatorBoundary(trigger)
+      return !boundary || !coveredIndicatorBoundaries.has(boundary)
+    })
+  }
+
+  private readSequenceCoveredIndicatorBoundary(trigger: SeedTrigger): string | null {
+    if (trigger.key !== 'condition.sequence') return null
+
+    const sequenceKind = trigger.params?.sequenceKind
+    if (sequenceKind !== 'pullback_reclaim' && sequenceKind !== 'rsi_reclaim') {
+      return null
+    }
+
+    if (sequenceKind === 'pullback_reclaim') {
+      const reference = trigger.params?.reference
+      if (!this.isPlainObject(reference)) return null
+      const indicator = typeof reference.indicator === 'string' ? reference.indicator.toLowerCase() : null
+      const period = typeof reference.period === 'number' && Number.isFinite(reference.period) ? reference.period : null
+      if (!indicator || period === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: 'indicator.above',
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator,
+        period,
+      })
+    }
+
+    const threshold = typeof trigger.params?.threshold === 'number' && Number.isFinite(trigger.params.threshold)
+      ? trigger.params.threshold
+      : null
+    if (threshold === null) return null
+
+    return this.buildStaticIndicatorBoundarySignature({
+      key: 'oscillator.rsi_gte',
+      phase: trigger.phase,
+      sideScope: trigger.sideScope,
+      indicator: 'rsi',
+      period: typeof trigger.params?.period === 'number' && Number.isFinite(trigger.params.period)
+        ? trigger.params.period
+        : 14,
+      threshold,
+    })
+  }
+
+  private readStaticIndicatorBoundary(trigger: SeedTrigger): string | null {
+    if (trigger.key === 'indicator.above' || trigger.key === 'indicator.below') {
+      const indicator = typeof trigger.params?.indicator === 'string' ? trigger.params.indicator.toLowerCase() : 'ma'
+      const period = typeof trigger.params?.['reference.period'] === 'number' && Number.isFinite(trigger.params['reference.period'])
+        ? trigger.params['reference.period']
+        : null
+      if (period === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator,
+        period,
+      })
+    }
+
+    if (trigger.key === 'oscillator.rsi_gte' || trigger.key === 'oscillator.rsi_lte') {
+      const threshold = typeof trigger.params?.value === 'number' && Number.isFinite(trigger.params.value)
+        ? trigger.params.value
+        : null
+      if (threshold === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator: 'rsi',
+        period: typeof trigger.params?.period === 'number' && Number.isFinite(trigger.params.period)
+          ? trigger.params.period
+          : 14,
+        threshold,
+      })
+    }
+
+    if (
+      (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under')
+      && typeof trigger.params?.indicator === 'string'
+      && trigger.params.indicator.toLowerCase() === 'rsi'
+    ) {
+      const threshold = typeof trigger.params?.value === 'number' && Number.isFinite(trigger.params.value)
+        ? trigger.params.value
+        : null
+      if (threshold === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: trigger.key === 'indicator.cross_over' ? 'oscillator.rsi_gte' : 'oscillator.rsi_lte',
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator: 'rsi',
+        period: typeof trigger.params?.period === 'number' && Number.isFinite(trigger.params.period)
+          ? trigger.params.period
+          : 14,
+        threshold,
+      })
+    }
+
+    return null
+  }
+
+  private buildStaticIndicatorBoundarySignature(input: {
+    key: string
+    phase: SeedTrigger['phase']
+    sideScope?: SeedTrigger['sideScope']
+    indicator: string
+    period: number
+    threshold?: number
+  }): string {
+    return JSON.stringify([
+      input.key,
+      input.phase,
+      input.sideScope ?? null,
+      input.indicator,
+      input.period,
+      input.threshold ?? null,
+    ])
   }
 
   private resolveLegacyBollingerBoundaryRole(key: string): 'upper' | 'lower' | 'middle' | null {
@@ -3045,6 +3915,7 @@ export class SemanticSeedExtractorService {
 
       return `${chineseMatch[1]}${this.normalizeTimeframeUnit(chineseMatch[2])}`
     }
+    if (/日线|日\s*K|天线/u.test(text)) return '1d'
     return null
   }
 
@@ -3094,6 +3965,9 @@ export class SemanticSeedExtractorService {
       if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
       push(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`)
     }
+    if (/日线|日\s*K|天线/u.test(text)) {
+      push('1d')
+    }
 
     return values
   }
@@ -3127,6 +4001,36 @@ export class SemanticSeedExtractorService {
       }
     }
     return null
+  }
+
+  private parseChineseInteger(text: string): number | null {
+    const numeric = Number(text)
+    if (Number.isFinite(numeric)) return numeric
+
+    const digits: Record<string, number> = {
+      一: 1,
+      二: 2,
+      两: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9,
+    }
+    if (text === '十') return 10
+    if (text.startsWith('十')) {
+      return 10 + (digits[text.slice(1)] ?? 0)
+    }
+    if (text.includes('十')) {
+      const [tensText, onesText = ''] = text.split('十')
+      const tens = digits[tensText] ?? 1
+      const ones = onesText ? digits[onesText] : 0
+      return tens * 10 + (ones ?? 0)
+    }
+
+    return digits[text] ?? null
   }
 
   private extractPercent(text: string, patterns: RegExp[]): number | null {

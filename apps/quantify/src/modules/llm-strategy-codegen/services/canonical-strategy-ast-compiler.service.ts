@@ -1,5 +1,5 @@
-import type { DecisionProgramNode, ExprNode, GuardProgramNode, OrderProgramNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
+import type { DecisionProgramNode, ExprNode, GuardProgramNode, OrderProgramNode, RiskPredicateProgramNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
+import type { CanonicalStrategyIrV1, PredicateDef, RiskPredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 
@@ -29,17 +29,20 @@ export class CanonicalStrategyAstCompilerService {
   compile(ir: CanonicalStrategyIrV1): StrategyAstV1 {
     const exprPool = this.compileExprPool(ir)
     const guards = this.compileGuards(ir)
+    const riskPredicates = this.compileRiskPredicates(ir)
     const decisionPrograms = this.compileDecisionPrograms(ir)
     const orderPrograms = this.compileOrderPrograms(ir)
-    const topology = this.buildTopology({ exprPool, guards, decisionPrograms, orderPrograms })
+    const topology = this.buildTopology({ exprPool, guards, riskPredicates, decisionPrograms, orderPrograms })
 
     return {
       astVersion: 'csa.v1',
-      manifest: this.buildManifest(ir, { exprPool, guards, decisionPrograms, orderPrograms, topology }),
+      manifest: this.buildManifest(ir, { exprPool, guards, riskPredicates, decisionPrograms, orderPrograms, topology }),
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
+      ...(ir.runtimeRequirements ? { runtimeRequirements: ir.runtimeRequirements } : {}),
       exprPool,
       guards,
+      ...(riskPredicates.length > 0 ? { riskPredicates } : {}),
       decisionPrograms,
       orderPrograms,
       topology,
@@ -99,6 +102,24 @@ export class CanonicalStrategyAstCompilerService {
     }))
   }
 
+  private compileRiskPredicates(ir: CanonicalStrategyIrV1): RiskPredicateProgramNode[] {
+    return this.orderedRiskPredicates(ir).map((riskPredicate, index) => ({
+      id: `risk_predicate_${String(index + 1).padStart(2, '0')}_${riskPredicate.id}`,
+      sourceRef: riskPredicate.id,
+      payload: riskPredicate,
+    }))
+  }
+
+  private orderedRiskPredicates(ir: CanonicalStrategyIrV1): RiskPredicateDef[] {
+    return [...(ir.riskPolicy.riskPredicates ?? [])].sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind.localeCompare(right.kind)
+      const leftParams = stableJsonStringify(left.params)
+      const rightParams = stableJsonStringify(right.params)
+      if (leftParams !== rightParams) return leftParams.localeCompare(rightParams)
+      return left.id.localeCompare(right.id)
+    })
+  }
+
   private compileDecisionPrograms(ir: CanonicalStrategyIrV1): DecisionProgramNode[] {
     const exprIdIndex = this.buildExprIdIndex(
       ir,
@@ -146,12 +167,14 @@ export class CanonicalStrategyAstCompilerService {
   private buildTopology(input: {
     exprPool: ExprNode[]
     guards: GuardProgramNode[]
+    riskPredicates: RiskPredicateProgramNode[]
     decisionPrograms: DecisionProgramNode[]
     orderPrograms: OrderProgramNode[]
   }): StrategyAstV1['topology'] {
     return {
       exprOrder: input.exprPool.map(item => item.id),
       guardOrder: input.guards.map(item => item.id),
+      ...(input.riskPredicates.length > 0 ? { riskPredicateOrder: input.riskPredicates.map(item => item.id) } : {}),
       decisionOrder: input.decisionPrograms.map(item => item.id),
       orderProgramOrder: input.orderPrograms.map(item => item.id),
     }
@@ -176,6 +199,7 @@ export class CanonicalStrategyAstCompilerService {
     projection: {
       exprPool: ExprNode[]
       guards: GuardProgramNode[]
+      riskPredicates: RiskPredicateProgramNode[]
       decisionPrograms: DecisionProgramNode[]
       orderPrograms: OrderProgramNode[]
       topology: StrategyAstV1['topology']
@@ -184,11 +208,13 @@ export class CanonicalStrategyAstCompilerService {
     const structuralProjection = {
       exprPool: projection.exprPool,
       guards: projection.guards,
+      riskPredicates: projection.riskPredicates,
       decisionPrograms: projection.decisionPrograms,
       orderPrograms: projection.orderPrograms,
       topology: projection.topology,
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
+      runtimeRequirements: ir.runtimeRequirements,
     }
 
     return {

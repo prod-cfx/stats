@@ -8,6 +8,7 @@ import { ScriptProfileExtractorService } from '../script-profile-extractor.servi
 import { SemanticGraphCompilerService } from '../semantic-graph-compiler.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { buildLockedAtomicState } from './fixtures/semantic-state-golden-cases'
 
 describe('strategyConsistencyService', () => {
   const consistency = new StrategyConsistencyService(
@@ -76,6 +77,62 @@ strategy
     expect(report.checks.some(
       check => check.key === 'compiler_consistency.execution_envelope.position_mode' && check.status === 'passed',
     )).toBe(true)
+  })
+
+  it('passes AST projection for atomic scripts with runtime requirements and risk predicates', () => {
+    const canonicalSpec = canonicalBuilder.buildFromSemanticState(buildLockedAtomicState('atr-risk'))
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(ast.runtimeRequirements?.helpers).toEqual(expect.arrayContaining(['atr']))
+    expect(ast.riskPredicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ payload: expect.objectContaining({ kind: 'atrMultipleStop' }) }),
+      expect.objectContaining({ payload: expect.objectContaining({ kind: 'atrMultipleTakeProfit' }) }),
+    ]))
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      key: 'compiler_consistency.ast_projection',
+      status: 'passed',
+    }))
+  })
+
+  it('keeps AST projection compatible with compiler.v1 scripts emitted before optional atomic constants', () => {
+    const semanticGraph = createBollingerSemanticGraph()
+    const ir = new SemanticGraphCompilerService().compile(semanticGraph)
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: createExecutionEnvelope(),
+    })
+      .replace('const RUNTIME_REQUIREMENTS = null as const\n', '')
+      .replace('const RISK_PREDICATES = null as const\n', '')
+
+    const report = consistency.audit({
+      semanticGraph,
+      ir,
+      scriptCode: script,
+    })
+
+    expect(report.checks).toContainEqual(expect.objectContaining({
+      key: 'compiler_consistency.ast_projection',
+      status: 'passed',
+    }))
   })
 
   it('fails with direction-sensitive atom drift at the IR layer', () => {

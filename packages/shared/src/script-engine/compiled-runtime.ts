@@ -2,5 +2,6 @@ export { buildCompiledManifest } from './compiled-runtime/build-compiled-manifes
 export { canonicalSerialize } from './compiled-runtime/canonical-serialize'
 export { evaluateExprPool } from './compiled-runtime/evaluate-expr-pool'
 export { evaluateGuards } from './compiled-runtime/evaluate-guards'
+export { evaluateRiskPredicates } from './compiled-runtime/evaluate-risk-predicates'
 export { runDecisionPrograms } from './compiled-runtime/run-decision-programs'
 export { runOrderPrograms } from './compiled-runtime/run-order-programs'

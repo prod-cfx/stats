@@ -29,6 +29,17 @@ export function sma(prices: number[], period: number): number | null {
 }
 
 /**
+ * 成交量简单移动平均线 (SMA Volume)
+ */
+export function smaVolume(bars: Bar[], period: number): number | null {
+  if (!Array.isArray(bars) || period <= 0 || bars.length < period) {
+    return null
+  }
+
+  return sma(bars.map(bar => bar.volume), period)
+}
+
+/**
  * 指数移动平均线 (EMA)
  */
 export function ema(prices: number[], period: number): number | null {

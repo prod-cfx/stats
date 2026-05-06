@@ -100,4 +100,46 @@ describe('canonicalStrategyIrCompilerService', () => {
 
     expect(() => compiler.compile(graph)).toThrow('codegen.graph_join_ambiguous')
   })
+
+  it('accepts generic predicate operators on the legacy graph IR path', () => {
+    const compiler = buildCompiler()
+
+    const graph: StrategyLogicGraphSnapshot = {
+      version: 4,
+      status: 'confirmed',
+      trigger: [
+        {
+          id: 'trigger-entry-generic',
+          phase: 'entry',
+          operator: 'allOf(compare(CLOSE,EMA(CLOSE,20)),cross(EMA(CLOSE,7),EMA(CLOSE,21)))',
+        },
+        {
+          id: 'trigger-exit-sequence',
+          phase: 'exit',
+          operator: 'sequence()',
+        },
+      ],
+      actions: [
+        { id: 'action-buy-4', action: 'BUY', target: 'BTCUSDT', amount: '10%' },
+        { id: 'action-sell-4', action: 'SELL', target: 'BTCUSDT', amount: '10%' },
+      ],
+      risk: [],
+      meta: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        positionPct: 10,
+        executionTags: [],
+      },
+    }
+
+    const ir = compiler.compile(graph)
+
+    expect(ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'allOf' }),
+      expect.objectContaining({ kind: 'compare' }),
+      expect.objectContaining({ kind: 'cross' }),
+      expect.objectContaining({ kind: 'sequence' }),
+    ]))
+  })
 })

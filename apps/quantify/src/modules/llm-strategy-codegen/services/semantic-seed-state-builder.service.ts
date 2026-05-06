@@ -43,7 +43,7 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
 }
 const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
 const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
-const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set(['place_limit_grid', 'grid_ladder', 'grid.ladder', 'maintain_limit_ladder'])
+const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set(['place_limit_grid', 'grid_ladder', 'grid.ladder', 'action.grid_ladder', 'maintain_limit_ladder'])
 const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
@@ -132,9 +132,9 @@ export class SemanticSeedStateBuilderService {
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
     const contracts = this.readContracts(update.contracts)
-      ?? (this.hasOwnProperty(update, 'contracts')
-        ? null
-        : this.synthesizeTriggerContracts(key, phase, sideScope, params, index))
+      ?? (this.shouldSynthesizeMissingContracts(update)
+        ? this.synthesizeTriggerContracts(key, phase, sideScope, params, index)
+        : null)
     openSlots = this.ensureGridLevelSetDensityOpenSlot({
       key,
       openSlots,
@@ -181,9 +181,9 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const params = this.readParams(update.params)
     const contracts = this.readContracts(update.contracts)
-      ?? (this.hasOwnProperty(update, 'contracts')
-        ? null
-        : this.synthesizeActionContracts(key, params, index))
+      ?? (this.shouldSynthesizeMissingContracts(update)
+        ? this.synthesizeActionContracts(key, params, index)
+        : null)
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -405,8 +405,17 @@ export class SemanticSeedStateBuilderService {
     if (
       key === 'volume.spike'
       || key === 'volume.threshold'
+      || key === 'volume.relative_average'
       || key === 'volatility.atr_threshold'
     ) {
+      return true
+    }
+
+    if (key === 'condition.sequence') {
+      return typeof params.sequenceKind === 'string' && params.sequenceKind.trim().length > 0
+    }
+
+    if (key === 'confirmation.rebound') {
       return true
     }
 
@@ -545,11 +554,53 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
+    if (key === 'volume.relative_average') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_relative_average',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
     if (key === 'volatility.atr_threshold') {
       return {
         domain: 'market',
         verb: 'detect',
         object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    if (key === 'condition.sequence') {
+      return {
+        domain: 'price',
+        verb: 'detect',
+        object: 'sequence_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    if (key === 'confirmation.rebound') {
+      return {
+        domain: 'price',
+        verb: 'confirm',
+        object: 'rebound',
         shape: this.toCapabilityShape({
           key,
           phase,
@@ -1216,10 +1267,31 @@ export class SemanticSeedStateBuilderService {
     return { ...value }
   }
 
+  private shouldSynthesizeMissingContracts(update: SemanticPatchRecord): boolean {
+    if (!this.hasOwnProperty(update, 'contracts')) {
+      return true
+    }
+
+    return update.contracts === null
+      || (Array.isArray(update.contracts) && update.contracts.length === 0)
+  }
+
   private normalizeTriggerParams(
     key: string,
     params: Record<string, unknown>,
   ): Record<string, unknown> {
+    if (
+      (key === 'indicator.cross_over' || key === 'indicator.cross_under')
+      && this.readTrimmedString(params.indicator)?.toLowerCase() === 'macd'
+    ) {
+      return {
+        ...params,
+        fastPeriod: this.hasFiniteNumber(params.fastPeriod) ? params.fastPeriod : 12,
+        slowPeriod: this.hasFiniteNumber(params.slowPeriod) ? params.slowPeriod : 26,
+        signalPeriod: this.hasFiniteNumber(params.signalPeriod) ? params.signalPeriod : 9,
+      }
+    }
+
     if (key !== 'price.percent_change' || typeof params.valuePct !== 'number' || !Number.isFinite(params.valuePct)) {
       return params
     }

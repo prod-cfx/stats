@@ -7,6 +7,10 @@ import { BacktestStrategyAdapterService } from './backtest-strategy-adapter.serv
 describe('backtestStrategyAdapterService', () => {
   const service = new BacktestStrategyAdapterService()
 
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   it('builds runner strategy fn from valid StrategyAdapterV1 script', async () => {
     const strategy = await service.build({
       id: 's1',
@@ -46,6 +50,61 @@ strategy`,
         compiled: true,
       }),
     })
+  })
+
+  it('executes parsed compiled risk predicates in the backtest fast path', async () => {
+    const strategy = await service.build({
+      id: 'compiled-risk-s1',
+      protocolVersion: 'v1',
+      scriptCode: createCompiledAtrRiskScriptFixture(),
+      params: {},
+    })
+
+    await expect(strategy.fn({
+      position: { qty: 1, avgEntryPrice: 100 },
+      currentPrice: 75,
+      bars: Array.from({ length: 16 }, (_unused, index) => ({
+        time: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: index === 15 ? 75 : 100,
+        volume: 1,
+      })),
+      __compiledDecisionState: { barIndex: 16, lastTriggeredByProgram: {} },
+    } as any)).resolves.toMatchObject({
+      action: 'CLOSE_LONG',
+      reason: 'compiled.force_exit',
+      meta: expect.objectContaining({
+        guardState: expect.objectContaining({
+          forceExit: true,
+          triggered: ['risk_predicate_01_risk-atr-stop'],
+        }),
+      }),
+    })
+  })
+
+  it('fails closed when a compiler.v1 generated script fails compiled parser validation', async () => {
+    const tamperedScript = createCompiledScriptFixture().replace(
+      'export default strategy',
+      'export default strategy\n// tampered fixed wrapper',
+    )
+    const executeAdapter = jest
+      .spyOn(service as any, 'executeAdapter')
+      .mockResolvedValue({
+        protocolVersion: 'v1',
+        onBar: () => ({ action: 'NOOP', reason: 'vm.fallback' }),
+      })
+
+    await expect(service.build({
+      id: 'compiled-tampered-s1',
+      protocolVersion: 'v1',
+      scriptCode: tamperedScript,
+      params: {},
+    })).rejects.toMatchObject({
+      message: 'backtest.compiled_strategy_invalid',
+    } as Partial<DomainException>)
+    expect(executeAdapter).not.toHaveBeenCalled()
   })
 
   it('fails when protocolVersion is not v1', async () => {
@@ -175,6 +234,75 @@ function createCompiledScriptFixture(): string {
     riskPolicy: {
       guards: [
         { id: 'stop_loss_4', kind: 'STOP_LOSS_PCT', scope: 'position', value: 4, onBreach: 'FORCE_EXIT' },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+
+  return emitter.emit({
+    ast: compiler.compile(ir),
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
+
+function createCompiledAtrRiskScriptFixture(): string {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const emitter = new CompiledScriptEmitterService()
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'7'.repeat(64)}`,
+      specHash: `sha256:${'8'.repeat(64)}`,
+    },
+    market: {
+      venue: 'binance',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['1h'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 25 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 15,
+      maxLookback: 15,
+      requiredTimeframes: ['1h'],
+    },
+    signalCatalog: {
+      series: [],
+      levelSets: [],
+      predicates: [],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    ruleBlocks: [],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'risk-atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
       ],
     },
     executionPolicy: {

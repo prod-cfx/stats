@@ -185,6 +185,61 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes supported grid contracts when planner explicitly sends null contracts', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeMin: 79200,
+          rangeMax: 80200,
+          sideMode: 'bidirectional',
+        },
+        contracts: null,
+      }],
+      actions: [{
+        key: 'place_limit_grid',
+        params: {
+          orderType: 'limit',
+          timeInForce: 'gtc',
+        },
+        contracts: null,
+      }],
+    })
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      key: 'grid.range_rebalance',
+      openSlots: expect.arrayContaining([expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+      })]),
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: expect.objectContaining({
+            lower: 79200,
+            upper: 80200,
+          }),
+        })],
+      })],
+    }))
+    expect(state?.actions[0]).toEqual(expect.objectContaining({
+      key: 'place_limit_grid',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
+          domain: 'order_program',
+          verb: 'maintain',
+          object: 'limit_ladder',
+        })]),
+      })],
+    }))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
   it('closes synthesized fixed grid density slots from percent spacing answers', () => {
     const state = service.build({
       triggers: [{
@@ -277,6 +332,197 @@ describe('SemanticSeedStateBuilderService', () => {
       && item.fieldPath === slot.fieldPath
       && item.status === 'open',
     )).toBeUndefined()
+  })
+
+  it('synthesizes supported bollinger boundary contracts when planner explicitly sends null contracts', () => {
+    const state = service.build({
+      triggers: [{
+        id: 'entry-bollinger-upper',
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'short',
+        params: {
+          indicator: {
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          },
+          boundaryRole: 'upper',
+          confirmationMode: 'close_confirm',
+        },
+        contracts: null,
+      }, {
+        id: 'exit-bollinger-middle-short',
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: {
+          indicator: {
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          },
+          boundaryRole: 'middle',
+          confirmationMode: 'close_confirm',
+        },
+        contracts: null,
+      }],
+    })
+
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        status: 'locked',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'detect',
+            object: 'signal_condition',
+          })],
+        })],
+      }),
+    ]))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
+  it('synthesizes default MACD cross contracts without asking for execution contracts', () => {
+    const state = service.build({
+      triggers: [
+        {
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'macd', semantic: 'cross_up' },
+        },
+        {
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { indicator: 'macd', semantic: 'cross_down' },
+        },
+      ],
+      actions: [
+        { key: 'open_long' },
+        { key: 'close_long' },
+      ],
+    })
+
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          params: expect.objectContaining({
+            indicator: 'macd',
+            fastPeriod: 12,
+            slowPeriod: 26,
+            signalPeriod: 9,
+          }),
+        })],
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          params: expect.objectContaining({
+            indicator: 'macd',
+            fastPeriod: 12,
+            slowPeriod: 26,
+            signalPeriod: 9,
+          }),
+        })],
+      }),
+    ]))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
+  it('synthesizes contracts for sequence, rebound and relative-volume atoms without generic contract prompts', () => {
+    const state = service.build({
+      triggers: [
+        {
+          key: 'condition.sequence',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            sequenceKind: 'consecutive_candles',
+            count: 3,
+            direction: 'down',
+            groupId: 'entry-confirmation-1',
+          },
+        },
+        {
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'open',
+          params: {
+            event: 'spike',
+            comparator: 'gt',
+            groupId: 'entry-confirmation-1',
+          },
+          openSlots: [{
+            slotKey: 'trigger.volume.relative_average.lookback_bars',
+            fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量比较窗口，例如过去 20 根 K 线均量。',
+            affectsExecution: true,
+          }],
+        },
+        {
+          key: 'confirmation.rebound',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            groupId: 'entry-confirmation-1',
+          },
+        },
+      ],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'detect',
+            object: 'sequence_condition',
+          })],
+        })],
+      }),
+      expect.objectContaining({
+        key: 'volume.relative_average',
+        status: 'open',
+        openSlots: expect.arrayContaining([expect.objectContaining({
+          slotKey: 'trigger.volume.relative_average.lookback_bars',
+        })]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'market',
+            verb: 'detect',
+            object: 'volume_relative_average',
+          })],
+        })],
+      }),
+      expect.objectContaining({
+        key: 'confirmation.rebound',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'confirm',
+            object: 'rebound',
+          })],
+        })],
+      }),
+    ]))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
   it('synthesizes contracts for complete lightweight planner patches and keeps them locked', () => {

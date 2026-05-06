@@ -17,6 +17,13 @@ export function resolveSemanticClarificationMetadata(
     }
   }
 
+  if (slotKey === 'risk.falling_knife_guard.definition') {
+    return {
+      reason: 'missing_risk_atom',
+      field: 'risk',
+    }
+  }
+
   if (slotKey === 'risk.protective_exit' || slotKey.startsWith('risk.')) {
     return {
       reason: 'missing_semantic_risk',

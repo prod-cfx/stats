@@ -139,6 +139,7 @@ return null
 - `macd`
 - `atr`
 - `bollingerBands`
+- `smaVolume`
 - `rsi`
 - `stochastic`
 - `adx`
@@ -151,6 +152,8 @@ return null
 - `deathCross`
 - `highest`
 - `lowest`
+- `rollingHigh`
+- `rollingLow`
 - `calcStopLoss`
 - `calcTakeProfit`
 - `createSignal`

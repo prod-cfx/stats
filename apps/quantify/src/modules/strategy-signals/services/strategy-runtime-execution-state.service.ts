@@ -1,5 +1,9 @@
 import type { StrategyRuntimeExecutionState } from '@/prisma/prisma.types'
 import type {
+  AtomicRuntimeRequirements,
+  SemanticRuntimeState,
+} from '@/modules/strategy-runtime/semantic-runtime-state.util'
+import type {
   MarkFailedStateInput,
   MarkRetryableFailureStateInput,
   RuntimeExecutionStateKeyInput,
@@ -8,6 +12,10 @@ import type {
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class metadata
 import { StrategyRuntimeExecutionStateRepository } from '../repositories/strategy-runtime-execution-state.repository'
 import { Injectable } from '@nestjs/common'
+import {
+  buildSemanticRuntimeState,
+  readAtomicRuntimeRequirementsFromSnapshot,
+} from '@/modules/strategy-runtime/semantic-runtime-state.util'
 
 export type RuntimeExecutionStateStatus = 'ready' | 'running' | 'retryable' | 'terminal' | 'consumed'
 export type RuntimeExecutionFailureFamily = 'retryable' | 'terminal'
@@ -63,6 +71,16 @@ export class StrategyRuntimeExecutionStateService {
     const explicitKeys = this.readExplicitRuntimeExecutionSemantics(snapshot)
     if (!explicitKeys.length) return []
     return explicitKeys
+  }
+
+  buildRuntimeRequirementsFromSnapshot(snapshot: unknown): AtomicRuntimeRequirements | null {
+    return readAtomicRuntimeRequirementsFromSnapshot(snapshot)
+  }
+
+  buildSemanticRuntimeStateFromSnapshot(snapshot: unknown): SemanticRuntimeState | undefined {
+    const stateKeys = this.buildRuntimeRequirementsFromSnapshot(snapshot)?.stateKeys ?? []
+    if (stateKeys.length === 0) return undefined
+    return buildSemanticRuntimeState(stateKeys)
   }
 
   async initializeStatesForDeploy(input: InitializeRuntimeExecutionStatesInput): Promise<string[]> {

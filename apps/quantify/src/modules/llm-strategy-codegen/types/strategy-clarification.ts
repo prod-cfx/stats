@@ -22,6 +22,7 @@ export const STRATEGY_CLARIFICATION_REASONS = [
   'missing_semantic_trigger',
   'missing_semantic_action',
   'missing_semantic_risk',
+  'missing_risk_atom',
   'missing_semantic_position_sizing',
   'missing_semantic_position_mode',
   'missing_semantic_contract_requirement',

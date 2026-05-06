@@ -14,7 +14,13 @@ describe('compiledPublicationGateService', () => {
       publishedSnapshotsRepo as never,
       undefined,
     )
-    const ir = createIrFixture()
+    const ir = {
+      ...createIrFixture(),
+      runtimeRequirements: {
+        helpers: ['rollingHigh'],
+        stateKeys: ['breakout'],
+      },
+    }
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
       positionMode: 'long_only' as const,
@@ -121,7 +127,12 @@ describe('compiledPublicationGateService', () => {
       semanticConsistencyReport: { status: 'PASSED', checks: [] },
       userIntentSummary: { marketScope: ['BTCUSDT'] },
       strategySummary: { thesis: 'ma-crossover' },
-      scriptSummary: { indicators: ['EMA'] },
+      scriptSummary: {
+        indicators: ['EMA'],
+        compatibilityMetadata: {
+          existingFlag: true,
+        },
+      },
       lockedParams: { positionPct: 25 },
     })
 
@@ -140,7 +151,16 @@ describe('compiledPublicationGateService', () => {
         semanticConsistency: { status: 'PASSED', checks: [] },
         compilerConsistency: expect.any(Object),
       }),
-      scriptSummary: { indicators: ['EMA'] },
+      scriptSummary: {
+        indicators: ['EMA'],
+        compatibilityMetadata: {
+          existingFlag: true,
+          atomicContractExecution: {
+            schemaVersion: 1,
+            runtimeRequirements: ir.runtimeRequirements,
+          },
+        },
+      },
       paramsSnapshot: {
         exchange: 'binance',
         symbol: 'BTCUSDT',

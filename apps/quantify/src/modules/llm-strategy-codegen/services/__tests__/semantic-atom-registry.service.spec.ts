@@ -75,6 +75,81 @@ describe('SemanticAtomRegistryService', () => {
     }
   })
 
+  it('classifies generic atomic contract atoms as supported canonical v2 projections', () => {
+    const expectedAtoms = [
+      {
+        key: 'price.rolling_extrema_breakout',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['extrema', 'event'],
+      },
+      {
+        key: 'condition.sequence',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['sequenceKind'],
+      },
+      {
+        key: 'confirmation.rebound',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: [],
+      },
+      {
+        key: 'logical.any_of',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['items'],
+      },
+      {
+        key: 'volume.relative_average',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['lookbackBars', 'multiplier'],
+      },
+      {
+        key: 'risk.atr_multiple_stop',
+        category: 'risk',
+        supportStatus: 'supported_executable',
+        requiredParams: ['multiple'],
+      },
+      {
+        key: 'risk.atr_multiple_take_profit',
+        category: 'risk',
+        supportStatus: 'supported_executable',
+        requiredParams: ['multiple'],
+      },
+      {
+        key: 'risk.remembered_level_stop',
+        category: 'risk',
+        supportStatus: 'supported_executable',
+        requiredParams: ['levelKey'],
+      },
+      {
+        key: 'risk.falling_knife_guard',
+        category: 'risk',
+        supportStatus: 'supported_requires_slot',
+        requiredParams: ['definition'],
+      },
+    ]
+
+    for (const expectedAtom of expectedAtoms) {
+      expect(service.get(expectedAtom.key)).toMatchObject({
+        ...expectedAtom,
+        executableProjection: expect.arrayContaining(['canonical_spec_v2']),
+      })
+    }
+
+    expect(service.get('risk.falling_knife_guard').openSlots).toEqual([
+      {
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+        priority: 'risk',
+        questionHint: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+      },
+    ])
+  })
+
   it('provides a fallback patch that closes trigger contracts in the current semantic builder', () => {
     const replacement = service.get('risk.atr_stop').replacement
     expect(replacement?.description).toBe('MA20 上穿 MA50 开多，MA20 下穿 MA50 平仓，5% 止损，10% 止盈，单笔 10% 仓位。')

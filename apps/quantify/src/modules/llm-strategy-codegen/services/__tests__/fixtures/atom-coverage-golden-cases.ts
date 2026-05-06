@@ -8,6 +8,79 @@ export interface AtomCoverageGoldenCase {
   expectedRoute: SemanticSupportRoute
 }
 
+export const ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES = [
+  'BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓。',
+  'ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入。',
+  '我想在大跌后抄底，但不要接飞刀，反弹确认后再买。',
+  'BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。',
+  'BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。',
+  'ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。',
+  'SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。',
+  'BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。',
+  'ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈',
+] as const satisfies readonly string[]
+
+export const atomicContractExecutionUpgradeGoldenCases: AtomCoverageGoldenCase[] = [
+  {
+    name: 'atomic rolling extrema breakout entry and exit',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[0],
+    expectedKeys: ['context.symbol', 'context.timeframe', 'price.rolling_extrema_breakout', 'open_long', 'close_long'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    name: 'atomic ma gate with pullback reclaim entry',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[1],
+    expectedKeys: ['context.symbol', 'context.timeframe', 'condition.expression', 'condition.sequence', 'open_long'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    name: 'atomic dip buying rebound confirmation open slots',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[2],
+    expectedKeys: ['price.percent_change', 'confirmation.rebound', 'risk.falling_knife_guard', 'open_long', 'open_slot:trigger.percent_change.magnitude', 'open_slot:trigger.confirmation.rebound_definition', 'open_slot:risk.falling_knife_guard.definition'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    name: 'atomic consecutive candles volume rebound sizing slot',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[3],
+    expectedKeys: ['condition.sequence', 'volume.relative_average', 'confirmation.rebound', 'open_long', 'open_slot:position.sizing', 'open_slot:trigger.volume.relative_average.lookback_bars', 'open_slot:trigger.volume.relative_average.multiplier'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    name: 'atomic ma gate rsi reclaim and rsi exit',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[4],
+    expectedKeys: ['condition.expression', 'condition.sequence', 'oscillator.rsi_gte', 'open_long', 'close_long'],
+    forbiddenKeys: ['unsupported:condition.sequence'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    name: 'atomic bollinger boundary with relative average volume',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[5],
+    expectedKeys: ['price.detect.indicator_boundary', 'volume.relative_average', 'open_long', 'close_long'],
+    forbiddenKeys: ['unsupported:volume.relative_average'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    name: 'atomic ma100 gate macd entry any-of exit',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[6],
+    expectedKeys: ['indicator.above', 'indicator.cross_over', 'logical.any_of', 'open_long', 'close_long'],
+    forbiddenKeys: ['unsupported:logical.any_of'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    name: 'atomic breakout retest with remembered level stop',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[7],
+    expectedKeys: ['condition.sequence', 'risk.remembered_level_stop', 'open_long'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    name: 'atomic atr multiple stop and take profit',
+    message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[8],
+    expectedKeys: ['indicator.cross_over', 'risk.atr_multiple_stop', 'risk.atr_multiple_take_profit', 'open_long'],
+    forbiddenKeys: ['unsupported:risk.atr_multiple_stop', 'unsupported:risk.atr_multiple_take_profit'],
+    expectedRoute: 'projection_gate',
+  },
+]
+
 export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     name: 'supported ma cross long with fixed pct risk',
@@ -144,10 +217,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    name: 'recognized unsupported volume spike',
+    name: 'open-slot relative-average volume spike',
     message: 'OKX 合约 BTCUSDT 15m，放量突破最近 20 根 K 线高点开多，单笔 10%，止损 5%。',
-    expectedKeys: ['volume.spike', 'price.breakout_up', 'open_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'unsupported:volume.spike'],
-    expectedRoute: 'unsupported_fallback',
+    expectedKeys: ['volume.relative_average', 'price.breakout_up', 'open_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'open_slot:trigger.volume.relative_average.lookback_bars', 'open_slot:trigger.volume.relative_average.multiplier'],
+    forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
+    expectedRoute: 'open_slots',
   },
   {
     name: 'recognized unsupported volume threshold',
@@ -272,10 +346,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'projection_gate',
   },
   {
-    name: 'combo supported plus recognized unsupported blocks whole route',
+    name: 'combo supported plus open-slot relative-average volume needs clarification',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时要求成交量放大，MA20 下穿 MA50 平多，单笔 10%，止损 5%。',
-    expectedKeys: ['indicator.cross_over', 'volume.spike', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'unsupported:volume.spike'],
-    expectedRoute: 'unsupported_fallback',
+    expectedKeys: ['indicator.cross_over', 'volume.relative_average', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'open_slot:trigger.volume.relative_average.lookback_bars', 'open_slot:trigger.volume.relative_average.multiplier'],
+    forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
+    expectedRoute: 'open_slots',
   },
   {
     name: 'combo supported plus atr unsupported blocks whole route',
@@ -290,9 +365,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unknown_unsupported',
   },
   {
-    name: 'combo recognized unsupported plus unknown keeps unknown precedence',
+    name: 'combo supported volume plus unknown keeps unknown precedence',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时成交量放大，并参考 KOL 口令强弱决定是否交易，单笔 10%。',
-    expectedKeys: ['indicator.cross_over', 'volume.spike', 'external.signal', 'unsupported:volume.spike', 'unknown:external.signal'],
+    expectedKeys: ['indicator.cross_over', 'volume.relative_average', 'external.signal', 'unknown:external.signal'],
+    forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
     expectedRoute: 'unknown_unsupported',
   },
   {

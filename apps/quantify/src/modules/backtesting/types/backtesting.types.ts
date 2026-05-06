@@ -1,4 +1,5 @@
 import type { MarketTimeframe, StrategyDecisionV1 } from '@ai/shared'
+import type { SemanticRuntimeState } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 
 export type Timeframe = MarketTimeframe
 
@@ -47,6 +48,7 @@ export interface StrategyContext {
   position: PositionView
   portfolio: PortfolioView
   params: Record<string, unknown>
+  semanticRuntimeState?: SemanticRuntimeState
 }
 
 export type SignalIntent =

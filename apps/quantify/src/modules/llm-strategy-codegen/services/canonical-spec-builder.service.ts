@@ -17,10 +17,12 @@ import type {
   NormalizedGridIntent,
   NormalizedRiskAtom,
   NormalizedTriggerAtom,
+  NormalizedTriggerAtomKey,
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../types/strategy-normalized-intent'
 import {
   buildStrategyRuleDrafts,
   resolveStrategyDefaultTimeframe,
@@ -984,6 +986,11 @@ export class CanonicalSpecBuilderService {
       gate: 0,
     }
     const rules: CanonicalRuleV2[] = []
+    const pendingTriggerRules: Array<{
+      trigger: SemanticTriggerState
+      condition: CanonicalConditionNode
+      actions: CanonicalRuleV2['actions']
+    }> = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
     const gateConditions = state.triggers
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
@@ -1032,6 +1039,15 @@ export class CanonicalSpecBuilderService {
           ? this.attachSemanticGateConditions(condition, gateConditions)
           : condition
 
+      if (trigger.phase === 'entry' || trigger.phase === 'exit') {
+        pendingTriggerRules.push({
+          trigger,
+          condition: ruleCondition,
+          actions,
+        })
+        continue
+      }
+
       for (const ruleVariant of this.splitSemanticRuleVariants(trigger, actions)) {
         counters[trigger.phase] += 1
         rules.push({
@@ -1045,9 +1061,83 @@ export class CanonicalSpecBuilderService {
       }
     }
 
+    rules.push(...this.buildGroupedSemanticTriggerRules(pendingTriggerRules, counters))
     rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position))
 
     return rules
+  }
+
+  private buildGroupedSemanticTriggerRules(
+    pendingRules: Array<{
+      trigger: SemanticTriggerState
+      condition: CanonicalConditionNode
+      actions: CanonicalRuleV2['actions']
+    }>,
+    counters: Record<'entry' | 'exit' | 'gate', number>,
+  ): CanonicalRuleV2[] {
+    const grouped = new Map<string, typeof pendingRules>()
+    for (const pendingRule of pendingRules) {
+      const groupMarker = this.readSemanticTriggerGroupMarker(pendingRule.trigger)
+      const key = JSON.stringify([
+        pendingRule.trigger.phase,
+        pendingRule.trigger.sideScope ?? null,
+        pendingRule.actions.map(action => action.type).sort(),
+        groupMarker ?? pendingRule.trigger.id,
+      ])
+      const rules = grouped.get(key) ?? []
+      rules.push(pendingRule)
+      grouped.set(key, rules)
+    }
+
+    const rules: CanonicalRuleV2[] = []
+    for (const group of grouped.values()) {
+      const first = group[0]
+      if (!first) continue
+
+      const condition = group.length === 1
+        ? first.condition
+        : {
+            kind: 'AND' as const,
+            predicateForm: 'generic' as const,
+            children: group.map(item => item.condition),
+          }
+      const actions = first.actions
+      const phase = first.trigger.phase
+      if (phase !== 'entry' && phase !== 'exit') {
+        continue
+      }
+      for (const ruleVariant of this.splitSemanticRuleVariants(first.trigger, actions)) {
+        counters[phase] += 1
+        rules.push({
+          id: `semantic-${phase}-${counters[phase]}`,
+          phase,
+          sideScope: ruleVariant.sideScope,
+          priority: this.resolveSemanticRulePriority(phase, counters[phase]),
+          condition,
+          actions: ruleVariant.actions,
+        })
+      }
+    }
+
+    return rules
+  }
+
+  private readSemanticTriggerGroupMarker(trigger: SemanticTriggerState): string | null {
+    const candidates = [
+      trigger.params.groupId,
+      trigger.params.semanticGroupId,
+      trigger.params.logicalGroupId,
+      trigger.params.combinationId,
+      trigger.params.atomicCombinationId,
+    ]
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim()
+      }
+    }
+
+    return null
   }
 
   private groupSemanticMultiTimeframeTriggers(
@@ -1092,8 +1182,25 @@ export class CanonicalSpecBuilderService {
 
     return {
       kind: 'AND',
+      ...(this.hasGenericPredicateForm([condition, ...gateConditions]) ? { predicateForm: 'generic' as const } : {}),
       children: [condition, ...gateConditions],
     }
+  }
+
+  private hasGenericPredicateForm(conditions: CanonicalConditionNode[]): boolean {
+    return conditions.some(condition => this.isGenericPredicateCondition(condition))
+  }
+
+  private isGenericPredicateCondition(condition: CanonicalConditionNode): boolean {
+    if (condition.kind === 'atom') {
+      return condition.predicateForm === 'generic'
+    }
+    if (condition.kind === 'expression') {
+      return false
+    }
+
+    return condition.predicateForm === 'generic'
+      || condition.children.some(child => this.isGenericPredicateCondition(child))
   }
 
   private isNoPositionGateCondition(condition: CanonicalConditionNode): boolean {
@@ -1373,7 +1480,21 @@ export class CanonicalSpecBuilderService {
     let priority = 120
 
     for (const risk of normalizedRisks) {
-      if (risk.status !== 'locked' || !validateSemanticRiskContract(risk).ok) {
+      if (risk.status !== 'locked') {
+        continue
+      }
+      if (
+        risk.key === 'risk.atr_multiple_stop'
+        || risk.key === 'risk.atr_multiple_take_profit'
+        || risk.key === 'risk.remembered_level_stop'
+      ) {
+        const riskRule = this.buildAtomicContractRiskRule(risk, sideScope, priority--)
+        if (riskRule) {
+          rules.push(riskRule)
+        }
+        continue
+      }
+      if (!validateSemanticRiskContract(risk).ok) {
         continue
       }
       if (risk.key === 'risk.condition_expression') {
@@ -1429,6 +1550,63 @@ export class CanonicalSpecBuilderService {
     }
 
     return rules
+  }
+
+  private buildAtomicContractRiskRule(
+    risk: SemanticRiskState,
+    sideScope: CanonicalRuleV2['sideScope'],
+    priority: number,
+  ): CanonicalRuleV2 | null {
+    if (risk.key === 'risk.atr_multiple_stop' || risk.key === 'risk.atr_multiple_take_profit') {
+      const multiple = typeof risk.params.multiple === 'number' && Number.isFinite(risk.params.multiple)
+        ? risk.params.multiple
+        : null
+      if (multiple === null) {
+        return null
+      }
+      return {
+        id: `semantic-${risk.id}`,
+        phase: 'risk',
+        sideScope,
+        priority,
+        condition: {
+          kind: 'atom',
+          key: risk.key,
+          semanticScope: 'position',
+          params: { multiple },
+        },
+        actions: risk.key === 'risk.atr_multiple_stop'
+          ? [{ type: 'FORCE_EXIT' }]
+          : [{ type: sideScope === 'short' ? 'CLOSE_SHORT' : 'CLOSE_LONG' }],
+        metadata: {
+          semanticKey: risk.key,
+        },
+      }
+    }
+
+    const levelKey = typeof risk.params.levelKey === 'string' && risk.params.levelKey.trim().length > 0
+      ? risk.params.levelKey.trim()
+      : null
+    if (!levelKey) {
+      return null
+    }
+
+    return {
+      id: `semantic-${risk.id}`,
+      phase: 'risk',
+      sideScope,
+      priority,
+      condition: {
+        kind: 'atom',
+        key: 'risk.remembered_level_stop',
+        semanticScope: 'position',
+        params: { levelKey },
+      },
+      actions: [{ type: 'FORCE_EXIT' }],
+      metadata: {
+        semanticKey: risk.key,
+      },
+    }
   }
 
   private buildActionsForSemanticRiskExpression(
@@ -3036,6 +3214,76 @@ export class CanonicalSpecBuilderService {
         }
       case 'price.detect.indicator_boundary':
         return this.buildConditionFromIndicatorBoundaryTrigger(trigger)
+      case 'volume.relative_average': {
+        const timeframe = this.readTriggerParamTimeframe(trigger.params)
+        return {
+          kind: 'atom',
+          key: 'volume.relative_average',
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: this.resolveRelativeAverageComparator(trigger.params.comparator),
+          params: {
+            lookbackBars: typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : 20,
+            multiplier: typeof trigger.params.multiplier === 'number' ? trigger.params.multiplier : 1,
+            ...(timeframe ? { timeframe } : {}),
+          },
+        }
+      }
+      case 'price.rolling_extrema_breakout': {
+        const extrema = this.readStringParam(trigger.params.extrema) === 'low' ? 'low' : 'high'
+        const event = this.readStringParam(trigger.params.event)
+        const timeframe = this.readTriggerParamTimeframe(trigger.params)
+        return {
+          kind: 'atom',
+          key: 'price.rolling_extrema_breakout',
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          op: event === 'breakout_down' || extrema === 'low' ? 'LT' : 'GT',
+          params: {
+            extrema,
+            lookbackBars: typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : 20,
+            ...(event ? { event } : {}),
+            ...(timeframe ? { timeframe } : {}),
+          },
+        }
+      }
+      case 'condition.sequence': {
+        const sequenceKind = this.readStringParam(trigger.params.sequenceKind)
+        if (!sequenceKind) {
+          return null
+        }
+        const reference = this.readRecordParam(trigger.params.reference)
+        const referenceIndicator = this.readStringParam(reference?.indicator)
+        const referencePeriod = this.readNumberParam(reference?.period)
+        const threshold = this.readNumberParam(trigger.params.threshold)
+        const count = this.readNumberParam(trigger.params.count)
+        const direction = this.readStringParam(trigger.params.direction)
+        const lookbackBars = this.readNumberParam(trigger.params.lookbackBars)
+        return {
+          kind: 'atom',
+          key: 'condition.sequence',
+          semanticScope: 'market',
+          predicateForm: 'generic',
+          params: {
+            sequenceKind,
+            ...(typeof trigger.params.lookbackWindow === 'string' ? { lookbackWindow: trigger.params.lookbackWindow } : {}),
+            ...(typeof trigger.params.memoryKey === 'string' ? { memoryKey: trigger.params.memoryKey } : {}),
+            ...(threshold !== null ? { threshold } : {}),
+            ...(count !== null ? { count } : {}),
+            ...(direction ? { direction } : {}),
+            ...(lookbackBars !== null ? { lookbackBars } : {}),
+            ...(referenceIndicator ? { 'reference.indicator': referenceIndicator } : {}),
+            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+          },
+        }
+      }
+      case 'logical.any_of': {
+        const items = Array.isArray(trigger.params.items) ? trigger.params.items : []
+        const children = items
+          .map(item => this.buildConditionFromLogicalAnyOfItem(item, trigger, defaultTimeframe))
+          .filter((condition): condition is CanonicalConditionNode => condition !== null)
+        return children.length > 0 ? { kind: 'OR', predicateForm: 'generic', children } : null
+      }
       case 'bollinger.touch_upper':
         return {
           kind: 'atom',
@@ -3192,6 +3440,44 @@ export class CanonicalSpecBuilderService {
       default:
         return null
     }
+  }
+
+  private resolveRelativeAverageComparator(comparator: unknown): 'GT' | 'GTE' | 'LT' | 'LTE' {
+    if (comparator === 'gte') return 'GTE'
+    if (comparator === 'lt') return 'LT'
+    if (comparator === 'lte') return 'LTE'
+    return 'GT'
+  }
+
+  private buildConditionFromLogicalAnyOfItem(
+    item: unknown,
+    parentTrigger: NormalizedTriggerAtom,
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    if (!item || typeof item !== 'object' || !('key' in item)) {
+      return null
+    }
+
+    const key = (item as { key?: unknown }).key
+    if (!this.isNormalizedTriggerAtomKey(key)) {
+      return null
+    }
+
+    const params = (item as { params?: unknown }).params
+    return this.buildConditionFromNormalizedTrigger({
+      key,
+      phase: parentTrigger.phase,
+      sideScope: parentTrigger.sideScope,
+      params: params && typeof params === 'object' && !Array.isArray(params)
+        ? params as Record<string, unknown>
+        : {},
+      closureStatus: 'closed',
+      unresolvedSlots: [],
+    }, defaultTimeframe)
+  }
+
+  private isNormalizedTriggerAtomKey(value: unknown): value is NormalizedTriggerAtomKey {
+    return typeof value === 'string' && NORMALIZED_TRIGGER_ATOM_KEYS.includes(value as NormalizedTriggerAtomKey)
   }
 
   private buildActionsForNormalizedTrigger(
@@ -3394,6 +3680,21 @@ export class CanonicalSpecBuilderService {
 
   private readStringParam(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readNumberParam(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+  }
+
+  private readRecordParam(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   }
 
   private extractRuleTimeframe(text: string): string | null {

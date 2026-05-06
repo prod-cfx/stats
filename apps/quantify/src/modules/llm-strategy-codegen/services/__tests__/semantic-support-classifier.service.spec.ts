@@ -56,6 +56,43 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.unknownAtoms).toEqual([])
   })
 
+  it('routes generic volume and ATR atom combinations to projection', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'volume',
+        key: 'volume.relative_average',
+        phase: 'entry',
+        params: { lookbackBars: 20, multiplier: 1.5 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      risk: [{
+        id: 'atr-stop',
+        key: 'risk.atr_multiple_stop',
+        params: { multiple: 2 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }))
+
+    expect(result.route).not.toBe('unsupported_fallback')
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.unknownAtoms).toEqual([])
+  })
+
   it('uses registry support status as authoritative over stale unsupported metadata', () => {
     const result = service.classify(baseState({
       triggers: [{
@@ -236,6 +273,122 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
     expect(result.state.triggers.map(trigger => trigger.support)).toEqual([undefined, undefined])
+  })
+
+  it('does not treat raw price indicator aliases as executable MA references', () => {
+    const result = service.classify(baseState({
+      triggers: [
+        {
+          id: 'gate-price-vs-ma',
+          key: 'indicator.above',
+          phase: 'gate',
+          params: {
+            indicator: 'price',
+            referenceRole: 'long_term',
+            'reference.period': 100,
+            reference: { indicator: 'ma', period: 100 },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+    }))
+
+    expect(result.route).toBe('unsupported_fallback')
+    expect(result.unsupportedAtoms).toEqual([
+      expect.objectContaining({ key: 'indicator.above' }),
+    ])
+  })
+
+  it('routes executable moving-average indicator aliases through public classification', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'long_term',
+          'reference.period': 50,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }))
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.state.triggers[0].support).toBeUndefined()
+  })
+
+  it('adds registry open slots for supported requires-slot risk atoms with unknown required params', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      risk: [{
+        id: 'falling-knife',
+        key: 'risk.falling_knife_guard',
+        params: { definition: 'unknown' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }))
+
+    expect(result.route).toBe('open_slots')
+    expect(result.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+      }),
+    ])
+    expect(result.state.risk[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+      }),
+    ])
+  })
+
+  it('deduplicates registry open slots by slot identity instead of slot key only', () => {
+    const ownerSlot = {
+      slotKey: 'risk.falling_knife_guard.definition',
+      fieldPath: 'risk[falling-knife].params.definition',
+      status: 'open' as const,
+      priority: 'risk' as const,
+      questionHint: '请确认具体风控定义。',
+      affectsExecution: true,
+    }
+
+    const result = service.classify(baseState({
+      risk: [{
+        id: 'falling-knife',
+        key: 'risk.falling_knife_guard',
+        params: { definition: 'unknown' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [ownerSlot],
+      }],
+    }))
+
+    expect(result.route).toBe('open_slots')
+    expect(result.state.risk[0].openSlots).toEqual([
+      ownerSlot,
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+      }),
+    ])
   })
 
   it('routes executable EMA compare triggers with per-trigger timeframe to projection', () => {

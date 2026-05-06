@@ -278,6 +278,49 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('keeps independent same-side entry triggers as separate rule blocks', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'entry-close-above-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('GT') },
+        },
+        {
+          id: 'entry-close-below-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('LT') },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+
+    expect(entryRules).toHaveLength(2)
+    expect(entryRules.map(rule => rule.condition)).toEqual([
+      expect.objectContaining({ kind: 'expression', op: 'GT' }),
+      expect.objectContaining({ kind: 'expression', op: 'LT' }),
+    ])
+    expect(entryRules).not.toContainEqual(expect.objectContaining({
+      condition: expect.objectContaining({ kind: 'AND' }),
+    }))
+  })
+
   it('projects contract order programs from SemanticState without grid signal actions', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({

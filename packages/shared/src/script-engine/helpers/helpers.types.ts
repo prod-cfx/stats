@@ -257,6 +257,7 @@ export interface StrategyHelpers {
     rsi: (prices: number[], period?: number) => number | null
     bollingerBands: (prices: number[], period?: number, stdDev?: number) => { upper: number, middle: number, lower: number } | null
     atr: (bars: Bar[], period?: number) => number | null
+    smaVolume: (bars: Bar[], period: number) => number | null
     stochastic: (bars: Bar[], kPeriod?: number, dPeriod?: number) => { k: number, d: number } | null
     obv: (bars: Bar[]) => number | null
     vwap: (bars: Bar[]) => number | null
@@ -274,6 +275,8 @@ export interface StrategyHelpers {
     crossUnder: (series1: number[], series2: number[]) => boolean
     highest: (array: number[], period: number) => number | null
     lowest: (array: number[], period: number) => number | null
+    rollingHigh: (bars: Bar[], period: number) => number | null
+    rollingLow: (bars: Bar[], period: number) => number | null
     isRising: (array: number[], count: number) => boolean
     isFalling: (array: number[], count: number) => boolean
     inRange: (value: number, min: number, max: number) => boolean
@@ -428,6 +431,14 @@ export function getHelperDocs(): HelperFunctionDoc[] {
       category: 'ta',
       returns: '{ upper, middle, lower } 或 null',
     },
+    {
+      name: 'smaVolume',
+      signature: 'helpers.ta.smaVolume(bars: Bar[], period: number): number | null',
+      description: '计算成交量简单移动平均线',
+      example: 'const avgVolume20 = helpers.ta.smaVolume(bars, 20)',
+      category: 'ta',
+      returns: '成交量 SMA 值或 null',
+    },
     
     // 信号生成
     {
@@ -445,6 +456,22 @@ export function getHelperDocs(): HelperFunctionDoc[] {
       example: 'if (helpers.signal.crossUnder(fastMA, slowMA)) { /* 卖出信号 */ }',
       category: 'signal',
       returns: 'true 或 false',
+    },
+    {
+      name: 'rollingHigh',
+      signature: 'helpers.signal.rollingHigh(bars: Bar[], period: number): number | null',
+      description: '读取最近 N 根 K 线最高价',
+      example: 'const high20 = helpers.signal.rollingHigh(bars, 20)',
+      category: 'signal',
+      returns: '最高价或 null',
+    },
+    {
+      name: 'rollingLow',
+      signature: 'helpers.signal.rollingLow(bars: Bar[], period: number): number | null',
+      description: '读取最近 N 根 K 线最低价',
+      example: 'const low20 = helpers.signal.rollingLow(bars, 20)',
+      category: 'signal',
+      returns: '最低价或 null',
     },
     {
       name: 'isOverbought',

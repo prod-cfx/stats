@@ -475,6 +475,10 @@ export class SemanticStateMergeService {
     left: SemanticTriggerState,
     right: SemanticTriggerState,
   ): boolean {
+    if (this.isEquivalentBollingerBoundaryTrigger(left, right)) {
+      return true
+    }
+
     if (
       left.id !== right.id
       && left.source === 'user_explicit'
@@ -519,9 +523,84 @@ export class SemanticStateMergeService {
         ...stronger.params,
         ...(confirmationMode ? { confirmationMode } : {}),
       },
+      contracts: this.mergeContracts(existing.contracts, incoming.contracts),
       openSlots: this.mergeOpenSlots(existing.openSlots, incoming.openSlots),
       evidence: stronger.evidence ?? weaker.evidence,
     }
+  }
+
+  private isEquivalentBollingerBoundaryTrigger(
+    left: SemanticTriggerState,
+    right: SemanticTriggerState,
+  ): boolean {
+    if (left.phase !== right.phase) {
+      return false
+    }
+    if (left.sideScope && right.sideScope && left.sideScope !== right.sideScope) {
+      return false
+    }
+
+    const leftBoundary = this.readBollingerBoundaryIdentity(left)
+    const rightBoundary = this.readBollingerBoundaryIdentity(right)
+    if (!leftBoundary || !rightBoundary) {
+      return false
+    }
+
+    return leftBoundary.role === rightBoundary.role
+      && this.sameOptionalNumber(leftBoundary.period, rightBoundary.period)
+      && this.sameOptionalNumber(leftBoundary.stdDev, rightBoundary.stdDev)
+  }
+
+  private readBollingerBoundaryIdentity(
+    trigger: SemanticTriggerState,
+  ): { role: string, period: number | null, stdDev: number | null } | null {
+    if (
+      trigger.key === 'bollinger.touch_upper'
+      || trigger.key === 'bollinger.touch_lower'
+      || trigger.key === 'bollinger.touch_middle'
+    ) {
+      return {
+        role: trigger.key === 'bollinger.touch_upper'
+          ? 'upper'
+          : trigger.key === 'bollinger.touch_lower'
+            ? 'lower'
+            : 'middle',
+        period: this.readFiniteNumber(trigger.params.period),
+        stdDev: this.readFiniteNumber(trigger.params.stdDev),
+      }
+    }
+
+    if (trigger.key !== 'price.detect.indicator_boundary') {
+      return null
+    }
+
+    const indicator = trigger.params.indicator
+    if (!indicator || typeof indicator !== 'object' || Array.isArray(indicator)) {
+      return null
+    }
+    const indicatorRecord = indicator as Record<string, unknown>
+    if (indicatorRecord.name !== 'bollinger') {
+      return null
+    }
+
+    const role = typeof trigger.params.boundaryRole === 'string' ? trigger.params.boundaryRole : null
+    if (role !== 'upper' && role !== 'lower' && role !== 'middle') {
+      return null
+    }
+
+    return {
+      role,
+      period: this.readFiniteNumber(indicatorRecord.period),
+      stdDev: this.readFiniteNumber(indicatorRecord.stdDev),
+    }
+  }
+
+  private sameOptionalNumber(left: number | null, right: number | null): boolean {
+    return left === null || right === null || left === right
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
   private omitTriggerConfirmationParam(params: Record<string, unknown>): Record<string, unknown> {

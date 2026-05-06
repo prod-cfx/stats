@@ -41,6 +41,45 @@ describe('compiledScriptParserService', () => {
     expect(() => parser.parse(tamperedScript)).toThrow('codegen.compiled_script_invalid')
   })
 
+  it('parses compiler.v1 scripts emitted before optional atomic execution constants existed', () => {
+    const emitter = new CompiledScriptEmitterService()
+    const parser = new CompiledScriptParserService()
+    const legacyCompatibleScript = emitter.emit({
+      ast: createAstFixture(),
+      executionEnvelope: createExecutionEnvelope(),
+    })
+      .replace('const RUNTIME_REQUIREMENTS = null as const\n', '')
+      .replace('const RISK_PREDICATES = null as const\n', '')
+
+    const parsed = parser.parse(legacyCompatibleScript)
+
+    expect(parsed).not.toHaveProperty('runtimeRequirements')
+    expect(parsed).not.toHaveProperty('riskPredicates')
+    expect(parsed).toEqual(expect.objectContaining({
+      decisionPrograms: expect.arrayContaining([
+        expect.objectContaining({ sourceRef: 'entry_long' }),
+      ]),
+    }))
+  })
+
+  it('parses compiler.v1 scripts emitted before risk predicate wrapper execution existed', () => {
+    const emitter = new CompiledScriptEmitterService()
+    const parser = new CompiledScriptParserService()
+    const legacyWrapperScript = toPreRiskPredicateWrapperScript(emitter.emit({
+      ast: createAstFixture(),
+      executionEnvelope: createExecutionEnvelope(),
+    }))
+
+    const parsed = parser.parse(legacyWrapperScript)
+
+    expect(parsed).not.toHaveProperty('riskPredicates')
+    expect(parsed).toEqual(expect.objectContaining({
+      decisionPrograms: expect.arrayContaining([
+        expect.objectContaining({ sourceRef: 'entry_long' }),
+      ]),
+    }))
+  })
+
   it('round-trips a short-side bollinger middle revert script without reintroducing both close programs', () => {
     const emitter = new CompiledScriptEmitterService()
     const parser = new CompiledScriptParserService()
@@ -233,4 +272,35 @@ function createExecutionEnvelope() {
     quantityPrecision: 6,
     fillAssumption: 'strict' as const,
   }
+}
+
+function toPreRiskPredicateWrapperScript(script: string): string {
+  return script
+    .replace('  evaluateRiskPredicates,\n', '')
+    .replace('const RISK_PREDICATES = null as const\n', '')
+    .replace(
+      [
+        '    const baseGuardState = evaluateGuards(',
+        '      ctx,',
+        '      GUARD_PROGRAMS,',
+        '      exprValues,',
+        '      TOPOLOGY.guardOrder,',
+        '    )',
+        '',
+        '    const guardState = evaluateRiskPredicates(',
+        '      ctx,',
+        '      RISK_PREDICATES,',
+        '      baseGuardState,',
+        '      TOPOLOGY.riskPredicateOrder,',
+        '    )',
+      ].join('\n'),
+      [
+        '    const guardState = evaluateGuards(',
+        '      ctx,',
+        '      GUARD_PROGRAMS,',
+        '      exprValues,',
+        '      TOPOLOGY.guardOrder,',
+        '    )',
+      ].join('\n'),
+    )
 }

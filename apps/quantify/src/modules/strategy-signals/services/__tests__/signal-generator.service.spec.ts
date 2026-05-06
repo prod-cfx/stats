@@ -38,6 +38,9 @@ describe('signalGeneratorService coordinator behavior', () => {
     const generatorRepository = {
       findRunningInstances: jest.fn().mockResolvedValue([]),
       findSymbolByCode: jest.fn(),
+      findSymbolByCodeForMarket: jest.fn(),
+      findOpenPositionForRuntimeContext: jest.fn().mockResolvedValue(null),
+      updateStrategyInstanceMetadata: jest.fn().mockResolvedValue({ id: 'instance-1' }),
       ...overrides.generatorRepository,
     }
     const runtimeExecutionStateService = {
@@ -1051,6 +1054,229 @@ describe('signalGeneratorService coordinator behavior', () => {
     expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 
+  it('loads persisted semantic state and injects open position into published snapshot runtime context', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          runtimeRequirements: {
+            stateKeys: ['breakout'],
+          },
+        },
+        paramsSnapshot: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTCUSDT:PERP',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCodeForMarket: jest.fn().mockResolvedValue({
+          id: 'symbol-1',
+          code: 'BTCUSDT:PERP',
+          instrumentType: 'PERPETUAL',
+        }),
+        findOpenPositionForRuntimeContext: jest.fn().mockResolvedValue({
+          positionSide: 'LONG',
+          quantity: '2',
+          avgEntryPrice: '100',
+        }),
+        updateStrategyInstanceMetadata: jest.fn().mockResolvedValue({ id: 'instance-1' }),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 103,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    const generatePublished = jest
+      .spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome')
+      .mockImplementation(async (...args: unknown[]) => {
+        const semanticRuntimeState = args[7] as Record<string, Record<string, unknown>>
+        semanticRuntimeState.breakout = {
+          ...semanticRuntimeState.breakout,
+          rememberedLevel: 102,
+          confirmed: true,
+        }
+        return {
+          kind: 'noop',
+          reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+          reason: 'waiting',
+        }
+      })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          atomicContractRuntimeState: {
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+            semanticRuntimeState: {
+              breakout: { rememberedLevel: 101 },
+            },
+          },
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.findOpenPositionForRuntimeContext).toHaveBeenCalledWith({
+      strategyId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT:PERP',
+    })
+    expect(generatePublished).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      '15m',
+      expect.anything(),
+      103,
+      undefined,
+      { breakout: { rememberedLevel: 102, confirmed: true } },
+      { qty: 2, avgEntryPrice: 100, entryPrice: 100, positionSide: 'LONG' },
+    )
+    expect(generatorRepository.updateStrategyInstanceMetadata).toHaveBeenCalledWith(
+      'instance-1',
+      expect.objectContaining({
+        atomicContractRuntimeState: expect.objectContaining({
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          semanticRuntimeState: {
+            breakout: { rememberedLevel: 102, confirmed: true },
+          },
+        }),
+      }),
+    )
+  })
+
+  it('keeps published snapshot params locked over mutable instance params', () => {
+    const { service } = createService()
+
+    const effectiveParams = (service as any).decisionStage.buildEffectiveParams(
+      {
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        defaultParams: {
+          __publishedSnapshotLockedParams: true,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          marketType: 'perp',
+          positionPct: 10,
+          customThreshold: 35,
+        },
+      },
+      {
+        params: {
+          symbol: 'ETHUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
+          positionPct: 99,
+          customThreshold: 40,
+          userRuntimeNote: 'kept',
+        },
+      },
+    )
+
+    expect(effectiveParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      marketType: 'perp',
+      positionPct: 10,
+      customThreshold: 35,
+      userRuntimeNote: 'kept',
+    })
+  })
+
+  it('does not persist mutated semantic state when published runtime returns an error outcome', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          runtimeRequirements: {
+            stateKeys: ['breakout'],
+          },
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest
+      .spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome')
+      .mockImplementation(async (...args: unknown[]) => {
+        const semanticRuntimeState = args[7] as Record<string, Record<string, unknown>>
+        semanticRuntimeState.breakout = { rememberedLevel: 999 }
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_OUTPUT_INVALID',
+          reason: 'invalid output',
+        }
+      })
+    jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.updateStrategyInstanceMetadata).not.toHaveBeenCalled()
+  })
+
   it('creates a signal for a published snapshot runtime OPEN_LONG decision that only has required adapter truth', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
@@ -1619,6 +1845,59 @@ strategy`,
         failureCode: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
       }),
     )
+  })
+
+  it('applies compiler.v1 risk predicates on parsed published runtime adapter decisions', () => {
+    const { service } = createService()
+    const compiled = (service as any).buildCompiledRuntimeAdapter(createCompiledAtrRiskScriptFixture())
+
+    expect(compiled.parseError).toBeUndefined()
+    expect(compiled.adapter).not.toBeNull()
+
+    const decision = compiled.adapter!.onBar({
+      position: { qty: 1, avgEntryPrice: 100 },
+      currentPrice: 75,
+      bars: Array.from({ length: 16 }, (_, index) => ({
+        time: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: index === 15 ? 75 : 100,
+        volume: 10,
+        timestamp: 1_775_000_000_000 + index * 60_000,
+      })),
+      __compiledDecisionState: { barIndex: 16, lastTriggeredByProgram: {} },
+    } as any)
+    const outcome = (service as any).decisionStage.buildPublishedRuntimeSignalOutcomeFromDecision(
+      decision,
+      {
+        exchange: 'OKX',
+        marketType: 'perp',
+        symbol: 'BTCUSDT:PERP',
+        timeframe: '15m',
+        referencePrice: 75,
+      },
+      config,
+    )
+
+    expect(decision).toMatchObject({
+      action: 'CLOSE_LONG',
+      reason: 'compiled.force_exit',
+      meta: expect.objectContaining({
+        guardState: expect.objectContaining({
+          forceExit: true,
+          triggered: ['risk_predicate_01_atr-stop'],
+        }),
+      }),
+    })
+    expect(outcome).toMatchObject({
+      kind: 'signal',
+      payload: {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        entryPrice: 75,
+      },
+    })
   })
 
   it('marks a ready on_start snapshot semantic as terminal after runtime outcome resolves to noop', async () => {
@@ -2226,6 +2505,77 @@ function createCompiledNoopScriptFixture(): string {
     executionEnvelope: {
       positionMode: 'long_only',
       marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
+
+function createCompiledAtrRiskScriptFixture(): string {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const emitter = new CompiledScriptEmitterService()
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'9'.repeat(64)}`,
+      specHash: `sha256:${'a'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'perpetual',
+      symbol: 'BTCUSDT:PERP',
+      timeframes: ['15m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_short',
+      sizing: { mode: 'pct_equity', value: 10 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 16,
+      maxLookback: 16,
+      requiredTimeframes: ['15m'],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'close_15m', kind: 'PRICE', timeframe: '15m', field: 'close' },
+      ],
+      levelSets: [],
+      predicates: [],
+    },
+    ruleBlocks: [],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+
+  return emitter.emit({
+    ast: compiler.compile(ir),
+    executionEnvelope: {
+      positionMode: 'long_short',
+      marginMode: 'isolated',
       tickSize: 0.01,
       pricePrecision: 2,
       quantityPrecision: 6,

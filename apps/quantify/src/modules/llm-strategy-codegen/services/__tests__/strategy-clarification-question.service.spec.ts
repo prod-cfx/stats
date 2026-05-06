@@ -98,6 +98,98 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('请确认交易所')
   })
 
+  it('prioritizes vague dip buying semantic slots before exchange gaps', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '大跌后确认反弹且不接飞刀再买入。',
+      items: [
+        {
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          question: '请确认交易所（binance / okx / hyperliquid）。',
+          status: 'pending',
+        },
+        {
+          key: 'semantic.trigger.percent_change.magnitude',
+          reason: 'missing_semantic_trigger',
+          field: 'triggers',
+          blocking: true,
+          question: '请确认“大跌”的判定幅度，例如 4 小时跌幅超过 5% / 最近 20 根 K 线跌幅超过 8%。',
+          status: 'pending',
+          slotKey: 'trigger.percent_change.magnitude',
+          fieldPath: 'triggers[price.percent_change].params.valuePct',
+        },
+        {
+          key: 'semantic.risk.falling_knife_guard.definition',
+          reason: 'missing_risk_atom',
+          field: 'risk',
+          blocking: true,
+          question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+          status: 'pending',
+          slotKey: 'risk.falling_knife_guard.definition',
+          fieldPath: 'risk.params.definition',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的策略语义槽位')
+    expect(prompt).toContain('请确认“大跌”的判定幅度')
+    expect(prompt).not.toContain('请确认交易所')
+  })
+
+  it('describes missing risk atom blockers as risk semantic slots by reason', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '大跌后不接飞刀再买入。',
+      items: [
+        {
+          key: 'risk.falling_knife_guard.definition',
+          reason: 'missing_risk_atom',
+          field: 'risk',
+          blocking: true,
+          question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+          status: 'pending',
+          slotKey: 'risk.falling_knife_guard.definition',
+          fieldPath: 'risk.params.definition',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的风控语义槽位')
+    expect(prompt).not.toContain('关键条件')
+  })
+
+  it('prioritizes non-semantic missing risk atom blockers before execution context gaps', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '大跌后不接飞刀再买入。',
+      items: [
+        {
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          question: '请确认交易所（binance / okx / hyperliquid）。',
+          status: 'pending',
+        },
+        {
+          key: 'risk.falling_knife_guard.definition',
+          reason: 'missing_risk_atom',
+          field: 'risk',
+          blocking: true,
+          question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的风控语义槽位')
+    expect(prompt).toContain('不接飞刀')
+    expect(prompt).not.toContain('请确认交易所')
+  })
+
   it('asks only the highest-priority unresolved clarification question', () => {
     const prompt = questionService.build({
       status: 'NEEDS_CLARIFICATION',

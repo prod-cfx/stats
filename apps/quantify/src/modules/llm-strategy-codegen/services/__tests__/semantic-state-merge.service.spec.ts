@@ -891,6 +891,110 @@ describe('SemanticStateMergeService', () => {
     }))
   })
 
+  it('coalesces legacy and universal Bollinger boundary atoms after planner and seed merge', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'seed-entry-upper-boundary',
+            key: 'price.detect.indicator_boundary',
+            phase: 'entry',
+            sideScope: 'short',
+            params: {
+              boundaryRole: 'upper',
+              confirmationMode: 'close_confirm',
+              indicator: { name: 'bollinger', period: 30, stdDev: 2.5 },
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+          {
+            id: 'seed-exit-middle-boundary',
+            key: 'price.detect.indicator_boundary',
+            phase: 'exit',
+            sideScope: 'short',
+            params: {
+              boundaryRole: 'middle',
+              confirmationMode: 'touch',
+              indicator: { name: 'bollinger', period: 30, stdDev: 2.5 },
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-06T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'planner-entry-upper-touch',
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+            params: {
+              band: 'upper',
+              confirmationMode: 'touch',
+              period: 30,
+              stdDev: 2.5,
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+          {
+            id: 'planner-exit-middle-touch',
+            key: 'bollinger.touch_middle',
+            phase: 'exit',
+            sideScope: 'short',
+            params: {
+              band: 'middle',
+              confirmationMode: 'close_confirm',
+              period: 30,
+              stdDev: 2.5,
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-06T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.triggers).toHaveLength(2)
+    expect(merged.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        params: expect.objectContaining({ confirmationMode: 'close_confirm' }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        params: expect.objectContaining({ confirmationMode: 'close_confirm' }),
+      }),
+    ]))
+    expect(merged.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'price.detect.indicator_boundary' }),
+    ]))
+  })
+
   it('keeps stronger persisted position, actions, and risk atoms when a weaker derived round only provides looser replacements', () => {
     const merged = service.merge({
       persisted: {

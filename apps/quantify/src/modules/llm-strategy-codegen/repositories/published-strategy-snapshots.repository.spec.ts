@@ -148,6 +148,145 @@ describe('publishedStrategySnapshotsRepository', () => {
     expect(result.id).toBe('snapshot-1')
   })
 
+  it('round-trips script summary compatibility metadata through snapshot reads', async () => {
+    type JsonRecord = Record<string, unknown>
+    type PublishedSnapshotRow = JsonRecord & {
+      id: string
+      sessionId: string
+      strategyTemplateId: string | null
+      strategyInstanceId: string | null
+      scriptSummary: JsonRecord
+      createdAt: Date
+    }
+    type CreateSnapshotArgs = {
+      data: JsonRecord & { session?: { connect?: { id?: string } } }
+    }
+    type FindUniqueArgs = {
+      where: { id: string }
+      select?: Record<string, boolean>
+    }
+    type FindFirstArgs = {
+      where: { sessionId?: string }
+      orderBy?: Array<Record<string, string>>
+      select?: Record<string, boolean>
+    }
+    const cloneJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+    const cloneRow = (row: PublishedSnapshotRow): PublishedSnapshotRow => ({
+      ...row,
+      scriptSummary: cloneJson(row.scriptSummary),
+      specSnapshot: cloneJson(row.specSnapshot),
+      consistencyReport: cloneJson(row.consistencyReport),
+      userIntentSummary: cloneJson(row.userIntentSummary),
+      strategySummary: cloneJson(row.strategySummary),
+      lockedParams: cloneJson(row.lockedParams),
+      createdAt: new Date(row.createdAt),
+    })
+    const applySelect = (
+      row: PublishedSnapshotRow,
+      select?: Record<string, boolean>,
+    ): PublishedSnapshotRow | Partial<PublishedSnapshotRow> => {
+      const cloned = cloneRow(row)
+      if (!select) return cloned
+
+      return Object.fromEntries(
+        Object.entries(select)
+          .filter(([, enabled]) => enabled)
+          .map(([key]) => [key, cloned[key]]),
+      ) as Partial<PublishedSnapshotRow>
+    }
+    let persistedSnapshot: PublishedSnapshotRow | null = null
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn().mockImplementation(async (args: CreateSnapshotArgs) => {
+          const sessionId = args.data.session?.connect?.id
+          if (!sessionId) throw new Error('missing session connect id')
+
+          const { session: _session, ...columnData } = args.data
+          persistedSnapshot = {
+            id: 'snapshot-atomic-contract-1',
+            sessionId,
+            strategyTemplateId: typeof args.data.strategyTemplateId === 'string'
+              ? args.data.strategyTemplateId
+              : null,
+            strategyInstanceId: typeof args.data.strategyInstanceId === 'string'
+              ? args.data.strategyInstanceId
+              : null,
+            createdAt: new Date('2026-05-06T10:00:00.000Z'),
+            ...columnData,
+            scriptSummary: cloneJson(args.data.scriptSummary) as JsonRecord,
+            specSnapshot: cloneJson(args.data.specSnapshot),
+            consistencyReport: cloneJson(args.data.consistencyReport),
+            userIntentSummary: cloneJson(args.data.userIntentSummary),
+            strategySummary: cloneJson(args.data.strategySummary),
+            lockedParams: cloneJson(args.data.lockedParams),
+          }
+
+          return cloneRow(persistedSnapshot)
+        }),
+        findUnique: jest.fn().mockImplementation(async ({ where, select }: FindUniqueArgs) => {
+          return persistedSnapshot?.id === where.id ? applySelect(persistedSnapshot, select) : null
+        }),
+        findFirst: jest.fn().mockImplementation(async ({ where, select }: FindFirstArgs) => {
+          return persistedSnapshot?.sessionId === where.sessionId
+            ? applySelect(persistedSnapshot, select)
+            : null
+        }),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+    const expectedScriptSummary = {
+      indicators: ['BBANDS'],
+      compatibilityMetadata: {
+        existingField: { keep: true },
+        atomicContractExecution: {
+          schemaVersion: 1,
+          runtimeRequirements: { helpers: ['rollingHigh'], stateKeys: ['breakout'] },
+        },
+      },
+    }
+    const scriptSummary = cloneJson(expectedScriptSummary)
+
+    const created = await repo.create({
+      sessionId: 'session-atomic-contract-1',
+      scriptSnapshot: 'const strategy = { protocolVersion: "v1" }\nstrategy\n',
+      specSnapshot: { market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' } },
+      consistencyReport: { status: 'PASSED' },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'atomic contract execution metadata persistence' },
+      scriptSummary,
+      lockedParams: { positionPct: 10 },
+      snapshotVersion: 2,
+    })
+    scriptSummary.compatibilityMetadata.atomicContractExecution.runtimeRequirements.helpers.push('mutated')
+
+    const byId = await repo.findById(created.id)
+    const latest = await repo.findLatestBySessionId('session-atomic-contract-1')
+
+    expect(byId).toEqual(expect.objectContaining({
+      scriptSummary: expectedScriptSummary,
+    }))
+    expect(latest).toEqual(expect.objectContaining({
+      scriptSummary: expectedScriptSummary,
+    }))
+    expect(byId?.scriptSummary).not.toBe(scriptSummary)
+    expect(latest?.scriptSummary).not.toBe(scriptSummary)
+    expect(byId).not.toHaveProperty('session')
+    expect(latest).not.toHaveProperty('session')
+    expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        scriptSummary: expect.objectContaining({
+          compatibilityMetadata: expect.objectContaining({
+            atomicContractExecution: expect.objectContaining({
+              schemaVersion: 1,
+            }),
+            existingField: { keep: true },
+          }),
+        }),
+        snapshotHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      }),
+    }))
+  })
+
   it('persists compiled snapshot fields with stable hashes', async () => {
     const tx = {
       publishedStrategySnapshot: {

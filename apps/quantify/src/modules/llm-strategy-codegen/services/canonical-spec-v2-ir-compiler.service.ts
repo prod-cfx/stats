@@ -4,12 +4,14 @@ import type {
   OrderProgram,
   PredicateDef,
   RiskGuard,
+  RiskPredicateDef,
   RuleBlock,
   SeriesDef,
   LevelSetDef,
 } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
+  CanonicalConditionGroup,
   CanonicalConditionNode,
   CanonicalExpressionCondition,
   CanonicalOrderProgramIntent,
@@ -70,6 +72,10 @@ interface CompileContext {
     period: number
     stdDev: number
   }
+  runtimeRequirements: {
+    helpers: Set<string>
+    stateKeys: Set<string>
+  }
 }
 
 @Injectable()
@@ -126,6 +132,10 @@ export class CanonicalSpecV2IrCompilerService {
       rsi: this.resolveRsiConfig(input.canonicalSpec),
       macd: this.resolveMacdConfig(input.canonicalSpec),
       bollinger: this.resolveBollingerConfig(input.canonicalSpec),
+      runtimeRequirements: {
+        helpers: new Set(),
+        stateKeys: new Set(),
+      },
     }
 
     const orderPrograms = this.compileOrderPrograms(input.canonicalSpec.orderPrograms ?? [], context)
@@ -133,8 +143,15 @@ export class CanonicalSpecV2IrCompilerService {
     const hasOrderPrograms = orderPrograms.length > 0
     const ruleBlocks: RuleBlock[] = []
     const guards: RiskGuard[] = []
+    const riskPredicates: RiskPredicateDef[] = []
 
     for (const rule of input.canonicalSpec.rules) {
+      const riskPredicate = this.tryCompileRiskPredicate(rule, context)
+      if (riskPredicate) {
+        riskPredicates.push(riskPredicate)
+        continue
+      }
+
       const compiledGuards = this.tryCompileRiskGuards(rule, context)
       if (compiledGuards.length > 0) {
         guards.push(...compiledGuards)
@@ -197,10 +214,15 @@ export class CanonicalSpecV2IrCompilerService {
         levelSets: [...levelSetMap.values()],
         predicates: [...predicateMap.values()],
       },
+      runtimeRequirements: {
+        helpers: [...context.runtimeRequirements.helpers].sort(),
+        stateKeys: [...context.runtimeRequirements.stateKeys].sort(),
+      },
       ruleBlocks,
       orderPrograms,
       riskPolicy: {
         guards,
+        riskPredicates,
       },
       executionPolicy: {
         signalEvaluation: 'bar_close',
@@ -754,7 +776,12 @@ export class CanonicalSpecV2IrCompilerService {
   ): string {
     if (condition.kind === 'AND' || condition.kind === 'OR') {
       const childRefs = condition.children.map((child, index) => this.compileCondition(child, context, `${seed}_${index + 1}`))
-      return this.upsertPredicate(context.predicateMap, `${seed}_${condition.kind.toLowerCase()}`, condition.kind, childRefs)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_${condition.kind.toLowerCase()}`,
+        this.resolveLogicalPredicateKind(condition),
+        childRefs,
+      )
     }
 
     if (condition.kind === 'NOT') {
@@ -791,6 +818,16 @@ export class CanonicalSpecV2IrCompilerService {
       condition.op,
       [leftRef, rightRef],
     )
+  }
+
+  private resolveLogicalPredicateKind(
+    condition: CanonicalConditionGroup,
+  ): PredicateDef['kind'] {
+    if (condition.predicateForm !== 'generic') {
+      return condition.kind
+    }
+
+    return condition.kind === 'AND' ? 'allOf' : 'anyOf'
   }
 
   private compileExpressionOperand(
@@ -1038,6 +1075,43 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'volume.relative_average': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const volumeRef = this.ensureVolumeSeries(context, timeframe)
+        const lookbackBars = this.readNumber([atom.params?.lookbackBars], 20)
+        const multiplier = this.readNumber([atom.params?.multiplier], 1)
+        const averageRef = this.ensureSmaVolumeSeries(context, lookbackBars, multiplier, timeframe)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          'compare',
+          [volumeRef, averageRef],
+          { op: this.resolveComparisonKind(atom.op) },
+        )
+      }
+
+      case 'price.rolling_extrema_breakout': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const closeRef = this.ensurePriceSeries(context, 'close', timeframe)
+        const period = this.readNumber([atom.params?.lookbackBars, atom.params?.period], 20)
+        const extrema = typeof atom.params?.extrema === 'string' ? atom.params.extrema : 'high'
+        const channelRef = extrema === 'low'
+          ? this.ensureChannelSeries(context, 'LOWEST_LOW', period, timeframe)
+          : this.ensureChannelSeries(context, 'HIGHEST_HIGH', period, timeframe)
+        context.runtimeRequirements.helpers.add(extrema === 'low' ? 'rollingLow' : 'rollingHigh')
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${timeframe}`,
+          'compare',
+          [closeRef, channelRef],
+          { op: this.resolveComparisonKind(atom.op ?? (extrema === 'low' ? 'LT' : 'GT')) },
+        )
+      }
+
       case 'rsi.threshold_lte':
       case 'rsi.threshold_gte':
       case 'rsi.cross_over':
@@ -1144,18 +1218,21 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'bollinger.upper_break':
       case 'bollinger.lower_break': {
+        context.runtimeRequirements.helpers.add('bollinger')
         const bandRef = atom.key === 'bollinger.upper_break'
           ? this.ensureBollingerSeries(context, 'UPPER_BAND')
           : this.ensureBollingerSeries(context, 'LOWER_BAND')
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
-          atom.op ?? (atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER'),
+          'compare',
           [closeRef, bandRef],
+          { op: atom.op ?? (atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER') },
         )
       }
 
       case 'bollinger.middle_revert': {
+        context.runtimeRequirements.helpers.add('bollinger')
         const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
         const under = this.upsertPredicate(context.predicateMap, `${seed}_middle_under`, 'CROSS_UNDER', [closeRef, midRef])
@@ -1222,6 +1299,69 @@ export class CanonicalSpecV2IrCompilerService {
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           'EQ',
           [stateSeriesRef, expectedValueRef],
+        )
+      }
+
+      case 'condition.sequence': {
+        const sequenceKind = typeof atom.params?.sequenceKind === 'string' ? atom.params.sequenceKind : 'sequence'
+        if (sequenceKind === 'pullback_reclaim') {
+          const referenceIndicator = this.readStringParam(atom.params?.['reference.indicator']) ?? 'ma'
+          const referencePeriod = this.readNumber([atom.params?.['reference.period'], atom.params?.period], context.movingAverage.slow)
+          const referenceRef = referenceIndicator.toLowerCase() === 'ema'
+            ? this.ensureIndicatorSeries(context, 'EMA', referencePeriod, context.timeframe)
+            : this.ensureIndicatorSeries(context, 'SMA', referencePeriod, context.timeframe)
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${referenceIndicator}_${referencePeriod}`,
+            'cross',
+            [closeRef, referenceRef],
+            {
+              sequenceKind,
+              direction: 'CROSS_OVER',
+              'reference.indicator': referenceIndicator.toLowerCase() === 'ema' ? 'ema' : 'ma',
+              'reference.period': referencePeriod,
+            },
+          )
+        }
+
+        if (sequenceKind === 'rsi_reclaim') {
+          const period = this.readNumber([atom.params?.period], context.rsi.period)
+          const threshold = this.readNumber([atom.params?.threshold, atom.value], 30)
+          const rsiRef = this.ensureRsiSeries(context, period)
+          const thresholdRef = this.ensureConstSeries(context, threshold)
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${period}_${this.normalizeNumberToken(threshold)}`,
+            'cross',
+            [rsiRef, thresholdRef],
+            {
+              sequenceKind,
+              direction: 'CROSS_OVER',
+              period,
+              threshold,
+            },
+          )
+        }
+
+        const memoryKey = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
+          ? atom.params.memoryKey.trim()
+          : null
+        if (memoryKey) {
+          context.runtimeRequirements.stateKeys.add(memoryKey)
+        }
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}`,
+          'sequence',
+          [],
+          {
+            sequenceKind,
+            ...(typeof atom.params?.lookbackWindow === 'string' ? { lookbackWindow: atom.params.lookbackWindow } : {}),
+            ...(typeof atom.params?.lookbackBars === 'number' ? { lookbackBars: atom.params.lookbackBars } : {}),
+            ...(typeof atom.params?.count === 'number' ? { count: atom.params.count } : {}),
+            ...(typeof atom.params?.direction === 'string' ? { direction: atom.params.direction } : {}),
+            ...(memoryKey ? { memoryKey } : {}),
+          },
         )
       }
 
@@ -1397,13 +1537,14 @@ export class CanonicalSpecV2IrCompilerService {
     context: CompileContext,
     kind: Extract<SeriesDef['kind'], 'HIGHEST_HIGH' | 'LOWEST_LOW'>,
     period: number,
+    timeframe = context.timeframe,
   ): string {
-    const id = `${kind.toLowerCase()}_${period}_${context.timeframe}`
+    const id = `${kind.toLowerCase()}_${period}_${timeframe}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
         kind,
-        timeframe: context.timeframe,
+        timeframe,
         params: { period },
       })
     }
@@ -1473,6 +1614,39 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
+  private ensureVolumeSeries(context: CompileContext, timeframe = context.timeframe): string {
+    const id = `volume_${timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'VOLUME',
+        timeframe,
+      })
+    }
+    return id
+  }
+
+  private ensureSmaVolumeSeries(
+    context: CompileContext,
+    period: number,
+    multiplier: number,
+    timeframe = context.timeframe,
+  ): string {
+    context.runtimeRequirements.helpers.add('smaVolume')
+    const volumeRef = this.ensureVolumeSeries(context, timeframe)
+    const id = `sma_volume_${period}_${this.normalizeNumberToken(multiplier)}_${timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'SMA_VOLUME',
+        timeframe,
+        inputs: [volumeRef],
+        params: { period, multiplier },
+      })
+    }
+    return id
+  }
+
   private ensureConstSeries(context: CompileContext, value: number | string): string {
     const id = typeof value === 'string'
       ? `const_text_${this.normalizeTextToken(value)}`
@@ -1511,9 +1685,26 @@ export class CanonicalSpecV2IrCompilerService {
     baseId: string,
     kind: PredicateDef['kind'],
     args: string[],
+    params?: PredicateDef['params'],
   ): string {
-    const signature = `${kind}:${args.join('|')}`
-    const existing = [...predicateMap.values()].find(predicate => `${predicate.kind}:${predicate.args.join('|')}` === signature)
+    const paramsSignature = params ? JSON.stringify(Object.keys(params).sort().reduce<Record<string, number | string | boolean>>((acc, key) => {
+      const value = params[key]
+      if (value !== undefined) {
+        acc[key] = value
+      }
+      return acc
+    }, {})) : ''
+    const signature = `${kind}:${args.join('|')}:${paramsSignature}`
+    const existing = [...predicateMap.values()].find(predicate => {
+      const existingParamsSignature = predicate.params ? JSON.stringify(Object.keys(predicate.params).sort().reduce<Record<string, number | string | boolean>>((acc, key) => {
+        const value = predicate.params?.[key]
+        if (value !== undefined) {
+          acc[key] = value
+        }
+        return acc
+      }, {})) : ''
+      return `${predicate.kind}:${predicate.args.join('|')}:${existingParamsSignature}` === signature
+    })
     if (existing) {
       return existing.id
     }
@@ -1523,8 +1714,45 @@ export class CanonicalSpecV2IrCompilerService {
       id,
       kind,
       args,
+      ...(params ? { params } : {}),
     })
     return id
+  }
+
+  private tryCompileRiskPredicate(rule: CanonicalRuleV2, context: CompileContext): RiskPredicateDef | null {
+    if (rule.phase !== 'risk' || rule.condition.kind !== 'atom') {
+      return null
+    }
+
+    if (rule.condition.key === 'risk.atr_multiple_stop' || rule.condition.key === 'risk.atr_multiple_take_profit') {
+      const multiple = this.readNumber([rule.condition.params?.multiple], 0)
+      if (multiple <= 0) {
+        return null
+      }
+      context.runtimeRequirements.helpers.add('atr')
+      return {
+        id: rule.id,
+        kind: rule.condition.key === 'risk.atr_multiple_stop' ? 'atrMultipleStop' : 'atrMultipleTakeProfit',
+        params: { multiple },
+      }
+    }
+
+    if (rule.condition.key === 'risk.remembered_level_stop') {
+      const levelKey = typeof rule.condition.params?.levelKey === 'string' && rule.condition.params.levelKey.trim().length > 0
+        ? rule.condition.params.levelKey.trim()
+        : null
+      if (!levelKey) {
+        return null
+      }
+      context.runtimeRequirements.stateKeys.add(levelKey)
+      return {
+        id: rule.id,
+        kind: 'rememberedLevelStop',
+        params: { levelKey },
+      }
+    }
+
+    return null
   }
 
   private tryCompileRiskGuard(rule: CanonicalRuleV2, context: CompileContext): RiskGuard | null {
@@ -2065,7 +2293,7 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private resolveComparisonKind(op: CanonicalConditionAtom['op']): Extract<PredicateDef['kind'], 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ'> {
-    if (op === 'GTE' || op === 'LTE' || op === 'EQ') {
+    if (op === 'GT' || op === 'GTE' || op === 'LT' || op === 'LTE' || op === 'EQ') {
       return op
     }
 

@@ -1,8 +1,17 @@
 import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
+import { buildLockedAtomicState } from './fixtures/semantic-state-golden-cases'
 
 describe('SemanticStateProjectionService', () => {
   const service = new SemanticStateProjectionService()
+
+  function flattenDisplayGraphText(state: SemanticState): string {
+    return service
+      .buildDisplayLogicGraph(state)
+      .blocks
+      .flatMap(block => block.items.map(item => item.text))
+      .join(' ')
+  }
 
   it('builds display logic graph from locked semantic atoms for previous candle breakout strategy', () => {
     const state: SemanticState = {
@@ -146,6 +155,418 @@ describe('SemanticStateProjectionService', () => {
     expect(text).toContain('风控: 止损：价格相对入场均价下跌1% 强制平仓 -> 平仓')
     expect(text).not.toContain('不支持的条件')
     expect(text).not.toContain('待补充')
+  })
+
+  it('renders bollinger and relative volume atomic contract combinations as readable display graph', () => {
+    const graph = service.buildDisplayLogicGraph(buildLockedAtomicState('bollinger-volume-entry'))
+    const firstBlockText = graph.blocks[0]?.items.map(item => item.text).join(' ') ?? ''
+    const executeText = graph.blocks.at(-1)?.items.map(item => item.text).join(' ') ?? ''
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(firstBlockText).toContain('布林带下轨')
+    expect(firstBlockText).toContain('成交量高于过去 20 根均量的 1.5 倍')
+    expect(firstBlockText).toContain('开多 10%')
+    expect(text).toContain('布林带上轨')
+    expect(executeText).toContain('交易所: OKX')
+    expect(executeText).toContain('标的: BTCUSDT')
+    expect(executeText).toContain('周期: 15m')
+    expect(executeText).toContain('仓位: 10%')
+    expect(executeText).toContain('市场: 永续')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+    expect(text).not.toContain('price.detect.indicator_boundary')
+    expect(text).not.toContain('volume.relative_average')
+  })
+
+  it('keeps unrelated same-side entry triggers as separate display rule blocks', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.risk = []
+    state.triggers = [
+      {
+        id: 'entry-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 24,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'entry-ma-above',
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'trend',
+          'reference.period': 20,
+          reference: { indicator: 'ma', period: 20 },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.filter(item => item.kind === 'condition')).toHaveLength(1)
+    expect(graph.blocks[1]?.items.filter(item => item.kind === 'condition')).toHaveLength(1)
+    const ruleBlockTexts = graph.blocks
+      .filter(block => block.type !== 'EXECUTE')
+      .map(block => block.items.map(item => item.text).join(' '))
+    expect(ruleBlockTexts).toEqual(expect.arrayContaining([
+      expect.stringContaining('突破过去 24 根 K 线最高价'),
+      expect.stringContaining('价格在 MA20 上方'),
+    ]))
+  })
+
+  it('renders sequence and remembered level risk atomic contracts without raw keys', () => {
+    const text = flattenDisplayGraphText(buildLockedAtomicState('breakout-retest'))
+
+    expect(text).toContain('突破后回踩确认')
+    expect(text).toContain('24h')
+    expect(text).toContain('记录位 breakout')
+    expect(text).toContain('跌破记录位 breakout 止损')
+    expect(text).not.toContain('condition.sequence')
+    expect(text).not.toContain('risk.remembered_level_stop')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
+  it('summarizes sequence, volume spike and rebound confirmation groups without raw keys', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-sequence',
+          key: 'condition.sequence',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            sequenceKind: 'consecutive_candles',
+            count: 3,
+            direction: 'down',
+            groupId: 'entry-confirmation-1',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-volume',
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            event: 'spike',
+            comparator: 'gt',
+            groupId: 'entry-confirmation-1',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'trigger.volume.relative_average.lookback_bars',
+            fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量比较窗口，例如过去 20 根 K 线均量。',
+            affectsExecution: true,
+          }],
+        },
+        {
+          id: 'entry-rebound',
+          key: 'confirmation.rebound',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            groupId: 'entry-confirmation-1',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const clarification = service.buildClarificationView(state)
+    const graphText = flattenDisplayGraphText(state)
+
+    expect(clarification.summary).toContain('连续 3 根 K 线收跌')
+    expect(clarification.summary).toContain('成交量放大')
+    expect(clarification.summary).toContain('反弹确认')
+    expect(clarification.summary).toContain('做多开仓')
+    expect(graphText).toContain('连续 3 根 K 线收跌')
+    expect(graphText).toContain('反弹确认')
+    expect(clarification.summary).not.toContain('condition.sequence')
+    expect(clarification.summary).not.toContain('volume.relative_average')
+    expect(clarification.summary).not.toContain('confirmation.rebound')
+    expect(graphText).not.toContain('condition.sequence')
+    expect(graphText).not.toContain('volume.relative_average')
+    expect(graphText).not.toContain('confirmation.rebound')
+  })
+
+  it('uses IF for the first logical any-of display block', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-any-of',
+        key: 'logical.any_of',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          items: [
+            {
+              key: 'indicator.above',
+              params: {
+                indicator: 'ma',
+                'reference.period': 20,
+              },
+            },
+            {
+              key: 'price.rolling_extrema_breakout',
+              params: {
+                extrema: 'high',
+                event: 'breakout_up',
+                lookbackBars: 12,
+              },
+            },
+          ],
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.map(item => item.text).join(' ')).toContain('任一条件')
+  })
+
+  it('uses IF when logical any-of is the first visible display block after skipped triggers', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-unknown-skipped',
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'rsi' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-any-of-visible',
+        key: 'logical.any_of',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          items: [
+            {
+              key: 'indicator.below',
+              params: {
+                indicator: 'ma',
+                'reference.period': 20,
+              },
+            },
+            {
+              key: 'indicator.cross_under',
+              params: {
+                indicator: 'macd',
+              },
+            },
+          ],
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.map(item => item.text).join(' ')).toContain('任一条件')
+  })
+
+  it('renders rolling extrema breakout, logical any-of exits, and ATR multiple risk summaries', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 24,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-any-of',
+        key: 'logical.any_of',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          items: [
+            {
+              key: 'indicator.below',
+              params: {
+                indicator: 'ma',
+                'reference.period': 20,
+              },
+            },
+            {
+              key: 'indicator.cross_under',
+              params: {
+                indicator: 'macd',
+                fastPeriod: 12,
+                slowPeriod: 26,
+                signalPeriod: 9,
+              },
+            },
+          ],
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+    state.actions.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'OR_THEN', 'EXECUTE'])
+    expect(text).toContain('突破过去 24 根 K 线最高价')
+    expect(text).toContain('任一条件')
+    expect(text).toContain('价格低于 MA20')
+    expect(text).toContain('MACD 12/26/9 死叉')
+    expect(text).toContain('2 倍 ATR 止损')
+    expect(text).toContain('3 倍 ATR 止盈')
+    expect(text).not.toContain('price.rolling_extrema_breakout')
+    expect(text).not.toContain('logical.any_of')
+    expect(text).not.toContain('risk.atr_multiple')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
+  it('renders atomic trigger display text in conversation summaries instead of raw atom keys', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 20,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-rolling-low-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          extrema: 'low',
+          event: 'breakout_down',
+          lookbackBars: 10,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+    state.actions.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
+
+    const view = service.buildConversationView(state)
+
+    expect(view.summary).toContain('入场：突破过去 20 根 K 线最高价时做多开仓')
+    expect(view.summary).toContain('出场：跌破过去 10 根 K 线最低价时平多')
+    expect(view.summary).not.toContain('price.rolling_extrema_breakout')
+  })
+
+  it('keeps malformed locked risk atoms visible in the execute display block', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.risk = [
+      {
+        id: 'risk-atr-stop-missing-multiple',
+        key: 'risk.atr_multiple_stop',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'risk-remembered-stop-missing-level',
+        key: 'risk.remembered_level_stop',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'risk-custom-unknown',
+        key: 'risk.custom_unknown',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const executeText = service
+      .buildDisplayLogicGraph(state)
+      .blocks
+      .at(-1)
+      ?.items
+      .map(item => item.text)
+      .join(' ') ?? ''
+
+    expect(executeText).toContain('风控: risk.atr_multiple_stop 已识别，参数待补充 -> 平仓')
+    expect(executeText).toContain('风控: risk.remembered_level_stop 已识别，参数待补充 -> 平仓')
+    expect(executeText).toContain('风控: risk.custom_unknown 已识别，参数待补充 -> 平仓')
   })
 
   it('skips malformed expression operands instead of throwing while building display graph', () => {

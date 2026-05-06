@@ -19,6 +19,7 @@ import { Injectable } from '@nestjs/common'
 
 import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
@@ -31,6 +32,7 @@ export class StrategyConsistencyService {
     private readonly compiledScriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
     private readonly canonicalSpecV2IrCompiler: CanonicalSpecV2IrCompilerService = new CanonicalSpecV2IrCompilerService(),
     private readonly canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService = new CanonicalStrategyAstCompilerService(),
+    private readonly compiledScriptEmitter: CompiledScriptEmitterService = new CompiledScriptEmitterService(),
   ) {}
 
   audit(input: {
@@ -598,56 +600,27 @@ export class StrategyConsistencyService {
       }
     }
 
-    const expectedAstProjection = {
-      astVersion: expectedAst.astVersion,
-      executionModel: expectedAst.executionModel,
-      dataRequirements: expectedAst.dataRequirements,
-      exprPool: expectedAst.exprPool,
-      guards: expectedAst.guards,
-      decisionPrograms: expectedAst.decisionPrograms,
-      orderPrograms: expectedAst.orderPrograms,
-      topology: expectedAst.topology,
-    }
-    const expectedManifest = {
-      irVersion: expectedAst.manifest.irVersion,
-      astVersion: expectedAst.astVersion,
-      irHash: expectedAst.manifest.irHash,
-      specHash: expectedAst.manifest.specHash,
-      compileVersion: expectedAst.manifest.compileVersion,
-      astDigest: this.hashCanonicalJson(expectedAstProjection),
-    }
-    const actual = {
-      manifest: {
-        irVersion: projection.compiledManifest.irVersion,
-        astVersion: projection.compiledManifest.astVersion,
-        irHash: projection.compiledManifest.irHash,
-        specHash: projection.compiledManifest.specHash,
-        compileVersion: projection.compiledManifest.compileVersion,
-        astDigest: projection.compiledManifest.astDigest,
-      },
-      executionModel: this.stripExecutionEnvelope(projection.executionModel),
-      dataRequirements: projection.dataRequirements,
-      exprPool: projection.exprPool,
-      guards: projection.guards,
-      decisionPrograms: projection.decisionPrograms,
-      orderPrograms: projection.orderPrograms,
-      topology: projection.topology,
-    }
-
-    const expected = {
-      manifest: expectedManifest,
-      executionModel: expectedAst.executionModel,
-      dataRequirements: expectedAst.dataRequirements,
-      exprPool: expectedAst.exprPool,
-      guards: expectedAst.guards,
-      decisionPrograms: expectedAst.decisionPrograms,
-      orderPrograms: expectedAst.orderPrograms,
-      topology: expectedAst.topology,
-    }
+    const expectedProjection = this.compiledScriptEmitter.buildProjection({
+      ast: expectedAst,
+      executionEnvelope: this.extractExecutionEnvelope(projection.executionModel),
+    })
+    const expected = this.buildAstProjectionCheckView(expectedProjection)
+    const actual = this.buildAstProjectionCheckView(projection)
 
     const mismatches: string[] = []
-    for (const key of ['manifest', 'executionModel', 'dataRequirements', 'exprPool', 'guards', 'decisionPrograms', 'orderPrograms', 'topology'] as const) {
-      if (this.hashCanonicalJson(expected[key]) !== this.hashCanonicalJson(actual[key])) {
+    for (const key of [
+      'manifest',
+      'executionModel',
+      'dataRequirements',
+      'runtimeRequirements',
+      'exprPool',
+      'guards',
+      'riskPredicates',
+      'decisionPrograms',
+      'orderPrograms',
+      'topology',
+    ] as const) {
+      if (this.hashOptionalCanonicalJson(expected[key]) !== this.hashOptionalCanonicalJson(actual[key])) {
         mismatches.push(key)
       }
     }
@@ -1369,6 +1342,10 @@ export class StrategyConsistencyService {
     return `sha256:${digest}`
   }
 
+  private hashOptionalCanonicalJson(value: unknown): `sha256:${string}` {
+    return this.hashCanonicalJson(value === undefined ? null : value)
+  }
+
   private stripExecutionEnvelope(
     executionModel: ReturnType<CompiledScriptParserService['parse']>['executionModel'],
   ): {
@@ -1392,6 +1369,68 @@ export class StrategyConsistencyService {
       fillPolicy: executionModel.fillPolicy,
       defaultOrderType: executionModel.defaultOrderType,
       allowPartialFill: executionModel.allowPartialFill,
+    }
+  }
+
+  private extractExecutionEnvelope(
+    executionModel: ReturnType<CompiledScriptParserService['parse']>['executionModel'],
+  ): {
+    positionMode: 'long_only' | 'short_only' | 'long_short'
+    marginMode: 'cash' | 'isolated' | 'cross'
+    tickSize: number
+    pricePrecision: number
+    quantityPrecision: number
+    fillAssumption: 'strict' | 'optimistic'
+  } {
+    return {
+      positionMode: executionModel.positionMode,
+      marginMode: executionModel.marginMode,
+      tickSize: executionModel.tickSize,
+      pricePrecision: executionModel.pricePrecision,
+      quantityPrecision: executionModel.quantityPrecision,
+      fillAssumption: executionModel.fillAssumption,
+    }
+  }
+
+  private buildAstProjectionCheckView(
+    projection: ReturnType<CompiledScriptParserService['parse']>,
+  ): {
+    manifest: {
+      irVersion: 'csi.v1'
+      astVersion: 'csa.v1'
+      irHash: `sha256:${string}`
+      specHash: `sha256:${string}`
+      compileVersion: 'compiler.v1'
+      astDigest: `sha256:${string}`
+    }
+    executionModel: ReturnType<StrategyConsistencyService['stripExecutionEnvelope']>
+    dataRequirements: ReturnType<CompiledScriptParserService['parse']>['dataRequirements']
+    runtimeRequirements: ReturnType<CompiledScriptParserService['parse']>['runtimeRequirements']
+    exprPool: ReturnType<CompiledScriptParserService['parse']>['exprPool']
+    guards: ReturnType<CompiledScriptParserService['parse']>['guards']
+    riskPredicates: ReturnType<CompiledScriptParserService['parse']>['riskPredicates']
+    decisionPrograms: ReturnType<CompiledScriptParserService['parse']>['decisionPrograms']
+    orderPrograms: ReturnType<CompiledScriptParserService['parse']>['orderPrograms']
+    topology: ReturnType<CompiledScriptParserService['parse']>['topology']
+  } {
+    return {
+      manifest: {
+        irVersion: projection.compiledManifest.irVersion,
+        astVersion: projection.compiledManifest.astVersion,
+        irHash: projection.compiledManifest.irHash,
+        specHash: projection.compiledManifest.specHash,
+        compileVersion: projection.compiledManifest.compileVersion,
+        astDigest: projection.compiledManifest.astDigest,
+      },
+      executionModel: this.stripExecutionEnvelope(projection.executionModel),
+      dataRequirements: projection.dataRequirements,
+      runtimeRequirements: projection.runtimeRequirements,
+      exprPool: projection.exprPool,
+      guards: projection.guards,
+      riskPredicates: projection.riskPredicates,
+      decisionPrograms: projection.decisionPrograms,
+      orderPrograms: projection.orderPrograms,
+      topology: projection.topology,
     }
   }
 

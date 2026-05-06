@@ -26,6 +26,11 @@ const ALLOWED_FUNCTIONS = new Set([
   'AND',
   'OR',
   'NOT',
+  'allOf',
+  'anyOf',
+  'sequence',
+  'compare',
+  'cross',
   'TOUCH_LEVEL_UP',
   'TOUCH_LEVEL_DOWN',
   'STOP_LOSS_PCT',
@@ -149,7 +154,7 @@ export class GraphOperatorParserService {
         continue
       }
 
-      const identMatch = source.slice(cursor).match(/^[A-Z_][A-Z0-9_]*/u)
+      const identMatch = source.slice(cursor).match(/^[A-Za-z_][A-Za-z0-9_]*/u)
       if (identMatch) {
         tokens.push({ type: 'IDENT', value: identMatch[0] })
         cursor += identMatch[0].length

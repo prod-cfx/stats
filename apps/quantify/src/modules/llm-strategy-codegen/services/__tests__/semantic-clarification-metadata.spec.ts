@@ -1,3 +1,4 @@
+import { STRATEGY_CLARIFICATION_REASONS } from '../../types/strategy-clarification'
 import { resolveSemanticClarificationMetadata } from '../semantic-clarification-metadata'
 
 describe('resolveSemanticClarificationMetadata', () => {
@@ -24,6 +25,29 @@ describe('resolveSemanticClarificationMetadata', () => {
       reason: 'missing_semantic_risk',
       field: 'risk',
     })
+  })
+
+  it.each([
+    'trigger.percent_change.magnitude',
+    'trigger.confirmation.rebound_definition',
+    'trigger.confirmation.pullback_hold',
+    'trigger.volume.relative_average.lookback_bars',
+    'trigger.volume.relative_average.multiplier',
+  ])('maps %s to semantic trigger metadata', (slotKey) => {
+    expect(resolveSemanticClarificationMetadata(slotKey)).toEqual({
+      reason: 'missing_semantic_trigger',
+      field: 'triggers',
+    })
+  })
+
+  it('maps falling knife guard definition to risk atom metadata', () => {
+    const metadata = resolveSemanticClarificationMetadata('risk.falling_knife_guard.definition')
+
+    expect(metadata).toEqual({
+      reason: 'missing_risk_atom',
+      field: 'risk',
+    })
+    expect(STRATEGY_CLARIFICATION_REASONS).toContain(metadata.reason)
   })
 
   it.each([

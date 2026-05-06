@@ -23,7 +23,7 @@ interface CompiledExprNode {
     offsetBars?: number
     inputs?: string[]
     value?: number | string
-    params?: Record<string, number | string>
+    params?: Record<string, number | string | boolean>
   }
 }
 
@@ -91,6 +91,8 @@ function evaluateSeries(
     case 'MACD_SIGNAL':
     case 'HIGHEST_HIGH':
     case 'LOWEST_LOW':
+    case 'VOLUME':
+    case 'SMA_VOLUME':
     case 'POSITION_BARS_HELD':
     case 'POSITION_AVG_PRICE':
     case 'POSITION_PNL_PCT':
@@ -139,12 +141,22 @@ function evaluatePredicate(
       return (node.deps ?? []).every(dep => values[dep] === true)
     case 'OR':
       return (node.deps ?? []).some(dep => values[dep] === true)
+    case 'allOf':
+      return (node.deps ?? []).every(dep => values[dep] === true)
+    case 'anyOf':
+      return (node.deps ?? []).some(dep => values[dep] === true)
     case 'NOT':
       return node.deps?.[0] ? values[node.deps[0]] !== true : true
     case 'CROSS_OVER':
       return crossesOver(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
     case 'CROSS_UNDER':
       return crossesUnder(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
+    case 'compare':
+      return evaluateGenericCompare(node, left, right, ctx, executionModel, exprIndex, seriesMemo)
+    case 'cross':
+      return evaluateGenericCross(node, ctx, executionModel, exprIndex, seriesMemo)
+    case 'sequence':
+      return evaluateGenericSequence(node, values, ctx)
     case 'TOUCH_LEVEL_DOWN':
       return touchesLevel(leftId, rightId, values, ctx, executionModel, exprIndex, seriesMemo, 'down')
     case 'TOUCH_LEVEL_UP':
@@ -195,9 +207,12 @@ function evaluateLevelSet(
   }
 
   const levels: number[] = []
+  const levelSetKind = node.payload.kind
   for (let index = -downLevels; index <= upLevels; index += 1) {
     const current = spacingMode === 'pct'
-      ? anchor * Math.pow(1 + spacingValue / 100, index)
+      ? levelSetKind === 'GEOMETRIC_LEVEL_SET'
+        ? anchor * Math.pow(1 + spacingValue / 100, index)
+        : anchor + anchor * (spacingValue / 100) * index
       : anchor + spacingValue * index
     if (lower !== null && current < lower) continue
     if (upper !== null && current > upper) break
@@ -418,6 +433,16 @@ function resolveSeriesValueAt(
         if (window.length === 0) return null
         return Math.min(...window.map(bar => bar.low))
       }
+      case 'VOLUME':
+        return readVolumeAtOffset(bars, offset + (node.payload.offsetBars ?? 0))
+      case 'SMA_VOLUME': {
+        const period = readNumericParam(node.payload.params, 'period') ?? 20
+        const multiplier = readNumericParam(node.payload.params, 'multiplier') ?? 1
+        const volumeOffset = offset + (node.payload.offsetBars ?? 0) + 1
+        const window = collectVolumeWindow(period, volumeOffset, bars)
+        const average = sma(window, period)
+        return average == null ? null : average * multiplier
+      }
       case 'RANGE_POSITION_PCT': {
         const [closeSeriesId, highSeriesId, lowSeriesId] = resolveSeriesInputNodeIds(node, exprIndex)
         const close = resolveSeriesValueAt(
@@ -513,6 +538,250 @@ function resolveSeriesValueAt(
 
   seriesMemo?.set(memoKey, resolved)
   return resolved
+}
+
+function evaluateGenericCompare(
+  node: CompiledExprNode,
+  left: CompiledRuntimeValue,
+  right: CompiledRuntimeValue,
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+  exprIndex?: ReadonlyMap<string, CompiledExprNode>,
+  seriesMemo?: Map<string, number | null>,
+): boolean {
+  const [leftId, rightId] = node.deps ?? []
+  const op = readGenericComparisonOp(node.payload.params, 'op', 'GT')
+  if (op === null) return false
+
+  switch (op) {
+    case 'GTE':
+      return compare(left, right, (a, b) => a >= b)
+    case 'LT':
+      return compare(left, right, (a, b) => a < b)
+    case 'LTE':
+      return compare(left, right, (a, b) => a <= b)
+    case 'EQ':
+      return compareEq(left, right)
+    case 'CROSS_OVER':
+      return crossesOver(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
+    case 'CROSS_UNDER':
+      return crossesUnder(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
+    case 'GT':
+    default:
+      return compare(left, right, (a, b) => a > b)
+  }
+}
+
+function evaluateGenericCross(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+  exprIndex?: ReadonlyMap<string, CompiledExprNode>,
+  seriesMemo?: Map<string, number | null>,
+): boolean {
+  const [leftId, rightId] = node.deps ?? []
+  const direction = readGenericCrossOp(node.payload.params)
+  if (direction === null) return false
+  if (direction === 'CROSS_UNDER') {
+    return crossesUnder(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
+  }
+  return crossesOver(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
+}
+
+function evaluateGenericSequence(
+  node: CompiledExprNode,
+  values: Record<string, CompiledRuntimeValue>,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const memoryKey = readStringParam(node.payload.params, 'memoryKey')
+  const state = memoryKey ? readSemanticRuntimeState(ctx, memoryKey) : null
+  const stateDecision = state ? readSequenceStateDecision(state) : null
+  if (stateDecision !== null) {
+    return stateDecision
+  }
+
+  const sequenceDecision = evaluateSequenceFromBars(node, ctx)
+  if (sequenceDecision !== null) {
+    return sequenceDecision
+  }
+
+  const deps = node.deps ?? []
+  return deps.length > 0 && deps.every(dep => values[dep] === true)
+}
+
+function evaluateSequenceFromBars(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean | null {
+  const sequenceKind = readStringParam(node.payload.params, 'sequenceKind')
+  if (sequenceKind === 'consecutive_candles') {
+    return evaluateConsecutiveCandlesSequence(node, ctx)
+  }
+  if (sequenceKind === 'breakout_retest') {
+    return evaluateBreakoutRetestSequence(node, ctx)
+  }
+  return null
+}
+
+function evaluateConsecutiveCandlesSequence(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean | null {
+  const count = Math.floor(readNumericParam(node.payload.params, 'count') ?? 0)
+  const direction = readStringParam(node.payload.params, 'direction') ?? 'down'
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  if (count <= 0 || bars.length < count) return false
+
+  const window = bars.slice(Math.max(0, bars.length - count))
+  if (window.length !== count) return false
+
+  if (direction === 'up') {
+    return window.every(bar => bar.close > bar.open)
+  }
+
+  return window.every(bar => bar.close < bar.open)
+}
+
+function evaluateBreakoutRetestSequence(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean | null {
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const lookbackBars = resolveSequenceLookbackBars(node, ctx)
+  if (lookbackBars <= 1 || bars.length < lookbackBars + 2) return false
+
+  const current = bars[bars.length - 1]
+  if (!current) return false
+
+  const searchStart = Math.max(lookbackBars, bars.length - lookbackBars - 1)
+  for (let breakoutIndex = searchStart; breakoutIndex < bars.length - 1; breakoutIndex += 1) {
+    const breakoutBar = bars[breakoutIndex]
+    if (!breakoutBar) continue
+
+    const priorWindow = bars.slice(Math.max(0, breakoutIndex - lookbackBars), breakoutIndex)
+    if (priorWindow.length < 2) continue
+
+    const breakoutLevel = Math.max(...priorWindow.map(bar => bar.high))
+    if (!Number.isFinite(breakoutLevel) || breakoutBar.close <= breakoutLevel) continue
+
+    const postBreakoutBars = bars.slice(breakoutIndex + 1)
+    if (postBreakoutBars.some(bar => bar.close < breakoutLevel)) continue
+
+    if (current.low <= breakoutLevel && current.close >= breakoutLevel) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function resolveSequenceLookbackBars(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): number {
+  const explicit = readNumericParam(node.payload.params, 'lookbackBars')
+  if (explicit && explicit > 0) return Math.floor(explicit)
+
+  const lookbackWindow = readStringParam(node.payload.params, 'lookbackWindow')
+  const timeframe = typeof ctx.timeframe === 'string' ? ctx.timeframe : null
+  const windowMinutes = parseDurationMinutes(lookbackWindow)
+  const timeframeMinutes = parseDurationMinutes(timeframe)
+  if (windowMinutes && timeframeMinutes && timeframeMinutes > 0) {
+    return Math.max(1, Math.floor(windowMinutes / timeframeMinutes))
+  }
+
+  return 24
+}
+
+function parseDurationMinutes(value: string | null): number | null {
+  const matched = value?.trim().match(/^(\d+(?:\.\d+)?)\s*(m|min|分钟|h|小时|d|天)$/iu)
+  if (!matched?.[1] || !matched[2]) return null
+
+  const amount = Number(matched[1])
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const unit = matched[2].toLowerCase()
+  if (unit === 'm' || unit === 'min' || unit === '分钟') return amount
+  if (unit === 'h' || unit === '小时') return amount * 60
+  return amount * 24 * 60
+}
+
+function readGenericComparisonOp(
+  params: Record<string, number | string | boolean> | undefined,
+  key: string,
+  defaultOp: string,
+): string | null {
+  const raw = readStringParam(params, key)
+  if (!raw) return defaultOp
+  return normalizeComparisonOp(raw)
+}
+
+function readGenericCrossOp(
+  params: Record<string, number | string | boolean> | undefined,
+): string | null {
+  const direction = readStringParam(params, 'direction')
+  if (direction) return normalizeCrossOp(direction)
+
+  const op = readStringParam(params, 'op')
+  if (op) return normalizeCrossOp(op)
+
+  return 'CROSS_OVER'
+}
+
+function normalizeCrossOp(op: string): 'CROSS_OVER' | 'CROSS_UNDER' | null {
+  const normalized = op.trim().toUpperCase()
+  if (normalized === 'OVER' || normalized === 'CROSS_OVER') return 'CROSS_OVER'
+  if (normalized === 'UNDER' || normalized === 'CROSS_UNDER') return 'CROSS_UNDER'
+  return null
+}
+
+function normalizeComparisonOp(op: string): string | null {
+  const normalized = op.trim().toUpperCase()
+  if (normalized === 'OVER') return 'CROSS_OVER'
+  if (normalized === 'UNDER') return 'CROSS_UNDER'
+  if (
+    normalized === 'GT'
+    || normalized === 'GTE'
+    || normalized === 'LT'
+    || normalized === 'LTE'
+    || normalized === 'EQ'
+    || normalized === 'CROSS_OVER'
+    || normalized === 'CROSS_UNDER'
+  ) {
+    return normalized
+  }
+  return null
+}
+
+function readSemanticRuntimeState(
+  ctx: StrategyExecutionContextV1,
+  memoryKey: string,
+): Record<string, unknown> | null {
+  const semanticRuntimeState = (ctx as Record<string, unknown>).semanticRuntimeState
+  if (!semanticRuntimeState || typeof semanticRuntimeState !== 'object' || Array.isArray(semanticRuntimeState)) {
+    return null
+  }
+
+  const state = (semanticRuntimeState as Record<string, unknown>)[memoryKey]
+  return state && typeof state === 'object' && !Array.isArray(state)
+    ? state as Record<string, unknown>
+    : null
+}
+
+function readSequenceStateDecision(state: Record<string, unknown>): boolean | null {
+  const candidates = [
+    state.completed,
+    state.matched,
+    state.ready,
+    state.triggered,
+    state.confirmed,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'boolean') return candidate
+  }
+
+  return null
 }
 
 function isWithinLevelSet(
@@ -612,6 +881,22 @@ function collectBarHistory(
   return result
 }
 
+function collectVolumeWindow(
+  period: number,
+  offset: number,
+  bars: readonly Pick<Bar, 'volume'>[],
+): number[] {
+  if (!Number.isFinite(period) || period <= 0) return []
+
+  const result: number[] = []
+  for (let relative = period - 1 + offset; relative >= offset; relative -= 1) {
+    const value = readVolumeAtOffset(bars, relative)
+    if (value == null) return []
+    result.push(value)
+  }
+  return result
+}
+
 function readPriceAtOffset(
   field: 'open' | 'high' | 'low' | 'close',
   bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
@@ -620,6 +905,15 @@ function readPriceAtOffset(
 ): number | null {
   const target = bars[bars.length - 1 - offset] ?? null
   return readLatestPrice(field, target, offset === 0 ? executionModel : undefined)
+}
+
+function readVolumeAtOffset(
+  bars: readonly Pick<Bar, 'volume'>[],
+  offset: number,
+): number | null {
+  if (offset < 0 || offset >= bars.length) return null
+  const value = bars[bars.length - 1 - offset]?.volume
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function readDeploymentPrice(
@@ -631,7 +925,7 @@ function readDeploymentPrice(
 }
 
 function readNumericParam(
-  params: Record<string, number | string> | undefined,
+  params: Record<string, number | string | boolean> | undefined,
   key: string,
 ): number | null {
   const raw = params?.[key]
@@ -640,7 +934,7 @@ function readNumericParam(
 }
 
 function readStringParam(
-  params: Record<string, number | string> | undefined,
+  params: Record<string, number | string | boolean> | undefined,
   key: string,
 ): string | null {
   const raw = params?.[key]

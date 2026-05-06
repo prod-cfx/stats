@@ -1,5 +1,5 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
-import type { BacktestRunInput } from '../types/backtesting.types'
+import type { BacktestRunInput, StrategyContext } from '../types/backtesting.types'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -157,6 +157,72 @@ describe('backtestRunnerService', () => {
     })
 
     expect(tsSeen).toEqual([2, 3])
+  })
+
+  it('initializes semantic runtime state keys from atomic runtime requirements without changing legacy scripts', async () => {
+    const runner = createRunner()
+    const semanticRuntimeStates: Array<StrategyContext['semanticRuntimeState']> = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'atomic-state',
+        params: {},
+        astSnapshot: {
+          runtimeRequirements: {
+            helpers: ['rollingHigh'],
+            stateKeys: ['breakout'],
+          },
+        },
+        fn: (ctx) => {
+          semanticRuntimeStates.push(ctx.semanticRuntimeState)
+          if (ctx.semanticRuntimeState) {
+            ctx.semanticRuntimeState.breakout = {
+              rememberedLevel: ctx.baseTimeframeBar.high,
+            }
+          }
+          return { type: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, high: 101, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 2, high: 102, close: 101 }),
+      ],
+    })
+
+    expect(semanticRuntimeStates).toHaveLength(2)
+    expect(semanticRuntimeStates[0]).toEqual({ breakout: { rememberedLevel: 102 } })
+    expect(semanticRuntimeStates[1]).toBe(semanticRuntimeStates[0])
+
+    const legacyStates: Array<StrategyContext['semanticRuntimeState']> = []
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 'legacy-state',
+        params: {},
+        fn: (ctx) => {
+          legacyStates.push(ctx.semanticRuntimeState)
+          return { type: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, close: 100 }),
+      ],
+    })
+
+    expect(legacyStates).toEqual([undefined])
   })
 
   it('should respect leverage cap when opening position', async () => {
