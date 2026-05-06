@@ -175,7 +175,9 @@ export function BacktestSummaryCard({
             </p>
           )}
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
-            {drawdownLimited ? t('aiQuant.messages.backtestDrawdownLimit') : '当前为模拟部署模式：忽略回撤门槛'}
+            {drawdownLimited
+              ? t('aiQuant.messages.backtestDrawdownLimit')
+              : t('aiQuant.messages.backtestDrawdownLimitBypassed')}
           </p>
           {backtestContext && (
             <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{backtestContext}</p>
