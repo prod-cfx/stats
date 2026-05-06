@@ -1,12 +1,6 @@
-import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticState } from '../../types/semantic-state'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
-
-interface TriggerSupportResolver {
-  resolveTriggerSupport(trigger: SemanticTriggerState): {
-    executableProjection?: string[]
-  }
-}
 
 function baseState(overrides: Partial<SemanticState>): SemanticState {
   return {
@@ -281,23 +275,62 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.state.triggers.map(trigger => trigger.support)).toEqual([undefined, undefined])
   })
 
-  it('uses canonical v2 projection for executable moving-average indicator aliases', () => {
-    const resolved = (service as unknown as TriggerSupportResolver).resolveTriggerSupport({
-      id: 'entry-ma',
-      key: 'indicator.above',
-      phase: 'entry',
-      params: {
-        indicator: 'ma',
-        referenceRole: 'long_term',
-        'reference.period': 50,
-      },
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    })
+  it('routes executable moving-average indicator aliases through public classification', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'long_term',
+          'reference.period': 50,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }))
 
-    expect(resolved.executableProjection).toEqual(expect.arrayContaining(['canonical_spec_v2']))
-    expect(resolved.executableProjection).not.toContain('canonical_spec_v1')
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.state.triggers[0].support).toBeUndefined()
+  })
+
+  it('adds registry open slots for supported requires-slot risk atoms with unknown required params', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'entry',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+      risk: [{
+        id: 'falling-knife',
+        key: 'risk.falling_knife_guard',
+        params: { definition: 'unknown' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }))
+
+    expect(result.route).toBe('open_slots')
+    expect(result.openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+      }),
+    ])
+    expect(result.state.risk[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+      }),
+    ])
   })
 
   it('routes executable EMA compare triggers with per-trigger timeframe to projection', () => {

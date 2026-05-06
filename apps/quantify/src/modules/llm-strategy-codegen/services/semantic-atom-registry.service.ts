@@ -128,7 +128,14 @@ const ATOMS: SemanticAtomDefinition[] = [
   executableRisk('risk.atr_multiple_stop', ['multiple']),
   executableRisk('risk.atr_multiple_take_profit', ['multiple']),
   executableRisk('risk.remembered_level_stop', ['levelKey']),
-  supportedRequiresSlotRisk('risk.falling_knife_guard', ['definition']),
+  supportedRequiresSlotRisk('risk.falling_knife_guard', ['definition'], [
+    {
+      slotKey: 'risk.falling_knife_guard.definition',
+      fieldPath: 'risk.params.definition',
+      priority: 'risk',
+      questionHint: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+    },
+  ]),
   executableRisk('risk.trailing_stop_pct', ['valuePct']),
   executableRisk('risk.max_drawdown_pct', ['valuePct']),
   executableRisk('risk.max_single_loss_pct', ['valuePct']),
@@ -220,7 +227,11 @@ function executableRisk(key: string, requiredParams: string[]): SemanticAtomDefi
   }
 }
 
-function supportedRequiresSlotRisk(key: string, requiredParams: string[]): SemanticAtomDefinition {
+function supportedRequiresSlotRisk(
+  key: string,
+  requiredParams: string[],
+  openSlots: SemanticAtomDefinition['openSlots'],
+): SemanticAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -228,7 +239,7 @@ function supportedRequiresSlotRisk(key: string, requiredParams: string[]): Seman
     requiredParams,
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
-    openSlots: [],
+    openSlots,
   }
 }
 

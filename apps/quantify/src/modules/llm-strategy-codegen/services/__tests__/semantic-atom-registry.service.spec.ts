@@ -139,6 +139,15 @@ describe('SemanticAtomRegistryService', () => {
         executableProjection: expect.arrayContaining(['canonical_spec_v2']),
       })
     }
+
+    expect(service.get('risk.falling_knife_guard').openSlots).toEqual([
+      {
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+        priority: 'risk',
+        questionHint: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+      },
+    ])
   })
 
   it('provides a fallback patch that closes trigger contracts in the current semantic builder', () => {
