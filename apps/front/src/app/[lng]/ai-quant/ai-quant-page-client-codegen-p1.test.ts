@@ -1003,6 +1003,81 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(isDeployableBacktestResult(next.backtestResult)).toBe(true)
   })
 
+  it('keeps config_changed recovery status during same-snapshot reconciliation', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        ...createConversation((key: string) => key),
+        id: 'conv-with-recovered-backtest',
+        serverConversationId: 'server-conv-1',
+        messages: [{ id: 'msg-1', role: 'assistant', content: 'Strategy code generated.' }],
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: {
+          ...DEFAULT_PARAM_VALUES,
+          backtestRangePreset: '30D',
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
+        backtestDraftConfig: {
+          range: { preset: '30D' },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        backtestResult: {
+          id: 'btjob-recovered',
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+          recoveryStatus: 'config_changed',
+        },
+        llmCodegenSessionId: 'session-1',
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'export default function strategy() { return true }',
+        publishedScriptGraphVersion: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: null,
+        publishedSnapshotId: 'snapshot-1',
+        specDesc: {
+          canonicalDigest: 'sha256:canonical-1',
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [],
+        },
+      } as any,
+      confirmGenerate: false,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '',
+      preserveBacktestResultOnSameSnapshot: true,
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+    })
+
+    expect(next.publishedSnapshotId).toBe('snapshot-1')
+    expect(next.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-recovered',
+      recoveryStatus: 'config_changed',
+    }))
+    expect(isDeployableBacktestResult(next.backtestResult)).toBe(false)
+  })
+
   it('prefers authoritative publishedSnapshotParamValues over strategyConfig-derived subsets on publish response', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {

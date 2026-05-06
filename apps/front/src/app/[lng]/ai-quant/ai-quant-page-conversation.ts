@@ -1397,11 +1397,6 @@ export function reconcileBacktestResultWithDraftConfig(input: {
     }
   }
 
-  if (result.recoveryStatus === 'config_changed') {
-    const { recoveryStatus: _recoveryStatus, ...freshResult } = result
-    return freshResult
-  }
-
   return result
 }
 
