@@ -291,3 +291,10 @@ okx
 - canonical、IR、publication、backtest 消费到归一化 symbol。
 - 不新增策略族专用 symbol 识别逻辑。
 - 不让 LLM planner 输出成为未经校验的 symbol 权威。
+
+## Implementation Audit
+
+- Authority Write: `SemanticSeedExtractorService`, `SemanticSeedStateBuilderService`, `SemanticOpenSlotAnswerResolverService`, and `ConversationSemanticEditService` route `contextSlots.symbol` writes through `MarketInstrumentSymbolResolverService`.
+- Compatibility Input: planner and legacy context symbol values enter semantic state through `SemanticSeedStateBuilderService`, which normalizes string and structured symbol values before creating `contextSlots.symbol`.
+- Validation / Projection: canonical, IR, publication, execution context, graph, consistency, and summary services continue reading normalized `contextSlots.symbol` or legacy `symbols[0]` projections and do not decide user-facing symbol clarification.
+- Regression Evidence: resolver, seed extractor, seed state builder, open slot answer, semantic edit, conversation mainflow, and publication tests cover the symbol authority path.
