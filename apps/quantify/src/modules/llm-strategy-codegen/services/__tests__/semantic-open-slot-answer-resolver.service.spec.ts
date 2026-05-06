@@ -766,6 +766,30 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
     expect(result.closedSlotKeys).toEqual(['trigger.entry'])
   })
 
+  it('keeps complete gate triggers attached to a fulfilled entry fragment', () => {
+    const mixedService = new SemanticOpenSlotAnswerResolverService(undefined, new MixedEntryGateExitSeedExtractorService())
+
+    const result = mixedService.resolve({
+      currentState: stateWithMissingEntry(),
+      message: 'entry with gate and extra exit',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'entry', key: 'indicator.above' }),
+      expect.objectContaining({ phase: 'gate', key: 'condition.expression' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
+    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(result.nextState.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
   it('does not fulfill an entry slot from an incomplete entry trigger fragment', () => {
     const incompleteService = new SemanticOpenSlotAnswerResolverService(undefined, new IncompleteEntrySeedExtractorService())
     const state = stateWithMissingEntry()
@@ -806,6 +830,41 @@ class IncompleteEntrySeedExtractorService extends SemanticSeedExtractorService {
           affectsExecution: true,
         }],
       }],
+    }
+  }
+}
+
+class MixedEntryGateExitSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      triggers: [
+        {
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ema', 'reference.period': 20 },
+        },
+        {
+          key: 'condition.expression',
+          phase: 'gate',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+        },
+        {
+          key: 'indicator.below',
+          phase: 'exit',
+          params: { indicator: 'ema', 'reference.period': 20 },
+        },
+      ],
+      actions: [
+        { key: 'open_long', params: {} },
+        { key: 'close_long', params: {} },
+      ],
     }
   }
 }

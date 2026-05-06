@@ -152,26 +152,28 @@ function mergeFragmentPatch(
   const existingActionIds = new Set(state.actions.map(action => action.id))
   const nextTriggers = [
     ...state.triggers.filter(trigger => !(missingTriggerKeys.has(trigger.key) && trigger.status === 'open')),
-    ...(patch.triggers ?? []).map((trigger, index): SemanticTriggerState => {
-      const id = ensureUniqueId(
-        trigger.id ?? `semantic-fragment-trigger-${trigger.phase}-${slugifyFragmentId(trigger.key)}-${index + 1}`,
-        existingTriggerIds,
-      )
+    ...(patch.triggers ?? [])
+      .filter(trigger => shouldMergeFragmentTrigger(trigger, fulfilledPhaseSet))
+      .map((trigger, index): SemanticTriggerState => {
+        const id = ensureUniqueId(
+          trigger.id ?? `semantic-fragment-trigger-${trigger.phase}-${slugifyFragmentId(trigger.key)}-${index + 1}`,
+          existingTriggerIds,
+        )
 
-      return {
-        id,
-        key: trigger.key,
-        phase: trigger.phase,
-        sideScope: trigger.sideScope,
-        params: trigger.params ?? {},
-        status: resolveFragmentNodeStatus(trigger),
-        source: 'user_explicit',
-        evidence: trigger.evidence,
-        openSlots: trigger.openSlots ?? [],
-        contracts: trigger.contracts,
-        support: trigger.support,
-      }
-    }).filter(trigger => isFulfilledTriggerPhase(trigger.phase) && fulfilledPhaseSet.has(trigger.phase)),
+        return {
+          id,
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope,
+          params: trigger.params ?? {},
+          status: resolveFragmentNodeStatus(trigger),
+          source: 'user_explicit',
+          evidence: trigger.evidence,
+          openSlots: trigger.openSlots ?? [],
+          contracts: trigger.contracts,
+          support: trigger.support,
+        }
+      }),
   ]
   const existingActionKeys = new Set(state.actions.map(action => action.key))
   const nextActions = [
@@ -205,6 +207,20 @@ function mergeFragmentPatch(
     actions: nextActions,
     contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots),
   }
+}
+
+function shouldMergeFragmentTrigger(
+  trigger: FragmentTrigger,
+  fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
+): boolean {
+  if (isFulfilledTriggerPhase(trigger.phase)) {
+    return fulfilledPhases.has(trigger.phase)
+  }
+  if (trigger.phase === 'gate') {
+    return fulfilledPhases.size > 0 && isCompleteFragmentNode(trigger)
+  }
+
+  return false
 }
 
 function actionMatchesFulfilledPhases(
