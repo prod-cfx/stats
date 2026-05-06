@@ -179,6 +179,55 @@ describe('SemanticStateProjectionService', () => {
     expect(text).not.toContain('volume.relative_average')
   })
 
+  it('keeps unrelated same-side entry triggers as separate display rule blocks', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.risk = []
+    state.triggers = [
+      {
+        id: 'entry-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 24,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'entry-ma-above',
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'trend',
+          'reference.period': 20,
+          reference: { indicator: 'ma', period: 20 },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.filter(item => item.kind === 'condition')).toHaveLength(1)
+    expect(graph.blocks[1]?.items.filter(item => item.kind === 'condition')).toHaveLength(1)
+    const ruleBlockTexts = graph.blocks
+      .filter(block => block.type !== 'EXECUTE')
+      .map(block => block.items.map(item => item.text).join(' '))
+    expect(ruleBlockTexts).toEqual(expect.arrayContaining([
+      expect.stringContaining('突破过去 24 根 K 线最高价'),
+      expect.stringContaining('价格在 MA20 上方'),
+    ]))
+  })
+
   it('renders sequence and remembered level risk atomic contracts without raw keys', () => {
     const text = flattenDisplayGraphText(buildLockedAtomicState('breakout-retest'))
 
@@ -190,6 +239,45 @@ describe('SemanticStateProjectionService', () => {
     expect(text).not.toContain('risk.remembered_level_stop')
     expect(text).not.toContain('不支持的条件')
     expect(text).not.toContain('待补充')
+  })
+
+  it('uses IF for the first logical any-of display block', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-any-of',
+        key: 'logical.any_of',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          items: [
+            {
+              key: 'indicator.above',
+              params: {
+                indicator: 'ma',
+                'reference.period': 20,
+              },
+            },
+            {
+              key: 'price.rolling_extrema_breakout',
+              params: {
+                extrema: 'high',
+                event: 'breakout_up',
+                lookbackBars: 12,
+              },
+            },
+          ],
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.map(item => item.text).join(' ')).toContain('任一条件')
   })
 
   it('renders rolling extrema breakout, logical any-of exits, and ATR multiple risk summaries', () => {
@@ -256,6 +344,48 @@ describe('SemanticStateProjectionService', () => {
     expect(text).not.toContain('risk.atr_multiple')
     expect(text).not.toContain('不支持的条件')
     expect(text).not.toContain('待补充')
+  })
+
+  it('keeps malformed locked risk atoms visible in the execute display block', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.risk = [
+      {
+        id: 'risk-atr-stop-missing-multiple',
+        key: 'risk.atr_multiple_stop',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'risk-remembered-stop-missing-level',
+        key: 'risk.remembered_level_stop',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'risk-custom-unknown',
+        key: 'risk.custom_unknown',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const executeText = service
+      .buildDisplayLogicGraph(state)
+      .blocks
+      .at(-1)
+      ?.items
+      .map(item => item.text)
+      .join(' ') ?? ''
+
+    expect(executeText).toContain('风控: risk.atr_multiple_stop 已识别，参数待补充 -> 平仓')
+    expect(executeText).toContain('风控: risk.remembered_level_stop 已识别，参数待补充 -> 平仓')
+    expect(executeText).toContain('风控: risk.custom_unknown 已识别，参数待补充 -> 平仓')
   })
 
   it('skips malformed expression operands instead of throwing while building display graph', () => {

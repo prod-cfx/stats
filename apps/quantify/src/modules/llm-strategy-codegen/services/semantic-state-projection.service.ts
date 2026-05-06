@@ -210,21 +210,88 @@ export class SemanticStateProjectionService {
     previous: SemanticState['triggers'][number],
     next: SemanticState['triggers'][number],
   ): boolean {
-    return previous.phase === 'entry'
-      && next.phase === 'entry'
-      && previous.key !== 'logical.any_of'
-      && next.key !== 'logical.any_of'
-      && (previous.sideScope ?? 'long') === (next.sideScope ?? 'long')
+    if (
+      previous.phase !== next.phase
+      || previous.phase !== 'entry'
+      || previous.key === 'logical.any_of'
+      || next.key === 'logical.any_of'
+      || (previous.sideScope ?? 'long') !== (next.sideScope ?? 'long')
+    ) {
+      return false
+    }
+
+    return this.shareDisplayRuleGroupMarker(previous, next)
+      || this.isKnownAtomicEntryCombination(previous, next)
   }
 
   private resolveDisplayRuleBlockType(
     group: SemanticState['triggers'],
     index: number,
   ): SemanticDisplayBlockType {
+    if (index === 0) {
+      return 'IF'
+    }
     if (group.some(trigger => trigger.key === 'logical.any_of')) {
       return 'OR_THEN'
     }
-    return index === 0 ? 'IF' : 'AND_AT_THEN'
+    return 'AND_AT_THEN'
+  }
+
+  private shareDisplayRuleGroupMarker(
+    previous: SemanticState['triggers'][number],
+    next: SemanticState['triggers'][number],
+  ): boolean {
+    const previousMarker = this.readDisplayRuleGroupMarker(previous)
+    const nextMarker = this.readDisplayRuleGroupMarker(next)
+    return previousMarker !== null && previousMarker === nextMarker
+  }
+
+  private readDisplayRuleGroupMarker(trigger: SemanticState['triggers'][number]): string | null {
+    const markerKeys = [
+      'displayGroupId',
+      'groupId',
+      'logicalGroupId',
+      'logicalParentId',
+      'parentTriggerId',
+      'combinationId',
+      'comboId',
+    ]
+    for (const key of markerKeys) {
+      const value = this.readString(trigger.params[key])
+      if (value) {
+        return `${key}:${value}`
+      }
+    }
+
+    const contracts = trigger.contracts ?? []
+    for (const contract of contracts) {
+      const marker = this.readString(contract.params.displayGroupId)
+        ?? this.readString(contract.params.groupId)
+        ?? this.readString(contract.params.combinationId)
+      if (marker) {
+        return `contract:${marker}`
+      }
+    }
+
+    return null
+  }
+
+  private isKnownAtomicEntryCombination(
+    previous: SemanticState['triggers'][number],
+    next: SemanticState['triggers'][number],
+  ): boolean {
+    const keys = new Set([previous.key, next.key])
+    return keys.has('price.detect.indicator_boundary')
+      && keys.has('volume.relative_average')
+      && (
+        this.isBollingerBoundaryTrigger(previous)
+        || this.isBollingerBoundaryTrigger(next)
+      )
+  }
+
+  private isBollingerBoundaryTrigger(trigger: SemanticState['triggers'][number]): boolean {
+    return trigger.key === 'price.detect.indicator_boundary'
+      && this.readIndicatorBoundaryIndicator(trigger.params)?.name === 'bollinger'
   }
 
   private buildDisplayConditionText(
@@ -1264,29 +1331,29 @@ export class SemanticStateProjectionService {
         if (risk.key === 'risk.condition_expression') {
           const condition = this.formatSemanticExpression(risk.params.condition)
           if (!condition) {
-            return ''
+            return this.buildRiskFallbackSummary(risk)
           }
           return `风控：当${condition}时${this.describeRiskExpressionEffect(risk.params.effect)}`
         }
 
         if (risk.key === 'risk.atr_multiple_stop') {
           const multiple = this.readFiniteNumber(risk.params.multiple)
-          return multiple === null ? '' : `${this.formatNumber(multiple)} 倍 ATR 止损`
+          return multiple === null ? this.buildRiskFallbackSummary(risk) : `${this.formatNumber(multiple)} 倍 ATR 止损`
         }
 
         if (risk.key === 'risk.atr_multiple_take_profit') {
           const multiple = this.readFiniteNumber(risk.params.multiple)
-          return multiple === null ? '' : `${this.formatNumber(multiple)} 倍 ATR 止盈`
+          return multiple === null ? this.buildRiskFallbackSummary(risk) : `${this.formatNumber(multiple)} 倍 ATR 止盈`
         }
 
         if (risk.key === 'risk.remembered_level_stop') {
           const levelKey = this.readString(risk.params.levelKey)
-          return levelKey ? `跌破记录位 ${levelKey} 止损` : ''
+          return levelKey ? `跌破记录位 ${levelKey} 止损` : this.buildRiskFallbackSummary(risk)
         }
 
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
-          return ''
+          return this.buildRiskFallbackSummary(risk)
         }
 
         if (risk.key === 'risk.stop_loss_pct') {
@@ -1307,10 +1374,14 @@ export class SemanticStateProjectionService {
           return `单笔止损：下跌${this.formatPercent(valuePct)}%`
         }
 
-        return ''
+        return this.buildRiskFallbackSummary(risk)
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private buildRiskFallbackSummary(risk: SemanticState['risk'][number]): string {
+    return `${risk.key} 已识别，参数待补充`
   }
 
   private buildActionSummary(actions: SemanticState['actions']): string {
