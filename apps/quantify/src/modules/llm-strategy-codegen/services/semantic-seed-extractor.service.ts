@@ -2656,6 +2656,11 @@ export class SemanticSeedExtractorService {
     return /(触及|突破|回到|回归|跌破|上穿|下穿|站上|失守|高于|低于)/u.test(segment)
   }
 
+  private hasExecutableConditionOperator(segment: string): boolean {
+    return this.hasBollingerBandAction(segment)
+      || /(上方|下方|之上|之下|大于|小于|超过|少于|>=|<=|>|<)/u.test(segment)
+  }
+
   private resolvePercentDirection(segment: string): 'up' | 'down' | 'drawdown' | null {
     if (/回撤/u.test(segment)) {
       return 'drawdown'
@@ -2931,6 +2936,10 @@ export class SemanticSeedExtractorService {
   }
 
   private extractExchange(text: string): string | null {
+    if (/币安/u.test(text)) return 'binance'
+    if (/欧易/u.test(text)) return 'okx'
+    if (/海伯利安|hyperliquid/iu.test(text)) return 'hyperliquid'
+
     const match = text.match(/\b(OKX|BINANCE|HYPERLIQUID)\b/iu)
     if (!match?.[1]) return null
 
@@ -3088,7 +3097,37 @@ export class SemanticSeedExtractorService {
 
     const tail = segment.slice(start).trim()
     if (tail) clauses.push(tail)
-    return clauses.length > 0 ? clauses : [segment]
+    const explicitClauses = clauses.length > 0 ? clauses : [segment]
+    return explicitClauses.flatMap(clause => this.splitImplicitTradeClauses(clause))
+  }
+
+  private splitImplicitTradeClauses(clause: string): string[] {
+    const parts: string[] = []
+    let start = 0
+
+    for (const match of clause.matchAll(/\s+/gu)) {
+      const index = match.index ?? -1
+      if (index <= start) continue
+
+      const before = clause.slice(start, index).trim()
+      const after = clause.slice(index + match[0].length).trim()
+      if (!before || !after) continue
+      if (!this.hasExecutableTradeIntent(before)) continue
+      if (!this.looksLikeNewExecutableClause(after)) continue
+
+      parts.push(before)
+      start = index + match[0].length
+    }
+
+    const tail = clause.slice(start).trim()
+    if (tail) parts.push(tail)
+    return parts.length > 0 ? parts : [clause]
+  }
+
+  private looksLikeNewExecutableClause(text: string): boolean {
+    return /^(?:如果|当|若|在)?\s*(?:(?:\d{1,2}\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|分钟|分|小时|时|天|日))|(?:价格|K线|k线|收盘价|开盘价|close|open|MA|EMA|均线|RSI|MACD|布林|bollinger))/iu.test(text)
+      && this.hasExecutableTradeIntent(text)
+      && this.hasExecutableConditionOperator(text)
   }
 
   private isBollingerParamComma(segment: string, commaIndex: number): boolean {

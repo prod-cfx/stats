@@ -5918,6 +5918,73 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps space-separated multi-timeframe EMA entry and exit distinct through first-turn conversation state', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-first-turn-space-mtf-ema-exit' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请确认交易所')
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
+    expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'binance',
+    }))
+    expect(createPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'BTCUSDT',
+    }))
+    expect(createPayload.semanticState.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'perp',
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    ]))
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+      expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
+    ]))
+  })
+
   it('prunes missing exit placeholders when a later turn supplies complete order-program contracts', () => {
     const stateWithRiskOnly = (service as any).withRequiredSemanticOpenSlots({
       version: 1,
