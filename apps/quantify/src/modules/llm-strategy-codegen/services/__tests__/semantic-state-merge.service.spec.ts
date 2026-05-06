@@ -1074,7 +1074,7 @@ describe('SemanticStateMergeService', () => {
             },
             status: 'locked' as const,
             source: 'user_explicit' as const,
-            evidence: `entry ${index}`,
+            evidence: { text: `entry ${index}`, source: 'user_explicit' as const },
             openSlots: [],
           })),
           {
