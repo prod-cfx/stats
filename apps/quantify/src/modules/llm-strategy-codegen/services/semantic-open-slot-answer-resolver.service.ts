@@ -103,7 +103,7 @@ export class SemanticOpenSlotAnswerResolverService {
       }
     }
 
-    const symbolAnswer = this.resolveSymbolAnswer(input.currentState, input.message)
+    const symbolAnswer = this.resolveSymbolAnswer(input.currentState, input.message, input.clarificationState)
     if (symbolAnswer) {
       return symbolAnswer
     }
@@ -111,9 +111,16 @@ export class SemanticOpenSlotAnswerResolverService {
     return fulfillSemanticFragment(input.currentState, this.seedExtractor.extract(input.message))
   }
 
-  private resolveSymbolAnswer(state: SemanticState, message: string): SemanticOpenSlotAnswerResolverResult | null {
+  private resolveSymbolAnswer(
+    state: SemanticState,
+    message: string,
+    clarificationState: unknown,
+  ): SemanticOpenSlotAnswerResolverResult | null {
     const symbolSlot = state.contextSlots.symbol
     if (symbolSlot?.status !== 'open') {
+      return null
+    }
+    if (!canConsumeSymbolAnswer(symbolSlot, clarificationState)) {
       return null
     }
 
@@ -136,6 +143,20 @@ export class SemanticOpenSlotAnswerResolverService {
       closedSlots: [{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }],
     }
   }
+}
+
+function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationState: unknown): boolean {
+  const pendingItems = readPendingClarificationItems(clarificationState)
+  const activeItem = pendingItems[0]
+  if (!activeItem) {
+    return true
+  }
+
+  if (typeof activeItem.slotId === 'string' && buildSemanticSlotId(symbolSlot) === activeItem.slotId) {
+    return true
+  }
+
+  return activeItem.slotKey === symbolSlot.slotKey && activeItem.fieldPath === symbolSlot.fieldPath
 }
 
 function fulfillSemanticFragment(

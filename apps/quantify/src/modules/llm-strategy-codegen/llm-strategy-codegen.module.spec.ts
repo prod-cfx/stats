@@ -2,11 +2,13 @@ import { MODULE_METADATA } from '@nestjs/common/constants'
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
 import { CodegenGraphSnapshotService } from './services/codegen-graph-snapshot.service'
 import { LlmStrategyCodegenModule } from './llm-strategy-codegen.module'
+import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
+import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 
 describe('LlmStrategyCodegenModule', () => {
@@ -46,6 +48,14 @@ describe('LlmStrategyCodegenModule', () => {
       SemanticEventFrameParserService,
       SemanticEventFrameProjectorService,
     ]))
+  })
+
+  it('registers the market instrument symbol resolver required by open slot answer resolution', () => {
+    const providers = Reflect.getMetadata(MODULE_METADATA.PROVIDERS, LlmStrategyCodegenModule)
+    const dependencies = Reflect.getMetadata('design:paramtypes', SemanticOpenSlotAnswerResolverService)
+
+    expect(providers).toContain(MarketInstrumentSymbolResolverService)
+    expect(dependencies).toContain(MarketInstrumentSymbolResolverService)
   })
 
   it('emits semantic atom contract dependency metadata for semantic contract readiness', () => {

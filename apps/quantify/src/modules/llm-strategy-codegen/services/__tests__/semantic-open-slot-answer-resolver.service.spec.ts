@@ -754,6 +754,82 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
     }))
   })
 
+  it('locks an open symbol context slot when active clarification targets symbol', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: symbolSlot.slotKey,
+          fieldPath: symbolSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDT',
+      status: 'locked',
+    }))
+  })
+
+  it('does not consume a symbol context slot answer when active clarification targets another slot', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    const timeframeSlot: SemanticSlotState = {
+      slotKey: 'timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择时间周期。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+    state.contextSlots.timeframe = timeframeSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: timeframeSlot.slotKey,
+          fieldPath: timeframeSlot.fieldPath,
+        }],
+      },
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
+    })
+    expect(state.contextSlots.symbol).toBe(symbolSlot)
+  })
+
   it('consumes a complete entry trigger fragment for a missing entry slot', () => {
     const result = service.resolve({
       currentState: stateWithMissingEntry(),
