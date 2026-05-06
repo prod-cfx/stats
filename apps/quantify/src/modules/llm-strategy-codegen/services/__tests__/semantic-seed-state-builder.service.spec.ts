@@ -764,6 +764,49 @@ describe('SemanticSeedStateBuilderService', () => {
     }))
   })
 
+  it('normalizes structured symbol patch values with supported stablecoin quotes', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: {
+          value: 'BTCBUSD',
+          source: 'user_explicit',
+          evidenceText: 'BTC busd',
+          base: 'BTC',
+          quote: 'BUSD',
+          quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'BTCBUSD',
+      status: 'locked',
+      evidence: expect.objectContaining({
+        text: 'BTC busd',
+        source: 'user_explicit',
+      }),
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-BTCBUSD',
+          params: expect.objectContaining({
+            symbol: 'BTCBUSD',
+            base: 'BTC',
+            quote: 'BUSD',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
   it('preserves action open slots from semantic seed patch', () => {
     const state = service.build({
       actions: [{

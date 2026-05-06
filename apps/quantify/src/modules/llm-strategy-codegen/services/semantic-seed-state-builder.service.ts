@@ -45,6 +45,7 @@ const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
 const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
 const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
+const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
 @Injectable()
 export class SemanticSeedStateBuilderService {
@@ -1511,8 +1512,8 @@ export class SemanticSeedStateBuilderService {
   }
 
   private readMarketInstrumentQuote(value: unknown): MarketInstrumentQuote | null {
-    if (value === 'USDT' || value === 'USDC' || value === 'USD') {
-      return value
+    if (typeof value === 'string' && MARKET_INSTRUMENT_QUOTES.includes(value as MarketInstrumentQuote)) {
+      return value as MarketInstrumentQuote
     }
 
     return null
