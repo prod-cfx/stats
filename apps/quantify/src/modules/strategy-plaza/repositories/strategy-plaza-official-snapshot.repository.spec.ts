@@ -88,9 +88,11 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-template-1' }),
       },
       strategyInstance: {
-        findFirst: jest.fn().mockResolvedValue({ id: overrides?.existingSnapshot?.strategyInstanceId ?? 'strategy-instance-1' }),
-        upsert: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
-        update: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot
+          ? { id: overrides.existingSnapshot.strategyInstanceId }
+          : null),
+        create: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
       },
     }
   }
@@ -130,7 +132,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         scriptSnapshot: expect.stringContaining('risk.stopLoss'),
       }),
     }))
-    expect(tx.strategyInstance.upsert).toHaveBeenCalled()
+    expect(tx.strategyInstance.create).toHaveBeenCalled()
   })
 
   it('refreshes a legacy official source snapshot that still contains HOLD script', async () => {
@@ -213,8 +215,17 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       },
       select: { id: true },
     })
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        name: 'MA 均线交叉 官方模板',
+        createdBy: 'user-1',
+      }),
+      select: { id: true },
+    }))
     expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: expect.stringMatching(/^plaza_/) },
+      create: expect.objectContaining({ strategyInstanceId: 'strategy-instance-1' }),
+      update: expect.objectContaining({ strategyInstanceId: 'strategy-instance-1' }),
     }))
   })
 
@@ -427,18 +438,8 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         }),
       }),
     }))
-    expect(tx.strategyInstance.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({
-        params: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'perp',
-          symbol: 'BTC-USDT-SWAP',
-          timeframe: '15m',
-          positionPct: 10,
-          leverage: 2,
-        }),
-      }),
-      update: expect.objectContaining({
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
         params: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',

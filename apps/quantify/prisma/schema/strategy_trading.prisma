@@ -282,7 +282,7 @@ model StrategyInstance {
   subscriptions          UserStrategySubscription[]
   deployRequests         DeployRequest[]
 
-  @@unique([strategyTemplateId, llmModel, name], map: "uniq_strategy_instance_template_model_name")
+  @@index([strategyTemplateId, llmModel, name, archivedAt], map: "idx_strategy_instance_template_model_name_archived")
   @@index([strategyTemplateId, status], map: "idx_strategy_instance_template_status")
   @@index([status], map: "idx_strategy_instance_status")
   @@index([createdBy, archivedAt, updatedAt], map: "idx_strategy_instance_creator_archived_updated")

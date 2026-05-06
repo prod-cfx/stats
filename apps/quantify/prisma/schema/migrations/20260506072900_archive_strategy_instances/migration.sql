@@ -6,3 +6,12 @@ ALTER TABLE "strategy_instances"
 
 CREATE INDEX "idx_strategy_instance_creator_archived_updated"
   ON "strategy_instances"("created_by", "archived_at", "updated_at");
+
+DROP INDEX IF EXISTS "uniq_strategy_instance_template_model_name";
+
+CREATE UNIQUE INDEX "uniq_strategy_instance_visible_template_model_name"
+  ON "strategy_instances"("strategy_template_id", "llm_model", "name")
+  WHERE "archived_at" IS NULL;
+
+CREATE INDEX "idx_strategy_instance_template_model_name_archived"
+  ON "strategy_instances"("strategy_template_id", "llm_model", "name", "archived_at");

@@ -108,32 +108,11 @@ export class StrategyPlazaOfficialSnapshotRepository {
       select: { id: true },
     })
 
-    const strategyInstance = await client.strategyInstance.upsert({
-      where: {
-        strategyTemplateId_llmModel_name: {
-          strategyTemplateId: strategyTemplate.id,
-          llmModel: LLM_MODEL,
-          name: this.buildStrategyInstanceName(input.template),
-        },
-      },
-      update: {
-        params: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
-        updatedBy: input.userId,
-        metadata: this.buildOfficialMetadata(input.template, sourceSnapshot) as Prisma.InputJsonValue,
-      },
-      create: {
-        strategyTemplateId: strategyTemplate.id,
-        name: this.buildStrategyInstanceName(input.template),
-        description: input.template.description,
-        llmModel: LLM_MODEL,
-        params: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
-        status: 'draft',
-        mode: 'PAPER',
-        createdBy: input.userId,
-        updatedBy: input.userId,
-        metadata: this.buildOfficialMetadata(input.template, sourceSnapshot) as Prisma.InputJsonValue,
-      },
-      select: { id: true },
+    const strategyInstance = await this.resolveVisibleStrategyInstance({
+      userId: input.userId,
+      template: input.template,
+      sourceSnapshot,
+      strategyTemplateId: strategyTemplate.id,
     })
 
     await client.llmStrategyCodegenSession.update({
@@ -162,6 +141,55 @@ export class StrategyPlazaOfficialSnapshotRepository {
     await this.bindStrategyInstanceToSnapshot(strategyInstance.id, input.template, sourceSnapshot, snapshot)
 
     return { id: snapshot.id }
+  }
+
+  private async resolveVisibleStrategyInstance(input: {
+    userId: string
+    template: OfficialStrategyPlazaTemplate
+    sourceSnapshot: PublishedStrategySnapshot
+    strategyTemplateId: string
+  }): Promise<{ id: string }> {
+    const client = this.txHost.tx
+    const name = this.buildStrategyInstanceName(input.template)
+    const params = buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue
+    const metadata = this.buildOfficialMetadata(input.template, input.sourceSnapshot) as Prisma.InputJsonValue
+    const existingVisibleInstance = await client.strategyInstance.findFirst({
+      where: visibleStrategyInstanceWhere({
+        strategyTemplateId: input.strategyTemplateId,
+        llmModel: LLM_MODEL,
+        name,
+        createdBy: input.userId,
+      }),
+      select: { id: true },
+    })
+
+    if (existingVisibleInstance) {
+      return client.strategyInstance.update({
+        where: { id: existingVisibleInstance.id },
+        data: {
+          params,
+          updatedBy: input.userId,
+          metadata,
+        },
+        select: { id: true },
+      })
+    }
+
+    return client.strategyInstance.create({
+      data: {
+        strategyTemplateId: input.strategyTemplateId,
+        name,
+        description: input.template.description,
+        llmModel: LLM_MODEL,
+        params,
+        status: 'draft',
+        mode: 'PAPER',
+        createdBy: input.userId,
+        updatedBy: input.userId,
+        metadata,
+      },
+      select: { id: true },
+    })
   }
 
   private async resolveOrCreateOfficialSourceSnapshot(
