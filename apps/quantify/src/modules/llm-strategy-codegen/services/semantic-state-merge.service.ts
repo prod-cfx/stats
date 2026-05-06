@@ -48,10 +48,16 @@ export class SemanticStateMergeService {
       params: { ...trigger.params },
       openSlots: trigger.openSlots.map(slot => ({ ...slot })),
     }))
+    const originalDerivedCount = next.length
     const consumedDerivedIndexes = new Set<number>()
 
     for (const persistedTrigger of persisted) {
-      const matchIndex = this.findBestTriggerMatchIndex(persistedTrigger, next, consumedDerivedIndexes)
+      const matchIndex = this.findBestTriggerMatchIndex(
+        persistedTrigger,
+        next,
+        consumedDerivedIndexes,
+        originalDerivedCount,
+      )
       if (matchIndex < 0) {
         next.push({
           ...persistedTrigger,
@@ -95,11 +101,15 @@ export class SemanticStateMergeService {
     persistedTrigger: SemanticTriggerState,
     derivedTriggers: SemanticTriggerState[],
     consumedDerivedIndexes: Set<number>,
+    searchLimit: number = derivedTriggers.length,
   ): number {
     let bestIndex = -1
     let bestScore = -1
 
     for (const [index, candidate] of derivedTriggers.entries()) {
+      if (index >= searchLimit) {
+        break
+      }
       if (consumedDerivedIndexes.has(index) || !this.isSameTriggerIdentity(persistedTrigger, candidate)) {
         continue
       }
