@@ -1,12 +1,12 @@
 export type MarketScopeField = 'exchange' | 'marketType' | 'symbol' | 'timeframe'
 
 const KNOWN_QUOTES = [
+  'FDUSD',
   'USDT',
   'USDC',
-  'USD',
-  'FDUSD',
-  'TUSD',
   'BUSD',
+  'TUSD',
+  'USD',
 ] as const
 
 export function canonicalizeStrategySymbolInput(

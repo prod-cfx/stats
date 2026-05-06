@@ -4,8 +4,8 @@ import type { MarketInstrumentQuote, MarketInstrumentSymbolResolution } from '..
 import type { SemanticAtomContract, SemanticCapabilityShape } from '../types/semantic-state'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
-const SUPPORTED_QUOTES: readonly MarketInstrumentQuote[] = ['USDT', 'USDC', 'USD']
-const EXPLICIT_SYMBOL_PATTERN = /^([A-Z0-9]{2,20})(?:([-/\s])?(USDT|USDC|USD))(?:(-SWAP)|:(PERP|SPOT))?$/iu
+const SUPPORTED_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
+const EXPLICIT_SYMBOL_PATTERN = /^([A-Z0-9]{2,20})(?:([-/\s])?(FDUSD|USDT|USDC|BUSD|TUSD|USD))(?:(-SWAP)|:(PERP|SPOT))?$/iu
 
 const BASE_SYMBOL_ALIASES: Readonly<Record<string, 'ETH' | 'BTC'>> = {
   ETH: 'ETH',

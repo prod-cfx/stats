@@ -34,7 +34,13 @@ export class ConversationSemanticEditService {
         return withPendingSemanticEdit(next, null)
       }
       if (operation.op === 'replace_context') {
-        return this.applyContextReplacement(next, operation.field, operation.value, operation.evidenceText)
+        return this.applyContextReplacement(
+          next,
+          operation.field,
+          operation.value,
+          operation.evidenceText,
+          operation.symbolResolution,
+        )
       }
       if (operation.op === 'replace_trigger') {
         return this.applyTriggerReplacement(next, operation.text ?? '')
@@ -307,6 +313,7 @@ export class ConversationSemanticEditService {
     field: 'symbol' | 'timeframe' | 'exchange' | 'marketType',
     value: string,
     evidenceText?: string,
+    symbolResolution?: MarketInstrumentSymbolResolution,
   ): SemanticState {
     const questionHints = {
       exchange: '请确认交易所（binance / okx / hyperliquid）。',
@@ -315,16 +322,16 @@ export class ConversationSemanticEditService {
       timeframe: '请确认策略主周期（例如 15m 或 1h）。',
     } as const
 
-    const symbolResolution = field === 'symbol'
-      ? this.resolveMatchingSymbolReplacement(value, evidenceText ?? value)
+    const resolvedSymbol = field === 'symbol'
+      ? this.resolveMatchingSymbolReplacement(value, evidenceText ?? value, symbolResolution)
       : null
 
     return {
       ...state,
       contextSlots: {
         ...state.contextSlots,
-        [field]: symbolResolution
-          ? this.createLockedSymbolContextSlot(symbolResolution, questionHints.symbol)
+        [field]: resolvedSymbol
+          ? this.createLockedSymbolContextSlot(resolvedSymbol, questionHints.symbol)
           : {
               slotKey: field,
               fieldPath: `contextSlots.${field}`,
@@ -793,35 +800,52 @@ export class ConversationSemanticEditService {
     }
   }
 
-  private extractReplacementSymbol(message: string): { value: string, evidenceText?: string } | null {
-    const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9]+(?:[-/\s]?(?:USDT|USDC|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)/iu.exec(message)
+  private extractReplacementSymbol(message: string): {
+    value: string
+    evidenceText?: string
+    symbolResolution?: MarketInstrumentSymbolResolution
+  } | null {
+    const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9]+(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)/iu.exec(message)
     const explicitResolution = this.symbolResolver.resolve(explicitMatch?.[1])
     if (explicitResolution) return this.toReplacementSymbolOperationValue(explicitResolution)
 
-    const valueReplacementMatch = /(?:把\s*)?([A-Za-z0-9]+(?:[-/\s]?(?:USDT|USDC|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z0-9]+(?:[-/\s]?(?:USDT|USDC|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)/iu.exec(message)
+    const valueReplacementMatch = /(?:把\s*)?([A-Za-z0-9]+(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z0-9]+(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))?(?:(?:-SWAP)|(?::(?:PERP|SPOT)))?)/iu.exec(message)
     const fromSymbol = this.symbolResolver.resolve(valueReplacementMatch?.[1])
     const toSymbol = this.symbolResolver.resolve(valueReplacementMatch?.[2])
     if (fromSymbol && toSymbol && fromSymbol.value !== toSymbol.value) {
-      return this.toReplacementSymbolOperationValue(toSymbol, false)
+      return this.toReplacementSymbolOperationValue(toSymbol)
     }
     return null
   }
 
   private toReplacementSymbolOperationValue(
     resolution: MarketInstrumentSymbolResolution,
-    includeEvidenceText = resolution.source === 'inferred' || /\s/u.test(resolution.evidenceText),
-  ): { value: string, evidenceText?: string } {
+  ): { value: string, evidenceText?: string, symbolResolution?: MarketInstrumentSymbolResolution } {
+    const shouldCarryResolution = this.shouldCarrySymbolResolution(resolution)
     return {
       value: resolution.value,
-      ...(includeEvidenceText && resolution.evidenceText !== resolution.value ? { evidenceText: resolution.evidenceText } : {}),
+      ...(this.shouldCarrySymbolEvidenceText(resolution) ? { evidenceText: resolution.evidenceText } : {}),
+      ...(shouldCarryResolution ? { symbolResolution: resolution } : {}),
     }
+  }
+
+  private shouldCarrySymbolEvidenceText(resolution: MarketInstrumentSymbolResolution): boolean {
+    return resolution.evidenceText !== resolution.value
+      && (resolution.source === 'inferred' || /\s/u.test(resolution.evidenceText))
+  }
+
+  private shouldCarrySymbolResolution(resolution: MarketInstrumentSymbolResolution): boolean {
+    return Boolean(resolution.venueSymbolHint || resolution.marketTypeHint)
+      || !['USDT', 'USDC', 'USD'].includes(resolution.quote)
   }
 
   private resolveMatchingSymbolReplacement(
     value: string,
     evidenceText: string,
+    structuredResolution?: MarketInstrumentSymbolResolution,
   ): MarketInstrumentSymbolResolution | null {
-    const resolution = this.symbolResolver.resolve(evidenceText)
+    const resolution = structuredResolution
+      ?? this.symbolResolver.resolve(evidenceText)
       ?? this.symbolResolver.resolve(value)
     if (!resolution || resolution.value !== value) return null
     return resolution

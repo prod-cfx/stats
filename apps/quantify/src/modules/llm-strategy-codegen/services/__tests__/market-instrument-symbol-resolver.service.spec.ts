@@ -10,6 +10,9 @@ describe('MarketInstrumentSymbolResolverService', () => {
     ['ETH usdt', 'ETHUSDT', 'user_explicit', 'explicit'],
     ['ETH USDC', 'ETHUSDC', 'user_explicit', 'explicit'],
     ['BTC USD', 'BTCUSD', 'user_explicit', 'explicit'],
+    ['BTCBUSD', 'BTCBUSD', 'user_explicit', 'explicit'],
+    ['ETH/FDUSD', 'ETHFDUSD', 'user_explicit', 'explicit'],
+    ['BTC TUSD', 'BTCTUSD', 'user_explicit', 'explicit'],
   ] as const)('resolves explicit symbol text %s', (input, value, source, quoteSource) => {
     expect(resolver.resolve(input)).toEqual(expect.objectContaining({
       value,
@@ -46,6 +49,14 @@ describe('MarketInstrumentSymbolResolverService', () => {
       value,
       venueSymbolHint,
       marketTypeHint,
+    }))
+  })
+
+  it('splits longer stablecoin quotes before shorter USD suffix', () => {
+    expect(resolver.resolve('BTCBUSD')).toEqual(expect.objectContaining({
+      value: 'BTCBUSD',
+      base: 'BTC',
+      quote: 'BUSD',
     }))
   })
 

@@ -1,6 +1,6 @@
 import type { SemanticAtomContract, SemanticEvidence, SemanticSlotState } from './semantic-state'
 
-export type MarketInstrumentQuote = 'USDT' | 'USDC' | 'USD'
+export type MarketInstrumentQuote = 'FDUSD' | 'USDT' | 'USDC' | 'BUSD' | 'TUSD' | 'USD'
 export type MarketInstrumentSymbolSource = 'user_explicit' | 'inferred'
 export type MarketInstrumentQuoteSource = 'explicit' | 'default_usdt'
 
