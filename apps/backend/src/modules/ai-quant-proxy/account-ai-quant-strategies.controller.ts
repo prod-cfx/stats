@@ -1,6 +1,6 @@
 import type { AiQuantProxyService } from './ai-quant-proxy.service'
 import { Body, Controller, Delete, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
@@ -160,11 +160,19 @@ export class AccountAiQuantStrategiesController {
   }
 
   @Delete(':id')
+  @ApiQuery({
+    name: 'deleteStoppedStrategy',
+    required: false,
+    type: 'boolean',
+    description: '为 true 时同时归档策略记录；缺省/false 仅归档关联会话并把策略转为只读',
+  })
   async remove(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
+    @Query('deleteStoppedStrategy') deleteStoppedStrategyRaw?: string,
   ): Promise<void> {
-    return this.service.deleteAccountStrategy(userId, authorization, id)
+    const deleteStoppedStrategy = deleteStoppedStrategyRaw === 'true'
+    return this.service.deleteAccountStrategy(userId, authorization, id, { deleteStoppedStrategy })
   }
 }

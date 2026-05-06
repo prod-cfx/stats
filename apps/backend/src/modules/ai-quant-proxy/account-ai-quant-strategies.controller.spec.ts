@@ -117,11 +117,35 @@ describe('accountAiQuantStrategiesController', () => {
     )
   })
 
-  it('deletes strategy with backend-controlled user identity', async () => {
+  it('deletes strategy without deleteStoppedStrategy by default', async () => {
     const { controller, service } = createController()
 
     await controller.remove('user-1', 'Bearer token-1', 'strategy-1')
 
-    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1')
+    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1', {
+      deleteStoppedStrategy: false,
+    })
+  })
+
+  it('forwards deleteStoppedStrategy=true query through to the service', async () => {
+    const { controller, service } = createController()
+
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'true')
+
+    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1', {
+      deleteStoppedStrategy: true,
+    })
+  })
+
+  it('treats any non-true query value as deleteStoppedStrategy=false', async () => {
+    const { controller, service } = createController()
+
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'false')
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'TRUE')
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', '1')
+
+    for (const call of (service.deleteAccountStrategy as jest.Mock).mock.calls) {
+      expect(call[3]).toEqual({ deleteStoppedStrategy: false })
+    }
   })
 })

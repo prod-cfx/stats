@@ -141,11 +141,15 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async deleteAccountStrategy(strategyId: string, options: QuantifyRequestOptions & { userId: string }): Promise<void> {
+  async deleteAccountStrategy(
+    strategyId: string,
+    options: QuantifyRequestOptions & { userId: string; deleteStoppedStrategy?: boolean },
+  ): Promise<void> {
     await this.runRequest<void>(
       signal =>
         this.client.AccountStrategyViewController_remove(undefined, {
           params: { id: strategyId },
+          queries: options.deleteStoppedStrategy === true ? { deleteStoppedStrategy: true } : {},
           headers: buildUserHeaders(options.userId, options.headers?.authorization),
           signal,
         }) as Promise<unknown>,
