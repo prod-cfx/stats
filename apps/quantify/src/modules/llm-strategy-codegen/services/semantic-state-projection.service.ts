@@ -115,15 +115,19 @@ export class SemanticStateProjectionService {
     const ruleGroups = this.groupDisplayRuleTriggers(
       triggers.filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit'),
     )
-    const ruleBlocks = ruleGroups
-      .map((group, index) => this.buildDisplayRuleBlock({
+    const ruleBlocks: SemanticDisplayLogicGraphBlock[] = []
+    for (const group of ruleGroups) {
+      const block = this.buildDisplayRuleBlock({
         triggers: group,
-        blockType: this.resolveDisplayRuleBlockType(group, index),
+        blockType: this.resolveDisplayRuleBlockType(group, ruleBlocks.length),
         gateText: group[0]?.phase === 'entry' && group[0] ? this.buildDisplayGateText(triggers, group[0]) : null,
         actions,
         position: state.position,
-      }))
-      .filter((block): block is SemanticDisplayLogicGraphBlock => Boolean(block))
+      })
+      if (block) {
+        ruleBlocks.push(block)
+      }
+    }
 
     return {
       blocks: [

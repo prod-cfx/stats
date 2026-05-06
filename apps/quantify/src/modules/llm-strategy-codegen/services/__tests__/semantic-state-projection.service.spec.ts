@@ -280,6 +280,60 @@ describe('SemanticStateProjectionService', () => {
     expect(graph.blocks[0]?.items.map(item => item.text).join(' ')).toContain('任一条件')
   })
 
+  it('uses IF when logical any-of is the first visible display block after skipped triggers', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-unknown-skipped',
+        key: 'condition.expression',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'rsi' },
+          },
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-any-of-visible',
+        key: 'logical.any_of',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          items: [
+            {
+              key: 'indicator.below',
+              params: {
+                indicator: 'ma',
+                'reference.period': 20,
+              },
+            },
+            {
+              key: 'indicator.cross_under',
+              params: {
+                indicator: 'macd',
+              },
+            },
+          ],
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+
+    const graph = service.buildDisplayLogicGraph(state)
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(graph.blocks[0]?.items.map(item => item.text).join(' ')).toContain('任一条件')
+  })
+
   it('renders rolling extrema breakout, logical any-of exits, and ATR multiple risk summaries', () => {
     const state = buildLockedAtomicState('atr-risk')
     state.triggers = [
