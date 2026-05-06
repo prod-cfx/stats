@@ -29,6 +29,9 @@ function buildService(rowOverrides: Record<string, unknown> = {}, repoOverrides:
     getOpenOrders: jest.fn().mockResolvedValue([]),
     cancelOrder: jest.fn(),
   }
+  const txHost = {
+    withTransaction: jest.fn(async (cb: () => Promise<unknown>) => cb()),
+  }
   const service = new AccountStrategyViewService(
     repo as any,
     {} as any,
@@ -39,8 +42,12 @@ function buildService(rowOverrides: Record<string, unknown> = {}, repoOverrides:
     tradingService as any,
     undefined,
     undefined,
+    undefined,
+    undefined,
+    undefined,
+    txHost as any,
   )
-  return { service, repo, tradingService }
+  return { service, repo, tradingService, txHost }
 }
 
 describe('AccountStrategyViewService.deleteStrategy (unified)', () => {

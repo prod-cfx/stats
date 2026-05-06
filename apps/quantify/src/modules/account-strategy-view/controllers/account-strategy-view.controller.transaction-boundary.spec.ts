@@ -8,6 +8,9 @@ describe('accountStrategyViewController transaction boundary', () => {
     expect(source).not.toMatch(/@Transactional\(\)\s*@Post\('deploy'\)/)
     expect(source).toMatch(/@Transactional\(\)\s*@Post\(':id\/actions'\)/)
     expect(source).toMatch(/@Transactional\(\)\s*@Post\(':id\/execution\/leverage'\)/)
-    expect(source).toMatch(/@Transactional\(\)\s*@Delete\(':id'\)/)
+    // DELETE 不再使用 controller 级 @Transactional()：service.deleteStrategy 内部
+    // 用 txHost.withTransaction 把归档写操作包成事务，把 tradingService 远程
+    // HTTP I/O（getOpenOrders）留在事务外，遵循「事务中禁止外部 I/O」。
+    expect(source).not.toMatch(/@Transactional\(\)\s*@Delete\(':id'\)/)
   })
 })

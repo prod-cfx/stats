@@ -12,6 +12,7 @@ import {
 } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
+import { parseBooleanQuery } from '@/common/utils/parse-boolean-query'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
@@ -154,7 +155,10 @@ export class AccountStrategyViewController {
     })
   }
 
-  @Transactional()
+  // 注意：DELETE 路径不再使用 controller 级 @Transactional()。
+  // service.deleteStrategy 内部使用 txHost.withTransaction 包归档写操作，
+  // 把 tradingService.getOpenOrders 等远程 HTTP I/O 留在事务外，
+  // 遵循 ruler/conventions.md 第 5 节「事务中禁止直接做外部 I/O」。
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: '删除当前用户的 AI Quant 策略' })
@@ -174,7 +178,7 @@ export class AccountStrategyViewController {
     @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<void> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
-    const deleteStoppedStrategy = deleteStoppedStrategyRaw === 'true'
+    const deleteStoppedStrategy = parseBooleanQuery(deleteStoppedStrategyRaw)
     return this.service.deleteStrategy(userId, id, { deleteStoppedStrategy, via: 'account-list' })
   }
 }

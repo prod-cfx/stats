@@ -11,7 +11,11 @@ import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-s
 import type { StrategyInstanceStatsDto } from '@/modules/strategy-instances/dto/strategy-instance-stats.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient } from '@/prisma/prisma.types'
 import { createHash } from 'node:crypto'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -116,6 +120,9 @@ export class AccountStrategyViewService {
     @Optional() private readonly positionsService?: PositionsService,
     @Optional() private readonly positionSyncService?: PositionSyncService,
     @Optional() private readonly gridRuntimeService?: GridRuntimeService,
+    // 注入靠后是为了不打乱已有大量按位置 mock 的 spec；deleteStrategy 用 withTransaction
+    // 把归档写操作包成事务，把 tradingService 远程 I/O 留在事务外。
+    @Optional() private readonly txHost?: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {}
 
   async listStrategies(
@@ -1455,13 +1462,25 @@ export class AccountStrategyViewService {
       })
     }
 
+    if (!this.txHost) {
+      throw new DomainException('account_strategy.transaction_host_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: { strategyInstanceId },
+      })
+    }
+    const txHost = this.txHost
+
     const hasConversation = await this.repo.hasActiveConversationsForStrategy(userId, strategyInstanceId)
 
     if (!options.deleteStoppedStrategy) {
-      if (hasConversation) {
-        await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
-      }
-      await this.repo.markStrategyViewOnly(userId, strategyInstanceId)
+      // 仅 DB 写入；事务化以保证「conversation 归档」与「viewOnlyAt 标记」原子。
+      await txHost.withTransaction(async () => {
+        if (hasConversation) {
+          await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
+        }
+        await this.repo.markStrategyViewOnly(userId, strategyInstanceId)
+      })
       this.logDeleteAccepted(
         { userId, strategyInstanceId, status: row.status, hasConversation, deleteStoppedStrategy: false, via: options.via },
         hasConversation ? 'view_only_set_with_conversations' : 'view_only_set_no_conversation',
@@ -1469,13 +1488,17 @@ export class AccountStrategyViewService {
       return
     }
 
+    // 事务外采集 orphan 持仓/挂单，避免在事务内做远程交易所 HTTP I/O 拉长锁。
+    // 数据仅用于审计日志，不参与归档决策；采集失败不阻断删除。
     const orphanArtifacts = row.status !== 'draft'
       ? await this.collectOrphanRuntimeArtifacts(userId, row, strategyInstanceId)
-      : { openPositionsCount: 0, openOrdersCount: 0 }
-    if (hasConversation) {
-      await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
-    }
-    await this.repo.archiveStrategyInstanceById(userId, strategyInstanceId)
+      : { openPositionsCount: 0, openOrdersCount: 0, auditStatus: 'ok' as const }
+    await txHost.withTransaction(async () => {
+      if (hasConversation) {
+        await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
+      }
+      await this.repo.archiveStrategyInstanceById(userId, strategyInstanceId)
+    })
     this.logDeleteAccepted(
       {
         userId,
@@ -1486,6 +1509,7 @@ export class AccountStrategyViewService {
         via: options.via,
         orphanOpenPositionsCount: orphanArtifacts.openPositionsCount,
         orphanOpenOrdersCount: orphanArtifacts.openOrdersCount,
+        orphanAuditStatus: orphanArtifacts.auditStatus,
       },
       hasConversation ? 'archived_with_conversations' : 'archived_no_conversation',
     )
@@ -1499,7 +1523,11 @@ export class AccountStrategyViewService {
     userId: string,
     row: StrategyRow,
     strategyInstanceId: string,
-  ): Promise<{ openPositionsCount: number; openOrdersCount: number }> {
+  ): Promise<{
+    openPositionsCount: number
+    openOrdersCount: number
+    auditStatus: 'ok' | 'orders_skipped' | 'lookup_failed'
+  }> {
     const sub = this.assertStrategyVisible(row, strategyInstanceId)
     let openPositionsCount = 0
     let openOrdersCount = 0
@@ -1516,7 +1544,7 @@ export class AccountStrategyViewService {
         input: { userId, strategyInstanceId, openPositionsCount },
         reason: 'orphan_check_skipped_trading_service_unavailable',
       })
-      return { openPositionsCount, openOrdersCount }
+      return { openPositionsCount, openOrdersCount, auditStatus: 'orders_skipped' }
     }
 
     const mergedParams = {
@@ -1531,7 +1559,7 @@ export class AccountStrategyViewService {
     )
     const symbol = this.readString(mergedParams, ['symbol'])
     if (!exchangeId || !symbol) {
-      return { openPositionsCount, openOrdersCount }
+      return { openPositionsCount, openOrdersCount, auditStatus: 'orders_skipped' }
     }
 
     try {
@@ -1545,6 +1573,7 @@ export class AccountStrategyViewService {
         sub.exchangeAccount?.id ?? undefined,
       )
       openOrdersCount = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled').length
+      return { openPositionsCount, openOrdersCount, auditStatus: 'ok' }
     } catch (error) {
       this.logger.warn({
         module: 'AccountStrategyViewService.deleteStrategy',
@@ -1552,9 +1581,8 @@ export class AccountStrategyViewService {
         reason: 'orphan_orders_lookup_failed',
         error: error instanceof Error ? error.message : String(error),
       })
+      return { openPositionsCount, openOrdersCount, auditStatus: 'lookup_failed' }
     }
-
-    return { openPositionsCount, openOrdersCount }
   }
 
   private logDeleteRejected(input: Record<string, unknown>, reason: string): void {

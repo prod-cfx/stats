@@ -45,6 +45,9 @@ function createActionTestContext(
     cancelOrder: jest.fn().mockResolvedValue({ status: 'canceled' }),
   }
   const positionsService = { closePosition: jest.fn().mockResolvedValue({ success: true }) }
+  const txHost = {
+    withTransaction: jest.fn(async (cb: () => Promise<unknown>) => cb()),
+  }
   const service = new AccountStrategyViewService(
     repo as any,
     statsService as any,
@@ -56,6 +59,9 @@ function createActionTestContext(
     undefined,
     undefined,
     positionsService as any,
+    undefined,
+    undefined,
+    txHost as any,
   )
   service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
 
@@ -64,6 +70,7 @@ function createActionTestContext(
     strategyInstancesService,
     tradingService,
     positionsService,
+    txHost,
     service,
   }
 }
