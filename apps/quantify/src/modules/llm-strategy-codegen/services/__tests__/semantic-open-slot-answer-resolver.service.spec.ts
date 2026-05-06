@@ -844,9 +844,59 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
         expect.objectContaining({
           id: 'context-symbol-ETHUSDT',
           kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                symbol: 'ETHUSDT',
+                base: 'ETH',
+                quote: 'USDT',
+                source: 'user_explicit',
+                quoteSource: 'explicit',
+              }),
+            }),
+          ]),
+          params: expect.objectContaining({
+            symbol: 'ETHUSDT',
+            base: 'ETH',
+            quote: 'USDT',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
         }),
       ]),
     }))
+  })
+
+  it('keeps open non-symbol context slots when fragment value is structured', () => {
+    const nonSymbolObjectService = new SemanticOpenSlotAnswerResolverService(undefined, new NonSymbolObjectSeedExtractorService())
+    const openTimeframeSlot: SemanticSlotState = {
+      slotKey: 'timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择时间周期。',
+      affectsExecution: true,
+    }
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: openTimeframeSlot,
+      },
+    }
+
+    const result = nonSymbolObjectService.resolve({
+      currentState: state,
+      message: 'entry with structured timeframe',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.timeframe).toBe(openTimeframeSlot)
   })
 })
 
@@ -916,26 +966,36 @@ class StructuredSymbolSeedExtractorService extends SemanticSeedExtractorService 
           base: 'ETH',
           quote: 'USDT',
           quoteSource: 'explicit',
-          evidence: {
-            text: 'ETH usdt',
-            source: 'user_explicit',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
           },
-          contracts: [{
-            id: 'context-symbol-ETHUSDT',
-            kind: 'context',
-            capabilities: [{
-              domain: 'market',
-              verb: 'identify',
-              object: 'instrument',
-              shape: {
-                symbol: 'ETHUSDT',
-              },
-            }],
-            requires: [],
-            params: {
-              symbol: 'ETHUSDT',
-            },
-          }],
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class NonSymbolObjectSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        timeframe: {
+          value: '15m',
+          source: 'user_explicit',
+          evidenceText: '15m',
+          base: 'BTC',
+          quote: 'USDT',
+          quoteSource: 'explicit',
         },
       },
       triggers: [{

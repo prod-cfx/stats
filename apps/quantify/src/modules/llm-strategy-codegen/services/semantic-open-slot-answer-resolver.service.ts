@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import type {
   SemanticActionState,
   SemanticAtomContract,
@@ -15,6 +16,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { buildSemanticSlotId } from '../types/semantic-state'
+import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
@@ -26,6 +28,7 @@ const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
 const MISSING_ENTRY_TRIGGER_KEY = 'semantic.missing_entry_atom'
 const MISSING_EXIT_TRIGGER_KEY = 'semantic.missing_exit_atom'
+const marketInstrumentSymbolResolver = new MarketInstrumentSymbolResolverService()
 
 type LevelSetDensityAnswer = Partial<{
   gridIntervals: number
@@ -304,13 +307,30 @@ function mergeFragmentContextSlot(
     return current
   }
 
-  return createLockedContextSlot(field, value)
+  return createLockedContextSlot(field, value) ?? current
 }
 
 function createLockedContextSlot(
   field: keyof SemanticContextSlotState,
   value: PatchContextSlotValue,
 ): SemanticSlotState | null {
+  if (field === 'symbol' && isMarketInstrumentSymbolResolution(value)) {
+    return {
+      slotKey: field,
+      fieldPath: `contextSlots.${field}`,
+      value: value.value,
+      status: 'locked',
+      priority: 'context',
+      questionHint: contextQuestionHint(field),
+      affectsExecution: true,
+      evidence: {
+        text: value.evidenceText,
+        source: value.source,
+      },
+      contracts: [marketInstrumentSymbolResolver.buildContextContract(value)],
+    }
+  }
+
   if (field === 'symbol' && isStructuredSymbolContextValue(value)) {
     const contracts = readSymbolContracts(value)
     return {
@@ -357,6 +377,16 @@ function isStructuredSymbolContextValue(value: PatchContextSlotValue): value is 
     && value !== null
     && !Array.isArray(value)
     && typeof value.value === 'string'
+}
+
+function isMarketInstrumentSymbolResolution(value: PatchContextSlotValue): value is MarketInstrumentSymbolResolution {
+  return isStructuredSymbolContextValue(value)
+    && (value.source === 'user_explicit' || value.source === 'inferred')
+    && typeof value.evidenceText === 'string'
+    && typeof value.base === 'string'
+    && (value.quote === 'USDT' || value.quote === 'USDC' || value.quote === 'USD')
+    && (value.quoteSource === 'explicit' || value.quoteSource === 'default_usdt')
+    && (value.marketTypeHint === undefined || value.marketTypeHint === 'perp' || value.marketTypeHint === 'spot')
 }
 
 function readSymbolEvidence(value: Record<string, unknown>): SemanticEvidence | undefined {
