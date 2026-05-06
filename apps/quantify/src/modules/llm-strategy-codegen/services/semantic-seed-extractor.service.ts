@@ -2985,6 +2985,13 @@ export class SemanticSeedExtractorService {
       }
     }
 
+    for (const match of text.matchAll(/\b(BTC|ETH)\b/giu)) {
+      const candidate = match[1]?.trim()
+      if (candidate) {
+        candidates.push(candidate)
+      }
+    }
+
     for (const match of text.matchAll(/(以太坊|比特币)(?:永续合约|合约)?/gu)) {
       const candidate = match[0]?.trim()
       if (candidate) {

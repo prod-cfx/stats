@@ -292,6 +292,18 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.contextSlots?.marketType).toBe('perp')
   })
 
+  it('extracts inferred base-only symbols from trade-intent strategy text', () => {
+    const patch = service.extract('在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%')
+
+    expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({
+      value: 'BTCUSDT',
+      source: 'inferred',
+      quoteSource: 'default_usdt',
+      base: 'BTC',
+      quote: 'USDT',
+    }))
+  })
+
   it.each([
     'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不加仓，单笔 10%。',
     'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不要加仓，单笔 10%。',
