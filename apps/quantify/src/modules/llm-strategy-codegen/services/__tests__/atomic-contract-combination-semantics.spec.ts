@@ -553,6 +553,33 @@ describe('atomic contract combination semantics', () => {
     })
   })
 
+  it('keeps default combination action keys idempotent across repeated normalization', () => {
+    const once = normalizeSemanticStateCombinationContracts(semanticStateWithTrigger({
+      id: 'legacy-entry-both-fast',
+      key: 'indicator.above',
+      phase: 'entry',
+      sideScope: 'both',
+      params: {
+        groupId: 'entry-both-stack',
+        join: 'AND',
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+    const twice = normalizeSemanticStateCombinationContracts(once)
+    const contract = twice.triggers[0]?.contracts?.find(candidate =>
+      candidate.kind === 'trigger'
+      && candidate.params.groupId === 'entry-both-stack',
+    )
+
+    expect(contract?.params).toEqual(expect.objectContaining({
+      groupId: 'entry-both-stack',
+      actionKey: 'open_long',
+      actionKeySource: 'default',
+    }))
+  })
+
   it('upgrades existing standard-like legacy combination contracts without duplicating resolver members', () => {
     const normalizedState = normalizeSemanticStateCombinationContracts(semanticStateWithTrigger({
       id: 'legacy-entry-volume',

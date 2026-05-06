@@ -13,6 +13,7 @@ interface BuildTriggerCombinationContractInput {
   phase: SemanticTriggerState['phase']
   sideScope?: SemanticTriggerState['sideScope']
   actionKey?: string
+  actionKeySource?: 'default' | 'explicit'
 }
 
 /**
@@ -90,7 +91,7 @@ export function buildTriggerCombinationContract(
   const role = input.role ?? 'member'
   const sideScope = input.sideScope ?? 'long'
   const actionKey = input.actionKey ?? defaultTriggerCombinationActionKey(input.phase, sideScope)
-  const actionKeySource = input.actionKey ? 'explicit' : 'default'
+  const actionKeySource = input.actionKeySource ?? (input.actionKey ? 'explicit' : 'default')
   const actionBinding = 'single_action'
   const shape = {
     groupId: input.groupId,
@@ -230,8 +231,10 @@ function upgradeTriggerCombinationContract(
     ?? readFirstJoin(trigger.params, ['join', 'logic', 'operator', 'conditionOperator'])
     ?? 'AND'
   const role = readString(contract.params.role) ?? readString(trigger.params.role) ?? 'member'
-  const explicitActionKey = readString(contract.params.actionKey)
-    ?? readString(trigger.params.actionKey)
+  const contractActionKeySource = readString(contract.params.actionKeySource)
+  const explicitActionKey = contractActionKeySource === 'explicit'
+    ? readString(contract.params.actionKey)
+    : readString(trigger.params.actionKey)
   const standard = buildTriggerCombinationContract({
     groupId,
     join,

@@ -47,6 +47,13 @@ type SemanticAliasContext = {
   }
 }
 
+type TriggerCombinationContractInput = {
+  groupId: string
+  join: 'AND' | 'OR'
+  actionKey?: string
+  actionKeySource?: 'default' | 'explicit'
+}
+
 @Injectable()
 export class SemanticSeedExtractorService {
   constructor(
@@ -300,18 +307,24 @@ export class SemanticSeedExtractorService {
         return trigger
       }
 
+      const explicitActionKey = this.readString(trigger.params?.actionKey)
       return this.withTriggerCombinationContract(trigger, {
         groupId: legacyGroupId,
         join: this.readTriggerCombinationJoin(trigger.params ?? {}) ?? 'AND',
-        actionKey: this.readString(trigger.params?.actionKey) ?? this.defaultTriggerCombinationActionKey(trigger),
+        ...(explicitActionKey
+          ? {
+              actionKey: explicitActionKey,
+              actionKeySource: 'explicit' as const,
+            }
+          : {}),
       })
     })
   }
 
   private resolveRecognizedTriggerCombination(
     trigger: SeedTrigger,
-    movingAverageStack: { groupId: string, join: 'AND', actionKey: string } | undefined,
-  ): { groupId: string, join: 'AND' | 'OR', actionKey: string } | null {
+    movingAverageStack: TriggerCombinationContractInput | undefined,
+  ): TriggerCombinationContractInput | null {
     if (movingAverageStack) {
       return movingAverageStack
     }
@@ -324,7 +337,6 @@ export class SemanticSeedExtractorService {
       return {
         groupId: 'exit-ma100-macd',
         join: 'OR',
-        actionKey: 'close_long',
       }
     }
 
@@ -333,7 +345,7 @@ export class SemanticSeedExtractorService {
 
   private resolveMovingAverageStackCombinationGroups(
     triggers: SeedTrigger[],
-  ): Map<number, { groupId: string, join: 'AND', actionKey: string }> {
+  ): Map<number, TriggerCombinationContractInput> {
     const candidates = new Map<string, Array<{ trigger: SeedTrigger, index: number, period: number }>>()
 
     triggers.forEach((trigger, index) => {
@@ -352,7 +364,7 @@ export class SemanticSeedExtractorService {
       candidates.set(groupKey, [...(candidates.get(groupKey) ?? []), { trigger, index, period }])
     })
 
-    const groups = new Map<number, { groupId: string, join: 'AND', actionKey: string }>()
+    const groups = new Map<number, TriggerCombinationContractInput>()
     for (const members of candidates.values()) {
       const periods = Array.from(new Set(members.map(member => member.period))).sort((left, right) => left - right)
       if (periods.length < 2) continue
@@ -363,10 +375,9 @@ export class SemanticSeedExtractorService {
       const direction = first.key === 'indicator.above' ? 'above' : 'below'
       const timeframe = typeof first.params?.timeframe === 'string' ? `-${first.params.timeframe}` : ''
       const groupId = `${first.phase}-${sideScope}-${indicator}-${direction}-stack${timeframe}-${periods.join('-')}`
-      const actionKey = this.defaultTriggerCombinationActionKey(first)
 
       for (const member of members) {
-        groups.set(member.index, { groupId, join: 'AND', actionKey })
+        groups.set(member.index, { groupId, join: 'AND' })
       }
     }
 
@@ -383,7 +394,7 @@ export class SemanticSeedExtractorService {
 
   private withTriggerCombinationContract(
     trigger: SeedTrigger,
-    input: { groupId: string, join: 'AND' | 'OR', actionKey: string },
+    input: TriggerCombinationContractInput,
   ): SeedTrigger {
     if (trigger.contracts?.some(contract => this.isTriggerCombinationLikeContract(contract))) {
       return {
@@ -412,7 +423,7 @@ export class SemanticSeedExtractorService {
   private upgradeTriggerCombinationContract(
     trigger: SeedTrigger,
     contract: SemanticAtomContract,
-    input: { groupId: string, join: 'AND' | 'OR', actionKey: string },
+    input: TriggerCombinationContractInput,
   ): SemanticAtomContract {
     const standard = buildTriggerCombinationContract({
       ...input,
