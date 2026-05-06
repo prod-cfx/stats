@@ -218,6 +218,9 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
         id: 'archived-strategy-instance',
         createdBy: 'user-1',
         archivedAt: null,
+        // 复用路径同时排除 view-only 实例：用户主动把策略转为只读后，
+        // 不应再被 plaza「再次运行」复活。
+        viewOnlyAt: null,
       },
       select: { id: true },
     })
@@ -233,6 +236,39 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
       where: { id: expect.stringMatching(/^plaza_/) },
       create: expect.objectContaining({ strategyInstanceId: 'strategy-instance-1' }),
       update: expect.objectContaining({ strategyInstanceId: 'strategy-instance-1' }),
+    }))
+  })
+
+  it('does not reuse an existing user snapshot when its strategy instance is view-only', async () => {
+    // 用户主动把策略转为只读（viewOnlyAt 非空）后，plaza「再次运行」不应再
+    // 复用同一个 strategyInstance —— 否则只读策略会从只读态被复活，违反规格。
+    const existingSnapshot = {
+      id: 'user-snapshot-view-only',
+      snapshotHash: sourceSnapshot.snapshotHash,
+      strategyInstanceId: 'view-only-strategy-instance',
+    }
+    const tx = buildTx({ existingSnapshot })
+    // findFirst 加了 viewOnlyAt: null 过滤后，只读实例不会被命中。
+    tx.strategyInstance.findFirst.mockResolvedValue(null)
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.strategyInstance.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'view-only-strategy-instance',
+        createdBy: 'user-1',
+        archivedAt: null,
+        viewOnlyAt: null,
+      },
+      select: { id: true },
+    })
+    // 创建一个全新的 strategyInstance，旧的只读实例不被复活也不被改动。
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ createdBy: 'user-1' }),
+      select: { id: true },
     }))
   })
 

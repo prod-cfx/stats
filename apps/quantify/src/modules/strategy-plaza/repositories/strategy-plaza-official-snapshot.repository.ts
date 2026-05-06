@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-import { visibleStrategyInstanceWhere } from '@/modules/account-strategy-view/repositories/strategy-instance-visibility.query'
+import { runnableStrategyInstanceWhere } from '@/modules/account-strategy-view/repositories/strategy-instance-visibility.query'
 import { Prisma } from '@/prisma/prisma.types'
 import {
   buildOfficialStrategySnapshotContent,
@@ -164,7 +164,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     const params = buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue
     const metadata = this.buildOfficialMetadata(input.template, input.sourceSnapshot) as Prisma.InputJsonValue
     const existingVisibleInstance = await client.strategyInstance.findFirst({
-      where: visibleStrategyInstanceWhere({
+      where: runnableStrategyInstanceWhere({
         strategyTemplateId: input.strategyTemplateId,
         llmModel: LLM_MODEL,
         name,
@@ -300,7 +300,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     }
 
     const visibleStrategy = await this.txHost.tx.strategyInstance.findFirst({
-      where: visibleStrategyInstanceWhere({
+      where: runnableStrategyInstanceWhere({
         id: existing.strategyInstanceId,
         createdBy: userId,
       }),

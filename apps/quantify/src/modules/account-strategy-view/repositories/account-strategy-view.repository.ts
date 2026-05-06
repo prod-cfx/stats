@@ -14,7 +14,7 @@ import { RUNTIME_BINDING_STATUS } from '@/modules/strategy-signals/types/runtime
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
-import { STRATEGY_ARCHIVE_REASON_USER_DELETE, visibleStrategyInstanceWhere } from './strategy-instance-visibility.query'
+import { runnableStrategyInstanceWhere, STRATEGY_ARCHIVE_REASON_USER_DELETE, visibleStrategyInstanceWhere } from './strategy-instance-visibility.query'
 
 interface ListStrategiesQuery {
   userId: string
@@ -209,8 +209,11 @@ export class AccountStrategyViewRepository {
       const reusableStrategyInstanceId = input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? null
 
       if (reusableStrategyInstanceId) {
+        // 复用已存在的 strategyInstance：必须是「可运行」状态——既不能 archived，
+        // 也不能是用户已转为只读（viewOnlyAt 非空）的实例。否则 plaza/deploy 会
+        // 把已退役的策略复活，违反 view-only 语义。
         const existingInstance = await tx.strategyInstance.findFirst({
-          where: visibleStrategyInstanceWhere({
+          where: runnableStrategyInstanceWhere({
             id: reusableStrategyInstanceId,
             createdBy: input.userId,
           }),
