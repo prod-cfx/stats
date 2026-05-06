@@ -464,7 +464,33 @@ describe('atomic contract combination semantics', () => {
 
     for (const trigger of stackTriggers) {
       expectCombinationContract(trigger, {
-        groupId: 'entry-ema-stack',
+        groupId: 'entry-long-ema-above-stack-15m-20-60-144',
+        join: 'AND',
+        actionKey: 'open_long',
+      })
+    }
+    expect(classification.route).not.toBe('unsupported_fallback')
+  })
+
+  it('emits standard AND contracts for arbitrary moving-average stack entries', () => {
+    const { state, classification } = runPipeline('BTC 15分钟价格在 EMA10 EMA20 EMA50 上方做多。')
+    const stackTriggers = [10, 20, 50].map((period) => {
+      const trigger = state.triggers.find(candidate =>
+        candidate.key === 'indicator.above'
+        && candidate.phase === 'entry'
+        && candidate.sideScope === 'long'
+        && candidate.params.indicator === 'ema'
+        && candidate.params['reference.period'] === period,
+      )
+      if (!trigger) {
+        throw new Error(`semantic_trigger_missing:ema:${period}`)
+      }
+      return trigger
+    })
+
+    for (const trigger of stackTriggers) {
+      expectCombinationContract(trigger, {
+        groupId: 'entry-long-ema-above-stack-15m-10-20-50',
         join: 'AND',
         actionKey: 'open_long',
       })

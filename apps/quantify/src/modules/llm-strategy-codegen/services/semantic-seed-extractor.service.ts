@@ -287,18 +287,10 @@ export class SemanticSeedExtractorService {
   }
 
   private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[]): SeedTrigger[] {
-    const hasEmaStack = [20, 60, 144].every(period =>
-      triggers.some(trigger =>
-        trigger.key === 'indicator.above'
-        && trigger.phase === 'entry'
-        && (trigger.sideScope ?? 'long') === 'long'
-        && trigger.params?.indicator === 'ema'
-        && trigger.params['reference.period'] === period,
-      ),
-    )
+    const movingAverageStackGroups = this.resolveMovingAverageStackCombinationGroups(triggers)
 
-    return triggers.map((trigger) => {
-      const explicit = this.resolveRecognizedTriggerCombination(trigger, hasEmaStack)
+    return triggers.map((trigger, index) => {
+      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index))
       if (explicit) {
         return this.withTriggerCombinationContract(trigger, explicit)
       }
@@ -318,21 +310,10 @@ export class SemanticSeedExtractorService {
 
   private resolveRecognizedTriggerCombination(
     trigger: SeedTrigger,
-    hasEmaStack: boolean,
+    movingAverageStack: { groupId: string, join: 'AND', actionKey: string } | undefined,
   ): { groupId: string, join: 'AND' | 'OR', actionKey: string } | null {
-    if (
-      hasEmaStack
-      && trigger.key === 'indicator.above'
-      && trigger.phase === 'entry'
-      && (trigger.sideScope ?? 'long') === 'long'
-      && trigger.params?.indicator === 'ema'
-      && [20, 60, 144].includes(Number(trigger.params['reference.period']))
-    ) {
-      return {
-        groupId: 'entry-ema-stack',
-        join: 'AND',
-        actionKey: 'open_long',
-      }
+    if (movingAverageStack) {
+      return movingAverageStack
     }
 
     if (
@@ -348,6 +329,56 @@ export class SemanticSeedExtractorService {
     }
 
     return null
+  }
+
+  private resolveMovingAverageStackCombinationGroups(
+    triggers: SeedTrigger[],
+  ): Map<number, { groupId: string, join: 'AND', actionKey: string }> {
+    const candidates = new Map<string, Array<{ trigger: SeedTrigger, index: number, period: number }>>()
+
+    triggers.forEach((trigger, index) => {
+      if (!this.isMovingAverageStackCandidate(trigger)) return
+
+      const period = Number(trigger.params?.['reference.period'])
+      const sideScope = trigger.sideScope ?? 'long'
+      const timeframe = typeof trigger.params?.timeframe === 'string' ? trigger.params.timeframe : 'default'
+      const groupKey = [
+        trigger.phase,
+        sideScope,
+        trigger.key,
+        trigger.params?.indicator,
+        timeframe,
+      ].join(':')
+      candidates.set(groupKey, [...(candidates.get(groupKey) ?? []), { trigger, index, period }])
+    })
+
+    const groups = new Map<number, { groupId: string, join: 'AND', actionKey: string }>()
+    for (const members of candidates.values()) {
+      const periods = Array.from(new Set(members.map(member => member.period))).sort((left, right) => left - right)
+      if (periods.length < 2) continue
+
+      const first = members[0]!.trigger
+      const sideScope = first.sideScope ?? 'long'
+      const indicator = String(first.params?.indicator)
+      const direction = first.key === 'indicator.above' ? 'above' : 'below'
+      const timeframe = typeof first.params?.timeframe === 'string' ? `-${first.params.timeframe}` : ''
+      const groupId = `${first.phase}-${sideScope}-${indicator}-${direction}-stack${timeframe}-${periods.join('-')}`
+      const actionKey = this.defaultTriggerCombinationActionKey(first)
+
+      for (const member of members) {
+        groups.set(member.index, { groupId, join: 'AND', actionKey })
+      }
+    }
+
+    return groups
+  }
+
+  private isMovingAverageStackCandidate(trigger: SeedTrigger): boolean {
+    return (trigger.phase === 'entry' || trigger.phase === 'exit')
+      && (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+      && (trigger.params?.indicator === 'ema' || trigger.params?.indicator === 'ma')
+      && typeof trigger.params?.['reference.period'] === 'number'
+      && Number.isFinite(trigger.params['reference.period'])
   }
 
   private withTriggerCombinationContract(

@@ -1277,6 +1277,39 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('keeps both-side ATR take-profit actions faithful to long and short position contracts', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      positionMode: 'long_short',
+      risk: [
+        {
+          id: 'atr-take-profit',
+          key: 'risk.atr_multiple_take_profit',
+          params: { multiple: 3 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const riskRule = spec.rules.find(rule => rule.id === 'semantic-atr-take-profit')
+
+    expect(riskRule).toEqual(expect.objectContaining({
+      phase: 'risk',
+      sideScope: 'both',
+      condition: expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        params: { multiple: 3 },
+      }),
+      actions: [
+        expect.objectContaining({ type: 'CLOSE_LONG' }),
+        expect.objectContaining({ type: 'CLOSE_SHORT' }),
+      ],
+    }))
+  })
+
   it('projects normalized semantic risk basis to legacy riskRules compatibility output', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({

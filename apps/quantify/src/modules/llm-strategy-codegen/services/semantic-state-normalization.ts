@@ -90,12 +90,14 @@ export function buildTriggerCombinationContract(
   const role = input.role ?? 'member'
   const sideScope = input.sideScope ?? 'long'
   const actionKey = input.actionKey ?? defaultTriggerCombinationActionKey(input.phase, sideScope)
+  const actionKeySource = input.actionKey ? 'explicit' : 'default'
   const actionBinding = 'single_action'
   const shape = {
     groupId: input.groupId,
     join,
     role,
     actionKey,
+    actionKeySource,
     actionBinding,
     phase: input.phase,
     sideScope,
@@ -116,6 +118,7 @@ export function buildTriggerCombinationContract(
       join,
       role,
       actionKey,
+      actionKeySource,
       actionBinding,
       phase: input.phase,
       sideScope,
@@ -189,8 +192,7 @@ export function normalizeTriggerCombinationContract(trigger: SemanticTriggerStat
   }
 
   const join = readFirstJoin(trigger.params, ['join', 'logic', 'operator', 'conditionOperator']) ?? 'AND'
-  const actionKey = readString(trigger.params.actionKey)
-    ?? defaultTriggerCombinationActionKey(trigger.phase, trigger.sideScope ?? 'long')
+  const explicitActionKey = readString(trigger.params.actionKey)
   const role = readString(trigger.params.role) ?? 'member'
   const combinationContract = buildTriggerCombinationContract({
     groupId,
@@ -198,7 +200,7 @@ export function normalizeTriggerCombinationContract(trigger: SemanticTriggerStat
     role,
     phase: trigger.phase,
     sideScope: trigger.sideScope,
-    actionKey,
+    ...(explicitActionKey ? { actionKey: explicitActionKey } : {}),
   })
 
   return {
@@ -228,16 +230,15 @@ function upgradeTriggerCombinationContract(
     ?? readFirstJoin(trigger.params, ['join', 'logic', 'operator', 'conditionOperator'])
     ?? 'AND'
   const role = readString(contract.params.role) ?? readString(trigger.params.role) ?? 'member'
-  const actionKey = readString(contract.params.actionKey)
+  const explicitActionKey = readString(contract.params.actionKey)
     ?? readString(trigger.params.actionKey)
-    ?? defaultTriggerCombinationActionKey(trigger.phase, sideScope)
   const standard = buildTriggerCombinationContract({
     groupId,
     join,
     role,
     phase: trigger.phase,
     sideScope,
-    actionKey,
+    ...(explicitActionKey ? { actionKey: explicitActionKey } : {}),
   })
 
   return {

@@ -31,7 +31,7 @@ import {
 } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
-import { normalizeRiskSemantics } from './semantic-state-normalization'
+import { normalizeRiskSemantics, normalizeSemanticStateCombinationContracts } from './semantic-state-normalization'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
@@ -500,14 +500,15 @@ export class CanonicalSpecBuilderService {
   }
 
   buildFromSemanticState(state: SemanticState): CanonicalStrategySpecV2 {
-    const market = this.resolveSemanticStateMarket(state)
-    const sizing = this.resolveSizingFromSemanticState(state.position)
+    const normalizedState = normalizeSemanticStateCombinationContracts(state)
+    const market = this.resolveSemanticStateMarket(normalizedState)
+    const sizing = this.resolveSizingFromSemanticState(normalizedState.position)
 
-    const orderPrograms = this.buildContractOrderPrograms(state)
+    const orderPrograms = this.buildContractOrderPrograms(normalizedState)
     const rules = this.filterOrderProgramShadowRules(
       [
-        ...this.buildRulesFromSemanticState(state, sizing),
-        ...this.buildBoundaryGuardRulesFromSemanticState(state, orderPrograms),
+        ...this.buildRulesFromSemanticState(normalizedState, sizing),
+        ...this.buildBoundaryGuardRulesFromSemanticState(normalizedState, orderPrograms),
       ],
       orderPrograms,
     )
@@ -518,9 +519,9 @@ export class CanonicalSpecBuilderService {
       market: this.withRequiredMarketTimeframes(
         market,
         requiredTimeframes,
-        state.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
+        normalizedState.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
       ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers(state.triggers),
+      indicators: this.resolveIndicatorsFromSemanticTriggers(normalizedState.triggers),
       sizing,
       executionPolicy: {
         signalTiming: 'BAR_CLOSE',
@@ -1126,7 +1127,8 @@ export class CanonicalSpecBuilderService {
     return group.members.some(trigger =>
       trigger.contracts?.some(contract =>
         contract.params.groupId === group.groupId
-        && Object.prototype.hasOwnProperty.call(contract.params, 'actionKey'),
+        && Object.prototype.hasOwnProperty.call(contract.params, 'actionKey')
+        && contract.params.actionKeySource !== 'default',
       ),
     )
   }
@@ -1665,7 +1667,7 @@ export class CanonicalSpecBuilderService {
         },
         actions: risk.key === 'risk.atr_multiple_stop'
           ? [{ type: 'FORCE_EXIT' }]
-          : [{ type: sideScope === 'short' ? 'CLOSE_SHORT' : 'CLOSE_LONG' }],
+          : this.buildAtrTakeProfitActions(sideScope),
         metadata: {
           semanticKey: risk.key,
         },
@@ -1695,6 +1697,18 @@ export class CanonicalSpecBuilderService {
         semanticKey: risk.key,
       },
     }
+  }
+
+  private buildAtrTakeProfitActions(
+    sideScope: CanonicalRuleV2['sideScope'],
+  ): CanonicalRuleV2['actions'] {
+    if (sideScope === 'short') {
+      return [{ type: 'CLOSE_SHORT' }]
+    }
+    if (sideScope === 'both') {
+      return [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }]
+    }
+    return [{ type: 'CLOSE_LONG' }]
   }
 
   private buildActionsForSemanticRiskExpression(
