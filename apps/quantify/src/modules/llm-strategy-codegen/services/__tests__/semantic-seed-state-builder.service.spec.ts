@@ -386,6 +386,59 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes default MACD cross contracts without asking for execution contracts', () => {
+    const state = service.build({
+      triggers: [
+        {
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'macd', semantic: 'cross_up' },
+        },
+        {
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { indicator: 'macd', semantic: 'cross_down' },
+        },
+      ],
+      actions: [
+        { key: 'open_long' },
+        { key: 'close_long' },
+      ],
+    })
+
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          params: expect.objectContaining({
+            indicator: 'macd',
+            fastPeriod: 12,
+            slowPeriod: 26,
+            signalPeriod: 9,
+          }),
+        })],
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          params: expect.objectContaining({
+            indicator: 'macd',
+            fastPeriod: 12,
+            slowPeriod: 26,
+            signalPeriod: 9,
+          }),
+        })],
+      }),
+    ]))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
   it('synthesizes contracts for complete lightweight planner patches and keeps them locked', () => {
     const state = service.build({
       triggers: [{

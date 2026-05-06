@@ -2493,6 +2493,67 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps deterministic exit semantics when planner returns only the matching entry cross', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认单笔仓位大小。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'indicator.cross_over',
+              phase: 'entry',
+              sideScope: 'long',
+              params: {
+                indicator: 'macd',
+                semantic: 'cross_up',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+          ],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-macd-seed-exit-preserved' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('入场：MACD 12/26/9 金叉时买入')
+    expect(result.assistantPrompt).toContain('出场：MACD 12/26/9 死叉时平多')
+    expect(result.assistantPrompt).toContain('请确认单笔仓位大小')
+    expect(result.assistantPrompt).not.toContain('请补充该原子的执行合约')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+    ]))
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_semantic_position_sizing',
+      }),
+    ]))
+  })
+
 
   it('clears stale open position sizing slots when locked position sizing is already valid', () => {
     const currentState = {

@@ -1229,6 +1229,18 @@ export class SemanticSeedStateBuilderService {
     key: string,
     params: Record<string, unknown>,
   ): Record<string, unknown> {
+    if (
+      (key === 'indicator.cross_over' || key === 'indicator.cross_under')
+      && this.readTrimmedString(params.indicator)?.toLowerCase() === 'macd'
+    ) {
+      return {
+        ...params,
+        fastPeriod: this.hasFiniteNumber(params.fastPeriod) ? params.fastPeriod : 12,
+        slowPeriod: this.hasFiniteNumber(params.slowPeriod) ? params.slowPeriod : 26,
+        signalPeriod: this.hasFiniteNumber(params.signalPeriod) ? params.signalPeriod : 9,
+      }
+    }
+
     if (key !== 'price.percent_change' || typeof params.valuePct !== 'number' || !Number.isFinite(params.valuePct)) {
       return params
     }

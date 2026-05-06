@@ -3067,10 +3067,10 @@ export class SemanticSeedExtractorService {
     if (/做空|开空|空单|short/u.test(segment)) {
       return { phase: 'entry', sideScope: 'short' }
     }
-    if (/卖出/u.test(segment)) {
+    if (/卖出|卖/u.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
-    if (/做多|开多|买入|入场|开仓|long/u.test(segment)) {
+    if (/做多|开多|买入|买|入场|开仓|long/u.test(segment)) {
       return { phase: 'entry', sideScope: 'long' }
     }
     if (/平仓/u.test(segment)) {
@@ -3186,7 +3186,7 @@ export class SemanticSeedExtractorService {
   }
 
   private hasExecutableTradeIntent(segment: string): boolean {
-    return /(买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空|多单|空单)/u.test(segment)
+    return /(买入|卖出|买|卖|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空|多单|空单)/u.test(segment)
   }
 
   private hasBollingerBandAction(segment: string): boolean {

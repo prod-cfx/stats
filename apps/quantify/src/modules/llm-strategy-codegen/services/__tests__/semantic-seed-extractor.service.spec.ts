@@ -190,7 +190,7 @@ describe('SemanticSeedExtractorService', () => {
   })
 
   it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
-    expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。').contextSlots).toEqual(expect.objectContaining({
+    expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。').contextSlots).toEqual(expect.objectContaining({
       timeframe: '1h',
     }))
     expect(service.extract('15m 周期，价格区间 79200-80200，采用双向网格').contextSlots).toEqual(expect.objectContaining({
@@ -202,7 +202,7 @@ describe('SemanticSeedExtractorService', () => {
   })
 
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
-    const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。')
+    const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
