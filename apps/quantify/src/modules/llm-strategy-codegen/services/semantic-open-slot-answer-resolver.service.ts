@@ -20,6 +20,7 @@ import { MarketInstrumentSymbolResolverService } from './market-instrument-symbo
 import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
+import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const REQUIREMENT_LEVEL_SET_SLOT_KEY = 'contract.requirement.price.define.level_set'
@@ -147,7 +148,7 @@ export class SemanticOpenSlotAnswerResolverService {
 
 function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationState: unknown): boolean {
   const pendingItems = readPendingClarificationItems(clarificationState)
-  const activeItem = pendingItems[0]
+  const activeItem = pickPendingClarificationTarget(pendingItems)
   if (!activeItem) {
     return true
   }
@@ -679,6 +680,8 @@ function findClarificationTargetSlot(
 
 function readPendingClarificationItems(clarificationState: unknown): Array<{
   status?: unknown
+  key?: unknown
+  reason?: unknown
   slotId?: unknown
   slotKey?: unknown
   fieldPath?: unknown
@@ -689,6 +692,8 @@ function readPendingClarificationItems(clarificationState: unknown): Array<{
 
   return clarificationState.items.filter((item): item is {
     status?: unknown
+    key?: unknown
+    reason?: unknown
     slotId?: unknown
     slotKey?: unknown
     fieldPath?: unknown

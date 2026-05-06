@@ -7,6 +7,12 @@ type StrategyClarificationPromptState = StrategyClarificationState & {
   summary?: string | null
 }
 
+interface PendingClarificationTargetCandidate {
+  status?: unknown
+  key?: unknown
+  reason?: unknown
+}
+
 const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   conflicting_market_scope: 1,
   invalid_spot_short_combo: 1,
@@ -34,6 +40,19 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   missing_exit_rules: 20,
   missing_stop_loss_rule: 20,
   missing_take_profit_rule: 20,
+}
+
+export function pickPendingClarificationTarget<T extends PendingClarificationTargetCandidate>(
+  items: readonly T[],
+): T | null {
+  return items
+    .filter(item => item.status === 'pending')
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const priorityDelta = readClarificationItemPriority(a.item) - readClarificationItemPriority(b.item)
+      if (priorityDelta !== 0) return priorityDelta
+      return a.index - b.index
+    })[0]?.item ?? null
 }
 
 @Injectable()
@@ -76,16 +95,7 @@ export class StrategyClarificationQuestionService {
   build(state: StrategyClarificationPromptState | null | undefined): string {
     if (!state || state.status !== 'NEEDS_CLARIFICATION') return ''
 
-    const pendingItems = state.items.filter(item => item.status === 'pending')
-    if (pendingItems.length === 0) return ''
-
-    const target = pendingItems
-      .map((item, index) => ({ item, index }))
-      .sort((a, b) => {
-        const priorityDelta = this.readItemPriority(a.item) - this.readItemPriority(b.item)
-        if (priorityDelta !== 0) return priorityDelta
-        return a.index - b.index
-      })[0]?.item
+    const target = pickPendingClarificationTarget(state.items)
 
     if (!target) return ''
 
@@ -161,22 +171,6 @@ export class StrategyClarificationQuestionService {
     if (reason === 'runtime_context_missing') return '待确认的执行上下文槽位。'
     if (reason === 'exit_semantics_missing') return '待确认的策略语义槽位。'
     return '关键条件。'
-  }
-
-  private readItemPriority(item: StrategyClarificationItem): number {
-    if (item.key.startsWith('semantic.')) {
-      if (item.key.includes('confirmationMode')) return 2
-      if (item.key.includes('reference.period')) return 2
-      if (item.key.includes('risk.')) return 4
-      return 3
-    }
-    if (item.key.startsWith('executionContext.')) {
-      return 6
-    }
-    if (item.key.startsWith('grid.')) {
-      return 5
-    }
-    return REASON_PRIORITY[item.reason] ?? 99
   }
 
   private pickHighestPriorityAmbiguity(ambiguities: StrategyAmbiguity[]): StrategyAmbiguity | null {
@@ -261,4 +255,22 @@ export class StrategyClarificationQuestionService {
 
     return ambiguity.message
   }
+}
+
+function readClarificationItemPriority(item: PendingClarificationTargetCandidate): number {
+  const key = typeof item.key === 'string' ? item.key : ''
+  if (key.startsWith('semantic.')) {
+    if (key.includes('confirmationMode')) return 2
+    if (key.includes('reference.period')) return 2
+    if (key.includes('risk.')) return 4
+    return 3
+  }
+  if (key.startsWith('executionContext.')) {
+    return 6
+  }
+  if (key.startsWith('grid.')) {
+    return 5
+  }
+
+  return typeof item.reason === 'string' ? REASON_PRIORITY[item.reason] ?? 99 : 99
 }

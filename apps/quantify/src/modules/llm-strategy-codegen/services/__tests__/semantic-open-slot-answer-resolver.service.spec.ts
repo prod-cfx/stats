@@ -787,6 +787,58 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
     }))
   })
 
+  it('locks an open symbol context slot when priority-selected clarification targets symbol after another pending item', () => {
+    const state = stateWithMissingEntry()
+    const symbolSlot: SemanticSlotState = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+    const exitSlot: SemanticSlotState = {
+      slotKey: 'trigger.exit',
+      fieldPath: 'triggers[exit]',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请补充出场触发条件。',
+      affectsExecution: true,
+    }
+    state.contextSlots.symbol = symbolSlot
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            status: 'pending',
+            reason: 'missing_exit_rules',
+            key: 'exitRules',
+            slotKey: exitSlot.slotKey,
+            fieldPath: exitSlot.fieldPath,
+          },
+          {
+            status: 'pending',
+            reason: 'missing_symbol',
+            key: 'executionContext.symbol',
+            slotKey: symbolSlot.slotKey,
+            fieldPath: symbolSlot.fieldPath,
+          },
+        ],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDT',
+      status: 'locked',
+    }))
+  })
+
   it('does not consume a symbol context slot answer when active clarification targets another slot', () => {
     const state = stateWithMissingEntry()
     const symbolSlot: SemanticSlotState = {
