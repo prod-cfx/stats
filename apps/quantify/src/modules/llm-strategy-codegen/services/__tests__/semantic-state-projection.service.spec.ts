@@ -1,8 +1,17 @@
 import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
+import { buildLockedAtomicState } from './fixtures/semantic-state-golden-cases'
 
 describe('SemanticStateProjectionService', () => {
   const service = new SemanticStateProjectionService()
+
+  function flattenDisplayGraphText(state: SemanticState): string {
+    return service
+      .buildDisplayLogicGraph(state)
+      .blocks
+      .flatMap(block => block.items.map(item => item.text))
+      .join(' ')
+  }
 
   it('builds display logic graph from locked semantic atoms for previous candle breakout strategy', () => {
     const state: SemanticState = {
@@ -144,6 +153,107 @@ describe('SemanticStateProjectionService', () => {
     expect(text).toContain('仓位: 3%')
     expect(text).toContain('市场: 永续')
     expect(text).toContain('风控: 止损：价格相对入场均价下跌1% 强制平仓 -> 平仓')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
+  it('renders bollinger and relative volume atomic contract combinations as readable display graph', () => {
+    const graph = service.buildDisplayLogicGraph(buildLockedAtomicState('bollinger-volume-entry'))
+    const firstBlockText = graph.blocks[0]?.items.map(item => item.text).join(' ') ?? ''
+    const executeText = graph.blocks.at(-1)?.items.map(item => item.text).join(' ') ?? ''
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(firstBlockText).toContain('布林带下轨')
+    expect(firstBlockText).toContain('成交量高于过去 20 根均量的 1.5 倍')
+    expect(firstBlockText).toContain('开多 10%')
+    expect(text).toContain('布林带上轨')
+    expect(executeText).toContain('交易所: OKX')
+    expect(executeText).toContain('标的: BTCUSDT')
+    expect(executeText).toContain('周期: 15m')
+    expect(executeText).toContain('仓位: 10%')
+    expect(executeText).toContain('市场: 永续')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+    expect(text).not.toContain('price.detect.indicator_boundary')
+    expect(text).not.toContain('volume.relative_average')
+  })
+
+  it('renders sequence and remembered level risk atomic contracts without raw keys', () => {
+    const text = flattenDisplayGraphText(buildLockedAtomicState('breakout-retest'))
+
+    expect(text).toContain('突破后回踩确认')
+    expect(text).toContain('24h')
+    expect(text).toContain('记录位 breakout')
+    expect(text).toContain('跌破记录位 breakout 止损')
+    expect(text).not.toContain('condition.sequence')
+    expect(text).not.toContain('risk.remembered_level_stop')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
+  it('renders rolling extrema breakout, logical any-of exits, and ATR multiple risk summaries', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 24,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-any-of',
+        key: 'logical.any_of',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          items: [
+            {
+              key: 'indicator.below',
+              params: {
+                indicator: 'ma',
+                'reference.period': 20,
+              },
+            },
+            {
+              key: 'indicator.cross_under',
+              params: {
+                indicator: 'macd',
+                fastPeriod: 12,
+                slowPeriod: 26,
+                signalPeriod: 9,
+              },
+            },
+          ],
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+    state.actions.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'OR_THEN', 'EXECUTE'])
+    expect(text).toContain('突破过去 24 根 K 线最高价')
+    expect(text).toContain('任一条件')
+    expect(text).toContain('价格低于 MA20')
+    expect(text).toContain('MACD 12/26/9 死叉')
+    expect(text).toContain('2 倍 ATR 止损')
+    expect(text).toContain('3 倍 ATR 止盈')
+    expect(text).not.toContain('price.rolling_extrema_breakout')
+    expect(text).not.toContain('logical.any_of')
+    expect(text).not.toContain('risk.atr_multiple')
     expect(text).not.toContain('不支持的条件')
     expect(text).not.toContain('待补充')
   })

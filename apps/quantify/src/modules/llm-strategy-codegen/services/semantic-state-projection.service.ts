@@ -112,12 +112,14 @@ export class SemanticStateProjectionService {
   buildDisplayLogicGraph(state: SemanticState): SemanticDisplayLogicGraph {
     const triggers = this.filterDeterministicTriggers(state.triggers)
     const actions = this.filterDeterministicActions(state.actions)
-    const ruleBlocks = triggers
-      .filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit')
-      .map((trigger, index) => this.buildDisplayRuleBlock({
-        trigger,
-        blockType: index === 0 ? 'IF' : 'AND_AT_THEN',
-        gateText: trigger.phase === 'entry' ? this.buildDisplayGateText(triggers, trigger) : null,
+    const ruleGroups = this.groupDisplayRuleTriggers(
+      triggers.filter(trigger => trigger.phase === 'entry' || trigger.phase === 'exit'),
+    )
+    const ruleBlocks = ruleGroups
+      .map((group, index) => this.buildDisplayRuleBlock({
+        triggers: group,
+        blockType: this.resolveDisplayRuleBlockType(group, index),
+        gateText: group[0]?.phase === 'entry' && group[0] ? this.buildDisplayGateText(triggers, group[0]) : null,
         actions,
         position: state.position,
       }))
@@ -146,28 +148,83 @@ export class SemanticStateProjectionService {
   }
 
   private buildDisplayRuleBlock(input: {
-    trigger: SemanticState['triggers'][number]
+    triggers: SemanticState['triggers']
     blockType: SemanticDisplayBlockType
     gateText: string | null
     actions: SemanticState['actions']
     position: SemanticState['position']
   }): SemanticDisplayLogicGraphBlock | null {
-    const conditionText = this.buildDisplayConditionText(input.trigger, input.gateText)
-    if (!conditionText) {
+    const [firstTrigger] = input.triggers
+    if (!firstTrigger) {
+      return null
+    }
+    const conditionItems = input.triggers
+      .map((trigger, index): SemanticDisplayConditionItem | null => {
+        const conditionText = this.buildDisplayConditionText(trigger, index === 0 ? input.gateText : null)
+        if (!conditionText) {
+          return null
+        }
+
+        return {
+          kind: 'condition',
+          id: `condition-${trigger.id}`,
+          text: conditionText,
+        }
+      })
+      .filter((item): item is SemanticDisplayConditionItem => Boolean(item))
+    if (conditionItems.length === 0) {
       return null
     }
 
     return {
       type: input.blockType,
       items: [
-        {
-          kind: 'condition',
-          id: `condition-${input.trigger.id}`,
-          text: conditionText,
-        },
-        ...this.buildDisplayActionItems(input.trigger, input.actions, input.position),
+        ...conditionItems,
+        ...this.buildDisplayActionItems(firstTrigger, input.actions, input.position),
       ],
     }
+  }
+
+  private groupDisplayRuleTriggers(triggers: SemanticState['triggers']): SemanticState['triggers'][] {
+    const groups: SemanticState['triggers'][] = []
+
+    for (const trigger of triggers) {
+      const previousGroup = groups.at(-1)
+      const previousTrigger = previousGroup?.[0]
+      if (
+        previousGroup
+        && previousTrigger
+        && this.canMergeDisplayRuleTriggers(previousTrigger, trigger)
+      ) {
+        previousGroup.push(trigger)
+        continue
+      }
+
+      groups.push([trigger])
+    }
+
+    return groups
+  }
+
+  private canMergeDisplayRuleTriggers(
+    previous: SemanticState['triggers'][number],
+    next: SemanticState['triggers'][number],
+  ): boolean {
+    return previous.phase === 'entry'
+      && next.phase === 'entry'
+      && previous.key !== 'logical.any_of'
+      && next.key !== 'logical.any_of'
+      && (previous.sideScope ?? 'long') === (next.sideScope ?? 'long')
+  }
+
+  private resolveDisplayRuleBlockType(
+    group: SemanticState['triggers'],
+    index: number,
+  ): SemanticDisplayBlockType {
+    if (group.some(trigger => trigger.key === 'logical.any_of')) {
+      return 'OR_THEN'
+    }
+    return index === 0 ? 'IF' : 'AND_AT_THEN'
   }
 
   private buildDisplayConditionText(
@@ -185,8 +242,169 @@ export class SemanticStateProjectionService {
   }
 
   private formatDisplayTriggerCondition(trigger: SemanticState['triggers'][number]): string {
+    const atomicCondition = this.formatDisplayAtomicTriggerCondition(trigger)
+    if (atomicCondition) {
+      return atomicCondition
+    }
+
     const summary = this.buildTriggerSummary([trigger], true)
     return summary.replace(/^(入场|出场|条件)：/u, '').replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
+  }
+
+  private formatDisplayAtomicTriggerCondition(trigger: SemanticState['triggers'][number]): string {
+    switch (trigger.key) {
+      case 'price.detect.indicator_boundary':
+        return this.formatDisplayIndicatorBoundaryCondition(trigger)
+      case 'volume.relative_average':
+        return this.formatDisplayRelativeVolumeCondition(trigger)
+      case 'condition.sequence':
+        return this.formatDisplaySequenceCondition(trigger)
+      case 'price.rolling_extrema_breakout':
+        return this.formatDisplayRollingExtremaBreakoutCondition(trigger)
+      case 'logical.any_of':
+        return this.formatDisplayLogicalAnyOfCondition(trigger)
+      default:
+        return ''
+    }
+  }
+
+  private formatDisplayIndicatorBoundaryCondition(trigger: SemanticState['triggers'][number]): string {
+    const indicator = this.readIndicatorBoundaryIndicator(trigger.params)
+    const boundaryRole = this.readBoundaryRole(trigger.params.boundaryRole)
+    if (!indicator || !boundaryRole) {
+      return ''
+    }
+
+    const boundaryText = this.formatBoundaryRole(boundaryRole)
+    const actionText = this.formatIndicatorBoundaryActionText(trigger.params.confirmationMode)
+    if (indicator.name === 'bollinger') {
+      return `${actionText}布林带${boundaryText}${this.formatDisplayIndicatorParams(indicator)}`
+    }
+    return `${actionText}${indicator.name.toUpperCase()}${boundaryText}${this.formatDisplayIndicatorParams(indicator)}`
+  }
+
+  private formatDisplayRelativeVolumeCondition(trigger: SemanticState['triggers'][number]): string {
+    const lookbackBars = this.readFiniteNumber(trigger.params.lookbackBars)
+    const multiplier = this.readFiniteNumber(trigger.params.multiplier)
+    if (lookbackBars === null || multiplier === null) {
+      return ''
+    }
+
+    const comparator = this.readString(trigger.params.comparator)
+    const direction = comparator === 'lt' || comparator === 'lte' ? '低于' : '高于'
+    const inclusive = comparator === 'gte' || comparator === 'lte' ? '或等于' : ''
+    return `成交量${direction}${inclusive}过去 ${this.formatNumber(lookbackBars)} 根均量的 ${this.formatNumber(multiplier)} 倍`
+  }
+
+  private formatDisplaySequenceCondition(trigger: SemanticState['triggers'][number]): string {
+    const sequenceKind = this.readString(trigger.params.sequenceKind)
+    if (!sequenceKind) {
+      return ''
+    }
+
+    const windowText = this.formatDisplaySequenceWindow(trigger.params)
+    const memoryKey = this.readString(trigger.params.memoryKey)
+    const memoryText = memoryKey ? `，记录位 ${memoryKey}` : ''
+    if (sequenceKind === 'breakout_retest') {
+      return `突破后回踩确认${windowText}${memoryText}`
+    }
+    if (sequenceKind === 'pullback_reclaim') {
+      return `回踩${this.formatDisplaySequenceReference(trigger.params)}后重新站上${windowText}${memoryText}`
+    }
+    if (sequenceKind === 'rsi_reclaim') {
+      const threshold = this.readFiniteNumber(trigger.params.threshold)
+      return `RSI 回落后重新站上${threshold === null ? '阈值' : ` ${this.formatNumber(threshold)}`}${windowText}${memoryText}`
+    }
+    if (sequenceKind === 'consecutive_candles') {
+      const count = this.readFiniteNumber(trigger.params.count)
+      const direction = this.readString(trigger.params.direction) === 'down' ? '收跌' : '收涨'
+      return `连续 ${count === null ? '多' : this.formatNumber(count)} 根 K 线${direction}${windowText}${memoryText}`
+    }
+
+    return `序列条件 ${sequenceKind}${windowText}${memoryText}`
+  }
+
+  private formatDisplayRollingExtremaBreakoutCondition(trigger: SemanticState['triggers'][number]): string {
+    const extrema = this.readString(trigger.params.extrema) === 'low' ? 'low' : 'high'
+    const lookbackBars = this.readFiniteNumber(trigger.params.lookbackBars)
+    const lookbackText = lookbackBars === null
+      ? '过去若干根 K 线'
+      : `过去 ${this.formatNumber(lookbackBars)} 根 K 线`
+    const timeframe = this.readString(trigger.params.timeframe)
+    const prefix = timeframe ? `${timeframe} ` : ''
+    return extrema === 'low'
+      ? `${prefix}跌破${lookbackText}最低价`
+      : `${prefix}突破${lookbackText}最高价`
+  }
+
+  private formatDisplayLogicalAnyOfCondition(trigger: SemanticState['triggers'][number]): string {
+    const items = Array.isArray(trigger.params.items) ? trigger.params.items : []
+    const childTexts = items
+      .map((item, index) => this.formatDisplayLogicalAnyOfItem(trigger, item, index))
+      .filter(text => text.length > 0)
+
+    return childTexts.length > 0 ? `任一条件：${childTexts.join(' 或 ')}` : ''
+  }
+
+  private formatDisplayLogicalAnyOfItem(
+    parentTrigger: SemanticState['triggers'][number],
+    item: unknown,
+    index: number,
+  ): string {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return ''
+    }
+    const record = item as Record<string, unknown>
+    const key = this.readString(record.key)
+    if (!key || key === 'logical.any_of') {
+      return ''
+    }
+
+    const params = record.params && typeof record.params === 'object' && !Array.isArray(record.params)
+      ? record.params as Record<string, unknown>
+      : {}
+    return this.formatDisplayTriggerCondition({
+      ...parentTrigger,
+      id: `${parentTrigger.id}-any-of-${index}`,
+      key,
+      params,
+    })
+  }
+
+  private formatDisplayIndicatorParams(indicator: { period?: number, stdDev?: number }): string {
+    if (indicator.period !== undefined && indicator.stdDev !== undefined) {
+      return `（${this.formatNumber(indicator.period)}, ${this.formatNumber(indicator.stdDev)}）`
+    }
+    if (indicator.period !== undefined) {
+      return `（${this.formatNumber(indicator.period)}）`
+    }
+    return ''
+  }
+
+  private formatDisplaySequenceWindow(params: Record<string, unknown>): string {
+    const lookbackWindow = this.readString(params.lookbackWindow)
+    if (lookbackWindow) {
+      return `（${lookbackWindow} 内）`
+    }
+
+    const lookbackBars = this.readFiniteNumber(params.lookbackBars)
+    return lookbackBars === null ? '' : `（${this.formatNumber(lookbackBars)} 根 K 线内）`
+  }
+
+  private formatDisplaySequenceReference(params: Record<string, unknown>): string {
+    const reference = params.reference
+    if (!reference || typeof reference !== 'object' || Array.isArray(reference)) {
+      return '关键位'
+    }
+
+    const record = reference as Record<string, unknown>
+    const indicator = this.readString(record.indicator)
+    const period = this.readFiniteNumber(record.period)
+    if (indicator) {
+      return `${indicator.toUpperCase()}${period === null ? '' : this.formatNumber(period)}`
+    }
+
+    return '关键位'
   }
 
   private buildDisplayGateText(
@@ -1051,6 +1269,21 @@ export class SemanticStateProjectionService {
           return `风控：当${condition}时${this.describeRiskExpressionEffect(risk.params.effect)}`
         }
 
+        if (risk.key === 'risk.atr_multiple_stop') {
+          const multiple = this.readFiniteNumber(risk.params.multiple)
+          return multiple === null ? '' : `${this.formatNumber(multiple)} 倍 ATR 止损`
+        }
+
+        if (risk.key === 'risk.atr_multiple_take_profit') {
+          const multiple = this.readFiniteNumber(risk.params.multiple)
+          return multiple === null ? '' : `${this.formatNumber(multiple)} 倍 ATR 止盈`
+        }
+
+        if (risk.key === 'risk.remembered_level_stop') {
+          const levelKey = this.readString(risk.params.levelKey)
+          return levelKey ? `跌破记录位 ${levelKey} 止损` : ''
+        }
+
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
           return ''
@@ -1175,6 +1408,14 @@ export class SemanticStateProjectionService {
   private readShapeBoolean(shape: SemanticCapability['shape'], key: string): boolean | null {
     const value = shape[key]
     return typeof value === 'boolean' ? value : null
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
   private describeRiskExpressionEffect(rawEffect: unknown): string {
