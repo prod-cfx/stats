@@ -185,6 +185,61 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes supported grid contracts when planner explicitly sends null contracts', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeMin: 79200,
+          rangeMax: 80200,
+          sideMode: 'bidirectional',
+        },
+        contracts: null,
+      }],
+      actions: [{
+        key: 'place_limit_grid',
+        params: {
+          orderType: 'limit',
+          timeInForce: 'gtc',
+        },
+        contracts: null,
+      }],
+    })
+
+    expect(state?.triggers[0]).toEqual(expect.objectContaining({
+      key: 'grid.range_rebalance',
+      openSlots: expect.arrayContaining([expect.objectContaining({
+        slotKey: 'contract.shape.price.level_set.density',
+        status: 'open',
+      })]),
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'price',
+          verb: 'define',
+          object: 'level_set',
+          shape: expect.objectContaining({
+            lower: 79200,
+            upper: 80200,
+          }),
+        })],
+      })],
+    }))
+    expect(state?.actions[0]).toEqual(expect.objectContaining({
+      key: 'place_limit_grid',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        capabilities: expect.arrayContaining([expect.objectContaining({
+          domain: 'order_program',
+          verb: 'maintain',
+          object: 'limit_ladder',
+        })]),
+      })],
+    }))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
   it('closes synthesized fixed grid density slots from percent spacing answers', () => {
     const state = service.build({
       triggers: [{
@@ -277,6 +332,58 @@ describe('SemanticSeedStateBuilderService', () => {
       && item.fieldPath === slot.fieldPath
       && item.status === 'open',
     )).toBeUndefined()
+  })
+
+  it('synthesizes supported bollinger boundary contracts when planner explicitly sends null contracts', () => {
+    const state = service.build({
+      triggers: [{
+        id: 'entry-bollinger-upper',
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'short',
+        params: {
+          indicator: {
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          },
+          boundaryRole: 'upper',
+          confirmationMode: 'close_confirm',
+        },
+        contracts: null,
+      }, {
+        id: 'exit-bollinger-middle-short',
+        key: 'price.detect.indicator_boundary',
+        phase: 'exit',
+        sideScope: 'short',
+        params: {
+          indicator: {
+            name: 'bollinger',
+            period: 20,
+            stdDev: 2,
+          },
+          boundaryRole: 'middle',
+          confirmationMode: 'close_confirm',
+        },
+        contracts: null,
+      }],
+    })
+
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        status: 'locked',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'detect',
+            object: 'signal_condition',
+          })],
+        })],
+      }),
+    ]))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
   it('synthesizes contracts for complete lightweight planner patches and keeps them locked', () => {

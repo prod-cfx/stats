@@ -5287,6 +5287,108 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('触碰即触发，还是收盘确认')
   })
 
+  it('keeps Bollinger null planner contracts internal after close-confirm clarification', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-null-contract-confirmation' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认触发语义。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'price.detect.indicator_boundary',
+              phase: 'entry',
+              sideScope: 'short',
+              params: { indicator: { name: 'bollinger', period: 20, stdDev: 2 }, boundaryRole: 'upper' },
+              contracts: null,
+            },
+            {
+              key: 'price.detect.indicator_boundary',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { indicator: { name: 'bollinger', period: 20, stdDev: 2 }, boundaryRole: 'lower' },
+              contracts: null,
+            },
+            {
+              key: 'price.detect.indicator_boundary',
+              phase: 'exit',
+              sideScope: 'long',
+              params: { indicator: { name: 'bollinger', period: 20, stdDev: 2 }, boundaryRole: 'middle' },
+              contracts: null,
+            },
+            {
+              key: 'price.detect.indicator_boundary',
+              phase: 'exit',
+              sideScope: 'short',
+              params: { indicator: { name: 'bollinger', period: 20, stdDev: 2 }, boundaryRole: 'middle' },
+              contracts: null,
+            },
+          ],
+          actions: [
+            { key: 'open_short', contracts: null },
+            { key: 'open_long', contracts: null },
+            { key: 'close_long', contracts: null },
+            { key: 'close_short', contracts: null },
+          ],
+          position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'hedge' },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+    })
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('触碰即触发，还是收盘确认')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createdSession.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-bollinger-null-contract-confirmation',
+      createdSession,
+      { status: started.status },
+    ))
+
+    const result = await service.continueSession('s-bollinger-null-contract-confirmation', {
+      userId: 'u1',
+      message: '收盘确认后触发',
+    } as ContinueCodegenSessionDto)
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(result.assistantPrompt).not.toContain('price.detect.indicator_boundary')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        params: expect.objectContaining({ confirmationMode: 'close_confirm' }),
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({
+            slotKey: expect.stringContaining('confirmationMode'),
+            status: 'open',
+          }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'detect',
+            object: 'signal_condition',
+          })],
+        })],
+      }),
+    ]))
+  })
+
   it('keeps Bollinger boundary atoms readable and preserves stop-loss risk through full clarification', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-boundary-full-clarification' })
     mockAi.chat.mockResolvedValue({
@@ -13373,6 +13475,93 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             object: 'level_set',
             shape: expect.objectContaining({ gridCount: 10 }),
           })],
+        })],
+      }),
+    ]))
+  })
+
+  it('keeps bidirectional grid null planner contracts out of generic contract-required prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'both',
+            params: {
+              rangeMin: 79200,
+              rangeMax: 80200,
+              sideMode: 'bidirectional',
+            },
+            contracts: null,
+          }],
+          actions: [{
+            key: 'action.grid_ladder',
+            params: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+            },
+            contracts: null,
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-null-contracts' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'BTC 15m 周期，价格区间 79200-80200，采用双向网格',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-bidirectional-grid-null-contracts',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-bidirectional-grid-null-contracts', {
+      userId: 'u1',
+      message: '10格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'action.grid_ladder',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: expect.arrayContaining([expect.objectContaining({
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+          })]),
         })],
       }),
     ]))
