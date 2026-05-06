@@ -910,7 +910,7 @@ describe('SemanticSeedExtractorService', () => {
   })
 
   it('keeps space-separated multi-timeframe EMA entry and EMA exit in separate atom phases', () => {
-    const patch = service.extract('15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约')
+    const patch = service.extract('5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'binance',
@@ -925,7 +925,7 @@ describe('SemanticSeedExtractorService', () => {
         params: expect.objectContaining({
           indicator: 'ema',
           'reference.period': 20,
-          timeframe: '15m',
+          timeframe: '5m',
         }),
       }),
       expect.objectContaining({

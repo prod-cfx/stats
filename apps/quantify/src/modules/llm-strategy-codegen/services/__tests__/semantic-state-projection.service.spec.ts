@@ -729,6 +729,59 @@ describe('SemanticStateProjectionService', () => {
     expect(result.nextQuestion).toBe('突破按收盘确认还是盘中触发？')
   })
 
+  it('groups multi-timeframe static indicator entry conditions into one semantic summary', () => {
+    const baseTrigger = {
+      key: 'indicator.above',
+      phase: 'entry',
+      sideScope: 'long',
+      params: {
+        indicator: 'ema',
+        'reference.period': 20,
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    } satisfies Partial<SemanticTriggerState>
+    const result = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          ...baseTrigger,
+          id: 'entry-ema-5m',
+          params: { ...baseTrigger.params, timeframe: '5m' },
+        },
+        {
+          ...baseTrigger,
+          id: 'entry-ema-1h',
+          params: { ...baseTrigger.params, timeframe: '1h' },
+        },
+        {
+          ...baseTrigger,
+          id: 'entry-ema-4h',
+          params: { ...baseTrigger.params, timeframe: '4h' },
+        },
+      ] as SemanticTriggerState[],
+      actions: [{
+        id: 'action-open-long',
+        key: 'open_long',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    })
+
+    expect(result.summary).toContain('入场：5m / 1h / 4h 价格在 EMA20 上方时做多开仓')
+    expect(result.summary).not.toContain('突破 MA20')
+    expect((result.summary.match(/入场：/gu) ?? [])).toHaveLength(1)
+  })
+
   it('describes official strategy plaza atomic triggers with concrete params and actions', () => {
     const result = service.buildConversationView({
       version: 1,

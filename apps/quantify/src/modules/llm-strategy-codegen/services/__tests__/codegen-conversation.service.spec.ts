@@ -5930,13 +5930,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u1',
-      initialMessage: '15min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+      initialMessage: '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
     })
     const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
 
     expect(result.assistantPrompt ?? '').not.toContain('请确认交易所')
+    expect(result.assistantPrompt ?? '').not.toContain('请确认策略主周期')
     expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
     expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
+    expect(result.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+    expect(result.assistantPrompt ?? '').not.toContain('入场：突破 MA20')
     expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'binance',
@@ -5949,12 +5952,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'locked',
       value: 'perp',
     }))
+    expect(createPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '5m',
+    }))
     expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.above',
         phase: 'entry',
         sideScope: 'long',
-        params: expect.objectContaining({ timeframe: '15m' }),
+        params: expect.objectContaining({ timeframe: '5m' }),
       }),
       expect.objectContaining({
         key: 'indicator.above',

@@ -2797,8 +2797,9 @@ export class CodegenConversationService {
   ): SemanticState {
     const normalizedInput = this.normalizeRiskState(state)
     const stateWithDeterministicContext = this.withDeterministicContextSlots(normalizedInput, checklist)
+    const stateWithRuleDerivedExecutionTimeframe = this.withRuleDerivedExecutionTimeframe(stateWithDeterministicContext)
     const stateWithExplicitDeterministicPosition = this.withExplicitDeterministicPositionSizing(
-      stateWithDeterministicContext,
+      stateWithRuleDerivedExecutionTimeframe,
       checklist,
     )
     const stateWithExplicitDeterministicRisk = this.withExplicitDeterministicStopLossRisk(
@@ -2987,6 +2988,58 @@ export class CodegenConversationService {
     }
 
     return changed ? { ...state, contextSlots } : state
+  }
+
+  private withRuleDerivedExecutionTimeframe(state: SemanticState): SemanticState {
+    if (state.contextSlots.timeframe?.status === 'locked') {
+      return state
+    }
+
+    const timeframe = this.resolvePrimaryExecutionTimeframeFromRules(state)
+    if (!timeframe) {
+      return state
+    }
+
+    return {
+      ...state,
+      contextSlots: {
+        ...state.contextSlots,
+        timeframe: this.buildContextSlotState('timeframe', timeframe, '请确认策略主周期（例如 15m 或 1h）。'),
+      },
+    }
+  }
+
+  private resolvePrimaryExecutionTimeframeFromRules(state: SemanticState): string | null {
+    const timeframes = new Set<string>()
+    for (const trigger of state.triggers) {
+      if (trigger.status !== 'locked') continue
+      const timeframe = trigger.params.timeframe
+      if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
+        timeframes.add(timeframe.trim())
+      }
+    }
+
+    return [...timeframes].sort((left, right) =>
+      this.timeframeToMinutes(left) - this.timeframeToMinutes(right) || left.localeCompare(right),
+    )[0] ?? null
+  }
+
+  private timeframeToMinutes(timeframe: string): number {
+    const match = /^(\d+)\s*([mhdw])$/iu.exec(timeframe.trim())
+    if (!match?.[1] || !match[2]) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value)) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const unit = match[2].toLowerCase()
+    if (unit === 'm') return value
+    if (unit === 'h') return value * 60
+    if (unit === 'd') return value * 1440
+    return value * 10080
   }
 
   private withExplicitDeterministicPositionSizing(
