@@ -15,6 +15,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
+import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 
@@ -351,7 +352,7 @@ function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
 }
 
 function ownerHasOpenSlot(owner: { openSlots?: SemanticSlotState[] } | null): boolean {
-  return owner?.openSlots?.some(slot => slot.status === 'open' && slot.affectsExecution) ?? false
+  return owner?.openSlots?.some(isBlockingSemanticOpenSlot) ?? false
 }
 
 function toOpenSlot(requirement: MissingSemanticContractRequirement): SemanticSlotState {

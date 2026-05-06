@@ -161,6 +161,35 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('关键条件')
   })
 
+  it('prioritizes non-semantic missing risk atom blockers before execution context gaps', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '大跌后不接飞刀再买入。',
+      items: [
+        {
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          question: '请确认交易所（binance / okx / hyperliquid）。',
+          status: 'pending',
+        },
+        {
+          key: 'risk.falling_knife_guard.definition',
+          reason: 'missing_risk_atom',
+          field: 'risk',
+          blocking: true,
+          question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的风控语义槽位')
+    expect(prompt).toContain('不接飞刀')
+    expect(prompt).not.toContain('请确认交易所')
+  })
+
   it('asks only the highest-priority unresolved clarification question', () => {
     const prompt = questionService.build({
       status: 'NEEDS_CLARIFICATION',

@@ -109,6 +109,7 @@ import {
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
 import { SemanticMissingPlaceholderReconcilerService } from './semantic-missing-placeholder-reconciler.service'
+import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 
@@ -3598,7 +3599,7 @@ export class CodegenConversationService {
       state.triggers
         .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
-        .filter(slot => slot.status === 'open'),
+        .filter(isBlockingSemanticOpenSlot),
     )
     const behaviorTriggerSlot = openTriggerSlots.find(slot =>
       slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition',
@@ -3612,24 +3613,24 @@ export class CodegenConversationService {
       return triggerSlot
     }
 
-    const positionSlot = state.position?.openSlots?.find(slot => slot.status === 'open')
+    const positionSlot = state.position?.openSlots?.find(isBlockingSemanticOpenSlot)
     if (positionSlot) {
       return positionSlot
     }
 
     const actionSlot = state.actions
       .flatMap(action => action.openSlots ?? [])
-      .find(slot => slot.status === 'open')
+      .find(isBlockingSemanticOpenSlot)
     if (actionSlot) {
       return actionSlot
     }
 
-    const riskSlot = state.risk.flatMap(risk => risk.openSlots).find(slot => slot.status === 'open')
+    const riskSlot = state.risk.flatMap(risk => risk.openSlots).find(isBlockingSemanticOpenSlot)
     if (riskSlot) {
       return riskSlot
     }
 
-    return Object.values(state.contextSlots).find(slot => slot?.status === 'open') ?? null
+    return Object.values(state.contextSlots).find(isBlockingSemanticOpenSlot) ?? null
   }
 
   private buildSemanticClarificationItem(slot: SemanticSlotState): StrategyClarificationItem {
@@ -3701,17 +3702,17 @@ export class CodegenConversationService {
       state.triggers
         .filter(trigger => trigger.phase === phase)
         .flatMap(trigger => trigger.openSlots)
-        .filter(slot => slot.status === 'open'),
+        .filter(isBlockingSemanticOpenSlot),
     )
     const openRiskSlots = state.risk
       .flatMap(risk => risk.openSlots)
-      .filter(slot => slot.status === 'open')
+      .filter(isBlockingSemanticOpenSlot)
     const openActionSlots = state.actions
       .flatMap(action => action.openSlots ?? [])
-      .filter(slot => slot.status === 'open')
-    const openPositionSlots = state.position?.openSlots?.filter(slot => slot.status === 'open') ?? []
+      .filter(isBlockingSemanticOpenSlot)
+    const openPositionSlots = state.position?.openSlots?.filter(isBlockingSemanticOpenSlot) ?? []
     const openContextSlots = Object.values(state.contextSlots)
-      .filter((slot): slot is SemanticSlotState => Boolean(slot) && slot.status === 'open')
+      .filter(isBlockingSemanticOpenSlot)
 
     return [...openTriggerSlots, ...openPositionSlots, ...openActionSlots, ...openRiskSlots, ...openContextSlots]
   }

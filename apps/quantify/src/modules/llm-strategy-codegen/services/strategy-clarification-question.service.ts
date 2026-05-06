@@ -30,7 +30,7 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   missing_semantic_position_sizing: 8,
   missing_semantic_position_mode: 8,
   missing_semantic_risk: 8,
-  missing_risk_atom: 4,
+  missing_risk_atom: 3,
   missing_entry_rules: 20,
   missing_exit_rules: 20,
   missing_stop_loss_rule: 20,
