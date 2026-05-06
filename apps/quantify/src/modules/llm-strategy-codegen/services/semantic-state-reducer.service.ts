@@ -207,6 +207,22 @@ export class SemanticStateReducerService {
         break
       }
 
+      if (risk.key !== 'risk.protective_exit' && slot?.status === 'open') {
+        const paramKey = this.resolveRiskParamKey(slot)
+        if (paramKey) {
+          risk.params[paramKey] = answerText
+          slot.value = answerText
+          slot.status = 'locked'
+          slot.evidence = {
+            text: answerText,
+            messageIndex: input.messageIndex,
+            source: 'user_explicit',
+          }
+          risk.status = risk.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+          break
+        }
+      }
+
       if (risk.key !== 'risk.protective_exit') continue
       if (slot?.slotKey !== 'risk.protective_exit' || slot.status !== 'open') continue
 
@@ -284,6 +300,16 @@ export class SemanticStateReducerService {
     }
 
     return slot.slotKey
+  }
+
+  private resolveRiskParamKey(slot: SemanticSlotState): string | null {
+    const paramsPath = slot.fieldPath.match(/(?:^|\.)params\.([A-Za-z0-9_]+)$/u)
+    if (paramsPath?.[1]) {
+      return paramsPath[1]
+    }
+
+    const slotKeyPath = slot.slotKey.match(/\.([A-Za-z0-9_]+)$/u)
+    return slotKeyPath?.[1] ?? null
   }
 
   private applyContractRequirementAnswer(

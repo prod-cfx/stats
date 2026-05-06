@@ -333,6 +333,37 @@ describe('SemanticSupportClassifierService', () => {
     ])
   })
 
+  it('deduplicates registry open slots by slot identity instead of slot key only', () => {
+    const ownerSlot = {
+      slotKey: 'risk.falling_knife_guard.definition',
+      fieldPath: 'risk[falling-knife].params.definition',
+      status: 'open' as const,
+      priority: 'risk' as const,
+      questionHint: '请确认具体风控定义。',
+      affectsExecution: true,
+    }
+
+    const result = service.classify(baseState({
+      risk: [{
+        id: 'falling-knife',
+        key: 'risk.falling_knife_guard',
+        params: { definition: 'unknown' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [ownerSlot],
+      }],
+    }))
+
+    expect(result.route).toBe('open_slots')
+    expect(result.state.risk[0].openSlots).toEqual([
+      ownerSlot,
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk.params.definition',
+      }),
+    ])
+  })
+
   it('routes executable EMA compare triggers with per-trigger timeframe to projection', () => {
     const result = service.classify(baseState({
       triggers: [{

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import type {
+  SemanticSlotIdentity,
   SemanticActionState,
   SemanticPositionState,
   SemanticRiskState,
@@ -8,6 +9,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import { buildSemanticSlotId } from '../types/semantic-state'
 import type {
   SemanticAtomDefinition,
   SemanticAtomReplacementStrategy,
@@ -235,9 +237,9 @@ function withRegistryOpenSlots<
   }
 
   const existingSlots = node.openSlots ?? []
-  const existingSlotKeys = new Set(existingSlots.map(slot => slot.slotKey))
+  const existingSlotIds = new Set(existingSlots.map(slot => buildSemanticSlotId(slot)))
   const registryOpenSlots = resolved.openSlots
-    .filter(slot => !existingSlotKeys.has(slot.slotKey))
+    .filter(slot => !existingSlotIds.has(toSlotId(slot)))
     .map(slot => toSemanticSupportOpenSlot(slot))
 
   if (registryOpenSlots.length === 0) {
@@ -248,6 +250,10 @@ function withRegistryOpenSlots<
     ...node,
     openSlots: [...existingSlots, ...registryOpenSlots],
   }
+}
+
+function toSlotId(slot: SemanticSlotIdentity): string {
+  return buildSemanticSlotId(slot)
 }
 
 function hasRequiredParamOpenSlotSpecs(
