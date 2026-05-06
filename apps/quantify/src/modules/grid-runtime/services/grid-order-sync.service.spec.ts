@@ -1651,6 +1651,85 @@ describe('GridOrderSyncService', () => {
     }))
   })
 
+  it.each([
+    {
+      name: 'non-OKX perp close order accepts less than the local plan',
+      exchangeId: 'binance',
+      side: 'buy',
+      role: 'close_short',
+      exchangeAmount: 0.041,
+    },
+    {
+      name: 'OKX perp open order accepts less than the local plan',
+      exchangeId: 'okx',
+      side: 'sell',
+      role: 'open_short',
+      exchangeAmount: 0.041,
+    },
+    {
+      name: 'OKX perp close order accepts more than the local plan',
+      exchangeId: 'okx',
+      side: 'buy',
+      role: 'close_short',
+      exchangeAmount: 0.044,
+    },
+  ])('moves to RECONCILE_REQUIRED when $name', async ({ exchangeId, side, role, exchangeAmount }) => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      exchangeId,
+      marketType: 'perp',
+      symbol: 'ETH/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_short' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'perp-order-1',
+        clientOrderId: 'grid-perp-order-1',
+        exchangeOrderId: 'exchange-perp-order-1',
+        side,
+        role,
+        price: { toString: () => '2300' },
+        quantity: { toString: () => '0.043' },
+        status: 'OPEN',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([
+      {
+        id: 'exchange-perp-order-1',
+        clientOrderId: 'grid-perp-order-1',
+        symbol: 'ETH/USDT:PERP',
+        marketType: 'perp',
+        side,
+        type: 'limit',
+        price: 2300,
+        amount: exchangeAmount,
+        filled: 0,
+        status: 'open',
+        createdAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        updatedAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        raw: { orderId: 'exchange-perp-order-1' },
+      },
+    ])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).toHaveBeenCalledWith('grid-1', 'exchange_mismatch', expect.objectContaining({
+      mismatches: expect.arrayContaining([
+        expect.objectContaining({
+          gridOrderId: 'perp-order-1',
+          clientOrderId: 'grid-perp-order-1',
+          reason: 'order_contract_mismatch',
+        }),
+      ]),
+    }))
+    expect(repository.updateOrderFromExchange).not.toHaveBeenCalled()
+  })
+
   it('records matched fills before marking reconcile when another local order mismatches', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([
