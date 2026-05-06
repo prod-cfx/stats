@@ -1,6 +1,6 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient } from '@/prisma/prisma.types'
 import type { StrategyFundingSnapshot } from '@/modules/trading/core/strategy-buying-power.resolver'
+import type { PrismaClient } from '@/prisma/prisma.types'
 import { ErrorCode, PositionStatus, SubscriptionStatus  } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -14,6 +14,7 @@ import { RUNTIME_BINDING_STATUS } from '@/modules/strategy-signals/types/runtime
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
+import { STRATEGY_ARCHIVE_REASON_USER_DELETE, visibleStrategyInstanceWhere } from './strategy-instance-visibility.query'
 
 interface ListStrategiesQuery {
   userId: string
@@ -57,6 +58,10 @@ interface DeployStrategyInput {
   mode?: 'TESTNET' | 'LIVE'
   exchangeAccountId?: string
   exchangeAccountName?: string
+}
+
+interface DeleteStrategyVisibilityOptions {
+  archiveLinkedConversations: boolean
 }
 
 interface ExistingInstanceSnapshotBinding {
@@ -209,10 +214,10 @@ export class AccountStrategyViewRepository {
 
       if (reusableStrategyInstanceId) {
         const existingInstance = await tx.strategyInstance.findFirst({
-          where: {
+          where: visibleStrategyInstanceWhere({
             id: reusableStrategyInstanceId,
             createdBy: input.userId,
-          },
+          }),
           select: {
             id: true,
             strategyTemplateId: true,
@@ -487,9 +492,9 @@ export class AccountStrategyViewRepository {
     const client = this.txHost.tx
     const skip = (page - 1) * limit
 
-    const where: Prisma.StrategyInstanceWhereInput = {
+    const where: Prisma.StrategyInstanceWhereInput = visibleStrategyInstanceWhere({
       ...this.buildStatusWhere(query.status),
-    }
+    })
 
     if (query.subscribedOnly) {
       where.subscriptions = {
@@ -506,10 +511,12 @@ export class AccountStrategyViewRepository {
         })
       ).map(item => item.strategyInstanceId)
 
-      where.OR = [
-        { id: { in: subscribedInstanceIds.length > 0 ? subscribedInstanceIds : ['__none__'] } },
-        { createdBy: query.userId },
-      ]
+      where.OR = subscribedInstanceIds.length > 0
+        ? [
+            { id: { in: subscribedInstanceIds } },
+            { createdBy: query.userId },
+          ]
+        : [{ createdBy: query.userId }]
     }
 
     if (query.excludeDraft) {
@@ -780,13 +787,13 @@ export class AccountStrategyViewRepository {
   async findStrategyForUser(userId: string, strategyInstanceId: string) {
     const client = this.txHost.tx
     return client.strategyInstance.findFirst({
-      where: {
+      where: visibleStrategyInstanceWhere({
         id: strategyInstanceId,
         OR: [
           { createdBy: userId },
           { subscriptions: { some: { userId } } },
         ],
-      },
+      }),
       include: {
         strategyTemplate: {
           select: {
@@ -1109,14 +1116,18 @@ export class AccountStrategyViewRepository {
     }
   }
 
-  async deleteStrategyForUser(userId: string, strategyInstanceId: string): Promise<void> {
+  async deleteStrategyForUser(
+    userId: string,
+    strategyInstanceId: string,
+    options: DeleteStrategyVisibilityOptions,
+  ): Promise<void> {
     await this.txHost.withTransaction(async () => {
       const tx = this.txHost.tx
       const strategy = await tx.strategyInstance.findFirst({
-        where: {
+        where: visibleStrategyInstanceWhere({
           id: strategyInstanceId,
           createdBy: userId,
-        },
+        }),
         select: {
           id: true,
         },
@@ -1125,31 +1136,48 @@ export class AccountStrategyViewRepository {
         return
       }
 
+      const linkedSessions = await tx.llmStrategyCodegenSession.findMany({
+        where: { userId, strategyInstanceId: strategy.id },
+        select: { id: true },
+      })
+      const linkedSnapshotSessions = await tx.publishedStrategySnapshot.findMany({
+        where: { strategyInstanceId: strategy.id, session: { userId } },
+        select: { sessionId: true },
+      })
+      const linkedSessionIds = Array.from(new Set([
+        ...linkedSessions.map(session => session.id),
+        ...linkedSnapshotSessions.map(snapshot => snapshot.sessionId),
+      ]))
+      const archivedAt = new Date()
+
+      if (options.archiveLinkedConversations && linkedSessionIds.length > 0) {
+        await tx.aiQuantConversation.updateMany({
+          where: {
+            userId,
+            archivedAt: null,
+            codegenSessionId: { in: linkedSessionIds },
+          },
+          data: { archivedAt },
+        })
+      }
+
       await tx.llmStrategyCodegenSession.updateMany({
-        where: {
-          userId,
-          strategyInstanceId: strategy.id,
-        },
-        data: {
-          strategyInstanceId: null,
-        },
+        where: { userId, strategyInstanceId: strategy.id },
+        data: { strategyInstanceId: null },
       })
 
       await tx.publishedStrategySnapshot.updateMany({
-        where: {
-          strategyInstanceId: strategy.id,
-          session: {
-            userId,
-          },
-        },
-        data: {
-          strategyInstanceId: null,
-        },
+        where: { strategyInstanceId: strategy.id, session: { userId } },
+        data: { strategyInstanceId: null },
       })
 
-      await tx.strategyInstance.delete({
-        where: {
-          id: strategy.id,
+      await tx.strategyInstance.update({
+        where: { id: strategy.id },
+        data: {
+          archivedAt,
+          archivedReason: STRATEGY_ARCHIVE_REASON_USER_DELETE,
+          archivedByUserId: userId,
+          updatedBy: userId,
         },
       })
     })

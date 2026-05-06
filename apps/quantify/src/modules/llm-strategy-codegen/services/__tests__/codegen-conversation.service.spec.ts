@@ -3261,7 +3261,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     await (service as any).deleteConversation('conv-1', 'u1', { deleteStoppedStrategy: true })
 
-    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped')
+    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { archiveLinkedConversations: false })
     expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 

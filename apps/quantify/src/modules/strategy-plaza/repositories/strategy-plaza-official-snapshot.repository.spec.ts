@@ -88,6 +88,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-template-1' }),
       },
       strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({ id: overrides?.existingSnapshot?.strategyInstanceId ?? 'strategy-instance-1' }),
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
         update: jest.fn(),
       },
@@ -187,6 +188,33 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         scriptHash: sourceSnapshot.scriptHash,
         scriptSnapshot: sourceSnapshot.scriptSnapshot,
       }),
+    }))
+  })
+
+  it('does not reuse an existing user snapshot when its strategy instance is archived', async () => {
+    const existingSnapshot = {
+      id: 'user-snapshot-archived',
+      snapshotHash: sourceSnapshot.snapshotHash,
+      strategyInstanceId: 'archived-strategy-instance',
+    }
+    const tx = buildTx({ existingSnapshot })
+    tx.strategyInstance.findFirst.mockResolvedValue(null)
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.strategyInstance.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'archived-strategy-instance',
+        createdBy: 'user-1',
+        archivedAt: null,
+      },
+      select: { id: true },
+    })
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: expect.stringMatching(/^plaza_/) },
     }))
   })
 

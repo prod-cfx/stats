@@ -110,7 +110,16 @@ describe('accountStrategyViewService.performAction', () => {
       'BTC/USDT',
       'exchange-account-1',
     )
-    expect(repo.deleteStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-1')
+    expect(repo.deleteStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-1', { archiveLinkedConversations: true })
+  })
+
+  it('archives a draft orphan strategy by strategy id without requiring a session', async () => {
+    const { service, repo } = createActionTestContext({ status: 'draft' })
+
+    await service.deleteStrategy('user-1', 'inst-1')
+
+    expect(repo.findUserStrategyAccount).not.toHaveBeenCalled()
+    expect(repo.deleteStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-1', { archiveLinkedConversations: true })
   })
 
   it('rejects deleting a stopped strategy with open positions', async () => {

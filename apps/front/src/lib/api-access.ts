@@ -40,26 +40,6 @@ export function shouldFallbackToAccountAiQuantMock(error: unknown): boolean {
   return ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED && shouldFallbackToMock(error)
 }
 
-export function isRetryableNetworkStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500
-}
-
-export function shouldFallbackDeleteAccountAiQuantMock(error: unknown): boolean {
-  if (!ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED) return false
-  if (!shouldFallbackToAccountAiQuantMock(error)) return false
-
-  const status = getHttpStatusFromError(error)
-  if (typeof status === 'number') {
-    return isRetryableNetworkStatus(status)
-  }
-
-  if (error instanceof ApiError) {
-    return error.code === 'API_ERROR' || error.code === 'UNKNOWN_ERROR'
-  }
-
-  return false
-}
-
 export function unwrapResponse<T>(response: T | BaseResponse<T>): T {
   return unwrapTransportResponse(response)
 }

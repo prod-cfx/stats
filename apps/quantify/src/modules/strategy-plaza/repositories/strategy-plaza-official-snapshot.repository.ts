@@ -1,10 +1,15 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient, PublishedStrategySnapshot, Prisma } from '@/prisma/prisma.types'
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import type { PrismaClient, PublishedStrategySnapshot, Prisma } from '@/prisma/prisma.types'
 import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { visibleStrategyInstanceWhere } from '@/modules/account-strategy-view/repositories/strategy-instance-visibility.query'
+import {
+  buildOfficialStrategySnapshotContent,
+  OFFICIAL_STRATEGY_PLAZA_USER_ID,
+} from '../utils/official-strategy-plaza-snapshot-builder'
 import {
   buildOfficialTemplateBacktestConfigDefaults,
   buildOfficialTemplateDataRequirements,
@@ -13,10 +18,6 @@ import {
   buildOfficialTemplateParamsSnapshot,
   buildOfficialTemplateStrategyConfig,
 } from '../utils/official-strategy-plaza-snapshot-content'
-import {
-  buildOfficialStrategySnapshotContent,
-  OFFICIAL_STRATEGY_PLAZA_USER_ID,
-} from '../utils/official-strategy-plaza-snapshot-builder'
 
 const LLM_MODEL = 'official-strategy-plaza'
 
@@ -235,7 +236,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     sessionId: string,
     sourceSnapshot: PublishedStrategySnapshot,
   ): Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null> {
-    return this.txHost.tx.publishedStrategySnapshot.findFirst({
+    const existing = await this.txHost.tx.publishedStrategySnapshot.findFirst({
       where: {
         sessionId,
         snapshotHash: sourceSnapshot.snapshotHash,
@@ -245,7 +246,21 @@ export class StrategyPlazaOfficialSnapshotRepository {
       },
       orderBy: [{ createdAt: 'desc' }],
       select: { id: true, snapshotHash: true, strategyInstanceId: true },
-    }) as Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null>
+    }) as Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null
+
+    if (!existing || !existing.strategyInstanceId) {
+      return null
+    }
+
+    const visibleStrategy = await this.txHost.tx.strategyInstance.findFirst({
+      where: visibleStrategyInstanceWhere({
+        id: existing.strategyInstanceId,
+        createdBy: userId,
+      }),
+      select: { id: true },
+    })
+
+    return visibleStrategy ? existing : null
   }
 
   private async bindStrategyInstanceToSnapshot(

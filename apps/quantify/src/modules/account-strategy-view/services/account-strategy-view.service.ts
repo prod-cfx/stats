@@ -89,6 +89,9 @@ interface SnapshotPositionSizing {
 }
 
 type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository['findStrategyForUser']>>>
+interface DeleteStrategyOptions {
+  archiveLinkedConversations: boolean
+}
 type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: MarketType }
 
 @Injectable()
@@ -195,6 +198,7 @@ export class AccountStrategyViewService {
   async getStrategyDetail(userId: string, strategyInstanceId: string): Promise<AccountStrategyDetailResponseDto> {
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
+      this.logDeleteRejected({ userId, strategyInstanceId }, 'strategy_not_found')
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
@@ -875,11 +879,13 @@ export class AccountStrategyViewService {
 
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
+      this.logDeleteRejected({ userId, strategyInstanceId }, 'strategy_not_found')
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
     const isOwner = row.createdBy === userId
     if (!isOwner) {
+      this.logDeleteRejected({ userId, strategyInstanceId, ownerId: row.createdBy }, 'owner_mismatch')
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
 
@@ -1407,17 +1413,24 @@ export class AccountStrategyViewService {
     return this.getStrategyDetail(dto.userId, strategyInstanceId)
   }
 
-  async deleteStrategy(userId: string, strategyInstanceId: string): Promise<void> {
+  async deleteStrategy(
+    userId: string,
+    strategyInstanceId: string,
+    options: DeleteStrategyOptions = { archiveLinkedConversations: true },
+  ): Promise<void> {
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
+      this.logDeleteRejected({ userId, strategyInstanceId }, 'strategy_not_found')
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
     const isOwner = row.createdBy === userId
     if (!isOwner) {
+      this.logDeleteRejected({ userId, strategyInstanceId, ownerId: row.createdBy }, 'owner_mismatch')
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
     if (row.status === 'running') {
+      this.logDeleteRejected({ userId, strategyInstanceId, status: row.status }, 'strategy_running')
       throw new DomainException('account_strategy.delete_running_forbidden', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
@@ -1428,7 +1441,7 @@ export class AccountStrategyViewService {
       await this.assertNoRuntimeRiskBeforeDelete(userId, row, strategyInstanceId)
     }
 
-    await this.repo.deleteStrategyForUser(userId, strategyInstanceId)
+    await this.repo.deleteStrategyForUser(userId, strategyInstanceId, options)
   }
 
   private async assertNoRuntimeRiskBeforeDelete(
@@ -1441,6 +1454,7 @@ export class AccountStrategyViewService {
     if (account) {
       const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
       if (openPositions.length > 0) {
+        this.logDeleteRejected({ userId, strategyInstanceId, accountId: account.id, openPositionsCount: openPositions.length }, 'open_positions')
         throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
           code: ErrorCode.BAD_REQUEST,
           status: HttpStatus.BAD_REQUEST,
@@ -1450,6 +1464,7 @@ export class AccountStrategyViewService {
     }
 
     if (!this.tradingService) {
+      this.logDeleteRejected({ userId, strategyInstanceId }, 'trading_service_unavailable')
       throw new DomainException('account_strategy.trading_service_unavailable', {
         code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
         status: HttpStatus.SERVICE_UNAVAILABLE,
@@ -1482,12 +1497,21 @@ export class AccountStrategyViewService {
     )
     const riskyOrders = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled')
     if (riskyOrders.length > 0) {
+      this.logDeleteRejected({ userId, strategyInstanceId, openOrdersCount: riskyOrders.length }, 'open_orders')
       throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { strategyInstanceId, openOrdersCount: riskyOrders.length },
       })
     }
+  }
+
+  private logDeleteRejected(input: Record<string, unknown>, reason: string): void {
+    this.logger.warn({
+      module: 'AccountStrategyViewService.deleteStrategy',
+      input,
+      reason,
+    })
   }
 
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {

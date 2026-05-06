@@ -14,7 +14,6 @@ import type {
 } from './api'
 
 import {
-  deleteStrategyById as deleteMockStrategyById,
   listStrategies as listMockStrategies,
   updateStrategyStatus as updateMockStrategyStatus,
 } from '@/components/account/ai-quant-strategy-store'
@@ -28,7 +27,6 @@ import {
   apiCall,
   optionalAuthHeaders,
   requireAuthHeaders,
-  shouldFallbackDeleteAccountAiQuantMock,
   shouldFallbackToAccountAiQuantMock,
   unwrapResponse,
   validateId,
@@ -280,24 +278,19 @@ export async function deleteAccountAiQuantStrategy(
   strategyId: string,
   userId: string,
 ): Promise<void> {
-  try {
-    return await apiCall(async () => {
-      validateId(strategyId, 'strategy ID')
-      if (!userId?.trim()) {
-        throw new ApiError('userId is required', 'INVALID_INPUT')
-      }
+  return apiCall(async () => {
+    validateId(strategyId, 'strategy ID')
+    if (!userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
 
-      const search = new URLSearchParams({ userId: userId.trim() })
-      const response = await fetch(
-        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
-        { method: 'DELETE', headers: buildAccountAiQuantHeaders(userId.trim()) },
-      )
-      await parseAccountAiQuantJson(response, '删除策略失败')
-    }, 'DELETE_ACCOUNT_AI_QUANT_STRATEGY')
-  } catch (error) {
-    if (!shouldFallbackDeleteAccountAiQuantMock(error)) throw error
-    deleteMockStrategyById(strategyId)
-  }
+    const search = new URLSearchParams({ userId: userId.trim() })
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+      { method: 'DELETE', headers: buildAccountAiQuantHeaders(userId.trim()) },
+    )
+    await parseAccountAiQuantJson(response, '删除策略失败')
+  }, 'DELETE_ACCOUNT_AI_QUANT_STRATEGY')
 }
 
 export async function deployAccountAiQuantStrategy(

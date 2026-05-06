@@ -124,7 +124,7 @@ describe('accountStrategyViewController', () => {
     await controller.remove('inst-1', 'Bearer token', 'caller-u1')
 
     expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
-    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1')
+    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1', { archiveLinkedConversations: true })
   })
 
   it('injects caller userId into deployment leverage update dto', async () => {

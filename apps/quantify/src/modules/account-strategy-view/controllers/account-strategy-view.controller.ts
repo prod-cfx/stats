@@ -165,6 +165,6 @@ export class AccountStrategyViewController {
     @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<void> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
-    return this.service.deleteStrategy(userId, id)
+    return this.service.deleteStrategy(userId, id, { archiveLinkedConversations: true })
   }
 }

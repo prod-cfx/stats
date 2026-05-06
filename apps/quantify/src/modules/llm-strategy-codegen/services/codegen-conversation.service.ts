@@ -484,7 +484,7 @@ export class CodegenConversationService {
     }
 
     if (options.deleteStoppedStrategy) {
-      await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId)
+      await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId, { archiveLinkedConversations: false })
     }
 
     await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)

@@ -91,7 +91,7 @@ describe('deleteAccountAiQuantStrategy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('falls back to local delete only when fallback is explicitly enabled and network error is transient', async () => {
+  it('never falls back to local delete even when fallback is explicitly enabled and network error is transient', async () => {
     process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK = 'true'
 
     const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'))
@@ -99,8 +99,8 @@ describe('deleteAccountAiQuantStrategy', () => {
 
     const { deleteAccountAiQuantStrategy } = await import('./api')
 
-    await expect(deleteAccountAiQuantStrategy('strategy-2', 'user-2')).resolves.toBeUndefined()
-    expect(deleteMockStrategyById).toHaveBeenCalledWith('strategy-2')
+    await expect(deleteAccountAiQuantStrategy('strategy-2', 'user-2')).rejects.toThrow('fetch failed')
+    expect(deleteMockStrategyById).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
