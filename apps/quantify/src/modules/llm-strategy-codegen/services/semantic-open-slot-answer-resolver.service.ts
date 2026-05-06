@@ -82,6 +82,7 @@ export class SemanticOpenSlotAnswerResolverService {
   constructor(
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
     private readonly seedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
+    private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
   ) {}
 
   resolve(input: SemanticOpenSlotAnswerResolverInput): SemanticOpenSlotAnswerResolverResult {
@@ -102,7 +103,38 @@ export class SemanticOpenSlotAnswerResolverService {
       }
     }
 
+    const symbolAnswer = this.resolveSymbolAnswer(input.currentState, input.message)
+    if (symbolAnswer) {
+      return symbolAnswer
+    }
+
     return fulfillSemanticFragment(input.currentState, this.seedExtractor.extract(input.message))
+  }
+
+  private resolveSymbolAnswer(state: SemanticState, message: string): SemanticOpenSlotAnswerResolverResult | null {
+    const symbolSlot = state.contextSlots.symbol
+    if (symbolSlot?.status !== 'open') {
+      return null
+    }
+
+    const resolution = this.symbolResolver.resolve(message)
+    if (!resolution) {
+      return null
+    }
+
+    return {
+      consumed: true,
+      nextState: {
+        ...state,
+        contextSlots: {
+          ...state.contextSlots,
+          symbol: createLockedSymbolContextSlot(resolution, this.symbolResolver),
+        },
+      },
+      answer: {},
+      closedSlotKeys: ['symbol'],
+      closedSlots: [{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }],
+    }
   }
 }
 
@@ -315,20 +347,7 @@ function createLockedContextSlot(
   value: PatchContextSlotValue,
 ): SemanticSlotState | null {
   if (field === 'symbol' && isMarketInstrumentSymbolResolution(value)) {
-    return {
-      slotKey: field,
-      fieldPath: `contextSlots.${field}`,
-      value: value.value,
-      status: 'locked',
-      priority: 'context',
-      questionHint: contextQuestionHint(field),
-      affectsExecution: true,
-      evidence: {
-        text: value.evidenceText,
-        source: value.source,
-      },
-      contracts: [marketInstrumentSymbolResolver.buildContextContract(value)],
-    }
+    return createLockedSymbolContextSlot(value, marketInstrumentSymbolResolver)
   }
 
   if (field === 'symbol' && isStructuredSymbolContextValue(value)) {
@@ -365,6 +384,26 @@ function createLockedContextSlot(
       text: String(value),
       source: 'user_explicit',
     },
+  }
+}
+
+function createLockedSymbolContextSlot(
+  resolution: MarketInstrumentSymbolResolution,
+  symbolResolver: MarketInstrumentSymbolResolverService,
+): SemanticSlotState {
+  return {
+    slotKey: 'symbol',
+    fieldPath: 'contextSlots.symbol',
+    value: resolution.value,
+    status: 'locked',
+    priority: 'context',
+    questionHint: contextQuestionHint('symbol'),
+    affectsExecution: true,
+    evidence: {
+      text: resolution.evidenceText,
+      source: resolution.source,
+    },
+    contracts: [symbolResolver.buildContextContract(resolution)],
   }
 }
 

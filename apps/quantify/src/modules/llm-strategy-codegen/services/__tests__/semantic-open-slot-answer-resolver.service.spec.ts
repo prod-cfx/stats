@@ -661,6 +661,99 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
 describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
   const service = new SemanticOpenSlotAnswerResolverService(undefined, new SemanticSeedExtractorService())
 
+  it('locks an open symbol context slot from an inferred symbol answer', () => {
+    const state = stateWithMissingEntry()
+    state.contextSlots.symbol = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH',
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({})
+    expect(result.closedSlotKeys).toEqual(['symbol'])
+    expect(result.closedSlots).toEqual([{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }])
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH',
+        source: 'inferred',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDT',
+          kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                symbol: 'ETHUSDT',
+                base: 'ETH',
+                quote: 'USDT',
+                source: 'inferred',
+                quoteSource: 'default_usdt',
+              }),
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
+  it('locks an open symbol context slot from an explicit usdc symbol answer', () => {
+    const state = stateWithMissingEntry()
+    state.contextSlots.symbol = {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择标的。',
+      affectsExecution: true,
+    }
+
+    const result = service.resolve({
+      currentState: state,
+      message: 'ETH usdc',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDC',
+      status: 'locked',
+      evidence: {
+        text: 'ETH usdc',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDC',
+          params: expect.objectContaining({
+            symbol: 'ETHUSDC',
+            base: 'ETH',
+            quote: 'USDC',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
   it('consumes a complete entry trigger fragment for a missing entry slot', () => {
     const result = service.resolve({
       currentState: stateWithMissingEntry(),
