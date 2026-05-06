@@ -6,10 +6,19 @@ export interface AtomicRuntimeRequirements {
 export type SemanticRuntimeState = Record<string, Record<string, unknown>>
 
 export function buildSemanticRuntimeState(stateKeys: readonly string[]): SemanticRuntimeState {
-  return uniqueStrings(stateKeys).reduce<SemanticRuntimeState>((state, key) => {
-    state[key] = {}
-    return state
-  }, {})
+  return ensureSemanticRuntimeStateKeys(createNullPrototypeRecord(), stateKeys)
+}
+
+export function ensureSemanticRuntimeStateKeys(
+  state: SemanticRuntimeState,
+  stateKeys: readonly string[],
+): SemanticRuntimeState {
+  uniqueStrings(stateKeys).forEach((key) => {
+    if (!hasOwn(state, key)) {
+      state[key] = createNullPrototypeRecord()
+    }
+  })
+  return state
 }
 
 export function readAtomicRuntimeRequirementsFromSnapshot(snapshot: unknown): AtomicRuntimeRequirements | null {
@@ -78,4 +87,14 @@ function readStringArray(value: unknown): string[] {
 
 function uniqueStrings(values: readonly string[]): string[] {
   return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)))
+}
+
+function hasOwn(record: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key)
+}
+
+function createNullPrototypeRecord(): Record<string, Record<string, unknown>>
+function createNullPrototypeRecord(): Record<string, unknown>
+function createNullPrototypeRecord(): Record<string, unknown> {
+  return Object.create(null) as Record<string, unknown>
 }

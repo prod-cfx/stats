@@ -16,6 +16,7 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { normalizeExactCode, toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import {
   buildSemanticRuntimeState,
+  ensureSemanticRuntimeStateKeys,
   readAtomicRuntimeRequirementsFromSnapshot,
 } from '@/modules/strategy-runtime/semantic-runtime-state.util'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
@@ -943,10 +944,7 @@ export class BacktestRunnerService {
 
     const existing = store.get(symbol)
     if (existing) {
-      stateKeys.forEach((stateKey) => {
-        existing[stateKey] ??= {}
-      })
-      return existing
+      return ensureSemanticRuntimeStateKeys(existing, stateKeys)
     }
 
     const semanticRuntimeState = buildSemanticRuntimeState(stateKeys)
