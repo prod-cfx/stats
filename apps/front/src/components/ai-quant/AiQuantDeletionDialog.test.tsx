@@ -81,18 +81,38 @@ describe('AiQuantDeletionDialog', () => {
     expect(primary?.textContent).toContain('删除会话和策略')
   })
 
-  it('no-conversation shows "删除策略记录" / "保留为只读" and no "取消" text', async () => {
+  it('no-conversation default (unchecked): primary "保留为只读", secondary "取消", checkbox shows "彻底删除策略记录"', async () => {
     await render({
       kind: 'no-conversation',
       conversation: null,
+      deleteStoppedStrategy: false,
       onKeepAsViewOnly: jest.fn(),
     })
 
     const dialog = container.querySelector('[role="dialog"]')
     expect(dialog).toBeTruthy()
-    expect(dialog?.textContent).not.toContain('取消')
-    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')?.textContent).toContain('删除策略记录')
-    expect(container.querySelector('[data-testid="ai-quant-deletion-secondary"]')?.textContent).toContain('保留为只读')
+    expect(dialog?.textContent).toContain('策略广场')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')?.textContent).toContain('保留为只读')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-secondary"]')?.textContent).toContain('取消')
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')
+    expect(checkbox).toBeTruthy()
+    expect(checkbox?.checked).toBe(false)
+    expect(dialog?.textContent).toContain('彻底删除策略记录（不可恢复）')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-destructive-warning"]')).toBeNull()
+  })
+
+  it('no-conversation checked: primary swaps to "彻底删除策略" with destructive warning', async () => {
+    await render({
+      kind: 'no-conversation',
+      conversation: null,
+      deleteStoppedStrategy: true,
+      onKeepAsViewOnly: jest.fn(),
+    })
+
+    expect(container.querySelector('[data-testid="ai-quant-deletion-primary"]')?.textContent).toContain('彻底删除策略')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-secondary"]')?.textContent).toContain('取消')
+    const warning = container.querySelector('[data-testid="ai-quant-deletion-destructive-warning"]')
+    expect(warning?.textContent).toContain('此操作不可恢复')
   })
 
   it('renders errorMessage', async () => {

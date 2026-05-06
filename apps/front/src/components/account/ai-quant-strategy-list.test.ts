@@ -352,7 +352,7 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: true })
   })
 
-  it('no-conversation: keep-as-view-only does not delete the strategy record', async () => {
+  it('no-conversation default (unchecked): primary "保留为只读" sets viewOnlyAt without deleting', async () => {
     mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
 
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
@@ -366,21 +366,24 @@ describe('AiQuantStrategyList primary summary', () => {
 
     const dialog = container.querySelector('[role="dialog"]')
     expect(dialog).toBeTruthy()
-    expect(dialog?.textContent).not.toContain('取消')
+    // 文案带「策略广场」来源说明。
+    expect(dialog?.textContent).toContain('策略广场')
 
+    // 默认未勾：主按钮 = 保留为只读，副按钮 = 取消，未显示破坏性警告。
     const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
-    expect(primary?.textContent).toContain('删除策略记录')
+    expect(primary?.textContent).toContain('保留为只读')
     const secondary = container.querySelector('[data-testid="ai-quant-deletion-secondary"]')
-    expect(secondary?.textContent).toContain('保留为只读')
+    expect(secondary?.textContent).toContain('取消')
+    expect(container.querySelector('[data-testid="ai-quant-deletion-destructive-warning"]')).toBeNull()
 
     await act(async () => {
-      secondary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
     expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: false })
   })
 
-  it('no-conversation: primary deletes the strategy record', async () => {
+  it('no-conversation checked: primary swaps to "彻底删除策略" and archives the strategy', async () => {
     mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
 
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
@@ -392,7 +395,20 @@ describe('AiQuantStrategyList primary summary', () => {
     })
     await act(async () => {})
 
+    // 勾选「彻底删除策略记录（不可恢复）」复选框。
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')
+    expect(checkbox).toBeTruthy()
+    await act(async () => {
+      checkbox!.click()
+    })
+    await act(async () => {})
+
+    // 主按钮文案与样式切换；展示破坏性警告条。
     const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    expect(primary?.textContent).toContain('彻底删除策略')
+    const warning = container.querySelector('[data-testid="ai-quant-deletion-destructive-warning"]')
+    expect(warning?.textContent).toContain('此操作不可恢复')
+
     await act(async () => {
       primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })

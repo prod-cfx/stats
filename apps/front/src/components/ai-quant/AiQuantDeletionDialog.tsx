@@ -48,8 +48,8 @@ function resolveContent(kind: AiQuantDeletionDialogKind): DialogContent {
       }
     case 'no-conversation':
       return {
-        title: '删除策略记录',
-        description: '该策略没有关联会话，可选择保留为只读或彻底删除策略记录。',
+        title: '删除策略',
+        description: '该策略由「策略广场」直接运行生成，没有关联 AI Quant 会话。默认保留在我的策略列表中（仅可查看详情）；如不再需要可勾选下方选项彻底删除。',
       }
     case 'with-conversation':
     default:
@@ -140,36 +140,67 @@ export function AiQuantDeletionDialog({
 
   const { title, description } = resolveContent(kind)
 
+  // 视觉风格预设：safe = 绿/紫主按钮（默认 Enter 触发的安全操作），
+  // destructive_primary = 红色破坏性主按钮，destructive_secondary = 红色破坏性副按钮，
+  // neutral_secondary = 中性边框副按钮（取消/关闭）。
+  const SAFE_PRIMARY_CLASS = 'rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60'
+  const DESTRUCTIVE_PRIMARY_CLASS = 'rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60'
+  const DESTRUCTIVE_SECONDARY_CLASS = 'rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 disabled:cursor-not-allowed disabled:opacity-60'
+  const NEUTRAL_SECONDARY_CLASS = 'rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60'
+
   let primaryLabel: string | null = null
-  let primaryClassName = 'rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60'
+  let primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
   let primaryHandler: (() => void) | null = null
+
+  let secondaryLabel: string | null = '取消'
+  let secondaryClassName = NEUTRAL_SECONDARY_CLASS
+  let secondaryHandler: (() => void) | null = onClose
 
   if (kind === 'running') {
     primaryLabel = '前往运行策略'
-    primaryClassName = 'rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60'
+    primaryClassName = SAFE_PRIMARY_CLASS
     primaryHandler = onGoToRunningStrategy ?? null
+    secondaryLabel = '关闭'
+    secondaryHandler = onClose
   } else if (kind === 'with-conversation') {
     primaryLabel = deleteStoppedStrategy ? '删除会话和策略' : '仅删除会话'
+    primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
     primaryHandler = onConfirm
+    secondaryLabel = '取消'
+    secondaryHandler = onClose
   } else if (kind === 'no-conversation') {
-    primaryLabel = '删除策略记录'
-    primaryHandler = onConfirm
-  }
-
-  let secondaryLabel: string | null = '取消'
-  let secondaryHandler: (() => void) | null = onClose
-
-  if (kind === 'no-conversation') {
-    secondaryLabel = '保留为只读'
-    secondaryHandler = onKeepAsViewOnly ?? null
-  } else if (kind === 'running') {
-    secondaryLabel = '关闭'
+    // plaza 分支：默认动作随复选框切换。
+    // - 未勾选：主按钮「保留为只读」（safe），点击设置 viewOnlyAt → onKeepAsViewOnly
+    // - 已勾选：主按钮「彻底删除策略」（destructive），点击归档 strategy → onConfirm
+    // 副按钮固定为「取消」，关闭弹框不做任何操作。
+    if (deleteStoppedStrategy) {
+      primaryLabel = '彻底删除策略'
+      primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
+      primaryHandler = onConfirm
+    } else {
+      primaryLabel = '保留为只读'
+      primaryClassName = SAFE_PRIMARY_CLASS
+      primaryHandler = onKeepAsViewOnly ?? null
+    }
+    secondaryLabel = '取消'
     secondaryHandler = onClose
   }
 
   const confirmDisabled = pending || kind === 'loading' || kind === 'unknown'
-  const showCheckbox = kind === 'with-conversation'
+  // with-conversation 与 no-conversation 都暴露复选框：
+  // - with-conversation：勾选 = 在删除会话之外同时归档策略
+  // - no-conversation（plaza）：勾选 = 把主按钮从「保留为只读」切换到「彻底删除策略」
+  const showCheckbox = kind === 'with-conversation' || kind === 'no-conversation'
   const showInfoBlock = kind === 'with-conversation' || kind === 'running' || kind === 'no-conversation'
+  const checkboxLabel = kind === 'no-conversation'
+    ? {
+        main: '彻底删除策略记录（不可恢复）',
+        hint: '勾选后该策略将从我的策略列表移除，不能再次运行。',
+      }
+    : {
+        main: '同时删除已停止策略记录',
+        hint: '删除后该策略将从我的策略列表移除，不能再次运行。',
+      }
 
   const handleBackdropClick = () => {
     if (!pending && !confirmInFlightRef.current) onClose()
@@ -243,9 +274,9 @@ export function AiQuantDeletionDialog({
                 onChange={event => onToggleDeleteStoppedStrategy(event.target.checked)}
               />
               <span>
-                同时删除已停止策略记录
+                {checkboxLabel.main}
                 <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
-                  删除后该策略将从我的策略列表移除，不能再次运行。
+                  {checkboxLabel.hint}
                 </span>
               </span>
             </label>
@@ -286,7 +317,7 @@ export function AiQuantDeletionDialog({
               data-testid="ai-quant-deletion-secondary"
               disabled={pending}
               onClick={secondaryHandler}
-              className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              className={secondaryClassName}
             >
               {secondaryLabel}
             </button>
