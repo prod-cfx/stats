@@ -259,6 +259,66 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(first.ir.orderPrograms[0]?.levelSetRef).not.toBe(second.ir.orderPrograms[0]?.levelSetRef)
   })
 
+  it('derives fixed-range level count from absolute spacing when grid count is absent', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'perp_neutral',
+          levelSet: {
+            lower: 79200,
+            upper: 80250,
+            absoluteSpacing: 100,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 20,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', baseTimeframe: '15m', positionPct: 10 },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        spacing: { mode: 'absolute', value: 100 },
+        levelsPerSide: { down: 0, up: 10 },
+      }),
+    ])
+    expect(result.ir.orderPrograms[0]).toEqual(expect.objectContaining({
+      maxWorkingOrders: 11,
+    }))
+  })
+
   it('keeps contract order programs exclusive from legacy grid decision rules', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -590,6 +650,85 @@ describe('canonicalSpecV2IrCompilerService', () => {
       expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(levelLength)
     },
   )
+
+  it('derives centered-percent interval count from percent spacing when grid count is absent', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const canonicalSpec = {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [],
+      orderPrograms: [
+        {
+          id: 'contract-order-program-grid',
+          kind: 'contract_order_program',
+          mode: 'spot',
+          levelSet: {
+            mode: 'centered_percent_range',
+            centerTiming: 'deployment',
+            centerSource: 'last_price',
+            halfRangePct: 0.4,
+            spacingPct: 0.08,
+            spacingMode: 'arithmetic',
+          },
+          budget: {
+            mode: 'per_order_quote',
+            value: 10,
+            asset: 'USDT',
+          },
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+          cancelOnStop: true,
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.levelSets).toEqual([
+      expect.objectContaining({
+        spacing: { mode: 'pct', value: 0.08 },
+        levelsPerSide: { down: 5, up: 5 },
+      }),
+    ])
+
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const levelSetExpr = ast.exprPool.find(expr => expr.nodeType === 'level_set')
+    const exprValues = evaluateExprPool(
+      {
+        bars: [{ open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 }],
+        baseTimeframeBar: { close: 100, open: 100, high: 101, low: 99, volume: 1, timestamp: 1 },
+      },
+      ast.exprPool as any,
+      ast.topology.exprOrder,
+      ast.executionModel as any,
+    )
+    const evaluatedLevels = levelSetExpr ? exprValues[levelSetExpr.id] : null
+
+    expect((evaluatedLevels as { levels: number[] }).levels).toHaveLength(11)
+  })
 
   it.each([
     [

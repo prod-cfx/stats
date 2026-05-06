@@ -7,6 +7,7 @@ import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
+import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
 
 type StrategyClarificationInput = StrategyLogicSnapshot
 
@@ -26,6 +27,10 @@ const STATE_GATE_PATTERN = /趋势|震荡|波动|regime|volatility|trend/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
+  constructor(
+    private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+  ) {}
+
   detectFromAmbiguities(input: {
     executionContext: StrategyExecutionContextResolution
     atomicResolution: AtomicIntentResolution
@@ -148,7 +153,10 @@ export class StrategyClarificationRulesService {
           reason: semanticMetadata.reason,
           field: semanticMetadata.field,
           blocking: true,
-          question: ambiguity.question ?? ambiguity.message,
+          question: this.semanticQuestionRenderer.render({
+            slotKey,
+            fallback: ambiguity.question ?? ambiguity.message,
+          }),
           status: 'pending',
           slotId,
           slotKey,
@@ -172,7 +180,10 @@ export class StrategyClarificationRulesService {
           ...(ambiguity.choices?.length ? { allowedAnswers: ambiguity.choices } : {}),
           ...(typeof ambiguity.priority === 'number' ? { priority: ambiguity.priority } : {}),
           blocking: true,
-          question: ambiguity.question ?? this.renderAtomicForkQuestion(ambiguity),
+          question: this.semanticQuestionRenderer.render({
+            slotKey: ambiguity.slotKey,
+            fallback: ambiguity.question ?? this.renderAtomicForkQuestion(ambiguity),
+          }),
           status: 'pending',
           slotId: ambiguity.slotId ?? buildSemanticSlotId({
             slotKey: ambiguity.slotKey,

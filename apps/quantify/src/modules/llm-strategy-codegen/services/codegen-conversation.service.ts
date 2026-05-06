@@ -107,6 +107,8 @@ import {
   type InferredConfirmationSemanticDefaults,
 } from './inferred-confirmation-classifier.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
+import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
+import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 interface GenerationOptions {
@@ -161,6 +163,14 @@ const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
 const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
+const STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS = new Set([
+  'contract.shape.price.level_set.density',
+  'contract.requirement.price.define.level_set',
+  'contract.shape.price.level_set.spacing_conflict',
+])
+const STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS = new Set([
+  ...STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS,
+])
 const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
@@ -216,6 +226,8 @@ export class CodegenConversationService {
     private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService()),
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
+    private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+    private readonly semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService = new SemanticOpenSlotAnswerResolverService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
@@ -1308,6 +1320,36 @@ export class CodegenConversationService {
       effectiveClarificationAnswers,
     )
     const baseConstraintPack = this.readConstraintPack(session.constraintPack)
+    const structuredOpenSlotAnswerState = this.resolveStructuredSemanticOpenSlotAnswers(
+      rawSemanticStateAfterAnswers,
+      activeClarificationState,
+      effectiveClarificationAnswers,
+    )
+    if (structuredOpenSlotAnswerState) {
+      return this.continueWithResolvedSemanticOpenSlotAnswer({
+        session,
+        semanticState: structuredOpenSlotAnswerState,
+        message: dto.message,
+        userId: sessionUserId,
+        constraintPack: baseConstraintPack,
+        guideConfig: dto.guideConfig,
+      })
+    }
+    const openSlotAnswer = this.semanticOpenSlotAnswerResolver.resolve({
+      currentState: rawSemanticStateAfterAnswers,
+      message: dto.message,
+      clarificationState: activeClarificationState,
+    })
+    if (openSlotAnswer.consumed) {
+      return this.continueWithResolvedSemanticOpenSlotAnswer({
+        session,
+        semanticState: openSlotAnswer.nextState,
+        message: dto.message,
+        userId: sessionUserId,
+        constraintPack: baseConstraintPack,
+        guideConfig: dto.guideConfig,
+      })
+    }
     const preReadinessSupportGateResponse = await this.handleSemanticSupportGateForExistingSession({
       session,
       semanticState: rawSemanticStateAfterAnswers,
@@ -1579,6 +1621,119 @@ export class CodegenConversationService {
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+  }
+
+  private async continueWithResolvedSemanticOpenSlotAnswer(args: {
+    session: PersistedConversationSessionForContinue
+    semanticState: SemanticState
+    message: string
+    userId: string
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+    guideConfig?: CodegenGuideConfigDto
+  }): Promise<CodegenSessionResponseDto> {
+    const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+      args.message,
+      args.semanticState,
+      args.constraintPack.recommendationStyle,
+    )
+    const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
+      session: args.session,
+      semanticState: args.semanticState,
+      message: args.message,
+      userId: args.userId,
+      constraintPack: args.constraintPack,
+      guidePrompt,
+      recommendationStyle,
+    })
+    if (supportGateResponse.response) {
+      return supportGateResponse.response
+    }
+
+    const semanticStateAfterSupport = this.normalizeSemanticContractReadiness(supportGateResponse.semanticState)
+    const logicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticStateAfterSupport, {})
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, logicSnapshot, {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterSupport.position),
+      }),
+    )
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const clarificationState = semanticArtifacts.clarificationState
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: semanticArtifacts.executionContext.context,
+      semanticState: reducedSemanticState,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const nextConstraintPack = this.withGuidePrompt(args.constraintPack, guidePrompt, recommendationStyle)
+    const decision = this.buildStrategyDecision({
+      checklist: this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {}),
+      semanticState: reducedSemanticState,
+      clarification: semanticArtifacts,
+      effectiveBlockingReasons: semanticArtifacts.blockingReasons,
+      constraintPack: nextConstraintPack,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : semanticArtifacts.clarificationPrompt
+    const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+      semanticState: reducedSemanticState,
+      clarificationState,
+      normalization,
+      decisionKind: decision.kind,
+      semanticReadyForGenerate,
+    })
+    const assistantPrompt = deterministicAuthority === 'clarification'
+      ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+      : deterministicAuthority === 'decision'
+        ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+        : deterministicAuthority === 'normalization'
+          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+          : deterministicAuthority === 'confirm_gate'
+            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
+            : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
+    const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+    const historyAfterOpenSlotAnswer = this.appendConversationHistory(
+      args.constraintPack.conversationHistory ?? [],
+      args.message,
+      assistantPrompt,
+    )
+    const terminalPlannerEditArtifactReset = this.stateMachine.isTerminalStatus(args.session.status)
+      ? this.buildSemanticEditArtifactReset(reducedSemanticState)
+      : {}
+
+    await this.sessionsRepo.updateSession(args.session.id, {
+      ...this.stateMachine.buildConversationUpdate({
+        status: targetStatus,
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterOpenSlotAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }),
+      ...terminalPlannerEditArtifactReset,
+    } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+
+    const response = this.finalizeSessionResponse({
+      id: args.session.id,
+      status: targetStatus,
+      missingFields: [],
+      ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'decision'
+        ? {
+            specDesc,
+            canonicalDigest,
+          }
+        : {}),
+      ...(deterministicAuthority === 'normalization' ? { specDesc } : {}),
+      assistantPrompt,
+      clarificationState,
+    })
+    return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
   }
 
   private async handleUserSubmittedScriptCode(
@@ -2400,6 +2555,140 @@ export class CodegenConversationService {
     }
 
     return nextState
+  }
+
+  private resolveStructuredSemanticOpenSlotAnswers(
+    currentState: SemanticState,
+    clarificationState: StrategyClarificationState | null,
+    answers?: Record<string, string>,
+  ): SemanticState | null {
+    if (!answers || Object.keys(answers).length === 0) {
+      return null
+    }
+
+    let nextState = currentState
+    let consumed = false
+
+    for (const item of clarificationState?.items ?? []) {
+      const targetSlot = this.findStructuredLevelSetOpenSlot(nextState, item)
+      if (!targetSlot || !STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS.has(targetSlot.slotKey)) {
+        continue
+      }
+
+      const rawAnswer = this.readClarificationAnswerForItem(answers, item)
+      if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
+        continue
+      }
+
+      const result = this.semanticOpenSlotAnswerResolver.resolve({
+        currentState: nextState,
+        message: rawAnswer.trim(),
+        clarificationState: {
+          ...clarificationState,
+          items: [{
+            ...item,
+            status: 'pending',
+            slotKey: targetSlot.slotKey,
+            fieldPath: targetSlot.fieldPath,
+            slotId: buildSemanticSlotId(targetSlot),
+          }],
+        },
+      })
+      if (!result.consumed) {
+        continue
+      }
+
+      nextState = result.nextState
+      consumed = true
+    }
+
+    return consumed ? nextState : null
+  }
+
+  private findStructuredLevelSetOpenSlot(
+    semanticState: SemanticState,
+    item: StrategyClarificationItem,
+  ): SemanticSlotState | null {
+    const itemSlotKey = this.readStructuredLevelSetSlotKey(item)
+    if (itemSlotKey && !STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS.has(itemSlotKey)) {
+      return null
+    }
+
+    const openSlots = this.collectStructuredLevelSetOpenSlots(semanticState)
+    const bySlotId = typeof item.slotId === 'string'
+      ? openSlots.find(slot => buildSemanticSlotId(slot) === item.slotId)
+      : undefined
+    if (bySlotId) {
+      return bySlotId
+    }
+
+    const itemFieldPath = typeof item.fieldPath === 'string'
+      ? item.fieldPath
+      : typeof item.field === 'string' ? item.field : undefined
+    if (itemSlotKey && itemFieldPath) {
+      return openSlots.find(slot => slot.slotKey === itemSlotKey && slot.fieldPath === itemFieldPath) ?? null
+    }
+
+    if (itemSlotKey) {
+      return openSlots.find(slot => slot.slotKey === itemSlotKey) ?? null
+    }
+
+    return null
+  }
+
+  private collectStructuredLevelSetOpenSlots(semanticState: SemanticState): SemanticSlotState[] {
+    const slots: SemanticSlotState[] = []
+    for (const trigger of semanticState.triggers) {
+      slots.push(...trigger.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+    for (const action of semanticState.actions) {
+      slots.push(...(action.openSlots ?? []).filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+    for (const risk of semanticState.risk) {
+      slots.push(...risk.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+    if (semanticState.position?.openSlots?.length) {
+      slots.push(...semanticState.position.openSlots.filter(slot => this.isStructuredLevelSetOpenSlot(slot)))
+    }
+
+    return slots
+  }
+
+  private isStructuredLevelSetOpenSlot(slot: SemanticSlotState): boolean {
+    return slot.status === 'open' && STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS.has(slot.slotKey)
+  }
+
+  private readStructuredLevelSetSlotKey(item: StrategyClarificationItem): string | null {
+    if (typeof item.slotKey === 'string' && item.slotKey.length > 0) {
+      return item.slotKey
+    }
+
+    if (typeof item.key === 'string' && item.key.startsWith('semantic.')) {
+      return item.key.replace(/^semantic\./u, '')
+    }
+
+    return null
+  }
+
+  private readClarificationAnswerForItem(
+    answers: Record<string, string>,
+    item: StrategyClarificationItem,
+  ): string | undefined {
+    const candidateKeys = [
+      item.key,
+      item.field,
+      item.slotId,
+      item.slotKey,
+    ].filter((key): key is string => typeof key === 'string' && key.length > 0)
+
+    for (const key of candidateKeys) {
+      const answer = answers[key]
+      if (typeof answer === 'string') {
+        return answer
+      }
+    }
+
+    return undefined
   }
 
   /**
@@ -3295,7 +3584,10 @@ export class CodegenConversationService {
       reason,
       field,
       blocking: true,
-      question: slot.questionHint,
+      question: this.semanticQuestionRenderer.render({
+        slotKey: slot.slotKey,
+        fallback: slot.questionHint,
+      }),
       status: 'pending',
       slotId: buildSemanticSlotId(slot),
       slotKey: slot.slotKey,
@@ -7230,7 +7522,14 @@ export class CodegenConversationService {
     return {
       normalizedIntent,
       blocked: nextOpenSlot !== null,
-      ...(nextOpenSlot ? { blockerReason: nextOpenSlot.questionHint } : {}),
+      ...(nextOpenSlot
+        ? {
+            blockerReason: this.semanticQuestionRenderer.render({
+              slotKey: nextOpenSlot.slotKey,
+              fallback: nextOpenSlot.questionHint,
+            }),
+          }
+        : {}),
     }
   }
 

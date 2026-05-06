@@ -975,6 +975,53 @@ describe('SemanticAtomInvariantService', () => {
     ]))
   })
 
+  it('passes when percent-spaced fixed grid order programs derive level count without semantic gridCount', () => {
+    const state = buildContractOrderProgramSemanticState()
+    const levelSet = state.triggers[0]?.contracts?.[0]?.capabilities[0]
+    if (levelSet) {
+      levelSet.shape = {
+        lower: 79200,
+        upper: 80200,
+        spacingPct: 0.1,
+        spacingMode: 'arithmetic',
+      }
+    }
+    if (state.actions[0]?.contracts?.[0]) {
+      state.actions[0].contracts[0].requires = []
+    }
+    if (state.position?.contracts?.[0]?.capabilities[0]) {
+      state.position.contracts[0].capabilities = state.position.contracts[0].capabilities.filter(capability =>
+        !(capability.domain === 'capital' && capability.verb === 'allocate'),
+      )
+      state.position = {
+        ...state.position,
+        mode: 'fixed_ratio',
+        value: 10,
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      }
+    }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms : []).toHaveLength(1)
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms?.[0]?.levelSet : null).toEqual(expect.objectContaining({
+      lower: 79200,
+      upper: 80200,
+      spacingPct: 0.1,
+    }))
+    expect(canonicalSpec.version === 2 ? canonicalSpec.orderPrograms?.[0]?.levelSet : null).not.toHaveProperty('gridCount')
+    expect(ir.orderPrograms[0]?.maxWorkingOrders).toBe(13)
+    expect(ast.orderPrograms[0]?.payload.maxWorkingOrders).toBe(13)
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_contract.order_program',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
   it('fails when canonical contract order program drops normalized absolute spacing', () => {
     const state = buildContractOrderProgramSemanticState()
     const { canonicalSpec, ir, ast } = compileFromSemanticState(state)

@@ -151,6 +151,94 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('extracts omitted EMA cross-under exit from prior trigger context', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 时开多；下穿时平多。')
+
+    expect(patch.contextSlots?.timeframe).toBeUndefined()
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', fastPeriod: 7, slowPeriod: 21 }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
+  it('does not extract indicator periods followed by 时 as timeframe context', () => {
+    expect(service.extract('EMA7 上穿 EMA21 时开多。').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('MA20 上穿 MA50 时开多。').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('SMA20 上穿 SMA50 时开多。').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('均线 20 上穿均线 50 时开多。').contextSlots?.timeframe).toBeUndefined()
+  })
+
+  it('does not extract suffix-style moving average periods as timeframe context', () => {
+    expect(service.extract('20日均线上穿50日均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('20 日均线上穿 50 日均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('7日EMA 上穿 21日MA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('50日SMA 下穿 100日SMA 开空，单笔10%').contextSlots?.timeframe).toBeUndefined()
+  })
+
+  it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
+    expect(service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '1h',
+    }))
+    expect(service.extract('15m 周期，价格区间 79200-80200，采用双向网格').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '15m',
+    }))
+    expect(service.extract('4h K线，MA20 上穿 MA50 开多。').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '4h',
+    }))
+  })
+
+  it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
+    const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖出。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+    ]))
+    const macdTriggers = patch.triggers?.filter(trigger => trigger.params?.indicator === 'macd') ?? []
+    expect(macdTriggers).toHaveLength(2)
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
+    expect(macdTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'exit',
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
   it('does not treat trigger quote prices as position sizing in seed text', () => {
     const patch = service.extract('BTC 跌到 60000 USDT 用 10u 开多')
 
@@ -2148,6 +2236,7 @@ describe('SemanticSeedExtractorService', () => {
       ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
       ?.shape
     expect(gridShape).not.toHaveProperty('absoluteSpacing')
+    expect(gridShape).not.toHaveProperty('gridCount')
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contracts: expect.arrayContaining([
@@ -2166,6 +2255,24 @@ describe('SemanticSeedExtractorService', () => {
         ]),
       }),
     ]))
+  })
+
+  it('keeps percent-spaced fixed grid free of synthetic spacing conflicts', () => {
+    const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，每格间距 0.1%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
+    const trigger = patch.triggers?.find(item => item.key === 'grid.range_rebalance')
+    const gridShape = trigger
+      ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
+      ?.shape
+
+    expect(trigger?.openSlots ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'contract.shape.price.level_set.spacing_conflict' }),
+    ]))
+    expect(gridShape).toEqual(expect.objectContaining({
+      lower: 79200,
+      upper: 80200,
+      spacingPct: 0.1,
+    }))
+    expect(gridShape).not.toHaveProperty('gridCount')
   })
 
   it('extracts rolling range-position semantics from the official grid-range template', () => {
@@ -2241,6 +2348,19 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('preserves distinct RSI cross thresholds as separate trigger atoms', () => {
+    const patch = service.extract('RSI14 从 30 下方向上穿回 30 时买入；RSI14 从 50 下方向上穿回 50 时买入。')
+    const rsiCrossOverTriggers = patch.triggers?.filter(trigger =>
+      trigger.key === 'indicator.cross_over'
+      && trigger.phase === 'entry'
+      && trigger.sideScope === 'long'
+      && trigger.params?.indicator === 'rsi',
+    ) ?? []
+
+    expect(rsiCrossOverTriggers).toHaveLength(2)
+    expect(rsiCrossOverTriggers.map(trigger => trigger.params?.value).sort()).toEqual([30, 50])
+  })
+
   it('extracts breakout-tracking semantics from the official breakout template', () => {
     const patch = service.extract('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。入场规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；出场规则：价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，止损 3%，止盈 0.6%。')
 
@@ -2294,6 +2414,9 @@ describe('SemanticSeedExtractorService', () => {
         }),
       }),
     ]))
+    const macdTriggers = patch.triggers?.filter(trigger => trigger.params?.indicator === 'macd') ?? []
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
   })
 
   it('keeps MA price-vs-reference periods local to each clause', () => {
@@ -3072,5 +3195,80 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]))
     }
+  })
+
+  it('does not add close-long semantics for explicit sell then open-short wording', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 卖出开空；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+    ]))
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(patch.actions ?? []).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'open_short',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                shape: expect.objectContaining({
+                  intent: 'open',
+                  side: 'short',
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'close_long',
+      }),
+    ]))
+  })
+
+  it('extracts moving-average compact golden-cross buy and death-cross sell as separate events', () => {
+    const patch = service.extract('EMA7 和 EMA21 金叉买入死叉卖出；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
   })
 })

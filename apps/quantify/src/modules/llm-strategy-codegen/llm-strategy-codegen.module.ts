@@ -30,8 +30,12 @@ import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
 import { SemanticAtomRegistryService } from './services/semantic-atom-registry.service'
+import { SemanticClarificationQuestionRendererService } from './services/semantic-clarification-question-renderer.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
+import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
+import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
+import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
@@ -62,6 +66,8 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     PublishedStrategySnapshotsRepository,
     StaticGuardrailService,
     RuntimeGuardrailService,
+    SemanticEventFrameParserService,
+    SemanticEventFrameProjectorService,
     SemanticSeedExtractorService,
     SemanticSeedStateBuilderService,
     SemanticStateMergeService,
@@ -90,6 +96,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     StrategyIntentResolutionService,
     StrategySummaryObservationService,
     StrategySummaryBuilderService,
+    SemanticClarificationQuestionRendererService,
     StrategyClarificationRulesService,
     StrategyClarificationQuestionService,
     RecommendationIndexService,
@@ -102,6 +109,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticAtomRegistryService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
+    SemanticOpenSlotAnswerResolverService,
     SemanticSupportClassifierService,
     UnsupportedFallbackService,
   ],
