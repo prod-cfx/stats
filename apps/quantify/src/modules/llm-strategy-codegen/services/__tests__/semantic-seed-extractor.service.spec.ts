@@ -625,9 +625,17 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'volume.relative_average',
-        params: expect.objectContaining({ event: 'spike', lookbackBars: 20, multiplier: 1 }),
+        status: 'open',
+        params: expect.objectContaining({ event: 'spike', comparator: 'gt' }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'trigger.volume.relative_average.lookback_bars' }),
+          expect.objectContaining({ slotKey: 'trigger.volume.relative_average.multiplier' }),
+        ]),
       }),
     ]))
+    const volumeTriggers = patch.triggers?.filter(trigger => trigger.key === 'volume.relative_average') ?? []
+    expect(volumeTriggers).toHaveLength(1)
+    expect(volumeTriggers[0]?.params).not.toEqual(expect.objectContaining({ lookbackBars: 20, multiplier: 1 }))
   })
 
   it('extracts relative-average volume threshold as supported trigger atom', () => {
@@ -639,6 +647,9 @@ describe('SemanticSeedExtractorService', () => {
         params: expect.objectContaining({ lookbackBars: 20, multiplier: 2, comparator: 'gt' }),
       }),
     ]))
+    const volumeTrigger = patch.triggers?.find(trigger => trigger.key === 'volume.relative_average')
+    expect(volumeTrigger?.status).toBeUndefined()
+    expect(volumeTrigger?.openSlots ?? []).toEqual([])
   })
 
   it('extracts ATR threshold and filter wording as recognized unsupported trigger atom', () => {
@@ -3499,5 +3510,27 @@ describe('SemanticSeedExtractorService', () => {
     ]))
     expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
     expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
+  })
+
+  it('keeps OR exit children inside logical any-of without standalone exit siblings', () => {
+    const patch = service.extract('SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。')
+    const exitTriggers = patch.triggers?.filter(trigger => trigger.phase === 'exit') ?? []
+
+    expect(exitTriggers).toEqual([
+      expect.objectContaining({
+        key: 'logical.any_of',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({ key: 'indicator.below' }),
+            expect.objectContaining({ key: 'indicator.cross_under' }),
+          ]),
+        }),
+      }),
+    ])
+    expect(exitTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_under', params: expect.objectContaining({ indicator: 'macd' }) }),
+      expect.objectContaining({ key: 'indicator.below' }),
+    ]))
   })
 })

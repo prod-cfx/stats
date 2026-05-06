@@ -42,7 +42,7 @@ export const atomicContractExecutionUpgradeGoldenCases: AtomCoverageGoldenCase[]
   {
     name: 'atomic consecutive candles volume rebound sizing slot',
     message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[3],
-    expectedKeys: ['condition.sequence', 'volume.relative_average', 'confirmation.rebound', 'open_long', 'open_slot:position.sizing'],
+    expectedKeys: ['condition.sequence', 'volume.relative_average', 'confirmation.rebound', 'open_long', 'open_slot:position.sizing', 'open_slot:trigger.volume.relative_average.lookback_bars', 'open_slot:trigger.volume.relative_average.multiplier'],
     expectedRoute: 'open_slots',
   },
   {
@@ -217,11 +217,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    name: 'supported relative-average volume spike',
+    name: 'open-slot relative-average volume spike',
     message: 'OKX 合约 BTCUSDT 15m，放量突破最近 20 根 K 线高点开多，单笔 10%，止损 5%。',
-    expectedKeys: ['volume.relative_average', 'price.breakout_up', 'open_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    expectedKeys: ['volume.relative_average', 'price.breakout_up', 'open_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'open_slot:trigger.volume.relative_average.lookback_bars', 'open_slot:trigger.volume.relative_average.multiplier'],
     forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
-    expectedRoute: 'projection_gate',
+    expectedRoute: 'open_slots',
   },
   {
     name: 'recognized unsupported volume threshold',
@@ -346,11 +346,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'projection_gate',
   },
   {
-    name: 'combo supported plus relative-average volume stays projection gate',
+    name: 'combo supported plus open-slot relative-average volume needs clarification',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时要求成交量放大，MA20 下穿 MA50 平多，单笔 10%，止损 5%。',
-    expectedKeys: ['indicator.cross_over', 'volume.relative_average', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    expectedKeys: ['indicator.cross_over', 'volume.relative_average', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'open_slot:trigger.volume.relative_average.lookback_bars', 'open_slot:trigger.volume.relative_average.multiplier'],
     forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
-    expectedRoute: 'projection_gate',
+    expectedRoute: 'open_slots',
   },
   {
     name: 'combo supported plus atr unsupported blocks whole route',

@@ -275,6 +275,33 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.state.triggers.map(trigger => trigger.support)).toEqual([undefined, undefined])
   })
 
+  it('does not treat raw price indicator aliases as executable MA references', () => {
+    const result = service.classify(baseState({
+      triggers: [
+        {
+          id: 'gate-price-vs-ma',
+          key: 'indicator.above',
+          phase: 'gate',
+          params: {
+            indicator: 'price',
+            referenceRole: 'long_term',
+            'reference.period': 100,
+            reference: { indicator: 'ma', period: 100 },
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+    }))
+
+    expect(result.route).toBe('unsupported_fallback')
+    expect(result.unsupportedAtoms).toEqual([
+      expect.objectContaining({ key: 'indicator.above' }),
+    ])
+  })
+
   it('routes executable moving-average indicator aliases through public classification', () => {
     const result = service.classify(baseState({
       triggers: [{

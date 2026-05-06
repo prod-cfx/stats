@@ -62,10 +62,10 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.mergeSeedTriggers(
+    const triggers = this.atomizeTriggers(this.removeLogicalAnyOfExitChildren(this.mergeSeedTriggers(
       eventFramePatch.triggers ?? [],
       this.extractTriggers(text, aliasContext),
-    ))
+    )))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),
@@ -631,7 +631,7 @@ export class SemanticSeedExtractorService {
       this.pushGridTrigger(text, triggers, seen)
     }
 
-    return this.harmonizeBollingerTriggers(triggers)
+    return this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(triggers))
   }
 
   private extractActions(text: string, triggers: SeedTrigger[]): NonNullable<CodegenSemanticPatch['actions']> {
@@ -1346,7 +1346,7 @@ export class SemanticSeedExtractorService {
         sideScope: /只做多|做多|买入/u.test(segment) ? 'long' : undefined,
         params: key === 'indicator.above'
           ? {
-              indicator: 'price',
+              indicator,
               referenceRole: period >= 20 ? 'long_term' : 'short_term',
               'reference.period': period,
               reference: { indicator, period },
@@ -2608,12 +2608,30 @@ export class SemanticSeedExtractorService {
         key: 'volume.relative_average',
         phase: intent.phase,
         sideScope: intent.sideScope,
+        status: 'open',
+        source: 'user_explicit',
         params: {
           event: 'spike',
-          lookbackBars: 20,
-          multiplier: 1,
           comparator: 'gt',
         },
+        openSlots: [
+          {
+            slotKey: 'trigger.volume.relative_average.lookback_bars',
+            fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量比较窗口，例如过去 20 根 K 线均量。',
+            affectsExecution: true,
+          },
+          {
+            slotKey: 'trigger.volume.relative_average.multiplier',
+            fieldPath: 'triggers[volume.relative_average].params.multiplier',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量倍数，例如高于均量 1.5 倍。',
+            affectsExecution: true,
+          },
+        ],
       })
     }
   }
@@ -2638,13 +2656,17 @@ export class SemanticSeedExtractorService {
     const items: Array<Record<string, unknown>> = []
     const maBreakdown = segment.match(/跌破\s*(MA|EMA)\s*(\d{1,4})/iu)
     if (maBreakdown?.[1] && maBreakdown[2]) {
+      const referenceIndicator = maBreakdown[1].toLowerCase() === 'ema' ? 'ema' : 'ma'
+      const referencePeriod = Number(maBreakdown[2])
       items.push({
         key: 'indicator.below',
         params: {
-          indicator: 'price',
+          indicator: referenceIndicator,
+          referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
+          'reference.period': referencePeriod,
           reference: {
-            indicator: maBreakdown[1].toLowerCase() === 'ema' ? 'ema' : 'ma',
-            period: Number(maBreakdown[2]),
+            indicator: referenceIndicator,
+            period: referencePeriod,
           },
         },
       })
@@ -3409,6 +3431,32 @@ export class SemanticSeedExtractorService {
         trigger.sideScope ?? null,
       ]))
     })
+  }
+
+  private removeLogicalAnyOfExitChildren(triggers: SeedTrigger[]): SeedTrigger[] {
+    const anyOfExitChildren = new Set<string>()
+
+    for (const trigger of triggers) {
+      if (trigger.key !== 'logical.any_of' || trigger.phase !== 'exit') continue
+      const items = trigger.params?.items
+      if (!Array.isArray(items)) continue
+
+      for (const item of items) {
+        if (!this.isPlainObject(item) || typeof item.key !== 'string') continue
+        anyOfExitChildren.add(this.buildLogicalAnyOfChildSignature(item.key, item.params))
+      }
+    }
+
+    if (anyOfExitChildren.size === 0) return triggers
+
+    return triggers.filter((trigger) => {
+      if (trigger.key === 'logical.any_of' || trigger.phase !== 'exit') return true
+      return !anyOfExitChildren.has(this.buildLogicalAnyOfChildSignature(trigger.key, trigger.params))
+    })
+  }
+
+  private buildLogicalAnyOfChildSignature(key: string, params: unknown): string {
+    return JSON.stringify([key, this.stableValue(params ?? {})])
   }
 
   private resolveLegacyBollingerBoundaryRole(key: string): 'upper' | 'lower' | 'middle' | null {

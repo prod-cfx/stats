@@ -258,7 +258,9 @@ describe('atomic contract combination semantics', () => {
       key: 'indicator.above',
       phase: 'gate',
       params: expect.objectContaining({
-        indicator: 'price',
+        indicator: 'ma',
+        referenceRole: 'long_term',
+        'reference.period': 100,
         reference: expect.objectContaining({
           indicator: 'ma',
           period: 100,
@@ -276,6 +278,9 @@ describe('atomic contract combination semantics', () => {
       phase: 'exit',
       sideScope: 'long',
     })
+    expect(state.triggers.filter(trigger => trigger.phase === 'exit')).toEqual([
+      expect.objectContaining({ key: 'logical.any_of' }),
+    ])
     expect(classification.route).not.toBe('unsupported_fallback')
   })
 
