@@ -1496,6 +1496,134 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('emits one entry decision for semantic multi-timeframe confirmation strategies', () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      contextSlots: {
+        exchange: {
+          slotKey: 'context.exchange',
+          fieldPath: 'exchange',
+          value: 'binance',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '交易所',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'context.symbol',
+          fieldPath: 'symbol',
+          value: 'BTCUSDT',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '交易标的',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'context.marketType',
+          fieldPath: 'marketType',
+          value: 'perp',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '市场类型',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'context.timeframe',
+          fieldPath: 'timeframe',
+          value: '15m',
+          status: 'locked',
+          priority: 'context',
+          questionHint: 'K 线周期',
+          affectsExecution: true,
+        },
+      },
+      position: null,
+      triggers: [
+        ...['5m', '1h', '4h'].map((timeframe, index) => ({
+          id: `entry-ema-${index}`,
+          key: 'indicator.above',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+          params: {
+            indicator: 'ema',
+            referenceRole: 'long_term',
+            'reference.period': 20,
+            timeframe,
+          },
+        })),
+        {
+          id: 'exit-ema-15m',
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            indicator: 'ema',
+            referenceRole: 'long_term',
+            'reference.period': 20,
+            timeframe: '15m',
+          },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      risk: [{
+        id: 'stop-loss-3',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 3, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      normalizationNotes: [],
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    }
+
+    const canonicalSpec = new CanonicalSpecBuilderService().buildFromSemanticState(semanticState)
+    const result = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(result.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: {
+        positionMode: 'long_only',
+        marginMode: 'cross',
+        tickSize: 0.01,
+        pricePrecision: 2,
+        quantityPrecision: 6,
+        fillAssumption: 'strict',
+      },
+    })
+    const entryBlocks = result.ir.ruleBlocks.filter(block => block.phase === 'entry')
+    const entryPredicate = result.ir.signalCatalog.predicates.find(predicate => predicate.id === entryBlocks[0]?.when)
+
+    expect(entryBlocks).toHaveLength(1)
+    expect(entryPredicate).toEqual(expect.objectContaining({
+      kind: 'AND',
+      args: expect.any(Array),
+    }))
+    expect(entryPredicate?.args).toHaveLength(3)
+    expect(ast.decisionPrograms.filter(program => program.phase === 'entry')).toHaveLength(1)
+    expect(script.match(/"kind":"OPEN_LONG"/g)).toHaveLength(1)
+    expect(script).not.toContain('"asset":"MIN"')
+    expect(result.ir.dataRequirements.requiredTimeframes).toEqual(expect.arrayContaining(['15m', '5m', '1h', '4h']))
+  })
+
   it('normalizes position_gain_pct thresholds to runtime percent units', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

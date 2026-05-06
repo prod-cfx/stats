@@ -45,6 +45,10 @@ export class CanonicalStrategyIrValidatorService {
     predicateIndex: Map<string, PredicateDef>,
     seriesIndex: Map<string, SeriesDef>,
   ): void {
+    if (predicate.kind === 'AND' || predicate.kind === 'OR' || predicate.kind === 'NOT') {
+      return
+    }
+
     const timeframes = this.resolvePredicateTimeframes(predicate, predicateIndex, seriesIndex)
     if (timeframes.size > 1) {
       throw new Error('codegen.ir_timeframe_mismatch')

@@ -993,7 +993,11 @@ export class CanonicalSpecBuilderService {
       .filter((condition): condition is CanonicalConditionNode => condition !== null)
       .filter(condition => !this.isNoPositionGateCondition(condition))
 
-    for (const trigger of state.triggers) {
+    for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.triggers)) {
+      const trigger = triggerGroup[0]
+      if (!trigger) {
+        continue
+      }
       if (trigger.status !== 'locked') {
         continue
       }
@@ -1010,9 +1014,7 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const condition = trigger.key === 'condition.expression'
-        ? this.buildConditionFromSemanticExpressionTrigger(trigger)
-        : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe)
+      const condition = this.buildConditionFromSemanticTriggerGroup(triggerGroup, defaultTimeframe)
       if (!condition) {
         continue
       }
@@ -1046,6 +1048,38 @@ export class CanonicalSpecBuilderService {
     rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position))
 
     return rules
+  }
+
+  private groupSemanticMultiTimeframeTriggers(
+    triggers: SemanticTriggerState[],
+  ): SemanticTriggerState[][] {
+    return this.groupMultiTimeframeRuleTriggers(
+      triggers,
+      trigger => this.semanticMultiTimeframeGroupKey(trigger),
+    )
+  }
+
+  private buildConditionFromSemanticTriggerGroup(
+    triggers: SemanticTriggerState[],
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    const conditions = triggers
+      .map(trigger => trigger.key === 'condition.expression'
+        ? this.buildConditionFromSemanticExpressionTrigger(trigger)
+        : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe))
+      .filter((condition): condition is CanonicalConditionNode => condition !== null)
+
+    if (conditions.length === 0) {
+      return null
+    }
+    if (conditions.length === 1) {
+      return conditions[0] ?? null
+    }
+
+    return {
+      kind: 'AND',
+      children: conditions,
+    }
   }
 
   private attachSemanticGateConditions(
@@ -2256,14 +2290,17 @@ export class CanonicalSpecBuilderService {
     let exitPriority = 140
     let riskPriority = 120
 
-    for (const trigger of input.normalizedIntent.triggers) {
-      if (trigger.phase !== 'entry' && trigger.phase !== 'exit') {
+    const phaseTriggers = input.normalizedIntent.triggers
+      .filter((trigger): trigger is NormalizedTriggerAtom & { phase: 'entry' | 'exit' } =>
+        trigger.phase === 'entry' || trigger.phase === 'exit')
+
+    for (const triggerGroup of this.groupNormalizedMultiTimeframeTriggers(phaseTriggers)) {
+      const phaseTrigger = triggerGroup[0]
+      if (!phaseTrigger) {
         continue
       }
-      const phaseTrigger = trigger as NormalizedTriggerAtom & { phase: 'entry' | 'exit' }
-
-      const rule = this.buildRuleFromNormalizedTrigger({
-        trigger: phaseTrigger,
+      const rule = this.buildRuleFromNormalizedTriggerGroup({
+        triggers: triggerGroup,
         gateTriggers,
         sizing: input.sizing,
         priority: phaseTrigger.phase === 'entry' ? entryPriority-- : exitPriority--,
@@ -2299,6 +2336,160 @@ export class CanonicalSpecBuilderService {
     }
 
     return rules
+  }
+
+  private groupNormalizedMultiTimeframeTriggers(
+    triggers: Array<NormalizedTriggerAtom & { phase: 'entry' | 'exit' }>,
+  ): Array<Array<NormalizedTriggerAtom & { phase: 'entry' | 'exit' }>> {
+    return this.groupMultiTimeframeRuleTriggers(
+      triggers,
+      trigger => this.normalizedMultiTimeframeGroupKey(trigger),
+    )
+  }
+
+  private groupMultiTimeframeRuleTriggers<T>(
+    triggers: T[],
+    readGroupKey: (trigger: T) => string | null,
+  ): T[][] {
+    const groups = new Map<string, T[]>()
+    const ordered: T[][] = []
+
+    for (const trigger of triggers) {
+      const groupKey = readGroupKey(trigger)
+      if (!groupKey) {
+        ordered.push([trigger])
+        continue
+      }
+
+      const group = groups.get(groupKey)
+      if (group) {
+        group.push(trigger)
+      }
+      else {
+        const nextGroup = [trigger]
+        groups.set(groupKey, nextGroup)
+        ordered.push(nextGroup)
+      }
+    }
+
+    return ordered
+  }
+
+  private normalizedMultiTimeframeGroupKey(
+    trigger: NormalizedTriggerAtom & { phase: 'entry' | 'exit' },
+  ): string | null {
+    return this.multiTimeframeGroupKey({
+      key: trigger.key,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      params: trigger.params,
+    })
+  }
+
+  private semanticMultiTimeframeGroupKey(trigger: SemanticTriggerState): string | null {
+    if (trigger.status !== 'locked' || (trigger.phase !== 'entry' && trigger.phase !== 'exit')) {
+      return null
+    }
+
+    return this.multiTimeframeGroupKey({
+      key: trigger.key,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      params: trigger.params,
+    })
+  }
+
+  private multiTimeframeGroupKey(input: {
+    key: string
+    phase: string
+    sideScope: string | null
+    params: Record<string, unknown>
+  }): string | null {
+    if (!this.isMultiTimeframeConfirmableKey(input.key)) {
+      return null
+    }
+    if (!this.readTriggerParamTimeframe(input.params)) {
+      return null
+    }
+
+    const comparableParams = Object.keys(input.params)
+      .filter(key => key !== 'timeframe')
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = input.params[key]
+        return acc
+      }, {})
+
+    return JSON.stringify({
+      key: input.key,
+      phase: input.phase,
+      sideScope: input.sideScope,
+      params: comparableParams,
+    })
+  }
+
+  private isMultiTimeframeConfirmableKey(key: string): boolean {
+    return key !== 'condition.expression'
+      && key !== 'execution.on_start'
+      && key !== 'grid.range_rebalance'
+      && key !== 'price.detect.indicator_boundary'
+  }
+
+  private buildRuleFromNormalizedTriggerGroup(input: {
+    triggers: Array<NormalizedTriggerAtom & { phase: 'entry' | 'exit' }>
+    gateTriggers: NormalizedTriggerAtom[]
+    sizing: CanonicalStrategySpecV2['sizing']
+    priority: number
+    defaultTimeframe: string | null
+  }): CanonicalRuleV2 | null {
+    const trigger = input.triggers[0]
+    if (!trigger) {
+      return null
+    }
+
+    if (input.triggers.length === 1) {
+      return this.buildRuleFromNormalizedTrigger({
+        trigger,
+        gateTriggers: input.gateTriggers,
+        sizing: input.sizing,
+        priority: input.priority,
+        defaultTimeframe: input.defaultTimeframe,
+      })
+    }
+
+    const triggerConditions = input.triggers
+      .map(item => this.buildConditionFromNormalizedTrigger(item, input.defaultTimeframe))
+      .filter((condition): condition is CanonicalConditionNode => condition !== null)
+    if (triggerConditions.length === 0) {
+      return null
+    }
+
+    const actions = this.buildActionsForNormalizedTrigger(trigger, input.sizing)
+    if (actions.length === 0) {
+      return null
+    }
+
+    const gateKeys = input.gateTriggers.map(item => item.key)
+    return {
+      id: `${trigger.phase}-${trigger.key.replace(/\./g, '-')}-${input.priority}`,
+      phase: trigger.phase,
+      sideScope: this.resolveNormalizedRuleSideScope(trigger, actions),
+      priority: input.priority,
+      condition: this.attachGateConditions({
+        kind: 'AND',
+        children: triggerConditions,
+      }, input.gateTriggers),
+      actions,
+      metadata: {
+        normalized: {
+          source: 'normalized-intent',
+          triggerKeys: [...new Set(input.triggers.map(item => item.key))],
+          ...(gateKeys.length > 0 ? { gateKeys } : {}),
+          actionKeys: actions.map(action => action.type),
+          family: 'single-leg',
+        },
+      },
+    }
   }
 
   private buildRuleFromNormalizedTrigger(input: {

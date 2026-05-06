@@ -237,6 +237,7 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
+    expect(patch.position).toBeUndefined()
   })
 
   it('does not treat trigger quote prices as position sizing in seed text', () => {

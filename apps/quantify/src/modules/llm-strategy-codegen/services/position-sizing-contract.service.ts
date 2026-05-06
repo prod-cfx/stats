@@ -51,6 +51,7 @@ export class PositionSizingContractService {
 
       const asset = match[2].toUpperCase()
       if (asset === 'USDT' || asset === 'USDC' || asset === 'USD') continue
+      if (this.isTimeframeUnitAsset(asset)) continue
       const valueIndex = match.index + match[0].indexOf(match[1])
       const valueLength = `${match[1]} ${match[2]}`.length
       if (!this.hasLocalBaseSizingContext(text, valueIndex, valueLength)) continue
@@ -65,6 +66,10 @@ export class PositionSizingContractService {
     }
 
     return null
+  }
+
+  private isTimeframeUnitAsset(asset: string): boolean {
+    return /^(?:MIN|MINS|MINUTE|MINUTES|HOUR|HOURS|DAY|DAYS)$/u.test(asset)
   }
 
   private parseRatio(text: string, messageIndex?: number): ParsedPositionSizingContract | null {

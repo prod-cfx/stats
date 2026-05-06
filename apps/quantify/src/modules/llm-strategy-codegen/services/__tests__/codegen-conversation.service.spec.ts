@@ -5940,6 +5940,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
     expect(result.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
     expect(result.assistantPrompt ?? '').not.toContain('入场：突破 MA20')
+    expect(result.assistantPrompt ?? '').not.toContain('仓位：15 MIN')
     expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'binance',
@@ -5986,6 +5987,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
+    expect(createPayload.semanticState.position?.sizing).not.toEqual(expect.objectContaining({
+      kind: 'base',
+      value: 15,
+      asset: 'MIN',
+    }))
     expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
       expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
@@ -6026,6 +6032,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(continued.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
     expect(continued.assistantPrompt ?? '').not.toContain('入场：5m 价格在 EMA20 上方')
+    expect(continued.assistantPrompt ?? '').not.toContain('仓位：15 MIN')
     expect(semanticState.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.above',
