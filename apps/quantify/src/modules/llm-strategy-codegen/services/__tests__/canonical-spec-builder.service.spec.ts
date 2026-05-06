@@ -321,6 +321,350 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  describe('semantic trigger contract rule groups', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    it('compiles EMA20/60/144 explicit AND entry group into one OPEN_LONG rule', () => {
+      const state = createSemanticState({
+        triggers: [20, 60, 144].map(period => ({
+          id: `entry-ema${period}`,
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { indicator: 'ema', 'reference.period': period },
+          contracts: [{
+            id: 'contract-entry-ema-stack',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [],
+            params: {
+              groupId: 'entry-ema-stack',
+              join: 'AND',
+              actionKey: 'open_long',
+              actionBinding: 'single_action',
+            },
+          }],
+        })),
+        actions: [
+          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+
+      expect(entryRules).toHaveLength(1)
+      expect(entryRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'AND' }))
+      expect(entryRules[0]?.actions).toEqual([expect.objectContaining({ type: 'OPEN_LONG' })])
+    })
+
+    it('compiles MA100 below OR MACD death cross explicit OR exit group into one CLOSE_LONG rule', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'exit-ma100',
+            key: 'indicator.below',
+            phase: 'exit',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { indicator: 'ma', 'reference.period': 100 },
+            contracts: [{
+              id: 'contract-exit-ma100-macd',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'exit-ma100-macd',
+                join: 'OR',
+                actionKey: 'close_long',
+                actionBinding: 'single_action',
+              },
+            }],
+          },
+          {
+            id: 'exit-macd-death',
+            key: 'indicator.cross_under',
+            phase: 'exit',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { indicator: 'macd' },
+            contracts: [{
+              id: 'contract-exit-ma100-macd',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'exit-ma100-macd',
+                join: 'OR',
+                actionKey: 'close_long',
+                actionBinding: 'single_action',
+              },
+            }],
+          },
+        ],
+        actions: [
+          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
+
+      expect(exitRules).toHaveLength(1)
+      expect(exitRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'OR' }))
+      expect(exitRules[0]?.actions).toEqual([expect.objectContaining({ type: 'CLOSE_LONG' })])
+    })
+
+    it('attaches gate triggers to entry groups without creating an extra open rule', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'gate-close-above-open',
+            key: 'condition.expression',
+            phase: 'gate',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { expression: closeOpenPredicate('GT') },
+          },
+          {
+            id: 'entry-rsi-cross',
+            key: 'indicator.cross_over',
+            phase: 'entry',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { indicator: 'rsi', value: 50 },
+            contracts: [{
+              id: 'contract-entry-rsi',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'entry-rsi',
+                join: 'AND',
+                actionKey: 'open_long',
+                actionBinding: 'single_action',
+              },
+            }],
+          },
+        ],
+        actions: [
+          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const openRules = spec.rules.filter(rule => rule.actions.some(action => action.type === 'OPEN_LONG'))
+
+      expect(openRules).toHaveLength(1)
+      expect(openRules[0]?.condition).toEqual(expect.objectContaining({
+        kind: 'AND',
+        children: expect.arrayContaining([
+          expect.objectContaining({ key: 'rsi.cross_over' }),
+          expect.objectContaining({ kind: 'expression', op: 'GT' }),
+        ]),
+      }))
+      expect(spec.rules.filter(rule => rule.phase === 'gate')).toHaveLength(0)
+    })
+
+    it('keeps ungrouped simple entry and exit triggers as singleton rules', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'entry-close-above-open',
+            key: 'condition.expression',
+            phase: 'entry',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { expression: closeOpenPredicate('GT') },
+          },
+          {
+            id: 'exit-close-below-open',
+            key: 'condition.expression',
+            phase: 'exit',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { expression: closeOpenPredicate('LT') },
+          },
+        ],
+        actions: [
+          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+      const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
+
+      expect(entryRules).toHaveLength(1)
+      expect(exitRules).toHaveLength(1)
+      expect(entryRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'expression', op: 'GT' }))
+      expect(entryRules[0]?.actions).toEqual([expect.objectContaining({ type: 'OPEN_LONG' })])
+      expect(exitRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'expression', op: 'LT' }))
+      expect(exitRules[0]?.actions).toEqual([expect.objectContaining({ type: 'CLOSE_LONG' })])
+    })
+
+    it('keeps ungrouped simple both-side exit as one rule with aggregated close actions', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'exit-close-below-open-both',
+            key: 'condition.expression',
+            phase: 'exit',
+            sideScope: 'both',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { expression: closeOpenPredicate('LT') },
+          },
+        ],
+        actions: [
+          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+          { id: 'close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
+
+      expect(exitRules).toHaveLength(1)
+      expect(exitRules[0]).toEqual(expect.objectContaining({
+        sideScope: 'both',
+        condition: expect.objectContaining({ kind: 'expression', op: 'LT' }),
+        actions: expect.arrayContaining([
+          expect.objectContaining({ type: 'CLOSE_LONG' }),
+          expect.objectContaining({ type: 'CLOSE_SHORT' }),
+        ]),
+      }))
+    })
+
+    it('keeps legacy grouped both-side entry split into long and short rules when actionKey is implicit', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'entry-legacy-both-fast',
+            key: 'indicator.above',
+            phase: 'entry',
+            sideScope: 'both',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: {
+              groupId: 'legacy-entry-both',
+              join: 'AND',
+              indicator: 'ema',
+              'reference.period': 20,
+            },
+          },
+          {
+            id: 'entry-legacy-both-slow',
+            key: 'indicator.above',
+            phase: 'entry',
+            sideScope: 'both',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: {
+              groupId: 'legacy-entry-both',
+              join: 'AND',
+              indicator: 'ema',
+              'reference.period': 60,
+            },
+          },
+        ],
+        actions: [
+          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+          { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+
+      expect(entryRules).toHaveLength(2)
+      expect(entryRules).toEqual([
+        expect.objectContaining({
+          sideScope: 'long',
+          condition: expect.objectContaining({ kind: 'AND' }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          sideScope: 'short',
+          condition: expect.objectContaining({ kind: 'AND' }),
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+      ])
+    })
+
+    it('keeps legacy grouped both-side exit as one rule with aggregated close actions when actionKey is implicit', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'exit-legacy-both-ma',
+            key: 'indicator.below',
+            phase: 'exit',
+            sideScope: 'both',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: {
+              groupId: 'legacy-exit-both',
+              join: 'OR',
+              indicator: 'ma',
+              'reference.period': 100,
+            },
+          },
+          {
+            id: 'exit-legacy-both-macd',
+            key: 'indicator.cross_under',
+            phase: 'exit',
+            sideScope: 'both',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: {
+              groupId: 'legacy-exit-both',
+              join: 'OR',
+              indicator: 'macd',
+            },
+          },
+        ],
+        actions: [
+          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+          { id: 'close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
+
+      expect(exitRules).toHaveLength(1)
+      expect(exitRules[0]).toEqual(expect.objectContaining({
+        sideScope: 'both',
+        condition: expect.objectContaining({ kind: 'OR' }),
+        actions: expect.arrayContaining([
+          expect.objectContaining({ type: 'CLOSE_LONG' }),
+          expect.objectContaining({ type: 'CLOSE_SHORT' }),
+        ]),
+      }))
+    })
+  })
+
   it('projects contract order programs from SemanticState without grid signal actions', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({
