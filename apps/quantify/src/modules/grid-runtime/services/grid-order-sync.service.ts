@@ -54,6 +54,7 @@ interface RuntimeOrder {
   price: DecimalLike | string
   quantity: DecimalLike | string
   status: string
+  rawPayload?: unknown
 }
 
 interface RetryableRateLimitInput {
@@ -151,13 +152,15 @@ export class GridOrderSyncService {
           continue
         }
 
+        const acceptedCloseQuantity = this.resolveAcceptedCloseQuantity(order, exchangeOrder, instance)
         await this.repository.updateOrderFromExchange({
           id: order.id,
           exchangeOrderId: exchangeOrder.id,
           status: this.toGridOrderStatus(exchangeOrder.status),
           filledQuantity: String(exchangeOrder.filled),
+          acceptedQuantity: acceptedCloseQuantity,
           avgFillPrice: exchangeOrder.price == null ? null : String(exchangeOrder.price),
-          rawPayload: this.toJsonValue(exchangeOrder.raw),
+          rawPayload: this.buildExchangeSyncPayload(order, exchangeOrder, acceptedCloseQuantity),
         })
 
         if (this.shouldRecordTerminalFill(exchangeOrder)) {
@@ -824,8 +827,73 @@ export class GridOrderSyncService {
       && exchangeOrder.side === order.side
       && exchangeOrder.type === order.orderType
       && this.decimalEquals(exchangeOrder.price, order.price)
-      && this.decimalEquals(exchangeOrder.amount, order.quantity)
+      && this.matchesOrderQuantity(order, exchangeOrder, instance)
     )
+  }
+
+  private matchesOrderQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): boolean {
+    return this.decimalEquals(exchangeOrder.amount, order.quantity)
+      || this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder, instance)
+  }
+
+  private shouldConvergeAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): boolean {
+    if (instance.exchangeId !== 'okx' || this.normalizeMarketType(instance.marketType) !== 'perp') return false
+    if (order.role !== 'close_long' && order.role !== 'close_short') return false
+    if (exchangeOrder.amount <= 0) return false
+    const exchangeAmount = this.decimal(String(exchangeOrder.amount))
+    const localQuantity = this.decimal(this.decimalToString(order.quantity))
+    return exchangeAmount.lt(localQuantity)
+  }
+
+  private resolveAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): string | null {
+    return this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder, instance) ? String(exchangeOrder.amount) : null
+  }
+
+  private buildExchangeSyncPayload(
+    order: RuntimeOrder,
+    exchangeOrder: UnifiedOrder,
+    acceptedCloseQuantity: string | null,
+  ): GridRuntimeJsonValue {
+    const existingConvergence = this.readExistingQuantityConvergence(order.rawPayload)
+    if (acceptedCloseQuantity == null) {
+      if (!existingConvergence) return this.toJsonValue(exchangeOrder.raw)
+      return this.toJsonValue({
+        source: 'grid_order_sync',
+        exchange: exchangeOrder.raw,
+        quantityConvergence: existingConvergence,
+      })
+    }
+
+    return this.toJsonValue({
+      source: 'grid_order_sync',
+      exchange: exchangeOrder.raw,
+      quantityConvergence: {
+        reason: 'okx_reduce_only_close_accepted_quantity',
+        role: order.role,
+        originalQuantity: existingConvergence?.originalQuantity ?? this.decimalToString(order.quantity),
+        acceptedQuantity: acceptedCloseQuantity,
+      },
+    })
+  }
+
+  private readExistingQuantityConvergence(rawPayload: unknown): { reason: string, role: string | null, originalQuantity: string, acceptedQuantity: string } | null {
+    const convergence = this.readNestedValue(rawPayload, ['quantityConvergence'])
+    if (typeof convergence !== 'object' || convergence === null) return null
+    const record = convergence as Record<string, unknown>
+    if (
+      typeof record.reason !== 'string'
+      || typeof record.originalQuantity !== 'string'
+      || typeof record.acceptedQuantity !== 'string'
+    ) {
+      return null
+    }
+
+    return {
+      reason: record.reason,
+      role: typeof record.role === 'string' ? record.role : null,
+      originalQuantity: record.originalQuantity,
+      acceptedQuantity: record.acceptedQuantity,
+    }
   }
 
   private buildOrderMismatch(order: RuntimeOrder, exchangeOrder: UnifiedOrder): GridSyncMismatch {
