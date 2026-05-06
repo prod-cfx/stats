@@ -3252,6 +3252,13 @@ export class CanonicalSpecBuilderService {
         if (!sequenceKind) {
           return null
         }
+        const reference = this.readRecordParam(trigger.params.reference)
+        const referenceIndicator = this.readStringParam(reference?.indicator)
+        const referencePeriod = this.readNumberParam(reference?.period)
+        const threshold = this.readNumberParam(trigger.params.threshold)
+        const count = this.readNumberParam(trigger.params.count)
+        const direction = this.readStringParam(trigger.params.direction)
+        const lookbackBars = this.readNumberParam(trigger.params.lookbackBars)
         return {
           kind: 'atom',
           key: 'condition.sequence',
@@ -3261,6 +3268,12 @@ export class CanonicalSpecBuilderService {
             sequenceKind,
             ...(typeof trigger.params.lookbackWindow === 'string' ? { lookbackWindow: trigger.params.lookbackWindow } : {}),
             ...(typeof trigger.params.memoryKey === 'string' ? { memoryKey: trigger.params.memoryKey } : {}),
+            ...(threshold !== null ? { threshold } : {}),
+            ...(count !== null ? { count } : {}),
+            ...(direction ? { direction } : {}),
+            ...(lookbackBars !== null ? { lookbackBars } : {}),
+            ...(referenceIndicator ? { 'reference.indicator': referenceIndicator } : {}),
+            ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
           },
         }
       }
@@ -3667,6 +3680,21 @@ export class CanonicalSpecBuilderService {
 
   private readStringParam(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readNumberParam(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    return null
+  }
+
+  private readRecordParam(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
   }
 
   private extractRuleTimeframe(text: string): string | null {

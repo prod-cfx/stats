@@ -53,6 +53,44 @@ describe('atomic contract canonical IR projection', () => {
     expect(ir.runtimeRequirements?.stateKeys).toEqual(expect.arrayContaining(['breakout']))
   })
 
+  it('compiles reclaim sequences into executable cross predicates with semantic params preserved', () => {
+    const state = buildLockedAtomicState('breakout-retest')
+    state.triggers = [{
+      id: 'entry-rsi-reclaim',
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params: {
+        sequenceKind: 'rsi_reclaim',
+        threshold: 35,
+      },
+    }]
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const ir = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec: spec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    }).ir
+
+    expect(ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'cross',
+        args: expect.arrayContaining([expect.stringContaining('rsi_')]),
+        params: expect.objectContaining({
+          sequenceKind: 'rsi_reclaim',
+          threshold: 35,
+        }),
+      }),
+    ]))
+  })
+
   it('projects ATR multiple risks into risk predicates and requires the atr helper', () => {
     const ir = compileAtomicState('atr-risk')
 

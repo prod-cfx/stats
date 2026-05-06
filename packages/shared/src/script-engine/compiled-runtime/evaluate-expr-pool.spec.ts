@@ -289,6 +289,87 @@ describe('evaluateExprPool', () => {
     expect(values.breakout_retest).toBe(true)
   })
 
+  it('evaluates consecutive candle reversal sequences from bar history', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'predicate'
+      sourceRef: string
+      payload: { kind: string, params?: Record<string, number | string> }
+      deps?: string[]
+    }> = [
+      {
+        id: 'consecutive_rebound',
+        nodeType: 'predicate',
+        sourceRef: 'condition.sequence',
+        payload: {
+          kind: 'sequence',
+          params: {
+            sequenceKind: 'consecutive_candles',
+            count: 3,
+            direction: 'down',
+          },
+        },
+        deps: [],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 105, high: 106, low: 99, close: 100, volume: 100, timestamp: 1 },
+          { open: 100, high: 101, low: 94, close: 95, volume: 110, timestamp: 2 },
+          { open: 95, high: 96, low: 89, close: 90, volume: 120, timestamp: 3 },
+          { open: 90, high: 94, low: 88, close: 93, volume: 180, timestamp: 4 },
+        ],
+      },
+      exprPool,
+      ['consecutive_rebound'],
+    )
+
+    expect(values.consecutive_rebound).toBe(true)
+  })
+
+  it('evaluates breakout retest sequences from bar history when runtime state is absent', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'predicate'
+      sourceRef: string
+      payload: { kind: string, params?: Record<string, number | string> }
+      deps?: string[]
+    }> = [
+      {
+        id: 'breakout_retest',
+        nodeType: 'predicate',
+        sourceRef: 'condition.sequence',
+        payload: {
+          kind: 'sequence',
+          params: {
+            sequenceKind: 'breakout_retest',
+            lookbackBars: 3,
+          },
+        },
+        deps: [],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 90, high: 100, low: 88, close: 95, volume: 100, timestamp: 1 },
+          { open: 95, high: 102, low: 94, close: 99, volume: 100, timestamp: 2 },
+          { open: 99, high: 101, low: 96, close: 100, volume: 100, timestamp: 3 },
+          { open: 100, high: 108, low: 99, close: 106, volume: 180, timestamp: 4 },
+          { open: 106, high: 107, low: 101, close: 103, volume: 140, timestamp: 5 },
+          { open: 103, high: 105, low: 101, close: 104, volume: 130, timestamp: 6 },
+        ],
+      },
+      exprPool,
+      ['breakout_retest'],
+    )
+
+    expect(values.breakout_retest).toBe(true)
+  })
+
   it('fails unknown generic compare and cross operators closed', () => {
     const exprPool: Array<{
       id: string

@@ -1304,6 +1304,45 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'condition.sequence': {
         const sequenceKind = typeof atom.params?.sequenceKind === 'string' ? atom.params.sequenceKind : 'sequence'
+        if (sequenceKind === 'pullback_reclaim') {
+          const referenceIndicator = this.readStringParam(atom.params?.['reference.indicator']) ?? 'ma'
+          const referencePeriod = this.readNumber([atom.params?.['reference.period'], atom.params?.period], context.movingAverage.slow)
+          const referenceRef = referenceIndicator.toLowerCase() === 'ema'
+            ? this.ensureIndicatorSeries(context, 'EMA', referencePeriod, context.timeframe)
+            : this.ensureIndicatorSeries(context, 'SMA', referencePeriod, context.timeframe)
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${referenceIndicator}_${referencePeriod}`,
+            'cross',
+            [closeRef, referenceRef],
+            {
+              sequenceKind,
+              direction: 'CROSS_OVER',
+              'reference.indicator': referenceIndicator.toLowerCase() === 'ema' ? 'ema' : 'ma',
+              'reference.period': referencePeriod,
+            },
+          )
+        }
+
+        if (sequenceKind === 'rsi_reclaim') {
+          const period = this.readNumber([atom.params?.period], context.rsi.period)
+          const threshold = this.readNumber([atom.params?.threshold, atom.value], 30)
+          const rsiRef = this.ensureRsiSeries(context, period)
+          const thresholdRef = this.ensureConstSeries(context, threshold)
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}_${sequenceKind}_${period}_${this.normalizeNumberToken(threshold)}`,
+            'cross',
+            [rsiRef, thresholdRef],
+            {
+              sequenceKind,
+              direction: 'CROSS_OVER',
+              period,
+              threshold,
+            },
+          )
+        }
+
         const memoryKey = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
           ? atom.params.memoryKey.trim()
           : null
@@ -1318,6 +1357,9 @@ export class CanonicalSpecV2IrCompilerService {
           {
             sequenceKind,
             ...(typeof atom.params?.lookbackWindow === 'string' ? { lookbackWindow: atom.params.lookbackWindow } : {}),
+            ...(typeof atom.params?.lookbackBars === 'number' ? { lookbackBars: atom.params.lookbackBars } : {}),
+            ...(typeof atom.params?.count === 'number' ? { count: atom.params.count } : {}),
+            ...(typeof atom.params?.direction === 'string' ? { direction: atom.params.direction } : {}),
             ...(memoryKey ? { memoryKey } : {}),
           },
         )

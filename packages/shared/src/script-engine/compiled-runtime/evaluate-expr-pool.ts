@@ -600,8 +600,111 @@ function evaluateGenericSequence(
     return stateDecision
   }
 
+  const sequenceDecision = evaluateSequenceFromBars(node, ctx)
+  if (sequenceDecision !== null) {
+    return sequenceDecision
+  }
+
   const deps = node.deps ?? []
   return deps.length > 0 && deps.every(dep => values[dep] === true)
+}
+
+function evaluateSequenceFromBars(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean | null {
+  const sequenceKind = readStringParam(node.payload.params, 'sequenceKind')
+  if (sequenceKind === 'consecutive_candles') {
+    return evaluateConsecutiveCandlesSequence(node, ctx)
+  }
+  if (sequenceKind === 'breakout_retest') {
+    return evaluateBreakoutRetestSequence(node, ctx)
+  }
+  return null
+}
+
+function evaluateConsecutiveCandlesSequence(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean | null {
+  const count = Math.floor(readNumericParam(node.payload.params, 'count') ?? 0)
+  const direction = readStringParam(node.payload.params, 'direction') ?? 'down'
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  if (count <= 0 || bars.length < count + 1) return false
+
+  const current = bars[bars.length - 1]
+  const priorBars = bars.slice(Math.max(0, bars.length - 1 - count), bars.length - 1)
+  if (!current || priorBars.length !== count) return false
+
+  if (direction === 'up') {
+    return priorBars.every(bar => bar.close > bar.open) && current.close < current.open
+  }
+
+  return priorBars.every(bar => bar.close < bar.open) && current.close > current.open
+}
+
+function evaluateBreakoutRetestSequence(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): boolean | null {
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const lookbackBars = resolveSequenceLookbackBars(node, ctx)
+  if (lookbackBars <= 1 || bars.length < lookbackBars + 2) return false
+
+  const current = bars[bars.length - 1]
+  if (!current) return false
+
+  const searchStart = Math.max(lookbackBars, bars.length - lookbackBars - 1)
+  for (let breakoutIndex = searchStart; breakoutIndex < bars.length - 1; breakoutIndex += 1) {
+    const breakoutBar = bars[breakoutIndex]
+    if (!breakoutBar) continue
+
+    const priorWindow = bars.slice(Math.max(0, breakoutIndex - lookbackBars), breakoutIndex)
+    if (priorWindow.length < 2) continue
+
+    const breakoutLevel = Math.max(...priorWindow.map(bar => bar.high))
+    if (!Number.isFinite(breakoutLevel) || breakoutBar.close <= breakoutLevel) continue
+
+    const postBreakoutBars = bars.slice(breakoutIndex + 1)
+    if (postBreakoutBars.some(bar => bar.close < breakoutLevel)) continue
+
+    if (current.low <= breakoutLevel && current.close >= breakoutLevel) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function resolveSequenceLookbackBars(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): number {
+  const explicit = readNumericParam(node.payload.params, 'lookbackBars')
+  if (explicit && explicit > 0) return Math.floor(explicit)
+
+  const lookbackWindow = readStringParam(node.payload.params, 'lookbackWindow')
+  const timeframe = typeof ctx.timeframe === 'string' ? ctx.timeframe : null
+  const windowMinutes = parseDurationMinutes(lookbackWindow)
+  const timeframeMinutes = parseDurationMinutes(timeframe)
+  if (windowMinutes && timeframeMinutes && timeframeMinutes > 0) {
+    return Math.max(1, Math.floor(windowMinutes / timeframeMinutes))
+  }
+
+  return 24
+}
+
+function parseDurationMinutes(value: string | null): number | null {
+  const matched = value?.trim().match(/^(\d+(?:\.\d+)?)\s*(m|min|分钟|h|小时|d|天)$/iu)
+  if (!matched?.[1] || !matched[2]) return null
+
+  const amount = Number(matched[1])
+  if (!Number.isFinite(amount) || amount <= 0) return null
+
+  const unit = matched[2].toLowerCase()
+  if (unit === 'm' || unit === 'min' || unit === '分钟') return amount
+  if (unit === 'h' || unit === '小时') return amount * 60
+  return amount * 24 * 60
 }
 
 function readGenericComparisonOp(
