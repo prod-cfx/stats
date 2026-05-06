@@ -437,15 +437,26 @@ export class CodegenConversationService {
     userId: string,
     options: { deleteStoppedStrategy?: boolean } = {},
   ): Promise<void> {
+    const deleteStoppedStrategy = options.deleteStoppedStrategy === true
     const conversation = await this.conversationsRepo.findActiveDeleteContextByIdAndUser(conversationId, userId)
     if (!conversation) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      this.logger.log({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId: null, deleteStoppedStrategy },
+        reason: 'conversation_not_found_archive_only',
+      })
       return
     }
 
     const strategyInstanceId = await this.resolveConversationStrategyInstanceId(conversation.codegenSessionId)
     if (!strategyInstanceId) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      this.logger.log({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId: null, deleteStoppedStrategy },
+        reason: 'orphan_conversation_archive_only',
+      })
       return
     }
 
@@ -464,6 +475,11 @@ export class CodegenConversationService {
       })
     if (!strategy) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      this.logger.log({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId, deleteStoppedStrategy },
+        reason: 'strategy_not_found_archive_conversation_only',
+      })
       return
     }
 
@@ -483,11 +499,17 @@ export class CodegenConversationService {
       })
     }
 
-    if (options.deleteStoppedStrategy) {
-      await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId, { archiveLinkedConversations: false })
-    }
-
-    await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+    // deleteStrategy 已统一处理 conversation 归档 + viewOnly/archive。
+    // 不再额外调用 conversationsRepo.archiveByIdAndUser，避免双写。
+    await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId, {
+      deleteStoppedStrategy,
+      via: 'conversation-list',
+    })
+    this.logger.log({
+      module: 'CodegenConversationService.deleteConversation',
+      input: { userId, conversationId, strategyInstanceId, deleteStoppedStrategy },
+      reason: deleteStoppedStrategy ? 'delegated_strategy_archive' : 'delegated_view_only_with_conversation_archive',
+    })
   }
 
   private isStrategyNotFoundError(error: unknown): boolean {

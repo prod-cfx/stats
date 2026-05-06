@@ -6,6 +6,7 @@ import {
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
@@ -98,6 +99,7 @@ export class AccountStrategyViewController {
     return this.service.getStrategyDetail(userId, id)
   }
 
+  @Transactional()
   @Post(':id/actions')
   @ApiOperation({ summary: '对当前用户的 AI Quant 策略执行操作' })
   @ApiHeader({ name: 'authorization', required: false })
@@ -158,13 +160,21 @@ export class AccountStrategyViewController {
   @ApiOperation({ summary: '删除当前用户的 AI Quant 策略' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiQuery({
+    name: 'deleteStoppedStrategy',
+    required: false,
+    type: 'boolean',
+    description: '为 true 时同时归档策略记录；缺省/false 仅归档关联会话并把策略转为只读',
+  })
   @ApiNoContentResponse({ description: '删除成功' })
   async remove(
     @Param('id') id: string,
+    @Query('deleteStoppedStrategy') deleteStoppedStrategyRaw?: string,
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<void> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
-    return this.service.deleteStrategy(userId, id, { archiveLinkedConversations: true })
+    const deleteStoppedStrategy = deleteStoppedStrategyRaw === 'true'
+    return this.service.deleteStrategy(userId, id, { deleteStoppedStrategy, via: 'account-list' })
   }
 }

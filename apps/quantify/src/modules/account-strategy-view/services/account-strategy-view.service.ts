@@ -89,8 +89,10 @@ interface SnapshotPositionSizing {
 }
 
 type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository['findStrategyForUser']>>>
-interface DeleteStrategyOptions {
-  archiveLinkedConversations: boolean
+export type DeleteStrategyVia = 'account-list' | 'conversation-list'
+export interface DeleteStrategyOptions {
+  deleteStoppedStrategy: boolean
+  via: DeleteStrategyVia
 }
 type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: MarketType }
 
@@ -184,6 +186,8 @@ export class AccountStrategyViewService {
           tradeCount: this.pickStatsOrFallbackMetric(statsTradeCount, fallback?.tradeCount),
         },
         updatedAt: item.updatedAt.toISOString(),
+        viewOnlyAt: item.viewOnlyAt ? item.viewOnlyAt.toISOString() : null,
+        hasActiveConversation: item.hasActiveConversation === true,
       }
     }))
 
@@ -492,6 +496,8 @@ export class AccountStrategyViewService {
       ruleSummary: resolvedSnapshot.ruleSummary,
     })
 
+    const detailViewOnlyAt = (row as { viewOnlyAt?: Date | null }).viewOnlyAt ?? null
+    const detailHasActiveConversation = await this.repo.hasActiveConversationsForStrategy(userId, strategyInstanceId)
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
       name: row.name,
@@ -511,6 +517,8 @@ export class AccountStrategyViewService {
           : this.readStatsNumber(stats, 'totalTradesCount'),
       },
       updatedAt: row.updatedAt.toISOString(),
+      viewOnlyAt: detailViewOnlyAt ? detailViewOnlyAt.toISOString() : null,
+      hasActiveConversation: detailHasActiveConversation,
       totalPnl,
       todayPnl,
       equitySeries: derivedEquitySeries,
@@ -1416,32 +1424,62 @@ export class AccountStrategyViewService {
   async deleteStrategy(
     userId: string,
     strategyInstanceId: string,
-    options: DeleteStrategyOptions = { archiveLinkedConversations: true },
+    options: DeleteStrategyOptions,
   ): Promise<void> {
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
-      this.logDeleteRejected({ userId, strategyInstanceId }, 'strategy_not_found')
-      throw new StrategyNotFoundException({ strategyInstanceId })
+      this.logDeleteRejected(
+        { userId, strategyInstanceId, deleteStoppedStrategy: options.deleteStoppedStrategy, via: options.via },
+        'not_visible',
+      )
+      return
     }
 
     const isOwner = row.createdBy === userId
     if (!isOwner) {
-      this.logDeleteRejected({ userId, strategyInstanceId, ownerId: row.createdBy }, 'owner_mismatch')
+      this.logDeleteRejected(
+        { userId, strategyInstanceId, ownerId: row.createdBy, deleteStoppedStrategy: options.deleteStoppedStrategy, via: options.via },
+        'owner_mismatch',
+      )
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
     if (row.status === 'running') {
-      this.logDeleteRejected({ userId, strategyInstanceId, status: row.status }, 'strategy_running')
+      this.logDeleteRejected(
+        { userId, strategyInstanceId, status: row.status, deleteStoppedStrategy: options.deleteStoppedStrategy, via: options.via },
+        'running_blocked',
+      )
       throw new DomainException('account_strategy.delete_running_forbidden', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { strategyInstanceId },
       })
     }
+
+    const hasConversation = await this.repo.hasActiveConversationsForStrategy(userId, strategyInstanceId)
+
+    if (!options.deleteStoppedStrategy) {
+      if (hasConversation) {
+        await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
+      }
+      await this.repo.markStrategyViewOnly(userId, strategyInstanceId)
+      this.logDeleteAccepted(
+        { userId, strategyInstanceId, status: row.status, hasConversation, deleteStoppedStrategy: false, via: options.via },
+        hasConversation ? 'view_only_set_with_conversations' : 'view_only_set_no_conversation',
+      )
+      return
+    }
+
     if (row.status !== 'draft') {
       await this.assertNoRuntimeRiskBeforeDelete(userId, row, strategyInstanceId)
     }
-
-    await this.repo.deleteStrategyForUser(userId, strategyInstanceId, options)
+    if (hasConversation) {
+      await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
+    }
+    await this.repo.archiveStrategyInstanceById(userId, strategyInstanceId)
+    this.logDeleteAccepted(
+      { userId, strategyInstanceId, status: row.status, hasConversation, deleteStoppedStrategy: true, via: options.via },
+      hasConversation ? 'archived_with_conversations' : 'archived_no_conversation',
+    )
   }
 
   private async assertNoRuntimeRiskBeforeDelete(
@@ -1508,6 +1546,14 @@ export class AccountStrategyViewService {
 
   private logDeleteRejected(input: Record<string, unknown>, reason: string): void {
     this.logger.warn({
+      module: 'AccountStrategyViewService.deleteStrategy',
+      input,
+      reason,
+    })
+  }
+
+  private logDeleteAccepted(input: Record<string, unknown>, reason: string): void {
+    this.logger.log({
       module: 'AccountStrategyViewService.deleteStrategy',
       input,
       reason,

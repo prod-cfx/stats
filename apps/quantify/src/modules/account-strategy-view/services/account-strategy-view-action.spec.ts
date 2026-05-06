@@ -31,7 +31,10 @@ function createActionTestContext(
     }),
     findUserStrategyAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
     loadOpenPositionsForLiquidation: jest.fn().mockResolvedValue([]),
-    deleteStrategyForUser: jest.fn().mockResolvedValue(undefined),
+    hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
+    archiveLinkedConversationsForStrategy: jest.fn().mockResolvedValue({ archivedCount: 0 }),
+    markStrategyViewOnly: jest.fn().mockResolvedValue(undefined),
+    archiveStrategyInstanceById: jest.fn().mockResolvedValue(undefined),
   }
 
   const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
@@ -93,14 +96,17 @@ describe('accountStrategyViewService.performAction', () => {
   it('rejects deleting a running strategy instance', async () => {
     const { service, repo } = createActionTestContext({ status: 'running' })
 
-    await expect(service.deleteStrategy('user-1', 'inst-1')).rejects.toThrow('account_strategy.delete_running_forbidden')
-    expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
+    await expect(
+      service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' }),
+    ).rejects.toThrow('account_strategy.delete_running_forbidden')
+    expect(repo.archiveStrategyInstanceById).not.toHaveBeenCalled()
+    expect(repo.markStrategyViewOnly).not.toHaveBeenCalled()
   })
 
   it('deletes a stopped strategy only after runtime risk checks pass', async () => {
     const { service, repo, tradingService } = createActionTestContext({ status: 'stopped' })
 
-    await service.deleteStrategy('user-1', 'inst-1')
+    await service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' })
 
     expect(repo.loadOpenPositionsForLiquidation).toHaveBeenCalledWith('account-1')
     expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
@@ -110,16 +116,16 @@ describe('accountStrategyViewService.performAction', () => {
       'BTC/USDT',
       'exchange-account-1',
     )
-    expect(repo.deleteStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-1', { archiveLinkedConversations: true })
+    expect(repo.archiveStrategyInstanceById).toHaveBeenCalledWith('user-1', 'inst-1')
   })
 
   it('archives a draft orphan strategy by strategy id without requiring a session', async () => {
     const { service, repo } = createActionTestContext({ status: 'draft' })
 
-    await service.deleteStrategy('user-1', 'inst-1')
+    await service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' })
 
     expect(repo.findUserStrategyAccount).not.toHaveBeenCalled()
-    expect(repo.deleteStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-1', { archiveLinkedConversations: true })
+    expect(repo.archiveStrategyInstanceById).toHaveBeenCalledWith('user-1', 'inst-1')
   })
 
   it('rejects deleting a stopped strategy with open positions', async () => {
@@ -132,8 +138,10 @@ describe('accountStrategyViewService.performAction', () => {
       status: 'OPEN',
     }])
 
-    await expect(service.deleteStrategy('user-1', 'inst-1')).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
-    expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
+    await expect(
+      service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' }),
+    ).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
+    expect(repo.archiveStrategyInstanceById).not.toHaveBeenCalled()
   })
 
   it('rejects deleting a stopped strategy with open orders', async () => {
@@ -142,8 +150,10 @@ describe('accountStrategyViewService.performAction', () => {
       { id: 'order-1', symbol: 'BTC/USDT', status: 'partially_filled' },
     ])
 
-    await expect(service.deleteStrategy('user-1', 'inst-1')).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
-    expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
+    await expect(
+      service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' }),
+    ).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
+    expect(repo.archiveStrategyInstanceById).not.toHaveBeenCalled()
   })
 
   it('rejects subscriber changing global strategy instance status', async () => {

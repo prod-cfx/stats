@@ -3261,8 +3261,37 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     await (service as any).deleteConversation('conv-1', 'u1', { deleteStoppedStrategy: true })
 
-    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { archiveLinkedConversations: false })
-    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
+    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { deleteStoppedStrategy: true, via: 'conversation-list' })
+    expect(mockConversationsRepo.archiveByIdAndUser).not.toHaveBeenCalled()
+  })
+
+  it('delegates conversation archive + view-only set to deleteStrategy when deleteStoppedStrategy=false', async () => {
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'u1',
+      codegenSessionId: 'session-1',
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'inst-stopped',
+      latestSpecDesc: null,
+      constraintPack: null,
+      latestDraftCode: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+    })
+    mockAccountStrategyViewService.getStrategyDetail.mockResolvedValue({
+      id: 'inst-stopped',
+      status: 'stopped',
+    })
+
+    await service.deleteConversation('conv-1', 'u1')
+
+    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { deleteStoppedStrategy: false, via: 'conversation-list' })
+    expect(mockConversationsRepo.archiveByIdAndUser).not.toHaveBeenCalled()
   })
 
   it('sends the non-contradictory planner prompt to ai service', async () => {

@@ -60,10 +60,6 @@ interface DeployStrategyInput {
   exchangeAccountName?: string
 }
 
-interface DeleteStrategyVisibilityOptions {
-  archiveLinkedConversations: boolean
-}
-
 interface ExistingInstanceSnapshotBinding {
   bindingSource?: unknown
   publishedSnapshotId?: unknown
@@ -559,6 +555,11 @@ export class AccountStrategyViewRepository {
       client.strategyInstance.count({ where }),
     ])
 
+    const hasActiveConversationMap = await this.computeHasActiveConversationMap(
+      query.userId,
+      items.map(item => item.id),
+    )
+
     return new BasePaginationResponseDto(total, page, limit, items.map(item => {
       const userSub = item.subscriptions[0]
       const isSubscribed = !!userSub && userSub.status === SubscriptionStatus.active
@@ -577,8 +578,64 @@ export class AccountStrategyViewRepository {
         customParams: userSub?.customParams as Record<string, unknown> | null,
         updatedAt: item.updatedAt,
         subscribed: isSubscribed,
+        viewOnlyAt: item.viewOnlyAt ?? null,
+        hasActiveConversation: hasActiveConversationMap.get(item.id) === true,
       }
     }))
+  }
+
+  private async computeHasActiveConversationMap(
+    userId: string,
+    strategyInstanceIds: string[],
+  ): Promise<Map<string, boolean>> {
+    const map = new Map<string, boolean>()
+    if (strategyInstanceIds.length === 0) {
+      return map
+    }
+    const tx = this.txHost.tx
+    const [directSessions, snapshotSessions] = await Promise.all([
+      tx.llmStrategyCodegenSession.findMany({
+        where: { userId, strategyInstanceId: { in: strategyInstanceIds } },
+        select: { id: true, strategyInstanceId: true },
+      }),
+      tx.publishedStrategySnapshot.findMany({
+        where: { strategyInstanceId: { in: strategyInstanceIds }, session: { userId } },
+        select: { sessionId: true, strategyInstanceId: true },
+      }),
+    ])
+
+    const sessionIdToInstanceId = new Map<string, string>()
+    for (const session of directSessions) {
+      if (session.strategyInstanceId) {
+        sessionIdToInstanceId.set(session.id, session.strategyInstanceId)
+      }
+    }
+    for (const snap of snapshotSessions) {
+      if (snap.strategyInstanceId && !sessionIdToInstanceId.has(snap.sessionId)) {
+        sessionIdToInstanceId.set(snap.sessionId, snap.strategyInstanceId)
+      }
+    }
+
+    const sessionIds = Array.from(sessionIdToInstanceId.keys())
+    if (sessionIds.length === 0) {
+      return map
+    }
+
+    const activeConversations = await tx.aiQuantConversation.findMany({
+      where: {
+        userId,
+        archivedAt: null,
+        codegenSessionId: { in: sessionIds },
+      },
+      select: { codegenSessionId: true },
+    })
+    for (const conv of activeConversations) {
+      const instanceId = conv.codegenSessionId ? sessionIdToInstanceId.get(conv.codegenSessionId) : null
+      if (instanceId) {
+        map.set(instanceId, true)
+      }
+    }
+    return map
   }
 
   async findDeployRequestByUserAndRequestId(userId: string, deployRequestId: string) {
@@ -1116,71 +1173,109 @@ export class AccountStrategyViewRepository {
     }
   }
 
-  async deleteStrategyForUser(
+  async hasActiveConversationsForStrategy(userId: string, strategyInstanceId: string): Promise<boolean> {
+    const tx = this.txHost.tx
+    const linkedSessionIds = await this.collectLinkedSessionIds(userId, strategyInstanceId)
+    if (linkedSessionIds.length === 0) {
+      return false
+    }
+    const active = await tx.aiQuantConversation.findFirst({
+      where: {
+        userId,
+        archivedAt: null,
+        codegenSessionId: { in: linkedSessionIds },
+      },
+      select: { id: true },
+    })
+    return active !== null
+  }
+
+  async archiveLinkedConversationsForStrategy(
     userId: string,
     strategyInstanceId: string,
-    options: DeleteStrategyVisibilityOptions,
-  ): Promise<void> {
-    await this.txHost.withTransaction(async () => {
-      const tx = this.txHost.tx
-      const strategy = await tx.strategyInstance.findFirst({
-        where: visibleStrategyInstanceWhere({
-          id: strategyInstanceId,
-          createdBy: userId,
-        }),
-        select: {
-          id: true,
-        },
-      })
-      if (!strategy) {
-        return
-      }
-
-      const linkedSessions = await tx.llmStrategyCodegenSession.findMany({
-        where: { userId, strategyInstanceId: strategy.id },
-        select: { id: true },
-      })
-      const linkedSnapshotSessions = await tx.publishedStrategySnapshot.findMany({
-        where: { strategyInstanceId: strategy.id, session: { userId } },
-        select: { sessionId: true },
-      })
-      const linkedSessionIds = Array.from(new Set([
-        ...linkedSessions.map(session => session.id),
-        ...linkedSnapshotSessions.map(snapshot => snapshot.sessionId),
-      ]))
-      const archivedAt = new Date()
-
-      if (options.archiveLinkedConversations && linkedSessionIds.length > 0) {
-        await tx.aiQuantConversation.updateMany({
-          where: {
-            userId,
-            archivedAt: null,
-            codegenSessionId: { in: linkedSessionIds },
-          },
-          data: { archivedAt },
-        })
-      }
-
-      await tx.llmStrategyCodegenSession.updateMany({
-        where: { userId, strategyInstanceId: strategy.id },
-        data: { strategyInstanceId: null },
-      })
-
-      await tx.publishedStrategySnapshot.updateMany({
-        where: { strategyInstanceId: strategy.id, session: { userId } },
-        data: { strategyInstanceId: null },
-      })
-
-      await tx.strategyInstance.update({
-        where: { id: strategy.id },
-        data: {
-          archivedAt,
-          archivedReason: STRATEGY_ARCHIVE_REASON_USER_DELETE,
-          archivedByUserId: userId,
-          updatedBy: userId,
-        },
-      })
+  ): Promise<{ archivedCount: number }> {
+    const tx = this.txHost.tx
+    const linkedSessionIds = await this.collectLinkedSessionIds(userId, strategyInstanceId)
+    if (linkedSessionIds.length === 0) {
+      return { archivedCount: 0 }
+    }
+    const result = await tx.aiQuantConversation.updateMany({
+      where: {
+        userId,
+        archivedAt: null,
+        codegenSessionId: { in: linkedSessionIds },
+      },
+      data: { archivedAt: new Date() },
     })
+    return { archivedCount: result.count }
+  }
+
+  async markStrategyViewOnly(userId: string, strategyInstanceId: string): Promise<void> {
+    const tx = this.txHost.tx
+    await tx.strategyInstance.updateMany({
+      where: {
+        id: strategyInstanceId,
+        createdBy: userId,
+        archivedAt: null,
+        viewOnlyAt: null,
+      },
+      data: {
+        viewOnlyAt: new Date(),
+        updatedBy: userId,
+      },
+    })
+  }
+
+  async archiveStrategyInstanceById(userId: string, strategyInstanceId: string): Promise<void> {
+    const tx = this.txHost.tx
+    const strategy = await tx.strategyInstance.findFirst({
+      where: visibleStrategyInstanceWhere({
+        id: strategyInstanceId,
+        createdBy: userId,
+      }),
+      select: { id: true },
+    })
+    if (!strategy) {
+      return
+    }
+
+    await tx.llmStrategyCodegenSession.updateMany({
+      where: { userId, strategyInstanceId: strategy.id },
+      data: { strategyInstanceId: null },
+    })
+
+    await tx.publishedStrategySnapshot.updateMany({
+      where: { strategyInstanceId: strategy.id, session: { userId } },
+      data: { strategyInstanceId: null },
+    })
+
+    await tx.strategyInstance.update({
+      where: { id: strategy.id },
+      data: {
+        archivedAt: new Date(),
+        archivedReason: STRATEGY_ARCHIVE_REASON_USER_DELETE,
+        archivedByUserId: userId,
+        updatedBy: userId,
+      },
+    })
+  }
+
+  private async collectLinkedSessionIds(userId: string, strategyInstanceId: string): Promise<string[]> {
+    const tx = this.txHost.tx
+    const [linkedSessions, linkedSnapshotSessions] = await Promise.all([
+      tx.llmStrategyCodegenSession.findMany({
+        where: { userId, strategyInstanceId },
+        select: { id: true },
+      }),
+      tx.publishedStrategySnapshot.findMany({
+        where: { strategyInstanceId, session: { userId } },
+        select: { sessionId: true },
+      }),
+    ])
+    return Array.from(new Set([
+      ...linkedSessions.map(session => session.id),
+      ...linkedSnapshotSessions.map(snapshot => snapshot.sessionId),
+    ]))
   }
 
   private buildStatusWhere(status?: 'running' | 'stopped' | 'draft'): Prisma.StrategyInstanceWhereInput {

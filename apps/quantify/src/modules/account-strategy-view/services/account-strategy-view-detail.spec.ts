@@ -6,7 +6,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     jest.useFakeTimers()
     try {
       const repo = {
-        findStrategyForUser: jest.fn().mockResolvedValue({
+        hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
+      findStrategyForUser: jest.fn().mockResolvedValue({
           id: 'inst-slow-balance',
           name: 'Hyperliquid detail',
           status: 'running',
@@ -93,6 +94,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('builds detail payload with equity series and mixed timeline', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-1',
         name: 'BTC 动量突破',
@@ -521,6 +523,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('returns explicit null snapshot truth when no published snapshot binding exists', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-no-binding',
         name: 'No binding strategy',
@@ -602,6 +605,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('marks legacy snapshots as compatibility-only instead of faking backtest and deployment truth', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-legacy-1',
         name: 'Legacy snapshot strategy',
@@ -699,6 +703,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('marks missing bound snapshots as invalid compatibility state and hides deployment truth', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-missing-snapshot-1',
         name: 'Missing snapshot strategy',
@@ -781,6 +786,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('fails closed when bound runtime execution states cannot be validated', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-runtime-invalid-1',
         name: 'Runtime invalid strategy',
@@ -882,6 +888,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('preserves deployment truth when runtime execution state loading fails for a transient read error', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-runtime-transient-1',
         name: 'Runtime transient strategy',
@@ -983,6 +990,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('rejects detail when strategy is not actively subscribed', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-1',
         name: 'BTC 动量突破',
@@ -1014,6 +1022,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('rejects detail when strategy status is draft', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-1',
         name: 'BTC 动量突破',
@@ -1045,6 +1054,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('falls back to instance stats tradeCount when account trade stats are empty', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-1',
         name: 'BTC 动量突破',
@@ -1098,6 +1108,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('keeps pnl fields nullable when backend stats are unavailable', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-9',
         name: 'Null pnl strategy',
@@ -1142,6 +1153,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('falls back to latest executed account by symbol when template account is missing', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-fallback',
         name: 'Fallback strategy',
@@ -1194,6 +1206,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('keeps persisted execution balances for pristine strategy accounts', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-live-account',
         name: 'Live account strategy',
@@ -1281,6 +1294,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('does not substitute snapshot backtest equity for an empty strategy account curve', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-perp-flat-account',
         name: 'Perp flat account strategy',
@@ -1394,6 +1408,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('keeps real account equity series separate from snapshot backtest results', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-account-moving',
         name: 'Moving account strategy',
@@ -1473,6 +1488,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('uses persisted execution equity as the latest curve point for pristine non-default seed accounts', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-live-account-nondefault-seed',
         name: 'Live account strategy with seeded capital',
@@ -1559,6 +1575,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('ignores pre-start closed positions when computing drawdown', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-dd',
         name: 'Drawdown guard',
@@ -1619,6 +1636,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('returns null dynamic param fields when strategy template schema is missing', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-legacy',
         name: 'Legacy strategy',
@@ -1671,6 +1689,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('derives detail pnl and equity from position data when account aggregates are stale', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-stale',
         name: 'Stale account aggregates',
@@ -1754,6 +1773,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('derives available balance and equity from position state when historical account balance is stale', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-closed',
         name: 'Closed strategy',
@@ -1829,6 +1849,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('refreshes local open positions before computing detail pnl', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-sync-before-detail',
         name: 'Sync before detail',
@@ -1931,6 +1952,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('revalues open positions from latest market quotes when stored unrealized pnl is stale', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-live',
         name: 'Live strategy',
@@ -2017,6 +2039,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('uses open-position unrealized pnl over stale account unrealized aggregates', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-aggregate',
         name: 'Aggregate strategy',
@@ -2093,6 +2116,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('shows total equity separately from zero available buying power', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'strategy-1',
         name: 'Funding semantics strategy',
@@ -2171,6 +2195,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('refreshes stale zero buying power for pristine strategy accounts from exchange balance', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'strategy-stale-zero-balance',
         name: 'Funding stale zero strategy',
@@ -2276,6 +2301,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('uses raw local balance as buying power for legacy accounts without funding snapshot', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'strategy-legacy-zero-balance',
         name: 'Legacy zero balance strategy',
@@ -2341,6 +2367,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('prefers local funding over stale deploy snapshot after strategy activity', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-local-activity-funding',
         name: 'Local activity funding strategy',
@@ -2417,6 +2444,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('shows persisted zero buying power after local activity even when derived equity is positive', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-local-zero-buying-power',
         name: 'Local zero buying power strategy',
@@ -2483,6 +2511,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-today',
         name: 'Daily pnl strategy',
@@ -2555,6 +2584,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('falls back per field when empty position financials only conflict with one account aggregate side', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-partial-aggregate',
         name: 'Partial aggregate strategy',
@@ -2623,6 +2653,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-exchange-flat-daily',
         name: 'Exchange-first strategy',
@@ -2722,6 +2753,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     todayStart.setUTCHours(0, 0, 0, 0)
     const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000)
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-stale-daily',
         name: 'Stale daily pnl strategy',
@@ -2794,6 +2826,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
   it('removes deployment leverage semantics from spot strategy detail responses', async () => {
     const repo = {
+      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-spot-1',
         name: 'Spot strategy',

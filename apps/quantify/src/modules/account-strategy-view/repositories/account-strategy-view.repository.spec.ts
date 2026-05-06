@@ -957,55 +957,88 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
   })
 })
 
-describe('accountStrategyViewRepository.deleteStrategyForUser', () => {
-  it('archives strategy visibility and unlinks only direct user-visible relations in one transaction', async () => {
+describe('accountStrategyViewRepository unified delete primitives', () => {
+  function buildRepo(tx: Record<string, unknown>) {
+    return new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
+  }
+
+  it('hasActiveConversationsForStrategy returns true when an active conversation exists', async () => {
     const tx = {
-      strategyInstance: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
-        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
-        delete: jest.fn(),
-      },
-      llmStrategyCodegenSession: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'session-direct' }]),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      publishedStrategySnapshot: {
-        findMany: jest.fn().mockResolvedValue([{ sessionId: 'session-snapshot' }]),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      aiQuantConversation: {
-        updateMany: jest.fn().mockResolvedValue({ count: 2 }),
-      },
+      llmStrategyCodegenSession: { findMany: jest.fn().mockResolvedValue([{ id: 'session-direct' }]) },
+      publishedStrategySnapshot: { findMany: jest.fn().mockResolvedValue([{ sessionId: 'session-snapshot' }]) },
+      aiQuantConversation: { findFirst: jest.fn().mockResolvedValue({ id: 'conv-1' }) },
     }
-
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
-
-    await repo.deleteStrategyForUser('user-1', 'strategy-instance-1', { archiveLinkedConversations: true })
-
-    expect(tx.strategyInstance.findFirst).toHaveBeenCalledWith({
-      where: {
-        id: 'strategy-instance-1',
-        createdBy: 'user-1',
-        archivedAt: null,
-      },
-      select: { id: true },
-    })
-    expect(tx.llmStrategyCodegenSession.findMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1', strategyInstanceId: 'strategy-instance-1' },
-      select: { id: true },
-    })
-    expect(tx.publishedStrategySnapshot.findMany).toHaveBeenCalledWith({
-      where: { strategyInstanceId: 'strategy-instance-1', session: { userId: 'user-1' } },
-      select: { sessionId: true },
-    })
-    expect(tx.aiQuantConversation.updateMany).toHaveBeenCalledWith({
+    const repo = buildRepo(tx)
+    const result = await repo.hasActiveConversationsForStrategy('user-1', 'strategy-instance-1')
+    expect(result).toBe(true)
+    expect(tx.aiQuantConversation.findFirst).toHaveBeenCalledWith({
       where: {
         userId: 'user-1',
         archivedAt: null,
         codegenSessionId: { in: ['session-direct', 'session-snapshot'] },
       },
+      select: { id: true },
+    })
+  })
+
+  it('hasActiveConversationsForStrategy returns false when no linked sessions exist', async () => {
+    const tx = {
+      llmStrategyCodegenSession: { findMany: jest.fn().mockResolvedValue([]) },
+      publishedStrategySnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      aiQuantConversation: { findFirst: jest.fn() },
+    }
+    const repo = buildRepo(tx)
+    const result = await repo.hasActiveConversationsForStrategy('user-1', 'strategy-instance-1')
+    expect(result).toBe(false)
+    expect(tx.aiQuantConversation.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('archiveLinkedConversationsForStrategy archives every active conversation across direct and snapshot sessions', async () => {
+    const tx = {
+      llmStrategyCodegenSession: { findMany: jest.fn().mockResolvedValue([{ id: 'session-a' }, { id: 'session-b' }]) },
+      publishedStrategySnapshot: { findMany: jest.fn().mockResolvedValue([{ sessionId: 'session-c' }]) },
+      aiQuantConversation: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) },
+    }
+    const repo = buildRepo(tx)
+    const result = await repo.archiveLinkedConversationsForStrategy('user-1', 'strategy-instance-1')
+    expect(result).toEqual({ archivedCount: 3 })
+    expect(tx.aiQuantConversation.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        archivedAt: null,
+        codegenSessionId: { in: ['session-a', 'session-b', 'session-c'] },
+      },
       data: { archivedAt: expect.any(Date) },
     })
+  })
+
+  it('markStrategyViewOnly is idempotent: only updates when viewOnlyAt is null', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 })
+    const tx = { strategyInstance: { updateMany } }
+    const repo = buildRepo(tx)
+    await repo.markStrategyViewOnly('user-1', 'strategy-instance-1')
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'strategy-instance-1',
+        createdBy: 'user-1',
+        archivedAt: null,
+        viewOnlyAt: null,
+      },
+      data: { viewOnlyAt: expect.any(Date), updatedBy: 'user-1' },
+    })
+  })
+
+  it('archiveStrategyInstanceById unbinds sessions+snapshots then archives the strategy', async () => {
+    const tx = {
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+      },
+      llmStrategyCodegenSession: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      publishedStrategySnapshot: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    }
+    const repo = buildRepo(tx)
+    await repo.archiveStrategyInstanceById('user-1', 'strategy-instance-1')
     expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', strategyInstanceId: 'strategy-instance-1' },
       data: { strategyInstanceId: null },
@@ -1023,31 +1056,21 @@ describe('accountStrategyViewRepository.deleteStrategyForUser', () => {
         updatedBy: 'user-1',
       },
     })
-    expect(tx.strategyInstance.delete).not.toHaveBeenCalled()
   })
 
-  it('does not archive linked conversations when the caller owns current conversation archive', async () => {
+  it('archiveStrategyInstanceById is a no-op when strategy not visible', async () => {
     const tx = {
       strategyInstance: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
-        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
       },
-      llmStrategyCodegenSession: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'session-direct' }]),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      publishedStrategySnapshot: {
-        findMany: jest.fn().mockResolvedValue([]),
-        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
-      },
-      aiQuantConversation: { updateMany: jest.fn() },
+      llmStrategyCodegenSession: { updateMany: jest.fn() },
+      publishedStrategySnapshot: { updateMany: jest.fn() },
     }
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
-
-    await repo.deleteStrategyForUser('user-1', 'strategy-instance-1', { archiveLinkedConversations: false })
-
-    expect(tx.aiQuantConversation.updateMany).not.toHaveBeenCalled()
-    expect(tx.strategyInstance.update).toHaveBeenCalled()
+    const repo = buildRepo(tx)
+    await repo.archiveStrategyInstanceById('user-1', 'strategy-instance-1')
+    expect(tx.strategyInstance.update).not.toHaveBeenCalled()
+    expect(tx.llmStrategyCodegenSession.updateMany).not.toHaveBeenCalled()
   })
 })
 
