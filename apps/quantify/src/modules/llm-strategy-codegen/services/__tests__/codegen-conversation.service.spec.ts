@@ -13207,6 +13207,169 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps fixed range grid planner action keys out of generic contract-required prompts after density reply', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          context: {
+            symbol: 'ETHUSDT',
+          },
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: {
+              rangeMin: 2300,
+              rangeMax: 2430,
+              sideMode: 'long_only',
+            },
+          }],
+          actions: [{
+            key: 'place_limit_grid',
+            params: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+              recycleOnFill: true,
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-fixed-grid-action-density' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '区间网格，ETH,2300-2430',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-fixed-grid-action-density',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-fixed-grid-action-density', {
+      userId: 'u1',
+      message: '10格',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+    expect(updatePayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'place_limit_grid',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+            }),
+          ]),
+        })],
+      }),
+    ]))
+  })
+
+  it('keeps compact complete fixed range grid action keys out of generic contract-required prompts', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          context: {
+            symbol: 'ETHUSDT',
+          },
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: {
+              rangeMin: 2300,
+              rangeMax: 2430,
+              gridCount: 10,
+              sideMode: 'long_only',
+            },
+          }],
+          actions: [{
+            key: 'place_limit_grid',
+            params: {
+              orderType: 'limit',
+              timeInForce: 'gtc',
+              recycleOnFill: true,
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-compact-fixed-grid-action' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '区间网格，ETH,2300-2430,10格',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'place_limit_grid',
+        openSlots: [],
+        contracts: [expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+            }),
+          ]),
+        })],
+      }),
+    ]))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
   it('consumes freeform percent spacing for a bare fixed bidirectional grid density slot', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({

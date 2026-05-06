@@ -12,6 +12,8 @@ export function buildConversationPlannerSystemPrompt(): string {
     '输出必须是 semanticPatch，而不是 checklist patch。',
     '输出原子语义 patch，按 context、trigger、action、risk、position 表达当前消息造成的最小语义变化，不要输出 checklist。',
     'semanticPatch 只表达当前消息涉及的增量语义，不要臆造、补写或弱化任何规则。',
+    'semanticPatch 中任何可执行 action atom 必须携带 contracts/capabilities；不得输出缺少执行合约的裸 action。',
+    '网格执行 action（如 place_limit_grid、action.grid_ladder、grid_ladder）必须表达 order_program/maintain/limit_ladder 合约，而不是让用户补充内部执行合约。',
     '标的、周期、仓位和关键风控若属于必答项，缺失时必须继续澄清，不能跳过。',
     '若编辑意图不完整，只追问缺失的 semantic slot，不要重新询问已锁定语义。',
     '禁止发明新的 atom、family、state 值或 grid 语义。',
