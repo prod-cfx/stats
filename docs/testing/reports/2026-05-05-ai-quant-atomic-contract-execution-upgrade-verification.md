@@ -32,7 +32,7 @@ Issue：#960
 | `dx test unit front AiQuantPageClient.deploy-guard.test.tsx` | PASS | 13 passed |
 | `dx test unit front ai-quant-page-conversation.test.ts` | PASS | 61 passed |
 | `dx build quantify --dev` | PASS | `quantify:prisma:generate` ran; `quantify:build` completed, some dependencies came from Nx cache |
-| `dx build contracts --dev` | FAIL | Blocked before contracts generation: current Node is `v20.18.0`, project wants `>=20.19.0`; `backend:swagger` also failed because `apps/backend/src/prisma/prisma.types.ts` cannot resolve `../../generated/prisma` |
+| `dx build contracts --dev` | PASS | Reran after `dx db generate --dev` with a temporary `BASH_ENV` that prepends `/Users/zengmengdan/Library/pnpm` so the internal `bash -lc` uses Node `v20.19.0`; backend and quantify swagger exported, backend/quantify contracts generated |
 | `git diff --check` | PASS | No whitespace errors |
 
 ## Development-only diagnostic reruns
@@ -55,5 +55,5 @@ Issue：#960
 
 ## Known environment limitations
 
-- `dx build contracts --dev` is not green in this worktree because the local runtime is Node `v20.18.0`, below the repo baseline `>=20.19.0`, and backend generated Prisma client is absent for swagger compilation.
-- The failing contracts command stopped at `backend:swagger`, before `quantify:swagger` and contract generation scripts could run.
+- None remaining for the targeted verification set.
+- Diagnostic note: the first contracts attempt failed because `dx` runs the contracts recipe through an internal `bash -lc`; on this machine that login shell reorders PATH to `/usr/local/bin` first, which selects Node `v20.18.0`. Running `dx db generate --dev` and then `dx build contracts --dev` with `BASH_ENV` prepending `/Users/zengmengdan/Library/pnpm` keeps the command on Node `v20.19.0` and uses the stats root `.env.development` / `.env.development.local` files.
