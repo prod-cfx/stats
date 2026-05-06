@@ -241,6 +241,92 @@ describe('SemanticStateProjectionService', () => {
     expect(text).not.toContain('待补充')
   })
 
+  it('summarizes sequence, volume spike and rebound confirmation groups without raw keys', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-sequence',
+          key: 'condition.sequence',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            sequenceKind: 'consecutive_candles',
+            count: 3,
+            direction: 'down',
+            groupId: 'entry-confirmation-1',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-volume',
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            event: 'spike',
+            comparator: 'gt',
+            groupId: 'entry-confirmation-1',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'trigger.volume.relative_average.lookback_bars',
+            fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量比较窗口，例如过去 20 根 K 线均量。',
+            affectsExecution: true,
+          }],
+        },
+        {
+          id: 'entry-rebound',
+          key: 'confirmation.rebound',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            groupId: 'entry-confirmation-1',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const clarification = service.buildClarificationView(state)
+    const graphText = flattenDisplayGraphText(state)
+
+    expect(clarification.summary).toContain('连续 3 根 K 线收跌')
+    expect(clarification.summary).toContain('成交量放大')
+    expect(clarification.summary).toContain('反弹确认')
+    expect(clarification.summary).toContain('做多开仓')
+    expect(graphText).toContain('连续 3 根 K 线收跌')
+    expect(graphText).toContain('反弹确认')
+    expect(clarification.summary).not.toContain('condition.sequence')
+    expect(clarification.summary).not.toContain('volume.relative_average')
+    expect(clarification.summary).not.toContain('confirmation.rebound')
+    expect(graphText).not.toContain('condition.sequence')
+    expect(graphText).not.toContain('volume.relative_average')
+    expect(graphText).not.toContain('confirmation.rebound')
+  })
+
   it('uses IF for the first logical any-of display block', () => {
     const state = buildLockedAtomicState('atr-risk')
     state.triggers = [

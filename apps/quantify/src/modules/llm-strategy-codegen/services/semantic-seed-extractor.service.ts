@@ -65,12 +65,12 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.removeStaticIndicatorTriggersCoveredBySequences(
+    const triggers = this.atomizeTriggers(this.groupEntryConfirmationTriggers(this.removeStaticIndicatorTriggersCoveredBySequences(
       this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
         eventFramePatch.triggers ?? [],
         this.extractTriggers(text, aliasContext),
       ))),
-    ))
+    )))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),
@@ -254,6 +254,68 @@ export class SemanticSeedExtractorService {
     ))
   }
 
+  private groupEntryConfirmationTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
+    const groups = new Map<string, Array<{ trigger: SeedTrigger, index: number }>>()
+    triggers.forEach((trigger, index) => {
+      if (trigger.phase !== 'entry' || !this.isEntryConfirmationAtom(trigger)) {
+        return
+      }
+      const groupKey = `${trigger.phase}:${trigger.sideScope ?? 'long'}`
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), { trigger, index }])
+    })
+
+    const selectedGroups = Array.from(groups.values()).filter((group) => {
+      const hasSequence = group.some(({ trigger }) => trigger.key === 'condition.sequence')
+      const hasConfirmation = group.some(({ trigger }) => (
+        trigger.key === 'volume.relative_average'
+        || trigger.key === 'confirmation.rebound'
+      ))
+      return hasSequence && hasConfirmation && group.length > 1
+    })
+    if (selectedGroups.length === 0) {
+      return triggers
+    }
+
+    const groupIdsByIndex = new Map<number, string>()
+    selectedGroups.forEach((group, groupIndex) => {
+      const groupId = group
+        .map(({ trigger }) => this.readTriggerGroupMarker(trigger))
+        .find((marker): marker is string => Boolean(marker))
+        ?? `entry-sequence-confirmation-${groupIndex + 1}`
+      for (const { index } of group) {
+        groupIdsByIndex.set(index, groupId)
+      }
+    })
+
+    return triggers.map((trigger, index) => {
+      const groupId = groupIdsByIndex.get(index)
+      if (!groupId || this.readTriggerGroupMarker(trigger)) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        params: {
+          ...(trigger.params ?? {}),
+          groupId,
+        },
+      }
+    })
+  }
+
+  private isEntryConfirmationAtom(trigger: SeedTrigger): boolean {
+    return trigger.key === 'condition.sequence'
+      || trigger.key === 'volume.relative_average'
+      || trigger.key === 'confirmation.rebound'
+  }
+
+  private readTriggerGroupMarker(trigger: SeedTrigger): string | null {
+    const params = trigger.params
+    if (!params) return null
+    const marker = params.groupId ?? params.displayGroupId ?? params.logicalGroupId ?? params.combinationId
+    return typeof marker === 'string' && marker.trim().length > 0 ? marker.trim() : null
+  }
+
   private atomizeActions(actions: SeedAction[]): SeedAction[] {
     return actions.map((action, index) => (
       this.hasContracts(action)
@@ -385,11 +447,53 @@ export class SemanticSeedExtractorService {
       }
     }
 
+    if (trigger.key === 'volume.relative_average') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_relative_average',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
     if (trigger.key === 'volatility.atr_threshold') {
       return {
         domain: 'market',
         verb: 'detect',
         object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'condition.sequence') {
+      return {
+        domain: 'price',
+        verb: 'detect',
+        object: 'sequence_condition',
+        shape: this.toCapabilityShape({
+          key: trigger.key,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? null,
+          ...(trigger.params ?? {}),
+        }),
+      }
+    }
+
+    if (trigger.key === 'confirmation.rebound') {
+      return {
+        domain: 'price',
+        verb: 'confirm',
+        object: 'rebound',
         shape: this.toCapabilityShape({
           key: trigger.key,
           phase: trigger.phase,

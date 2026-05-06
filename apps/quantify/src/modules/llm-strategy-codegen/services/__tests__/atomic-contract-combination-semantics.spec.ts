@@ -3,11 +3,13 @@ import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
+import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
 
 const extractor = new SemanticSeedExtractorService()
 const builder = new SemanticSeedStateBuilderService()
 const classifier = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
+const projection = new SemanticStateProjectionService()
 
 interface PipelineResult {
   state: SemanticState
@@ -196,7 +198,15 @@ describe('atomic contract combination semantics', () => {
         affectsExecution: true,
       }),
     ]))
+    const summary = projection.buildClarificationView(state).summary
+    expect(summary).toContain('连续 3 根 K 线收跌')
+    expect(summary).toContain('成交量放大')
+    expect(summary).toContain('反弹确认')
+    expect(summary).not.toContain('condition.sequence')
+    expect(summary).not.toContain('volume.relative_average')
+    expect(summary).not.toContain('confirmation.rebound')
     expect(classification.route).toBe('open_slots')
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
   it('keeps RSI reclaim semantics distinct from MA50 over MA200 gate', () => {

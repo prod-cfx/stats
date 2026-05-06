@@ -439,6 +439,92 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes contracts for sequence, rebound and relative-volume atoms without generic contract prompts', () => {
+    const state = service.build({
+      triggers: [
+        {
+          key: 'condition.sequence',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            sequenceKind: 'consecutive_candles',
+            count: 3,
+            direction: 'down',
+            groupId: 'entry-confirmation-1',
+          },
+        },
+        {
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'open',
+          params: {
+            event: 'spike',
+            comparator: 'gt',
+            groupId: 'entry-confirmation-1',
+          },
+          openSlots: [{
+            slotKey: 'trigger.volume.relative_average.lookback_bars',
+            fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量比较窗口，例如过去 20 根 K 线均量。',
+            affectsExecution: true,
+          }],
+        },
+        {
+          key: 'confirmation.rebound',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            groupId: 'entry-confirmation-1',
+          },
+        },
+      ],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'detect',
+            object: 'sequence_condition',
+          })],
+        })],
+      }),
+      expect.objectContaining({
+        key: 'volume.relative_average',
+        status: 'open',
+        openSlots: expect.arrayContaining([expect.objectContaining({
+          slotKey: 'trigger.volume.relative_average.lookback_bars',
+        })]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'market',
+            verb: 'detect',
+            object: 'volume_relative_average',
+          })],
+        })],
+      }),
+      expect.objectContaining({
+        key: 'confirmation.rebound',
+        status: 'locked',
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'confirm',
+            object: 'rebound',
+          })],
+        })],
+      }),
+    ]))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
   it('synthesizes contracts for complete lightweight planner patches and keeps them locked', () => {
     const state = service.build({
       triggers: [{

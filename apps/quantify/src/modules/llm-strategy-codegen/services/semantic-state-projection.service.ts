@@ -363,6 +363,8 @@ export class SemanticStateProjectionService {
         return this.formatDisplayRelativeVolumeCondition(trigger)
       case 'condition.sequence':
         return this.formatDisplaySequenceCondition(trigger)
+      case 'confirmation.rebound':
+        return this.formatDisplayReboundConfirmationCondition(trigger)
       case 'price.rolling_extrema_breakout':
         return this.formatDisplayRollingExtremaBreakoutCondition(trigger)
       case 'logical.any_of':
@@ -391,13 +393,28 @@ export class SemanticStateProjectionService {
     const lookbackBars = this.readFiniteNumber(trigger.params.lookbackBars)
     const multiplier = this.readFiniteNumber(trigger.params.multiplier)
     if (lookbackBars === null || multiplier === null) {
-      return ''
+      const event = this.readString(trigger.params.event)
+      return event === 'spike' ? '成交量放大' : ''
     }
 
     const comparator = this.readString(trigger.params.comparator)
     const direction = comparator === 'lt' || comparator === 'lte' ? '低于' : '高于'
     const inclusive = comparator === 'gte' || comparator === 'lte' ? '或等于' : ''
     return `成交量${direction}${inclusive}过去 ${this.formatNumber(lookbackBars)} 根均量的 ${this.formatNumber(multiplier)} 倍`
+  }
+
+  private formatDisplayReboundConfirmationCondition(trigger: SemanticState['triggers'][number]): string {
+    const definition = this.readString(trigger.params.definition)
+    if (definition) {
+      return `反弹确认（${definition}）`
+    }
+
+    const windowBars = this.readFiniteNumber(trigger.params.windowBars) ?? this.readFiniteNumber(trigger.params.nextBars)
+    if (windowBars !== null) {
+      return `${this.formatNumber(windowBars)} 根 K 线内反弹确认`
+    }
+
+    return '反弹确认'
   }
 
   private formatDisplaySequenceCondition(trigger: SemanticState['triggers'][number]): string {
@@ -809,9 +826,15 @@ export class SemanticStateProjectionService {
       : triggers.filter(trigger => trigger.status === 'locked')
     const orderedTriggers = sourceTriggers.sort((left, right) => this.compareTriggers(left, right))
     const groupedIndicatorCompareSummaries = this.buildGroupedIndicatorCompareSummaries(orderedTriggers)
+    const groupedAtomicSummaries = this.buildGroupedAtomicTriggerSummaries(orderedTriggers)
 
     return orderedTriggers
       .map((trigger) => {
+        const groupedAtomicSummary = groupedAtomicSummaries.get(trigger.id)
+        if (groupedAtomicSummary !== undefined) {
+          return groupedAtomicSummary
+        }
+
         const groupedSummary = groupedIndicatorCompareSummaries.get(trigger.id)
         if (groupedSummary !== undefined) {
           return groupedSummary
@@ -971,6 +994,60 @@ export class SemanticStateProjectionService {
       const [first, ...rest] = group
       if (!first) continue
       result.set(first.id, this.formatGroupedIndicatorCompareTriggerSummary(first, timeframes))
+      for (const trigger of rest) {
+        result.set(trigger.id, '')
+      }
+    }
+
+    return result
+  }
+
+  private buildGroupedAtomicTriggerSummaries(
+    triggers: SemanticState['triggers'],
+  ): Map<string, string> {
+    const result = new Map<string, string>()
+    const groups = new Map<string, Array<SemanticState['triggers'][number]>>()
+
+    for (const trigger of triggers) {
+      if (trigger.key === 'logical.any_of') {
+        continue
+      }
+
+      const marker = this.readDisplayRuleGroupMarker(trigger)
+      if (!marker) {
+        continue
+      }
+
+      const groupKey = [
+        marker,
+        trigger.phase,
+        trigger.sideScope ?? '',
+      ].join('|')
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), trigger])
+    }
+
+    for (const group of groups.values()) {
+      if (group.length <= 1) {
+        continue
+      }
+
+      const conditions = group
+        .map(trigger => this.formatDisplayAtomicTriggerCondition(trigger))
+        .filter(text => text.length > 0)
+      if (conditions.length <= 1) {
+        continue
+      }
+
+      const [first, ...rest] = group
+      if (!first) continue
+
+      const phase = first.phase === 'entry'
+        ? '入场'
+        : first.phase === 'exit'
+          ? '出场'
+          : '条件'
+      const condition = conditions.join('，且')
+      result.set(first.id, `${phase}：${condition}${this.formatActionSuffix(first, condition)}`)
       for (const trigger of rest) {
         result.set(trigger.id, '')
       }

@@ -405,8 +405,17 @@ export class SemanticSeedStateBuilderService {
     if (
       key === 'volume.spike'
       || key === 'volume.threshold'
+      || key === 'volume.relative_average'
       || key === 'volatility.atr_threshold'
     ) {
+      return true
+    }
+
+    if (key === 'condition.sequence') {
+      return typeof params.sequenceKind === 'string' && params.sequenceKind.trim().length > 0
+    }
+
+    if (key === 'confirmation.rebound') {
       return true
     }
 
@@ -545,11 +554,53 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
+    if (key === 'volume.relative_average') {
+      return {
+        domain: 'market',
+        verb: 'detect',
+        object: 'volume_relative_average',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
     if (key === 'volatility.atr_threshold') {
       return {
         domain: 'market',
         verb: 'detect',
         object: 'volatility_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    if (key === 'condition.sequence') {
+      return {
+        domain: 'price',
+        verb: 'detect',
+        object: 'sequence_condition',
+        shape: this.toCapabilityShape({
+          key,
+          phase,
+          sideScope: sideScope ?? null,
+          ...params,
+        }),
+      }
+    }
+
+    if (key === 'confirmation.rebound') {
+      return {
+        domain: 'price',
+        verb: 'confirm',
+        object: 'rebound',
         shape: this.toCapabilityShape({
           key,
           phase,
