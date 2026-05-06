@@ -619,24 +619,24 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
-  it('extracts volume spike as recognized unsupported atom instead of generic fallback text', () => {
+  it('extracts volume spike as supported relative-average atom instead of generic fallback text', () => {
     const patch = service.extract('BTCUSDT 15m 放量突破前高做多，止损 5%，单笔 10%。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'volume.spike',
-        params: expect.objectContaining({ sourceText: expect.stringContaining('放量突破') }),
+        key: 'volume.relative_average',
+        params: expect.objectContaining({ event: 'spike', lookbackBars: 20, multiplier: 1 }),
       }),
     ]))
   })
 
-  it('extracts volume threshold as recognized unsupported trigger atom', () => {
+  it('extracts relative-average volume threshold as supported trigger atom', () => {
     const patch = service.extract('OKX BTCUSDT 15m，成交量大于过去 20 根均量 2 倍时开多，仓位 10%。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'volume.threshold',
-        params: expect.objectContaining({ sourceText: expect.stringContaining('成交量大于') }),
+        key: 'volume.relative_average',
+        params: expect.objectContaining({ lookbackBars: 20, multiplier: 2, comparator: 'gt' }),
       }),
     ]))
   })
@@ -709,12 +709,12 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.risk).not.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'risk.partial_take_profit' })]))
   })
 
-  it('preserves trade intent for unsupported volume triggers', () => {
+  it('preserves trade intent for relative-average volume triggers', () => {
     const patch = service.extract('OKX BTCUSDT 15m，放量做空，放量平仓。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'volume.spike', phase: 'entry', sideScope: 'short' }),
-      expect.objectContaining({ key: 'volume.spike', phase: 'exit' }),
+      expect.objectContaining({ key: 'volume.relative_average', phase: 'entry', sideScope: 'short' }),
+      expect.objectContaining({ key: 'volume.relative_average', phase: 'exit' }),
     ]))
   })
 

@@ -201,7 +201,7 @@ function isExecutableIndicatorReferenceAlias(trigger: SemanticTriggerState): boo
     && slot.affectsExecution
     && /reference\.period/u.test(`${slot.slotKey}.${slot.fieldPath}`),
   )
-  return (indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
+  return (indicator === 'price' || indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
     && referenceRole.length > 0
     && (hasReferencePeriod || hasReferencePeriodOpenSlot)
 }
