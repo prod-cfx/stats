@@ -400,6 +400,47 @@ describe('SemanticStateProjectionService', () => {
     expect(text).not.toContain('待补充')
   })
 
+  it('renders atomic trigger display text in conversation summaries instead of raw atom keys', () => {
+    const state = buildLockedAtomicState('atr-risk')
+    state.triggers = [
+      {
+        id: 'entry-rolling-high-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          extrema: 'high',
+          event: 'breakout_up',
+          lookbackBars: 20,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-rolling-low-breakout',
+        key: 'price.rolling_extrema_breakout',
+        phase: 'exit',
+        sideScope: 'long',
+        params: {
+          extrema: 'low',
+          event: 'breakout_down',
+          lookbackBars: 10,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ]
+    state.actions.push({ id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] })
+
+    const view = service.buildConversationView(state)
+
+    expect(view.summary).toContain('入场：突破过去 20 根 K 线最高价时做多开仓')
+    expect(view.summary).toContain('出场：跌破过去 10 根 K 线最低价时平多')
+    expect(view.summary).not.toContain('price.rolling_extrema_breakout')
+  })
+
   it('keeps malformed locked risk atoms visible in the execute display block', () => {
     const state = buildLockedAtomicState('atr-risk')
     state.risk = [

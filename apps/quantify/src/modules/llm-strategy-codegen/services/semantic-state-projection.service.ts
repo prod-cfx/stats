@@ -925,6 +925,16 @@ export class SemanticStateProjectionService {
           return this.formatIndicatorBoundaryTriggerSummary(trigger)
         }
 
+        const atomicCondition = this.formatDisplayAtomicTriggerCondition(trigger)
+        if (atomicCondition) {
+          const phase = trigger.phase === 'entry'
+            ? '入场'
+            : trigger.phase === 'exit'
+              ? '出场'
+              : '条件'
+          return `${phase}：${atomicCondition}${this.formatActionSuffix(trigger, atomicCondition)}`
+        }
+
         return trigger.key
       })
       .filter(item => item.length > 0)

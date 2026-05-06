@@ -65,10 +65,10 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.removeLogicalAnyOfExitChildren(this.mergeSeedTriggers(
+    const triggers = this.atomizeTriggers(this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
       eventFramePatch.triggers ?? [],
       this.extractTriggers(text, aliasContext),
-    )))
+    ))))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),

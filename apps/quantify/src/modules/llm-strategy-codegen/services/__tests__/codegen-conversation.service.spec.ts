@@ -5279,11 +5279,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             key: 'bollinger.touch_upper',
             phase: 'entry',
             sideScope: 'short',
+            openSlots: expect.arrayContaining([
+              expect.objectContaining({ slotKey: 'confirmationMode.entry' }),
+            ]),
           }),
           expect.objectContaining({
             key: 'price.detect.indicator_boundary',
             phase: 'entry',
-            sideScope: 'short',
+            sideScope: 'long',
             openSlots: expect.arrayContaining([
               expect.objectContaining({ slotKey: 'confirmationMode.entry' }),
             ]),
@@ -5439,13 +5442,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             status: 'open',
           }),
         ]),
-        contracts: [expect.objectContaining({
-          capabilities: [expect.objectContaining({
+        contracts: expect.arrayContaining([expect.objectContaining({
+          capabilities: expect.arrayContaining([expect.objectContaining({
             domain: 'price',
             verb: 'detect',
             object: 'signal_condition',
-          })],
-        })],
+          })]),
+        })]),
       }),
     ]))
   })
@@ -7403,7 +7406,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({
         slotKey: 'position.sizing',
         fieldPath: 'position.sizing',
-        question: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+        question: expect.stringContaining('请确认单笔仓位大小'),
       }),
     ]))
   })
