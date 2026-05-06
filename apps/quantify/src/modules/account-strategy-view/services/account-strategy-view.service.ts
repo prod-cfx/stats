@@ -1469,44 +1469,54 @@ export class AccountStrategyViewService {
       return
     }
 
-    if (row.status !== 'draft') {
-      await this.assertNoRuntimeRiskBeforeDelete(userId, row, strategyInstanceId)
-    }
+    const orphanArtifacts = row.status !== 'draft'
+      ? await this.collectOrphanRuntimeArtifacts(userId, row, strategyInstanceId)
+      : { openPositionsCount: 0, openOrdersCount: 0 }
     if (hasConversation) {
       await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
     }
     await this.repo.archiveStrategyInstanceById(userId, strategyInstanceId)
     this.logDeleteAccepted(
-      { userId, strategyInstanceId, status: row.status, hasConversation, deleteStoppedStrategy: true, via: options.via },
+      {
+        userId,
+        strategyInstanceId,
+        status: row.status,
+        hasConversation,
+        deleteStoppedStrategy: true,
+        via: options.via,
+        orphanOpenPositionsCount: orphanArtifacts.openPositionsCount,
+        orphanOpenOrdersCount: orphanArtifacts.openOrdersCount,
+      },
       hasConversation ? 'archived_with_conversations' : 'archived_no_conversation',
     )
   }
 
-  private async assertNoRuntimeRiskBeforeDelete(
+  /**
+   * 用户主动停止策略时已经选择是否平仓；删除策略不再硬拦持仓/挂单，
+   * 仅采集 orphan 数量供审计日志记录。
+   */
+  private async collectOrphanRuntimeArtifacts(
     userId: string,
     row: StrategyRow,
     strategyInstanceId: string,
-  ): Promise<void> {
+  ): Promise<{ openPositionsCount: number; openOrdersCount: number }> {
     const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    let openPositionsCount = 0
+    let openOrdersCount = 0
+
     const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
     if (account) {
       const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
-      if (openPositions.length > 0) {
-        this.logDeleteRejected({ userId, strategyInstanceId, accountId: account.id, openPositionsCount: openPositions.length }, 'open_positions')
-        throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-          args: { strategyInstanceId, openPositionsCount: openPositions.length },
-        })
-      }
+      openPositionsCount = openPositions.length
     }
 
     if (!this.tradingService) {
-      this.logDeleteRejected({ userId, strategyInstanceId }, 'trading_service_unavailable')
-      throw new DomainException('account_strategy.trading_service_unavailable', {
-        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-        status: HttpStatus.SERVICE_UNAVAILABLE,
+      this.logger.warn({
+        module: 'AccountStrategyViewService.deleteStrategy',
+        input: { userId, strategyInstanceId, openPositionsCount },
+        reason: 'orphan_check_skipped_trading_service_unavailable',
       })
+      return { openPositionsCount, openOrdersCount }
     }
 
     const mergedParams = {
@@ -1521,27 +1531,30 @@ export class AccountStrategyViewService {
     )
     const symbol = this.readString(mergedParams, ['symbol'])
     if (!exchangeId || !symbol) {
-      return
+      return { openPositionsCount, openOrdersCount }
     }
 
-    const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
-    const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
-    const openOrders = await this.tradingService.getOpenOrders(
-      userId,
-      exchangeId,
-      marketType,
-      executionSymbol,
-      sub.exchangeAccount?.id ?? undefined,
-    )
-    const riskyOrders = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled')
-    if (riskyOrders.length > 0) {
-      this.logDeleteRejected({ userId, strategyInstanceId, openOrdersCount: riskyOrders.length }, 'open_orders')
-      throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { strategyInstanceId, openOrdersCount: riskyOrders.length },
+    try {
+      const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
+      const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
+      const openOrders = await this.tradingService.getOpenOrders(
+        userId,
+        exchangeId,
+        marketType,
+        executionSymbol,
+        sub.exchangeAccount?.id ?? undefined,
+      )
+      openOrdersCount = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled').length
+    } catch (error) {
+      this.logger.warn({
+        module: 'AccountStrategyViewService.deleteStrategy',
+        input: { userId, strategyInstanceId, exchangeId, symbol },
+        reason: 'orphan_orders_lookup_failed',
+        error: error instanceof Error ? error.message : String(error),
       })
     }
+
+    return { openPositionsCount, openOrdersCount }
   }
 
   private logDeleteRejected(input: Record<string, unknown>, reason: string): void {

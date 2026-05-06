@@ -92,7 +92,9 @@ describe('AccountStrategyViewService.deleteStrategy (unified)', () => {
     expect(repo.markStrategyViewOnly).not.toHaveBeenCalled()
   })
 
-  it('7. stopped + open positions + deleteStoppedStrategy=true → throws runtime_risk_forbidden, no archive', async () => {
+  it('7. stopped + open positions + deleteStoppedStrategy=true → archives strategy with orphan position recorded', async () => {
+    // 用户在「停止策略」时已显式选择不平仓；删除策略不应再被持仓拦截，
+    // 改为采集 orphan 数量供审计日志记录。
     const { service, repo } = buildService({ status: 'stopped' })
     repo.loadOpenPositionsForLiquidation.mockResolvedValue([{
       id: 'pos-1',
@@ -101,10 +103,9 @@ describe('AccountStrategyViewService.deleteStrategy (unified)', () => {
       marketType: 'spot',
       status: 'OPEN',
     }])
-    await expect(
-      service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' }),
-    ).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
-    expect(repo.archiveStrategyInstanceById).not.toHaveBeenCalled()
+    await service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' })
+    expect(repo.archiveStrategyInstanceById).toHaveBeenCalledWith('user-1', 'inst-1')
+    expect(repo.markStrategyViewOnly).not.toHaveBeenCalled()
   })
 
   it('8. multiple active conversations: all archived in one repo call', async () => {

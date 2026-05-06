@@ -128,7 +128,9 @@ describe('accountStrategyViewService.performAction', () => {
     expect(repo.archiveStrategyInstanceById).toHaveBeenCalledWith('user-1', 'inst-1')
   })
 
-  it('rejects deleting a stopped strategy with open positions', async () => {
+  it('archives a stopped strategy with open positions (orphan position recorded, not blocked)', async () => {
+    // 用户在「停止策略」时已经选择不平仓；删除策略不再被持仓拦截，
+    // service 只在审计日志里记录 orphan 数量。
     const { service, repo } = createActionTestContext({ status: 'stopped' })
     repo.loadOpenPositionsForLiquidation.mockResolvedValue([{
       id: 'pos-1',
@@ -138,22 +140,22 @@ describe('accountStrategyViewService.performAction', () => {
       status: 'OPEN',
     }])
 
-    await expect(
-      service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' }),
-    ).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
-    expect(repo.archiveStrategyInstanceById).not.toHaveBeenCalled()
+    await service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' })
+
+    expect(repo.archiveStrategyInstanceById).toHaveBeenCalledWith('user-1', 'inst-1')
+    expect(repo.markStrategyViewOnly).not.toHaveBeenCalled()
   })
 
-  it('rejects deleting a stopped strategy with open orders', async () => {
+  it('archives a stopped strategy with open orders (orphan order recorded, not blocked)', async () => {
     const { service, repo, tradingService } = createActionTestContext({ status: 'stopped' })
     tradingService.getOpenOrders.mockResolvedValue([
       { id: 'order-1', symbol: 'BTC/USDT', status: 'partially_filled' },
     ])
 
-    await expect(
-      service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' }),
-    ).rejects.toThrow('account_strategy.delete_runtime_risk_forbidden')
-    expect(repo.archiveStrategyInstanceById).not.toHaveBeenCalled()
+    await service.deleteStrategy('user-1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' })
+
+    expect(repo.archiveStrategyInstanceById).toHaveBeenCalledWith('user-1', 'inst-1')
+    expect(repo.markStrategyViewOnly).not.toHaveBeenCalled()
   })
 
   it('rejects subscriber changing global strategy instance status', async () => {
