@@ -139,6 +139,28 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('请确认交易所')
   })
 
+  it('describes missing risk atom blockers as risk semantic slots by reason', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '大跌后不接飞刀再买入。',
+      items: [
+        {
+          key: 'risk.falling_knife_guard.definition',
+          reason: 'missing_risk_atom',
+          field: 'risk',
+          blocking: true,
+          question: '请确认“不接飞刀”的判定方式，例如反弹站上 MA20 / 下一根 K 线收阳 / 跌幅停止扩大。',
+          status: 'pending',
+          slotKey: 'risk.falling_knife_guard.definition',
+          fieldPath: 'risk.params.definition',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的风控语义槽位')
+    expect(prompt).not.toContain('关键条件')
+  })
+
   it('asks only the highest-priority unresolved clarification question', () => {
     const prompt = questionService.build({
       status: 'NEEDS_CLARIFICATION',

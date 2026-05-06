@@ -5603,6 +5603,7 @@ export class CodegenConversationService {
       reason === 'missing_semantic_trigger'
       || reason === 'missing_semantic_action'
       || reason === 'missing_semantic_risk'
+      || reason === 'missing_risk_atom'
       || reason === 'missing_semantic_position_sizing'
       || reason === 'missing_semantic_position_mode'
       || reason === 'missing_semantic_contract_requirement'
