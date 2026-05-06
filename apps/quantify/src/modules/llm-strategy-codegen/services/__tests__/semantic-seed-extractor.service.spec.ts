@@ -1063,6 +1063,23 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('prefers explicit sizing over ambiguous light-size wording', () => {
+    const patch = service.extract('BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点，单笔 10%。')
+
+    expect(patch.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    }))
+    expect(patch.position?.openSlots ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        status: 'open',
+      }),
+    ]))
+  })
+
   it('does not lock unsupported exchanges into semantic context', () => {
     const patch = service.extract('BYBIT BTCUSDT 15m；价格上穿 MA50 买入；单笔 10%')
 
@@ -1127,6 +1144,34 @@ describe('SemanticSeedExtractorService', () => {
       value: 0.1,
       positionMode: 'long_only',
     }))
+  })
+
+  it('does not extract single-trade sizing percent as price percent change', () => {
+    const patch = service.extract('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓，单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.rolling_extrema_breakout',
+        phase: 'entry',
+        params: expect.objectContaining({
+          extrema: 'high',
+          lookbackBars: 20,
+          event: 'breakout_up',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.rolling_extrema_breakout',
+        phase: 'exit',
+        params: expect.objectContaining({
+          extrema: 'low',
+          lookbackBars: 10,
+          event: 'breakout_down',
+        }),
+      }),
+    ]))
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'price.percent_change' }),
+    ]))
   })
 
   it('extracts unpunctuated Chinese percent-change clauses independently', () => {

@@ -1034,18 +1034,6 @@ export class SemanticSeedExtractorService {
     text: string,
     triggers: SeedTrigger[],
   ): NonNullable<CodegenSemanticPatch['position']> | null {
-    if (this.hasAmbiguousSizingText(text)) {
-      return {
-        sizing: null,
-        mode: 'fixed_ratio',
-        value: 0,
-        positionMode: this.resolvePositionMode(text, triggers),
-        status: 'open',
-        source: 'user_explicit',
-        openSlots: [this.buildPositionSizingOpenSlot()],
-      }
-    }
-
     const unsupportedPosition = this.extractRecognizedUnsupportedPosition(text, triggers)
     if (unsupportedPosition) {
       return unsupportedPosition
@@ -1066,6 +1054,18 @@ export class SemanticSeedExtractorService {
       /(?:可用余额|账户余额|余额)(?:的)?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
     ])
     if (availableBalancePercent === null || availableBalancePercent <= 0 || availableBalancePercent > 100) {
+      if (this.hasAmbiguousSizingText(text)) {
+        return {
+          sizing: null,
+          mode: 'fixed_ratio',
+          value: 0,
+          positionMode: this.resolvePositionMode(text, triggers),
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [this.buildPositionSizingOpenSlot()],
+        }
+      }
+
       return null
     }
 
@@ -2485,6 +2485,9 @@ export class SemanticSeedExtractorService {
     contextText: string = segment,
   ): void {
     const clauses = this.splitPercentChangeClauses(segment)
+    if (clauses.length === 0 && this.hasMultiplePercentChangeRawClauses(segment)) {
+      return
+    }
     if (clauses.length > 0 && (clauses.length > 1 || clauses[0] !== segment)) {
       for (const clause of clauses) {
         this.pushPercentChangeTrigger(clause, triggers, seen, contextText)
@@ -2493,6 +2496,7 @@ export class SemanticSeedExtractorService {
     }
 
     if (!/%|百分/u.test(segment)) return
+    if (this.isNonPricePercentContext(segment)) return
     if (!this.hasExplicitPriceChangeContext(segment)) return
     const direction = this.resolvePercentDirection(segment)
     if (!direction) return
@@ -2685,6 +2689,19 @@ export class SemanticSeedExtractorService {
       .map(match => match[0].trim())
       .filter(Boolean)
     return matches.length > 0 ? matches : [segment]
+  }
+
+  private hasMultiplePercentChangeRawClauses(segment: string): boolean {
+    return segment
+      .split(/[，,、；;。]|(?:另有|另外|同时|并且|以及)/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+      .length > 1
+  }
+
+  private isNonPricePercentContext(segment: string): boolean {
+    return /(?:单笔|仓位|资金|余额|头寸|下单|投入|使用|用|买一点|买一些|轻仓|小仓位|少量).{0,12}(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)/u.test(segment)
+      || /(?:止损|止盈|亏损|盈利).{0,12}(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)/u.test(segment)
   }
 
   private pushRecognizedUnsupportedTriggers(
