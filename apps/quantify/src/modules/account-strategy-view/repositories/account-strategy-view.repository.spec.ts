@@ -1163,7 +1163,16 @@ describe('accountStrategyViewRepository.findStrategyForUser', () => {
     await repo.findStrategyForUser('user-1', 'inst-1')
 
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ archivedAt: null }),
+      // visible 过滤 + 严格按 id + owner-or-subscriber 双分支可见性。
+      // 显式断言 OR 分支以保护 owner 与订阅者列表不被后续重构悄悄缩小。
+      where: expect.objectContaining({
+        id: 'inst-1',
+        archivedAt: null,
+        OR: [
+          { createdBy: 'user-1' },
+          { subscriptions: { some: { userId: 'user-1' } } },
+        ],
+      }),
       include: expect.objectContaining({
         strategyTemplate: {
           select: expect.objectContaining({
