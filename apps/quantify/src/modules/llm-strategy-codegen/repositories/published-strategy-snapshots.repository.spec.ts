@@ -148,6 +148,68 @@ describe('publishedStrategySnapshotsRepository', () => {
     expect(result.id).toBe('snapshot-1')
   })
 
+  it('round-trips script summary compatibility metadata through snapshot reads', async () => {
+    let persistedSnapshot: Record<string, unknown> | null = null
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn().mockImplementation(async (args: {
+          data: Record<string, unknown> & { session?: { connect?: { id?: string } } }
+        }) => {
+          persistedSnapshot = {
+            id: 'snapshot-atomic-contract-1',
+            createdAt: new Date('2026-05-06T10:00:00.000Z'),
+            sessionId: args.data.session?.connect?.id,
+            ...args.data,
+          }
+
+          return persistedSnapshot
+        }),
+        findUnique: jest.fn().mockImplementation(async ({ where }: { where: { id: string } }) => {
+          return persistedSnapshot?.id === where.id ? persistedSnapshot : null
+        }),
+        findFirst: jest.fn().mockImplementation(async ({ where }: { where: { sessionId?: string } }) => {
+          return persistedSnapshot?.sessionId === where.sessionId ? persistedSnapshot : null
+        }),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+    const scriptSummary = {
+      indicators: ['BBANDS'],
+      compatibilityMetadata: {
+        existingField: { keep: true },
+        atomicContractExecution: {
+          schemaVersion: 1,
+          runtimeRequirements: { helpers: ['rollingHigh'], stateKeys: ['breakout'] },
+        },
+      },
+    }
+
+    const created = await repo.create({
+      sessionId: 'session-atomic-contract-1',
+      scriptSnapshot: 'const strategy = { protocolVersion: "v1" }\nstrategy\n',
+      specSnapshot: { market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' } },
+      consistencyReport: { status: 'PASSED' },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'atomic contract execution metadata persistence' },
+      scriptSummary,
+      lockedParams: { positionPct: 10 },
+      snapshotVersion: 2,
+    })
+
+    await expect(repo.findById(created.id)).resolves.toEqual(expect.objectContaining({
+      scriptSummary,
+    }))
+    await expect(repo.findLatestBySessionId('session-atomic-contract-1')).resolves.toEqual(expect.objectContaining({
+      scriptSummary,
+    }))
+    expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        scriptSummary,
+        snapshotHash: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      }),
+    }))
+  })
+
   it('persists compiled snapshot fields with stable hashes', async () => {
     const tx = {
       publishedStrategySnapshot: {
