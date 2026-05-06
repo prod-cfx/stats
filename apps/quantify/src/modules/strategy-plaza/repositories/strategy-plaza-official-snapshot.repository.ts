@@ -1,11 +1,12 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
-import type { PrismaClient, PublishedStrategySnapshot, Prisma } from '@/prisma/prisma.types'
+import type { PrismaClient, PublishedStrategySnapshot } from '@/prisma/prisma.types'
 import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { visibleStrategyInstanceWhere } from '@/modules/account-strategy-view/repositories/strategy-instance-visibility.query'
+import { Prisma } from '@/prisma/prisma.types'
 import {
   buildOfficialStrategySnapshotContent,
   OFFICIAL_STRATEGY_PLAZA_USER_ID,
@@ -151,6 +152,8 @@ export class StrategyPlazaOfficialSnapshotRepository {
   }): Promise<{ id: string }> {
     const client = this.txHost.tx
     const name = this.buildStrategyInstanceName(input.template)
+    await this.lockVisibleStrategyInstanceKey(input.strategyTemplateId, LLM_MODEL, name)
+
     const params = buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue
     const metadata = this.buildOfficialMetadata(input.template, input.sourceSnapshot) as Prisma.InputJsonValue
     const existingVisibleInstance = await client.strategyInstance.findFirst({
@@ -190,6 +193,15 @@ export class StrategyPlazaOfficialSnapshotRepository {
       },
       select: { id: true },
     })
+  }
+
+  private async lockVisibleStrategyInstanceKey(
+    strategyTemplateId: string,
+    llmModel: string,
+    name: string,
+  ): Promise<void> {
+    const lockKey = sha256(`${strategyTemplateId}:${llmModel}:${name}`)
+    await this.txHost.tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`)
   }
 
   private async resolveOrCreateOfficialSourceSnapshot(

@@ -7,7 +7,7 @@ function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOf
   return { tx } as ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0]
 }
 
-describe('StrategyPlazaOfficialSnapshotRepository', () => {
+describe('strategyPlazaOfficialSnapshotRepository', () => {
   const template = {
     id: 'ma-cross',
     name: 'MA 均线交叉',
@@ -73,6 +73,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     source?: typeof sourceSnapshot | null
   }) {
     return {
+      $executeRaw: jest.fn().mockResolvedValue(0),
       publishedStrategySnapshot: {
         findUnique: jest.fn().mockResolvedValue(overrides?.source === undefined ? sourceSnapshot : overrides.source),
         findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot ?? null),
@@ -215,6 +216,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       },
       select: { id: true },
     })
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1)
     expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         name: 'MA 均线交叉 官方模板',
