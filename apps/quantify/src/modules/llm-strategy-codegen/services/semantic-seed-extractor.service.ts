@@ -962,7 +962,7 @@ export class SemanticSeedExtractorService {
         effect: 'close_position',
         scope: 'current_position',
       },
-      status: 'open',
+      status: 'locked',
       source: 'user_explicit',
       openSlots: [],
     })

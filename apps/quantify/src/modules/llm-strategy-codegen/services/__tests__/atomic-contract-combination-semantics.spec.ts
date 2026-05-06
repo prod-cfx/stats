@@ -300,6 +300,8 @@ describe('atomic contract combination semantics', () => {
       expect.objectContaining({
         key: 'risk.remembered_level_stop',
         params: expect.objectContaining({ levelKey: 'breakout' }),
+        status: 'locked',
+        openSlots: [],
       }),
     ]))
     expect(classification.route).toBe('open_slots')
