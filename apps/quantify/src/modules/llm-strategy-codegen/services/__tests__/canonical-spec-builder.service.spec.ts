@@ -1370,13 +1370,108 @@ describe('canonicalSpecBuilderService', () => {
     } as any, normalizedIntent as any)
     const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
 
-    expect(entryRules).toHaveLength(3)
-    expect(entryRules.map(rule => rule.condition)).toEqual([
-      expect.objectContaining({ params: expect.objectContaining({ timeframe: '15m' }) }),
-      expect.objectContaining({ params: expect.objectContaining({ timeframe: '1h' }) }),
-      expect.objectContaining({ params: expect.objectContaining({ timeframe: '4h' }) }),
-    ])
+    expect(entryRules).toHaveLength(1)
+    expect(entryRules[0]?.condition).toEqual(expect.objectContaining({
+      kind: 'AND',
+      children: [
+        expect.objectContaining({ params: expect.objectContaining({ timeframe: '15m' }) }),
+        expect.objectContaining({ params: expect.objectContaining({ timeframe: '1h' }) }),
+        expect.objectContaining({ params: expect.objectContaining({ timeframe: '4h' }) }),
+      ],
+    }))
     expect(spec.market.timeframes).toEqual(expect.arrayContaining(['15m', '1h', '4h']))
+  })
+
+  it('builds one semantic entry rule when one entry condition requires multiple timeframes', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        ...['5m', '1h', '4h'].map((timeframe, index) => ({
+          id: `entry-ema-${index}`,
+          key: 'indicator.above',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+          params: {
+            indicator: 'ema',
+            referenceRole: 'long_term',
+            'reference.period': 20,
+            timeframe,
+          },
+        })),
+        {
+          id: 'exit-ema-15m',
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: {
+            indicator: 'ema',
+            referenceRole: 'long_term',
+            'reference.period': 20,
+            timeframe: '15m',
+          },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+    state.contextSlots.exchange = {
+      slotKey: 'context.exchange',
+      fieldPath: 'exchange',
+      value: 'binance',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '交易所',
+      affectsExecution: true,
+    }
+    state.contextSlots.marketType = {
+      slotKey: 'context.marketType',
+      fieldPath: 'marketType',
+      value: 'perp',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '市场类型',
+      affectsExecution: true,
+    }
+    state.contextSlots.timeframe = {
+      slotKey: 'context.timeframe',
+      fieldPath: 'timeframe',
+      value: '15m',
+      status: 'locked',
+      priority: 'context',
+      questionHint: 'K 线周期',
+      affectsExecution: true,
+    }
+
+    const spec = service.buildFromSemanticState(state)
+    const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
+    const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
+
+    expect(entryRules).toHaveLength(1)
+    expect(entryRules[0]).toEqual(expect.objectContaining({
+      actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      condition: expect.objectContaining({
+        kind: 'AND',
+        children: [
+          expect.objectContaining({ key: 'indicator.above', params: expect.objectContaining({ timeframe: '5m' }) }),
+          expect.objectContaining({ key: 'indicator.above', params: expect.objectContaining({ timeframe: '1h' }) }),
+          expect.objectContaining({ key: 'indicator.above', params: expect.objectContaining({ timeframe: '4h' }) }),
+        ],
+      }),
+    }))
+    expect(exitRules).toHaveLength(1)
+    expect(exitRules[0]?.condition).toEqual(expect.objectContaining({
+      key: 'indicator.below',
+      params: expect.objectContaining({ timeframe: '15m' }),
+    }))
+    expect(spec.dataRequirements.requiredTimeframes).toEqual(expect.arrayContaining(['15m', '5m', '1h', '4h']))
   })
 
   it('does not treat a bare asset symbol as a canonical market symbol', () => {

@@ -5940,6 +5940,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
     expect(result.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
     expect(result.assistantPrompt ?? '').not.toContain('入场：突破 MA20')
+    expect(result.assistantPrompt ?? '').not.toContain('仓位：15 MIN')
     expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'binance',
@@ -5986,9 +5987,77 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
     ]))
+    expect(createPayload.semanticState.position?.sizing).not.toEqual(expect.objectContaining({
+      kind: 'base',
+      value: 15,
+      asset: 'MIN',
+    }))
     expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
       expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
+    ]))
+  })
+
+  it('preserves multi-timeframe EMA entry atoms when a later turn only answers stop loss', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-mtf-ema-risk-follow-up' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+
+    const fixture = buildSemanticEraSessionFixture({
+      id: 's-mtf-ema-risk-follow-up',
+      semanticState: createPayload.semanticState,
+      status: 'DRAFTING',
+    })
+    mockRepo.findById.mockResolvedValue(fixture)
+
+    const continued = await service.continueSession('s-mtf-ema-risk-follow-up', {
+      userId: 'u1',
+      message: '3%止损',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const semanticState = updatePayload.semanticState
+
+    expect(continued.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+    expect(continued.assistantPrompt ?? '').not.toContain('入场：5m 价格在 EMA20 上方')
+    expect(continued.assistantPrompt ?? '').not.toContain('仓位：15 MIN')
+    expect(semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '5m' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+    ]))
+    expect(semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 3 }),
+      }),
     ]))
   })
 
