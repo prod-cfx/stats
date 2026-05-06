@@ -2,13 +2,14 @@
 
 日期：2026-05-06
 Issue：#960
-范围：conversation guardrails、atomic contract projection/backtest/runtime parity、AI Quant 前端 display graph 保存与展示、deploy guard、target build。
+范围：conversation guardrails、atomic contract projection/backtest/runtime parity、compiled runtime execution closure、AI Quant 前端 display graph 保存与展示、deploy guard、target build。
 
 ## Scope
 
 - 后端会话级 guardrail：覆盖三条真实中文组合策略，确保不会提前进入 `unsupportedFallback` / “是否改用”替代策略推荐。
 - 前端 display graph：确保 codegen 响应中 server `displayLogicGraph` 的“成交量高于过去 20 根均量的 1.5 倍”保留到 conversation state 并显示在页面上，不被 legacy fallback 覆盖。
 - deploy guard：确认 atomic display graph 只作为展示层，不进入 deploy payload，也不改变发布快照真相字段。
+- compiled runtime execution closure：确认 generic predicates、volume series、sequence fail-closed、riskPredicates、backtest/signal fast paths 都实际执行，不只停留在 projection metadata。
 - 验证命令：按 Task 10 指定的 targeted unit/build/diff 命令执行并记录结果。
 
 ## Target commands and results
@@ -18,9 +19,15 @@ Issue：#960
 | `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-combination-semantics.spec.ts` | PASS | 9 passed |
 | `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-canonical-ir.spec.ts` | PASS | 5 passed |
 | `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-script-emitter.spec.ts` | PASS | 3 passed |
-| `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-backtest-runtime-parity.spec.ts` | PASS | 1 passed |
+| `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-backtest-runtime-parity.spec.ts` | PASS | 2 passed |
 | `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts` | PASS | 48 passed |
 | `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts -t "keeps supported atomic conversation"` | PASS | 3 passed, 226 skipped |
+| `dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts` | PASS | 9 passed |
+| `dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-compiled-runtime-compat.spec.ts` | PASS | 24 passed |
+| `dx test unit quantify apps/quantify/src/modules/strategy-signals/services/__tests__/signal-generator.service.spec.ts` | PASS | 29 passed |
+| `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/compiled-script-parser.service.spec.ts` | PASS | 5 passed |
+| `npx nx test shared --testFile=packages/shared/src/script-engine/compiled-runtime/evaluate-expr-pool.spec.ts --runInBand` | PASS | 10 passed |
+| `npx nx test shared --testFile=packages/shared/src/script-engine/compiled-runtime/evaluate-risk-predicates.spec.ts --runInBand` | PASS | 2 passed |
 | `dx test unit front AiQuantPageClient.test.tsx` | PASS | 28 passed |
 | `dx test unit front AiQuantPageClient.deploy-guard.test.tsx` | PASS | 13 passed |
 | `dx test unit front ai-quant-page-conversation.test.ts` | PASS | 61 passed |
@@ -32,6 +39,7 @@ Issue：#960
 
 - Initial backend guardrail run failed after adding the test because the assertion expected legacy keys (`bollinger.touch_lower`, `indicator.above`) while the current supported atomic path correctly emits generic atomic keys (`price.detect.indicator_boundary`, `condition.expression`). The test was updated to assert supported atomic semantics instead of old aliases, then passed.
 - Initial frontend path-specific runs using `apps/front/src/app/[lng]/...` failed with “No tests found” because Jest treated `[lng]` as a regex character class. The same tests were rerun successfully by basename (`AiQuantPageClient.test.tsx`, `AiQuantPageClient.deploy-guard.test.tsx`).
+- Final review found an execution closure gap after the first report version: generic atomic predicates and `riskPredicates` were projected/emitted but not fully executed by every compiled runtime path. Follow-up fixes added runtime support for `compare` / `allOf` / `anyOf` / `cross` / `sequence`, `VOLUME` / `SMA_VOLUME`, `evaluateRiskPredicates`, backtest and signal fast-path wiring, parser compatibility for pre-risk wrappers, sequence fail-closed behavior, malformed cross fail-closed behavior, and compiler.v1 backtest parser fail-closed behavior. The added runtime/backtest/signal/parser tests above passed after those fixes.
 
 ## Guardrail coverage added
 
@@ -43,6 +51,7 @@ Issue：#960
 - Assertions verify `unsupportedFallback` remains null/undefined and the persisted semantic state has supported trigger/risk atoms without `recognized_unsupported` support markers.
 - Frontend state/page assertion verifies server `displayLogicGraph` keeps the atomic volume text and removes stale “不支持的条件” display text.
 - Deploy guard assertion verifies deploy still submits `publishedSnapshotId` and selected account truth, and display graph text is absent from the deploy payload.
+- Runtime guardrails verify parsed compiler.v1 snapshots do not bypass `riskPredicates` in backtest or live signal fast paths, malformed compiler.v1 snapshots fail closed in backtests, unknown generic cross operators fail closed, and missing generic compare operators intentionally default to `GT`.
 
 ## Known environment limitations
 
