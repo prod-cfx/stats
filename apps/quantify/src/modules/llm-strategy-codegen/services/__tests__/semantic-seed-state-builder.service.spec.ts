@@ -692,6 +692,78 @@ describe('SemanticSeedStateBuilderService', () => {
     }))
   })
 
+  it('normalizes string context symbol values through the market instrument resolver', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: 'ETH usdt',
+      },
+      triggers: [{
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: expect.objectContaining({
+        text: 'ETH usdt',
+        source: 'user_explicit',
+      }),
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'context',
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: expect.objectContaining({
+                base: 'ETH',
+                quote: 'USDT',
+                symbol: 'ETHUSDT',
+                quoteSource: 'explicit',
+              }),
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
+  it('normalizes structured inferred symbol patch values and preserves inferred evidence', () => {
+    const state = service.build({
+      contextSlots: {
+        symbol: {
+          value: 'ETH',
+          source: 'inferred',
+          evidenceText: 'ETH',
+          base: 'ETH',
+          quote: 'USDT',
+          quoteSource: 'default_usdt',
+        },
+      },
+      triggers: [{
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.contextSlots.symbol?.value).toBe('ETHUSDT')
+    expect(state?.contextSlots.symbol?.evidence).toEqual(expect.objectContaining({
+      text: 'ETH',
+      source: 'inferred',
+    }))
+  })
+
   it('preserves action open slots from semantic seed patch', () => {
     const state = service.build({
       actions: [{
