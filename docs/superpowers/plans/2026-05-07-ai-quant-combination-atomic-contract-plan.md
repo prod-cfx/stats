@@ -32,6 +32,14 @@
   - Covers risk predicate effects and anyOf child rule mapping.
 - Test: `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts`
   - Adds end-to-end publication regressions for the four acceptance strategies and simple singleton strategies.
+- Test: `apps/quantify/src/modules/backtesting/services/backtest-compiled-snapshot-preflight.service.spec.ts`
+  - Verifies generated combination snapshots pass compiled manifest, IR, AST, and structural digest preflight.
+- Test: `apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts`
+  - Verifies compiled combination scripts execute through the parser fast path and include `evaluateRiskPredicates`.
+- Test: `apps/quantify/src/modules/backtesting/core/backtest-runner.service.spec.ts`
+  - Verifies the runner consumes compiled entry, OR exit, and risk predicate close decisions.
+- Test: `apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts`
+  - Verifies deploy binds the published combination snapshot and preserves snapshot-derived strategy config and execution defaults.
 - Docs: `docs/superpowers/specs/2026-05-07-ai-quant-combination-atomic-contract-design.md`
   - Already written. Only update if implementation discovers a confirmed design correction.
 
@@ -1075,6 +1083,270 @@ MSG
 
 ---
 
+### Task 6: Backtest, Deploy, And Runtime Consumer Coverage
+
+**Files:**
+- Test: `apps/quantify/src/modules/backtesting/services/backtest-compiled-snapshot-preflight.service.spec.ts`
+- Test: `apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts`
+- Test: `apps/quantify/src/modules/backtesting/core/backtest-runner.service.spec.ts`
+- Test: `apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts`
+- Modify only if tests expose a real gap: `apps/quantify/src/modules/backtesting/services/backtest-snapshot-loader.service.ts`
+- Modify only if tests expose a real gap: `apps/quantify/src/modules/account-strategy-view/services/account-strategy-view.service.ts`
+
+- [ ] **Step 1: Add a shared compiled combination fixture helper**
+
+In `apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts`, add a fixture that builds a real compiler.v1 script from IR with one AND entry, one OR exit, and one ATR risk predicate:
+
+```ts
+function createCompiledCombinationScriptFixture(): string {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const emitter = new CompiledScriptEmitterService()
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'7'.repeat(64)}`,
+      specHash: `sha256:${'8'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'perpetual',
+      symbol: 'SOLUSDT',
+      timeframes: ['30m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 1 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 120,
+      maxLookback: 120,
+      requiredTimeframes: ['30m'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'close_30m', kind: 'PRICE', timeframe: '30m', field: 'close' },
+        { id: 'ma100_30m', kind: 'SMA', inputs: ['close_30m'], params: { period: 100 } },
+        { id: 'macd_line_30m', kind: 'MACD_LINE', inputs: ['close_30m'], params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } },
+        { id: 'macd_signal_30m', kind: 'MACD_SIGNAL', inputs: ['close_30m'], params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'gate_ma100_above', kind: 'GTE', args: ['close_30m', 'ma100_30m'] },
+        { id: 'entry_macd_golden', kind: 'CROSS_OVER', args: ['macd_line_30m', 'macd_signal_30m'] },
+        { id: 'entry_with_gate', kind: 'allOf', args: ['entry_macd_golden', 'gate_ma100_above'] },
+        { id: 'exit_ma100_below', kind: 'LTE', args: ['close_30m', 'ma100_30m'] },
+        { id: 'exit_macd_death', kind: 'CROSS_UNDER', args: ['macd_line_30m', 'macd_signal_30m'] },
+        { id: 'exit_any', kind: 'anyOf', args: ['exit_ma100_below', 'exit_macd_death'] },
+      ],
+    },
+    runtimeRequirements: { helpers: ['atr'], stateKeys: [] },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_with_gate',
+        priority: 200,
+        actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 1 } }],
+      },
+      {
+        id: 'exit_long',
+        phase: 'exit',
+        when: 'exit_any',
+        priority: 150,
+        actions: [{ kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } }],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'risk-atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+  return emitter.emit({
+    ast: compiler.compile(ir),
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
+```
+
+- [ ] **Step 2: Test backtest adapter compiled fast path for combination scripts**
+
+Add to `backtest-strategy-adapter.service.spec.ts`:
+
+```ts
+it('executes compiled combination scripts through the parser fast path', async () => {
+  const strategy = await service.build({
+    id: 'compiled-combination-s1',
+    protocolVersion: 'v1',
+    scriptCode: createCompiledCombinationScriptFixture(),
+    params: {},
+  })
+
+  await expect(strategy.fn({
+    position: { qty: 1, avgEntryPrice: 100 },
+    currentPrice: 70,
+    bars: Array.from({ length: 130 }, (_unused, index) => ({
+      time: index + 1,
+      open: 100,
+      high: 105,
+      low: index === 129 ? 70 : 95,
+      close: index === 129 ? 70 : 100 + Math.sin(index / 3),
+      volume: 1,
+    })),
+    __compiledDecisionState: { barIndex: 130, lastTriggeredByProgram: {} },
+  } as any)).resolves.toMatchObject({
+    action: 'CLOSE_LONG',
+    reason: 'compiled.force_exit',
+    meta: expect.objectContaining({
+      guardState: expect.objectContaining({
+        forceExit: true,
+      }),
+    }),
+  })
+})
+```
+
+Run:
+
+```bash
+dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts -t "compiled combination scripts"
+```
+
+Expected: PASS. If it fails by falling back to VM, fix parser compatibility rather than adding a new runtime path.
+
+- [ ] **Step 3: Test compiled snapshot preflight for combination artifacts**
+
+Add to `backtest-compiled-snapshot-preflight.service.spec.ts` a test that creates a compiled combination script, parses its manifest, and validates matching `irSnapshot`, `astSnapshot`, and `compiledManifest`.
+
+Use the same fixture pattern as Step 1 and assert:
+
+```ts
+expect(() => service.validate(snapshot)).not.toThrow()
+```
+
+Run:
+
+```bash
+dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-compiled-snapshot-preflight.service.spec.ts -t "combination"
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Test runner consumes compiled OR exit and risk predicate decisions**
+
+Add focused tests to `backtest-runner.service.spec.ts`:
+
+```ts
+it('consumes compiled OR exit decisions from combination scripts', async () => {
+  const runner = createRunner()
+  const report = await runner.run({
+    symbols: ['SOLUSDT'],
+    baseTimeframe: '30m',
+    stateTimeframes: ['30m'],
+    initialCash: 1000,
+    leverage: 1,
+    execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+    strategy: {
+      id: 'compiled-or-exit',
+      params: {},
+      fn: (ctx): StrategyDecisionV1 => {
+        if (ctx.ts === 1) return { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, reason: 'open' }
+        if (ctx.ts === 2) return { action: 'CLOSE_LONG', reason: 'compiled.exit_long' }
+        return { action: 'NOOP', reason: 'idle' }
+      },
+    },
+    dataRange: { fromTs: 1, toTs: 3 },
+    bars: [
+      createBar({ symbol: 'SOLUSDT', timeframe: '30m', closeTime: 1, open: 100, close: 100 }),
+      createBar({ symbol: 'SOLUSDT', timeframe: '30m', closeTime: 2, open: 99, close: 99 }),
+      createBar({ symbol: 'SOLUSDT', timeframe: '30m', closeTime: 3, open: 98, close: 98 }),
+    ],
+  })
+
+  expect(report.openPositions).toEqual([])
+  expect(report.summary.totalTrades).toBe(1)
+  expect(report.trades[0]?.exitReason).toBe('compiled.exit_long')
+})
+```
+
+Run:
+
+```bash
+dx test unit quantify apps/quantify/src/modules/backtesting/core/backtest-runner.service.spec.ts -t "compiled OR exit"
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Test deploy binds published combination snapshot**
+
+Add to `account-strategy-view-deploy.spec.ts` a deploy test using a compiler.v1 snapshot with `publishedSnapshotId`, `strategyConfig`, `deploymentExecutionDefaults`, and `deploymentExecutionConstraints`. Assert the deploy payload uses snapshot-derived values and keeps `publishedSnapshotBinding`.
+
+Key assertions:
+
+```ts
+expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+  publishedSnapshotBinding: expect.objectContaining({
+    publishedSnapshotId: 'snapshot-combination-1',
+    snapshotHash: 'snapshot-hash-combination-1',
+  }),
+  deploymentExecutionConfig: expect.objectContaining({
+    priceSource: 'close',
+    orderType: 'market',
+    timeInForce: 'gtc',
+  }),
+}))
+```
+
+Run:
+
+```bash
+dx test unit quantify apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts -t "combination snapshot"
+```
+
+Expected: PASS. If deploy drops snapshot-derived execution fields, fix the deploy snapshot resolution path.
+
+- [ ] **Step 6: Commit**
+
+Run:
+
+```bash
+git add apps/quantify/src/modules/backtesting/services/backtest-compiled-snapshot-preflight.service.spec.ts apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts apps/quantify/src/modules/backtesting/core/backtest-runner.service.spec.ts apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts apps/quantify/src/modules/backtesting/services/backtest-snapshot-loader.service.ts apps/quantify/src/modules/account-strategy-view/services/account-strategy-view.service.ts
+git commit -F - <<'MSG'
+test: cover combination strategy runtime consumers
+
+变更说明：
+- 覆盖组合策略 published snapshot preflight
+- 验证 backtest adapter/runner 消费 compiled combination 与 risk predicate 决策
+- 验证部署绑定 published snapshot 并保留执行默认值
+
+Refs: #981
+MSG
+```
+
+---
+
 ## Final Verification
 
 - [ ] Run all focused verification:
@@ -1085,6 +1357,10 @@ dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-combination-semantics.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-consistency.service.spec.ts
 dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts -t "reported combination strategy acceptance|singleton strategy acceptance"
+dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-compiled-snapshot-preflight.service.spec.ts -t "combination"
+dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts -t "compiled combination scripts"
+dx test unit quantify apps/quantify/src/modules/backtesting/core/backtest-runner.service.spec.ts -t "compiled OR exit"
+dx test unit quantify apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts -t "combination snapshot"
 dx lint
 ```
 
@@ -1104,6 +1380,10 @@ dx lint
 - dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/atomic-contract-combination-semantics.spec.ts
 - dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-consistency.service.spec.ts
 - dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts -t "reported combination strategy acceptance|singleton strategy acceptance"
+- dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-compiled-snapshot-preflight.service.spec.ts -t "combination"
+- dx test unit quantify apps/quantify/src/modules/backtesting/services/backtest-strategy-adapter.service.spec.ts -t "compiled combination scripts"
+- dx test unit quantify apps/quantify/src/modules/backtesting/core/backtest-runner.service.spec.ts -t "compiled OR exit"
+- dx test unit quantify apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts -t "combination snapshot"
 - dx lint
 
 Refs: #981
@@ -1113,6 +1393,6 @@ Refs: #981
 
 ## Self-Review
 
-- Spec coverage: The plan covers contract normalization, singleton group compilation, explicit AND/OR groups, gate attachment, risk predicate effects, the four reported strategies, and simple strategy regressions.
+- Spec coverage: The plan covers contract normalization, singleton group compilation, explicit AND/OR groups, gate attachment, risk predicate effects, the four reported strategies, simple strategy regressions, published snapshot preflight, backtest adapter/runner consumption, and deploy snapshot binding.
 - Placeholder scan: No `TBD`, `TODO`, or vague implementation-only tasks remain. Each code-changing task includes concrete tests, implementation snippets, commands, and expected results.
 - Type consistency: The plan consistently uses `SemanticTriggerCombinationDescriptor`, `groupId`, `join`, `actionKey`, `actionBinding`, `SemanticState`, `CanonicalSpecBuilderService`, and existing compiled projection names.

@@ -246,6 +246,43 @@ Consistency must check that compiled artifacts implement the original `SemanticS
 
 The current `StrategySemanticProfile` can remain as a report-friendly projection, but it must not become the semantic source. Any new alignment check should read from `SemanticState` or from a canonical contract projection derived directly from `SemanticState`.
 
+## Runtime Consumer Coverage
+
+The main data flow does not end at script generation. The design must explicitly cover every downstream consumer that can make a published strategy fail after consistency passes:
+
+```text
+SemanticState
+  -> normalization
+  -> CanonicalSpec
+  -> IR
+  -> AST
+  -> compiled script
+  -> consistency
+  -> published snapshot
+  -> backtest preflight / adapter / runner
+  -> deploy snapshot binding
+  -> live execution runtime
+```
+
+Remote `main` already has the runtime foundations needed for this:
+
+- Publication persists snapshot v3 fields: `specSnapshot`, `compiledIr`, `irSnapshot`, `astSnapshot`, `compiledManifest`, `scriptSnapshot`, `executionEnvelope`, `executionPolicy`, and `dataRequirements`.
+- Backtest preflight parses the compiled script and checks manifest, IR hash, AST digest, and structural digest.
+- Backtest adapter has a compiled fast path that parses compiler.v1 artifacts and executes `evaluateExprPool`, `evaluateGuards`, `evaluateRiskPredicates`, `runDecisionPrograms`, and `runOrderPrograms`.
+- The backtest runner already consumes compiled force-exit decisions.
+- Deploy reads published snapshot bindings and deployment execution defaults/constraints.
+
+The implementation must therefore add consumer-side regression coverage:
+
+- Published snapshots for the four acceptance strategies must contain the complete compiled artifact: IR, AST, manifest, script, runtime requirements, and execution envelope.
+- Backtest preflight must pass for those snapshots.
+- Backtest adapter must execute the compiled script path, not fall back to legacy VM execution.
+- Backtest runner must observe the same entry/exit/risk behavior that consistency approved, including risk predicate exits.
+- Deploy must bind the published snapshot and preserve snapshot-derived strategy config, deployment defaults, and execution constraints.
+- Live execution must consume the same compiler.v1 script semantics as backtest; no separate live-only interpretation of combination logic is allowed.
+
+This is a verification and integration requirement. It should not duplicate the compiler or runtime. If a downstream consumer already reads the compiled artifact correctly, the implementation should add regression tests rather than new production code.
+
 ## Testing
 
 Required unit coverage:
@@ -263,6 +300,8 @@ Required regression coverage:
 
 - The four acceptance strategies publish successfully and pass consistency.
 - Existing simple MA, RSI, MACD, stop-loss, and take-profit strategies still publish through the same singleton group model.
+- The four acceptance strategies also pass published snapshot preflight and compiled backtest adapter execution.
+- Deploy tests prove published snapshot binding preserves strategy config and execution defaults for combination strategies.
 
 Required negative coverage:
 
