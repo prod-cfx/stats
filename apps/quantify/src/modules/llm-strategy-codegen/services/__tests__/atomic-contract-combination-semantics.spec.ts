@@ -1,5 +1,5 @@
 import type { SemanticSupportClassification } from '../semantic-support-classifier.service'
-import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
@@ -49,8 +49,18 @@ function expectTrigger(
   return trigger
 }
 
-function expectOpenSlot(classification: SemanticSupportClassification, slotKey: string): void {
-  expect(classification.openSlots).toEqual(expect.arrayContaining([
+function expectTriggerOpenSlot(trigger: SemanticTriggerState, slotKey: string): void {
+  expect(trigger.openSlots).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      slotKey,
+      status: 'open',
+      affectsExecution: true,
+    }),
+  ]))
+}
+
+function expectRiskOpenSlot(risk: SemanticRiskState, slotKey: string): void {
+  expect(risk.openSlots).toEqual(expect.arrayContaining([
     expect.objectContaining({
       slotKey,
       status: 'open',
@@ -61,8 +71,9 @@ function expectOpenSlot(classification: SemanticSupportClassification, slotKey: 
 
 describe('atomic contract combination semantics', () => {
   it('extracts rolling extrema breakout entry and exit contracts', () => {
-    const { state } = runPipeline('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓。')
+    const { state, classification } = runPipeline('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓。')
 
+    expect(classification.route).not.toBe('unsupported_fallback')
     expect(state.contextSlots.symbol).toEqual(expect.objectContaining({ value: 'BTCUSDT', status: 'locked' }))
     expect(state.contextSlots.timeframe).toEqual(expect.objectContaining({ value: '4h', status: 'locked' }))
     expect(state.actions).toEqual(expect.arrayContaining([
@@ -92,8 +103,9 @@ describe('atomic contract combination semantics', () => {
   })
 
   it('extracts MA trend gate and MA20 pullback reclaim entry sequence', () => {
-    const { state } = runPipeline('ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入。')
+    const { state, classification } = runPipeline('ETH 日线在 MA120 上方时，只做多；价格回踩 MA20 后重新站上 MA20 买入。')
 
+    expect(classification.route).not.toBe('unsupported_fallback')
     expect(state.contextSlots.symbol).toEqual(expect.objectContaining({ value: 'ETHUSDT', status: 'locked' }))
     expect(state.contextSlots.timeframe).toEqual(expect.objectContaining({ value: '1d', status: 'locked' }))
     expectTrigger(state, {
@@ -118,26 +130,28 @@ describe('atomic contract combination semantics', () => {
     const { state, classification } = runPipeline('我想在大跌后抄底，但不要接飞刀，反弹确认后再买。')
 
     expect(classification.route).toBe('open_slots')
-    expectTrigger(state, {
+    const percentChangeTrigger = expectTrigger(state, {
       key: 'price.percent_change',
       phase: 'gate',
       sideScope: 'long',
       params: expect.objectContaining({ direction: 'down' }),
     })
-    expectTrigger(state, {
+    const reboundTrigger = expectTrigger(state, {
       key: 'confirmation.rebound',
       phase: 'entry',
       sideScope: 'long',
     })
-    expect(state.risk).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'risk.falling_knife_guard' }),
-    ]))
+    const fallingKnifeRisk = state.risk.find(risk => risk.key === 'risk.falling_knife_guard')
+    expect(fallingKnifeRisk).toEqual(expect.objectContaining({ key: 'risk.falling_knife_guard' }))
+    if (!fallingKnifeRisk) {
+      throw new Error('semantic_risk_missing:risk.falling_knife_guard')
+    }
     expect(state.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'open_long' }),
     ]))
-    expectOpenSlot(classification, 'trigger.percent_change.magnitude')
-    expectOpenSlot(classification, 'trigger.confirmation.rebound_definition')
-    expectOpenSlot(classification, 'risk.falling_knife_guard.definition')
+    expectTriggerOpenSlot(percentChangeTrigger, 'trigger.percent_change.magnitude')
+    expectTriggerOpenSlot(reboundTrigger, 'trigger.confirmation.rebound_definition')
+    expectRiskOpenSlot(fallingKnifeRisk, 'risk.falling_knife_guard.definition')
   })
 
   it('extracts consecutive down candles followed by volume rebound with sizing slot', () => {
@@ -165,7 +179,13 @@ describe('atomic contract combination semantics', () => {
       phase: 'entry',
       sideScope: 'long',
     })
-    expectOpenSlot(classification, 'position.sizing')
+    expect(state.position?.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        status: 'open',
+        affectsExecution: true,
+      }),
+    ]))
   })
 
   it('keeps RSI reclaim semantics distinct from MA50 over MA200 gate', () => {
