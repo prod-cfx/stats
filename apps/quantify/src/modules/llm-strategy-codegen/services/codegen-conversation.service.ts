@@ -499,12 +499,16 @@ export class CodegenConversationService {
       })
     }
 
-    // deleteStrategy 已统一处理 conversation 归档 + viewOnly/archive。
-    // 不再额外调用 conversationsRepo.archiveByIdAndUser，避免双写。
+    // 主流程：deleteStrategy 统一归档关联 conversation + viewOnly/archive。
     await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId, {
       deleteStoppedStrategy,
       via: 'conversation-list',
     })
+    // 兜底：deleteStrategy 仅按 strategyInstance 反查 codegen session 的 conversation；
+    // 若策略层因 archivedAt 过滤等原因静默 return，本入口的 conversationId
+    // 仍需被归档以避免 active 状态残留。archiveByIdAndUser 对已归档的 conversation
+    // 是 no-op，幂等安全。
+    await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
     this.logger.log({
       module: 'CodegenConversationService.deleteConversation',
       input: { userId, conversationId, strategyInstanceId, deleteStoppedStrategy },

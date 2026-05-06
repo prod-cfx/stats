@@ -3262,7 +3262,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await (service as any).deleteConversation('conv-1', 'u1', { deleteStoppedStrategy: true })
 
     expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { deleteStoppedStrategy: true, via: 'conversation-list' })
-    expect(mockConversationsRepo.archiveByIdAndUser).not.toHaveBeenCalled()
+    // 兜底：deleteStrategy 静默 return（如策略已归档）也要保证当前 conversation 被归档；
+    // archiveByIdAndUser 对已归档的 conversation 是 no-op，幂等安全。
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 
   it('delegates conversation archive + view-only set to deleteStrategy when deleteStoppedStrategy=false', async () => {
@@ -3291,7 +3293,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await service.deleteConversation('conv-1', 'u1')
 
     expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { deleteStoppedStrategy: false, via: 'conversation-list' })
-    expect(mockConversationsRepo.archiveByIdAndUser).not.toHaveBeenCalled()
+    // 同上兜底，幂等防御。
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 
   it('sends the non-contradictory planner prompt to ai service', async () => {
