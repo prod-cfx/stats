@@ -12,7 +12,7 @@ export type SemanticEditContextField = 'symbol' | 'timeframe' | 'exchange' | 'ma
 
 export type SemanticEditOperation =
   | { op: 'cancel_pending_edit' }
-  | { op: 'replace_context', field: SemanticEditContextField, value: string }
+  | { op: 'replace_context', field: SemanticEditContextField, value: string, evidenceText?: string }
   | { op: 'replace_position', targetRef?: string, text?: string }
   | { op: 'replace_indicator_period', indicator?: string, from: number, to: number, text?: string }
   | { op: 'replace_trigger_number', from: number, to: number, direction?: 'up' | 'down', text?: string }
