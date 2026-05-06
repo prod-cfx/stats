@@ -744,6 +744,28 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
     expect(result.closedSlotKeys).toEqual(expect.arrayContaining(['trigger.entry', 'trigger.exit']))
   })
 
+  it('does not merge trigger phases that do not have an open missing slot', () => {
+    const result = service.resolve({
+      currentState: stateWithMissingEntry(),
+      message: '15m 收盘价高于开盘价开多，收盘价低于开盘价平多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'entry' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
+    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(result.nextState.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(result.closedSlotKeys).toEqual(['trigger.entry'])
+  })
+
   it('does not fulfill an entry slot from an incomplete entry trigger fragment', () => {
     const incompleteService = new SemanticOpenSlotAnswerResolverService(undefined, new IncompleteEntrySeedExtractorService())
     const state = stateWithMissingEntry()

@@ -147,6 +147,7 @@ function mergeFragmentPatch(
   fulfilledPhases: readonly FulfilledTriggerPhase[],
 ): SemanticState {
   const missingTriggerKeys = new Set<string>(fulfilledPhases.map(missingTriggerKeyForPhase))
+  const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
   const existingTriggerIds = new Set(state.triggers.map(trigger => trigger.id))
   const existingActionIds = new Set(state.actions.map(action => action.id))
   const nextTriggers = [
@@ -170,13 +171,14 @@ function mergeFragmentPatch(
         contracts: trigger.contracts,
         support: trigger.support,
       }
-    }),
+    }).filter(trigger => fulfilledPhaseSet.has(trigger.phase)),
   ]
   const existingActionKeys = new Set(state.actions.map(action => action.key))
   const nextActions = [
     ...state.actions,
     ...(patch.actions ?? [])
       .filter(action => !existingActionKeys.has(action.key))
+      .filter(action => actionMatchesFulfilledPhases(action, fulfilledPhaseSet))
       .map((action, index): SemanticActionState => {
         const id = ensureUniqueId(
           action.id ?? `semantic-fragment-action-${slugifyFragmentId(action.key)}-${index + 1}`,
@@ -203,6 +205,28 @@ function mergeFragmentPatch(
     actions: nextActions,
     contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots),
   }
+}
+
+function actionMatchesFulfilledPhases(
+  action: FragmentAction,
+  fulfilledPhases: ReadonlySet<FulfilledTriggerPhase>,
+): boolean {
+  if (isEntryActionKey(action.key)) {
+    return fulfilledPhases.has('entry')
+  }
+  if (isExitActionKey(action.key)) {
+    return fulfilledPhases.has('exit')
+  }
+
+  return true
+}
+
+function isEntryActionKey(key: string): boolean {
+  return key === 'open_long' || key === 'open_short'
+}
+
+function isExitActionKey(key: string): boolean {
+  return key === 'close_long' || key === 'close_short'
 }
 
 function triggerPhaseSlotKey(phase: FulfilledTriggerPhase): typeof ENTRY_TRIGGER_SLOT_KEY | typeof EXIT_TRIGGER_SLOT_KEY {
