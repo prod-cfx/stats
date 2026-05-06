@@ -12812,6 +12812,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         related: true,
         logicReady: false,
         assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'both',
+            params: {
+              rangeMin: 79200,
+              rangeMax: 80200,
+              sideMode: 'bidirectional',
+            },
+          }],
+        },
       }),
     })
     mockRepo.createSession.mockResolvedValue({ id: 's-bidirectional-grid-density' })
@@ -12853,6 +12865,71 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             verb: 'define',
             object: 'level_set',
             shape: expect.objectContaining({ gridCount: 10 }),
+          })],
+        })],
+      }),
+    ]))
+  })
+
+  it('consumes freeform percent spacing for a bare fixed bidirectional grid density slot', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide grid clarification wording',
+        semanticPatch: {
+          triggers: [{
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'both',
+            params: {
+              rangeMin: 79200,
+              rangeMax: 80200,
+              sideMode: 'bidirectional',
+            },
+          }],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-bare-bidirectional-grid-density' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15m 周期，价格区间 79200-80200，采用双向网格',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('网格数量')
+    expect(started.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(createPayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-bare-bidirectional-grid-density',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const continued = await service.continueSession('s-bare-bidirectional-grid-density', {
+      userId: 'u1',
+      message: '步长0.5%',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(continued.assistantPrompt).not.toContain('补充该原子的执行合约')
+    expect(JSON.stringify(updatePayload.semanticState)).not.toContain('"slotKey":"contract.required"')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        openSlots: expect.not.arrayContaining([
+          expect.objectContaining({ slotKey: 'contract.shape.price.level_set.density' }),
+        ]),
+        contracts: [expect.objectContaining({
+          capabilities: [expect.objectContaining({
+            domain: 'price',
+            verb: 'define',
+            object: 'level_set',
+            shape: expect.objectContaining({ spacingPct: 0.5 }),
           })],
         })],
       }),
