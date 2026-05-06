@@ -47,11 +47,10 @@ type SemanticAliasContext = {
 
 @Injectable()
 export class SemanticSeedExtractorService {
-  private readonly eventFrameParser = new SemanticEventFrameParserService()
-  private readonly eventFrameProjector = new SemanticEventFrameProjectorService()
-
   constructor(
     private readonly positionSizingContracts: PositionSizingContractService = new PositionSizingContractService(),
+    private readonly eventFrameParser: SemanticEventFrameParserService = new SemanticEventFrameParserService(),
+    private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
@@ -101,15 +100,66 @@ export class SemanticSeedExtractorService {
   ): SeedTrigger[] {
     const merged: SeedTrigger[] = []
     const seen = new Set<string>()
+    const looseIndicatorIndex = new Map<string, number>()
 
     for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
       const signature = this.buildTriggerMergeSignature(trigger)
       if (seen.has(signature)) continue
+
+      const looseSignature = this.buildLooseIndicatorCrossMergeSignature(trigger)
+      if (looseSignature) {
+        const existingIndex = looseIndicatorIndex.get(looseSignature)
+        if (existingIndex !== undefined) {
+          const existingTrigger = merged[existingIndex]
+          if (this.canMergeLooseIndicatorCross(existingTrigger, trigger)) {
+            if (this.countIndicatorPeriodParams(trigger) > this.countIndicatorPeriodParams(existingTrigger)) {
+              merged[existingIndex] = trigger
+              seen.add(signature)
+            }
+            continue
+          }
+        }
+        else {
+          looseIndicatorIndex.set(looseSignature, merged.length)
+        }
+      }
+
       seen.add(signature)
       merged.push(trigger)
     }
 
     return merged
+  }
+
+  private buildLooseIndicatorCrossMergeSignature(trigger: SeedTrigger): string | null {
+    if (!this.isIndicatorCrossTrigger(trigger)) {
+      return null
+    }
+
+    return JSON.stringify({
+      key: trigger.key,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      indicator: trigger.params?.indicator,
+      semantic: this.resolveIndicatorCrossSemantic(trigger),
+    })
+  }
+
+  private canMergeLooseIndicatorCross(left: SeedTrigger, right: SeedTrigger): boolean {
+    if (!this.isIndicatorCrossTrigger(left) || !this.isIndicatorCrossTrigger(right)) {
+      return false
+    }
+
+    return this.countIndicatorPeriodParams(left) === 0 || this.countIndicatorPeriodParams(right) === 0
+  }
+
+  private countIndicatorPeriodParams(trigger: SeedTrigger): number {
+    let count = 0
+    if (trigger.params?.fastPeriod !== undefined) count += 1
+    if (trigger.params?.slowPeriod !== undefined) count += 1
+    if (trigger.params?.signalPeriod !== undefined) count += 1
+
+    return count
   }
 
   private buildTriggerMergeSignature(trigger: SeedTrigger): string {
@@ -1585,10 +1635,6 @@ export class SemanticSeedExtractorService {
       ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
       ...(stepPct !== null ? { spacingPct: stepPct } : {}),
     }
-    if (!('gridCount' in shape) && stepPct !== null) {
-      shape.gridCount = this.deriveGridCountFromPercentStep(fixedRange.lower, fixedRange.upper, stepPct)
-    }
-
     this.pushTrigger(triggers, seen, {
       key: 'grid.range_rebalance',
       phase: 'entry',
@@ -1707,19 +1753,6 @@ export class SemanticSeedExtractorService {
     }
 
     return value
-  }
-
-  private deriveGridCountFromPercentStep(lower: number, upper: number, stepPct: number): number {
-    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(stepPct) || lower <= 0 || upper <= lower || stepPct <= 0) {
-      return 2
-    }
-
-    const ratio = 1 + stepPct / 100
-    if (ratio <= 1) {
-      return 2
-    }
-
-    return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
   }
 
   private deriveGridCountFromAbsoluteSpacing(lower: number, upper: number, absoluteSpacing: number): number | null {
@@ -1909,8 +1942,31 @@ export class SemanticSeedExtractorService {
   ): void {
     if (!/MACD|DIF|DEA/iu.test(segment)) return
 
-    const clauses = this.splitLogicClauses(segment)
     const params = this.extractMacdParams(segment) ?? this.extractMacdParams(contextText)
+    const eventFrames = this.eventFrameParser.parse(segment)
+      .filter(frame => frame.trigger.kind === 'indicator_cross' && frame.trigger.indicator === 'macd')
+
+    if (eventFrames.length > 0) {
+      for (const frame of eventFrames) {
+        this.pushTrigger(triggers, seen, {
+          key: frame.trigger.direction === 'over' ? 'indicator.cross_over' : 'indicator.cross_under',
+          phase: frame.phase,
+          sideScope: frame.sideScope,
+          params: {
+            indicator: 'macd',
+            semantic: frame.trigger.semantic,
+            ...(params ? {
+              fastPeriod: params.fastPeriod,
+              slowPeriod: params.slowPeriod,
+              signalPeriod: params.signalPeriod,
+            } : {}),
+          },
+        })
+      }
+      return
+    }
+
+    const clauses = this.splitLogicClauses(segment)
 
     for (const clause of clauses) {
       if (!/MACD|DIF|DEA/iu.test(clause)) continue

@@ -365,6 +365,161 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     ])
   })
 
+  it('resolves spacing conflict by keeping the grid count', () => {
+    const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: {
+          lower: 79200,
+          upper: 80200,
+          gridCount: 20,
+          absoluteSpacing: 100,
+          spacingMode: 'arithmetic',
+        },
+        openSlots: [conflictSlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '保留网格数量',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(conflictSlot),
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ resolveConflictBy: 'gridCount' })
+    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+      absoluteSpacing: 100,
+    }))
+  })
+
+  it('resolves spacing conflict by keeping the spacing', () => {
+    const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: {
+          lower: 79200,
+          upper: 80200,
+          gridCount: 20,
+          absoluteSpacing: 100,
+          spacingMode: 'arithmetic',
+        },
+        openSlots: [conflictSlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '保留每格间距',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: conflictSlot.slotKey,
+          fieldPath: conflictSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
+    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      absoluteSpacing: 100,
+    }))
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+  })
+
+  it('resolves spacing conflict from a bare spacing choice answer', () => {
+    const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: {
+          lower: 79200,
+          upper: 80200,
+          gridCount: 20,
+          absoluteSpacing: 100,
+          spacingMode: 'arithmetic',
+        },
+        openSlots: [conflictSlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '每格间距',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: conflictSlot.slotKey,
+          fieldPath: conflictSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
+    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      absoluteSpacing: 100,
+    }))
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+  })
+
+  it('resolves percent spacing conflict by keeping the spacing', () => {
+    const conflictSlot = createOpenSlot('contract.shape.price.level_set.spacing_conflict')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: {
+          lower: 100,
+          upper: 110,
+          gridCount: 20,
+          spacingPct: 0.5,
+          spacingMode: 'arithmetic',
+        },
+        openSlots: [conflictSlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '保留每格间距',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotKey: conflictSlot.slotKey,
+          fieldPath: conflictSlot.fieldPath,
+        }],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.answer).toEqual({ resolveConflictBy: 'spacing' })
+    expect(result.nextState.triggers[0].openSlots).toEqual([])
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      spacingPct: 0.5,
+    }))
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).not.toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+  })
+
   it('does not consume invalid grid count numbers', () => {
     const state = createSemanticState({
       triggers: [createLevelSetTrigger({
@@ -402,6 +557,103 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     expect(service.resolve({ currentState: openState, message: '随便吧' })).toEqual({
       consumed: false,
       nextState: openState,
+    })
+  })
+
+  it('does not fallback to a level set slot when another clarification item is active', () => {
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    } satisfies SemanticSlotState
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
+        openSlots: [createOpenSlot('contract.shape.price.level_set.density')],
+      })],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '10%',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [{
+          status: 'pending',
+          slotId: buildSemanticSlotId(positionSlot),
+          slotKey: positionSlot.slotKey,
+          fieldPath: positionSlot.fieldPath,
+        }],
+      },
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
+    })
+  })
+
+  it('does not skip the active position clarification to consume a later level set item', () => {
+    const positionSlot = {
+      slotKey: 'position.sizing',
+      fieldPath: 'position.sizing',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
+      affectsExecution: true,
+    } satisfies SemanticSlotState
+    const densitySlot = createOpenSlot('contract.shape.price.level_set.density')
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
+        openSlots: [densitySlot],
+      })],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [positionSlot],
+      },
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '10%',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            status: 'pending',
+            slotId: buildSemanticSlotId(positionSlot),
+            slotKey: positionSlot.slotKey,
+            fieldPath: positionSlot.fieldPath,
+          },
+          {
+            status: 'pending',
+            slotId: buildSemanticSlotId(densitySlot),
+            slotKey: densitySlot.slotKey,
+            fieldPath: densitySlot.fieldPath,
+          },
+        ],
+      },
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
     })
   })
 })
@@ -669,7 +921,7 @@ function createLevelSetContract(id: string, shape: SemanticCapabilityShape): Non
 }
 
 function createOpenSlot(
-  slotKey: 'contract.shape.price.level_set.density' | 'contract.requirement.price.define.level_set',
+  slotKey: 'contract.shape.price.level_set.density' | 'contract.requirement.price.define.level_set' | 'contract.shape.price.level_set.spacing_conflict',
   fieldPath = 'triggers[trigger-grid-levels].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
 ): SemanticSlotState {
   return {

@@ -17,7 +17,8 @@ export interface ContractShapeNormalizationResult {
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
-const SPACING_CONFLICT_TOLERANCE = 1e-8
+const ABSOLUTE_SPACING_CONFLICT_TOLERANCE = 1e-8
+const PERCENT_SPACING_CONFLICT_TOLERANCE = 1e-3
 
 @Injectable()
 export class SemanticContractShapeNormalizerService {
@@ -107,7 +108,7 @@ export class SemanticContractShapeNormalizerService {
       shape.centerTiming = centerTiming
     }
 
-    if (options.requireDensity === true && !hasPositiveGridCount(shape)) {
+    if (options.requireDensity === true && !hasPositiveDensity(shape)) {
       return {
         status: 'open',
         shape,
@@ -154,11 +155,22 @@ function withFiniteDensityFields(
 function hasSpacingConflict(shape: SemanticCapabilityShape, lower: number, upper: number): boolean {
   const gridCount = readShapeNumber(shape, 'gridCount')
   const absoluteSpacing = readShapeNumber(shape, 'absoluteSpacing')
-  if (gridCount === null || absoluteSpacing === null || gridCount <= 1) {
+  const spacingPct = readShapeNumber(shape, 'spacingPct')
+  if (gridCount === null || gridCount <= 1) {
     return false
   }
 
-  return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > SPACING_CONFLICT_TOLERANCE
+  if (absoluteSpacing !== null) {
+    return Math.abs((upper - lower) / (gridCount - 1) - absoluteSpacing) > ABSOLUTE_SPACING_CONFLICT_TOLERANCE
+  }
+
+  if (spacingPct === null || lower <= 0) {
+    return false
+  }
+
+  const expectedSpacingPct = (Math.pow(upper / lower, 1 / (gridCount - 1)) - 1) * 100
+
+  return Math.abs(expectedSpacingPct - spacingPct) > PERCENT_SPACING_CONFLICT_TOLERANCE
 }
 
 function resolveHalfRangePct(shape: SemanticCapabilityShape): number | null {

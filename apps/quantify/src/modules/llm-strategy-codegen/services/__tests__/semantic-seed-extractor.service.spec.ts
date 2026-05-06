@@ -224,8 +224,15 @@ describe('SemanticSeedExtractorService', () => {
       }),
     ]))
     const macdTriggers = patch.triggers?.filter(trigger => trigger.params?.indicator === 'macd') ?? []
+    expect(macdTriggers).toHaveLength(2)
     expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
     expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
+    expect(macdTriggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'exit',
+      }),
+    ]))
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'open_long' }),
       expect.objectContaining({ key: 'close_long' }),
@@ -2336,6 +2343,7 @@ describe('SemanticSeedExtractorService', () => {
       ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
       ?.shape
     expect(gridShape).not.toHaveProperty('absoluteSpacing')
+    expect(gridShape).not.toHaveProperty('gridCount')
     expect(patch.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         contracts: expect.arrayContaining([
@@ -2354,6 +2362,24 @@ describe('SemanticSeedExtractorService', () => {
         ]),
       }),
     ]))
+  })
+
+  it('keeps percent-spaced fixed grid free of synthetic spacing conflicts', () => {
+    const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 79200-80200，采用双向网格，每格间距 0.1%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
+    const trigger = patch.triggers?.find(item => item.key === 'grid.range_rebalance')
+    const gridShape = trigger
+      ?.contracts?.[0]?.capabilities?.find(capability => capability.object === 'level_set')
+      ?.shape
+
+    expect(trigger?.openSlots ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'contract.shape.price.level_set.spacing_conflict' }),
+    ]))
+    expect(gridShape).toEqual(expect.objectContaining({
+      lower: 79200,
+      upper: 80200,
+      spacingPct: 0.1,
+    }))
+    expect(gridShape).not.toHaveProperty('gridCount')
   })
 
   it('extracts rolling range-position semantics from the official grid-range template', () => {
@@ -2495,6 +2521,9 @@ describe('SemanticSeedExtractorService', () => {
         }),
       }),
     ]))
+    const macdTriggers = patch.triggers?.filter(trigger => trigger.params?.indicator === 'macd') ?? []
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(macdTriggers.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
   })
 
   it('keeps MA price-vs-reference periods local to each clause', () => {
@@ -3273,5 +3302,80 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]))
     }
+  })
+
+  it('does not add close-long semantics for explicit sell then open-short wording', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 卖出开空；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+    ]))
+    expect(patch.triggers ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(patch.actions ?? []).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'open_short',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                shape: expect.objectContaining({
+                  intent: 'open',
+                  side: 'short',
+                }),
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    ]))
+    expect(patch.actions ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'close_long',
+      }),
+    ]))
+  })
+
+  it('extracts moving-average compact golden-cross buy and death-cross sell as separate events', () => {
+    const patch = service.extract('EMA7 和 EMA21 金叉买入死叉卖出；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          fastPeriod: 7,
+          slowPeriod: 21,
+        }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_over' && trigger.phase === 'entry')).toHaveLength(1)
+    expect(patch.triggers?.filter(trigger => trigger.key === 'indicator.cross_under' && trigger.phase === 'exit')).toHaveLength(1)
   })
 })

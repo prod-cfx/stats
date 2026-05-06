@@ -32,6 +32,10 @@ type LevelSetDensityAnswer = Partial<{
   absoluteSpacing: number
   spacingPct: number
 }>
+type LevelSetSpacingConflictAnswer = {
+  resolveConflictBy: 'gridCount' | 'spacing'
+}
+type LevelSetAnswer = LevelSetDensityAnswer | LevelSetSpacingConflictAnswer
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type FulfilledTriggerPhase = 'entry' | 'exit'
@@ -48,7 +52,7 @@ export type SemanticOpenSlotAnswerResolverResult =
   | {
     consumed: true
     nextState: SemanticState
-    answer: LevelSetDensityAnswer
+    answer: LevelSetAnswer
     closedSlotKeys: string[]
     closedSlots: Array<Pick<SemanticSlotState, 'slotKey' | 'fieldPath'>>
   }
@@ -76,11 +80,11 @@ export class SemanticOpenSlotAnswerResolverService {
   ) {}
 
   resolve(input: SemanticOpenSlotAnswerResolverInput): SemanticOpenSlotAnswerResolverResult {
-    const answer = parseLevelSetDensityAnswer(input.message)
+    const answer = parseLevelSetAnswer(input.message)
     if (answer) {
       const openSlot = findOpenLevelSetSlot(input.currentState, input.clarificationState)
       if (openSlot) {
-        const nextState = applyLevelSetDensityAnswer(input.currentState, openSlot, answer, this.shapeNormalizer)
+        const nextState = applyLevelSetAnswerToOpenSlot(input.currentState, openSlot, answer, this.shapeNormalizer)
         if (nextState !== input.currentState) {
           return {
             consumed: true,
@@ -310,6 +314,25 @@ function slugifyFragmentId(value: string): string {
     || 'atom'
 }
 
+function parseLevelSetAnswer(message: string): LevelSetAnswer | null {
+  return parseLevelSetSpacingConflictAnswer(message) ?? parseLevelSetDensityAnswer(message)
+}
+
+function parseLevelSetSpacingConflictAnswer(message: string): LevelSetSpacingConflictAnswer | null {
+  const text = message.trim()
+  if (/保留|按|用|使用|选择|选/u.test(text) && /网格数量|格数|格子数|多少格/u.test(text)) {
+    return { resolveConflictBy: 'gridCount' }
+  }
+  if (/保留|按|用|使用|选择|选/u.test(text) && /每格|间距|步长/u.test(text)) {
+    return { resolveConflictBy: 'spacing' }
+  }
+  if (/^(?:每格间距|每格|间距|步长)$/u.test(text)) {
+    return { resolveConflictBy: 'spacing' }
+  }
+
+  return null
+}
+
 function parseLevelSetDensityAnswer(message: string): LevelSetDensityAnswer | null {
   const text = message.trim()
   if (!text) {
@@ -372,14 +395,23 @@ function hasDensityAnswer(answer: LevelSetDensityAnswer): boolean {
     || answer.spacingPct !== undefined
 }
 
+function isSpacingConflictAnswer(answer: LevelSetAnswer): answer is LevelSetSpacingConflictAnswer {
+  return 'resolveConflictBy' in answer
+}
+
 function findOpenLevelSetSlot(state: SemanticState, clarificationState: unknown): OpenLevelSetSlotRef | null {
   const slots = collectOpenLevelSetSlots(state)
-  const clarificationTarget = findClarificationTargetSlot(slots, clarificationState)
+  const pendingItems = readPendingClarificationItems(clarificationState)
+  const clarificationTarget = findClarificationTargetSlot(slots, pendingItems)
   if (clarificationTarget) {
     return clarificationTarget
   }
 
-  return slots[0] ?? null
+  if (pendingItems.length > 0) {
+    return null
+  }
+
+  return slots.length === 1 ? slots[0] : null
 }
 
 function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
@@ -415,28 +447,33 @@ function collectOpenLevelSetSlots(state: SemanticState): OpenLevelSetSlotRef[] {
 function findOpenSlots(slots: readonly SemanticSlotState[]): SemanticSlotState[] {
   return slots.filter(slot =>
     slot.status === 'open'
-    && (slot.slotKey === DENSITY_SLOT_KEY || slot.slotKey === REQUIREMENT_LEVEL_SET_SLOT_KEY),
+    && (slot.slotKey === DENSITY_SLOT_KEY
+      || slot.slotKey === REQUIREMENT_LEVEL_SET_SLOT_KEY
+      || slot.slotKey === SPACING_CONFLICT_SLOT_KEY),
   )
 }
 
 function findClarificationTargetSlot(
   slots: readonly OpenLevelSetSlotRef[],
-  clarificationState: unknown,
+  pendingItems: ReturnType<typeof readPendingClarificationItems>,
 ): OpenLevelSetSlotRef | null {
-  for (const item of readPendingClarificationItems(clarificationState)) {
-    const bySlotId = typeof item.slotId === 'string'
-      ? slots.find(ref => buildSemanticSlotId(ref.slot) === item.slotId)
-      : undefined
-    if (bySlotId) {
-      return bySlotId
-    }
+  const activeItem = pendingItems[0]
+  if (!activeItem) {
+    return null
+  }
 
-    const byIdentity = typeof item.slotKey === 'string' && typeof item.fieldPath === 'string'
-      ? slots.find(ref => ref.slot.slotKey === item.slotKey && ref.slot.fieldPath === item.fieldPath)
-      : undefined
-    if (byIdentity) {
-      return byIdentity
-    }
+  const bySlotId = typeof activeItem.slotId === 'string'
+    ? slots.find(ref => buildSemanticSlotId(ref.slot) === activeItem.slotId)
+    : undefined
+  if (bySlotId) {
+    return bySlotId
+  }
+
+  const byIdentity = typeof activeItem.slotKey === 'string' && typeof activeItem.fieldPath === 'string'
+    ? slots.find(ref => ref.slot.slotKey === activeItem.slotKey && ref.slot.fieldPath === activeItem.fieldPath)
+    : undefined
+  if (byIdentity) {
+    return byIdentity
   }
 
   return null
@@ -467,10 +504,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function applyLevelSetDensityAnswer(
+function applyLevelSetAnswerToOpenSlot(
   state: SemanticState,
   openSlot: OpenLevelSetSlotRef,
-  answer: LevelSetDensityAnswer,
+  answer: LevelSetAnswer,
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): SemanticState {
   if (openSlot.ownerKind === 'trigger') {
@@ -512,7 +549,7 @@ function applyLevelSetDensityAnswer(
 function updateTriggerOwner(
   owner: SemanticTriggerState,
   consumedSlot: SemanticSlotState,
-  answer: LevelSetDensityAnswer,
+  answer: LevelSetAnswer,
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): OwnerSlotUpdateResult<SemanticTriggerState> {
   const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
@@ -536,7 +573,7 @@ function updateTriggerOwner(
 function updateActionOwner(
   owner: SemanticActionState,
   consumedSlot: SemanticSlotState,
-  answer: LevelSetDensityAnswer,
+  answer: LevelSetAnswer,
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): OwnerSlotUpdateResult<SemanticActionState> {
   const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
@@ -560,7 +597,7 @@ function updateActionOwner(
 function updateRiskOwner(
   owner: SemanticRiskState,
   consumedSlot: SemanticSlotState,
-  answer: LevelSetDensityAnswer,
+  answer: LevelSetAnswer,
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): OwnerSlotUpdateResult<SemanticRiskState> {
   const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
@@ -584,7 +621,7 @@ function updateRiskOwner(
 function updatePositionOwner(
   owner: SemanticPositionState,
   consumedSlot: SemanticSlotState,
-  answer: LevelSetDensityAnswer,
+  answer: LevelSetAnswer,
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): OwnerSlotUpdateResult<SemanticPositionState> {
   const contracts = updateLevelSetContracts(owner.contracts, consumedSlot, answer, shapeNormalizer)
@@ -608,7 +645,7 @@ function updatePositionOwner(
 function updateLevelSetContracts(
   contracts: readonly SemanticAtomContract[] | undefined,
   consumedSlot: SemanticSlotState,
-  answer: LevelSetDensityAnswer,
+  answer: LevelSetAnswer,
   shapeNormalizer: SemanticContractShapeNormalizerService,
 ): { contracts?: SemanticAtomContract[]; updated: boolean; fieldPath: string; hasConflict: boolean } {
   if (!contracts?.length) {
@@ -635,9 +672,13 @@ function updateLevelSetContracts(
       return contract
     }
 
+    const nextShape = applyLevelSetAnswer(contract.capabilities[capabilityIndex].shape, consumedSlot, answer)
+    if (nextShape === contract.capabilities[capabilityIndex].shape) {
+      return contract
+    }
+
     updated = true
     updatedFieldPath = target.fieldPath
-    const nextShape = mergeDensityAnswer(contract.capabilities[capabilityIndex].shape, answer)
     hasConflict = shapeNormalizer.normalizeLevelSetShape(nextShape, {
       requireDensity: true,
       fieldPath: updatedFieldPath,
@@ -662,10 +703,21 @@ function isLevelSetCapability(capability: SemanticCapability): boolean {
     && capability.object === 'level_set'
 }
 
-function mergeDensityAnswer(
+function applyLevelSetAnswer(
   shape: SemanticCapabilityShape,
-  answer: LevelSetDensityAnswer,
+  consumedSlot: SemanticSlotState,
+  answer: LevelSetAnswer,
 ): SemanticCapabilityShape {
+  if (isSpacingConflictAnswer(answer)) {
+    if (consumedSlot.slotKey !== SPACING_CONFLICT_SLOT_KEY) {
+      return shape
+    }
+
+    return answer.resolveConflictBy === 'gridCount'
+      ? omitShapeKeys(shape, ['absoluteSpacing', 'spacingPct'])
+      : omitShapeKeys(shape, ['gridIntervals', 'gridCount'])
+  }
+
   return {
     ...shape,
     ...(answer.gridIntervals !== undefined ? { gridIntervals: answer.gridIntervals } : {}),
@@ -673,6 +725,15 @@ function mergeDensityAnswer(
     ...(answer.absoluteSpacing !== undefined ? { absoluteSpacing: answer.absoluteSpacing } : {}),
     ...(answer.spacingPct !== undefined ? { spacingPct: answer.spacingPct } : {}),
   }
+}
+
+function omitShapeKeys(shape: SemanticCapabilityShape, keys: readonly string[]): SemanticCapabilityShape {
+  const next = { ...shape }
+  for (const key of keys) {
+    delete next[key]
+  }
+
+  return next
 }
 
 function resolveOwnerOpenSlots(

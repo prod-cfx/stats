@@ -37,6 +37,7 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
 const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
 const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
 const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
+const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 
 @Injectable()
 export class SemanticSeedStateBuilderService {
@@ -107,7 +108,7 @@ export class SemanticSeedStateBuilderService {
     const sideScope = update.sideScope === 'long' || update.sideScope === 'short' || update.sideScope === 'both'
       ? update.sideScope
       : null
-    const openSlots = this.ensureBollingerConfirmationOpenSlot({
+    let openSlots = this.ensureBollingerConfirmationOpenSlot({
       key,
       phase,
       params,
@@ -121,6 +122,12 @@ export class SemanticSeedStateBuilderService {
       ?? (this.hasOwnProperty(update, 'contracts')
         ? null
         : this.synthesizeTriggerContracts(key, phase, sideScope, params, index))
+    openSlots = this.ensureGridLevelSetDensityOpenSlot({
+      key,
+      openSlots,
+      contracts,
+      triggerIndex: index,
+    })
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -398,6 +405,10 @@ export class SemanticSeedStateBuilderService {
       return this.hasPositiveInteger(params.lookbackBars) && this.isPercentThreshold(params.thresholdPct)
     }
 
+    if (key === 'grid.range_rebalance') {
+      return this.resolveGridRange(params) !== null
+    }
+
     if (
       key === 'trend.direction'
       || key === 'market.trend'
@@ -466,6 +477,41 @@ export class SemanticSeedStateBuilderService {
     return this.hasFiniteNumber(value) && value > 0 && value <= 100
   }
 
+  private resolveGridRange(params: Record<string, unknown>): { lower: number; upper: number } | null {
+    const lower = this.readFiniteNumberParam(params, ['rangeLower', 'rangeMin', 'lower'])
+    const upper = this.readFiniteNumberParam(params, ['rangeUpper', 'rangeMax', 'upper'])
+    if (lower === null || upper === null || lower <= 0 || upper <= lower) {
+      return null
+    }
+
+    return { lower, upper }
+  }
+
+  private resolveGridDensityShape(params: Record<string, unknown>): SemanticCapabilityShape {
+    const gridCount = this.readFiniteNumberParam(params, ['gridCount'])
+    const gridIntervals = this.readFiniteNumberParam(params, ['gridIntervals'])
+    const absoluteSpacing = this.readFiniteNumberParam(params, ['absoluteSpacing'])
+    const spacingPct = this.readFiniteNumberParam(params, ['spacingPct', 'stepPct'])
+
+    return this.toCapabilityShape({
+      ...(gridCount !== null ? { gridCount } : {}),
+      ...(gridIntervals !== null ? { gridIntervals } : {}),
+      ...(absoluteSpacing !== null ? { absoluteSpacing } : {}),
+      ...(spacingPct !== null ? { spacingPct } : {}),
+    })
+  }
+
+  private readFiniteNumberParam(params: Record<string, unknown>, keys: readonly string[]): number | null {
+    for (const key of keys) {
+      const value = params[key]
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value
+      }
+    }
+
+    return null
+  }
+
   private buildTriggerCapability(
     key: string,
     phase: SemanticTriggerState['phase'],
@@ -514,6 +560,22 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
+    if (key === 'grid.range_rebalance') {
+      const range = this.resolveGridRange(params)
+      return {
+        domain: 'price',
+        verb: 'define',
+        object: 'level_set',
+        shape: this.toCapabilityShape({
+          mode: 'fixed_range',
+          lower: range?.lower ?? null,
+          upper: range?.upper ?? null,
+          spacingMode: 'arithmetic',
+          ...this.resolveGridDensityShape(params),
+        }),
+      }
+    }
+
     return {
       domain: 'price',
       verb: 'detect',
@@ -525,6 +587,68 @@ export class SemanticSeedStateBuilderService {
         ...params,
       }),
     }
+  }
+
+  private ensureGridLevelSetDensityOpenSlot(input: {
+    key: string
+    openSlots: SemanticSlotState[]
+    contracts: SemanticAtomContract[] | null
+    triggerIndex: number
+  }): SemanticSlotState[] {
+    if (input.key !== 'grid.range_rebalance' || !input.contracts?.length) {
+      return input.openSlots
+    }
+
+    const target = this.resolveLevelSetContractTarget(input.contracts, `triggers[${input.triggerIndex}]`)
+    if (!target || this.hasLevelSetDensity(target.capability.shape)) {
+      return input.openSlots
+    }
+
+    if (input.openSlots.some(slot => slot.slotKey === LEVEL_SET_DENSITY_SLOT_KEY && slot.fieldPath === target.fieldPath)) {
+      return input.openSlots
+    }
+
+    return [
+      ...this.removeContractRequiredSlots(input.openSlots, target.contractFieldPath),
+      {
+        slotKey: LEVEL_SET_DENSITY_SLOT_KEY,
+        fieldPath: target.fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: '请确认网格数量或每格间距，例如 20 格 / 每格 100 USDT / 每格 0.5%。',
+        affectsExecution: true,
+      },
+    ]
+  }
+
+  private resolveLevelSetContractTarget(contracts: SemanticAtomContract[], ownerFieldPath: string): {
+    capability: SemanticCapability
+    contractFieldPath: string
+    fieldPath: string
+  } | null {
+    for (const contract of contracts) {
+      const capability = contract.capabilities.find(item =>
+        item.domain === 'price'
+        && item.verb === 'define'
+        && item.object === 'level_set',
+      )
+      if (!capability) continue
+
+      return {
+        capability,
+        contractFieldPath: `${ownerFieldPath}.contracts`,
+        fieldPath: `${ownerFieldPath}.contracts[${contract.id}].capabilities[price.define.level_set].shape`,
+      }
+    }
+
+    return null
+  }
+
+  private hasLevelSetDensity(shape: SemanticCapabilityShape): boolean {
+    return this.hasPositiveFiniteNumber(shape.gridCount)
+      || this.hasPositiveFiniteNumber(shape.gridIntervals)
+      || this.hasPositiveFiniteNumber(shape.absoluteSpacing)
+      || this.hasPositiveFiniteNumber(shape.spacingPct)
   }
 
   private synthesizeActionContracts(
