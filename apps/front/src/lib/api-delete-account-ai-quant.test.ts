@@ -136,6 +136,63 @@ describe('deleteAccountAiQuantStrategy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('appends deleteStoppedStrategy=true query when option is set', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { deleteAccountAiQuantStrategy } = await import('./api')
+
+    await expect(
+      deleteAccountAiQuantStrategy('strategy-x', 'user-x', { deleteStoppedStrategy: true }),
+    ).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const calledUrl = fetchMock.mock.calls[0][0] as string
+    expect(calledUrl).toContain('userId=user-x')
+    expect(calledUrl).toContain('deleteStoppedStrategy=true')
+  })
+
+  it('omits deleteStoppedStrategy query by default', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { deleteAccountAiQuantStrategy } = await import('./api')
+
+    await expect(
+      deleteAccountAiQuantStrategy('strategy-y', 'user-y'),
+    ).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const calledUrl = fetchMock.mock.calls[0][0] as string
+    expect(calledUrl).toContain('userId=user-y')
+    expect(calledUrl).not.toContain('deleteStoppedStrategy')
+  })
+
+  it('propagates real backend error messages without falling back', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+      json: async () => ({ message: 'cannot delete running strategy' }),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { deleteAccountAiQuantStrategy } = await import('./api')
+
+    await expect(
+      deleteAccountAiQuantStrategy('strategy-z', 'user-z'),
+    ).rejects.toThrow('cannot delete running strategy')
+    expect(deleteMockStrategyById).not.toHaveBeenCalled()
+  })
+
   it('passes deleteStoppedStrategy through the conversation delete endpoint', async () => {
     const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSJ9.sig'
     getTokenMock.mockReturnValue(token)

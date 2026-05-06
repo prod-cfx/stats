@@ -277,6 +277,7 @@ export async function performAccountAiQuantStrategyAction(
 export async function deleteAccountAiQuantStrategy(
   strategyId: string,
   userId: string,
+  options: { deleteStoppedStrategy?: boolean } = {},
 ): Promise<void> {
   return apiCall(async () => {
     validateId(strategyId, 'strategy ID')
@@ -285,6 +286,9 @@ export async function deleteAccountAiQuantStrategy(
     }
 
     const search = new URLSearchParams({ userId: userId.trim() })
+    if (options.deleteStoppedStrategy === true) {
+      search.set('deleteStoppedStrategy', 'true')
+    }
     const response = await fetch(
       `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
       { method: 'DELETE', headers: buildAccountAiQuantHeaders(userId.trim()) },

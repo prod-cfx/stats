@@ -174,6 +174,8 @@ export interface AiQuantStrategyRecord {
     at: string
     status: 'running' | 'stopped'
   }
+  viewOnlyAt?: string | null
+  hasActiveConversation?: boolean
   updatedAt: string
 }
 

@@ -462,6 +462,8 @@ export function mapAccountStrategyListItemToRecord(
     ...dynamicParams,
     equitySeries: [],
     timeline: [],
+    viewOnlyAt: item.viewOnlyAt ?? null,
+    hasActiveConversation: item.hasActiveConversation === true,
     updatedAt: item.updatedAt,
   }
 }
@@ -615,6 +617,8 @@ export function mapAccountStrategyDetailToRecord(
           status: detail.status === 'running' ? 'running' : 'stopped',
         }
       : undefined,
+    viewOnlyAt: detail.viewOnlyAt ?? null,
+    hasActiveConversation: detail.hasActiveConversation === true,
     updatedAt: detail.updatedAt,
   }
   return {

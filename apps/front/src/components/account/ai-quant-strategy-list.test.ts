@@ -36,6 +36,8 @@ const mockFetchAccountAiQuantStrategies = jest.fn()
 const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 const mockPerformAccountAiQuantStrategyAction = jest.fn()
 const mockDeleteAccountAiQuantStrategy = jest.fn()
+const mockListAiQuantConversations = jest.fn()
+const mockRouterPush = jest.fn()
 let mockSession: { userId: string } | null = null
 const mockT = (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key
 
@@ -44,6 +46,11 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 jest.mock('react-i18next', () => ({
   // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
   useTranslation: () => ({ t: mockT }),
+}))
+
+jest.mock('next/navigation', () => ({
+  // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
+  useRouter: () => ({ push: mockRouterPush }),
 }))
 
 jest.mock('@/hooks/use-auth', () => ({
@@ -56,6 +63,7 @@ jest.mock('@/lib/api', () => ({
   fetchAccountAiQuantStrategies: (...args: unknown[]) => mockFetchAccountAiQuantStrategies(...args),
   fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchAccountAiQuantStrategyDetail(...args),
   performAccountAiQuantStrategyAction: (...args: unknown[]) => mockPerformAccountAiQuantStrategyAction(...args),
+  listAiQuantConversations: (...args: unknown[]) => mockListAiQuantConversations(...args),
 }))
 
 function makeListRecord(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantStrategyRecord {
@@ -106,6 +114,8 @@ beforeEach(() => {
   mockFetchAccountAiQuantStrategyDetail.mockReset()
   mockPerformAccountAiQuantStrategyAction.mockReset()
   mockDeleteAccountAiQuantStrategy.mockReset()
+  mockListAiQuantConversations.mockReset()
+  mockRouterPush.mockReset()
 })
 
 afterEach(() => {
@@ -272,10 +282,13 @@ describe('AiQuantStrategyList primary summary', () => {
     })
   })
 
-  it('uses an in-app confirmation dialog for deleting stopped strategies', async () => {
+  it('with-conversation: confirm without checkbox deletes only the conversation', async () => {
     mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
+    mockListAiQuantConversations.mockResolvedValue([
+      { id: 'conv-1', conversationTitle: '测试会话', strategyInstanceId: 'stg-list-1' },
+    ])
 
-    await renderStrategyListWithItems([listItem({ status: 'stopped' })])
+    await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: true })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
       .find(button => button.textContent?.includes('Delete'))
@@ -284,73 +297,167 @@ describe('AiQuantStrategyList primary summary', () => {
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+    await act(async () => {})
 
-    expect(container.textContent).toContain('确认删除策略？')
     const dialog = container.querySelector('[role="dialog"]')
+    expect(dialog).toBeTruthy()
     expect(dialog?.getAttribute('aria-modal')).toBe('true')
-    expect(dialog?.getAttribute('aria-labelledby')).toBe('ai-quant-delete-strategy-title')
 
-    const confirmDeleteButton = Array.from(container.querySelectorAll('button'))
-      .filter(button => button.textContent === 'Delete')
-      .at(-1)
-    expect(document.activeElement).toBe(confirmDeleteButton)
+    const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    expect(primary?.textContent).toContain('仅删除会话')
+
     await act(async () => {
-      confirmDeleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
-    expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1')
+    expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: false })
   })
 
-  it('shows delete errors inside the confirmation dialog', async () => {
-    mockDeleteAccountAiQuantStrategy.mockRejectedValue(new Error('delete failed from api'))
+  it('with-conversation: confirm with checkbox deletes both', async () => {
+    mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
+    mockListAiQuantConversations.mockResolvedValue([
+      { id: 'conv-1', conversationTitle: '测试会话', strategyInstanceId: 'stg-list-1' },
+    ])
+    const originalConfirm = window.confirm
+    window.confirm = jest.fn(() => true) as unknown as typeof window.confirm
 
-    await renderStrategyListWithItems([listItem({ status: 'stopped' })])
+    await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: true })])
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
       .find(button => button.textContent?.includes('Delete'))
     await act(async () => {
       deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+    await act(async () => {})
 
-    const confirmDeleteButton = Array.from(container.querySelectorAll('button'))
-      .filter(button => button.textContent === 'Delete')
-      .at(-1)
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')
+    expect(checkbox).toBeTruthy()
     await act(async () => {
-      confirmDeleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      checkbox!.click()
+    })
+    await act(async () => {})
+
+    const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    expect(primary?.textContent).toContain('删除会话和策略')
+
+    await act(async () => {
+      primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: true })
+
+    window.confirm = originalConfirm
+  })
+
+  it('no-conversation: keep-as-view-only does not delete the strategy record', async () => {
+    mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
+
+    await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    await act(async () => {})
+
+    const dialog = container.querySelector('[role="dialog"]')
+    expect(dialog).toBeTruthy()
+    expect(dialog?.textContent).not.toContain('取消')
+
+    const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    expect(primary?.textContent).toContain('删除策略记录')
+    const secondary = container.querySelector('[data-testid="ai-quant-deletion-secondary"]')
+    expect(secondary?.textContent).toContain('保留为只读')
+
+    await act(async () => {
+      secondary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: false })
+  })
+
+  it('no-conversation: primary deletes the strategy record', async () => {
+    mockDeleteAccountAiQuantStrategy.mockResolvedValue(undefined)
+
+    await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    await act(async () => {})
+
+    const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    await act(async () => {
+      primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: true })
+  })
+
+  it('running-strategy: opens running dialog and routes to strategy detail', async () => {
+    await renderStrategyListWithItems([listItem({ status: 'running', hasActiveConversation: true })])
+
+    // The running list item shows 停止策略 not Delete; force open via hasActiveConversation but status running
+    // Simulate the case by clicking the delete button if present (running strategies show no Delete in non-view-only)
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+
+    // Running strategies still show Delete button (non-view-only path)
+    expect(deleteButton).toBeTruthy()
+
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    const dialog = container.querySelector('[role="dialog"]')
+    expect(dialog?.textContent).toContain('当前策略正在运行')
+    const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    expect(primary?.textContent).toContain('前往运行策略')
+
+    await act(async () => {
+      primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+
+    expect(mockRouterPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/stg-list-1')
+    expect(mockDeleteAccountAiQuantStrategy).not.toHaveBeenCalled()
+  })
+
+  it('shows real backend errors in the dialog without falling back to local delete', async () => {
+    mockDeleteAccountAiQuantStrategy.mockRejectedValue(new Error('delete failed from api'))
+
+    await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: false })])
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('Delete'))
+    await act(async () => {
+      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    })
+    await act(async () => {})
+
+    const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
+    await act(async () => {
+      primary?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain('delete failed from api')
   })
 
-  it('closes the delete dialog with Escape before deletion starts', async () => {
-    await renderStrategyListWithItems([listItem({ status: 'stopped' })])
+  it('view-only items only render the view-detail link', async () => {
+    await renderStrategyListWithItems([
+      listItem({ status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' }),
+    ])
 
-    const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
-    await act(async () => {
-      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-    })
+    const buttons = Array.from(container.querySelectorAll('button'))
+    expect(buttons.find(b => b.textContent?.includes('Delete'))).toBeUndefined()
+    expect(buttons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
+    expect(buttons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
 
-    expect(container.querySelector('[role="dialog"]')).toBeTruthy()
-
-    await act(async () => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    })
-
-    expect(container.querySelector('[role="dialog"]')).toBeNull()
-  })
-
-  it('blocks deleting a running strategy with a localized message', async () => {
-    await renderStrategyListWithItems([listItem()])
-
-    const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('Delete'))
-    await act(async () => {
-      deleteButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
-    })
-
-    expect(container.textContent).toContain('Running strategies cannot be deleted. Stop the strategy first.')
-    expect(mockDeleteAccountAiQuantStrategy).not.toHaveBeenCalled()
+    const link = Array.from(container.querySelectorAll('a'))
+      .find(a => a.textContent?.includes('aiQuant.viewDetail'))
+    expect(link).toBeTruthy()
   })
 
   it('renders static fallback summary in DOM with separators and expected order', () => {

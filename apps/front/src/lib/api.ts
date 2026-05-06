@@ -294,6 +294,8 @@ export interface AccountAiQuantStrategyListItem {
   schemaVersion: string | null
   metrics: AccountAiQuantStrategyMetrics
   updatedAt: string
+  viewOnlyAt?: string | null
+  hasActiveConversation?: boolean
 }
 
 export interface AccountAiQuantStrategyEquityPoint {

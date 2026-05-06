@@ -1265,7 +1265,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
     await act(async () => {
-      ;(container.querySelector('[data-testid="confirm-delete-conversation"]') as HTMLButtonElement).click()
+      ;(container.querySelector('[data-testid="ai-quant-deletion-primary"]') as HTMLButtonElement).click()
       await Promise.resolve()
       await Promise.resolve()
     })
