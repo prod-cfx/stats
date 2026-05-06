@@ -13051,6 +13051,83 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('keeps normalized ETHUSDT context symbol through the grid mainflow clarifications', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: 'planner fallback should not provide symbol clarification wording',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-eth-grid-symbol-mainflow' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'ETH usdt，在 2500 到 3200 之间做多空网格，2倍杠杆，突破区间就停止。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(started.assistantPrompt).not.toContain('请确认策略交易标的')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-eth-grid-symbol-mainflow',
+      createPayload,
+      { status: started.status },
+    ))
+
+    const afterGridCount = await service.continueSession('s-eth-grid-symbol-mainflow', {
+      userId: 'u1',
+      message: '15格',
+    })
+    const gridCountPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(gridCountPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(afterGridCount.assistantPrompt).not.toContain('请确认策略交易标的')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-eth-grid-symbol-mainflow',
+      gridCountPayload,
+      { status: afterGridCount.status },
+    ))
+
+    const afterPosition = await service.continueSession('s-eth-grid-symbol-mainflow', {
+      userId: 'u1',
+      message: '100usdt',
+    })
+    const positionPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(positionPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(afterPosition.assistantPrompt).not.toContain('请确认策略交易标的')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-eth-grid-symbol-mainflow',
+      positionPayload,
+      { status: afterPosition.status },
+    ))
+
+    const afterExchange = await service.continueSession('s-eth-grid-symbol-mainflow', {
+      userId: 'u1',
+      message: 'okx',
+    })
+    const exchangePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(exchangePayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'ETHUSDT',
+    }))
+    expect(afterExchange.assistantPrompt).not.toContain('请确认策略交易标的')
+  })
+
   it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
