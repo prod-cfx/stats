@@ -13052,6 +13052,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('keeps normalized ETHUSDT context symbol through the grid mainflow clarifications', async () => {
+    const expectNoSymbolPrompt = (prompt: string) => {
+      expect(prompt).not.toContain('请确认策略交易标的')
+      expect(prompt).not.toContain('请选择标的')
+      expect(prompt).not.toContain('交易对')
+    }
+
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
         related: true,
@@ -13071,7 +13077,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'locked',
       value: 'ETHUSDT',
     }))
-    expect(started.assistantPrompt).not.toContain('请确认策略交易标的')
+    expectNoSymbolPrompt(started.assistantPrompt)
 
     mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
       's-eth-grid-symbol-mainflow',
@@ -13089,7 +13095,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'locked',
       value: 'ETHUSDT',
     }))
-    expect(afterGridCount.assistantPrompt).not.toContain('请确认策略交易标的')
+    expect(afterGridCount.assistantPrompt).toContain('请确认单笔仓位大小')
+    expectNoSymbolPrompt(afterGridCount.assistantPrompt)
 
     mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
       's-eth-grid-symbol-mainflow',
@@ -13101,17 +13108,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '100usdt',
     })
-    const positionPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const budgetPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
 
-    expect(positionPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+    expect(budgetPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'ETHUSDT',
     }))
-    expect(afterPosition.assistantPrompt).not.toContain('请确认策略交易标的')
+    expect(afterPosition.assistantPrompt).toContain('请确认交易所')
+    expectNoSymbolPrompt(afterPosition.assistantPrompt)
 
     mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
       's-eth-grid-symbol-mainflow',
-      positionPayload,
+      budgetPayload,
       { status: afterPosition.status },
     ))
 
@@ -13125,7 +13133,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'locked',
       value: 'ETHUSDT',
     }))
-    expect(afterExchange.assistantPrompt).not.toContain('请确认策略交易标的')
+    expect(exchangePayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'okx',
+    }))
+    expect(afterExchange.status).toBe('DRAFTING')
+    expect(afterExchange.assistantPrompt).toContain('请确认市场类型')
+    expectNoSymbolPrompt(afterExchange.assistantPrompt)
   })
 
   it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
