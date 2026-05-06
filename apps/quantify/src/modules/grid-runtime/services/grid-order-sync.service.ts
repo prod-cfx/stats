@@ -156,7 +156,7 @@ export class GridOrderSyncService {
           exchangeOrderId: exchangeOrder.id,
           status: this.toGridOrderStatus(exchangeOrder.status),
           filledQuantity: String(exchangeOrder.filled),
-          acceptedQuantity: this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder) ? String(exchangeOrder.amount) : null,
+          acceptedQuantity: this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder, instance) ? String(exchangeOrder.amount) : null,
           avgFillPrice: exchangeOrder.price == null ? null : String(exchangeOrder.price),
           rawPayload: this.toJsonValue(exchangeOrder.raw),
         })
@@ -825,16 +825,17 @@ export class GridOrderSyncService {
       && exchangeOrder.side === order.side
       && exchangeOrder.type === order.orderType
       && this.decimalEquals(exchangeOrder.price, order.price)
-      && this.matchesOrderQuantity(order, exchangeOrder)
+      && this.matchesOrderQuantity(order, exchangeOrder, instance)
     )
   }
 
-  private matchesOrderQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder): boolean {
+  private matchesOrderQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): boolean {
     return this.decimalEquals(exchangeOrder.amount, order.quantity)
-      || this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder)
+      || this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder, instance)
   }
 
-  private shouldConvergeAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder): boolean {
+  private shouldConvergeAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): boolean {
+    if (instance.exchangeId !== 'okx' || this.normalizeMarketType(instance.marketType) !== 'perp') return false
     if (order.role !== 'close_long' && order.role !== 'close_short') return false
     if (exchangeOrder.amount <= 0) return false
     const exchangeAmount = this.decimal(String(exchangeOrder.amount))
