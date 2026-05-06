@@ -348,7 +348,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         {strategies.map(item => {
           const statusConfig = STATUS_CONFIG[item.status]
           const StatusIcon = statusConfig.icon
-          const isViewOnly = Boolean(item.viewOnlyAt) && item.status !== 'running'
+          // viewOnlyAt 非空即只读：Run/Stop/Delete 全部隐藏，仅留「查看详情」入口。
+          // running + viewOnlyAt 这种异常组合也走只读分支；用户进入详情后自行处理 running。
+          const isViewOnly = Boolean(item.viewOnlyAt)
 
           return (
             <div
