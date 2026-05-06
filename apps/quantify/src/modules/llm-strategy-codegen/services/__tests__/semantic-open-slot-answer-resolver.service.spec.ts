@@ -812,6 +812,42 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
       }),
     ]))
   })
+
+  it('locks structured symbol context fragments using their resolved value', () => {
+    const structuredSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, new StructuredSymbolSeedExtractorService())
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+    }
+
+    const result = structuredSymbolService.resolve({
+      currentState: state,
+      message: 'ETH usdt 做多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH usdt',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDT',
+          kind: 'context',
+        }),
+      ]),
+    }))
+  })
 })
 
 class IncompleteEntrySeedExtractorService extends SemanticSeedExtractorService {
@@ -865,6 +901,56 @@ class MixedEntryGateExitSeedExtractorService extends SemanticSeedExtractorServic
         { key: 'open_long', params: {} },
         { key: 'close_long', params: {} },
       ],
+    }
+  }
+}
+
+class StructuredSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: {
+          value: 'ETHUSDT',
+          source: 'user_explicit',
+          evidenceText: 'ETH usdt',
+          base: 'ETH',
+          quote: 'USDT',
+          quoteSource: 'explicit',
+          evidence: {
+            text: 'ETH usdt',
+            source: 'user_explicit',
+          },
+          contracts: [{
+            id: 'context-symbol-ETHUSDT',
+            kind: 'context',
+            capabilities: [{
+              domain: 'market',
+              verb: 'identify',
+              object: 'instrument',
+              shape: {
+                symbol: 'ETHUSDT',
+              },
+            }],
+            requires: [],
+            params: {
+              symbol: 'ETHUSDT',
+            },
+          }],
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
     }
   }
 }

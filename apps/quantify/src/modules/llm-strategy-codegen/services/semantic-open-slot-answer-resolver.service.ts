@@ -7,6 +7,7 @@ import type {
   SemanticCapability,
   SemanticCapabilityShape,
   SemanticContextSlotState,
+  SemanticEvidence,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -41,6 +42,7 @@ type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type FulfilledTriggerPhase = 'entry' | 'exit'
 type FragmentTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type FragmentAction = NonNullable<CodegenSemanticPatch['actions']>[number]
+type PatchContextSlotValue = NonNullable<CodegenSemanticPatch['contextSlots']>[keyof SemanticContextSlotState]
 
 interface SemanticOpenSlotAnswerResolverInput {
   currentState: SemanticState
@@ -296,7 +298,7 @@ function mergeFragmentContextSlots(
 function mergeFragmentContextSlot(
   field: keyof SemanticContextSlotState,
   current: SemanticSlotState | null,
-  value: string | number | boolean | null | undefined,
+  value: PatchContextSlotValue | undefined,
 ): SemanticSlotState | null {
   if (current?.status === 'locked' || value === undefined || value === null) {
     return current
@@ -307,8 +309,30 @@ function mergeFragmentContextSlot(
 
 function createLockedContextSlot(
   field: keyof SemanticContextSlotState,
-  value: string | number | boolean,
-): SemanticSlotState {
+  value: PatchContextSlotValue,
+): SemanticSlotState | null {
+  if (field === 'symbol' && isStructuredSymbolContextValue(value)) {
+    const contracts = readSymbolContracts(value)
+    return {
+      slotKey: field,
+      fieldPath: `contextSlots.${field}`,
+      value: value.value,
+      status: 'locked',
+      priority: 'context',
+      questionHint: contextQuestionHint(field),
+      affectsExecution: true,
+      evidence: readSymbolEvidence(value) ?? {
+        text: value.value,
+        source: 'user_explicit',
+      },
+      ...(contracts ? { contracts } : {}),
+    }
+  }
+
+  if (!isPrimitiveContextSlotValue(value)) {
+    return null
+  }
+
   return {
     slotKey: field,
     fieldPath: `contextSlots.${field}`,
@@ -322,6 +346,50 @@ function createLockedContextSlot(
       source: 'user_explicit',
     },
   }
+}
+
+function isPrimitiveContextSlotValue(value: PatchContextSlotValue): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+}
+
+function isStructuredSymbolContextValue(value: PatchContextSlotValue): value is Record<string, unknown> & { value: string } {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof value.value === 'string'
+}
+
+function readSymbolEvidence(value: Record<string, unknown>): SemanticEvidence | undefined {
+  return isSemanticEvidence(value.evidence) ? value.evidence : undefined
+}
+
+function isSemanticEvidence(value: unknown): value is SemanticEvidence {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof (value as Record<string, unknown>).text === 'string'
+    && typeof (value as Record<string, unknown>).source === 'string'
+}
+
+function readSymbolContracts(value: Record<string, unknown>): SemanticAtomContract[] | undefined {
+  const contracts = value.contracts
+  if (!Array.isArray(contracts) || !contracts.every(isSemanticAtomContract)) {
+    return undefined
+  }
+
+  return contracts
+}
+
+function isSemanticAtomContract(value: unknown): value is SemanticAtomContract {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.id === 'string'
+    && typeof record.kind === 'string'
+    && Array.isArray(record.capabilities)
+    && Array.isArray(record.requires)
 }
 
 function contextQuestionHint(field: keyof SemanticContextSlotState): string {
