@@ -2972,7 +2972,7 @@ export class SemanticSeedExtractorService {
   private extractSymbolCandidates(text: string): string[] {
     const candidates: string[] = []
 
-    for (const match of text.matchAll(/\b([A-Z0-9]{2,20}(?:[-/\s]?(?:USDT|USDC|USD))(?:-SWAP|:PERP|:SPOT)?)\b/giu)) {
+    for (const match of text.matchAll(/\b([A-Z0-9]{2,20}(?:[-/\s]?(?:FDUSD|USDT|USDC|BUSD|TUSD|USD))(?:-SWAP|:PERP|:SPOT)?)\b/giu)) {
       const candidate = match[1]?.trim()
       if (!candidate || !/[A-Z]/iu.test(candidate)) continue
       candidates.push(candidate)

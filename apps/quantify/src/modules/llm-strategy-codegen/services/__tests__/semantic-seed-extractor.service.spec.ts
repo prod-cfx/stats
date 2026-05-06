@@ -263,6 +263,21 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it.each([
+    ['BTCBUSD 15m，突破 68000 做多。', 'BTCBUSD', 'BTC', 'BUSD'],
+    ['ETH/FDUSD 现货，跌破 2500 停止。', 'ETHFDUSD', 'ETH', 'FDUSD'],
+  ] as const)('extracts stablecoin quote symbols from initial strategy text: %s', (message, value, base, quote) => {
+    const patch = service.extract(message)
+
+    expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({
+      value,
+      source: 'user_explicit',
+      quoteSource: 'explicit',
+      base,
+      quote,
+    }))
+  })
+
   it('extracts inferred base-only symbols from contract strategy text', () => {
     const patch = service.extract('ETH永续合约，突破 3200 做多，跌破 2500 停止。')
 
