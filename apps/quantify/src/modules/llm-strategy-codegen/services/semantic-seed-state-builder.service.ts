@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common'
 
 import type {
+  MarketInstrumentQuote,
+  MarketInstrumentQuoteSource,
+  MarketInstrumentSymbolResolution,
+  MarketInstrumentSymbolSource,
+} from '../types/market-instrument-symbol'
+import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
@@ -19,6 +25,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
+import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
@@ -38,9 +45,14 @@ const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
 const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
 const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
+const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
 @Injectable()
 export class SemanticSeedStateBuilderService {
+  constructor(
+    private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+  ) {}
+
   build(semanticPatch: unknown): SemanticState | null {
     if (!this.isRecord(semanticPatch)) {
       return null
@@ -1063,6 +1075,10 @@ export class SemanticSeedStateBuilderService {
     field: ContextField,
     value: unknown,
   ): SemanticState['contextSlots'][typeof field] {
+    if (field === 'symbol') {
+      return this.toSymbolContextSlot(value)
+    }
+
     if (this.isRecord(value)) {
       const slot = this.toSlotState(value, {
         slotKey: field,
@@ -1086,6 +1102,80 @@ export class SemanticSeedStateBuilderService {
       priority: 'context',
       questionHint: CONTEXT_QUESTION_HINTS[field],
       affectsExecution: true,
+    }
+  }
+
+  private toSymbolContextSlot(value: unknown): SemanticState['contextSlots']['symbol'] {
+    const resolution = this.resolveSymbolContextSlotValue(value)
+    if (resolution) {
+      return this.toResolvedSymbolSlot(resolution)
+    }
+
+    if (this.isRecord(value)) {
+      return this.toSlotState(value, {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        priority: 'context',
+        questionHint: CONTEXT_QUESTION_HINTS.symbol,
+      })
+    }
+
+    return null
+  }
+
+  private resolveSymbolContextSlotValue(value: unknown): MarketInstrumentSymbolResolution | null {
+    const text = this.readTrimmedString(value)
+    if (text) {
+      return this.symbolResolver.resolve(text)
+    }
+
+    if (!this.isRecord(value)) {
+      return null
+    }
+
+    return this.readSymbolResolution(value)
+      ?? this.resolveSymbolContextSlotValue(value.value)
+  }
+
+  private readSymbolResolution(value: SemanticPatchRecord): MarketInstrumentSymbolResolution | null {
+    const base = this.readTrimmedString(value.base)?.toUpperCase()
+    const quote = this.readMarketInstrumentQuote(value.quote)
+    const source = this.readMarketInstrumentSymbolSource(value.source)
+    const evidenceText = this.readTrimmedString(value.evidenceText)
+    const quoteSource = this.readMarketInstrumentQuoteSource(value.quoteSource)
+    if (!base || !quote || !source || !evidenceText || !quoteSource) {
+      return null
+    }
+
+    const venueSymbolHint = this.readTrimmedString(value.venueSymbolHint)
+    const marketTypeHint = this.readMarketInstrumentMarketTypeHint(value.marketTypeHint)
+
+    return {
+      value: `${base}${quote}`,
+      source,
+      evidenceText,
+      base,
+      quote,
+      quoteSource,
+      ...(venueSymbolHint ? { venueSymbolHint } : {}),
+      ...(marketTypeHint ? { marketTypeHint } : {}),
+    }
+  }
+
+  private toResolvedSymbolSlot(resolution: MarketInstrumentSymbolResolution): SemanticSlotState {
+    return {
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: resolution.value,
+      status: 'locked',
+      priority: 'context',
+      questionHint: CONTEXT_QUESTION_HINTS.symbol,
+      affectsExecution: true,
+      evidence: {
+        text: resolution.evidenceText,
+        source: resolution.source,
+      },
+      contracts: [this.symbolResolver.buildContextContract(resolution)],
     }
   }
 
@@ -1331,6 +1421,7 @@ export class SemanticSeedStateBuilderService {
     const questionHint = this.readTrimmedString(value.questionHint) ?? defaults?.questionHint
     const evidence = this.readEvidence(value.evidence)
     const supersedes = this.readStringArray(value.supersedes)
+    const contracts = this.readContracts(value.contracts)
 
     if (!slotKey || !fieldPath || !priority || !questionHint || typeof value.affectsExecution !== 'boolean') {
       return null
@@ -1348,6 +1439,7 @@ export class SemanticSeedStateBuilderService {
       affectsExecution: value.affectsExecution,
       ...(evidence ? { evidence } : {}),
       ...(supersedes ? { supersedes } : {}),
+      ...(contracts ? { contracts } : {}),
     }
   }
 
@@ -1409,6 +1501,38 @@ export class SemanticSeedStateBuilderService {
       || value === 'risk'
       || value === 'position'
       || value === 'context'
+  }
+
+  private readMarketInstrumentSymbolSource(value: unknown): MarketInstrumentSymbolSource | null {
+    if (value === 'user_explicit' || value === 'inferred') {
+      return value
+    }
+
+    return null
+  }
+
+  private readMarketInstrumentQuote(value: unknown): MarketInstrumentQuote | null {
+    if (typeof value === 'string' && MARKET_INSTRUMENT_QUOTES.includes(value as MarketInstrumentQuote)) {
+      return value as MarketInstrumentQuote
+    }
+
+    return null
+  }
+
+  private readMarketInstrumentQuoteSource(value: unknown): MarketInstrumentQuoteSource | null {
+    if (value === 'explicit' || value === 'default_usdt') {
+      return value
+    }
+
+    return null
+  }
+
+  private readMarketInstrumentMarketTypeHint(value: unknown): MarketInstrumentSymbolResolution['marketTypeHint'] | null {
+    if (value === 'perp' || value === 'spot') {
+      return value
+    }
+
+    return null
   }
 
   private isCapabilityDomain(value: unknown): value is SemanticCapabilityDomain {

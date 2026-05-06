@@ -5,6 +5,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from './semantic-state'
+import type { MarketInstrumentSymbolResolution } from './market-instrument-symbol'
 
 export type SemanticEditNodeKind = 'trigger' | 'action' | 'risk' | 'position' | 'context'
 
@@ -12,7 +13,13 @@ export type SemanticEditContextField = 'symbol' | 'timeframe' | 'exchange' | 'ma
 
 export type SemanticEditOperation =
   | { op: 'cancel_pending_edit' }
-  | { op: 'replace_context', field: SemanticEditContextField, value: string }
+  | {
+    op: 'replace_context'
+    field: SemanticEditContextField
+    value: string
+    evidenceText?: string
+    symbolResolution?: MarketInstrumentSymbolResolution
+  }
   | { op: 'replace_position', targetRef?: string, text?: string }
   | { op: 'replace_indicator_period', indicator?: string, from: number, to: number, text?: string }
   | { op: 'replace_trigger_number', from: number, to: number, direction?: 'up' | 'down', text?: string }

@@ -1200,6 +1200,83 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('uses normalized ETHUSDT semantic context symbol in publication artifacts', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const compile = jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:semantic-eth' } }, graphSnapshot: {} })
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      passingSemanticAtomInvariant() as any,
+    )
+    const semanticState = buildLockedGridSemanticState()
+    const symbolSlot = semanticState.contextSlots.symbol
+    if (!symbolSlot) {
+      throw new Error('expected locked grid fixture to include symbol slot')
+    }
+    semanticState.contextSlots.symbol = {
+      ...symbolSlot,
+      value: 'ETHUSDT',
+    }
+
+    const artifacts = await stage.generate({
+      semanticState,
+    })
+
+    expect(artifacts.canonicalSpec.market.symbol).toBe('ETHUSDT')
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'ETHUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+    })
+    expect(artifacts.lockedParams).toEqual(expect.objectContaining({
+      symbol: 'ETHUSDT',
+    }))
+    expect(artifacts.sessionSpecDesc.lockedParams).toEqual(expect.objectContaining({
+      symbol: 'ETHUSDT',
+    }))
+    expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'ETHUSDT',
+      }),
+    }))
+    expect(compile).toHaveBeenCalledWith(expect.objectContaining({
+      fallback: expect.objectContaining({
+        symbol: 'ETHUSDT',
+      }),
+    }))
+  })
+
   it('carries normalized locked stop loss basis into publication metadata', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())

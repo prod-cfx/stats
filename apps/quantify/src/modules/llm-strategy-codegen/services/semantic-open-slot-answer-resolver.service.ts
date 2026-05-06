@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { MarketInstrumentQuote, MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityShape,
   SemanticContextSlotState,
+  SemanticEvidence,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -14,9 +16,11 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { buildSemanticSlotId } from '../types/semantic-state'
+import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { renderSemanticClarificationQuestion } from './semantic-clarification-question-renderer.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
+import { pickPendingClarificationTarget } from './strategy-clarification-question.service'
 
 const DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const REQUIREMENT_LEVEL_SET_SLOT_KEY = 'contract.requirement.price.define.level_set'
@@ -25,6 +29,7 @@ const ENTRY_TRIGGER_SLOT_KEY = 'trigger.entry'
 const EXIT_TRIGGER_SLOT_KEY = 'trigger.exit'
 const MISSING_ENTRY_TRIGGER_KEY = 'semantic.missing_entry_atom'
 const MISSING_EXIT_TRIGGER_KEY = 'semantic.missing_exit_atom'
+const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
 type LevelSetDensityAnswer = Partial<{
   gridIntervals: number
@@ -41,6 +46,7 @@ type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type FulfilledTriggerPhase = 'entry' | 'exit'
 type FragmentTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type FragmentAction = NonNullable<CodegenSemanticPatch['actions']>[number]
+type PatchContextSlotValue = NonNullable<CodegenSemanticPatch['contextSlots']>[keyof SemanticContextSlotState]
 
 interface SemanticOpenSlotAnswerResolverInput {
   currentState: SemanticState
@@ -77,6 +83,7 @@ export class SemanticOpenSlotAnswerResolverService {
   constructor(
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
     private readonly seedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
+    private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
   ) {}
 
   resolve(input: SemanticOpenSlotAnswerResolverInput): SemanticOpenSlotAnswerResolverResult {
@@ -97,13 +104,66 @@ export class SemanticOpenSlotAnswerResolverService {
       }
     }
 
-    return fulfillSemanticFragment(input.currentState, this.seedExtractor.extract(input.message))
+    const symbolAnswer = this.resolveSymbolAnswer(input.currentState, input.message, input.clarificationState)
+    if (symbolAnswer) {
+      return symbolAnswer
+    }
+
+    return fulfillSemanticFragment(input.currentState, this.seedExtractor.extract(input.message), this.symbolResolver)
   }
+
+  private resolveSymbolAnswer(
+    state: SemanticState,
+    message: string,
+    clarificationState: unknown,
+  ): SemanticOpenSlotAnswerResolverResult | null {
+    const symbolSlot = state.contextSlots.symbol
+    if (symbolSlot?.status !== 'open') {
+      return null
+    }
+    if (!canConsumeSymbolAnswer(symbolSlot, clarificationState)) {
+      return null
+    }
+
+    const resolution = this.symbolResolver.resolve(message)
+    if (!resolution) {
+      return null
+    }
+
+    return {
+      consumed: true,
+      nextState: {
+        ...state,
+        contextSlots: {
+          ...state.contextSlots,
+          symbol: createLockedSymbolContextSlot(resolution, this.symbolResolver),
+        },
+      },
+      answer: {},
+      closedSlotKeys: ['symbol'],
+      closedSlots: [{ slotKey: 'symbol', fieldPath: 'contextSlots.symbol' }],
+    }
+  }
+}
+
+function canConsumeSymbolAnswer(symbolSlot: SemanticSlotState, clarificationState: unknown): boolean {
+  const pendingItems = readPendingClarificationItems(clarificationState)
+  const activeItem = pickPendingClarificationTarget(pendingItems)
+  if (!activeItem) {
+    return true
+  }
+
+  if (typeof activeItem.slotId === 'string' && buildSemanticSlotId(symbolSlot) === activeItem.slotId) {
+    return true
+  }
+
+  return activeItem.slotKey === symbolSlot.slotKey && activeItem.fieldPath === symbolSlot.fieldPath
 }
 
 function fulfillSemanticFragment(
   state: SemanticState,
   patch: CodegenSemanticPatch,
+  symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticOpenSlotAnswerResolverResult {
   const patchTriggers = patch.triggers ?? []
   const entryTriggers = patchTriggers.filter(trigger => trigger.phase === 'entry')
@@ -124,7 +184,7 @@ function fulfillSemanticFragment(
 
   return {
     consumed: true,
-    nextState: mergeFragmentPatch(state, patch, fulfilledPhases),
+    nextState: mergeFragmentPatch(state, patch, fulfilledPhases, symbolResolver),
     answer: {},
     closedSlotKeys: fulfilledPhases.map(triggerPhaseSlotKey),
     closedSlots: fulfilledPhases.map(phase => ({
@@ -145,6 +205,7 @@ function mergeFragmentPatch(
   state: SemanticState,
   patch: CodegenSemanticPatch,
   fulfilledPhases: readonly FulfilledTriggerPhase[],
+  symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticState {
   const missingTriggerKeys = new Set<string>(fulfilledPhases.map(missingTriggerKeyForPhase))
   const fulfilledPhaseSet = new Set<FulfilledTriggerPhase>(fulfilledPhases)
@@ -205,7 +266,7 @@ function mergeFragmentPatch(
     ...state,
     triggers: nextTriggers,
     actions: nextActions,
-    contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots),
+    contextSlots: mergeFragmentContextSlots(state.contextSlots, patch.contextSlots, symbolResolver),
   }
 }
 
@@ -280,35 +341,74 @@ function hasOpenStatusSlot(slots: readonly SemanticSlotState[]): boolean {
 function mergeFragmentContextSlots(
   current: SemanticContextSlotState,
   patchContextSlots: CodegenSemanticPatch['contextSlots'],
+  symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticContextSlotState {
   if (!patchContextSlots) {
     return current
   }
 
   return {
-    exchange: mergeFragmentContextSlot('exchange', current.exchange, patchContextSlots.exchange),
-    symbol: mergeFragmentContextSlot('symbol', current.symbol, patchContextSlots.symbol),
-    marketType: mergeFragmentContextSlot('marketType', current.marketType, patchContextSlots.marketType),
-    timeframe: mergeFragmentContextSlot('timeframe', current.timeframe, patchContextSlots.timeframe),
+    exchange: mergeFragmentContextSlot('exchange', current.exchange, patchContextSlots.exchange, symbolResolver),
+    symbol: mergeFragmentContextSlot('symbol', current.symbol, patchContextSlots.symbol, symbolResolver),
+    marketType: mergeFragmentContextSlot('marketType', current.marketType, patchContextSlots.marketType, symbolResolver),
+    timeframe: mergeFragmentContextSlot('timeframe', current.timeframe, patchContextSlots.timeframe, symbolResolver),
   }
 }
 
 function mergeFragmentContextSlot(
   field: keyof SemanticContextSlotState,
   current: SemanticSlotState | null,
-  value: string | number | boolean | null | undefined,
+  value: PatchContextSlotValue | undefined,
+  symbolResolver: MarketInstrumentSymbolResolverService,
 ): SemanticSlotState | null {
   if (current?.status === 'locked' || value === undefined || value === null) {
     return current
   }
 
-  return createLockedContextSlot(field, value)
+  return createLockedContextSlot(field, value, symbolResolver) ?? current
 }
 
 function createLockedContextSlot(
   field: keyof SemanticContextSlotState,
-  value: string | number | boolean,
-): SemanticSlotState {
+  value: PatchContextSlotValue,
+  symbolResolver: MarketInstrumentSymbolResolverService,
+): SemanticSlotState | null {
+  if (field === 'symbol' && isMarketInstrumentSymbolResolution(value)) {
+    return createLockedSymbolContextSlot(value, symbolResolver)
+  }
+
+  if (field === 'symbol' && isStructuredSymbolContextValue(value)) {
+    const resolution = symbolResolver.resolve(value.value)
+    if (resolution) {
+      return createLockedSymbolContextSlot(resolution, symbolResolver)
+    }
+
+    const contracts = readSymbolContracts(value)
+    return {
+      slotKey: field,
+      fieldPath: `contextSlots.${field}`,
+      value: value.value,
+      status: 'locked',
+      priority: 'context',
+      questionHint: contextQuestionHint(field),
+      affectsExecution: true,
+      evidence: readSymbolEvidence(value) ?? {
+        text: value.value,
+        source: 'user_explicit',
+      },
+      ...(contracts ? { contracts } : {}),
+    }
+  }
+
+  if (field === 'symbol' && typeof value === 'string') {
+    const resolution = symbolResolver.resolve(value)
+    return resolution ? createLockedSymbolContextSlot(resolution, symbolResolver) : null
+  }
+
+  if (!isPrimitiveContextSlotValue(value)) {
+    return null
+  }
+
   return {
     slotKey: field,
     fieldPath: `contextSlots.${field}`,
@@ -322,6 +422,84 @@ function createLockedContextSlot(
       source: 'user_explicit',
     },
   }
+}
+
+function createLockedSymbolContextSlot(
+  resolution: MarketInstrumentSymbolResolution,
+  symbolResolver: MarketInstrumentSymbolResolverService,
+): SemanticSlotState {
+  return {
+    slotKey: 'symbol',
+    fieldPath: 'contextSlots.symbol',
+    value: resolution.value,
+    status: 'locked',
+    priority: 'context',
+    questionHint: contextQuestionHint('symbol'),
+    affectsExecution: true,
+    evidence: {
+      text: resolution.evidenceText,
+      source: resolution.source,
+    },
+    contracts: [symbolResolver.buildContextContract(resolution)],
+  }
+}
+
+function isPrimitiveContextSlotValue(value: PatchContextSlotValue): value is string | number | boolean {
+  return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+}
+
+function isStructuredSymbolContextValue(value: PatchContextSlotValue): value is Record<string, unknown> & { value: string } {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof value.value === 'string'
+}
+
+function isMarketInstrumentSymbolResolution(value: PatchContextSlotValue): value is MarketInstrumentSymbolResolution {
+  return isStructuredSymbolContextValue(value)
+    && (value.source === 'user_explicit' || value.source === 'inferred')
+    && typeof value.evidenceText === 'string'
+    && typeof value.base === 'string'
+    && isMarketInstrumentQuote(value.quote)
+    && (value.quoteSource === 'explicit' || value.quoteSource === 'default_usdt')
+    && (value.marketTypeHint === undefined || value.marketTypeHint === 'perp' || value.marketTypeHint === 'spot')
+}
+
+function isMarketInstrumentQuote(value: unknown): value is MarketInstrumentQuote {
+  return typeof value === 'string' && MARKET_INSTRUMENT_QUOTES.includes(value as MarketInstrumentQuote)
+}
+
+function readSymbolEvidence(value: Record<string, unknown>): SemanticEvidence | undefined {
+  return isSemanticEvidence(value.evidence) ? value.evidence : undefined
+}
+
+function isSemanticEvidence(value: unknown): value is SemanticEvidence {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof (value as Record<string, unknown>).text === 'string'
+    && typeof (value as Record<string, unknown>).source === 'string'
+}
+
+function readSymbolContracts(value: Record<string, unknown>): SemanticAtomContract[] | undefined {
+  const contracts = value.contracts
+  if (!Array.isArray(contracts) || !contracts.every(isSemanticAtomContract)) {
+    return undefined
+  }
+
+  return contracts
+}
+
+function isSemanticAtomContract(value: unknown): value is SemanticAtomContract {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return typeof record.id === 'string'
+    && typeof record.kind === 'string'
+    && Array.isArray(record.capabilities)
+    && Array.isArray(record.requires)
 }
 
 function contextQuestionHint(field: keyof SemanticContextSlotState): string {
@@ -497,7 +675,7 @@ function findClarificationTargetSlot(
   slots: readonly OpenLevelSetSlotRef[],
   pendingItems: ReturnType<typeof readPendingClarificationItems>,
 ): OpenLevelSetSlotRef | null {
-  const activeItem = pendingItems[0]
+  const activeItem = pickPendingClarificationTarget(pendingItems)
   if (!activeItem) {
     return null
   }
@@ -521,6 +699,8 @@ function findClarificationTargetSlot(
 
 function readPendingClarificationItems(clarificationState: unknown): Array<{
   status?: unknown
+  key?: unknown
+  reason?: unknown
   slotId?: unknown
   slotKey?: unknown
   fieldPath?: unknown
@@ -531,6 +711,8 @@ function readPendingClarificationItems(clarificationState: unknown): Array<{
 
   return clarificationState.items.filter((item): item is {
     status?: unknown
+    key?: unknown
+    reason?: unknown
     slotId?: unknown
     slotKey?: unknown
     fieldPath?: unknown
