@@ -38,6 +38,7 @@ export class CanonicalStrategyAstCompilerService {
       manifest: this.buildManifest(ir, { exprPool, guards, decisionPrograms, orderPrograms, topology }),
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
+      ...(ir.runtimeRequirements ? { runtimeRequirements: ir.runtimeRequirements } : {}),
       exprPool,
       guards,
       decisionPrograms,
@@ -189,6 +190,7 @@ export class CanonicalStrategyAstCompilerService {
       topology: projection.topology,
       executionModel: this.buildExecutionModel(ir),
       dataRequirements: ir.dataRequirements,
+      runtimeRequirements: ir.runtimeRequirements,
     }
 
     return {

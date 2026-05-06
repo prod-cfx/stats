@@ -1,4 +1,4 @@
-import type { ActionDef, LevelSetDef, OrderProgram, RiskGuard, SeriesDef, PredicateDef } from './canonical-strategy-ir'
+import type { ActionDef, LevelSetDef, OrderProgram, RiskGuard, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
 
 export interface StrategyAstV1 {
   astVersion: 'csa.v1'
@@ -25,6 +25,7 @@ export interface StrategyAstV1 {
     maxLookback: number
     requiredTimeframes: string[]
   }
+  runtimeRequirements?: RuntimeRequirements
   exprPool: ExprNode[]
   guards: GuardProgramNode[]
   decisionPrograms: DecisionProgramNode[]

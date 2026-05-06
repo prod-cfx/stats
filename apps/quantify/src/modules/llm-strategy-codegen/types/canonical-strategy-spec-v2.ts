@@ -10,6 +10,7 @@ export interface CanonicalConditionAtom {
   key: string
   semanticScope?: 'market' | 'position' | 'portfolio'
   op?: 'EQ' | 'LTE' | 'GTE' | 'CROSS_OVER' | 'CROSS_UNDER'
+    | 'GT' | 'LT'
   value?: number | string | boolean
   params?: Record<string, number | string | boolean>
 }
