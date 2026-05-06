@@ -3,8 +3,11 @@ import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/b
 import { buildOfficialStrategySnapshotContent } from '../utils/official-strategy-plaza-snapshot-builder'
 import { StrategyPlazaOfficialSnapshotRepository } from './strategy-plaza-official-snapshot.repository'
 
-function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] {
-  return { tx } as ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0]
+function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] & { withTransaction: jest.Mock } {
+  return {
+    tx,
+    withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+  } as unknown as ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] & { withTransaction: jest.Mock }
 }
 
 describe('strategyPlazaOfficialSnapshotRepository', () => {
@@ -106,12 +109,14 @@ describe('strategyPlazaOfficialSnapshotRepository', () => {
       }
       return { id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }
     })
-    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+    const txHost = createTxHost(tx)
+    const repo = new StrategyPlazaOfficialSnapshotRepository(txHost)
 
     await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
       id: 'user-snapshot-1',
     })
 
+    expect(txHost.withTransaction).toHaveBeenCalledTimes(1)
     expect(tx.publishedStrategySnapshot.findUnique).toHaveBeenCalledWith({
       where: { id: 'official-plaza-ma-cross-v1-snapshot' },
     })

@@ -45,6 +45,13 @@ export class StrategyPlazaOfficialSnapshotRepository {
     userId: string
     template: OfficialStrategyPlazaTemplate
   }): Promise<Pick<PublishedStrategySnapshot, 'id'>> {
+    return this.txHost.withTransaction(async () => this.resolveOfficialSnapshotForUserInTransaction(input))
+  }
+
+  private async resolveOfficialSnapshotForUserInTransaction(input: {
+    userId: string
+    template: OfficialStrategyPlazaTemplate
+  }): Promise<Pick<PublishedStrategySnapshot, 'id'>> {
     const client = this.txHost.tx
     const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
