@@ -21,6 +21,7 @@ import type {
   StrategyExecutionConfig,
   StrategyLegDefinition,
 } from '@/modules/strategy-templates/types/strategy-template.types'
+import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { Prisma, PrismaClient, StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
@@ -123,6 +124,13 @@ interface ActiveRuntimeExecutionState {
   publishedSnapshotId: string
   executionSemanticKey: string
   semantic?: RuntimeExecutionSemantic | null
+}
+
+interface PublishedRuntimePositionContext {
+  qty: number
+  avgEntryPrice?: number
+  entryPrice?: number
+  positionSide?: string
 }
 
 interface CompiledRuntimeAdapterResult {
@@ -761,6 +769,7 @@ export class SignalGeneratorService {
     referencePrice?: number,
     compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> },
     semanticRuntimeState?: SemanticRuntimeState,
+    position?: PublishedRuntimePositionContext | null,
   ): Promise<PublishedRuntimeSignalOutcome> {
     if (!strategy.script || !this.isStrictPublishedCodegenTemplate(strategy)) {
       return {
@@ -790,6 +799,7 @@ export class SignalGeneratorService {
         params: this.buildEffectiveParams(strategy, instance),
         compiledDecisionState,
         semanticRuntimeState,
+        position,
       })
 
       const compiledAdapter = this.buildCompiledRuntimeAdapter(strategy.script)
@@ -1394,6 +1404,7 @@ export class SignalGeneratorService {
 
     const hasRuntimeMarketTypeParam = this.hasOwnProperty(params, 'marketType')
     const marketType = this.readRuntimeMarketType(params.marketType)
+    const exchangeId = this.readRuntimeExchange(params.exchange ?? params.exchangeId)
     if (hasRuntimeMarketTypeParam && !marketType) {
       this.logger.warn(
         `Published snapshot runtime marketType invalid for instance ${instance.id}: ${String(params.marketType)}`,
@@ -1482,9 +1493,18 @@ export class SignalGeneratorService {
     }
 
     await this.markRuntimeExecutionStateRunning(activeRuntimeState)
-    const semanticRuntimeState = semanticRuntimeStateKeys.length > 0
-      ? this.decisionStage.buildSemanticRuntimeState(semanticRuntimeStateKeys)
-      : undefined
+    const semanticRuntimeState = this.resolvePublishedSemanticRuntimeState(
+      instance,
+      runtimeProvenance,
+      semanticRuntimeStateKeys,
+    )
+    const runtimePosition = await this.loadPublishedRuntimePosition({
+      strategyId: strategy.id,
+      strategyInstanceId: instance.id,
+      exchangeId,
+      marketType,
+      symbol: symbolCode,
+    })
     try {
       const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
       const runtimeSignalOutcome = await this.generatePublishedSnapshotRuntimeSignalOutcome(
@@ -1496,7 +1516,9 @@ export class SignalGeneratorService {
         referencePrice,
         compiledDecisionState,
         semanticRuntimeState,
+        runtimePosition,
       )
+      await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
 
       if (runtimeSignalOutcome.kind === 'noop') {
         if (!activeRuntimeState) {
@@ -1852,6 +1874,107 @@ export class SignalGeneratorService {
     const raw = this.readString(value)?.trim().toLowerCase()
     if (raw === 'spot') return 'spot'
     if (raw === 'perp' || raw === 'swap' || raw === 'perpetual' || raw === 'future') return 'perp'
+    return null
+  }
+
+  private readRuntimeExchange(value: unknown): ExchangeId | null {
+    const raw = this.readString(value)?.trim().toLowerCase()
+    return raw === 'binance' || raw === 'okx' || raw === 'hyperliquid' ? raw : null
+  }
+
+  private async loadPublishedRuntimePosition(input: {
+    strategyId: string
+    strategyInstanceId: string
+    exchangeId: ExchangeId | null
+    marketType: MarketType | null
+    symbol: string
+  }): Promise<PublishedRuntimePositionContext | null> {
+    if (!input.exchangeId || !input.marketType) {
+      return null
+    }
+
+    const position = await this.generatorRepository.findOpenPositionForRuntimeContext({
+      strategyId: input.strategyId,
+      strategyInstanceId: input.strategyInstanceId,
+      exchangeId: input.exchangeId,
+      marketType: input.marketType,
+      symbol: input.symbol,
+    })
+    if (!position) return null
+
+    const qty = this.readDecimalNumber(position.quantity)
+    const avgEntryPrice = this.readDecimalNumber(position.avgEntryPrice)
+    if (qty === null || qty <= 0) return null
+
+    const signedQty = position.positionSide === 'SHORT' ? -qty : qty
+    return {
+      qty: signedQty,
+      ...(avgEntryPrice !== null ? { avgEntryPrice, entryPrice: avgEntryPrice } : {}),
+      positionSide: position.positionSide,
+    }
+  }
+
+  private resolvePublishedSemanticRuntimeState(
+    instance: Pick<StrategyInstance, 'metadata'>,
+    runtimeProvenance: Prisma.JsonObject,
+    stateKeys: string[],
+  ): SemanticRuntimeState | undefined {
+    if (stateKeys.length === 0) return undefined
+
+    const state = this.decisionStage.buildSemanticRuntimeState(stateKeys)
+    const metadata = this.asRecord(instance.metadata)
+    const runtimeState = this.asRecord(metadata.atomicContractRuntimeState)
+    if (
+      this.readString(runtimeState.publishedSnapshotId) !== this.readString(runtimeProvenance.publishedSnapshotId)
+      || this.readString(runtimeState.snapshotHash) !== this.readString(runtimeProvenance.snapshotHash)
+    ) {
+      return state
+    }
+
+    const persisted = this.asRecord(runtimeState.semanticRuntimeState)
+    for (const key of stateKeys) {
+      const value = this.asRecord(persisted[key])
+      state[key] = { ...state[key], ...value }
+    }
+    return state
+  }
+
+  private async persistPublishedSemanticRuntimeState(
+    instance: StrategyInstanceWithTemplate,
+    runtimeProvenance: Prisma.JsonObject,
+    semanticRuntimeState: SemanticRuntimeState | undefined,
+  ): Promise<void> {
+    if (!semanticRuntimeState) return
+
+    const metadata = {
+      ...this.asRecord(instance.metadata),
+      atomicContractRuntimeState: {
+        publishedSnapshotId: this.readString(runtimeProvenance.publishedSnapshotId),
+        snapshotHash: this.readString(runtimeProvenance.snapshotHash),
+        semanticRuntimeState: this.toPlainSemanticRuntimeState(semanticRuntimeState),
+      },
+    } as Prisma.JsonObject
+
+    await this.generatorRepository.updateStrategyInstanceMetadata(instance.id, metadata)
+    ;(instance as { metadata: Prisma.JsonValue | null }).metadata = metadata
+  }
+
+  private toPlainSemanticRuntimeState(state: SemanticRuntimeState): Prisma.JsonObject {
+    return Object.fromEntries(
+      Object.entries(state).map(([key, value]) => [key, { ...this.asRecord(value) }]),
+    ) as Prisma.JsonObject
+  }
+
+  private readDecimalNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+    if (value && typeof value === 'object' && 'toString' in value) {
+      const parsed = Number(String((value as { toString(): string }).toString()))
+      return Number.isFinite(parsed) ? parsed : null
+    }
     return null
   }
 

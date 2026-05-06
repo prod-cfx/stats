@@ -38,6 +38,9 @@ describe('signalGeneratorService coordinator behavior', () => {
     const generatorRepository = {
       findRunningInstances: jest.fn().mockResolvedValue([]),
       findSymbolByCode: jest.fn(),
+      findSymbolByCodeForMarket: jest.fn(),
+      findOpenPositionForRuntimeContext: jest.fn().mockResolvedValue(null),
+      updateStrategyInstanceMetadata: jest.fn().mockResolvedValue({ id: 'instance-1' }),
       ...overrides.generatorRepository,
     }
     const runtimeExecutionStateService = {
@@ -1049,6 +1052,125 @@ describe('signalGeneratorService coordinator behavior', () => {
     })
     expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
     expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
+  })
+
+  it('loads persisted semantic state and injects open position into published snapshot runtime context', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          runtimeRequirements: {
+            stateKeys: ['breakout'],
+          },
+        },
+        paramsSnapshot: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTCUSDT:PERP',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCodeForMarket: jest.fn().mockResolvedValue({
+          id: 'symbol-1',
+          code: 'BTCUSDT:PERP',
+          instrumentType: 'PERPETUAL',
+        }),
+        findOpenPositionForRuntimeContext: jest.fn().mockResolvedValue({
+          positionSide: 'LONG',
+          quantity: '2',
+          avgEntryPrice: '100',
+        }),
+        updateStrategyInstanceMetadata: jest.fn().mockResolvedValue({ id: 'instance-1' }),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 103,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    const generatePublished = jest
+      .spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome')
+      .mockImplementation(async (...args: unknown[]) => {
+        const semanticRuntimeState = args[7] as Record<string, Record<string, unknown>>
+        semanticRuntimeState.breakout = {
+          ...semanticRuntimeState.breakout,
+          rememberedLevel: 102,
+          confirmed: true,
+        }
+        return {
+          kind: 'noop',
+          reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+          reason: 'waiting',
+        }
+      })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          atomicContractRuntimeState: {
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+            semanticRuntimeState: {
+              breakout: { rememberedLevel: 101 },
+            },
+          },
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.findOpenPositionForRuntimeContext).toHaveBeenCalledWith({
+      strategyId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT:PERP',
+    })
+    expect(generatePublished).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      '15m',
+      expect.anything(),
+      103,
+      undefined,
+      { breakout: { rememberedLevel: 102, confirmed: true } },
+      { qty: 2, avgEntryPrice: 100, entryPrice: 100, positionSide: 'LONG' },
+    )
+    expect(generatorRepository.updateStrategyInstanceMetadata).toHaveBeenCalledWith(
+      'instance-1',
+      expect.objectContaining({
+        atomicContractRuntimeState: expect.objectContaining({
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          semanticRuntimeState: {
+            breakout: { rememberedLevel: 102, confirmed: true },
+          },
+        }),
+      }),
+    )
   })
 
   it('creates a signal for a published snapshot runtime OPEN_LONG decision that only has required adapter truth', async () => {

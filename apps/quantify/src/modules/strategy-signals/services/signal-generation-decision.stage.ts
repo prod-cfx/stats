@@ -47,6 +47,12 @@ export interface PublishedStrategyRuntimeContextInput {
   params: Record<string, unknown> | null
   compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
   semanticRuntimeState?: SemanticRuntimeState
+  position?: {
+    qty: number
+    avgEntryPrice?: number
+    entryPrice?: number
+    positionSide?: string
+  } | null
 }
 
 export class SignalGenerationDecisionStage {
@@ -451,6 +457,7 @@ export class SignalGenerationDecisionStage {
       }),
       ...(input.compiledDecisionState ? { __compiledDecisionState: input.compiledDecisionState } : {}),
       ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
+      ...(input.position ? { position: input.position } : {}),
     }
   }
 
