@@ -1054,6 +1054,105 @@ describe('SemanticStateMergeService', () => {
     }))
   })
 
+  it('keeps persisted multi-timeframe siblings when a later round derives a different trigger', () => {
+    const persistedEntryTimeframes = ['5m', '1h', '4h']
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          ...persistedEntryTimeframes.map((timeframe, index) => ({
+            id: `entry-ema-${timeframe}`,
+            key: 'indicator.above',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            params: {
+              timeframe,
+              indicator: 'ema',
+              'reference.period': 20,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked' as const,
+            source: 'user_explicit' as const,
+            evidence: `entry ${index}`,
+            openSlots: [],
+          })),
+          {
+            id: 'exit-ema-15m',
+            key: 'indicator.below',
+            phase: 'exit',
+            sideScope: 'long',
+            params: {
+              timeframe: '15m',
+              indicator: 'ema',
+              'reference.period': 20,
+            },
+            status: 'open',
+            source: 'derived',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-06T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'derived-exit-ema-15m',
+            key: 'indicator.below',
+            phase: 'exit',
+            sideScope: 'long',
+            params: {
+              timeframe: '15m',
+              indicator: 'ema',
+              'reference.period': 20,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-06T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-ema-5m',
+        params: expect.objectContaining({ timeframe: '5m' }),
+      }),
+      expect.objectContaining({
+        id: 'entry-ema-1h',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        id: 'entry-ema-4h',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+      expect.objectContaining({
+        id: 'exit-ema-15m',
+        status: 'locked',
+        params: expect.objectContaining({
+          timeframe: '15m',
+          confirmationMode: 'close_confirm',
+        }),
+      }),
+    ]))
+    expect(merged.triggers.filter(trigger => trigger.key === 'indicator.above')).toHaveLength(3)
+  })
+
   it('matches each derived trigger at most once so persisted sibling atoms stay distinct', () => {
     const merged = service.merge({
       persisted: {
