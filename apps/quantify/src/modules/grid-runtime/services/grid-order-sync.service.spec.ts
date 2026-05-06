@@ -1638,6 +1638,16 @@ describe('GridOrderSyncService', () => {
       status: 'OPEN',
       filledQuantity: '0',
       acceptedQuantity: '0.041',
+      rawPayload: expect.objectContaining({
+        source: 'grid_order_sync',
+        exchange: { orderId: 'exchange-close-short-1' },
+        quantityConvergence: {
+          reason: 'okx_reduce_only_close_accepted_quantity',
+          role: 'close_short',
+          originalQuantity: '0.043',
+          acceptedQuantity: '0.041',
+        },
+      }),
     }))
   })
 

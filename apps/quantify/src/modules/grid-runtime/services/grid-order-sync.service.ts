@@ -151,14 +151,15 @@ export class GridOrderSyncService {
           continue
         }
 
+        const acceptedCloseQuantity = this.resolveAcceptedCloseQuantity(order, exchangeOrder, instance)
         await this.repository.updateOrderFromExchange({
           id: order.id,
           exchangeOrderId: exchangeOrder.id,
           status: this.toGridOrderStatus(exchangeOrder.status),
           filledQuantity: String(exchangeOrder.filled),
-          acceptedQuantity: this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder, instance) ? String(exchangeOrder.amount) : null,
+          acceptedQuantity: acceptedCloseQuantity,
           avgFillPrice: exchangeOrder.price == null ? null : String(exchangeOrder.price),
-          rawPayload: this.toJsonValue(exchangeOrder.raw),
+          rawPayload: this.buildExchangeSyncPayload(order, exchangeOrder, acceptedCloseQuantity),
         })
 
         if (this.shouldRecordTerminalFill(exchangeOrder)) {
@@ -841,6 +842,29 @@ export class GridOrderSyncService {
     const exchangeAmount = this.decimal(String(exchangeOrder.amount))
     const localQuantity = this.decimal(this.decimalToString(order.quantity))
     return exchangeAmount.lte(localQuantity)
+  }
+
+  private resolveAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): string | null {
+    return this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder, instance) ? String(exchangeOrder.amount) : null
+  }
+
+  private buildExchangeSyncPayload(
+    order: RuntimeOrder,
+    exchangeOrder: UnifiedOrder,
+    acceptedCloseQuantity: string | null,
+  ): GridRuntimeJsonValue {
+    if (acceptedCloseQuantity == null) return this.toJsonValue(exchangeOrder.raw)
+
+    return this.toJsonValue({
+      source: 'grid_order_sync',
+      exchange: exchangeOrder.raw,
+      quantityConvergence: {
+        reason: 'okx_reduce_only_close_accepted_quantity',
+        role: order.role,
+        originalQuantity: this.decimalToString(order.quantity),
+        acceptedQuantity: acceptedCloseQuantity,
+      },
+    })
   }
 
   private buildOrderMismatch(order: RuntimeOrder, exchangeOrder: UnifiedOrder): GridSyncMismatch {
