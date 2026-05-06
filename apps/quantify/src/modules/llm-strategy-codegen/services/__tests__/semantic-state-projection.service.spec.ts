@@ -211,6 +211,77 @@ describe('SemanticStateProjectionService', () => {
     ])
   })
 
+  it('renders multi-timeframe EMA entry as one AND condition block with one action', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        ...['5m', '1h', '4h'].map((timeframe): SemanticTriggerState => ({
+          id: `entry-ema-${timeframe}`,
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            timeframe,
+            indicator: 'ema',
+            'reference.period': 20,
+            confirmationMode: 'close_confirm',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })),
+        {
+          id: 'exit-ema-15m',
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          params: {
+            timeframe: '15m',
+            indicator: 'ema',
+            'reference.period': 20,
+            confirmationMode: 'close_confirm',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_base',
+        value: 15,
+        positionMode: 'long_only',
+        sizing: { kind: 'base', value: 15, asset: 'MIN' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const entryBlock = graph.blocks[0]
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(entryBlock?.items.filter(item => item.kind === 'condition').map(item => item.text)).toEqual([
+      '5m / 1h / 4h 价格在 EMA20 上方',
+    ])
+    expect(entryBlock?.items.filter(item => item.kind === 'action').map(item => item.text)).toEqual([
+      '开多',
+    ])
+    expect(graph.blocks[1]?.items.map(item => item.text)).toEqual([
+      '15m 价格低于 EMA20',
+      '平多',
+    ])
+  })
+
   it('selects entry action by trigger side for bidirectional display logic graph', () => {
     const state: SemanticState = {
       version: 1,
