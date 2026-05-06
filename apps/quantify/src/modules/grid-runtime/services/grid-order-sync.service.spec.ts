@@ -1651,6 +1651,128 @@ describe('GridOrderSyncService', () => {
     }))
   })
 
+  it('keeps exact OKX close quantity matches out of quantity convergence', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'ETH/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_short' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'close-short-1',
+        clientOrderId: 'grid-close-short-1',
+        exchangeOrderId: 'exchange-close-short-1',
+        side: 'buy',
+        role: 'close_short',
+        price: { toString: () => '2300' },
+        quantity: { toString: () => '0.041' },
+        status: 'OPEN',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([
+      {
+        id: 'exchange-close-short-1',
+        clientOrderId: 'grid-close-short-1',
+        symbol: 'ETH/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'limit',
+        price: 2300,
+        amount: 0.041,
+        filled: 0,
+        status: 'open',
+        createdAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        updatedAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        raw: { orderId: 'exchange-close-short-1' },
+      },
+    ])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(repository.updateOrderFromExchange).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'close-short-1',
+      acceptedQuantity: null,
+      rawPayload: { orderId: 'exchange-close-short-1' },
+    }))
+  })
+
+  it('preserves original quantity convergence audit after local quantity has converged', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'ETH/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_short' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'close-short-1',
+        clientOrderId: 'grid-close-short-1',
+        exchangeOrderId: 'exchange-close-short-1',
+        side: 'buy',
+        role: 'close_short',
+        price: { toString: () => '2300' },
+        quantity: { toString: () => '0.041' },
+        status: 'OPEN',
+        rawPayload: {
+          source: 'grid_order_sync',
+          exchange: { orderId: 'exchange-close-short-1' },
+          quantityConvergence: {
+            reason: 'okx_reduce_only_close_accepted_quantity',
+            role: 'close_short',
+            originalQuantity: '0.043',
+            acceptedQuantity: '0.041',
+          },
+        },
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([
+      {
+        id: 'exchange-close-short-1',
+        clientOrderId: 'grid-close-short-1',
+        symbol: 'ETH/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'limit',
+        price: 2300,
+        amount: 0.041,
+        filled: 0,
+        status: 'open',
+        createdAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        updatedAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        raw: { orderId: 'exchange-close-short-1', syncedAgain: true },
+      },
+    ])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(repository.updateOrderFromExchange).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'close-short-1',
+      acceptedQuantity: null,
+      rawPayload: expect.objectContaining({
+        exchange: { orderId: 'exchange-close-short-1', syncedAgain: true },
+        quantityConvergence: {
+          reason: 'okx_reduce_only_close_accepted_quantity',
+          role: 'close_short',
+          originalQuantity: '0.043',
+          acceptedQuantity: '0.041',
+        },
+      }),
+    }))
+  })
+
   it.each([
     {
       name: 'non-OKX perp close order accepts less than the local plan',

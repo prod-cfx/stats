@@ -54,6 +54,7 @@ interface RuntimeOrder {
   price: DecimalLike | string
   quantity: DecimalLike | string
   status: string
+  rawPayload?: unknown
 }
 
 interface RetryableRateLimitInput {
@@ -841,7 +842,7 @@ export class GridOrderSyncService {
     if (exchangeOrder.amount <= 0) return false
     const exchangeAmount = this.decimal(String(exchangeOrder.amount))
     const localQuantity = this.decimal(this.decimalToString(order.quantity))
-    return exchangeAmount.lte(localQuantity)
+    return exchangeAmount.lt(localQuantity)
   }
 
   private resolveAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder, instance: RuntimeInstance): string | null {
@@ -853,7 +854,15 @@ export class GridOrderSyncService {
     exchangeOrder: UnifiedOrder,
     acceptedCloseQuantity: string | null,
   ): GridRuntimeJsonValue {
-    if (acceptedCloseQuantity == null) return this.toJsonValue(exchangeOrder.raw)
+    const existingConvergence = this.readExistingQuantityConvergence(order.rawPayload)
+    if (acceptedCloseQuantity == null) {
+      if (!existingConvergence) return this.toJsonValue(exchangeOrder.raw)
+      return this.toJsonValue({
+        source: 'grid_order_sync',
+        exchange: exchangeOrder.raw,
+        quantityConvergence: existingConvergence,
+      })
+    }
 
     return this.toJsonValue({
       source: 'grid_order_sync',
@@ -861,10 +870,30 @@ export class GridOrderSyncService {
       quantityConvergence: {
         reason: 'okx_reduce_only_close_accepted_quantity',
         role: order.role,
-        originalQuantity: this.decimalToString(order.quantity),
+        originalQuantity: existingConvergence?.originalQuantity ?? this.decimalToString(order.quantity),
         acceptedQuantity: acceptedCloseQuantity,
       },
     })
+  }
+
+  private readExistingQuantityConvergence(rawPayload: unknown): { reason: string, role: string | null, originalQuantity: string, acceptedQuantity: string } | null {
+    const convergence = this.readNestedValue(rawPayload, ['quantityConvergence'])
+    if (typeof convergence !== 'object' || convergence === null) return null
+    const record = convergence as Record<string, unknown>
+    if (
+      typeof record.reason !== 'string'
+      || typeof record.originalQuantity !== 'string'
+      || typeof record.acceptedQuantity !== 'string'
+    ) {
+      return null
+    }
+
+    return {
+      reason: record.reason,
+      role: typeof record.role === 'string' ? record.role : null,
+      originalQuantity: record.originalQuantity,
+      acceptedQuantity: record.acceptedQuantity,
+    }
   }
 
   private buildOrderMismatch(order: RuntimeOrder, exchangeOrder: UnifiedOrder): GridSyncMismatch {
