@@ -289,7 +289,7 @@ describe('evaluateExprPool', () => {
     expect(values.breakout_retest).toBe(true)
   })
 
-  it('evaluates consecutive candle reversal sequences from bar history', () => {
+  it('evaluates consecutive candle sequences from the latest matching candle window', () => {
     const exprPool: Array<{
       id: string
       nodeType: 'predicate'
@@ -298,7 +298,7 @@ describe('evaluateExprPool', () => {
       deps?: string[]
     }> = [
       {
-        id: 'consecutive_rebound',
+        id: 'consecutive_down',
         nodeType: 'predicate',
         sourceRef: 'condition.sequence',
         payload: {
@@ -316,17 +316,17 @@ describe('evaluateExprPool', () => {
     const values = evaluateExprPool(
       {
         bars: [
-          { open: 105, high: 106, low: 99, close: 100, volume: 100, timestamp: 1 },
-          { open: 100, high: 101, low: 94, close: 95, volume: 110, timestamp: 2 },
-          { open: 95, high: 96, low: 89, close: 90, volume: 120, timestamp: 3 },
-          { open: 90, high: 94, low: 88, close: 93, volume: 180, timestamp: 4 },
+          { open: 110, high: 111, low: 104, close: 105, volume: 100, timestamp: 1 },
+          { open: 105, high: 106, low: 99, close: 100, volume: 100, timestamp: 2 },
+          { open: 100, high: 101, low: 94, close: 95, volume: 110, timestamp: 3 },
+          { open: 95, high: 96, low: 89, close: 90, volume: 120, timestamp: 4 },
         ],
       },
       exprPool,
-      ['consecutive_rebound'],
+      ['consecutive_down'],
     )
 
-    expect(values.consecutive_rebound).toBe(true)
+    expect(values.consecutive_down).toBe(true)
   })
 
   it('evaluates breakout retest sequences from bar history when runtime state is absent', () => {

@@ -630,17 +630,16 @@ function evaluateConsecutiveCandlesSequence(
   const count = Math.floor(readNumericParam(node.payload.params, 'count') ?? 0)
   const direction = readStringParam(node.payload.params, 'direction') ?? 'down'
   const bars = Array.isArray(ctx.bars) ? ctx.bars : []
-  if (count <= 0 || bars.length < count + 1) return false
+  if (count <= 0 || bars.length < count) return false
 
-  const current = bars[bars.length - 1]
-  const priorBars = bars.slice(Math.max(0, bars.length - 1 - count), bars.length - 1)
-  if (!current || priorBars.length !== count) return false
+  const window = bars.slice(Math.max(0, bars.length - count))
+  if (window.length !== count) return false
 
   if (direction === 'up') {
-    return priorBars.every(bar => bar.close > bar.open) && current.close < current.open
+    return window.every(bar => bar.close > bar.open)
   }
 
-  return priorBars.every(bar => bar.close < bar.open) && current.close > current.open
+  return window.every(bar => bar.close < bar.open)
 }
 
 function evaluateBreakoutRetestSequence(
