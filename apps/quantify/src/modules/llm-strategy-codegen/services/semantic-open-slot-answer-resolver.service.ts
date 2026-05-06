@@ -171,7 +171,7 @@ function mergeFragmentPatch(
         contracts: trigger.contracts,
         support: trigger.support,
       }
-    }).filter(trigger => fulfilledPhaseSet.has(trigger.phase)),
+    }).filter(trigger => isFulfilledTriggerPhase(trigger.phase) && fulfilledPhaseSet.has(trigger.phase)),
   ]
   const existingActionKeys = new Set(state.actions.map(action => action.key))
   const nextActions = [
@@ -219,6 +219,10 @@ function actionMatchesFulfilledPhases(
   }
 
   return true
+}
+
+function isFulfilledTriggerPhase(phase: SemanticTriggerState['phase']): phase is FulfilledTriggerPhase {
+  return phase === 'entry' || phase === 'exit'
 }
 
 function isEntryActionKey(key: string): boolean {
