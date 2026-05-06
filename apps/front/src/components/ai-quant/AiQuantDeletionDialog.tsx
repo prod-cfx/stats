@@ -85,6 +85,14 @@ export function AiQuantDeletionDialog({
     confirmInFlightRef.current = pending
   }, [pending])
 
+  // errorMessage 出现时立即解锁 confirm ref：
+  // 父组件在 catch 分支可能只设置 errorMessage 而 pending 维持 false（特别是
+  // primaryHandler 同步抛错的边角），不会触发 pending 边沿。errorMessage 边沿
+  // 解锁，保证错误展示后用户可以再次点确认或关闭弹框。
+  useEffect(() => {
+    if (errorMessage) confirmInFlightRef.current = false
+  }, [errorMessage])
+
   useEffect(() => {
     if (!open) {
       confirmInFlightRef.current = false
