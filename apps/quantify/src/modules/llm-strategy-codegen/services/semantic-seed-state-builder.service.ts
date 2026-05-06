@@ -1174,19 +1174,7 @@ export class SemanticSeedStateBuilderService {
         text: resolution.evidenceText,
         source: resolution.source,
       },
-      contracts: [this.toSemanticStateSymbolContract(this.symbolResolver.buildContextContract(resolution))],
-    }
-  }
-
-  private toSemanticStateSymbolContract(contract: SemanticAtomContract): SemanticAtomContract {
-    return {
-      ...contract,
-      capabilities: contract.capabilities.map(capability => ({
-        ...capability,
-        verb: capability.domain === 'market' && capability.verb === 'select' && capability.object === 'instrument'
-          ? 'identify'
-          : capability.verb,
-      })),
+      contracts: [this.symbolResolver.buildContextContract(resolution)],
     }
   }
 
