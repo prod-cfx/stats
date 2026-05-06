@@ -228,7 +228,6 @@ export class CodegenConversationService {
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
-    @Optional()
     private readonly semanticMissingPlaceholderReconciler: SemanticMissingPlaceholderReconcilerService = new SemanticMissingPlaceholderReconcilerService(),
     private readonly semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService = new SemanticOpenSlotAnswerResolverService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
