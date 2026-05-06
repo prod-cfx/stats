@@ -40,7 +40,7 @@ export class MarketInstrumentSymbolResolverService {
       kind: 'context',
       capabilities: [{
         domain: 'market',
-        verb: 'select',
+        verb: 'identify',
         object: 'instrument',
         shape: this.buildContextShape(resolution),
       }],

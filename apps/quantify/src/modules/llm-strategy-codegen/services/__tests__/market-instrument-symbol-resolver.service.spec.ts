@@ -53,4 +53,21 @@ describe('MarketInstrumentSymbolResolverService', () => {
     expect(resolver.resolve('please continue the strategy')).toBeNull()
     expect(resolver.resolve('price above 100 USDT')).toBeNull()
   })
+
+  it('builds a market identify instrument context contract', () => {
+    const resolution = resolver.resolve('ETH usdt')
+
+    expect(resolution).not.toBeNull()
+    expect(resolver.buildContextContract(resolution!)).toEqual(expect.objectContaining({
+      kind: 'context',
+      capabilities: expect.arrayContaining([
+        expect.objectContaining({
+          domain: 'market',
+          verb: 'identify',
+          object: 'instrument',
+          shape: expect.objectContaining({ symbol: 'ETHUSDT' }),
+        }),
+      ]),
+    }))
+  })
 })
