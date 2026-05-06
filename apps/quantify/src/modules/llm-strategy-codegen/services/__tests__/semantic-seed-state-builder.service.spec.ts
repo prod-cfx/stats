@@ -145,6 +145,46 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes grid execution contracts for planner grid action keys', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          rangeMin: 2300,
+          rangeMax: 2430,
+          gridCount: 10,
+          sideMode: 'long_only',
+        },
+      }],
+      actions: [{
+        key: 'place_limit_grid',
+        params: {
+          orderType: 'limit',
+          timeInForce: 'gtc',
+          recycleOnFill: true,
+        },
+      }],
+    })
+
+    expect(state?.actions[0]).toEqual(expect.objectContaining({
+      key: 'place_limit_grid',
+      status: 'locked',
+      openSlots: [],
+      contracts: [expect.objectContaining({
+        capabilities: expect.arrayContaining([
+          expect.objectContaining({
+            domain: 'order_program',
+            verb: 'maintain',
+            object: 'limit_ladder',
+          }),
+        ]),
+      })],
+    }))
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
   it('closes synthesized fixed grid density slots from percent spacing answers', () => {
     const state = service.build({
       triggers: [{

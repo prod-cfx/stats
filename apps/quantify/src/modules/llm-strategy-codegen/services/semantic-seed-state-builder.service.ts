@@ -43,6 +43,7 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
 }
 const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
 const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
+const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set(['place_limit_grid', 'grid_ladder', 'grid.ladder', 'maintain_limit_ladder'])
 const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
@@ -668,6 +669,10 @@ export class SemanticSeedStateBuilderService {
     params: Record<string, unknown>,
     index: number,
   ): SemanticAtomContract[] | null {
+    if (SYNTHESIZABLE_GRID_ACTION_KEYS.has(key)) {
+      return [this.buildGridActionContract(key, params, index)]
+    }
+
     if (!SYNTHESIZABLE_ACTION_KEYS.has(key)) {
       return null
     }
@@ -688,6 +693,30 @@ export class SemanticSeedStateBuilderService {
       },
       params,
     })]
+  }
+
+  private buildGridActionContract(
+    key: string,
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract {
+    return this.buildAtomContract({
+      id: `contract-seed-action-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'action',
+      capability: {
+        domain: 'order_program',
+        verb: 'maintain',
+        object: 'limit_ladder',
+        shape: this.toCapabilityShape({
+          key,
+          orderType: this.readTrimmedString(params.orderType) ?? 'limit',
+          timeInForce: this.readTrimmedString(params.timeInForce) ?? 'gtc',
+          recycleOnFill: typeof params.recycleOnFill === 'boolean' ? params.recycleOnFill : true,
+          pairingPolicy: this.readTrimmedString(params.pairingPolicy) ?? 'grid_level',
+        }),
+      },
+      params,
+    })
   }
 
   private synthesizeRiskContracts(
