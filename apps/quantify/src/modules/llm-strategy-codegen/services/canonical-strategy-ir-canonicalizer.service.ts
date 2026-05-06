@@ -1,4 +1,4 @@
-import type { CanonicalStrategyIrV1, PredicateDef, RiskGuard, RuleBlock, SeriesDef } from '../types/canonical-strategy-ir'
+import type { CanonicalStrategyIrV1, PredicateDef, RiskGuard, RiskPredicateDef, RuleBlock, SeriesDef } from '../types/canonical-strategy-ir'
 import { Injectable } from '@nestjs/common'
 
 const PHASE_ORDER: Record<RuleBlock['phase'], number> = {
@@ -27,6 +27,9 @@ export class CanonicalStrategyIrCanonicalizerService {
     normalized.signalCatalog.predicates = this.sortPredicates(normalized.signalCatalog.predicates)
     normalized.ruleBlocks = this.sortRuleBlocks(normalized.ruleBlocks)
     normalized.riskPolicy.guards = this.sortGuards(normalized.riskPolicy.guards)
+    if (normalized.riskPolicy.riskPredicates) {
+      normalized.riskPolicy.riskPredicates = this.sortRiskPredicates(normalized.riskPolicy.riskPredicates)
+    }
 
     return normalized
   }
@@ -54,6 +57,16 @@ export class CanonicalStrategyIrCanonicalizerService {
 
   private sortGuards(guards: RiskGuard[]): RiskGuard[] {
     return [...guards].sort((left, right) => left.id.localeCompare(right.id))
+  }
+
+  private sortRiskPredicates(riskPredicates: RiskPredicateDef[]): RiskPredicateDef[] {
+    return [...riskPredicates].sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind.localeCompare(right.kind)
+      const leftParams = JSON.stringify(left.params, Object.keys(left.params).sort())
+      const rightParams = JSON.stringify(right.params, Object.keys(right.params).sort())
+      if (leftParams !== rightParams) return leftParams.localeCompare(rightParams)
+      return left.id.localeCompare(right.id)
+    })
   }
 
   private sortTimeframesPreservingPrimary(timeframes: string[], primary?: string): string[] {

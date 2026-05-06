@@ -1128,8 +1128,25 @@ export class CanonicalSpecBuilderService {
 
     return {
       kind: 'AND',
+      ...(this.hasGenericPredicateForm([condition, ...gateConditions]) ? { predicateForm: 'generic' as const } : {}),
       children: [condition, ...gateConditions],
     }
+  }
+
+  private hasGenericPredicateForm(conditions: CanonicalConditionNode[]): boolean {
+    return conditions.some(condition => this.isGenericPredicateCondition(condition))
+  }
+
+  private isGenericPredicateCondition(condition: CanonicalConditionNode): boolean {
+    if (condition.kind === 'atom') {
+      return condition.predicateForm === 'generic'
+    }
+    if (condition.kind === 'expression') {
+      return false
+    }
+
+    return condition.predicateForm === 'generic'
+      || condition.children.some(child => this.isGenericPredicateCondition(child))
   }
 
   private isNoPositionGateCondition(condition: CanonicalConditionNode): boolean {
@@ -2992,6 +3009,7 @@ export class CanonicalSpecBuilderService {
           kind: 'atom',
           key: 'volume.relative_average',
           semanticScope: 'market',
+          predicateForm: 'generic',
           op: this.resolveRelativeAverageComparator(trigger.params.comparator),
           params: {
             lookbackBars: typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : 20,
@@ -3008,6 +3026,7 @@ export class CanonicalSpecBuilderService {
           kind: 'atom',
           key: 'price.rolling_extrema_breakout',
           semanticScope: 'market',
+          predicateForm: 'generic',
           op: event === 'breakout_down' || extrema === 'low' ? 'LT' : 'GT',
           params: {
             extrema,
@@ -3026,6 +3045,7 @@ export class CanonicalSpecBuilderService {
           kind: 'atom',
           key: 'condition.sequence',
           semanticScope: 'market',
+          predicateForm: 'generic',
           params: {
             sequenceKind,
             ...(typeof trigger.params.lookbackWindow === 'string' ? { lookbackWindow: trigger.params.lookbackWindow } : {}),

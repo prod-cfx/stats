@@ -9,6 +9,7 @@ export interface CanonicalConditionAtom {
   kind: 'atom'
   key: string
   semanticScope?: 'market' | 'position' | 'portfolio'
+  predicateForm?: 'legacy' | 'generic'
   op?: 'EQ' | 'LTE' | 'GTE' | 'CROSS_OVER' | 'CROSS_UNDER'
     | 'GT' | 'LT'
   value?: number | string | boolean

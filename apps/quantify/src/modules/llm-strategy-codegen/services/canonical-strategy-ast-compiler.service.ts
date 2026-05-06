@@ -1,5 +1,5 @@
 import type { DecisionProgramNode, ExprNode, GuardProgramNode, OrderProgramNode, RiskPredicateProgramNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
+import type { CanonicalStrategyIrV1, PredicateDef, RiskPredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 
@@ -103,11 +103,21 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private compileRiskPredicates(ir: CanonicalStrategyIrV1): RiskPredicateProgramNode[] {
-    return (ir.riskPolicy.riskPredicates ?? []).map((riskPredicate, index) => ({
+    return this.orderedRiskPredicates(ir).map((riskPredicate, index) => ({
       id: `risk_predicate_${String(index + 1).padStart(2, '0')}_${riskPredicate.id}`,
       sourceRef: riskPredicate.id,
       payload: riskPredicate,
     }))
+  }
+
+  private orderedRiskPredicates(ir: CanonicalStrategyIrV1): RiskPredicateDef[] {
+    return [...(ir.riskPolicy.riskPredicates ?? [])].sort((left, right) => {
+      if (left.kind !== right.kind) return left.kind.localeCompare(right.kind)
+      const leftParams = stableJsonStringify(left.params)
+      const rightParams = stableJsonStringify(right.params)
+      if (leftParams !== rightParams) return leftParams.localeCompare(rightParams)
+      return left.id.localeCompare(right.id)
+    })
   }
 
   private compileDecisionPrograms(ir: CanonicalStrategyIrV1): DecisionProgramNode[] {

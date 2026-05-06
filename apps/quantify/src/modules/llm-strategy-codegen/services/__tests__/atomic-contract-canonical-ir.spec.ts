@@ -111,4 +111,41 @@ describe('atomic contract canonical IR projection', () => {
     const entryPredicate = findPredicate(ir, predicate => predicate.id === entryBlock?.when)
     expect(entryPredicate.kind).toBe('anyOf')
   })
+
+  it('keeps attached gates in generic allOf when entry atomic predicates are combined with gates', () => {
+    const state = buildLockedAtomicState('breakout-retest')
+    state.triggers.push({
+      id: 'gate-volume-relative-average',
+      key: 'volume.relative_average',
+      phase: 'gate',
+      sideScope: 'long',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params: {
+        lookbackBars: 20,
+        multiplier: 1.2,
+        comparator: 'gt',
+      },
+    })
+    const spec = new CanonicalSpecBuilderService().buildFromSemanticState(state)
+    const ir = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec: spec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    }).ir
+
+    const entryBlock = ir.ruleBlocks.find(block => block.phase === 'entry')
+    expect(entryBlock).toBeDefined()
+    const entryPredicate = findPredicate(ir, predicate => predicate.id === entryBlock?.when)
+    expect(entryPredicate.kind).toBe('allOf')
+    expect(ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'sequence' }),
+      expect.objectContaining({ kind: 'compare', args: expect.arrayContaining([expect.stringContaining('sma_volume_20')]) }),
+    ]))
+  })
 })

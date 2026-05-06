@@ -389,4 +389,72 @@ describe('canonicalStrategyAstCompilerService', () => {
     ])
     expect(ast.runtimeRequirements).toEqual({ helpers: ['atr'], stateKeys: [] })
   })
+
+  it('uses stable risk predicate order and digest regardless of input order', () => {
+    const compiler = new CanonicalStrategyAstCompilerService()
+    const baseIr: CanonicalStrategyIrV1 = {
+      irVersion: 'csi.v1',
+      source: {
+        graphVersion: 1,
+        graphDigest: 'sha256:11aa',
+        specHash: 'sha256:11aa',
+      },
+      market: {
+        venue: 'okx',
+        instrumentType: 'perpetual',
+        symbol: 'BTCUSDT',
+        timeframes: ['1h'],
+        priceFeed: 'close',
+      },
+      portfolio: {
+        positionMode: 'long_only',
+        sizing: { mode: 'pct_equity', value: 10 },
+        maxConcurrentPositions: 1,
+        allowPyramiding: false,
+        maxPyramidingLayers: 1,
+      },
+      dataRequirements: {
+        warmupBars: 14,
+        maxLookback: 14,
+        requiredTimeframes: ['1h'],
+      },
+      signalCatalog: {
+        series: [],
+        levelSets: [],
+        predicates: [],
+      },
+      ruleBlocks: [],
+      orderPrograms: [],
+      riskPolicy: {
+        guards: [],
+        riskPredicates: [
+          { id: 'atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+          { id: 'atr-take-profit', kind: 'atrMultipleTakeProfit', params: { multiple: 3 } },
+        ],
+      },
+      executionPolicy: {
+        signalEvaluation: 'bar_close',
+        fillPolicy: 'next_bar_open',
+        timeframeAlignment: 'strict',
+        orderTypeDefault: 'market',
+        timeInForce: 'gtc',
+        allowPartialFill: false,
+      },
+    }
+
+    const reversedIr: CanonicalStrategyIrV1 = {
+      ...baseIr,
+      riskPolicy: {
+        guards: [],
+        riskPredicates: [...(baseIr.riskPolicy.riskPredicates ?? [])].reverse(),
+      },
+    }
+
+    const first = compiler.compile(baseIr)
+    const second = compiler.compile(reversedIr)
+
+    expect(first.topology.riskPredicateOrder).toEqual(second.topology.riskPredicateOrder)
+    expect(first.riskPredicates).toEqual(second.riskPredicates)
+    expect(first.manifest.structuralDigest).toBe(second.manifest.structuralDigest)
+  })
 })
