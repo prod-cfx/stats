@@ -503,7 +503,7 @@ export class AccountStrategyViewService {
       ruleSummary: resolvedSnapshot.ruleSummary,
     })
 
-    const detailViewOnlyAt = (row as { viewOnlyAt?: Date | null }).viewOnlyAt ?? null
+    const detailViewOnlyAt = row.viewOnlyAt ?? null
     const detailHasActiveConversation = await this.repo.hasActiveConversationsForStrategy(userId, strategyInstanceId)
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
