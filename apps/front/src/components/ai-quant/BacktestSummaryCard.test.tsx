@@ -16,6 +16,7 @@ jest.mock('react-i18next', () => ({
       'aiQuant.backtestResult': '回测结果',
       'aiQuant.messages.backtestDrawdownLimit': '最大回撤不超过 20% 方可部署',
       'aiQuant.messages.backtestDrawdownFail': '回撤超标，暂不允许部署',
+      'aiQuant.messages.backtestConfigChanged': '这是历史回测结果，当前参数已变化，不能直接用于部署，需要重新回测。',
       'aiQuant.fullScreen': '全屏查看',
       'aiQuant.maxDrawdown': '最大回撤',
       'aiQuant.closedReturn': '已平仓收益',
@@ -187,6 +188,43 @@ describe('BacktestSummaryCard', () => {
 
     expect(onDeploy).not.toHaveBeenCalled()
     expect(onViewRunningStrategy).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows config-changed recovery warning and keeps deployment disabled', async () => {
+    const onDeploy = jest.fn()
+
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-config-changed',
+            symbol: 'BTCUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 5,
+            totalReturnPct: 12,
+            winRatePct: 55,
+            tradeCount: 21,
+            recoveryStatus: 'config_changed',
+          }}
+          marketType="spot"
+          canDeploy={false}
+          onOpenFullScreen={() => undefined}
+          onDeploy={onDeploy}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('这是历史回测结果，当前参数已变化，不能直接用于部署，需要重新回测。')
+    const deployButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent === '一键部署') as HTMLButtonElement | undefined
+    expect(deployButton?.disabled).toBe(true)
+
+    await act(async () => {
+      deployButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onDeploy).not.toHaveBeenCalled()
   })
 
   it('uses redeploy wording after the published strategy is stopped', async () => {

@@ -27,6 +27,7 @@ export interface BacktestResult {
   symbol?: string
   startAt?: string
   endAt?: string
+  recoveryStatus?: 'config_changed'
 }
 
 export function BacktestSummaryCard({
@@ -43,6 +44,7 @@ export function BacktestSummaryCard({
   const { t, i18n } = useTranslation()
   const isEn = (i18n?.resolvedLanguage ?? i18n?.language ?? 'zh').toLowerCase().startsWith('en')
   const normalizedMarketType = normalizeBacktestMarketType(marketType ?? result.marketType)
+  const isConfigChangedRecovery = result.recoveryStatus === 'config_changed'
   const backtestContext = result.symbol && result.startAt && result.endAt
     ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
@@ -155,7 +157,7 @@ export function BacktestSummaryCard({
           : t('aiQuant.deploy'))
   const deployDisabled = !canDeploy || deploymentState === 'running' || deploymentState === 'unknown'
   const showDeployBlockMessage =
-    !canDeploy && deploymentState !== 'running' && deploymentState !== 'unknown'
+    !isConfigChangedRecovery && !canDeploy && deploymentState !== 'running' && deploymentState !== 'unknown'
   const deploymentHint = deploymentState === 'unknown'
     ? t('aiQuant.deploy.pendingHint', { defaultValue: '正在确认部署状态，确认前暂不能重复部署。' })
     : null
@@ -173,10 +175,17 @@ export function BacktestSummaryCard({
             </p>
           )}
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
-            {drawdownLimited ? t('aiQuant.messages.backtestDrawdownLimit') : '当前为模拟部署模式：忽略回撤门槛'}
+            {drawdownLimited
+              ? t('aiQuant.messages.backtestDrawdownLimit')
+              : t('aiQuant.messages.backtestDrawdownLimitBypassed')}
           </p>
           {backtestContext && (
             <p className="mt-1 text-xs text-[color:var(--cf-muted)]">{backtestContext}</p>
+          )}
+          {isConfigChangedRecovery && (
+            <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-500">
+              {t('aiQuant.messages.backtestConfigChanged')}
+            </p>
           )}
         </div>
         <button

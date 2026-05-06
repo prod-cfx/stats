@@ -1,3 +1,4 @@
+import type { QuantSizing } from './semantic-sizing'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
@@ -30,7 +31,6 @@ import {
   derivePositionPctFromSizing,
   formatSizing,
   normalizeSizing,
-  type QuantSizing,
 } from './semantic-sizing'
 
 export interface QuantParams {
@@ -1235,7 +1235,7 @@ export function buildBacktestDraftConfigFromValues(
   }
 }
 
-function doesBacktestConfigMatch(
+function doesBacktestRangeMatch(
   current: AiQuantBacktestDraftConfig,
   stored: AiQuantBacktestDraftConfig,
 ): boolean {
@@ -1248,6 +1248,13 @@ function doesBacktestConfigMatch(
     }
   }
 
+  return true
+}
+
+function doesBacktestExecutionConfigMatch(
+  current: AiQuantBacktestDraftConfig,
+  stored: AiQuantBacktestDraftConfig,
+): boolean {
   return (
     current.execution.initialCash === stored.execution.initialCash
     && current.execution.leverage === stored.execution.leverage
@@ -1258,6 +1265,24 @@ function doesBacktestConfigMatch(
   )
 }
 
+function logBacktestRecoveryDecision(input: {
+  reason: string
+  conversationPublishedSnapshotId: string | null
+  lastBacktestRef: AiQuantConversationLastBacktestRef | null
+  hasCurrentBacktestConfig: boolean
+}): void {
+  console.warn('[AiQuantBacktestRecovery] recovery decision', {
+    module: 'AiQuantBacktestRecovery',
+    input: {
+      conversationPublishedSnapshotId: input.conversationPublishedSnapshotId,
+      lastBacktestJobId: input.lastBacktestRef?.jobId ?? null,
+      lastBacktestPublishedSnapshotId: input.lastBacktestRef?.publishedSnapshotId ?? null,
+      hasCurrentBacktestConfig: input.hasCurrentBacktestConfig,
+    },
+    reason: input.reason,
+  })
+}
+
 function restoreBacktestResultFromLastBacktestRef(input: {
   conversationPublishedSnapshotId: string | null
   lastBacktestRef: AiQuantConversationLastBacktestRef | null
@@ -1266,13 +1291,44 @@ function restoreBacktestResultFromLastBacktestRef(input: {
 }): BacktestResult | null {
   const { conversationPublishedSnapshotId, lastBacktestRef, currentBacktestConfig, symbol } = input
   if (!lastBacktestRef || !conversationPublishedSnapshotId || !currentBacktestConfig) {
+    if (lastBacktestRef) {
+      logBacktestRecoveryDecision({
+        reason: !conversationPublishedSnapshotId
+          ? 'missing_published_snapshot_id'
+          : 'missing_current_backtest_config',
+        conversationPublishedSnapshotId,
+        lastBacktestRef,
+        hasCurrentBacktestConfig: Boolean(currentBacktestConfig),
+      })
+    }
     return null
   }
   if (conversationPublishedSnapshotId !== lastBacktestRef.publishedSnapshotId) {
+    logBacktestRecoveryDecision({
+      reason: 'published_snapshot_id_mismatch',
+      conversationPublishedSnapshotId,
+      lastBacktestRef,
+      hasCurrentBacktestConfig: true,
+    })
     return null
   }
-  if (!doesBacktestConfigMatch(currentBacktestConfig, lastBacktestRef.config)) {
+  if (!doesBacktestRangeMatch(currentBacktestConfig, lastBacktestRef.config)) {
+    logBacktestRecoveryDecision({
+      reason: 'backtest_range_mismatch',
+      conversationPublishedSnapshotId,
+      lastBacktestRef,
+      hasCurrentBacktestConfig: true,
+    })
     return null
+  }
+  const configChanged = !doesBacktestExecutionConfigMatch(currentBacktestConfig, lastBacktestRef.config)
+  if (configChanged) {
+    logBacktestRecoveryDecision({
+      reason: 'backtest_execution_config_changed',
+      conversationPublishedSnapshotId,
+      lastBacktestRef,
+      hasCurrentBacktestConfig: true,
+    })
   }
 
   return {
@@ -1289,7 +1345,59 @@ function restoreBacktestResultFromLastBacktestRef(input: {
       ? { openPnl: lastBacktestRef.summary.openPnl }
       : {}),
     ...(lastBacktestRef.summary.marketType ? { marketType: lastBacktestRef.summary.marketType } : {}),
+    ...(configChanged ? { recoveryStatus: 'config_changed' as const } : {}),
   }
+}
+
+export function reconcileBacktestResultWithDraftConfig(input: {
+  result: BacktestResult | null
+  currentBacktestConfig: AiQuantBacktestDraftConfig | null
+  nextBacktestConfig: AiQuantBacktestDraftConfig | null
+}): BacktestResult | null {
+  const { result, currentBacktestConfig, nextBacktestConfig } = input
+  if (!result) {
+    return null
+  }
+  if (!currentBacktestConfig || !nextBacktestConfig) {
+    console.warn('[AiQuantBacktestRecovery] reconciliation decision', {
+      module: 'AiQuantBacktestRecovery',
+      input: {
+        backtestResultId: result.id,
+        hasCurrentBacktestConfig: Boolean(currentBacktestConfig),
+        hasNextBacktestConfig: Boolean(nextBacktestConfig),
+      },
+      reason: 'missing_backtest_config_for_reconciliation',
+    })
+    return null
+  }
+  if (!doesBacktestRangeMatch(nextBacktestConfig, currentBacktestConfig)) {
+    console.warn('[AiQuantBacktestRecovery] reconciliation decision', {
+      module: 'AiQuantBacktestRecovery',
+      input: {
+        backtestResultId: result.id,
+        currentRangePreset: currentBacktestConfig.range.preset,
+        nextRangePreset: nextBacktestConfig.range.preset,
+      },
+      reason: 'backtest_range_mismatch',
+    })
+    return null
+  }
+  if (!doesBacktestExecutionConfigMatch(nextBacktestConfig, currentBacktestConfig)) {
+    console.warn('[AiQuantBacktestRecovery] reconciliation decision', {
+      module: 'AiQuantBacktestRecovery',
+      input: {
+        backtestResultId: result.id,
+        rangePreset: nextBacktestConfig.range.preset,
+      },
+      reason: 'backtest_execution_config_changed',
+    })
+    return {
+      ...result,
+      recoveryStatus: 'config_changed',
+    }
+  }
+
+  return result
 }
 
 function normalizeCodegenSessionId(sessionId: unknown): string | null {
@@ -1692,6 +1800,7 @@ export function isOpenOnlyBacktestResult(result: BacktestResult | null | undefin
 
 export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {
   if (!result) return false
+  if (result.recoveryStatus === 'config_changed') return false
   return (result.tradeCount > 0 || (result.openTradeCount ?? 0) > 0) && result.maxDrawdownPct <= 20
 }
 
