@@ -217,10 +217,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    name: 'recognized unsupported volume spike',
+    name: 'supported relative-average volume spike',
     message: 'OKX 合约 BTCUSDT 15m，放量突破最近 20 根 K 线高点开多，单笔 10%，止损 5%。',
-    expectedKeys: ['volume.spike', 'price.breakout_up', 'open_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'unsupported:volume.spike'],
-    expectedRoute: 'unsupported_fallback',
+    expectedKeys: ['volume.relative_average', 'price.breakout_up', 'open_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
+    expectedRoute: 'projection_gate',
   },
   {
     name: 'recognized unsupported volume threshold',
@@ -345,10 +346,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'projection_gate',
   },
   {
-    name: 'combo supported plus recognized unsupported blocks whole route',
+    name: 'combo supported plus relative-average volume stays projection gate',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时要求成交量放大，MA20 下穿 MA50 平多，单笔 10%，止损 5%。',
-    expectedKeys: ['indicator.cross_over', 'volume.spike', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct', 'unsupported:volume.spike'],
-    expectedRoute: 'unsupported_fallback',
+    expectedKeys: ['indicator.cross_over', 'volume.relative_average', 'indicator.cross_under', 'open_long', 'close_long', 'position.fixed_pct', 'risk.stop_loss_pct'],
+    forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
+    expectedRoute: 'projection_gate',
   },
   {
     name: 'combo supported plus atr unsupported blocks whole route',
@@ -363,9 +365,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unknown_unsupported',
   },
   {
-    name: 'combo recognized unsupported plus unknown keeps unknown precedence',
+    name: 'combo supported volume plus unknown keeps unknown precedence',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时成交量放大，并参考 KOL 口令强弱决定是否交易，单笔 10%。',
-    expectedKeys: ['indicator.cross_over', 'volume.spike', 'external.signal', 'unsupported:volume.spike', 'unknown:external.signal'],
+    expectedKeys: ['indicator.cross_over', 'volume.relative_average', 'external.signal', 'unknown:external.signal'],
+    forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
     expectedRoute: 'unknown_unsupported',
   },
   {
