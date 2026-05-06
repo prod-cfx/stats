@@ -1091,6 +1091,51 @@ describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
     }))
   })
 
+  it.each([
+    ['primitive', () => new PrimitiveSymbolSeedExtractorService()],
+    ['plain value object', () => new PlainValueSymbolSeedExtractorService()],
+  ] as const)('normalizes %s symbol context fragments through the symbol resolver', (_caseName, createSeedExtractor) => {
+    const fragmentSymbolService = new SemanticOpenSlotAnswerResolverService(undefined, createSeedExtractor())
+    const state = {
+      ...stateWithMissingEntry(),
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+    }
+
+    const result = fragmentSymbolService.resolve({
+      currentState: state,
+      message: 'ETH usdt 做多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'ETHUSDT',
+      status: 'locked',
+      evidence: {
+        text: 'ETH usdt',
+        source: 'user_explicit',
+      },
+      contracts: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'context-symbol-ETHUSDT',
+          params: expect.objectContaining({
+            symbol: 'ETHUSDT',
+            base: 'ETH',
+            quote: 'USDT',
+            source: 'user_explicit',
+            quoteSource: 'explicit',
+          }),
+        }),
+      ]),
+    }))
+  })
+
   it('keeps open non-symbol context slots when fragment value is structured', () => {
     const nonSymbolObjectService = new SemanticOpenSlotAnswerResolverService(undefined, new NonSymbolObjectSeedExtractorService())
     const openTimeframeSlot: SemanticSlotState = {
@@ -1187,6 +1232,54 @@ class StructuredSymbolSeedExtractorService extends SemanticSeedExtractorService 
           base: 'ETH',
           quote: 'USDT',
           quoteSource: 'explicit',
+        },
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class PrimitiveSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: 'ETH usdt',
+      },
+      triggers: [{
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {
+          expression: {
+            kind: 'predicate',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          },
+        },
+      }],
+      actions: [{ key: 'open_long', params: {} }],
+    }
+  }
+}
+
+class PlainValueSymbolSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      contextSlots: {
+        symbol: {
+          value: 'ETH usdt',
         },
       },
       triggers: [{
