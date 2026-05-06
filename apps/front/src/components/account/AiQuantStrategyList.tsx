@@ -242,13 +242,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
   const performDelete = async (deleteStoppedStrategy: boolean) => {
     if (!session || !accountDeleteDialog) return
-    if (accountDeleteDialog.kind === 'with-conversation' && deleteStoppedStrategy) {
-      // eslint-disable-next-line no-alert
-      if (!window.confirm('删除后该策略将从我的策略列表移除，不能再次运行。确认继续？')) {
-        return
-      }
-    }
-
+    // 不再使用 window.confirm 二次确认。复选框 + dialog 内的红色警告文本
+    // 已经构成明确的破坏性意图标识，再叠原生 confirm 既破坏 a11y/i18n
+    // 也让自动化测试/截图测试不可靠。
     const strategyId = accountDeleteDialog.strategy.id
     setAccountDeleteDialog(curr => curr ? { ...curr, pending: true, errorMessage: null } : curr)
     try {

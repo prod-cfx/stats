@@ -76,9 +76,20 @@ export function AiQuantDeletionDialog({
 }: AiQuantDeletionDialogProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
+  // pending state 是异步生效的；从「点击主按钮」到 setState 反映 pending=true
+  // 之间存在一帧 race window，遮罩点击/Esc 可能在此时仍然把弹框关掉。
+  // 用 ref 在主按钮触发时立即锁住，让 onClose 路径同步识别。
+  const confirmInFlightRef = useRef(false)
 
   useEffect(() => {
-    if (!open) return
+    confirmInFlightRef.current = pending
+  }, [pending])
+
+  useEffect(() => {
+    if (!open) {
+      confirmInFlightRef.current = false
+      return
+    }
 
     const previousActiveElement = document.activeElement instanceof HTMLElement
       ? document.activeElement
@@ -88,7 +99,7 @@ export function AiQuantDeletionDialog({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        if (!pending) onClose()
+        if (!pending && !confirmInFlightRef.current) onClose()
         return
       }
 
@@ -152,12 +163,21 @@ export function AiQuantDeletionDialog({
   const showCheckbox = kind === 'with-conversation'
   const showInfoBlock = kind === 'with-conversation' || kind === 'running' || kind === 'no-conversation'
 
+  const handleBackdropClick = () => {
+    if (!pending && !confirmInFlightRef.current) onClose()
+  }
+
+  const handlePrimaryClick = () => {
+    if (!primaryHandler || confirmDisabled || confirmInFlightRef.current) return
+    // 同步锁住，防止与遮罩/Esc 的 race。
+    confirmInFlightRef.current = true
+    primaryHandler()
+  }
+
   return (
     <div
       className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4"
-      onClick={() => {
-        if (!pending) onClose()
-      }}
+      onClick={handleBackdropClick}
     >
       <div
         role="dialog"
@@ -199,21 +219,38 @@ export function AiQuantDeletionDialog({
         )}
 
         {showCheckbox && (
-          <label className="mt-4 flex items-start gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 text-sm text-[color:var(--cf-text)]">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={deleteStoppedStrategy}
-              disabled={pending}
-              onChange={event => onToggleDeleteStoppedStrategy(event.target.checked)}
-            />
-            <span>
-              同时删除已停止策略记录
-              <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
-                删除后该策略将从我的策略列表移除，不能再次运行。
+          <>
+            <label
+              className={`mt-4 flex items-start gap-2 rounded-xl border p-3 text-sm transition-colors ${
+                deleteStoppedStrategy
+                  ? 'border-red-500/40 bg-red-500/10 text-[color:var(--cf-text-strong)]'
+                  : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]'
+              }`}
+            >
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={deleteStoppedStrategy}
+                disabled={pending}
+                onChange={event => onToggleDeleteStoppedStrategy(event.target.checked)}
+              />
+              <span>
+                同时删除已停止策略记录
+                <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
+                  删除后该策略将从我的策略列表移除，不能再次运行。
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+            {deleteStoppedStrategy && (
+              <div
+                role="alert"
+                data-testid="ai-quant-deletion-destructive-warning"
+                className="mt-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200"
+              >
+                此操作不可恢复。继续之前请确认你已不再需要该策略记录。
+              </div>
+            )}
+          </>
         )}
 
         {errorMessage && (
@@ -229,7 +266,7 @@ export function AiQuantDeletionDialog({
               type="button"
               data-testid="ai-quant-deletion-primary"
               disabled={confirmDisabled}
-              onClick={primaryHandler}
+              onClick={handlePrimaryClick}
               className={primaryClassName}
             >
               {primaryLabel}

@@ -1787,13 +1787,8 @@ export function AiQuantPageClient({
         }}
         onConfirm={() => {
           if (!conversationDeleteDialog) return
-          if (
-            conversationDeleteDialog.deleteStoppedStrategy
-            // eslint-disable-next-line no-alert
-            && !window.confirm('删除后该策略将从我的策略列表移除，不能再次运行。确认继续？')
-          ) {
-            return
-          }
+          // 复选框 + dialog 内 inline 警告（destructive-warning）已经构成
+          // 充分的破坏性意图标识；不再使用 window.confirm 二次拦截。
           void confirmDeleteConversation()
         }}
         onGoToRunningStrategy={() => {

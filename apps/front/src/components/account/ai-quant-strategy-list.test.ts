@@ -318,8 +318,6 @@ describe('AiQuantStrategyList primary summary', () => {
     mockListAiQuantConversations.mockResolvedValue([
       { id: 'conv-1', conversationTitle: '测试会话', strategyInstanceId: 'stg-list-1' },
     ])
-    const originalConfirm = window.confirm
-    window.confirm = jest.fn(() => true) as unknown as typeof window.confirm
 
     await renderStrategyListWithItems([listItem({ status: 'stopped', hasActiveConversation: true })])
 
@@ -332,10 +330,17 @@ describe('AiQuantStrategyList primary summary', () => {
 
     const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')
     expect(checkbox).toBeTruthy()
+    // 勾选前不显示破坏性内联警告。
+    expect(container.querySelector('[data-testid="ai-quant-deletion-destructive-warning"]')).toBeNull()
     await act(async () => {
       checkbox!.click()
     })
     await act(async () => {})
+
+    // 勾选后显示内联警告，提示「此操作不可恢复」，替代旧的 window.confirm。
+    const warning = container.querySelector('[data-testid="ai-quant-deletion-destructive-warning"]')
+    expect(warning).toBeTruthy()
+    expect(warning?.textContent).toContain('此操作不可恢复')
 
     const primary = container.querySelector('[data-testid="ai-quant-deletion-primary"]')
     expect(primary?.textContent).toContain('删除会话和策略')
@@ -345,8 +350,6 @@ describe('AiQuantStrategyList primary summary', () => {
     })
 
     expect(mockDeleteAccountAiQuantStrategy).toHaveBeenCalledWith('stg-list-1', 'user-1', { deleteStoppedStrategy: true })
-
-    window.confirm = originalConfirm
   })
 
   it('no-conversation: keep-as-view-only does not delete the strategy record', async () => {
@@ -400,12 +403,10 @@ describe('AiQuantStrategyList primary summary', () => {
   it('running-strategy: opens running dialog and routes to strategy detail', async () => {
     await renderStrategyListWithItems([listItem({ status: 'running', hasActiveConversation: true })])
 
-    // The running list item shows 停止策略 not Delete; force open via hasActiveConversation but status running
-    // Simulate the case by clicking the delete button if present (running strategies show no Delete in non-view-only)
+    // running 状态下列表行同时渲染「停止策略」与「Delete」按钮（viewOnly 才隐藏）；
+    // 点击 Delete 应把弹框切换到 running 分支，而非进入 with-conversation 分支。
     const deleteButton = Array.from(container.querySelectorAll('button'))
       .find(button => button.textContent?.includes('Delete'))
-
-    // Running strategies still show Delete button (non-view-only path)
     expect(deleteButton).toBeTruthy()
 
     await act(async () => {
