@@ -3,6 +3,7 @@ import { Body, Controller, Delete, Get, Headers, Inject, Param, Post, Query } fr
 import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
+import { parseBooleanQuery } from '@/common/utils/parse-boolean-query'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AiQuantProxyService as AiQuantProxyServiceToken } from './ai-quant-proxy.service'
@@ -172,7 +173,7 @@ export class AccountAiQuantStrategiesController {
     @Param('id') id: string,
     @Query('deleteStoppedStrategy') deleteStoppedStrategyRaw?: string,
   ): Promise<void> {
-    const deleteStoppedStrategy = deleteStoppedStrategyRaw === 'true'
+    const deleteStoppedStrategy = parseBooleanQuery(deleteStoppedStrategyRaw)
     return this.service.deleteAccountStrategy(userId, authorization, id, { deleteStoppedStrategy })
   }
 }

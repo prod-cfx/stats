@@ -1,6 +1,7 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
 import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common'
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { parseBooleanQuery } from '@/common/utils/parse-boolean-query'
 import { AiQuantConversationBacktestDraftConfigRequestDto } from '../dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai-quant-edit-conversation.request.dto'
@@ -50,7 +51,7 @@ export class AccountAiQuantConversationsController {
   ): Promise<void> {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.deleteConversation(id, callerUserId, {
-      deleteStoppedStrategy: deleteStoppedStrategy === 'true',
+      deleteStoppedStrategy: parseBooleanQuery(deleteStoppedStrategy),
     })
   }
 

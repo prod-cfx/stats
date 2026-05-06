@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Headers, Inject, Param, Patch, Query } f
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
+import { parseBooleanQuery } from '@/common/utils/parse-boolean-query'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { AiQuantConversationBacktestDraftConfigRequestDto } from './dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { AiQuantConversationResponseDto } from './dto/ai-quant-conversation.response.dto'
@@ -35,7 +36,7 @@ export class AccountAiQuantConversationsController {
     @Query('deleteStoppedStrategy') deleteStoppedStrategy?: string,
   ): Promise<void> {
     return this.service.deleteAiQuantConversation(userId, authorization, id, {
-      deleteStoppedStrategy: deleteStoppedStrategy === 'true',
+      deleteStoppedStrategy: parseBooleanQuery(deleteStoppedStrategy),
     })
   }
 
