@@ -67,6 +67,12 @@ jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
   GuestAiQuantLanding: () => <div data-testid="guest" />,
 }))
 
+jest.mock('@/components/ai-quant/DisplayLogicGraphPreview', () => ({
+  DisplayLogicGraphPreview: ({ graph }: { graph: Record<string, unknown> }) => (
+    <div data-testid="display-logic-graph">{JSON.stringify(graph)}</div>
+  ),
+}))
+
 jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
   LogicGraphPreview: () => null,
 }))
@@ -841,6 +847,111 @@ describe('AiQuantPageClient backtest range integration', () => {
     })
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
     expect(container.textContent).toContain('3% stop loss')
+  })
+
+  it('preserves atomic server display graph text in state and on the page after codegen response', async () => {
+    localStorage.clear()
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify({
+        version: 'deploy-current',
+        conversations: [{
+          ...buildPersistedConversation(Date.now()),
+          llmCodegenSessionId: 'session-edit',
+          displayLogicGraph: {
+            blocks: [
+              {
+                type: 'IF',
+                items: [{ id: 'legacy-fallback', kind: 'condition', text: '不支持的条件，待补充' }],
+              },
+            ],
+          },
+        }],
+      }),
+    )
+
+    const atomicDisplayGraph = {
+      blocks: [
+        {
+          type: 'IF',
+          items: [
+            { kind: 'condition', id: 'condition-bollinger', text: '触及布林带下轨（20, 2）' },
+            { kind: 'condition', id: 'condition-volume', text: '成交量高于过去 20 根均量的 1.5 倍' },
+            { kind: 'action', id: 'action-entry', text: '开多 10%' },
+          ],
+        },
+        {
+          type: 'EXECUTE',
+          items: [
+            { kind: 'execute', id: 'execute-symbol', key: 'symbol', value: 'ETHUSDT', text: '标的: ETHUSDT' },
+          ],
+        },
+      ],
+    }
+    const { continueLlmCodegenSession } = jest.requireMock('@/lib/api') as {
+      continueLlmCodegenSession: jest.Mock
+    }
+    continueLlmCodegenSession.mockResolvedValue({
+      id: 'session-edit',
+      conversationId: 'conv-1',
+      conversationTitle: 'atomic display graph',
+      status: 'CONFIRM_GATE',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      canonicalDigest: 'sha256:atomic-display-digest',
+      specDesc: {
+        displayLogicGraph: atomicDisplayGraph,
+        rules: [
+          {
+            id: 'legacy-atomic-key',
+            phase: 'entry',
+            condition: { key: 'condition.expression' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+      semanticGraph: {
+        version: 3,
+        nodes: [{ id: 'condition-volume', label: 'relative volume' }],
+        edges: [],
+      },
+      validationReport: { ok: true, errors: [] },
+      publicationGate: null,
+      assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+      conversationMessages: [
+        { role: 'user', content: '把止损改成 3%' },
+        { role: 'assistant', content: '逻辑图已更新。请确认逻辑图。' },
+      ],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="send-semantic-edit"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForCondition(() => {
+      const stored = localStorage.getItem('ai_quant_conversations_v1')
+      expect(stored).toBeTruthy()
+      const parsed = JSON.parse(stored ?? '{}') as {
+        conversations: Array<{
+          displayLogicGraph?: unknown
+        }>
+      }
+      const displayGraphText = JSON.stringify(parsed.conversations[0]?.displayLogicGraph)
+      expect(displayGraphText).toContain('成交量高于过去 20 根均量的 1.5 倍')
+      expect(displayGraphText).not.toContain('不支持的条件')
+    })
+    expect(container.querySelector('[data-testid="display-logic-graph"]')?.textContent)
+      .toContain('成交量高于过去 20 根均量的 1.5 倍')
+    expect(container.querySelector('[data-testid="display-logic-graph"]')?.textContent)
+      .not.toContain('不支持的条件')
   })
 
   it('activates a plaza edit session conversation without appending to the existing conversation', async () => {

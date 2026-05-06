@@ -874,6 +874,30 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     throw new Error(`timed out waiting for terminal status: ${sessionId}`)
   }
+  type SemanticStateExpectation = {
+    triggers?: Array<{
+      key?: string
+      phase?: string
+      sideScope?: string
+      params?: Record<string, unknown>
+      support?: { supportStatus?: string }
+    }>
+    risk?: Array<{
+      key?: string
+      params?: Record<string, unknown>
+      support?: { supportStatus?: string }
+    }>
+    unsupportedFallback?: unknown
+  }
+  const readLastCreatedSemanticState = (): SemanticStateExpectation => {
+    const payload = mockRepo.createSession.mock.calls.at(-1)?.[0] as {
+      semanticState?: SemanticStateExpectation
+    } | undefined
+    if (!payload?.semanticState) {
+      throw new Error('expected createSession semanticState payload')
+    }
+    return payload.semanticState
+  }
 
   beforeEach(() => {
     jest.resetAllMocks()
@@ -1403,6 +1427,145 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     ]))
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      sessionId: 's-atomic-guard-bollinger-volume',
+      message: 'ETH 15分钟触碰布林带下轨，并且成交量高于过去 20 根均量的 1.5 倍时买入，上轨卖出。',
+      expectedTriggers: [
+        expect.objectContaining({
+          key: 'price.detect.indicator_boundary',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            boundaryRole: 'lower',
+            confirmationMode: 'touch',
+          }),
+        }),
+        expect.objectContaining({
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            lookbackBars: 20,
+            multiplier: 1.5,
+            comparator: 'gt',
+          }),
+        }),
+        expect.objectContaining({
+          key: 'price.detect.indicator_boundary',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            boundaryRole: 'upper',
+          }),
+        }),
+      ],
+      expectedRisk: [],
+    },
+    {
+      sessionId: 's-atomic-guard-ma-atr',
+      message: 'ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈',
+      expectedTriggers: [
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 20,
+          }),
+        }),
+      ],
+      expectedRisk: [
+        expect.objectContaining({
+          key: 'risk.atr_multiple_stop',
+          params: expect.objectContaining({
+            multiple: 2,
+            basis: 'atr',
+          }),
+        }),
+        expect.objectContaining({
+          key: 'risk.atr_multiple_take_profit',
+          params: expect.objectContaining({
+            multiple: 3,
+            basis: 'atr',
+          }),
+        }),
+      ],
+    },
+    {
+      sessionId: 's-atomic-guard-ma-gated-rsi',
+      message: 'BTC 1小时 MA50 在 MA200 上方时，只在 RSI 跌破 35 后重新上穿 35 买入，RSI 超过 65 卖出。',
+      expectedTriggers: [
+        expect.objectContaining({
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            expression: expect.objectContaining({
+              kind: 'predicate',
+              op: 'GT',
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          key: 'condition.sequence',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            sequenceKind: 'rsi_reclaim',
+            threshold: 35,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'oscillator.rsi_gte',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            value: 65,
+          }),
+        }),
+      ],
+      expectedRisk: [],
+    },
+  ])('keeps supported atomic conversation away from unsupported replacement fallback: $sessionId', async ({
+    sessionId,
+    message,
+    expectedTriggers,
+    expectedRisk,
+  }) => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: 'planner fallback should not replace supported atomic semantics',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: sessionId })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: message,
+    })
+    const semanticState = readLastCreatedSemanticState()
+
+    expect(result.assistantPrompt ?? '').not.toContain('是否改用')
+    expect((result as { unsupportedFallback?: unknown }).unsupportedFallback ?? null).toBeNull()
+    expect(semanticState.unsupportedFallback ?? null).toBeNull()
+    expect(semanticState.triggers).toEqual(expect.arrayContaining(expectedTriggers))
+    expect(semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        support: expect.objectContaining({ supportStatus: 'recognized_unsupported' }),
+      }),
+    ]))
+    expect(semanticState.risk ?? []).toEqual(expect.arrayContaining(expectedRisk))
+    expect(semanticState.risk ?? []).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        support: expect.objectContaining({ supportStatus: 'recognized_unsupported' }),
+      }),
+    ]))
   })
 
   it('does not partially generate when supported atoms are mixed with recognized unsupported atoms', async () => {

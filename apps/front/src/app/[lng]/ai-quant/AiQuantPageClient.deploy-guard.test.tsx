@@ -230,6 +230,7 @@ function seedDeployableConversation(
   overrides: Partial<{
     publishedStrategyInstanceId: string | null
     publishedSnapshotId: string | null
+    displayLogicGraph: Record<string, unknown> | null
   }> = {},
 ) {
   localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
@@ -283,6 +284,7 @@ function seedDeployableConversation(
           positionPct: 10,
         },
       },
+      displayLogicGraph: overrides.displayLogicGraph ?? null,
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: overrides.publishedStrategyInstanceId ?? 'strategy-1',
       publishedSnapshotId: overrides.publishedSnapshotId ?? 'snapshot-1',
@@ -542,6 +544,62 @@ describe('AiQuantPageClient deploy guard', () => {
         strategyInstanceId: expect.anything(),
       }),
     )
+  })
+
+  it('keeps atomic display graph separate from deploy guard payload truth', async () => {
+    seedDeployableConversation(Date.now(), {
+      displayLogicGraph: {
+        blocks: [
+          {
+            type: 'IF',
+            items: [
+              { kind: 'condition', id: 'condition-bollinger', text: '触及布林带下轨（20, 2）' },
+              { kind: 'condition', id: 'condition-volume', text: '成交量高于过去 20 根均量的 1.5 倍' },
+            ],
+          },
+        ],
+      },
+    })
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publishedSnapshotId: 'snapshot-1',
+        exchangeAccountId: 'acct-binance-1',
+      }),
+    )
+    const deployPayload = mockDeployAccountAiQuantStrategy.mock.calls[0]?.[0]
+    expect(JSON.stringify(deployPayload)).not.toContain('成交量高于过去 20 根均量的 1.5 倍')
   })
 
   it('continues deploy with the latest available account when refreshed accounts replace the selected account', async () => {
