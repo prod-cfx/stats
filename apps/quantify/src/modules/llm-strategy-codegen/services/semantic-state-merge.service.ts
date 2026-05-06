@@ -35,6 +35,14 @@ export class SemanticStateMergeService {
     persisted: SemanticTriggerState[],
     derived: SemanticTriggerState[],
   ): SemanticTriggerState[] {
+    if (derived.length === 0) {
+      return persisted.map(trigger => ({
+        ...trigger,
+        params: { ...trigger.params },
+        openSlots: trigger.openSlots.map(slot => ({ ...slot })),
+      }))
+    }
+
     const next = derived.map(trigger => ({
       ...trigger,
       params: { ...trigger.params },

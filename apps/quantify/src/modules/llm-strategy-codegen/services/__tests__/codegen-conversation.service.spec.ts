@@ -5992,6 +5992,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('preserves multi-timeframe EMA entry atoms when a later turn only answers stop loss', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-mtf-ema-risk-follow-up' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(started.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+
+    const fixture = buildSemanticEraSessionFixture({
+      id: 's-mtf-ema-risk-follow-up',
+      semanticState: createPayload.semanticState,
+      status: 'DRAFTING',
+    })
+    mockRepo.findById.mockResolvedValue(fixture)
+
+    const continued = await service.continueSession('s-mtf-ema-risk-follow-up', {
+      userId: 'u1',
+      message: '3%止损',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const semanticState = updatePayload.semanticState
+
+    expect(continued.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+    expect(continued.assistantPrompt ?? '').not.toContain('入场：5m 价格在 EMA20 上方')
+    expect(semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '5m' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+    ]))
+    expect(semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 3 }),
+      }),
+    ]))
+  })
+
   it('prunes missing exit placeholders when a later turn supplies complete order-program contracts', () => {
     const stateWithRiskOnly = (service as any).withRequiredSemanticOpenSlots({
       version: 1,
