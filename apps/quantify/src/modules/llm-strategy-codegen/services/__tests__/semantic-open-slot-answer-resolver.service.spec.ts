@@ -210,6 +210,61 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     expect(result.nextState.triggers[1].openSlots).toEqual([])
   })
 
+  it('uses the priority-selected pending clarification target for level set answers', () => {
+    const densitySlot = createOpenSlot(
+      'contract.shape.price.level_set.density',
+      'triggers[trigger-grid-levels].contracts[contract-grid-levels].capabilities[price.define.level_set].shape',
+    )
+    const exitSlot: SemanticSlotState = {
+      slotKey: 'trigger.exit',
+      fieldPath: 'triggers[exit]',
+      status: 'open',
+      priority: 'core',
+      questionHint: '请补充出场触发条件。',
+      affectsExecution: true,
+    }
+    const state = createSemanticState({
+      triggers: [createLevelSetTrigger({
+        id: 'trigger-grid-levels',
+        contractId: 'contract-grid-levels',
+        shape: { lower: 79200, upper: 80200, spacingMode: 'arithmetic' },
+        openSlots: [densitySlot],
+      })],
+    })
+
+    const result = service.resolve({
+      currentState: state,
+      message: '20格',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            status: 'pending',
+            reason: 'missing_exit_rules',
+            key: 'exitRules',
+            slotId: buildSemanticSlotId(exitSlot),
+            slotKey: exitSlot.slotKey,
+            fieldPath: exitSlot.fieldPath,
+          },
+          {
+            status: 'pending',
+            reason: 'missing_semantic_contract_requirement',
+            key: 'semantic.grid.density',
+            slotId: buildSemanticSlotId(densitySlot),
+            slotKey: densitySlot.slotKey,
+            fieldPath: densitySlot.fieldPath,
+          },
+        ],
+      },
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers[0].contracts?.[0].capabilities[0].shape).toEqual(expect.objectContaining({
+      gridCount: 20,
+    }))
+    expect(result.closedSlots).toEqual([{ slotKey: densitySlot.slotKey, fieldPath: densitySlot.fieldPath }])
+  })
+
   it('updates only the capability targeted by fieldPath when one owner has multiple level sets', () => {
     const targetSlot = createOpenSlot(
       'contract.shape.price.level_set.density',

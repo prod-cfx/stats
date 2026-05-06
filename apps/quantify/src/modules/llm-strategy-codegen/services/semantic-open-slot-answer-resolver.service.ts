@@ -675,7 +675,7 @@ function findClarificationTargetSlot(
   slots: readonly OpenLevelSetSlotRef[],
   pendingItems: ReturnType<typeof readPendingClarificationItems>,
 ): OpenLevelSetSlotRef | null {
-  const activeItem = pendingItems[0]
+  const activeItem = pickPendingClarificationTarget(pendingItems)
   if (!activeItem) {
     return null
   }
