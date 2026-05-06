@@ -142,11 +142,13 @@ export class SemanticStateProjectionService {
     nextQuestion: string | null
   } {
     const triggerSummary = this.buildTriggerSummary(state.triggers, true)
+    const riskSummary = this.buildRiskSummary(state.risk)
+    const summaryItems = [triggerSummary, riskSummary].filter(item => item.length > 0)
 
     const nextSlot = this.findNextOpenSlot(state)
 
     return {
-      summary: triggerSummary || '已识别部分条件，但仍未完整。',
+      summary: summaryItems.length > 0 ? summaryItems.join('；') : '已识别部分条件，但仍未完整。',
       nextQuestion: nextSlot?.questionHint ?? null,
     }
   }
@@ -1069,7 +1071,7 @@ export class SemanticStateProjectionService {
     timeframes: string[],
   ): string {
     const condition = `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(trigger)}`
-    return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
+    return `${this.formatTriggerPhaseLabel(trigger.phase)}：${condition}${this.formatActionSuffix(trigger, condition)}`
   }
 
   private formatIndicatorCompareTriggerSummary(trigger: SemanticState['triggers'][number]): string {
@@ -1077,7 +1079,13 @@ export class SemanticStateProjectionService {
       ? `${trigger.params.timeframe.trim()} `
       : ''
     const condition = `${timeframe}${this.formatIndicatorCompareCondition(trigger)}`
-    return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
+    return `${this.formatTriggerPhaseLabel(trigger.phase)}：${condition}${this.formatActionSuffix(trigger, condition)}`
+  }
+
+  private formatTriggerPhaseLabel(phase: SemanticState['triggers'][number]['phase']): string {
+    if (phase === 'entry') return '入场'
+    if (phase === 'exit') return '出场'
+    return '条件'
   }
 
   private formatIndicatorCompareCondition(trigger: SemanticState['triggers'][number]): string {

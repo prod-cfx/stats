@@ -231,11 +231,23 @@ describe('atomic contract combination semantics', () => {
       sideScope: 'long',
       params: expect.objectContaining({ value: 65 }),
     })
+    expect(state.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'rsi',
+          value: 35,
+        }),
+      }),
+    ]))
 
     const rsiValues = state.triggers
       .filter(trigger => trigger.key.includes('rsi'))
       .map(trigger => trigger.params.value)
     expect(rsiValues).not.toContain(1)
+    expect(projection.buildClarificationView(state).summary).not.toContain('RSI14 上穿 35')
     expect(classification.route).not.toBe('unsupported_fallback')
   })
 
@@ -260,15 +272,24 @@ describe('atomic contract combination semantics', () => {
         multiplier: 1.5,
       }),
     })
-    expectTrigger(state, {
+    const exitTrigger = expectTrigger(state, {
       key: 'price.detect.indicator_boundary',
       phase: 'exit',
       sideScope: 'long',
       params: expect.objectContaining({
         boundaryRole: 'upper',
         indicator: expect.objectContaining({ name: 'bollinger' }),
+        confirmationMode: 'touch',
       }),
     })
+    expect(exitTrigger.openSlots).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: expect.stringContaining('confirmationMode') }),
+    ]))
+    const summary = projection.buildClarificationView(state).summary
+    expect(summary).toContain('触及布林带下轨')
+    expect(summary).toContain('成交量高于过去 20 根均量的 1.5 倍')
+    expect(summary).not.toMatch(/入场：触及布林带.?下轨.*；入场：成交量/u)
+    expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
     expect(classification.route).not.toBe('unsupported_fallback')
   })
 
@@ -302,6 +323,9 @@ describe('atomic contract combination semantics', () => {
     expect(state.triggers.filter(trigger => trigger.phase === 'exit')).toEqual([
       expect.objectContaining({ key: 'logical.any_of' }),
     ])
+    const summary = projection.buildClarificationView(state).summary
+    expect(summary).toContain('条件：价格在 MA100 上方')
+    expect(summary).not.toContain('出场：价格在 MA100 上方')
     expect(classification.route).not.toBe('unsupported_fallback')
   })
 
@@ -325,6 +349,7 @@ describe('atomic contract combination semantics', () => {
         openSlots: [],
       }),
     ]))
+    expect(projection.buildClarificationView(state).summary).toContain('跌破记录位 breakout 止损')
     expect(classification.route).toBe('open_slots')
   })
 
@@ -341,6 +366,9 @@ describe('atomic contract combination semantics', () => {
         params: expect.objectContaining({ multiple: 3 }),
       }),
     ]))
+    const summary = projection.buildClarificationView(state).summary
+    expect(summary).toContain('2 倍 ATR 止损')
+    expect(summary).toContain('3 倍 ATR 止盈')
     expect(classification.route).not.toBe('unsupported_fallback')
   })
 })

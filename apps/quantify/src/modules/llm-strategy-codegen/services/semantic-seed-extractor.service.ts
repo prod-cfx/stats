@@ -65,11 +65,13 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.groupEntryConfirmationTriggers(this.removeStaticIndicatorTriggersCoveredBySequences(
-      this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
-        eventFramePatch.triggers ?? [],
-        this.extractTriggers(text, aliasContext),
-      ))),
+    const triggers = this.atomizeTriggers(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
+      this.removeStaticIndicatorTriggersCoveredBySequences(
+        this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
+          eventFramePatch.triggers ?? [],
+          this.extractTriggers(text, aliasContext),
+        ))),
+      ),
     )))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
@@ -257,7 +259,7 @@ export class SemanticSeedExtractorService {
   private groupEntryConfirmationTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
     const groups = new Map<string, Array<{ trigger: SeedTrigger, index: number }>>()
     triggers.forEach((trigger, index) => {
-      if (trigger.phase !== 'entry' || !this.isEntryConfirmationAtom(trigger)) {
+      if (trigger.phase !== 'entry' || !this.isEntryCombinationAtom(trigger)) {
         return
       }
       const groupKey = `${trigger.phase}:${trigger.sideScope ?? 'long'}`
@@ -266,11 +268,16 @@ export class SemanticSeedExtractorService {
 
     const selectedGroups = Array.from(groups.values()).filter((group) => {
       const hasSequence = group.some(({ trigger }) => trigger.key === 'condition.sequence')
-      const hasConfirmation = group.some(({ trigger }) => (
+      const hasSequenceConfirmation = group.some(({ trigger }) => (
         trigger.key === 'volume.relative_average'
         || trigger.key === 'confirmation.rebound'
       ))
-      return hasSequence && hasConfirmation && group.length > 1
+      const hasIndicatorBoundary = group.some(({ trigger }) => trigger.key === 'price.detect.indicator_boundary')
+      const hasVolume = group.some(({ trigger }) => trigger.key === 'volume.relative_average')
+      return group.length > 1 && (
+        (hasSequence && hasSequenceConfirmation)
+        || (hasIndicatorBoundary && hasVolume)
+      )
     })
     if (selectedGroups.length === 0) {
       return triggers
@@ -281,7 +288,7 @@ export class SemanticSeedExtractorService {
       const groupId = group
         .map(({ trigger }) => this.readTriggerGroupMarker(trigger))
         .find((marker): marker is string => Boolean(marker))
-        ?? `entry-sequence-confirmation-${groupIndex + 1}`
+        ?? `entry-atomic-confirmation-${groupIndex + 1}`
       for (const { index } of group) {
         groupIdsByIndex.set(index, groupId)
       }
@@ -303,10 +310,11 @@ export class SemanticSeedExtractorService {
     })
   }
 
-  private isEntryConfirmationAtom(trigger: SeedTrigger): boolean {
+  private isEntryCombinationAtom(trigger: SeedTrigger): boolean {
     return trigger.key === 'condition.sequence'
       || trigger.key === 'volume.relative_average'
       || trigger.key === 'confirmation.rebound'
+      || trigger.key === 'price.detect.indicator_boundary'
   }
 
   private readTriggerGroupMarker(trigger: SeedTrigger): string | null {
@@ -314,6 +322,68 @@ export class SemanticSeedExtractorService {
     if (!params) return null
     const marker = params.groupId ?? params.displayGroupId ?? params.logicalGroupId ?? params.combinationId
     return typeof marker === 'string' && marker.trim().length > 0 ? marker.trim() : null
+  }
+
+  private inheritIndicatorBoundaryConfirmationModes(triggers: SeedTrigger[]): SeedTrigger[] {
+    const groups = new Map<string, Array<{ trigger: SeedTrigger, index: number }>>()
+
+    triggers.forEach((trigger, index) => {
+      if (trigger.key !== 'price.detect.indicator_boundary') {
+        return
+      }
+
+      const indicator = trigger.params?.indicator
+      const indicatorName = this.isPlainObject(indicator) && typeof indicator.name === 'string'
+        ? indicator.name.toLowerCase()
+        : null
+      if (!indicatorName) {
+        return
+      }
+
+      const groupKey = `${indicatorName}:${trigger.sideScope ?? 'both'}`
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), { trigger, index }])
+    })
+
+    if (groups.size === 0) {
+      return triggers
+    }
+
+    const inheritedByIndex = new Map<number, string>()
+    for (const group of groups.values()) {
+      const modes = Array.from(new Set(
+        group
+          .map(({ trigger }) => typeof trigger.params?.confirmationMode === 'string' ? trigger.params.confirmationMode : null)
+          .filter((mode): mode is string => Boolean(mode)),
+      ))
+      if (modes.length !== 1) {
+        continue
+      }
+
+      for (const { trigger, index } of group) {
+        if (typeof trigger.params?.confirmationMode !== 'string') {
+          inheritedByIndex.set(index, modes[0])
+        }
+      }
+    }
+
+    if (inheritedByIndex.size === 0) {
+      return triggers
+    }
+
+    return triggers.map((trigger, index) => {
+      const confirmationMode = inheritedByIndex.get(index)
+      if (!confirmationMode) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        params: {
+          ...(trigger.params ?? {}),
+          confirmationMode,
+        },
+      }
+    })
   }
 
   private atomizeActions(actions: SeedAction[]): SeedAction[] {
@@ -3655,6 +3725,28 @@ export class SemanticSeedExtractorService {
 
       return this.buildStaticIndicatorBoundarySignature({
         key: trigger.key,
+        phase: trigger.phase,
+        sideScope: trigger.sideScope,
+        indicator: 'rsi',
+        period: typeof trigger.params?.period === 'number' && Number.isFinite(trigger.params.period)
+          ? trigger.params.period
+          : 14,
+        threshold,
+      })
+    }
+
+    if (
+      (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under')
+      && typeof trigger.params?.indicator === 'string'
+      && trigger.params.indicator.toLowerCase() === 'rsi'
+    ) {
+      const threshold = typeof trigger.params?.value === 'number' && Number.isFinite(trigger.params.value)
+        ? trigger.params.value
+        : null
+      if (threshold === null) return null
+
+      return this.buildStaticIndicatorBoundarySignature({
+        key: trigger.key === 'indicator.cross_over' ? 'oscillator.rsi_gte' : 'oscillator.rsi_lte',
         phase: trigger.phase,
         sideScope: trigger.sideScope,
         indicator: 'rsi',
