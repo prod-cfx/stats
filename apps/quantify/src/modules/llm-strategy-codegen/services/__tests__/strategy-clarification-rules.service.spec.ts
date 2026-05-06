@@ -49,6 +49,12 @@ describe('strategyClarificationRulesService', () => {
     })
   })
 
+  it('keeps missing risk atom priority above execution context gaps', () => {
+    expect((service as any).readReasonPriority('missing_risk_atom')).toBeGreaterThan(
+      (service as any).readReasonPriority('missing_exchange'),
+    )
+  })
+
   it('prefers execution-context ambiguities over checklist fallback gaps', () => {
     const state = service.detectFromAmbiguities({
       executionContext: {

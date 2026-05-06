@@ -345,6 +345,7 @@ function hasOpenSlots(slotsByOwnerKey: Map<string, SemanticSlotState[]>): boolea
 
 function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
   return state.triggers.some(ownerHasOpenSlot)
+    || state.actions.some(ownerHasOpenSlot)
     || state.risk.some(ownerHasOpenSlot)
     || ownerHasOpenSlot(state.position)
 }

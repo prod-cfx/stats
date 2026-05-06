@@ -361,7 +361,7 @@ describe('SemanticContractReadinessService', () => {
 
     const result = new SemanticContractReadinessService().normalize(state)
 
-    expect(result.ready).toBe(true)
+    expect(result.ready).toBe(false)
     expect(result.missingRequirements).toEqual([])
     expect(result.state.actions[0].openSlots).toEqual([
       {
@@ -989,6 +989,68 @@ describe('SemanticContractReadinessService', () => {
         status: 'open',
       })],
     }))
+  })
+
+  it('keeps execution-affecting action owner open slots blocking readiness', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'action.order_type',
+          fieldPath: 'actions[action-1].params.orderType',
+          status: 'open',
+          priority: 'behavior',
+          affectsExecution: true,
+          questionHint: '请确认订单类型。',
+        }],
+        contracts: [],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.state.actions[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'action.order_type',
+        status: 'open',
+        affectsExecution: true,
+      }),
+    ])
+  })
+
+  it('does not block readiness on display-only action owner open slots', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-1',
+        key: 'action.grid_ladder',
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'action.display_hint',
+          fieldPath: 'actions[action-1].displayHint',
+          status: 'open',
+          priority: 'behavior',
+          affectsExecution: false,
+          questionHint: '展示提示。',
+        }],
+        contracts: [],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.state.actions[0].openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'action.display_hint',
+        status: 'open',
+        affectsExecution: false,
+      }),
+    ])
   })
 
   it('keeps trigger risk and position owner open slots blocking readiness', () => {

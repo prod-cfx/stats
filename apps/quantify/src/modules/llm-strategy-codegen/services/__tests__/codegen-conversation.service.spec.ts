@@ -962,6 +962,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('estimates missing risk atom blockers above execution context gaps', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    expect((service as any).estimateBlockingReasonPriority('missing_risk_atom')).toBeGreaterThan(
+      (service as any).estimateBlockingReasonPriority('missing_exchange'),
+    )
+  })
+
 
 
   it('builds clarification summary from rule-level timeframes instead of checklist.timeframes[0]', () => {
