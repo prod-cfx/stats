@@ -19,6 +19,7 @@ import { RuntimeSignalIntentAdapter } from './runtime-signal-intent.adapter'
 
 const DEFAULT_RAW_RESPONSE_LIMIT = 4000
 const MAX_SCRIPT_TIMEOUT_MS = 5000
+const PUBLISHED_SNAPSHOT_LOCKED_PARAMS_MARKER = '__publishedSnapshotLockedParams'
 
 export type GeneratedSignalPayload =
   | { type: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
@@ -732,7 +733,7 @@ export class SignalGenerationDecisionStage {
   }
 
   buildEffectiveParams(
-    strategy: Pick<StrategyTemplate, 'defaultParams'>,
+    strategy: Pick<StrategyTemplate, 'defaultParams' | 'promptTemplate'>,
     instance: Pick<StrategyInstance, 'params'>,
   ): Record<string, unknown> | null {
     const templateParams = strategy.defaultParams as Record<string, unknown> | null | undefined
@@ -746,8 +747,20 @@ export class SignalGenerationDecisionStage {
 
     if (!base && !override) return null
 
+    const baseHasPublishedSnapshotLock = base?.[PUBLISHED_SNAPSHOT_LOCKED_PARAMS_MARKER] === true
+    const sanitizedBase = baseHasPublishedSnapshotLock
+      ? Object.fromEntries(Object.entries(base ?? {}).filter(([key]) => key !== PUBLISHED_SNAPSHOT_LOCKED_PARAMS_MARKER))
+      : base
+
+    if (baseHasPublishedSnapshotLock) {
+      return {
+        ...(override ?? {}),
+        ...(sanitizedBase ?? {}),
+      }
+    }
+
     return {
-      ...(base ?? {}),
+      ...(sanitizedBase ?? {}),
       ...(override ?? {}),
     }
   }

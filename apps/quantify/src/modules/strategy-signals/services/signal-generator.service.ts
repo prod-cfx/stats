@@ -94,6 +94,7 @@ import { StrategyRuntimeExecutionStateService } from './strategy-runtime-executi
 
 const DEFAULT_BAR_LIMIT = 100
 const MAX_SCRIPT_TIMEOUT_MS = 5000
+const PUBLISHED_SNAPSHOT_LOCKED_PARAMS_MARKER = '__publishedSnapshotLockedParams'
 
 type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
   include: {
@@ -1692,6 +1693,7 @@ export class SignalGeneratorService {
         defaultParams: {
           ...(this.readJsonRecord(snapshot.paramsSnapshot) ?? {}),
           ...(this.readJsonRecord(snapshot.lockedParams) ?? {}),
+          [PUBLISHED_SNAPSHOT_LOCKED_PARAMS_MARKER]: true,
         } as Prisma.JsonObject,
       },
       provenance: {

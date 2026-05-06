@@ -1173,6 +1173,43 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
   })
 
+  it('keeps published snapshot params locked over mutable instance params', () => {
+    const { service } = createService()
+
+    const effectiveParams = (service as any).decisionStage.buildEffectiveParams(
+      {
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        defaultParams: {
+          __publishedSnapshotLockedParams: true,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          marketType: 'perp',
+          positionPct: 10,
+          customThreshold: 35,
+        },
+      },
+      {
+        params: {
+          symbol: 'ETHUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
+          positionPct: 99,
+          customThreshold: 40,
+          userRuntimeNote: 'kept',
+        },
+      },
+    )
+
+    expect(effectiveParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      marketType: 'perp',
+      positionPct: 10,
+      customThreshold: 35,
+      userRuntimeNote: 'kept',
+    })
+  })
+
   it('creates a signal for a published snapshot runtime OPEN_LONG decision that only has required adapter truth', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
