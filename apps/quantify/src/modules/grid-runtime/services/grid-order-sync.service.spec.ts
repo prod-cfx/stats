@@ -1587,6 +1587,60 @@ describe('GridOrderSyncService', () => {
     expect(repository.createPlannedOrder).not.toHaveBeenCalled()
   })
 
+  it('converges reduce-only close order quantity when exchange accepts less than the local plan', async () => {
+    const repository = createRepository()
+    repository.findInstanceForSync.mockResolvedValue({
+      ...createInstance(),
+      marketType: 'perp',
+      symbol: 'ETH/USDT:PERP',
+      configSnapshot: { ...baseConfig, mode: 'perp_short' },
+    })
+    repository.listOrders.mockResolvedValue([
+      createOrder({
+        id: 'close-short-1',
+        clientOrderId: 'grid-close-short-1',
+        exchangeOrderId: 'exchange-close-short-1',
+        side: 'buy',
+        role: 'close_short',
+        price: { toString: () => '2300' },
+        quantity: { toString: () => '0.043' },
+        status: 'OPEN',
+      }),
+    ])
+    const tradingService = createTradingService()
+    tradingService.getOpenOrders.mockResolvedValue([
+      {
+        id: 'exchange-close-short-1',
+        clientOrderId: 'grid-close-short-1',
+        symbol: 'ETH/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'limit',
+        price: 2300,
+        amount: 0.041,
+        filled: 0,
+        status: 'open',
+        createdAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        updatedAt: Date.parse('2026-05-06T01:44:46.000Z'),
+        raw: { orderId: 'exchange-close-short-1' },
+      },
+    ])
+    tradingService.getClosedOrders.mockResolvedValue([])
+    const stateMachine = createStateMachine()
+    const service = createService(repository, tradingService, stateMachine)
+
+    await service.syncInstance('grid-1')
+
+    expect(stateMachine.markReconcileRequired).not.toHaveBeenCalled()
+    expect(repository.updateOrderFromExchange).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'close-short-1',
+      exchangeOrderId: 'exchange-close-short-1',
+      status: 'OPEN',
+      filledQuantity: '0',
+      acceptedQuantity: '0.041',
+    }))
+  })
+
   it('records matched fills before marking reconcile when another local order mismatches', async () => {
     const repository = createRepository()
     repository.listOrders.mockResolvedValue([

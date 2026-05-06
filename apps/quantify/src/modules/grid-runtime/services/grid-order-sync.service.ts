@@ -156,6 +156,7 @@ export class GridOrderSyncService {
           exchangeOrderId: exchangeOrder.id,
           status: this.toGridOrderStatus(exchangeOrder.status),
           filledQuantity: String(exchangeOrder.filled),
+          acceptedQuantity: this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder) ? String(exchangeOrder.amount) : null,
           avgFillPrice: exchangeOrder.price == null ? null : String(exchangeOrder.price),
           rawPayload: this.toJsonValue(exchangeOrder.raw),
         })
@@ -824,8 +825,21 @@ export class GridOrderSyncService {
       && exchangeOrder.side === order.side
       && exchangeOrder.type === order.orderType
       && this.decimalEquals(exchangeOrder.price, order.price)
-      && this.decimalEquals(exchangeOrder.amount, order.quantity)
+      && this.matchesOrderQuantity(order, exchangeOrder)
     )
+  }
+
+  private matchesOrderQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder): boolean {
+    return this.decimalEquals(exchangeOrder.amount, order.quantity)
+      || this.shouldConvergeAcceptedCloseQuantity(order, exchangeOrder)
+  }
+
+  private shouldConvergeAcceptedCloseQuantity(order: RuntimeOrder, exchangeOrder: UnifiedOrder): boolean {
+    if (order.role !== 'close_long' && order.role !== 'close_short') return false
+    if (exchangeOrder.amount <= 0) return false
+    const exchangeAmount = this.decimal(String(exchangeOrder.amount))
+    const localQuantity = this.decimal(this.decimalToString(order.quantity))
+    return exchangeAmount.lte(localQuantity)
   }
 
   private buildOrderMismatch(order: RuntimeOrder, exchangeOrder: UnifiedOrder): GridSyncMismatch {
