@@ -1,15 +1,18 @@
 import type { SemanticSupportClassification } from '../semantic-support-classifier.service'
-import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticAtomContract, SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import { buildTriggerCombinationContract, normalizeSemanticStateCombinationContracts, normalizeTriggerCombinationContracts } from '../semantic-state-normalization'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+import { SemanticTriggerCombinationContractService } from '../semantic-trigger-combination-contract.service'
 
 const extractor = new SemanticSeedExtractorService()
 const builder = new SemanticSeedStateBuilderService()
 const classifier = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
 const projection = new SemanticStateProjectionService()
+const combinationResolver = new SemanticTriggerCombinationContractService()
 
 interface PipelineResult {
   state: SemanticState
@@ -71,7 +74,110 @@ function expectRiskOpenSlot(risk: SemanticRiskState, slotKey: string): void {
   ]))
 }
 
+function expectCombinationContract(
+  trigger: SemanticTriggerState,
+  expected: { groupId: string, join: 'AND' | 'OR', actionKey: string },
+): SemanticAtomContract {
+  const contract = trigger.contracts?.find(candidate =>
+    candidate.kind === 'trigger'
+    && candidate.capabilities.some(capability =>
+      capability.domain === 'market'
+      && capability.verb === 'combine'
+      && capability.object === 'predicate_group',
+    ),
+  )
+
+  expect(contract).toEqual(expect.objectContaining({
+    kind: 'trigger',
+    params: expect.objectContaining({
+      groupId: expected.groupId,
+      join: expected.join,
+      role: 'member',
+      actionKey: expected.actionKey,
+      actionBinding: 'single_action',
+    }),
+    capabilities: expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'market',
+        verb: 'combine',
+        object: 'predicate_group',
+        shape: expect.objectContaining({
+          groupId: expected.groupId,
+          join: expected.join,
+          role: 'member',
+          actionKey: expected.actionKey,
+          actionBinding: 'single_action',
+          phase: trigger.phase,
+          sideScope: trigger.sideScope ?? 'long',
+        }),
+      }),
+    ]),
+  }))
+
+  if (!contract) {
+    throw new Error(`semantic_combination_contract_missing:${expected.groupId}`)
+  }
+
+  return contract
+}
+
+function semanticStateWithTrigger(trigger: SemanticTriggerState): SemanticState {
+  return {
+    version: 1,
+    families: [],
+    triggers: [trigger],
+    actions: [],
+    risk: [],
+    position: null,
+    contextSlots: {
+      exchange: null,
+      symbol: null,
+      marketType: null,
+      timeframe: null,
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-05-07T00:00:00.000Z',
+  }
+}
+
 describe('atomic contract combination semantics', () => {
+  it('builds a standard trigger combination contract helper', () => {
+    const contract = buildTriggerCombinationContract({
+      groupId: 'entry-ema-stack',
+      join: 'AND',
+      phase: 'entry',
+      sideScope: 'long',
+      actionKey: 'open_long',
+    })
+
+    expect(contract).toEqual(expect.objectContaining({
+      kind: 'trigger',
+      params: expect.objectContaining({
+        groupId: 'entry-ema-stack',
+        join: 'AND',
+        role: 'member',
+        actionKey: 'open_long',
+        actionBinding: 'single_action',
+      }),
+      capabilities: expect.arrayContaining([
+        expect.objectContaining({
+          domain: 'market',
+          verb: 'combine',
+          object: 'predicate_group',
+          shape: expect.objectContaining({
+            groupId: 'entry-ema-stack',
+            join: 'AND',
+            role: 'member',
+            actionKey: 'open_long',
+            actionBinding: 'single_action',
+            phase: 'entry',
+            sideScope: 'long',
+          }),
+        }),
+      ]),
+    }))
+  })
+
   it('extracts rolling extrema breakout entry and exit contracts', () => {
     const { state, classification } = runPipeline('BTC 4小时突破过去 20 根 K 线最高价做多，跌破过去 10 根 K 线最低价平仓。')
 
@@ -315,10 +421,15 @@ describe('atomic contract combination semantics', () => {
       sideScope: 'long',
       params: expect.objectContaining({ indicator: 'macd' }),
     })
-    expectTrigger(state, {
+    const anyOfExit = expectTrigger(state, {
       key: 'logical.any_of',
       phase: 'exit',
       sideScope: 'long',
+    })
+    expectCombinationContract(anyOfExit, {
+      groupId: 'exit-ma100-macd',
+      join: 'OR',
+      actionKey: 'close_long',
     })
     expect(state.triggers.filter(trigger => trigger.phase === 'exit')).toEqual([
       expect.objectContaining({ key: 'logical.any_of' }),
@@ -327,6 +438,181 @@ describe('atomic contract combination semantics', () => {
     expect(summary).toContain('条件：价格在 MA100 上方')
     expect(summary).not.toContain('出场：价格在 MA100 上方')
     expect(classification.route).not.toBe('unsupported_fallback')
+  })
+
+  it('emits standard AND contracts for EMA20/60/144 stack entry', () => {
+    const { state, classification } = runPipeline('BTC 15分钟价格在 EMA20 EMA60 EMA144 上方做多。')
+
+    const stackTriggers = [20, 60, 144].map((period) => {
+      const trigger = state.triggers.find(candidate =>
+        candidate.key === 'indicator.above'
+        && candidate.phase === 'entry'
+        && candidate.sideScope === 'long'
+        && candidate.params.indicator === 'ema'
+        && candidate.params['reference.period'] === period,
+      )
+      expect(trigger).toEqual(expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+      }))
+      if (!trigger) {
+        throw new Error(`semantic_trigger_missing:ema:${period}`)
+      }
+      return trigger
+    })
+
+    for (const trigger of stackTriggers) {
+      expectCombinationContract(trigger, {
+        groupId: 'entry-ema-stack',
+        join: 'AND',
+        actionKey: 'open_long',
+      })
+    }
+    expect(classification.route).not.toBe('unsupported_fallback')
+  })
+
+  it('normalizes legacy loose trigger group markers into standard contracts', () => {
+    const [normalized] = normalizeTriggerCombinationContracts([{
+      id: 'legacy-entry-volume',
+      key: 'volume.relative_average',
+      phase: 'entry',
+      sideScope: 'long',
+      params: {
+        semanticGroupId: 'entry-confirmation-legacy',
+        logic: 'and',
+        actionKey: 'open_long',
+        lookbackBars: 20,
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }])
+
+    expect(normalized?.params).toEqual(expect.objectContaining({
+      semanticGroupId: 'entry-confirmation-legacy',
+      lookbackBars: 20,
+    }))
+    expectCombinationContract(normalized as SemanticTriggerState, {
+      groupId: 'entry-confirmation-legacy',
+      join: 'AND',
+      actionKey: 'open_long',
+    })
+  })
+
+  it('normalizes standard contracts from SemanticState loose atomic combination markers through the production flow', () => {
+    const normalizedState = normalizeSemanticStateCombinationContracts(semanticStateWithTrigger({
+      id: 'legacy-entry-rebound',
+      key: 'confirmation.rebound',
+      phase: 'entry',
+      sideScope: 'long',
+      params: {
+        atomicCombinationId: 'entry-confirmation-atomic',
+        conditionOperator: 'or',
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+
+    const [normalizedTrigger] = normalizedState.triggers
+    expect(normalizedTrigger?.params).toEqual(expect.objectContaining({
+      atomicCombinationId: 'entry-confirmation-atomic',
+      conditionOperator: 'or',
+    }))
+    expectCombinationContract(normalizedTrigger as SemanticTriggerState, {
+      groupId: 'entry-confirmation-atomic',
+      join: 'OR',
+      actionKey: 'open_long',
+    })
+  })
+
+  it('upgrades existing standard-like legacy combination contracts without duplicating resolver members', () => {
+    const normalizedState = normalizeSemanticStateCombinationContracts(semanticStateWithTrigger({
+      id: 'legacy-entry-volume',
+      key: 'volume.relative_average',
+      phase: 'entry',
+      sideScope: 'long',
+      params: {
+        groupId: 'entry-confirmation-existing',
+        logic: 'and',
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [{
+        id: 'legacy-contract-entry-confirmation',
+        kind: 'trigger',
+        capabilities: [],
+        requires: [],
+        params: {
+          groupId: 'entry-confirmation-existing',
+          join: 'AND',
+          legacyField: 'keep-me',
+        },
+      }],
+    }))
+
+    const [normalizedTrigger] = normalizedState.triggers
+    const combinationLikeContracts = normalizedTrigger?.contracts?.filter(contract =>
+      contract.kind === 'trigger'
+      && typeof contract.params.groupId === 'string'
+      && contract.params.groupId.length > 0,
+    )
+    expect(combinationLikeContracts).toHaveLength(1)
+    expect(combinationLikeContracts?.[0]).toEqual(expect.objectContaining({
+      id: 'legacy-contract-entry-confirmation',
+      params: expect.objectContaining({
+        groupId: 'entry-confirmation-existing',
+        join: 'AND',
+        legacyField: 'keep-me',
+        role: 'member',
+        actionKey: 'open_long',
+        actionBinding: 'single_action',
+      }),
+    }))
+    expectCombinationContract(normalizedTrigger as SemanticTriggerState, {
+      groupId: 'entry-confirmation-existing',
+      join: 'AND',
+      actionKey: 'open_long',
+    })
+
+    const [group] = combinationResolver.resolveExecutableGroups([normalizedTrigger as SemanticTriggerState])
+    expect(group?.members.map(member => member.id)).toEqual(['legacy-entry-volume'])
+  })
+
+  it('keeps standard group metadata out of ordinary trigger atom contract params', () => {
+    const { state } = runPipeline('BTC 连续跌三根 15 分钟 K 线后，如果下一根开始放量反弹就买一点。')
+    const sequenceTrigger = expectTrigger(state, {
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+    })
+
+    const ordinaryAtomContracts = sequenceTrigger.contracts?.filter(contract =>
+      contract.kind === 'trigger'
+      && !contract.capabilities.some(capability =>
+        capability.domain === 'market'
+        && capability.verb === 'combine'
+        && capability.object === 'predicate_group',
+      ),
+    )
+    expect(sequenceTrigger.params.groupId).toBe('entry-atomic-confirmation-1')
+    expect(ordinaryAtomContracts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.not.objectContaining({
+          groupId: expect.any(String),
+        }),
+      }),
+    ]))
+    expectCombinationContract(sequenceTrigger, {
+      groupId: 'entry-atomic-confirmation-1',
+      join: 'AND',
+      actionKey: 'open_long',
+    })
+
+    const [group] = combinationResolver.resolveExecutableGroups([sequenceTrigger])
+    expect(group?.members.map(member => member.id)).toEqual([sequenceTrigger.id])
   })
 
   it('keeps breakout retest sequence and remembered breakout level stop together', () => {

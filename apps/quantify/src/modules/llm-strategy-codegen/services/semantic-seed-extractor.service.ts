@@ -18,6 +18,7 @@ import { MarketInstrumentSymbolResolverService } from './market-instrument-symbo
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { SemanticEventFrameParserService } from './semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './semantic-event-frame-projector.service'
+import { buildTriggerCombinationContract } from './semantic-state-normalization'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -65,14 +66,14 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
+    const triggers = this.atomizeTriggers(this.withRecognizedTriggerCombinationContracts(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
       this.removeStaticIndicatorTriggersCoveredBySequences(
         this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
           eventFramePatch.triggers ?? [],
           this.extractTriggers(text, aliasContext),
         ))),
       ),
-    )))
+    ))))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),
@@ -241,19 +242,209 @@ export class SemanticSeedExtractorService {
   }
 
   private atomizeTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
-    return triggers.map((trigger, index) => (
-      this.hasContracts(trigger)
-        ? trigger
-        : {
-            ...trigger,
-            contracts: [this.buildAtomContract({
-              id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(trigger.key)}`,
-              kind: 'trigger',
-              capability: this.buildTriggerCapability(trigger),
-              params: trigger.params ?? {},
-            })],
-          }
-    ))
+    return triggers.map((trigger, index) => {
+      const contracts = trigger.contracts ?? []
+      if (contracts.some(contract => !this.isTriggerCombinationLikeContract(contract))) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        contracts: [
+          ...contracts,
+          this.buildAtomContract({
+            id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(trigger.key)}`,
+            kind: 'trigger',
+            capability: this.buildTriggerCapability({
+              ...trigger,
+              params: this.stripTriggerCombinationMarkerParams(trigger.params ?? {}),
+            }),
+            params: this.stripTriggerCombinationMarkerParams(trigger.params ?? {}),
+          }),
+        ],
+      }
+    })
+  }
+
+  private stripTriggerCombinationMarkerParams(params: Record<string, unknown>): Record<string, unknown> {
+    const {
+      groupId: _groupId,
+      semanticGroupId: _semanticGroupId,
+      logicalGroupId: _logicalGroupId,
+      combinationId: _combinationId,
+      atomicCombinationId: _atomicCombinationId,
+      join: _join,
+      logic: _logic,
+      operator: _operator,
+      conditionOperator: _conditionOperator,
+      actionKey: _actionKey,
+      actionBinding: _actionBinding,
+      role: _role,
+      ...stripped
+    } = params
+
+    return stripped
+  }
+
+  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[]): SeedTrigger[] {
+    const hasEmaStack = [20, 60, 144].every(period =>
+      triggers.some(trigger =>
+        trigger.key === 'indicator.above'
+        && trigger.phase === 'entry'
+        && (trigger.sideScope ?? 'long') === 'long'
+        && trigger.params?.indicator === 'ema'
+        && trigger.params['reference.period'] === period,
+      ),
+    )
+
+    return triggers.map((trigger) => {
+      const explicit = this.resolveRecognizedTriggerCombination(trigger, hasEmaStack)
+      if (explicit) {
+        return this.withTriggerCombinationContract(trigger, explicit)
+      }
+
+      const legacyGroupId = this.readTriggerGroupMarker(trigger)
+      if (!legacyGroupId) {
+        return trigger
+      }
+
+      return this.withTriggerCombinationContract(trigger, {
+        groupId: legacyGroupId,
+        join: this.readTriggerCombinationJoin(trigger.params ?? {}) ?? 'AND',
+        actionKey: this.readString(trigger.params?.actionKey) ?? this.defaultTriggerCombinationActionKey(trigger),
+      })
+    })
+  }
+
+  private resolveRecognizedTriggerCombination(
+    trigger: SeedTrigger,
+    hasEmaStack: boolean,
+  ): { groupId: string, join: 'AND' | 'OR', actionKey: string } | null {
+    if (
+      hasEmaStack
+      && trigger.key === 'indicator.above'
+      && trigger.phase === 'entry'
+      && (trigger.sideScope ?? 'long') === 'long'
+      && trigger.params?.indicator === 'ema'
+      && [20, 60, 144].includes(Number(trigger.params['reference.period']))
+    ) {
+      return {
+        groupId: 'entry-ema-stack',
+        join: 'AND',
+        actionKey: 'open_long',
+      }
+    }
+
+    if (
+      trigger.key === 'logical.any_of'
+      && trigger.phase === 'exit'
+      && this.isMa100MacdExitAnyOf(trigger)
+    ) {
+      return {
+        groupId: 'exit-ma100-macd',
+        join: 'OR',
+        actionKey: 'close_long',
+      }
+    }
+
+    return null
+  }
+
+  private withTriggerCombinationContract(
+    trigger: SeedTrigger,
+    input: { groupId: string, join: 'AND' | 'OR', actionKey: string },
+  ): SeedTrigger {
+    if (trigger.contracts?.some(contract => this.isTriggerCombinationLikeContract(contract))) {
+      return {
+        ...trigger,
+        contracts: trigger.contracts.map(contract =>
+          this.isTriggerCombinationLikeContract(contract)
+            ? this.upgradeTriggerCombinationContract(trigger, contract, input)
+            : contract,
+        ),
+      }
+    }
+
+    return {
+      ...trigger,
+      contracts: [
+        ...(trigger.contracts ?? []),
+        buildTriggerCombinationContract({
+          ...input,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope,
+        }),
+      ],
+    }
+  }
+
+  private upgradeTriggerCombinationContract(
+    trigger: SeedTrigger,
+    contract: SemanticAtomContract,
+    input: { groupId: string, join: 'AND' | 'OR', actionKey: string },
+  ): SemanticAtomContract {
+    const standard = buildTriggerCombinationContract({
+      ...input,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope,
+    })
+
+    return {
+      ...contract,
+      capabilities: this.isTriggerCombinationContract(contract)
+        ? [...contract.capabilities]
+        : [...contract.capabilities, ...standard.capabilities],
+      requires: [...contract.requires],
+      params: {
+        ...contract.params,
+        ...standard.params,
+      },
+      ...(contract.effects ? { effects: [...contract.effects] } : {}),
+    }
+  }
+
+  private isMa100MacdExitAnyOf(trigger: SeedTrigger): boolean {
+    const items = trigger.params?.items
+    if (!Array.isArray(items)) return false
+
+    const hasMa100Breakdown = items.some(item =>
+      this.isPlainObject(item)
+      && item.key === 'indicator.below'
+      && this.isPlainObject(item.params)
+      && item.params.indicator === 'ma'
+      && item.params['reference.period'] === 100,
+    )
+    const hasMacdDeathCross = items.some(item =>
+      this.isPlainObject(item)
+      && item.key === 'indicator.cross_under'
+      && this.isPlainObject(item.params)
+      && item.params.indicator === 'macd',
+    )
+
+    return hasMa100Breakdown && hasMacdDeathCross
+  }
+
+  private readTriggerCombinationJoin(params: Record<string, unknown>): 'AND' | 'OR' | null {
+    for (const key of ['join', 'logic', 'operator', 'conditionOperator']) {
+      const value = params[key]
+      if (typeof value !== 'string') continue
+
+      const normalized = value.trim().toUpperCase()
+      if (normalized === 'AND' || normalized === 'OR') {
+        return normalized
+      }
+    }
+
+    return null
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private defaultTriggerCombinationActionKey(trigger: SeedTrigger): string {
+    const side = trigger.sideScope === 'short' ? 'short' : 'long'
+    return trigger.phase === 'exit' ? `close_${side}` : `open_${side}`
   }
 
   private groupEntryConfirmationTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
@@ -320,7 +511,12 @@ export class SemanticSeedExtractorService {
   private readTriggerGroupMarker(trigger: SeedTrigger): string | null {
     const params = trigger.params
     if (!params) return null
-    const marker = params.groupId ?? params.displayGroupId ?? params.logicalGroupId ?? params.combinationId
+    const marker = params.groupId
+      ?? params.displayGroupId
+      ?? params.semanticGroupId
+      ?? params.logicalGroupId
+      ?? params.combinationId
+      ?? params.atomicCombinationId
     return typeof marker === 'string' && marker.trim().length > 0 ? marker.trim() : null
   }
 
@@ -443,6 +639,19 @@ export class SemanticSeedExtractorService {
 
   private hasContracts(node: { contracts?: SemanticAtomContract[] }): boolean {
     return Array.isArray(node.contracts) && node.contracts.length > 0
+  }
+
+  private isTriggerCombinationContract(contract: SemanticAtomContract): boolean {
+    return contract.kind === 'trigger'
+      && contract.capabilities.some(capability =>
+        capability.domain === 'market'
+        && capability.verb === 'combine'
+        && capability.object === 'predicate_group',
+      )
+  }
+
+  private isTriggerCombinationLikeContract(contract: SemanticAtomContract): boolean {
+    return contract.kind === 'trigger' && this.readString(contract.params.groupId) !== null
   }
 
   private buildAtomContract(input: {
