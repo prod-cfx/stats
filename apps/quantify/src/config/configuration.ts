@@ -64,6 +64,18 @@ export const aiConfig = registerAs('ai', () => ({
   },
 }))
 
+// Mastra 基础设施模块 runtime 配置
+// 复用 UNIAPI_* env（来源 QUANTIFY_UNIAPI_*，由 quantify-env.ts 映射）
+// Phase 1 仅暴露 default provider；strategy-codegen 等 Phase 2/3 扩展
+export const mastraConfig = registerAs('mastra', () => ({
+  default: {
+    apiKey: env.str('UNIAPI_API_KEY'),
+    baseUrl: env.str('UNIAPI_BASE_URL', 'https://api.uniapi.io'),
+    defaultModel: env.str('UNIAPI_DEFAULT_MODEL', 'gpt-4o-mini'),
+    envKeyName: 'QUANTIFY_UNIAPI_API_KEY',
+  },
+}))
+
 export const throttleConfig = registerAs('throttle', () => ({
   ttl: parsePositiveInt(env.str('THROTTLE_TTL'), 60),
   limit: parsePositiveInt(env.str('THROTTLE_LIMIT'), 30),
@@ -233,6 +245,7 @@ export const backendConfigLoaders = [
   httpConfig,
   redisConfig,
   aiConfig, // AI 配置用于策略脚本生成
+  mastraConfig, // Mastra 基础设施 (Phase 1 脚手架)
   marketDataConfig,
   strategySignalsConfig,
   // 其他配置在需要时再加入 ConfigModule.load
