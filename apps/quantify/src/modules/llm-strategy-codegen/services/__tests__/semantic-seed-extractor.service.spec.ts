@@ -53,7 +53,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
       marketType: 'spot',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '1m',
     }))
 
@@ -206,7 +206,7 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '1h',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
@@ -251,6 +251,32 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('extracts spaced quote symbols from initial strategy text', () => {
+    const patch = service.extract('ETH usdt，在 2500 到 3200 之间做多空网格，2倍杠杆，突破区间就停止。')
+
+    expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDT',
+      source: 'user_explicit',
+      quoteSource: 'explicit',
+      base: 'ETH',
+      quote: 'USDT',
+    }))
+  })
+
+  it('extracts inferred base-only symbols from contract strategy text', () => {
+    const patch = service.extract('ETH永续合约，突破 3200 做多，跌破 2500 停止。')
+
+    expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({
+      value: 'ETHUSDT',
+      source: 'inferred',
+      quoteSource: 'default_usdt',
+      base: 'ETH',
+      quote: 'USDT',
+      marketTypeHint: 'perp',
+    }))
+    expect(patch.contextSlots?.marketType).toBe('perp')
+  })
+
   it.each([
     'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不加仓，单笔 10%。',
     'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，不要加仓，单笔 10%。',
@@ -288,7 +314,7 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       marketType: 'perp',
       timeframe: '1m',
     }))
@@ -304,7 +330,7 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('用 BTCUSDT 1m K 线。每次最新 K 线收盘价高于开盘价时尝试开多，固定使用 10 USDT。如果已有持仓则不再开仓。收盘价低于开盘价时平多。')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '1m',
     }))
     expect(patch.contextSlots).not.toHaveProperty('exchange')
@@ -768,7 +794,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'spot',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -829,7 +855,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'spot',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -915,7 +941,7 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'binance',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       marketType: 'perp',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
@@ -1011,7 +1037,7 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('BTCUSDT 15m；如果 1h 趋势向上，价格站上 EMA20 买入')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '15m',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
@@ -1031,7 +1057,7 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('BTCUSDT 15m 如果 1h 趋势向上且价格站上 EMA20 买入')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '15m',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
@@ -1068,7 +1094,7 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('BYBIT BTCUSDT 15m；价格上穿 MA50 买入；单笔 10%')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '15m',
     }))
     expect(patch.contextSlots).not.toHaveProperty('exchange')
@@ -1079,7 +1105,7 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '15m',
     }))
   })
@@ -1096,7 +1122,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
       marketType: 'perp',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '15m',
     }))
   })
@@ -1105,7 +1131,7 @@ describe('SemanticSeedExtractorService', () => {
     const patch = service.extract('BTCUSDT 3分钟之内跌百分1买入；15分钟之内涨百分2卖出；单笔用百分10资金')
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '3m',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
@@ -1135,7 +1161,7 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       timeframe: '3m',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
@@ -1599,7 +1625,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'perp',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -1675,7 +1701,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'perp',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '1m',
       }),
       triggers: expect.arrayContaining([
@@ -2072,7 +2098,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'perp',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -2323,7 +2349,7 @@ describe('SemanticSeedExtractorService', () => {
 
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
-      symbol: 'BTCUSDT',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
       marketType: 'perp',
       timeframe: '15m',
     }))
@@ -2467,7 +2493,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'spot',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -2638,7 +2664,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'perp',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -2775,7 +2801,7 @@ describe('SemanticSeedExtractorService', () => {
       contextSlots: expect.objectContaining({
         exchange: 'okx',
         marketType: 'perp',
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '15m',
       }),
       triggers: expect.arrayContaining([
@@ -2926,7 +2952,7 @@ describe('SemanticSeedExtractorService', () => {
     const percentChangePatch = service.extract('BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入；15m 相对开仓均价上涨 2% 时卖出；5% 止损；10% 仓位。')
     expect(percentChangePatch).toEqual(expect.objectContaining({
       contextSlots: expect.objectContaining({
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '3m',
       }),
       triggers: expect.arrayContaining([
@@ -2979,7 +3005,7 @@ describe('SemanticSeedExtractorService', () => {
     const onStartPatch = service.extract('立即开始时市价买入一次；1h；BTCUSDT；单笔 10%；亏损 5% 止损。')
     expect(onStartPatch).toEqual(expect.objectContaining({
       contextSlots: expect.objectContaining({
-        symbol: 'BTCUSDT',
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
         timeframe: '1h',
       }),
       triggers: expect.arrayContaining([
@@ -3041,7 +3067,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.contextSlots).toEqual(expect.objectContaining({
       exchange: 'okx',
       marketType: 'spot',
-      symbol: 'ORDIUSDT',
+      symbol: expect.objectContaining({ value: 'ORDIUSDT' }),
       timeframe: '1h',
     }))
     expect(patch.triggers).toEqual(expect.arrayContaining([
