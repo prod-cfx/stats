@@ -618,12 +618,19 @@ function readGenericCrossOp(
   params: Record<string, number | string | boolean> | undefined,
 ): string | null {
   const direction = readStringParam(params, 'direction')
-  if (direction) return normalizeComparisonOp(direction)
+  if (direction) return normalizeCrossOp(direction)
 
   const op = readStringParam(params, 'op')
-  if (op) return normalizeComparisonOp(op)
+  if (op) return normalizeCrossOp(op)
 
   return 'CROSS_OVER'
+}
+
+function normalizeCrossOp(op: string): 'CROSS_OVER' | 'CROSS_UNDER' | null {
+  const normalized = op.trim().toUpperCase()
+  if (normalized === 'OVER' || normalized === 'CROSS_OVER') return 'CROSS_OVER'
+  if (normalized === 'UNDER' || normalized === 'CROSS_UNDER') return 'CROSS_UNDER'
+  return null
 }
 
 function normalizeComparisonOp(op: string): string | null {

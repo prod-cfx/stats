@@ -7,6 +7,10 @@ import { BacktestStrategyAdapterService } from './backtest-strategy-adapter.serv
 describe('backtestStrategyAdapterService', () => {
   const service = new BacktestStrategyAdapterService()
 
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   it('builds runner strategy fn from valid StrategyAdapterV1 script', async () => {
     const strategy = await service.build({
       id: 's1',
@@ -78,6 +82,29 @@ strategy`,
         }),
       }),
     })
+  })
+
+  it('fails closed when a compiler.v1 generated script fails compiled parser validation', async () => {
+    const tamperedScript = createCompiledScriptFixture().replace(
+      'export default strategy',
+      'export default strategy\n// tampered fixed wrapper',
+    )
+    const executeAdapter = jest
+      .spyOn(service as any, 'executeAdapter')
+      .mockResolvedValue({
+        protocolVersion: 'v1',
+        onBar: () => ({ action: 'NOOP', reason: 'vm.fallback' }),
+      })
+
+    await expect(service.build({
+      id: 'compiled-tampered-s1',
+      protocolVersion: 'v1',
+      scriptCode: tamperedScript,
+      params: {},
+    })).rejects.toMatchObject({
+      message: 'backtest.compiled_strategy_invalid',
+    } as Partial<DomainException>)
+    expect(executeAdapter).not.toHaveBeenCalled()
   })
 
   it('fails when protocolVersion is not v1', async () => {

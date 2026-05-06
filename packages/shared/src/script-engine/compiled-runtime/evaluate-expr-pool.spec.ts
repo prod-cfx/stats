@@ -325,6 +325,67 @@ describe('evaluateExprPool', () => {
     expect(values.unknown_cross).toBe(false)
   })
 
+  it('fails generic cross predicates closed when direction uses a compare operator', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: { kind: string, field?: 'close', value?: number, params?: Record<string, string> }
+      deps?: string[]
+    }> = [
+      { id: 'left', nodeType: 'series', sourceRef: 'left', payload: { kind: 'PRICE', field: 'close' } },
+      { id: 'right', nodeType: 'series', sourceRef: 'right', payload: { kind: 'CONST', value: 100 } },
+      {
+        id: 'malformed_cross',
+        nodeType: 'predicate',
+        sourceRef: 'malformed_cross',
+        payload: { kind: 'cross', params: { direction: 'GT' } },
+        deps: ['left', 'right'],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 101, low: 99, close: 99, volume: 1, timestamp: 1 },
+          { open: 100, high: 102, low: 99, close: 101, volume: 1, timestamp: 2 },
+        ],
+      },
+      exprPool,
+      ['left', 'right', 'malformed_cross'],
+    )
+
+    expect(values.malformed_cross).toBe(false)
+  })
+
+  it('defaults missing generic compare operators to GT', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: { kind: string, value?: number, params?: Record<string, string> }
+      deps?: string[]
+    }> = [
+      { id: 'left', nodeType: 'series', sourceRef: 'left', payload: { kind: 'CONST', value: 3 } },
+      { id: 'right', nodeType: 'series', sourceRef: 'right', payload: { kind: 'CONST', value: 2 } },
+      {
+        id: 'default_compare',
+        nodeType: 'predicate',
+        sourceRef: 'default_compare',
+        payload: { kind: 'compare' },
+        deps: ['left', 'right'],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      { bars: [] },
+      exprPool,
+      ['left', 'right', 'default_compare'],
+    )
+
+    expect(values.default_compare).toBe(true)
+  })
+
   it('evaluates generic rolling-high compare predicates against the previous channel', () => {
     const exprPool: Array<{
       id: string
