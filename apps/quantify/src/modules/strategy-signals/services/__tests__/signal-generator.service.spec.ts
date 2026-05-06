@@ -1621,6 +1621,59 @@ strategy`,
     )
   })
 
+  it('applies compiler.v1 risk predicates on parsed published runtime adapter decisions', () => {
+    const { service } = createService()
+    const compiled = (service as any).buildCompiledRuntimeAdapter(createCompiledAtrRiskScriptFixture())
+
+    expect(compiled.parseError).toBeUndefined()
+    expect(compiled.adapter).not.toBeNull()
+
+    const decision = compiled.adapter!.onBar({
+      position: { qty: 1, avgEntryPrice: 100 },
+      currentPrice: 75,
+      bars: Array.from({ length: 16 }, (_, index) => ({
+        time: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: index === 15 ? 75 : 100,
+        volume: 10,
+        timestamp: 1_775_000_000_000 + index * 60_000,
+      })),
+      __compiledDecisionState: { barIndex: 16, lastTriggeredByProgram: {} },
+    } as any)
+    const outcome = (service as any).decisionStage.buildPublishedRuntimeSignalOutcomeFromDecision(
+      decision,
+      {
+        exchange: 'OKX',
+        marketType: 'perp',
+        symbol: 'BTCUSDT:PERP',
+        timeframe: '15m',
+        referencePrice: 75,
+      },
+      config,
+    )
+
+    expect(decision).toMatchObject({
+      action: 'CLOSE_LONG',
+      reason: 'compiled.force_exit',
+      meta: expect.objectContaining({
+        guardState: expect.objectContaining({
+          forceExit: true,
+          triggered: ['risk_predicate_01_atr-stop'],
+        }),
+      }),
+    })
+    expect(outcome).toMatchObject({
+      kind: 'signal',
+      payload: {
+        signalType: 'EXIT',
+        direction: 'CLOSE_LONG',
+        entryPrice: 75,
+      },
+    })
+  })
+
   it('marks a ready on_start snapshot semantic as terminal after runtime outcome resolves to noop', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
@@ -2226,6 +2279,77 @@ function createCompiledNoopScriptFixture(): string {
     executionEnvelope: {
       positionMode: 'long_only',
       marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
+
+function createCompiledAtrRiskScriptFixture(): string {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const emitter = new CompiledScriptEmitterService()
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'9'.repeat(64)}`,
+      specHash: `sha256:${'a'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'perpetual',
+      symbol: 'BTCUSDT:PERP',
+      timeframes: ['15m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_short',
+      sizing: { mode: 'pct_equity', value: 10 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 16,
+      maxLookback: 16,
+      requiredTimeframes: ['15m'],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'close_15m', kind: 'PRICE', timeframe: '15m', field: 'close' },
+      ],
+      levelSets: [],
+      predicates: [],
+    },
+    ruleBlocks: [],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+
+  return emitter.emit({
+    ast: compiler.compile(ir),
+    executionEnvelope: {
+      positionMode: 'long_short',
+      marginMode: 'isolated',
       tickSize: 0.01,
       pricePrecision: 2,
       quantityPrecision: 6,
