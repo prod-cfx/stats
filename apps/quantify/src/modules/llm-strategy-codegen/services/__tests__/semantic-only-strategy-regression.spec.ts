@@ -327,15 +327,18 @@ describe('semantic-only strategy regression verification', () => {
     expect(JSON.stringify(semanticState.risk)).not.toContain('takeProfitBasis')
   })
 
-  it('rejects the MA price-vs-reference case as the explicit semantic compiler gap instead of checklist fallback publishing it', async () => {
+  it('publishes the MA price-vs-reference case through semantic indicator compare compilation', async () => {
     const semanticState = buildSemanticStateFromMessage('OKX 现货 BTCUSDT 15m；15m 收盘确认当价格突破 MA50 时买入；15m 收盘确认当价格跌破 MA10 时卖出；亏损 5% 止损，盈利 10% 止盈；单笔 10%。')
-    const result = await expectGenerationRejected('ma-price-reference-gap', semanticState)
+    const result = await generateAndPublish('ma-price-reference-publish', semanticState)
 
     expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
       'indicator.above',
       'indicator.below',
     ]))
-    expect(result.error.message).toContain('codegen.canonical_spec_v2_condition_unsupported:indicator.above')
+    expect(result.publishedSnapshot).toEqual(expect.objectContaining({
+      specSnapshot: result.canonicalSpec,
+      scriptSnapshot: expect.any(String),
+    }))
   })
 
   it('publishes the EMA crossover case through semantic seed and normalized canonical generation', async () => {

@@ -108,6 +108,7 @@ import {
 } from './inferred-confirmation-classifier.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
+import { SemanticMissingPlaceholderReconcilerService } from './semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './semantic-open-slot-answer-resolver.service'
 import { validateSemanticPositionContract } from './strategy-semantic-contracts'
 
@@ -227,6 +228,7 @@ export class CodegenConversationService {
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+    private readonly semanticMissingPlaceholderReconciler: SemanticMissingPlaceholderReconcilerService = new SemanticMissingPlaceholderReconcilerService(),
     private readonly semanticOpenSlotAnswerResolver: SemanticOpenSlotAnswerResolverService = new SemanticOpenSlotAnswerResolverService(),
     @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
@@ -256,8 +258,9 @@ export class CodegenConversationService {
       currentState: seedSemanticState,
       plan,
     })
+    initialSemanticState = this.reconcileSemanticMissingPlaceholders(initialSemanticState)
     const initialSupportGate = this.semanticSupportClassifier.classify(initialSemanticState)
-    initialSemanticState = initialSupportGate.state
+    initialSemanticState = this.reconcileSemanticMissingPlaceholders(initialSupportGate.state)
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       dto.initialMessage,
@@ -1203,7 +1206,9 @@ export class CodegenConversationService {
         args: { sessionId },
       })
     }
-    let currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    let currentSemanticState = this.reconcileSemanticMissingPlaceholders(
+      this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState),
+    )
     const unsupportedFallbackOutcome = await this.handlePendingUnsupportedFallback({
       session,
       semanticState: currentSemanticState,
@@ -1314,10 +1319,12 @@ export class CodegenConversationService {
     const hasStructuredClarificationAnswers = Boolean(
       effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
     )
-    const rawSemanticStateAfterAnswers = this.applySemanticClarificationAnswers(
-      currentSemanticState,
-      activeClarificationState,
-      effectiveClarificationAnswers,
+    const rawSemanticStateAfterAnswers = this.reconcileSemanticMissingPlaceholders(
+      this.applySemanticClarificationAnswers(
+        currentSemanticState,
+        activeClarificationState,
+        effectiveClarificationAnswers,
+      ),
     )
     const baseConstraintPack = this.readConstraintPack(session.constraintPack)
     const structuredOpenSlotAnswerState = this.resolveStructuredSemanticOpenSlotAnswers(
@@ -1363,7 +1370,7 @@ export class CodegenConversationService {
       return preReadinessSupportGateResponse.response
     }
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
-      preReadinessSupportGateResponse.semanticState,
+      this.reconcileSemanticMissingPlaceholders(preReadinessSupportGateResponse.semanticState),
     )
     const inferredConfirmation = await this.withConfirmedInferredDecisionKeys(
       baseConstraintPack,
@@ -1374,14 +1381,16 @@ export class CodegenConversationService {
         model: dto.model,
       },
     )
-    const baseSemanticState = inferredConfirmation.semanticState
+    const baseSemanticState = this.reconcileSemanticMissingPlaceholders(inferredConfirmation.semanticState)
     const baseLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(baseSemanticState, {})
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveSemanticClarificationArtifacts(baseSemanticState).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseLogicSnapshot)
-    const preMergedSemanticState = this.mergeSemanticPatchIntoState(
-      baseSemanticState,
-      this.extractSemanticPatchFromMessage(dto.message),
+    const preMergedSemanticState = this.reconcileSemanticMissingPlaceholders(
+      this.mergeSemanticPatchIntoState(
+        baseSemanticState,
+        this.extractSemanticPatchFromMessage(dto.message),
+      ),
     )
     const preMergedLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(preMergedSemanticState, {})
     const constraintPack = inferredConfirmation.constraintPack
@@ -1390,10 +1399,12 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
-    const plannedSemanticState = this.applyConversationPlanToSemanticState({
-      currentState: preMergedSemanticState,
-      plan,
-    })
+    const plannedSemanticState = this.reconcileSemanticMissingPlaceholders(
+      this.applyConversationPlanToSemanticState({
+        currentState: preMergedSemanticState,
+        plan,
+      }),
+    )
     const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
       session,
       semanticState: plannedSemanticState,
@@ -1410,8 +1421,11 @@ export class CodegenConversationService {
     if (supportGateResponse.response) {
       return supportGateResponse.response
     }
+    const semanticStateBeforeRequiredSlots = this.reconcileSemanticMissingPlaceholders(
+      supportGateResponse.semanticState,
+    )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(supportGateResponse.semanticState, preMergedLogicSnapshot, {
+      this.withRequiredSemanticOpenSlots(semanticStateBeforeRequiredSlots, preMergedLogicSnapshot, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
       }),
     )
@@ -1631,15 +1645,16 @@ export class CodegenConversationService {
     constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
     guideConfig?: CodegenGuideConfigDto
   }): Promise<CodegenSessionResponseDto> {
+    const reconciledSemanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
     const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       args.message,
-      args.semanticState,
+      reconciledSemanticState,
       args.constraintPack.recommendationStyle,
     )
     const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
       session: args.session,
-      semanticState: args.semanticState,
+      semanticState: reconciledSemanticState,
       message: args.message,
       userId: args.userId,
       constraintPack: args.constraintPack,
@@ -1650,7 +1665,9 @@ export class CodegenConversationService {
       return supportGateResponse.response
     }
 
-    const semanticStateAfterSupport = this.normalizeSemanticContractReadiness(supportGateResponse.semanticState)
+    const semanticStateAfterSupport = this.normalizeSemanticContractReadiness(
+      this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
+    )
     const logicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticStateAfterSupport, {})
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, logicSnapshot, {
@@ -1915,10 +1932,12 @@ export class CodegenConversationService {
         currentState: seedSemanticState,
         plan,
       })
-      const replacementCandidateState = buildReplacementSemanticState({
-        previous: args.currentSemanticState,
-        next: plannedSemanticState,
-      })
+      const replacementCandidateState = this.reconcileSemanticMissingPlaceholders(
+        buildReplacementSemanticState({
+          previous: args.currentSemanticState,
+          next: plannedSemanticState,
+        }),
+      )
       const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
       const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
         args.decision.seedText,
@@ -1936,7 +1955,9 @@ export class CodegenConversationService {
       })
       if (supportGate.response) return supportGate.response
 
-      const replacementState = this.normalizeSemanticContractReadiness(supportGate.semanticState)
+      const replacementState = this.normalizeSemanticContractReadiness(
+        this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
+      )
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState)
       const clarificationState = semanticArtifacts.clarificationState
       const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
@@ -2028,7 +2049,9 @@ export class CodegenConversationService {
     }
 
     if (args.decision.kind === 'ASK_EDIT_CLARIFICATION') {
-      const nextState = withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit)
+      const nextState = this.reconcileSemanticMissingPlaceholders(
+        withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit),
+      )
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState)
       const shouldClearFailedArtifacts = args.session.status === 'REJECTED'
         || args.session.status === 'CONSISTENCY_FAILED'
@@ -2071,9 +2094,11 @@ export class CodegenConversationService {
     const pendingEditBeforePatch = readPendingSemanticEdit(args.currentSemanticState)
     const shouldRestorePublishedOnCancel = pendingEditBeforePatch?.resumeStatusOnCancel === 'PUBLISHED'
       && args.decision.patch.operations.some((operation) => operation.op === 'cancel_pending_edit')
-    const patchedSemanticState = this.conversationSemanticEdit.applyPatch(
-      args.currentSemanticState,
-      args.decision.patch,
+    const patchedSemanticState = this.reconcileSemanticMissingPlaceholders(
+      this.conversationSemanticEdit.applyPatch(
+        args.currentSemanticState,
+        args.decision.patch,
+      ),
     )
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
@@ -2092,7 +2117,9 @@ export class CodegenConversationService {
     })
     if (supportGate.response) return supportGate.response
 
-    const reducedSemanticState = this.normalizeSemanticContractReadiness(supportGate.semanticState)
+    const reducedSemanticState = this.normalizeSemanticContractReadiness(
+      this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
+    )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
@@ -2222,7 +2249,9 @@ export class CodegenConversationService {
     options: ContinueConfirmedSessionOptions = {},
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
-    const persistedSemanticState = this.readSemanticState(session.semanticState)
+    const persistedSemanticState = this.reconcileSemanticMissingPlaceholders(
+      this.readSemanticState(session.semanticState),
+    )
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
       : this.resolveSemanticClarificationArtifacts(persistedSemanticState).clarificationState
@@ -2238,10 +2267,12 @@ export class CodegenConversationService {
     const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
       ? inferredSemanticClarificationAnswers
       : dto.clarificationAnswers
-    const rawSemanticStateAfterAnswers = this.applySemanticClarificationAnswers(
-      persistedSemanticState,
-      activeClarificationState,
-      effectiveClarificationAnswers,
+    const rawSemanticStateAfterAnswers = this.reconcileSemanticMissingPlaceholders(
+      this.applySemanticClarificationAnswers(
+        persistedSemanticState,
+        activeClarificationState,
+        effectiveClarificationAnswers,
+      ),
     )
     const constraintPack = this.readConstraintPack(session.constraintPack)
     const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
@@ -2256,7 +2287,9 @@ export class CodegenConversationService {
     if (supportGateResponse.response) {
       return supportGateResponse.response
     }
-    const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(supportGateResponse.semanticState)
+    const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
+      this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
+    )
     const confirmationBaseLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(
       semanticStateAfterAnswers,
       persistedLogicSnapshot,
@@ -2280,7 +2313,7 @@ export class CodegenConversationService {
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
-        semanticStateAfterAnswers,
+        this.reconcileSemanticMissingPlaceholders(semanticStateAfterAnswers),
         baseLogicSnapshot,
         {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
@@ -2754,7 +2787,7 @@ export class CodegenConversationService {
       updatedAt: new Date().toISOString(),
     }
 
-    return this.withRequiredSemanticOpenSlots(state, checklist)
+    return this.withRequiredSemanticOpenSlots(this.reconcileSemanticMissingPlaceholders(state), checklist)
   }
 
   private withRequiredSemanticOpenSlots(
@@ -2764,8 +2797,9 @@ export class CodegenConversationService {
   ): SemanticState {
     const normalizedInput = this.normalizeRiskState(state)
     const stateWithDeterministicContext = this.withDeterministicContextSlots(normalizedInput, checklist)
+    const stateWithRuleDerivedExecutionTimeframe = this.withRuleDerivedExecutionTimeframe(stateWithDeterministicContext)
     const stateWithExplicitDeterministicPosition = this.withExplicitDeterministicPositionSizing(
-      stateWithDeterministicContext,
+      stateWithRuleDerivedExecutionTimeframe,
       checklist,
     )
     const stateWithExplicitDeterministicRisk = this.withExplicitDeterministicStopLossRisk(
@@ -2954,6 +2988,58 @@ export class CodegenConversationService {
     }
 
     return changed ? { ...state, contextSlots } : state
+  }
+
+  private withRuleDerivedExecutionTimeframe(state: SemanticState): SemanticState {
+    if (state.contextSlots.timeframe?.status === 'locked') {
+      return state
+    }
+
+    const timeframe = this.resolvePrimaryExecutionTimeframeFromRules(state)
+    if (!timeframe) {
+      return state
+    }
+
+    return {
+      ...state,
+      contextSlots: {
+        ...state.contextSlots,
+        timeframe: this.buildContextSlotState('timeframe', timeframe, '请确认策略主周期（例如 15m 或 1h）。'),
+      },
+    }
+  }
+
+  private resolvePrimaryExecutionTimeframeFromRules(state: SemanticState): string | null {
+    const timeframes = new Set<string>()
+    for (const trigger of state.triggers) {
+      if (trigger.status !== 'locked') continue
+      const timeframe = trigger.params.timeframe
+      if (typeof timeframe === 'string' && timeframe.trim().length > 0) {
+        timeframes.add(timeframe.trim())
+      }
+    }
+
+    return [...timeframes].sort((left, right) =>
+      this.timeframeToMinutes(left) - this.timeframeToMinutes(right) || left.localeCompare(right),
+    )[0] ?? null
+  }
+
+  private timeframeToMinutes(timeframe: string): number {
+    const match = /^(\d+)\s*([mhdw])$/iu.exec(timeframe.trim())
+    if (!match?.[1] || !match[2]) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value)) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const unit = match[2].toLowerCase()
+    if (unit === 'm') return value
+    if (unit === 'h') return value * 60
+    if (unit === 'd') return value * 1440
+    return value * 10080
   }
 
   private withExplicitDeterministicPositionSizing(
@@ -3756,7 +3842,8 @@ export class CodegenConversationService {
       })
     }
 
-    const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(nextState, {}, {
+    const reconciledNextState = this.reconcileSemanticMissingPlaceholders(nextState)
+    const stateWithRequiredSlots = this.withRequiredSemanticOpenSlots(reconciledNextState, {}, {
       preserveLockedPositionSizing: Boolean(
         this.hasValidLockedPositionSizing(semanticPatchState?.position)
         || this.hasValidLockedPositionSizing(input.currentState.position),
@@ -3779,6 +3866,10 @@ export class CodegenConversationService {
       persisted: currentState,
       derived: semanticPatchState,
     })
+  }
+
+  private reconcileSemanticMissingPlaceholders(state: SemanticState): SemanticState {
+    return this.semanticMissingPlaceholderReconciler.reconcile(state)
   }
 
   private hasValidLockedPositionSizing(
@@ -4892,20 +4983,21 @@ export class CodegenConversationService {
   private async continueWithStructuredClarificationAnswers(
     args: StructuredClarificationContinuationArgs,
   ): Promise<CodegenSessionResponseDto> {
+    const semanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
     const historyAfterAnswer = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
     )
     const projectedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
       args.session.latestSpecDesc,
-      this.buildLegacyLogicSnapshotProjectionForCompatibility(args.semanticState, args.checklist),
+      this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticState, args.checklist),
     )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
-        args.semanticState,
+        semanticState,
         projectedLogicSnapshot,
         {
-          preserveLockedPositionSizing: this.hasValidLockedPositionSizing(args.semanticState.position),
+          preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticState.position),
         },
       ),
     )
@@ -7048,11 +7140,12 @@ export class CodegenConversationService {
     guideConfig?: CodegenGuideConfigDto
     prefix: string
   }): Promise<CodegenSessionResponseDto> {
-    const supportGate = this.semanticSupportClassifier.classify(args.semanticState)
+    const semanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
+    const supportGate = this.semanticSupportClassifier.classify(semanticState)
     if (supportGate.route === 'unsupported_fallback' || supportGate.route === 'unknown_unsupported') {
       const gated = await this.handleSemanticSupportGateForExistingSession({
         session: args.session,
-        semanticState: args.semanticState,
+        semanticState,
         message: args.message,
         userId: args.userId,
         constraintPack: args.constraintPack,
@@ -7062,11 +7155,11 @@ export class CodegenConversationService {
       if (gated.response) return gated.response
     }
 
-    const supportedState = {
+    const supportedState = this.reconcileSemanticMissingPlaceholders({
       ...supportGate.state,
       unsupportedFallback: null,
       updatedAt: new Date().toISOString(),
-    }
+    })
     const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(supportedState, {})
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(supportedState, checklist, {

@@ -1428,6 +1428,74 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.market.timeframes).toEqual(['3m', '15m'])
   })
 
+  it('compiles per-trigger timeframe indicator compare atoms into timeframe-specific MA predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+          timeframes: ['15m', '1h', '4h'],
+        },
+        indicators: [{ kind: 'ema', params: { period: 20 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m', '1h', '4h'],
+        },
+        rules: ['15m', '1h', '4h'].map((timeframe, index) => ({
+          id: `entry-ema-above-${timeframe}`,
+          phase: 'entry',
+          priority: 100 - index,
+          sideScope: 'long',
+          condition: {
+            kind: 'atom',
+            key: 'indicator.above',
+            semanticScope: 'market',
+            op: 'GTE',
+            params: {
+              indicator: 'ema',
+              referenceRole: 'long_term',
+              'reference.period': 20,
+              timeframe,
+            },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        })),
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.market.timeframes).toEqual(['15m', '1h', '4h'])
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'close_15m', kind: 'PRICE', timeframe: '15m' }),
+      expect.objectContaining({ id: 'ema_20_15m', kind: 'EMA', timeframe: '15m' }),
+      expect.objectContaining({ id: 'close_1h', kind: 'PRICE', timeframe: '1h' }),
+      expect.objectContaining({ id: 'ema_20_1h', kind: 'EMA', timeframe: '1h' }),
+      expect.objectContaining({ id: 'close_4h', kind: 'PRICE', timeframe: '4h' }),
+      expect.objectContaining({ id: 'ema_20_4h', kind: 'EMA', timeframe: '4h' }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'GTE', args: ['close_15m', 'ema_20_15m'] }),
+      expect.objectContaining({ kind: 'GTE', args: ['close_1h', 'ema_20_1h'] }),
+      expect.objectContaining({ kind: 'GTE', args: ['close_4h', 'ema_20_4h'] }),
+    ]))
+  })
+
   it('normalizes position_gain_pct thresholds to runtime percent units', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

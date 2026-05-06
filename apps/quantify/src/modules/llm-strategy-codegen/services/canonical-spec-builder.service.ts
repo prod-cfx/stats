@@ -461,7 +461,11 @@ export class CanonicalSpecBuilderService {
 
     return {
       version: 2,
-      market,
+      market: this.withRequiredMarketTimeframes(
+        market,
+        requiredTimeframes,
+        normalizedIntent.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
+      ),
       indicators,
       sizing,
       executionPolicy: {
@@ -506,7 +510,11 @@ export class CanonicalSpecBuilderService {
 
     return {
       version: 2,
-      market,
+      market: this.withRequiredMarketTimeframes(
+        market,
+        requiredTimeframes,
+        state.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
+      ),
       indicators: this.resolveIndicatorsFromSemanticTriggers(state.triggers),
       sizing,
       executionPolicy: {
@@ -888,6 +896,11 @@ export class CanonicalSpecBuilderService {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
   }
 
+  private readTriggerParamTimeframe(params: Record<string, unknown>): string | null {
+    const timeframe = params.timeframe
+    return typeof timeframe === 'string' && timeframe.trim().length > 0 ? timeframe.trim() : null
+  }
+
   private readShapeBoolean(shape: SemanticCapabilityShape, key: string): boolean | null {
     const value = shape[key]
     return typeof value === 'boolean' ? value : null
@@ -912,6 +925,20 @@ export class CanonicalSpecBuilderService {
       marketType: marketType === 'spot' || marketType === 'perp' ? marketType : null,
       defaultTimeframe: this.readLockedContextSlotString(state.contextSlots.timeframe),
     }
+  }
+
+  private withRequiredMarketTimeframes(
+    market: CanonicalStrategySpecV2['market'],
+    requiredTimeframes: readonly string[],
+    force = false,
+  ): CanonicalStrategySpecV2['market'] {
+    const timeframes = requiredTimeframes
+      .map(timeframe => timeframe.trim())
+      .filter((timeframe, index, list) => timeframe.length > 0 && list.indexOf(timeframe) === index)
+
+    return force || timeframes.length > 1
+      ? { ...market, timeframes }
+      : market
   }
 
   private readLockedContextSlotString(slot: SemanticSlotState | null): string | null {
@@ -2014,6 +2041,10 @@ export class CanonicalSpecBuilderService {
       if (window) {
         ordered.add(window)
       }
+      const timeframe = this.readTriggerParamTimeframe(trigger.params)
+      if (timeframe) {
+        ordered.add(timeframe)
+      }
     }
 
     const defaultTimeframe = fallbackTimeframe?.trim()
@@ -2923,7 +2954,8 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
-      case 'indicator.above':
+      case 'indicator.above': {
+        const timeframe = this.readTriggerParamTimeframe(trigger.params)
         return {
           kind: 'atom',
           key: 'indicator.above',
@@ -2935,9 +2967,12 @@ export class CanonicalSpecBuilderService {
             ...(typeof trigger.params['reference.period'] === 'number'
               ? { 'reference.period': trigger.params['reference.period'] }
               : {}),
+            ...(timeframe ? { timeframe } : {}),
           },
         }
-      case 'indicator.below':
+      }
+      case 'indicator.below': {
+        const timeframe = this.readTriggerParamTimeframe(trigger.params)
         return {
           kind: 'atom',
           key: 'indicator.below',
@@ -2949,8 +2984,10 @@ export class CanonicalSpecBuilderService {
             ...(typeof trigger.params['reference.period'] === 'number'
               ? { 'reference.period': trigger.params['reference.period'] }
               : {}),
+            ...(timeframe ? { timeframe } : {}),
           },
         }
+      }
       case 'trend.direction':
       case 'market.regime':
       case 'volatility.state':

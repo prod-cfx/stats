@@ -454,10 +454,16 @@ export class SemanticStateProjectionService {
     const sourceTriggers = includeSuperseded
       ? [...triggers]
       : triggers.filter(trigger => trigger.status === 'locked')
+    const orderedTriggers = sourceTriggers.sort((left, right) => this.compareTriggers(left, right))
+    const groupedIndicatorCompareSummaries = this.buildGroupedIndicatorCompareSummaries(orderedTriggers)
 
-    return sourceTriggers
-      .sort((left, right) => this.compareTriggers(left, right))
+    return orderedTriggers
       .map((trigger) => {
+        const groupedSummary = groupedIndicatorCompareSummaries.get(trigger.id)
+        if (groupedSummary !== undefined) {
+          return groupedSummary
+        }
+
         if (trigger.key === 'grid.range_rebalance') {
           const lower = this.readGridRangeValue(trigger.params, 'lower')
           const upper = this.readGridRangeValue(trigger.params, 'upper')
@@ -502,13 +508,11 @@ export class SemanticStateProjectionService {
         }
 
         if (trigger.key === 'indicator.above' && trigger.params['reference.period']) {
-          const condition = `突破 MA${trigger.params['reference.period']}`
-          return `入场：${condition}${this.formatActionSuffix(trigger, condition)}`
+          return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
         if (trigger.key === 'indicator.below' && trigger.params['reference.period']) {
-          const condition = `跌破 MA${trigger.params['reference.period']}`
-          return `出场：${condition}${this.formatActionSuffix(trigger, condition)}`
+          return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
         if (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under') {
@@ -572,6 +576,94 @@ export class SemanticStateProjectionService {
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private buildGroupedIndicatorCompareSummaries(
+    triggers: SemanticState['triggers'],
+  ): Map<string, string> {
+    const result = new Map<string, string>()
+    const groups = new Map<string, Array<SemanticState['triggers'][number]>>()
+
+    for (const trigger of triggers) {
+      if (!this.isGroupableIndicatorCompareTrigger(trigger)) {
+        continue
+      }
+
+      const groupKey = [
+        trigger.phase,
+        trigger.key,
+        trigger.sideScope ?? '',
+        String(trigger.params.indicator ?? 'ma').toLowerCase(),
+        String(trigger.params['reference.period']),
+      ].join('|')
+      groups.set(groupKey, [...(groups.get(groupKey) ?? []), trigger])
+    }
+
+    for (const group of groups.values()) {
+      const timeframes = this.uniqueSortedTimeframes(group)
+      if (timeframes.length <= 1) {
+        continue
+      }
+
+      const [first, ...rest] = group
+      if (!first) continue
+      result.set(first.id, this.formatGroupedIndicatorCompareTriggerSummary(first, timeframes))
+      for (const trigger of rest) {
+        result.set(trigger.id, '')
+      }
+    }
+
+    return result
+  }
+
+  private isGroupableIndicatorCompareTrigger(trigger: SemanticState['triggers'][number]): boolean {
+    return (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+      && (trigger.phase === 'entry' || trigger.phase === 'exit')
+      && typeof trigger.params['reference.period'] === 'number'
+      && typeof trigger.params.timeframe === 'string'
+      && trigger.params.timeframe.trim().length > 0
+  }
+
+  private formatGroupedIndicatorCompareTriggerSummary(
+    trigger: SemanticState['triggers'][number],
+    timeframes: string[],
+  ): string {
+    const condition = `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(trigger)}`
+    return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
+  }
+
+  private formatIndicatorCompareTriggerSummary(trigger: SemanticState['triggers'][number]): string {
+    const timeframe = typeof trigger.params.timeframe === 'string' && trigger.params.timeframe.trim().length > 0
+      ? `${trigger.params.timeframe.trim()} `
+      : ''
+    const condition = `${timeframe}${this.formatIndicatorCompareCondition(trigger)}`
+    return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
+  }
+
+  private formatIndicatorCompareCondition(trigger: SemanticState['triggers'][number]): string {
+    const period = typeof trigger.params['reference.period'] === 'number'
+      ? this.formatNumber(trigger.params['reference.period'])
+      : String(trigger.params['reference.period'] ?? '')
+    const indicator = typeof trigger.params.indicator === 'string' && trigger.params.indicator.trim().length > 0
+      ? trigger.params.indicator.trim().toUpperCase()
+      : 'MA'
+    const reference = `${indicator}${period}`
+    return trigger.key === 'indicator.above'
+      ? `价格在 ${reference} 上方`
+      : `价格低于 ${reference}`
+  }
+
+  private uniqueSortedTimeframes(triggers: Array<SemanticState['triggers'][number]>): string[] {
+    const timeframes = new Set<string>()
+    for (const trigger of triggers) {
+      if (typeof trigger.params.timeframe === 'string' && trigger.params.timeframe.trim().length > 0) {
+        timeframes.add(trigger.params.timeframe.trim())
+      }
+    }
+
+    return [...timeframes].sort((left, right) =>
+      this.timeframeToMinutes(left) - this.timeframeToMinutes(right) || left.localeCompare(right),
+    )
   }
 
   private buildContractLevelSetSummary(trigger: SemanticState['triggers'][number]): string {
@@ -1413,5 +1505,23 @@ export class SemanticStateProjectionService {
     },
   ): number {
     return left.id.localeCompare(right.id)
+  }
+
+  private timeframeToMinutes(timeframe: string): number {
+    const match = /^(\d+)\s*([mhdw])$/iu.exec(timeframe.trim())
+    if (!match?.[1] || !match[2]) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value)) {
+      return Number.MAX_SAFE_INTEGER
+    }
+
+    const unit = match[2].toLowerCase()
+    if (unit === 'm') return value
+    if (unit === 'h') return value * 60
+    if (unit === 'd') return value * 1440
+    return value * 10080
   }
 }

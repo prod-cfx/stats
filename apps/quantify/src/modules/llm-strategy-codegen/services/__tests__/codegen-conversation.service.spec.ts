@@ -5828,6 +5828,170 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('fulfills missing entry atom from follow-up EMA state fragment', async () => {
+    const semanticState = {
+      version: 1,
+      families: [],
+      triggers: [{
+        id: 'semantic-missing-entry-atom',
+        key: 'semantic.missing_entry_atom',
+        phase: 'entry',
+        params: {},
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'trigger.entry',
+          fieldPath: 'triggers[entry]',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请补充入场触发条件。',
+          affectsExecution: true,
+        }],
+      }],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所。', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择标的。', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型。', affectsExecution: true },
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-05-05T00:00:00.000Z',
+    }
+    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+      id: 's-follow-up-entry-fragment',
+      semanticState,
+      status: 'DRAFTING',
+    }))
+
+    const result = await service.continueSession('s-follow-up-entry-fragment', {
+      userId: 'u1',
+      message: '15min k线在 ema20 上方开多',
+    })
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+  })
+
+  it('does not ask for entry trigger when first-turn multi-timeframe EMA wording has an entry atom', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-first-turn-mtf-ema' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15min 1h 4h 价格都在 ema20 的上方 买入',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+    ]))
+    expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+  })
+
+  it('keeps space-separated multi-timeframe EMA entry and exit distinct through first-turn conversation state', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我先继续完善策略逻辑。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-first-turn-space-mtf-ema-exit' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '5min 1h 4h的价格都在ema20的上方买入 15min跌破ema20卖出 再币安交易所 btcusdt永续合约',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.assistantPrompt ?? '').not.toContain('请确认交易所')
+    expect(result.assistantPrompt ?? '').not.toContain('请确认策略主周期')
+    expect(result.assistantPrompt ?? '').not.toContain('请补充入场触发条件')
+    expect(result.assistantPrompt ?? '').not.toContain('请补充出场触发条件')
+    expect(result.assistantPrompt ?? '').toContain('入场：5m / 1h / 4h 价格在 EMA20 上方')
+    expect(result.assistantPrompt ?? '').not.toContain('入场：突破 MA20')
+    expect(createPayload.semanticState.contextSlots.exchange).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'binance',
+    }))
+    expect(createPayload.semanticState.contextSlots.symbol).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'BTCUSDT',
+    }))
+    expect(createPayload.semanticState.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'perp',
+    }))
+    expect(createPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '5m',
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '5m' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '1h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '4h' }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    ]))
+    expect(createPayload.semanticState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(createPayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+      expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
+    ]))
+  })
+
   it('prunes missing exit placeholders when a later turn supplies complete order-program contracts', () => {
     const stateWithRiskOnly = (service as any).withRequiredSemanticOpenSlots({
       version: 1,
@@ -9737,7 +9901,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
 
-  it('rejects the MA golden case after confirmGenerate instead of publishing through checklist fallback', async () => {
+  it('publishes the MA golden case after confirmGenerate through semantic indicator compare compilation', async () => {
     await startGoldenCase({
       sessionId: 's-golden-ma-publish',
       message: maGoldenCase.message,
@@ -9800,10 +9964,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-golden-ma-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
-      status: 'REJECTED',
-      rejectReason: expect.stringContaining('codegen.canonical_spec_v2_condition_unsupported:indicator.above'),
+      status: 'PUBLISHED',
+      rejectReason: null,
+      latestSpecDesc: expect.objectContaining({
+        canonicalSpec: expect.objectContaining({
+          rules: expect.arrayContaining([
+            expect.objectContaining({
+              condition: expect.objectContaining({ key: 'indicator.above' }),
+            }),
+            expect.objectContaining({
+              condition: expect.objectContaining({ key: 'indicator.below' }),
+            }),
+          ]),
+        }),
+      }),
     }))
-    expect(mockRepo.createVersion).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).toHaveBeenCalled()
   })
 
 

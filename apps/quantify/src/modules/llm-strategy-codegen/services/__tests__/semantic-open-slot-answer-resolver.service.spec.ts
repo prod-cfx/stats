@@ -1,9 +1,9 @@
+import type { CodegenSemanticPatch } from '../../types/codegen-semantic-patch'
 import type { SemanticCapabilityShape, SemanticSlotState, SemanticState } from '../../types/semantic-state'
+import type { SemanticOpenSlotAnswerResolverResult } from '../semantic-open-slot-answer-resolver.service'
 import { buildSemanticSlotId } from '../../types/semantic-state'
-import {
-  SemanticOpenSlotAnswerResolverService,
-  type SemanticOpenSlotAnswerResolverResult,
-} from '../semantic-open-slot-answer-resolver.service'
+import { SemanticOpenSlotAnswerResolverService } from '../semantic-open-slot-answer-resolver.service'
+import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 
 describe('SemanticOpenSlotAnswerResolverService', () => {
   const service = new SemanticOpenSlotAnswerResolverService()
@@ -657,6 +657,286 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
     })
   })
 })
+
+describe('SemanticOpenSlotAnswerResolverService semantic fragments', () => {
+  const service = new SemanticOpenSlotAnswerResolverService(undefined, new SemanticSeedExtractorService())
+
+  it('consumes a complete entry trigger fragment for a missing entry slot', () => {
+    const result = service.resolve({
+      currentState: stateWithMissingEntry(),
+      message: '15min k线在 ema20 上方开多',
+    })
+
+    expectConsumed(result)
+    if (!result.consumed) return
+
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 20,
+          timeframe: '15m',
+        }),
+      }),
+    ]))
+    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+    expect(result.closedSlotKeys).toContain('trigger.entry')
+  })
+
+  it('locks an open timeframe context slot from a consumed entry fragment', () => {
+    const state = stateWithMissingEntry()
+    state.contextSlots.timeframe = {
+      slotKey: 'timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      value: null,
+      status: 'open',
+      priority: 'context',
+      questionHint: '请选择时间周期。',
+      affectsExecution: true,
+    }
+
+    const result = service.resolve({
+      currentState: state,
+      message: '15min k线在 ema20 上方开多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+      }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+    expect(result.nextState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: '15m',
+    }))
+  })
+
+  it('closes entry and exit slots when one fragment fulfills both phases', () => {
+    const result = service.resolve({
+      currentState: stateWithMissingEntryAndExit(),
+      message: '15m 收盘价高于开盘价开多，收盘价低于开盘价平多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'entry' }),
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_entry_atom', status: 'open' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'semantic.missing_exit_atom', status: 'open' }),
+    ]))
+    expect(result.closedSlotKeys).toEqual(expect.arrayContaining(['trigger.entry', 'trigger.exit']))
+  })
+
+  it('does not merge trigger phases that do not have an open missing slot', () => {
+    const result = service.resolve({
+      currentState: stateWithMissingEntry(),
+      message: '15m 收盘价高于开盘价开多，收盘价低于开盘价平多',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'entry' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
+    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(result.nextState.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(result.closedSlotKeys).toEqual(['trigger.entry'])
+  })
+
+  it('keeps complete gate triggers attached to a fulfilled entry fragment', () => {
+    const mixedService = new SemanticOpenSlotAnswerResolverService(undefined, new MixedEntryGateExitSeedExtractorService())
+
+    const result = mixedService.resolve({
+      currentState: stateWithMissingEntry(),
+      message: 'entry with gate and extra exit',
+    })
+
+    expectConsumed(result)
+    expect(result.nextState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'entry', key: 'indicator.above' }),
+      expect.objectContaining({ phase: 'gate', key: 'condition.expression' }),
+    ]))
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'exit' }),
+    ]))
+    expect(result.nextState.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(result.nextState.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
+  it('does not fulfill an entry slot from an incomplete entry trigger fragment', () => {
+    const incompleteService = new SemanticOpenSlotAnswerResolverService(undefined, new IncompleteEntrySeedExtractorService())
+    const state = stateWithMissingEntry()
+
+    const result = incompleteService.resolve({
+      currentState: state,
+      message: 'entry trigger with missing threshold',
+    })
+
+    expect(result).toEqual({
+      consumed: false,
+      nextState: state,
+    })
+    expect(result.nextState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        status: 'locked',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({ status: 'open' }),
+        ]),
+      }),
+    ]))
+  })
+})
+
+class IncompleteEntrySeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        params: { indicator: 'ema' },
+        openSlots: [{
+          slotKey: 'trigger.entry.threshold',
+          fieldPath: 'triggers[indicator.above].params.threshold',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请补充阈值。',
+          affectsExecution: true,
+        }],
+      }],
+    }
+  }
+}
+
+class MixedEntryGateExitSeedExtractorService extends SemanticSeedExtractorService {
+  override extract(): CodegenSemanticPatch {
+    return {
+      triggers: [
+        {
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ema', 'reference.period': 20 },
+        },
+        {
+          key: 'condition.expression',
+          phase: 'gate',
+          params: {
+            expression: {
+              kind: 'predicate',
+              op: 'EQ',
+              left: { kind: 'position', field: 'has_position', side: 'long' },
+              right: { kind: 'constant', value: false },
+            },
+          },
+        },
+        {
+          key: 'indicator.below',
+          phase: 'exit',
+          params: { indicator: 'ema', 'reference.period': 20 },
+        },
+      ],
+      actions: [
+        { key: 'open_long', params: {} },
+        { key: 'close_long', params: {} },
+      ],
+    }
+  }
+}
+
+function stateWithMissingEntry(): SemanticState {
+  return {
+    version: 1,
+    families: [],
+    triggers: [{
+      id: 'semantic-missing-entry-atom',
+      key: 'semantic.missing_entry_atom',
+      phase: 'entry',
+      params: {},
+      status: 'open',
+      source: 'derived',
+      openSlots: [{
+        slotKey: 'trigger.entry',
+        fieldPath: 'triggers[entry]',
+        status: 'open',
+        priority: 'core',
+        questionHint: '请补充入场触发条件。',
+        affectsExecution: true,
+      }],
+    }],
+    actions: [],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    },
+    contextSlots: {
+      exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请选择交易所。', affectsExecution: true },
+      symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请选择标的。', affectsExecution: true },
+      marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请选择市场类型。', affectsExecution: true },
+      timeframe: null,
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-05-05T00:00:00.000Z',
+  }
+}
+
+function stateWithMissingEntryAndExit(): SemanticState {
+  const state = stateWithMissingEntry()
+
+  return {
+    ...state,
+    triggers: [
+      ...state.triggers,
+      {
+        id: 'semantic-missing-exit-atom',
+        key: 'semantic.missing_exit_atom',
+        phase: 'exit',
+        params: {},
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'trigger.exit',
+          fieldPath: 'triggers[exit]',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请补充出场触发条件。',
+          affectsExecution: true,
+        }],
+      },
+    ],
+  }
+}
 
 function expectConsumed(
   result: SemanticOpenSlotAnswerResolverResult,
