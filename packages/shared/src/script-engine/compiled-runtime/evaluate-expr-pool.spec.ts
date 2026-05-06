@@ -120,4 +120,171 @@ describe('evaluateExprPool', () => {
 
     expect(values.range_position_pct_3_15m).toBe(0.25)
   })
+
+  it('evaluates generic volume relative-average predicates', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: {
+        kind: string
+        timeframe?: string
+        inputs?: string[]
+        params?: Record<string, number | string>
+      }
+      deps?: string[]
+    }> = [
+      {
+        id: 'volume_15m',
+        nodeType: 'series',
+        sourceRef: 'volume_15m',
+        payload: {
+          kind: 'VOLUME',
+          timeframe: '15m',
+        },
+      },
+      {
+        id: 'sma_volume_3_1_5_15m',
+        nodeType: 'series',
+        sourceRef: 'sma_volume_3_1_5_15m',
+        deps: ['volume_15m'],
+        payload: {
+          kind: 'SMA_VOLUME',
+          timeframe: '15m',
+          inputs: ['volume_15m'],
+          params: { period: 3, multiplier: 1.5 },
+        },
+      },
+      {
+        id: 'volume_spike',
+        nodeType: 'predicate',
+        sourceRef: 'volume.relative_average',
+        deps: ['volume_15m', 'sma_volume_3_1_5_15m'],
+        payload: {
+          kind: 'compare',
+          params: { op: 'GT' },
+        },
+      },
+    ]
+
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 101, low: 99, close: 100, volume: 100, timestamp: 1 },
+          { open: 100, high: 101, low: 99, close: 100, volume: 120, timestamp: 2 },
+          { open: 100, high: 101, low: 99, close: 100, volume: 110, timestamp: 3 },
+          { open: 100, high: 101, low: 99, close: 100, volume: 300, timestamp: 4 },
+        ],
+      },
+      exprPool,
+      ['volume_15m', 'sma_volume_3_1_5_15m', 'volume_spike'],
+    )
+
+    expect(values.volume_15m).toBe(300)
+    expect(values.sma_volume_3_1_5_15m).toBe(165)
+    expect(values.volume_spike).toBe(true)
+  })
+
+  it('evaluates generic allOf and anyOf predicates', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: { kind: string, value?: number, params?: Record<string, string> }
+      deps?: string[]
+    }> = [
+      { id: 'left', nodeType: 'series', sourceRef: 'left', payload: { kind: 'CONST', value: 3 } },
+      { id: 'right', nodeType: 'series', sourceRef: 'right', payload: { kind: 'CONST', value: 2 } },
+      {
+        id: 'is_gt',
+        nodeType: 'predicate',
+        sourceRef: 'is_gt',
+        payload: { kind: 'compare', params: { op: 'GT' } },
+        deps: ['left', 'right'],
+      },
+      {
+        id: 'is_lt',
+        nodeType: 'predicate',
+        sourceRef: 'is_lt',
+        payload: { kind: 'compare', params: { op: 'LT' } },
+        deps: ['left', 'right'],
+      },
+      {
+        id: 'all_true',
+        nodeType: 'predicate',
+        sourceRef: 'all_true',
+        payload: { kind: 'allOf' },
+        deps: ['is_gt'],
+      },
+      {
+        id: 'any_true',
+        nodeType: 'predicate',
+        sourceRef: 'any_true',
+        payload: { kind: 'anyOf' },
+        deps: ['is_lt', 'is_gt'],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      { bars: [] },
+      exprPool,
+      ['left', 'right', 'is_gt', 'is_lt', 'all_true', 'any_true'],
+    )
+
+    expect(values.is_gt).toBe(true)
+    expect(values.is_lt).toBe(false)
+    expect(values.all_true).toBe(true)
+    expect(values.any_true).toBe(true)
+  })
+
+  it('evaluates generic rolling-high compare predicates against the previous channel', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: {
+        kind: string
+        field?: 'close'
+        timeframe?: string
+        params?: Record<string, number | string>
+      }
+      deps?: string[]
+    }> = [
+      {
+        id: 'close_1h',
+        nodeType: 'series',
+        sourceRef: 'close_1h',
+        payload: { kind: 'PRICE', field: 'close', timeframe: '1h' },
+      },
+      {
+        id: 'highest_high_3_1h',
+        nodeType: 'series',
+        sourceRef: 'highest_high_3_1h',
+        payload: { kind: 'HIGHEST_HIGH', timeframe: '1h', params: { period: 3 } },
+      },
+      {
+        id: 'breakout',
+        nodeType: 'predicate',
+        sourceRef: 'price.rolling_extrema_breakout',
+        payload: { kind: 'compare', params: { op: 'GT' } },
+        deps: ['close_1h', 'highest_high_3_1h'],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 101, low: 95, close: 100, volume: 1, timestamp: 1 },
+          { open: 100, high: 103, low: 96, close: 102, volume: 1, timestamp: 2 },
+          { open: 102, high: 104, low: 100, close: 103, volume: 1, timestamp: 3 },
+          { open: 103, high: 108, low: 102, close: 106, volume: 1, timestamp: 4 },
+        ],
+      },
+      exprPool,
+      ['close_1h', 'highest_high_3_1h', 'breakout'],
+    )
+
+    expect(values.highest_high_3_1h).toBe(104)
+    expect(values.breakout).toBe(true)
+  })
 })

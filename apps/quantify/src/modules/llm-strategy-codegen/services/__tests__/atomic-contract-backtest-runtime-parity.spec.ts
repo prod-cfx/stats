@@ -6,6 +6,7 @@ import {
   buildCompiledManifest,
   evaluateExprPool,
   evaluateGuards,
+  evaluateRiskPredicates,
   runDecisionPrograms,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
@@ -92,6 +93,44 @@ function createAtomicParityAst(): StrategyAstV1 {
   }
 }
 
+function createAtrRiskAst(): StrategyAstV1 {
+  return {
+    ...createAtomicParityAst(),
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    decisionPrograms: [],
+    riskPredicates: [
+      {
+        id: 'risk_predicate_01_atr_stop',
+        sourceRef: 'risk-atr-stop',
+        payload: {
+          id: 'risk-atr-stop',
+          kind: 'atrMultipleStop',
+          params: { multiple: 2 },
+        },
+      },
+      {
+        id: 'risk_predicate_02_atr_take_profit',
+        sourceRef: 'risk-atr-take-profit',
+        payload: {
+          id: 'risk-atr-take-profit',
+          kind: 'atrMultipleTakeProfit',
+          params: { multiple: 3 },
+        },
+      },
+    ],
+    topology: {
+      exprOrder: ['series.const.one', 'predicate.atomic.entry'],
+      guardOrder: [],
+      riskPredicateOrder: ['risk_predicate_01_atr_stop', 'risk_predicate_02_atr_take_profit'],
+      decisionOrder: [],
+      orderProgramOrder: [],
+    },
+  }
+}
+
 function createExecutionEnvelope(): CompiledScriptExecutionEnvelope {
   return {
     positionMode: 'long_only',
@@ -113,11 +152,17 @@ function executeProjection(
     projection.topology.exprOrder,
     projection.executionModel as unknown as Parameters<typeof evaluateExprPool>[3],
   )
-  const guardState = evaluateGuards(
+  const baseGuardState = evaluateGuards(
     ctx,
     projection.guards as Parameters<typeof evaluateGuards>[1],
     exprValues,
     projection.topology.guardOrder,
+  )
+  const guardState = evaluateRiskPredicates(
+    ctx,
+    projection.riskPredicates as Parameters<typeof evaluateRiskPredicates>[1],
+    baseGuardState,
+    projection.topology.riskPredicateOrder,
   )
   const decision = runDecisionPrograms(
     ctx,
@@ -235,6 +280,39 @@ describe('atomic contract backtest/runtime parity', () => {
         direction: 'BUY',
         signalType: 'ENTRY',
         reasoning: 'compiled.entry-primary',
+      }),
+    }))
+  })
+
+  it('executes emitted ATR risk predicates before decision programs', () => {
+    const ast = createAtrRiskAst()
+    const emitter = new CompiledScriptEmitterService()
+    const script = emitter.emit({ ast, executionEnvelope: createExecutionEnvelope() })
+    const projection = new CompiledScriptParserService().parse(script)
+
+    const decision = executeProjection(projection, {
+      position: { qty: 1, avgEntryPrice: 100 },
+      currentPrice: 75,
+      bars: Array.from({ length: 16 }, (_, index) => ({
+        open: 100,
+        high: 105,
+        low: 95,
+        close: index === 15 ? 75 : 100,
+        volume: 1,
+        timestamp: index + 1,
+      })),
+      __compiledDecisionState: { barIndex: 16, lastTriggeredByProgram: {} },
+    })
+
+    expect(script).toContain('evaluateRiskPredicates')
+    expect(decision).toEqual(expect.objectContaining({
+      action: 'CLOSE_LONG',
+      reason: 'compiled.force_exit',
+      meta: expect.objectContaining({
+        guardState: expect.objectContaining({
+          forceExit: true,
+          triggered: ['risk_predicate_01_atr_stop'],
+        }),
       }),
     }))
   })

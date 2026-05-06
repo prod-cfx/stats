@@ -78,6 +78,7 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
         phase: 'entry',
         sideScope: 'long',
         params: {
+          groupId: 'entry-bollinger-volume-confirmation',
           boundaryRole: 'lower',
           confirmationMode: 'touch',
           indicator: { name: 'bollinger', period: 20, stdDev: 2 },
@@ -89,6 +90,7 @@ export function buildLockedAtomicState(name: LockedAtomicStateName): SemanticSta
         phase: 'entry',
         sideScope: 'long',
         params: {
+          groupId: 'entry-bollinger-volume-confirmation',
           lookbackBars: 20,
           multiplier: 1.5,
           comparator: 'gt',

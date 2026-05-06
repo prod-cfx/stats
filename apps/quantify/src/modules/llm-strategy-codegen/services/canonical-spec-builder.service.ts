@@ -1075,10 +1075,12 @@ export class CanonicalSpecBuilderService {
   ): CanonicalRuleV2[] {
     const grouped = new Map<string, typeof pendingRules>()
     for (const pendingRule of pendingRules) {
+      const groupMarker = this.readSemanticTriggerGroupMarker(pendingRule.trigger)
       const key = JSON.stringify([
         pendingRule.trigger.phase,
         pendingRule.trigger.sideScope ?? null,
         pendingRule.actions.map(action => action.type).sort(),
+        groupMarker ?? pendingRule.trigger.id,
       ])
       const rules = grouped.get(key) ?? []
       rules.push(pendingRule)
@@ -1116,6 +1118,24 @@ export class CanonicalSpecBuilderService {
     }
 
     return rules
+  }
+
+  private readSemanticTriggerGroupMarker(trigger: SemanticTriggerState): string | null {
+    const candidates = [
+      trigger.params.groupId,
+      trigger.params.semanticGroupId,
+      trigger.params.logicalGroupId,
+      trigger.params.combinationId,
+      trigger.params.atomicCombinationId,
+    ]
+
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim()
+      }
+    }
+
+    return null
   }
 
   private attachSemanticGateConditions(
