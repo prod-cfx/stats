@@ -38,15 +38,19 @@ describe('MarketInstrumentSymbolResolverService', () => {
   it.each([
     ['ETHUSDT-SWAP', 'ETHUSDT', 'ETHUSDT-SWAP'],
     ['ETHUSDT:PERP', 'ETHUSDT', 'ETHUSDT:PERP'],
+    ['ETHUSDT:SPOT', 'ETHUSDT', 'ETHUSDT:SPOT'],
   ] as const)('preserves venue symbol hints from %s', (input, value, venueSymbolHint) => {
+    const marketTypeHint = input.endsWith(':SPOT') ? 'spot' : 'perp'
+
     expect(resolver.resolve(input)).toEqual(expect.objectContaining({
       value,
       venueSymbolHint,
-      marketTypeHint: 'perp',
+      marketTypeHint,
     }))
   })
 
   it('does not infer ordinary English as a symbol', () => {
     expect(resolver.resolve('please continue the strategy')).toBeNull()
+    expect(resolver.resolve('price above 100 USDT')).toBeNull()
   })
 })

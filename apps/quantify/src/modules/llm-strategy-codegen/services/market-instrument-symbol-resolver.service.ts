@@ -5,6 +5,7 @@ import type { SemanticAtomContract, SemanticCapabilityShape } from '../types/sem
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
 const SUPPORTED_QUOTES: readonly MarketInstrumentQuote[] = ['USDT', 'USDC', 'USD']
+const EXPLICIT_SYMBOL_PATTERN = /^([A-Z0-9]{2,20})(?:([-/\s])?(USDT|USDC|USD))(?:(-SWAP)|:(PERP|SPOT))?$/iu
 
 const BASE_SYMBOL_ALIASES: Readonly<Record<string, 'ETH' | 'BTC'>> = {
   ETH: 'ETH',
@@ -55,9 +56,12 @@ export class MarketInstrumentSymbolResolverService {
   }
 
   private resolveExplicit(evidenceText: string): MarketInstrumentSymbolResolution | null {
-    const compactText = evidenceText.replace(/\s+/gu, '')
-    const value = canonicalizeStrategySymbolInput(evidenceText)
-      ?? canonicalizeStrategySymbolInput(compactText)
+    const explicitInput = this.toExplicitSymbolInput(evidenceText)
+    if (!explicitInput) {
+      return null
+    }
+
+    const value = canonicalizeStrategySymbolInput(explicitInput)
 
     if (!value) {
       return null
@@ -77,7 +81,7 @@ export class MarketInstrumentSymbolResolverService {
       base: pair.base,
       quote: pair.quote,
       quoteSource: 'explicit',
-      ...(marketTypeHint ? { venueSymbolHint: evidenceText, marketTypeHint } : {}),
+      ...(marketTypeHint ? { venueSymbolHint: explicitInput, marketTypeHint } : {}),
     }
   }
 
@@ -132,10 +136,35 @@ export class MarketInstrumentSymbolResolverService {
     return null
   }
 
-  private resolveMarketTypeHint(evidenceText: string): 'perp' | null {
+  private toExplicitSymbolInput(evidenceText: string): string | null {
+    const match = EXPLICIT_SYMBOL_PATTERN.exec(evidenceText)
+    if (!match) {
+      return null
+    }
+
+    const [, base, separator, quote, swapSuffix, marketTypeSuffix] = match
+    if (!base || !quote) {
+      return null
+    }
+
+    const pair = separator?.trim() === '' ? `${base}${quote}` : `${base}${separator ?? ''}${quote}`
+    if (swapSuffix) {
+      return `${pair}${swapSuffix}`
+    }
+    if (marketTypeSuffix) {
+      return `${pair}:${marketTypeSuffix}`
+    }
+
+    return pair
+  }
+
+  private resolveMarketTypeHint(evidenceText: string): 'perp' | 'spot' | null {
     const normalized = evidenceText.trim().toUpperCase()
     if (normalized.endsWith('-SWAP') || normalized.endsWith(':PERP')) {
       return 'perp'
+    }
+    if (normalized.endsWith(':SPOT')) {
+      return 'spot'
     }
 
     return null
