@@ -5,10 +5,13 @@ import type {
   SemanticCapability,
   SemanticCapabilityDomain,
   SemanticNodeStatus,
+  SemanticOrderRequirement,
   SemanticPriority,
   SemanticRequirement,
+  SemanticRuntimeRequirement,
   SemanticSlotState,
   SemanticState,
+  SemanticStateRequirement,
 } from '../types/semantic-state'
 import type { SemanticAtomSupportMetadata } from '../types/semantic-atom-support'
 import { buildSemanticSlotId } from '../types/semantic-state'
@@ -18,6 +21,14 @@ import { SemanticContractShapeNormalizerService } from './semantic-contract-shap
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
+type SemanticSubstrateRequirement =
+  | SemanticRuntimeRequirement
+  | SemanticStateRequirement
+  | SemanticOrderRequirement
+type SemanticSubstrateRequirementKind =
+  | 'runtime_requirement'
+  | 'state_requirement'
+  | 'order_requirement'
 
 export interface MissingSemanticContractRequirement extends SemanticRequirement {
   ownerKind: SemanticContractOwnerKind
@@ -71,6 +82,7 @@ export class SemanticContractReadinessService {
       providerNormalization.shapeSlotsByOwnerKey,
       buildMissingRequirementSlots(missingRequirements),
       buildMissingSubstrateSlots(supportedOwners),
+      buildUnsupportedSubstrateRequirementSlots(supportedOwners),
       buildContractOpenSlotMap(supportedOwners),
     )
     const nextState: SemanticState = {
@@ -349,6 +361,93 @@ function buildMissingSubstrateSlots(
   }
 
   return slotsByOwnerKey
+}
+
+const SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS = new Set([
+  'runtime.provide.bar_ohlcv',
+  'runtime.provide.indicator_helper',
+  'runtime.provide.compiled_predicate_runtime',
+  'state.read.none',
+  'state.write.none',
+  'state.read.sequence_state',
+  'state.write.sequence_state',
+  'state.read.remembered_level',
+  'state.write.remembered_level',
+  'order.support.market_order',
+  'order.support.close_position',
+  'order.support.reduce_position',
+])
+
+function buildUnsupportedSubstrateRequirementSlots(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+
+  for (const owner of activeOwners) {
+    for (const contract of owner.contracts) {
+      if (!hasContractSubstrate(contract)) {
+        continue
+      }
+
+      const unsupportedRequirements = [
+        ...contract.runtimeRequirements.map(requirement => ({
+          kind: 'runtime_requirement' as const,
+          requirement,
+        })),
+        ...contract.stateRequirements.map(requirement => ({
+          kind: 'state_requirement' as const,
+          requirement,
+        })),
+        ...contract.orderRequirements.map(requirement => ({
+          kind: 'order_requirement' as const,
+          requirement,
+        })),
+      ].filter(({ requirement }) => !isSupportedSubstrateRequirement(requirement))
+
+      if (!unsupportedRequirements.length) {
+        continue
+      }
+
+      const key = ownerKey(owner.ownerKind, owner.ownerId)
+      const slots = slotsByOwnerKey.get(key) ?? []
+      slots.push(...unsupportedRequirements.map(({ kind, requirement }) =>
+        toUnsupportedSubstrateRequirementSlot(owner, contract, kind, requirement),
+      ))
+      slotsByOwnerKey.set(key, slots)
+    }
+  }
+
+  return slotsByOwnerKey
+}
+
+function isSupportedSubstrateRequirement(requirement: SemanticSubstrateRequirement): boolean {
+  return SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS.has(requirementKey(requirement))
+}
+
+function requirementKey(requirement: SemanticSubstrateRequirement): string {
+  return `${requirement.domain}.${requirement.verb}.${requirement.object}`
+}
+
+function toUnsupportedSubstrateRequirementSlot(
+  owner: SemanticContractOwnerRef,
+  contract: SemanticAtomContract,
+  requirementKind: SemanticSubstrateRequirementKind,
+  requirement: SemanticSubstrateRequirement,
+): SemanticSlotState {
+  const key = requirementKey(requirement)
+
+  return {
+    slotKey: `contract.${requirementKind}.${key}`,
+    fieldPath: `${buildContractFieldPath(owner, contract.id)}.${requirementKind}.${key}`,
+    status: 'open',
+    priority: requirementKind === 'order_requirement' ? 'risk' : 'behavior',
+    affectsExecution: true,
+    questionHint: `请补齐 ${requirement.domain} ${requirement.verb} ${requirement.object} 的执行 substrate。`,
+    evidence: {
+      source: 'derived',
+      text: `Unsupported semantic contract ${requirementKind} ${contract.id}: ${key}`,
+    },
+  }
 }
 
 function buildContractOpenSlotMap(

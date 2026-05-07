@@ -52,6 +52,93 @@ describe('SemanticContractReadinessService', () => {
     expect(result.missingRequirements).toEqual([])
   })
 
+  it('accepts known runtime state and order requirements', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-cross-over',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'trigger-contract-cross-over',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [
+            { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+            { domain: 'runtime', verb: 'provide', object: 'indicator_helper', shape: { name: 'sma' } },
+          ],
+          stateRequirements: [],
+          orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([])
+  })
+
+  it('fails closed on unknown runtime state and order requirements', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-grid-ladder',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'action-contract-grid-ladder',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'orderbook_depth' }],
+          stateRequirements: [{ domain: 'state', verb: 'write', object: 'grid_anchor' }],
+          orderRequirements: [{ domain: 'order', verb: 'support', object: 'cancel_replace_ladder' }],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [
+        expect.objectContaining({
+          slotKey: 'contract.runtime_requirement.runtime.provide.orderbook_depth',
+          priority: 'behavior',
+          affectsExecution: true,
+          status: 'open',
+        }),
+        expect.objectContaining({
+          slotKey: 'contract.state_requirement.state.write.grid_anchor',
+          priority: 'behavior',
+          affectsExecution: true,
+          status: 'open',
+        }),
+        expect.objectContaining({
+          slotKey: 'contract.order_requirement.order.support.cancel_replace_ladder',
+          priority: 'risk',
+          affectsExecution: true,
+          status: 'open',
+        }),
+      ],
+    }))
+  })
+
   it('fails supported owners whose contracts omit substrate arrays', () => {
     const legacyContract = {
       id: 'legacy-trigger-contract',
