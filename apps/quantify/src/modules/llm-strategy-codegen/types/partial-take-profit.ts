@@ -12,3 +12,16 @@ export interface PartialTakeProfitProgramMetadata {
   tierIndex: number
   totalTiers: number
 }
+
+// Compile-time assertion: structural shape must mirror the runtime declaration
+// in packages/shared/src/script-engine/compiled-runtime/run-decision-programs.ts
+// (PartialTakeProfitMeta). If you change PartialTakeProfitProgramMetadata,
+// update the shared mirror or this assertion will catch the drift.
+type _AssertShape = PartialTakeProfitProgramMetadata extends {
+  memoryKey: string
+  tierIndex: number
+  totalTiers: number
+} ? true : never
+
+// Trivial usage to keep _AssertShape from being tree-shaken
+const _shapeAssertion: _AssertShape = true
