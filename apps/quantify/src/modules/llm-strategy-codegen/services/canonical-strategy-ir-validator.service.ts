@@ -45,7 +45,7 @@ export class CanonicalStrategyIrValidatorService {
     predicateIndex: Map<string, PredicateDef>,
     seriesIndex: Map<string, SeriesDef>,
   ): void {
-    if (predicate.kind === 'AND' || predicate.kind === 'OR' || predicate.kind === 'NOT') {
+    if (predicate.kind === 'allOf' || predicate.kind === 'anyOf' || predicate.kind === 'NOT') {
       return
     }
 
