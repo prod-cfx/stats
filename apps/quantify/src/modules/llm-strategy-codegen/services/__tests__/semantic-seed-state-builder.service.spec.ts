@@ -1536,6 +1536,24 @@ describe('SemanticSeedStateBuilderService', () => {
       expect(keyA).not.toBe(keyB)
     })
 
+    it('produces identical memoryKey regardless of tier insertion order', () => {
+      const tiersA = [
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 },
+      ]
+      const tiersB = [
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+      ]
+      const sourceText = 'same source'
+      const keyA = service.build(buildPtpSeed(tiersA, sourceText))
+        ?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
+      const keyB = service.build(buildPtpSeed(tiersB, sourceText))
+        ?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
+      expect(keyA).toBeDefined()
+      expect(keyA).toBe(keyB)
+    })
+
     it('does not overwrite pre-existing memoryKey (idempotent round-trip)', () => {
       const existingKey = 'partial_tp_abcd1234'
       const state = service.build({
