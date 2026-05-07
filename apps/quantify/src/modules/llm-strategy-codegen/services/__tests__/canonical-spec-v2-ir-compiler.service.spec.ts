@@ -3456,3 +3456,173 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 })
+
+function makePhase1GateSpec(condition: CanonicalStrategySpecV2['rules'][number]['condition']): CanonicalStrategySpecV2 {
+  return {
+    version: 2,
+    market: {
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      defaultTimeframe: '1m',
+    },
+    indicators: [],
+    sizing: { mode: 'RATIO', value: 0.1 },
+    executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+    dataRequirements: { requiredTimeframes: ['1m'] },
+    rules: [
+      {
+        id: 'entry-close-above-open',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: {
+          kind: 'expression',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'series', source: 'bar', field: 'open' },
+        },
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+      },
+      {
+        id: 'gate-phase1-atom',
+        phase: 'gate',
+        sideScope: 'both',
+        priority: 100,
+        condition,
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      },
+    ],
+  }
+}
+
+describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
+  const fallback = {
+    exchange: 'binance',
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  it.each([
+    ['GT', 'LTE'],
+    ['GTE', 'LT'],
+    ['LT', 'GTE'],
+    ['LTE', 'GT'],
+  ] as const)('compiles volume.threshold %s into flipped %s expression guard', (userOp, predicateKind) => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = makePhase1GateSpec({
+      kind: 'atom',
+      key: 'volume.threshold',
+      semanticScope: 'market',
+      op: userOp,
+      value: 100,
+      params: { metric: 'base_volume' },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'VOLUME' }),
+      expect.objectContaining({ kind: 'CONST', value: 100 }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: predicateKind }),
+    ]))
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        appliesTo: 'both',
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }),
+    ]))
+  })
+
+  it('compiles volatility.atr_threshold into ATR series + flipped guard predicate', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = makePhase1GateSpec({
+      kind: 'atom',
+      key: 'volatility.atr_threshold',
+      semanticScope: 'market',
+      op: 'GT',
+      value: 1,
+      params: { period: 14, thresholdUnit: 'percent_of_close' },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'ATR', params: expect.objectContaining({ period: 14 }) }),
+      expect.objectContaining({ kind: 'CONST', value: 1 }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'LTE' }),
+    ]))
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        appliesTo: 'both',
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }),
+    ]))
+    expect(result.ir.runtimeRequirements.helpers).toEqual(expect.arrayContaining(['atr']))
+  })
+
+  it('compiles strategy.time_window into IN_TIME_WINDOW series + EQ const(0) predicate', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const windows = [{ start: '09:30', end: '15:00' }]
+    const spec = makePhase1GateSpec({
+      kind: 'atom',
+      key: 'strategy.time_window',
+      semanticScope: 'market',
+      op: 'EQ',
+      value: 1,
+      params: { timezone: 'Asia/Shanghai', windows: JSON.stringify(windows) },
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'IN_TIME_WINDOW',
+        timezone: 'Asia/Shanghai',
+        windows,
+      }),
+      expect.objectContaining({ kind: 'CONST', value: 0 }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'EQ' }),
+    ]))
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        appliesTo: 'both',
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }),
+    ]))
+    expect(result.ir.runtimeRequirements.helpers).toEqual(expect.arrayContaining(['timezone_clock']))
+  })
+
+  it('keeps no_position gate compiled to MAX_POSITION_PCT (regression)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = makePhase1GateSpec({
+      kind: 'atom',
+      key: 'position.has_position',
+      semanticScope: 'position',
+      op: 'EQ',
+      value: false,
+    })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'MAX_POSITION_PCT',
+        value: 0,
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }),
+    ]))
+  })
+
+  it('does not produce expression guards for specs without phase-1 gate atoms', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = createSizingCanonicalSpec({ mode: 'RATIO', value: 0.1 })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.filter(guard => guard.kind === 'EXPRESSION_GUARD')).toEqual([])
+  })
+})

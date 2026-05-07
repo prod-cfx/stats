@@ -3562,6 +3562,114 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('builds canonical gate rule for volume.threshold trigger', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'gate-volume-threshold',
+          key: 'volume.threshold',
+          phase: 'gate',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { metric: 'base_volume', operator: 'GT', value: 100 },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'gate',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'volume.threshold',
+          op: 'GT',
+          value: 100,
+          params: expect.objectContaining({ metric: 'base_volume' }),
+        }),
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      }),
+    ]))
+  })
+
+  it('builds canonical gate rule for volatility.atr_threshold trigger', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'gate-atr-threshold',
+          key: 'volatility.atr_threshold',
+          phase: 'gate',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { period: 14, operator: 'GT', threshold: 1, thresholdUnit: 'percent_of_close' },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'gate',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'volatility.atr_threshold',
+          op: 'GT',
+          value: 1,
+          params: expect.objectContaining({ period: 14, thresholdUnit: 'percent_of_close' }),
+        }),
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      }),
+    ]))
+  })
+
+  it('builds canonical gate rule for strategy.time_window trigger', () => {
+    const service = new CanonicalSpecBuilderService()
+    const windows = [{ start: '09:30', end: '15:00' }]
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'gate-time-window',
+          key: 'strategy.time_window',
+          phase: 'gate',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { timezone: 'Asia/Shanghai', windows },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const gateRule = spec.rules.find(rule => rule.phase === 'gate')
+    expect(gateRule).toBeDefined()
+    expect(gateRule!.condition).toEqual(expect.objectContaining({
+      kind: 'atom',
+      key: 'strategy.time_window',
+      op: 'EQ',
+      value: 1,
+    }))
+    const condition = gateRule!.condition as { params?: Record<string, unknown> }
+    expect(condition.params?.timezone).toBe('Asia/Shanghai')
+    expect(JSON.parse(condition.params?.windows as string)).toEqual(windows)
+    expect(gateRule!.actions).toEqual([expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })])
+  })
+
   it('defaults generic sell wording to close short when the strategy only has short-side entries', () => {
     const service = new CanonicalSpecBuilderService()
 

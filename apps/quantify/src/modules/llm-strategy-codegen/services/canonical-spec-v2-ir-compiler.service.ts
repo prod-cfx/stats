@@ -1626,6 +1626,40 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
+  private ensureAtrSeries(context: CompileContext, period: number, timeframe = context.timeframe): string {
+    context.runtimeRequirements.helpers.add('atr')
+    const id = `atr_${period}_${timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'ATR',
+        timeframe,
+        params: { period },
+      })
+    }
+    return id
+  }
+
+  private ensureTimeWindowSeries(
+    context: CompileContext,
+    timezone: string,
+    windows: ReadonlyArray<{ daysOfWeek?: readonly number[]; start: string; end: string }>,
+  ): string {
+    context.runtimeRequirements.helpers.add('timezone_clock')
+    const windowsJson = JSON.stringify(windows)
+    const hash = createHash('sha256').update(`${timezone}|${windowsJson}`).digest('hex').slice(0, 12)
+    const id = `in_time_window_${hash}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'IN_TIME_WINDOW',
+        timezone,
+        windows,
+      })
+    }
+    return id
+  }
+
   private ensureSmaVolumeSeries(
     context: CompileContext,
     period: number,
@@ -1817,6 +1851,27 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    if (
+      rule.phase === 'gate'
+      && (rule.condition.key === 'volume.threshold'
+        || rule.condition.key === 'volatility.atr_threshold'
+        || rule.condition.key === 'strategy.time_window')
+      && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
+    ) {
+      const predicateRef = this.compilePhase1GateAtom(rule.condition, context, rule.id)
+      if (!predicateRef) {
+        return null
+      }
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'EXPRESSION_GUARD',
+        scope: 'strategy',
+        appliesTo: 'both',
+        predicateRef,
+        onBreach: 'BLOCK_NEW_ENTRY',
+      }
+    }
+
     if (rule.phase !== 'risk') {
       return null
     }
@@ -1905,6 +1960,77 @@ export class CanonicalSpecV2IrCompilerService {
         onBreach: 'CANCEL_ORDER_PROGRAMS',
       },
     ]
+  }
+
+  private flipGateOperator(op: 'GT' | 'GTE' | 'LT' | 'LTE'): 'LTE' | 'LT' | 'GTE' | 'GT' {
+    switch (op) {
+      case 'GT': return 'LTE'
+      case 'GTE': return 'LT'
+      case 'LT': return 'GTE'
+      case 'LTE': return 'GT'
+    }
+  }
+
+  private compilePhase1GateAtom(
+    atom: CanonicalConditionAtom,
+    context: CompileContext,
+    seed: string,
+  ): string | null {
+    if (atom.key === 'volume.threshold') {
+      const value = this.readNumber([atom.value], Number.NaN)
+      if (!Number.isFinite(value)) return null
+      const userOp = atom.op === 'GT' || atom.op === 'GTE' || atom.op === 'LT' || atom.op === 'LTE' ? atom.op : 'GT'
+      const predicateKind = this.flipGateOperator(userOp)
+      const volumeRef = this.ensureVolumeSeries(context)
+      const constRef = this.ensureConstSeries(context, value)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_volume_threshold`,
+        predicateKind,
+        [volumeRef, constRef],
+      )
+    }
+
+    if (atom.key === 'volatility.atr_threshold') {
+      const value = this.readNumber([atom.value], Number.NaN)
+      if (!Number.isFinite(value)) return null
+      const userOp = atom.op === 'GT' || atom.op === 'GTE' || atom.op === 'LT' || atom.op === 'LTE' ? atom.op : 'GT'
+      const predicateKind = this.flipGateOperator(userOp)
+      const period = this.readNumber([atom.params?.period], 14)
+      const atrRef = this.ensureAtrSeries(context, period)
+      const constRef = this.ensureConstSeries(context, value)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_atr_threshold`,
+        predicateKind,
+        [atrRef, constRef],
+      )
+    }
+
+    if (atom.key === 'strategy.time_window') {
+      const timezone = typeof atom.params?.timezone === 'string' ? atom.params.timezone : null
+      const windowsRaw = atom.params?.windows
+      if (!timezone || typeof windowsRaw !== 'string') return null
+      let parsedWindows: Array<{ daysOfWeek?: number[]; start: string; end: string }>
+      try {
+        const parsed = JSON.parse(windowsRaw)
+        if (!Array.isArray(parsed) || parsed.length === 0) return null
+        parsedWindows = parsed
+      }
+      catch {
+        return null
+      }
+      const timeWindowRef = this.ensureTimeWindowSeries(context, timezone, parsedWindows)
+      const constRef = this.ensureConstSeries(context, 0)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_time_window`,
+        'EQ',
+        [timeWindowRef, constRef],
+      )
+    }
+
+    return null
   }
 
   private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {

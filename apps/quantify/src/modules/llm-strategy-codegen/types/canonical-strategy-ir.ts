@@ -82,12 +82,15 @@ export interface SeriesDef {
     | 'UPPER_BAND'
     | 'MID_BAND'
     | 'LOWER_BAND'
+    | 'IN_TIME_WINDOW'
   timeframe?: string
   field?: 'open' | 'high' | 'low' | 'close'
   offsetBars?: number
   inputs?: string[]
   params?: Record<string, number | string>
   value?: number | string
+  timezone?: string
+  windows?: ReadonlyArray<{ daysOfWeek?: readonly number[]; start: string; end: string }>
 }
 
 export interface LevelSetDef {

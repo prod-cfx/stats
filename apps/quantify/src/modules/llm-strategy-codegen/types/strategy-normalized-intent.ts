@@ -33,6 +33,9 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'market.regime',
   'volatility.state',
   'grid.range_rebalance',
+  'volume.threshold',
+  'volatility.atr_threshold',
+  'strategy.time_window',
 ] as const
 
 export type NormalizedTriggerAtomKey = (typeof NORMALIZED_TRIGGER_ATOM_KEYS)[number]

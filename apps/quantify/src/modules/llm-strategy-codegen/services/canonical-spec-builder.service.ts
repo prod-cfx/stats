@@ -997,7 +997,7 @@ export class CanonicalSpecBuilderService {
         ? this.buildConditionFromSemanticExpressionTrigger(trigger)
         : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe))
       .filter((condition): condition is CanonicalConditionNode => condition !== null)
-      .filter(condition => !this.isNoPositionGateCondition(condition))
+      .filter(condition => !this.isNoPositionGateCondition(condition) && !this.isCompiledGateAtom(condition))
 
     for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.triggers)) {
       const trigger = triggerGroup[0]
@@ -1027,7 +1027,7 @@ export class CanonicalSpecBuilderService {
       if (!condition) {
         continue
       }
-      if (trigger.phase === 'gate' && !this.isNoPositionGateCondition(condition)) {
+      if (trigger.phase === 'gate' && !this.isNoPositionGateCondition(condition) && !this.isCompiledGateAtom(condition)) {
         continue
       }
 
@@ -1320,6 +1320,13 @@ export class CanonicalSpecBuilderService {
       && condition.key === 'position.has_position'
       && condition.op === 'EQ'
       && condition.value === false
+  }
+
+  private isCompiledGateAtom(condition: CanonicalConditionNode): boolean {
+    return condition.kind === 'atom'
+      && (condition.key === 'volume.threshold'
+        || condition.key === 'volatility.atr_threshold'
+        || condition.key === 'strategy.time_window')
   }
 
   private buildConditionFromSemanticExpressionTrigger(
@@ -3561,9 +3568,74 @@ export class CanonicalSpecBuilderService {
           op: 'EQ',
           value: typeof trigger.params.value === 'string' ? trigger.params.value : undefined,
         }
+      case 'volume.threshold': {
+        const value = this.readNumberParam(trigger.params.value)
+        if (value === null) {
+          return null
+        }
+        const operator = this.readGateThresholdOperator(trigger.params.operator)
+        const metric = this.readStringParam(trigger.params.metric) ?? 'base_volume'
+        const unit = this.readStringParam(trigger.params.unit)
+        const period = this.readNumberParam(trigger.params.period)
+        return {
+          kind: 'atom',
+          key: 'volume.threshold',
+          semanticScope: 'market',
+          op: operator,
+          value,
+          params: {
+            metric,
+            ...(unit ? { unit } : {}),
+            ...(period !== null ? { period } : {}),
+          },
+        }
+      }
+      case 'volatility.atr_threshold': {
+        const threshold = this.readNumberParam(trigger.params.threshold)
+        if (threshold === null) {
+          return null
+        }
+        const operator = this.readGateThresholdOperator(trigger.params.operator)
+        const period = this.readNumberParam(trigger.params.period) ?? 14
+        const thresholdUnit = this.readStringParam(trigger.params.thresholdUnit) ?? 'percent_of_close'
+        return {
+          kind: 'atom',
+          key: 'volatility.atr_threshold',
+          semanticScope: 'market',
+          op: operator,
+          value: threshold,
+          params: {
+            period,
+            thresholdUnit,
+          },
+        }
+      }
+      case 'strategy.time_window': {
+        const timezone = this.readStringParam(trigger.params.timezone)
+        const windowsParam = trigger.params.windows
+        if (!timezone || !Array.isArray(windowsParam) || windowsParam.length === 0) {
+          return null
+        }
+        return {
+          kind: 'atom',
+          key: 'strategy.time_window',
+          semanticScope: 'market',
+          op: 'EQ',
+          value: 1,
+          params: {
+            timezone,
+            windows: JSON.stringify(windowsParam),
+          },
+        }
+      }
       default:
         return null
     }
+  }
+
+  private readGateThresholdOperator(value: unknown): 'GT' | 'GTE' | 'LT' | 'LTE' {
+    if (value === 'GTE' || value === 'LT' || value === 'LTE') return value
+    return 'GT'
   }
 
   private resolveRelativeAverageComparator(comparator: unknown): 'GT' | 'GTE' | 'LT' | 'LTE' {
