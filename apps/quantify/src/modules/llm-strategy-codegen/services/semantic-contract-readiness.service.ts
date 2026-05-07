@@ -4,6 +4,7 @@ import type {
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
+  SemanticOrchestrationContractKind,
   SemanticNodeStatus,
   SemanticOrderRequirement,
   SemanticPriority,
@@ -29,6 +30,23 @@ type SemanticSubstrateRequirementKind =
   | 'runtime_requirement'
   | 'state_requirement'
   | 'order_requirement'
+type Phase0OrchestrationBucket = 'scopes' | 'gates' | 'programs' | 'portfolioRisk'
+
+interface Phase0OrchestrationNode {
+  id: string
+  kind: SemanticOrchestrationContractKind
+  status: SemanticNodeStatus
+  openSlots?: readonly SemanticSlotState[]
+}
+
+type Phase0OrchestrationState = NonNullable<SemanticState['orchestration']> & Partial<
+  Record<Phase0OrchestrationBucket, readonly Phase0OrchestrationNode[]>
+>
+
+interface Phase0OrchestrationNormalizationResult {
+  state: SemanticState['orchestration']
+  hasBlockingSlots: boolean
+}
 
 export interface MissingSemanticContractRequirement extends SemanticRequirement {
   ownerKind: SemanticContractOwnerKind
@@ -66,6 +84,7 @@ export class SemanticContractReadinessService {
 
   normalize(state: SemanticState): SemanticContractReadinessNormalizationResult {
     const activeOwners = collectActiveContractOwners(state)
+    const orchestrationResult = normalizePhase0Orchestration(state.orchestration)
     const unsupportedOrUnknownOwnerKeys = new Set(
       activeOwners
         .filter(owner => this.isUnsupportedOrUnknownOwner(owner))
@@ -99,6 +118,7 @@ export class SemanticContractReadinessService {
       position: state.position
         ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
         : null,
+      orchestration: orchestrationResult.state,
     }
 
     return {
@@ -106,7 +126,8 @@ export class SemanticContractReadinessService {
       ready: unsupportedOrUnknownOwnerKeys.size === 0
         && missingRequirements.length === 0
         && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
-        && !hasBlockingOwnerOpenSlots(nextState),
+        && !hasBlockingOwnerOpenSlots(nextState)
+        && !orchestrationResult.hasBlockingSlots,
       missingRequirements,
     }
   }
@@ -244,6 +265,81 @@ export class SemanticContractReadinessService {
 
 function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resolve']>): boolean {
   return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
+}
+
+const PHASE0_ORCHESTRATION_BUCKETS: readonly Phase0OrchestrationBucket[] = [
+  'scopes',
+  'gates',
+  'programs',
+  'portfolioRisk',
+]
+
+function normalizePhase0Orchestration(
+  orchestration: SemanticState['orchestration'],
+): Phase0OrchestrationNormalizationResult {
+  if (!orchestration) {
+    return { state: orchestration, hasBlockingSlots: false }
+  }
+
+  const current = orchestration as Phase0OrchestrationState
+  let changed = false
+  let hasBlockingSlots = false
+  const next: Phase0OrchestrationState = { ...current }
+
+  for (const bucket of PHASE0_ORCHESTRATION_BUCKETS) {
+    const nodes = current[bucket]
+    if (!nodes?.length) {
+      continue
+    }
+
+    const nextNodes = nodes.map((node) => {
+      const nextNode = addPhase0OrchestrationBlocker(node)
+      changed ||= nextNode !== node
+      hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
+      return nextNode
+    })
+
+    next[bucket] = nextNodes
+  }
+
+  return {
+    state: (changed ? next : orchestration) as SemanticState['orchestration'],
+    hasBlockingSlots,
+  }
+}
+
+function addPhase0OrchestrationBlocker<T extends Phase0OrchestrationNode>(node: T): T {
+  if (node.status !== 'locked') {
+    return node
+  }
+
+  const blocker = toPhase0OrchestrationBlocker(node)
+  const openSlots = node.openSlots ?? []
+  const blockerIndex = openSlots.findIndex(slot => slot.slotKey === blocker.slotKey)
+  const nextOpenSlots = blockerIndex === -1
+    ? [...openSlots, blocker]
+    : openSlots.map((slot, index) => index === blockerIndex ? blocker : slot)
+
+  return {
+    ...node,
+    status: 'open',
+    openSlots: nextOpenSlots,
+  }
+}
+
+function toPhase0OrchestrationBlocker(node: Phase0OrchestrationNode): SemanticSlotState {
+  return {
+    slotKey: 'orchestration.phase0.unsupported',
+    fieldPath: `orchestration.${node.kind}[${node.id}]`,
+    status: 'open',
+    priority: 'behavior',
+    affectsExecution: true,
+    questionHint: 'Phase 0 暂不支持部署 orchestration runtime。',
+    evidence: {
+      source: 'derived',
+      text: `Phase 0 cannot deploy orchestration node ${node.id}`,
+    },
+  }
 }
 
 function isUnsupportedOrUnknownSupportStatus(status: ReturnType<SemanticAtomRegistryService['resolve']>['supportStatus']): boolean {
