@@ -113,15 +113,18 @@ export interface SemanticRequirement {
   object: string
 }
 
-export interface SemanticRuntimeRequirement extends SemanticRequirement {
+export interface SemanticRuntimeRequirement extends Omit<SemanticRequirement, 'domain'> {
+  domain: 'runtime'
   shape?: SemanticCapabilityShape
 }
 
-export interface SemanticStateRequirement extends SemanticRequirement {
+export interface SemanticStateRequirement extends Omit<SemanticRequirement, 'domain'> {
+  domain: 'state'
   shape?: SemanticCapabilityShape
 }
 
-export interface SemanticOrderRequirement extends SemanticRequirement {
+export interface SemanticOrderRequirement extends Omit<SemanticRequirement, 'domain'> {
+  domain: 'order'
   shape?: SemanticCapabilityShape
 }
 
