@@ -886,6 +886,21 @@ describe('SemanticSeedExtractorService', () => {
         ]),
       })
     })
+
+    it('extracts partial take profit from "止损/止盈" combo (documents current behavior)', () => {
+      // Edge case: user writes "止损 5% 止盈 50%, 止损 10% 止盈 100%" intending two
+      // independent stop-loss + take-profit blocks. Current cnColloqPattern matches
+      // "5% 止盈 50%" and "10% 止盈 100%", producing a 2-tier partial_take_profit.
+      // This rare phrasing is documented here to lock the behavior. Real users
+      // rarely write this; if it becomes a real friction, extend regex with
+      // negative lookbehind for 止损 prefix.
+      const seeds = service.extract('止损 5% 止盈 50%，止损 10% 止盈 100%')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 1.0 },
+      ])
+    })
   })
 
   it('does not treat ATR threshold plus fixed stop loss as ATR stop', () => {
