@@ -1786,7 +1786,16 @@ export class StrategyConsistencyService {
     if (!predicate) {
       return []
     }
-    if (predicate.kind === 'AND' || predicate.kind === 'OR' || predicate.kind === 'NOT') {
+    // 与 canonical-strategy-ir-validator.service.ts 对齐：IR predicate kind 同时存在
+    // 大写 (AND/OR/NOT) 与小写 (allOf/anyOf) 两套命名，'sequence' 也是逻辑容器。
+    if (
+      predicate.kind === 'AND'
+      || predicate.kind === 'OR'
+      || predicate.kind === 'NOT'
+      || predicate.kind === 'allOf'
+      || predicate.kind === 'anyOf'
+      || predicate.kind === 'sequence'
+    ) {
       const key = this.inferRuleKeyFromPredicate({
         predicateKind: predicate.kind,
         predicateId: predicate.id,
