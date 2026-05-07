@@ -1060,6 +1060,9 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
+      if (!this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
+        continue
+      }
       const actions = this.buildActionsForSemanticActionKey(group.actionKey, sizing)
       if (actions.length === 0) {
         continue
@@ -1084,6 +1087,19 @@ export class CanonicalSpecBuilderService {
     rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position))
 
     return rules
+  }
+
+  private isSemanticTriggerGroupActionAllowed(
+    group: SemanticTriggerCombinationGroup,
+    actionKeys: Set<string>,
+  ): boolean {
+    if (actionKeys.has(group.actionKey)) {
+      return true
+    }
+
+    return group.phase === 'entry'
+      && (group.actionKey === 'open_long' || group.actionKey === 'open_short')
+      && group.members.some(trigger => trigger.key === 'execution.on_start')
   }
 
   private buildSemanticTriggerGroupActionVariants(

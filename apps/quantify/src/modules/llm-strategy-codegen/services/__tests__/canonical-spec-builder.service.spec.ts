@@ -321,6 +321,39 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('does not build trading rules from locked triggers without matching locked actions', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'entry-close-above-open',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('GT') },
+        },
+        {
+          id: 'exit-close-below-open',
+          key: 'condition.expression',
+          phase: 'exit',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('LT') },
+        },
+      ],
+      actions: [],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.rules.filter(rule => rule.phase === 'entry' || rule.phase === 'exit')).toEqual([])
+  })
+
   describe('semantic trigger contract rule groups', () => {
     const service = new CanonicalSpecBuilderService()
 
