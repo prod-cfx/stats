@@ -4,12 +4,12 @@ import type {
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityDomain,
-  SemanticOrchestrationContractKind,
   SemanticNodeStatus,
   SemanticOrderRequirement,
   SemanticPriority,
   SemanticRequirement,
   SemanticRuntimeRequirement,
+  SemanticOrchestrationNode,
   SemanticSlotState,
   SemanticState,
   SemanticStateRequirement,
@@ -30,18 +30,6 @@ type SemanticSubstrateRequirementKind =
   | 'runtime_requirement'
   | 'state_requirement'
   | 'order_requirement'
-type Phase0OrchestrationBucket = 'scopes' | 'gates' | 'programs' | 'portfolioRisk'
-
-interface Phase0OrchestrationNode {
-  id: string
-  kind: SemanticOrchestrationContractKind
-  status: SemanticNodeStatus
-  openSlots?: readonly SemanticSlotState[]
-}
-
-type Phase0OrchestrationState = NonNullable<SemanticState['orchestration']> & Partial<
-  Record<Phase0OrchestrationBucket, readonly Phase0OrchestrationNode[]>
->
 
 interface Phase0OrchestrationNormalizationResult {
   state: SemanticState['orchestration']
@@ -267,13 +255,6 @@ function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resol
   return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
 }
 
-const PHASE0_ORCHESTRATION_BUCKETS: readonly Phase0OrchestrationBucket[] = [
-  'scopes',
-  'gates',
-  'programs',
-  'portfolioRisk',
-]
-
 function normalizePhase0Orchestration(
   orchestration: SemanticState['orchestration'],
 ): Phase0OrchestrationNormalizationResult {
@@ -281,34 +262,22 @@ function normalizePhase0Orchestration(
     return { state: orchestration, hasBlockingSlots: false }
   }
 
-  const current = orchestration as Phase0OrchestrationState
   let changed = false
   let hasBlockingSlots = false
-  const next: Phase0OrchestrationState = { ...current }
-
-  for (const bucket of PHASE0_ORCHESTRATION_BUCKETS) {
-    const nodes = current[bucket]
-    if (!nodes?.length) {
-      continue
-    }
-
-    const nextNodes = nodes.map((node) => {
-      const nextNode = addPhase0OrchestrationBlocker(node)
-      changed ||= nextNode !== node
-      hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
-      return nextNode
-    })
-
-    next[bucket] = nextNodes
-  }
+  const nodes = orchestration.nodes.map((node) => {
+    const nextNode = addPhase0OrchestrationBlocker(node)
+    changed ||= nextNode !== node
+    hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
+    return nextNode
+  })
 
   return {
-    state: (changed ? next : orchestration) as SemanticState['orchestration'],
+    state: changed ? { ...orchestration, nodes } : orchestration,
     hasBlockingSlots,
   }
 }
 
-function addPhase0OrchestrationBlocker<T extends Phase0OrchestrationNode>(node: T): T {
+function addPhase0OrchestrationBlocker(node: SemanticOrchestrationNode): SemanticOrchestrationNode {
   if (node.status !== 'locked') {
     return node
   }
@@ -327,7 +296,7 @@ function addPhase0OrchestrationBlocker<T extends Phase0OrchestrationNode>(node: 
   }
 }
 
-function toPhase0OrchestrationBlocker(node: Phase0OrchestrationNode): SemanticSlotState {
+function toPhase0OrchestrationBlocker(node: SemanticOrchestrationNode): SemanticSlotState {
   return {
     slotKey: 'orchestration.phase0.unsupported',
     fieldPath: `orchestration.${node.kind}[${node.id}]`,

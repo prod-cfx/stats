@@ -1745,39 +1745,31 @@ describe('SemanticContractReadinessService', () => {
   it('blocks locked orchestration nodes because Phase 0 has no orchestration runtime', () => {
     const state = createSemanticState({
       orchestration: {
-        scopes: [{
+        nodes: [{
           id: 'scope-1',
-          key: 'orchestration.scope.symbol',
           kind: 'scope',
           status: 'locked',
           source: 'user_explicit',
-          target: { symbol: 'BTCUSDT' },
-          params: {},
+          params: { symbol: 'BTCUSDT' },
           openSlots: [],
           contracts: [{
             id: 'scope-contract-1',
             kind: 'scope',
-            target: { symbol: 'BTCUSDT' },
             params: {},
+            capabilities: [],
             requires: [],
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
             openSlots: [],
           }],
         }],
-        gates: [],
-        programs: [],
-        portfolioRisk: [],
-      } as never,
+        contracts: [],
+      },
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
-    const openSlots = (result.state.orchestration as never as {
-      scopes: Array<{ openSlots: SemanticState['triggers'][number]['openSlots'] }>
-    }).scopes[0].openSlots
+    const openSlots = result.state.orchestration?.nodes[0].openSlots
 
     expect(result.ready).toBe(false)
+    expect(result.state.orchestration?.contracts).toEqual([])
     expect(openSlots).toContainEqual(
       expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
@@ -1790,17 +1782,15 @@ describe('SemanticContractReadinessService', () => {
   it('does not block draft orchestration nodes that are still open', () => {
     const state = createSemanticState({
       orchestration: {
-        scopes: [{
+        nodes: [{
           id: 'scope-1',
-          key: 'orchestration.scope.symbol',
           kind: 'scope',
           status: 'open',
           source: 'user_explicit',
-          target: { symbol: 'BTCUSDT' },
-          params: {},
+          params: { symbol: 'BTCUSDT' },
           openSlots: [{
             slotKey: 'orchestration.scope.symbol',
-            fieldPath: 'orchestration.scope[scope-1].target.symbol',
+            fieldPath: 'orchestration.scope[scope-1].params.symbol',
             status: 'open',
             priority: 'core',
             questionHint: '请选择 orchestration scope symbol。',
@@ -1809,27 +1799,21 @@ describe('SemanticContractReadinessService', () => {
           contracts: [{
             id: 'scope-contract-1',
             kind: 'scope',
-            target: { symbol: 'BTCUSDT' },
             params: {},
+            capabilities: [],
             requires: [],
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
             openSlots: [],
           }],
         }],
-        gates: [],
-        programs: [],
-        portfolioRisk: [],
-      } as never,
+        contracts: [],
+      },
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
-    const openSlots = (result.state.orchestration as never as {
-      scopes: Array<{ openSlots: SemanticState['triggers'][number]['openSlots'] }>
-    }).scopes[0].openSlots
+    const openSlots = result.state.orchestration?.nodes[0].openSlots
 
     expect(result.ready).toBe(false)
+    expect(result.state.orchestration?.contracts).toEqual([])
     expect(openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'orchestration.scope.symbol',
