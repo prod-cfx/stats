@@ -28,7 +28,9 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
+import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
@@ -55,6 +57,7 @@ const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'US
 export class SemanticSeedStateBuilderService {
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+    private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
   ) {}
 
   build(semanticPatch: unknown): SemanticState | null {
@@ -367,12 +370,14 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    return [this.buildAtomContract({
+    const contract = this.buildAtomContract({
       id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'trigger',
       capability: this.buildTriggerCapability(key, phase, sideScope, params),
       params,
-    })]
+    })
+
+    return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private canSynthesizeTriggerContract(key: string, params: Record<string, unknown>): boolean {
@@ -724,14 +729,14 @@ export class SemanticSeedStateBuilderService {
     index: number,
   ): SemanticAtomContract[] | null {
     if (SYNTHESIZABLE_GRID_ACTION_KEYS.has(key)) {
-      return [this.buildGridActionContract(key, params, index)]
+      return [this.withRegistryContractSubstrate(key, this.buildGridActionContract(key, params, index))]
     }
 
     if (!SYNTHESIZABLE_ACTION_KEYS.has(key)) {
       return null
     }
 
-    return [this.buildAtomContract({
+    const contract = this.buildAtomContract({
       id: `contract-seed-action-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'action',
       capability: {
@@ -746,7 +751,9 @@ export class SemanticSeedStateBuilderService {
         }),
       },
       params,
-    })]
+    })
+
+    return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private buildGridActionContract(
@@ -787,7 +794,7 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    return [this.buildAtomContract({
+    const contract = this.buildAtomContract({
       id: `contract-seed-risk-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'risk',
       capability: {
@@ -800,7 +807,9 @@ export class SemanticSeedStateBuilderService {
         }),
       },
       params,
-    })]
+    })
+
+    return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
@@ -828,7 +837,8 @@ export class SemanticSeedStateBuilderService {
       }).ok
     }
 
-    return false
+    const resolved = this.semanticAtomRegistry.resolve(key)
+    return resolved.category === 'risk' && resolved.supportStatus === 'supported_requires_slot'
   }
 
   private resolveRiskContractObject(key: string): string | null {
@@ -855,6 +865,9 @@ export class SemanticSeedStateBuilderService {
     }
     if (key === 'risk.partial_take_profit') {
       return 'partial_take_profit'
+    }
+    if (key === 'risk.falling_knife_guard') {
+      return 'falling_knife_guard'
     }
     return null
   }
@@ -982,6 +995,24 @@ export class SemanticSeedStateBuilderService {
       stateRequirements: [],
       orderRequirements: [],
       openSlots: [],
+    }
+  }
+
+  private withRegistryContractSubstrate(
+    atomKey: string,
+    contract: SemanticAtomContract,
+  ): SemanticAtomContract {
+    const resolved = this.semanticAtomRegistry.resolve(atomKey)
+    if (!('contractSubstrate' in resolved) || !resolved.contractSubstrate) {
+      return contract
+    }
+
+    return {
+      ...contract,
+      runtimeRequirements: [...resolved.contractSubstrate.runtimeRequirements],
+      stateRequirements: [...resolved.contractSubstrate.stateRequirements],
+      orderRequirements: [...resolved.contractSubstrate.orderRequirements],
+      openSlots: resolved.contractSubstrate.openSlots.map(slot => toSemanticSupportOpenSlot(slot)),
     }
   }
 
