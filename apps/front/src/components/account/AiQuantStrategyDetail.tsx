@@ -495,7 +495,7 @@ export function AiQuantStrategyDetail({
           data-testid="strategy-detail-view-only-banner"
           className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200"
         >
-          该策略已设为只读，所有操作（重新部署、编辑、停止、调整杠杆等）均已禁用，仅作历史记录展示。
+          该策略已设为只读，所有运行控制操作均已禁用，仅作历史记录展示。
         </section>
       )}
 
