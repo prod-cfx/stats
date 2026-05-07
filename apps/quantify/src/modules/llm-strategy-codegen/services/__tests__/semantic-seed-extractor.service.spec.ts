@@ -867,6 +867,15 @@ describe('SemanticSeedExtractorService', () => {
       ])
     })
 
+    it('parses Chinese formal+colloquial mix', () => {
+      const seeds = service.extract('赚 5% 止盈一半，盈利 10% 平剩下')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 1.0 },
+      ])
+    })
+
     it('falls back to openSlot when phrase recognized but tiers unparseable', () => {
       const seeds = service.extract('设置分批止盈')
       expect(seeds.risk[0]).toMatchObject({

@@ -1429,7 +1429,7 @@ export class SemanticSeedExtractorService {
     if (tiers.length > 0) return this.normalizePartialTakeProfitTiers(tiers)
 
     // 模式 2: "+X% 平一半/剩下/全部/Y%"（中文口语）
-    const cnColloqPattern = /\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:平|减)\s*(?:(\d+(?:\.\d+)?)\s*%|(一半|剩下|全部|全平))/giu
+    const cnColloqPattern = /\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:平|减|止盈)\s*(?:(\d+(?:\.\d+)?)\s*%|(一半|剩下|全部|全平))/giu
     while ((match = cnColloqPattern.exec(clause)) !== null) {
       const threshold = Number(match[1])
       const ratioPct = match[2] ? Number(match[2]) : null
