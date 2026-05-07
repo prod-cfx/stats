@@ -151,7 +151,7 @@ function ensureCompiledDecisionState(
   const fallback: CompiledDecisionState = {
     barIndex: 0,
     lastTriggeredByProgram: {},
-    previousPositionQty: readCurrentQty(ctx),
+    previousPositionQty: 0,
   }
   ;(ctx as Record<string, unknown>).__compiledDecisionState = fallback
   return fallback

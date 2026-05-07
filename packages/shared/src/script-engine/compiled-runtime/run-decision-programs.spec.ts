@@ -20,6 +20,7 @@ describe('partial take profit decision gate', () => {
     const ctx = {
       position: { qty: 1 },
       currentPrice: 100,
+      __compiledDecisionState: { previousPositionQty: 1, lastTriggeredByProgram: {}, barIndex: 0 },
       semanticRuntimeState: {
         partial_tp_test: { tier_0_fired: true },
       },
@@ -38,6 +39,7 @@ describe('partial take profit decision gate', () => {
     const ctx = {
       position: { qty: 1 },
       currentPrice: 100,
+      __compiledDecisionState: { previousPositionQty: 1, lastTriggeredByProgram: {}, barIndex: 0 },
       semanticRuntimeState: { partial_tp_test: {} as Record<string, unknown> },
     } as unknown as Ctx
     const decision = runDecisionPrograms(
@@ -89,6 +91,27 @@ describe('partial take profit decision gate', () => {
     expect(state.partial_tp_other).toEqual({ tier_0_fired: true })
     expect(state.unrelated_state).toEqual({ foo: 'bar' })
     expect(compiled.previousPositionQty).toBe(1)
+  })
+
+  it('hot-restart with no prior compiledState resets declared partial_tp keys (defaults previousPositionQty=0)', () => {
+    const ctx = {
+      position: { qty: 1 },
+      currentPrice: 100,
+      // no __compiledDecisionState — fresh fallback should default previousPositionQty to 0,
+      // so first bar with non-zero qty triggers entry-edge reset.
+      semanticRuntimeState: {
+        partial_tp_test: { tier_0_fired: true },
+      },
+    } as unknown as Ctx
+    const decision = runDecisionPrograms(
+      ctx,
+      [PTP_PROGRAM] as unknown as Programs,
+      { predicate_threshold_met: true },
+      baseGuard,
+      [PTP_PROGRAM.id],
+    )
+    // Stale tier_fired flag was reset, so program is allowed to fire.
+    expect(decision.action).toBe('ADJUST_POSITION')
   })
 
   it('does not reset state on continuing position (prev=1, current=1)', () => {
