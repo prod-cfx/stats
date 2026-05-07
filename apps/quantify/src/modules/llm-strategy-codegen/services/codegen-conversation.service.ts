@@ -3666,12 +3666,19 @@ export class CodegenConversationService {
       return riskSlot
     }
 
+    const orchestrationSlot = state.orchestration?.nodes
+      .flatMap(node => node.openSlots)
+      .find(isBlockingSemanticOpenSlot)
+    if (orchestrationSlot) {
+      return orchestrationSlot
+    }
+
     return Object.values(state.contextSlots).find(isBlockingSemanticOpenSlot) ?? null
   }
 
   private buildSemanticClarificationItem(slot: SemanticSlotState): StrategyClarificationItem {
-    const isContractRequirementSlot = slot.slotKey.startsWith('contract.requirement.')
-    const isStateGateSlot = !isContractRequirementSlot && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition')
+    const isContractReadinessSlot = isContractReadinessSemanticSlot(slot)
+    const isStateGateSlot = !isContractReadinessSlot && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition')
     const isContextSlot = slot.priority === 'context'
     const isGridSlot = slot.slotKey.startsWith('grid.')
     const contextReasonMap: Partial<Record<SemanticSlotState['slotKey'], string>> = {
@@ -3685,7 +3692,7 @@ export class CodegenConversationService {
       ? 'stateGates.marketRegime'
       : isContextSlot
         ? slot.slotKey
-      : isContractRequirementSlot
+      : isContractReadinessSlot
         ? slot.fieldPath
       : isGridSlot
         ? semanticMetadata.field
@@ -3694,8 +3701,8 @@ export class CodegenConversationService {
       ? 'ambiguous_state_gate'
       : isContextSlot
         ? (contextReasonMap[slot.slotKey] ?? 'missing_execution_context')
-      : isContractRequirementSlot
-        ? 'missing_semantic_contract_requirement'
+      : isContractReadinessSlot
+        ? toContractReadinessClarificationReason(slot)
       : isGridSlot
         ? semanticMetadata.reason
         : semanticMetadata.reason
@@ -5644,6 +5651,10 @@ export class CodegenConversationService {
       || reason === 'missing_semantic_position_sizing'
       || reason === 'missing_semantic_position_mode'
       || reason === 'missing_semantic_contract_requirement'
+      || reason === 'missing_semantic_contract_substrate'
+      || reason === 'missing_semantic_contract_runtime_requirement'
+      || reason === 'missing_semantic_contract_state_requirement'
+      || reason === 'missing_semantic_contract_order_requirement'
     ) {
       return true
     }
@@ -5659,6 +5670,7 @@ export class CodegenConversationService {
       || field.startsWith('triggers[')
       || field.startsWith('actions[')
       || field.startsWith('risk[')
+      || field.startsWith('contract.')
       || field.startsWith('contract.requirement.')
       || this.isDynamicSemanticContractRequirementField(field)
   }
@@ -7521,6 +7533,10 @@ export class CodegenConversationService {
       reason === 'missing_semantic_trigger'
       || reason === 'missing_semantic_action'
       || reason === 'missing_semantic_contract_requirement'
+      || reason === 'missing_semantic_contract_substrate'
+      || reason === 'missing_semantic_contract_runtime_requirement'
+      || reason === 'missing_semantic_contract_state_requirement'
+      || reason === 'missing_semantic_contract_order_requirement'
     ) return 90
     if (
       reason === 'missing_semantic_position_sizing'
@@ -9064,4 +9080,26 @@ export class CodegenConversationService {
     return requestUserId?.trim() ?? ''
   }
 
+}
+
+function isContractReadinessSemanticSlot(slot: SemanticSlotState): boolean {
+  return slot.slotKey.startsWith('contract.')
+}
+
+function toContractReadinessClarificationReason(
+  slot: SemanticSlotState,
+): StrategyClarificationItem['reason'] {
+  if (slot.slotKey.startsWith('contract.substrate.')) {
+    return 'missing_semantic_contract_substrate'
+  }
+  if (slot.slotKey.startsWith('contract.runtime_requirement.')) {
+    return 'missing_semantic_contract_runtime_requirement'
+  }
+  if (slot.slotKey.startsWith('contract.state_requirement.')) {
+    return 'missing_semantic_contract_state_requirement'
+  }
+  if (slot.slotKey.startsWith('contract.order_requirement.')) {
+    return 'missing_semantic_contract_order_requirement'
+  }
+  return 'missing_semantic_contract_requirement'
 }

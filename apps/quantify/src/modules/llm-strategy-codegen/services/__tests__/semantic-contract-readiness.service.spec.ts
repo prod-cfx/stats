@@ -2,6 +2,395 @@ import type { SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
 describe('SemanticContractReadinessService', () => {
+  it('accepts supported contracts with explicit empty substrate arrays', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-1',
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'trigger-contract-1',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+  })
+
+  it('accepts action owners without an openSlots array', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-without-open-slots',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        contracts: [{
+          id: 'action-contract-without-open-slots',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.state.actions[0].openSlots).toBeUndefined()
+  })
+
+  it('keeps executable indicator above and below MA aliases supported during readiness', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-price-above-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'moving_average',
+          'reference.period': 100,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-price-above-ma',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }, {
+        id: 'trigger-price-below-ema',
+        key: 'indicator.below',
+        phase: 'exit',
+        params: {
+          indicator: 'ema',
+          referenceRole: 'moving_average',
+          'reference.period': 50,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-price-below-ema',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [{
+        id: 'action-open-long',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'action-contract-open-long',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([])
+    expect(result.state.triggers[1].openSlots).toEqual([])
+  })
+
+  it('accepts known runtime state and order requirements', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-cross-over',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'trigger-contract-cross-over',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [
+            { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+            { domain: 'runtime', verb: 'provide', object: 'indicator_helper', shape: { name: 'sma' } },
+          ],
+          stateRequirements: [],
+          orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([])
+  })
+
+  it('fails closed on unknown runtime state and order requirements', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-grid-ladder',
+        key: 'action.grid_ladder',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'action-contract-grid-ladder',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'orderbook_depth' }],
+          stateRequirements: [{ domain: 'state', verb: 'write', object: 'grid_anchor' }],
+          orderRequirements: [{ domain: 'order', verb: 'support', object: 'cancel_replace_ladder' }],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.actions[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [
+        expect.objectContaining({
+          slotKey: 'contract.runtime_requirement.runtime.provide.orderbook_depth',
+          priority: 'behavior',
+          affectsExecution: true,
+          status: 'open',
+        }),
+        expect.objectContaining({
+          slotKey: 'contract.state_requirement.state.write.grid_anchor',
+          priority: 'behavior',
+          affectsExecution: true,
+          status: 'open',
+        }),
+        expect.objectContaining({
+          slotKey: 'contract.order_requirement.order.support.cancel_replace_ladder',
+          priority: 'risk',
+          affectsExecution: true,
+          status: 'open',
+        }),
+      ],
+    }))
+  })
+
+  it('fails supported owners whose contracts omit substrate arrays', () => {
+    const legacyContract = {
+      id: 'legacy-trigger-contract',
+      kind: 'trigger',
+      capabilities: [],
+      requires: [],
+      params: {},
+    } as never
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-legacy',
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [legacyContract],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.state.triggers[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.substrate.missing',
+        fieldPath: 'triggers[trigger-legacy].contracts[legacy-trigger-contract]',
+        affectsExecution: true,
+        status: 'open',
+      })],
+    }))
+  })
+
+  it('merges execution-affecting contract open slots into the owner', () => {
+    const state = createSemanticState({
+      risk: [{
+        id: 'risk-falling-knife',
+        key: 'risk.falling_knife_guard',
+        status: 'locked',
+        source: 'derived',
+        params: {},
+        openSlots: [],
+        support: { supportStatus: 'supported_requires_slot' },
+        contracts: [{
+          id: 'risk-contract-falling-knife',
+          kind: 'risk',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [{
+            slotKey: 'risk.falling_knife_guard.definition',
+            fieldPath: 'risk[risk-falling-knife].params.definition',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认“不接飞刀”的判定方式。',
+            affectsExecution: true,
+          }],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.state.risk[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        affectsExecution: true,
+        status: 'open',
+      })],
+    }))
+  })
+
+  it('preserves answered contract-declared owner open slots during readiness normalization', () => {
+    const state = createSemanticState({
+      risk: [{
+        id: 'risk-falling-knife',
+        key: 'risk.falling_knife_guard',
+        status: 'locked',
+        source: 'derived',
+        params: {},
+        openSlots: [{
+          slotKey: 'risk.falling_knife_guard.definition',
+          fieldPath: 'risk[risk-falling-knife].params.definition',
+          value: '反弹站上 MA20 后才允许开仓',
+          status: 'locked',
+          priority: 'risk',
+          questionHint: '请确认“不接飞刀”的判定方式。',
+          affectsExecution: true,
+          evidence: {
+            source: 'user_explicit',
+            text: '反弹站上 MA20 后才允许开仓',
+          },
+        }],
+        support: { supportStatus: 'supported_requires_slot' },
+        contracts: [{
+          id: 'risk-contract-falling-knife',
+          kind: 'risk',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [{
+            slotKey: 'risk.falling_knife_guard.definition',
+            fieldPath: 'risk[risk-falling-knife].params.definition',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认“不接飞刀”的判定方式。',
+            affectsExecution: true,
+            evidence: {
+              source: 'derived',
+              text: 'Missing falling knife definition',
+            },
+          }],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.state.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [{
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk[risk-falling-knife].params.definition',
+        value: '反弹站上 MA20 后才允许开仓',
+        status: 'locked',
+        priority: 'risk',
+        questionHint: '请确认“不接飞刀”的判定方式。',
+        affectsExecution: true,
+        evidence: {
+          source: 'user_explicit',
+          text: '反弹站上 MA20 后才允许开仓',
+        },
+      }],
+    }))
+  })
+
   it('writes missing price and capital requirements to the requiring action open slots', () => {
     const state = createSemanticState({
       actions: [{
@@ -23,6 +412,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -99,6 +492,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'guard', verb: 'enforce', object: 'atr_stop' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -129,6 +526,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'market', verb: 'read', object: 'order_flow_delta' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -166,6 +567,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -183,6 +588,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -215,6 +624,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'market', verb: 'read', object: 'latest_bar' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -250,6 +663,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'market', verb: 'read', object: 'latest_bar' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -292,6 +709,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -355,6 +776,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -396,6 +821,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -419,6 +848,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -454,6 +887,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -469,6 +906,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -521,6 +962,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -536,6 +981,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -590,6 +1039,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -605,6 +1058,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -647,6 +1104,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -662,6 +1123,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -716,6 +1181,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -739,6 +1208,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -774,6 +1247,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -789,6 +1266,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -849,6 +1330,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -900,6 +1385,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -936,6 +1425,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -1081,6 +1574,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       risk: [{
@@ -1108,6 +1605,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       position: {
@@ -1136,6 +1637,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       },
     })
@@ -1185,6 +1690,10 @@ describe('SemanticContractReadinessService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -1200,6 +1709,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -1240,6 +1753,10 @@ describe('SemanticContractReadinessService', () => {
               { domain: 'price', verb: 'define', object: 'level_set' },
             ],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
         {
@@ -1255,6 +1772,10 @@ describe('SemanticContractReadinessService', () => {
               { domain: 'price', verb: 'define', object: 'level_set' },
             ],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -1310,6 +1831,10 @@ describe('SemanticContractReadinessService', () => {
             { domain: 'price', verb: 'define', object: 'level_set' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -1319,6 +1844,90 @@ describe('SemanticContractReadinessService', () => {
     expect(result.ready).toBe(true)
     expect(result.missingRequirements).toEqual([])
     expect(result.state.actions[0].openSlots).toBeUndefined()
+  })
+
+  it('blocks locked orchestration nodes because Phase 0 has no orchestration runtime', () => {
+    const state = createSemanticState({
+      orchestration: {
+        nodes: [{
+          id: 'scope-1',
+          kind: 'scope',
+          status: 'locked',
+          source: 'user_explicit',
+          params: { symbol: 'BTCUSDT' },
+          openSlots: [],
+          contracts: [{
+            id: 'scope-contract-1',
+            kind: 'scope',
+            params: {},
+            capabilities: [],
+            requires: [],
+            openSlots: [],
+          }],
+        }],
+        contracts: [],
+      },
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+    const openSlots = result.state.orchestration?.nodes[0].openSlots
+
+    expect(result.ready).toBe(false)
+    expect(result.state.orchestration?.contracts).toEqual([])
+    expect(openSlots).toContainEqual(
+      expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+        affectsExecution: true,
+        status: 'open',
+      }),
+    )
+  })
+
+  it('does not block draft orchestration nodes that are still open', () => {
+    const state = createSemanticState({
+      orchestration: {
+        nodes: [{
+          id: 'scope-1',
+          kind: 'scope',
+          status: 'open',
+          source: 'user_explicit',
+          params: { symbol: 'BTCUSDT' },
+          openSlots: [{
+            slotKey: 'orchestration.scope.symbol',
+            fieldPath: 'orchestration.scope[scope-1].params.symbol',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请选择 orchestration scope symbol。',
+            affectsExecution: true,
+          }],
+          contracts: [{
+            id: 'scope-contract-1',
+            kind: 'scope',
+            params: {},
+            capabilities: [],
+            requires: [],
+            openSlots: [],
+          }],
+        }],
+        contracts: [],
+      },
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+    const openSlots = result.state.orchestration?.nodes[0].openSlots
+
+    expect(result.ready).toBe(false)
+    expect(result.state.orchestration?.contracts).toEqual([])
+    expect(openSlots).toEqual([
+      expect.objectContaining({
+        slotKey: 'orchestration.scope.symbol',
+        affectsExecution: true,
+        status: 'open',
+      }),
+    ])
+    expect(openSlots).not.toContainEqual(expect.objectContaining({
+      slotKey: 'orchestration.phase0.unsupported',
+    }))
   })
 })
 

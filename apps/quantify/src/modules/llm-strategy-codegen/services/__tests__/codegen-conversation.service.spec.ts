@@ -2608,6 +2608,34 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect((service as any).findNextOpenSemanticSlot(result)).toBeNull()
   })
 
+  it('returns orchestration.phase0.unsupported from orchestration node open slots', () => {
+    const state = buildLockedMaSemanticState({
+      orchestration: {
+        nodes: [{
+          id: 'scope-1',
+          kind: 'scope',
+          params: { symbol: 'BTCUSDT' },
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'orchestration.phase0.unsupported',
+            fieldPath: 'orchestration.scope[scope-1]',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: 'Phase 0 暂不支持部署 orchestration runtime。',
+            affectsExecution: true,
+          }],
+          contracts: [],
+        }],
+        contracts: [],
+      },
+    })
+
+    expect((service as any).findNextOpenSemanticSlot(state)).toEqual(expect.objectContaining({
+      slotKey: 'orchestration.phase0.unsupported',
+    }))
+  })
+
   it('ignores legacy-only planner logic when updating semantic triggers and actions', () => {
     const currentState = (service as any).createEmptySemanticState()
 
@@ -6012,6 +6040,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               ],
               requires: [],
               params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
             },
           ],
         },
@@ -6485,6 +6517,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -6520,6 +6556,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           ],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       position: {
@@ -8653,6 +8693,28 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       field: 'timeframe',
       question: '请确认策略主周期（例如 15m 或 1h）。',
     }))
+  })
+
+  it('maps contract readiness semantic slots without treating them as state gates', () => {
+    const item = (service as any).buildSemanticClarificationItem({
+      slotKey: 'contract.runtime_requirement.runtime.provide.orderbook_depth',
+      fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].runtimeRequirements[0]',
+      status: 'open',
+      priority: 'behavior',
+      questionHint: 'Phase 0 暂不支持 orderbook depth runtime。',
+      affectsExecution: true,
+    })
+
+    expect(item).toEqual(expect.objectContaining({
+      key: 'semantic.contract.runtime_requirement.runtime.provide.orderbook_depth',
+      reason: 'missing_semantic_contract_runtime_requirement',
+      field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].runtimeRequirements[0]',
+      question: 'Phase 0 暂不支持 orderbook depth runtime。',
+      slotKey: 'contract.runtime_requirement.runtime.provide.orderbook_depth',
+      fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].runtimeRequirements[0]',
+    }))
+    expect(item.reason).not.toBe('ambiguous_state_gate')
+    expect(item.field).not.toBe('stateGates.marketRegime')
   })
 
   it('does not auto-bind freeform semantic answers when another clarification item is currently active', () => {
@@ -12254,6 +12316,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               { domain: 'price', verb: 'define', object: 'level_set' },
             ],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
         { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
@@ -12355,6 +12421,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -12490,6 +12560,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -12666,6 +12740,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -12798,6 +12876,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -12952,6 +13034,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -13074,6 +13160,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -13105,6 +13195,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               { domain: 'price', verb: 'define', object: 'level_set' },
             ],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
         { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit', openSlots: [] },
@@ -13216,6 +13310,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }],
             requires: [],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -13252,6 +13350,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               { domain: 'price', verb: 'define', object: 'level_set' },
             ],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],
@@ -13278,6 +13380,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               { domain: 'guard', verb: 'enforce', object: 'boundary_cancel' },
             ],
             params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
           }],
         },
       ],

@@ -12,20 +12,25 @@ import type {
   SemanticCapability,
   SemanticCapabilityDomain,
   SemanticCapabilityShape,
-  SemanticEvidence,
   SemanticEffect,
+  SemanticEvidence,
   SemanticNodeStatus,
+  SemanticOrderRequirement,
   SemanticPositionSizingContract,
   SemanticPriority,
   SemanticRequirement,
   SemanticRiskState,
+  SemanticRuntimeRequirement,
   SemanticSlotState,
   SemanticSource,
   SemanticState,
+  SemanticStateRequirement,
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
+import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
@@ -52,6 +57,7 @@ const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'US
 export class SemanticSeedStateBuilderService {
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+    private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
   ) {}
 
   build(semanticPatch: unknown): SemanticState | null {
@@ -364,12 +370,14 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    return [this.buildAtomContract({
+    const contract = this.buildAtomContract({
       id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'trigger',
       capability: this.buildTriggerCapability(key, phase, sideScope, params),
       params,
-    })]
+    })
+
+    return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private canSynthesizeTriggerContract(key: string, params: Record<string, unknown>): boolean {
@@ -721,14 +729,14 @@ export class SemanticSeedStateBuilderService {
     index: number,
   ): SemanticAtomContract[] | null {
     if (SYNTHESIZABLE_GRID_ACTION_KEYS.has(key)) {
-      return [this.buildGridActionContract(key, params, index)]
+      return [this.withRegistryContractSubstrate(key, this.buildGridActionContract(key, params, index))]
     }
 
     if (!SYNTHESIZABLE_ACTION_KEYS.has(key)) {
       return null
     }
 
-    return [this.buildAtomContract({
+    const contract = this.buildAtomContract({
       id: `contract-seed-action-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'action',
       capability: {
@@ -743,7 +751,9 @@ export class SemanticSeedStateBuilderService {
         }),
       },
       params,
-    })]
+    })
+
+    return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private buildGridActionContract(
@@ -784,7 +794,7 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
-    return [this.buildAtomContract({
+    const contract = this.buildAtomContract({
       id: `contract-seed-risk-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'risk',
       capability: {
@@ -797,7 +807,9 @@ export class SemanticSeedStateBuilderService {
         }),
       },
       params,
-    })]
+    })
+
+    return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
@@ -825,7 +837,8 @@ export class SemanticSeedStateBuilderService {
       }).ok
     }
 
-    return false
+    const resolved = this.semanticAtomRegistry.resolve(key)
+    return resolved.category === 'risk' && resolved.supportStatus === 'supported_requires_slot'
   }
 
   private resolveRiskContractObject(key: string): string | null {
@@ -852,6 +865,9 @@ export class SemanticSeedStateBuilderService {
     }
     if (key === 'risk.partial_take_profit') {
       return 'partial_take_profit'
+    }
+    if (key === 'risk.falling_knife_guard') {
+      return 'falling_knife_guard'
     }
     return null
   }
@@ -975,7 +991,42 @@ export class SemanticSeedStateBuilderService {
       capabilities: [input.capability],
       requires: [],
       params: input.params,
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
     }
+  }
+
+  private withRegistryContractSubstrate(
+    atomKey: string,
+    contract: SemanticAtomContract,
+  ): SemanticAtomContract {
+    const resolved = this.semanticAtomRegistry.resolve(this.resolveContractSubstrateAtomKey(atomKey, contract.params))
+    if (!('contractSubstrate' in resolved) || !resolved.contractSubstrate) {
+      return contract
+    }
+
+    return {
+      ...contract,
+      runtimeRequirements: [...resolved.contractSubstrate.runtimeRequirements],
+      stateRequirements: [...resolved.contractSubstrate.stateRequirements],
+      orderRequirements: [...resolved.contractSubstrate.orderRequirements],
+      openSlots: resolved.contractSubstrate.openSlots.map(slot => toSemanticSupportOpenSlot(slot)),
+    }
+  }
+
+  private resolveContractSubstrateAtomKey(atomKey: string, params: Record<string, unknown>): string {
+    if ((atomKey !== 'indicator.above' && atomKey !== 'indicator.below') || !this.isMovingAverageIndicatorAlias(params)) {
+      return atomKey
+    }
+
+    return atomKey === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+  }
+
+  private isMovingAverageIndicatorAlias(params: Record<string, unknown>): boolean {
+    const indicator = this.readTrimmedString(params.indicator)?.toLowerCase()
+    return indicator === 'ma' || indicator === 'sma' || indicator === 'ema'
   }
 
   private readContracts(value: unknown): SemanticAtomContract[] | null {
@@ -997,7 +1048,18 @@ export class SemanticSeedStateBuilderService {
     const id = this.readTrimmedString(value.id)
     const capabilities = this.readCapabilities(value.capabilities)
     const requires = this.readRequirements(value.requires)
-    if (!id || !this.isContractKind(value.kind) || !capabilities || !requires) {
+    const runtimeRequirements = this.readRuntimeRequirements(value.runtimeRequirements)
+    const stateRequirements = this.readStateRequirements(value.stateRequirements)
+    const orderRequirements = this.readOrderRequirements(value.orderRequirements)
+    if (
+      !id
+      || !this.isContractKind(value.kind)
+      || !capabilities
+      || !requires
+      || !runtimeRequirements
+      || !stateRequirements
+      || !orderRequirements
+    ) {
       return null
     }
 
@@ -1009,6 +1071,10 @@ export class SemanticSeedStateBuilderService {
       capabilities,
       requires,
       params: this.readParams(value.params),
+      runtimeRequirements,
+      stateRequirements,
+      orderRequirements,
+      openSlots: this.readOpenSlots(value.openSlots),
       ...(effects ? { effects } : {}),
     }
   }
@@ -1081,6 +1147,131 @@ export class SemanticSeedStateBuilderService {
       domain: value.domain,
       verb,
       object,
+    }
+  }
+
+  private readRuntimeRequirements(value: unknown): SemanticRuntimeRequirement[] | null {
+    if (value === undefined) {
+      return []
+    }
+
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    const requirements: SemanticRuntimeRequirement[] = []
+    for (const item of value) {
+      const requirement = this.toRuntimeRequirement(item)
+      if (!requirement) {
+        return null
+      }
+      requirements.push(requirement)
+    }
+
+    return requirements
+  }
+
+  private toRuntimeRequirement(value: unknown): SemanticRuntimeRequirement | null {
+    const requirement = this.toRequirementWithOptionalShape(value)
+    if (!requirement || requirement.domain !== 'runtime') {
+      return null
+    }
+
+    return {
+      domain: 'runtime',
+      verb: requirement.verb,
+      object: requirement.object,
+      ...(requirement.shape === undefined ? {} : { shape: requirement.shape }),
+    }
+  }
+
+  private readStateRequirements(value: unknown): SemanticStateRequirement[] | null {
+    if (value === undefined) {
+      return []
+    }
+
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    const requirements: SemanticStateRequirement[] = []
+    for (const item of value) {
+      const requirement = this.toStateRequirement(item)
+      if (!requirement) {
+        return null
+      }
+      requirements.push(requirement)
+    }
+
+    return requirements
+  }
+
+  private toStateRequirement(value: unknown): SemanticStateRequirement | null {
+    const requirement = this.toRequirementWithOptionalShape(value)
+    if (!requirement || requirement.domain !== 'state') {
+      return null
+    }
+
+    return {
+      domain: 'state',
+      verb: requirement.verb,
+      object: requirement.object,
+      ...(requirement.shape === undefined ? {} : { shape: requirement.shape }),
+    }
+  }
+
+  private readOrderRequirements(value: unknown): SemanticOrderRequirement[] | null {
+    if (value === undefined) {
+      return []
+    }
+
+    if (!Array.isArray(value)) {
+      return null
+    }
+
+    const requirements: SemanticOrderRequirement[] = []
+    for (const item of value) {
+      const requirement = this.toOrderRequirement(item)
+      if (!requirement) {
+        return null
+      }
+      requirements.push(requirement)
+    }
+
+    return requirements
+  }
+
+  private toOrderRequirement(value: unknown): SemanticOrderRequirement | null {
+    const requirement = this.toRequirementWithOptionalShape(value)
+    if (!requirement || requirement.domain !== 'order') {
+      return null
+    }
+
+    return {
+      domain: 'order',
+      verb: requirement.verb,
+      object: requirement.object,
+      ...(requirement.shape === undefined ? {} : { shape: requirement.shape }),
+    }
+  }
+
+  private toRequirementWithOptionalShape(value: unknown): (SemanticRequirement & { shape?: SemanticCapabilityShape }) | null {
+    const requirement = this.toRequirement(value)
+    if (!requirement || !this.isRecord(value)) {
+      return null
+    }
+
+    if (value.shape === undefined) {
+      return requirement
+    }
+
+    if (!this.isCapabilityShape(value.shape)) {
+      return null
+    }
+
+    return {
+      ...requirement,
+      shape: value.shape,
     }
   }
 
@@ -1644,6 +1835,11 @@ export class SemanticSeedStateBuilderService {
       || value === 'exposure'
       || value === 'margin'
       || value === 'guard'
+      || value === 'runtime'
+      || value === 'state'
+      || value === 'order'
+      || value === 'portfolio'
+      || value === 'orchestration'
   }
 
   private isCapabilityShape(value: unknown): value is SemanticCapabilityShape {

@@ -926,6 +926,10 @@ export class StrategyClarificationRulesService {
       reason === 'missing_semantic_trigger'
       || reason === 'missing_semantic_action'
       || reason === 'missing_semantic_contract_requirement'
+      || reason === 'missing_semantic_contract_substrate'
+      || reason === 'missing_semantic_contract_runtime_requirement'
+      || reason === 'missing_semantic_contract_state_requirement'
+      || reason === 'missing_semantic_contract_order_requirement'
     ) return 90
     if (
       reason === 'missing_semantic_position_sizing'

@@ -5,10 +5,14 @@ import type {
   SemanticCapability,
   SemanticCapabilityDomain,
   SemanticNodeStatus,
+  SemanticOrderRequirement,
   SemanticPriority,
   SemanticRequirement,
+  SemanticRuntimeRequirement,
+  SemanticOrchestrationNode,
   SemanticSlotState,
   SemanticState,
+  SemanticStateRequirement,
 } from '../types/semantic-state'
 import type { SemanticAtomSupportMetadata } from '../types/semantic-atom-support'
 import { buildSemanticSlotId } from '../types/semantic-state'
@@ -18,6 +22,19 @@ import { SemanticContractShapeNormalizerService } from './semantic-contract-shap
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
+type SemanticSubstrateRequirement =
+  | SemanticRuntimeRequirement
+  | SemanticStateRequirement
+  | SemanticOrderRequirement
+type SemanticSubstrateRequirementKind =
+  | 'runtime_requirement'
+  | 'state_requirement'
+  | 'order_requirement'
+
+interface Phase0OrchestrationNormalizationResult {
+  state: SemanticState['orchestration']
+  hasBlockingSlots: boolean
+}
 
 export interface MissingSemanticContractRequirement extends SemanticRequirement {
   ownerKind: SemanticContractOwnerKind
@@ -35,8 +52,10 @@ interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
   atomKey: string
+  params: Record<string, unknown>
   support?: SemanticAtomSupportMetadata
   status: SemanticNodeStatus
+  openSlots: SemanticSlotState[]
   contracts: SemanticAtomContract[]
 }
 
@@ -55,6 +74,7 @@ export class SemanticContractReadinessService {
 
   normalize(state: SemanticState): SemanticContractReadinessNormalizationResult {
     const activeOwners = collectActiveContractOwners(state)
+    const orchestrationResult = normalizePhase0Orchestration(state.orchestration)
     const unsupportedOrUnknownOwnerKeys = new Set(
       activeOwners
         .filter(owner => this.isUnsupportedOrUnknownOwner(owner))
@@ -70,6 +90,9 @@ export class SemanticContractReadinessService {
     const slotsByOwnerKey = mergeSlotMaps(
       providerNormalization.shapeSlotsByOwnerKey,
       buildMissingRequirementSlots(missingRequirements),
+      buildMissingSubstrateSlots(supportedOwners),
+      buildUnsupportedSubstrateRequirementSlots(supportedOwners),
+      buildContractOpenSlotMap(supportedOwners),
     )
     const nextState: SemanticState = {
       ...state,
@@ -85,6 +108,7 @@ export class SemanticContractReadinessService {
       position: state.position
         ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
         : null,
+      orchestration: orchestrationResult.state,
     }
 
     return {
@@ -92,7 +116,8 @@ export class SemanticContractReadinessService {
       ready: unsupportedOrUnknownOwnerKeys.size === 0
         && missingRequirements.length === 0
         && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
-        && !hasBlockingOwnerOpenSlots(nextState),
+        && !hasBlockingOwnerOpenSlots(nextState)
+        && !orchestrationResult.hasBlockingSlots,
       missingRequirements,
     }
   }
@@ -208,7 +233,7 @@ export class SemanticContractReadinessService {
   }
 
   private isUnsupportedOrUnknownOwner(owner: SemanticContractOwnerRef): boolean {
-    const resolved = this.semanticAtomRegistry.resolve(owner.atomKey)
+    const resolved = this.resolveOwnerSupport(owner)
     if (isSupportedAtom(resolved)) {
       return false
     }
@@ -226,10 +251,78 @@ export class SemanticContractReadinessService {
 
     return false
   }
+
+  private resolveOwnerSupport(owner: SemanticContractOwnerRef): ReturnType<SemanticAtomRegistryService['resolve']> {
+    if (isExecutableIndicatorReferenceAlias(owner)) {
+      const registryKey = owner.atomKey === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+      return {
+        ...this.semanticAtomRegistry.get(registryKey),
+        key: owner.atomKey,
+      }
+    }
+
+    return this.semanticAtomRegistry.resolve(owner.atomKey)
+  }
 }
 
 function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resolve']>): boolean {
   return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
+}
+
+function normalizePhase0Orchestration(
+  orchestration: SemanticState['orchestration'],
+): Phase0OrchestrationNormalizationResult {
+  if (!orchestration) {
+    return { state: orchestration, hasBlockingSlots: false }
+  }
+
+  let changed = false
+  let hasBlockingSlots = false
+  const nodes = orchestration.nodes.map((node) => {
+    const nextNode = addPhase0OrchestrationBlocker(node)
+    changed ||= nextNode !== node
+    hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
+    return nextNode
+  })
+
+  return {
+    state: changed ? { ...orchestration, nodes } : orchestration,
+    hasBlockingSlots,
+  }
+}
+
+function addPhase0OrchestrationBlocker(node: SemanticOrchestrationNode): SemanticOrchestrationNode {
+  if (node.status !== 'locked') {
+    return node
+  }
+
+  const blocker = toPhase0OrchestrationBlocker(node)
+  const openSlots = node.openSlots ?? []
+  const blockerIndex = openSlots.findIndex(slot => slot.slotKey === blocker.slotKey)
+  const nextOpenSlots = blockerIndex === -1
+    ? [...openSlots, blocker]
+    : openSlots.map((slot, index) => index === blockerIndex ? blocker : slot)
+
+  return {
+    ...node,
+    status: 'open',
+    openSlots: nextOpenSlots,
+  }
+}
+
+function toPhase0OrchestrationBlocker(node: SemanticOrchestrationNode): SemanticSlotState {
+  return {
+    slotKey: 'orchestration.phase0.unsupported',
+    fieldPath: `orchestration.${node.kind}[${node.id}]`,
+    status: 'open',
+    priority: 'behavior',
+    affectsExecution: true,
+    questionHint: 'Phase 0 暂不支持部署 orchestration runtime。',
+    evidence: {
+      source: 'derived',
+      text: `Phase 0 cannot deploy orchestration node ${node.id}`,
+    },
+  }
 }
 
 function isUnsupportedOrUnknownSupportStatus(status: ReturnType<SemanticAtomRegistryService['resolve']>['supportStatus']): boolean {
@@ -254,8 +347,10 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'trigger',
         ownerId: trigger.id,
         atomKey: trigger.key,
+        params: trigger.params,
         support: trigger.support,
         status: trigger.status,
+        openSlots: trigger.openSlots,
         contracts: trigger.contracts,
       })
     }
@@ -267,8 +362,10 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'action',
         ownerId: action.id,
         atomKey: action.key,
+        params: {},
         support: action.support,
         status: action.status,
+        openSlots: action.openSlots ?? [],
         contracts: action.contracts,
       })
     }
@@ -280,8 +377,10 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'risk',
         ownerId: risk.id,
         atomKey: risk.key,
+        params: risk.params,
         support: risk.support,
         status: risk.status,
+        openSlots: risk.openSlots,
         contracts: risk.contracts,
       })
     }
@@ -292,13 +391,45 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       ownerKind: 'position',
       ownerId: positionOwnerId(),
       atomKey: toPositionAtomKey(state.position.mode),
+      params: {
+        mode: state.position.mode,
+        value: state.position.value,
+        positionMode: state.position.positionMode,
+        sizing: state.position.sizing,
+      },
       support: state.position.support,
       status: state.position.status,
+      openSlots: state.position.openSlots ?? [],
       contracts: state.position.contracts,
     })
   }
 
   return owners
+}
+
+function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): boolean {
+  if (owner.ownerKind !== 'trigger' || (owner.atomKey !== 'indicator.above' && owner.atomKey !== 'indicator.below')) {
+    return false
+  }
+
+  const indicator = readParamString(owner.params, 'indicator')?.toLowerCase() ?? ''
+  const referenceRole = readParamString(owner.params, 'referenceRole') ?? ''
+  const referencePeriod = owner.params['reference.period']
+  const hasReferencePeriod = typeof referencePeriod === 'number' && Number.isFinite(referencePeriod) && referencePeriod > 0
+  const hasReferencePeriodOpenSlot = owner.openSlots.some(slot =>
+    slot.status === 'open'
+    && slot.affectsExecution
+    && /reference\.period/u.test(`${slot.slotKey}.${slot.fieldPath}`),
+  )
+
+  return (indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
+    && referenceRole.length > 0
+    && (hasReferencePeriod || hasReferencePeriodOpenSlot)
+}
+
+function readParamString(params: Record<string, unknown>, key: string): string | null {
+  const value = params[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function buildMissingRequirementSlots(
@@ -315,6 +446,154 @@ function buildMissingRequirementSlots(
   }
 
   return slotsByOwnerKey
+}
+
+function buildMissingSubstrateSlots(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+
+  for (const owner of activeOwners) {
+    for (const contract of owner.contracts) {
+      if (hasContractSubstrate(contract)) {
+        continue
+      }
+
+      const key = ownerKey(owner.ownerKind, owner.ownerId)
+      const slots = slotsByOwnerKey.get(key) ?? []
+      slots.push({
+        slotKey: 'contract.substrate.missing',
+        fieldPath: buildContractFieldPath(owner, contract.id),
+        status: 'open',
+        priority: 'behavior',
+        affectsExecution: true,
+        questionHint: '请补齐该语义合约的执行 substrate。',
+        evidence: {
+          source: 'derived',
+          text: `Missing semantic contract substrate ${contract.id}`,
+        },
+      })
+      slotsByOwnerKey.set(key, slots)
+    }
+  }
+
+  return slotsByOwnerKey
+}
+
+const SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS = new Set([
+  'runtime.provide.bar_ohlcv',
+  'runtime.provide.indicator_helper',
+  'runtime.provide.compiled_predicate_runtime',
+  'state.read.none',
+  'state.write.none',
+  'state.read.sequence_state',
+  'state.write.sequence_state',
+  'state.read.remembered_level',
+  'state.write.remembered_level',
+  'order.support.market_order',
+  'order.support.close_position',
+  'order.support.reduce_position',
+])
+
+function buildUnsupportedSubstrateRequirementSlots(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+
+  for (const owner of activeOwners) {
+    for (const contract of owner.contracts) {
+      if (!hasContractSubstrate(contract)) {
+        continue
+      }
+
+      const unsupportedRequirements = [
+        ...contract.runtimeRequirements.map(requirement => ({
+          kind: 'runtime_requirement' as const,
+          requirement,
+        })),
+        ...contract.stateRequirements.map(requirement => ({
+          kind: 'state_requirement' as const,
+          requirement,
+        })),
+        ...contract.orderRequirements.map(requirement => ({
+          kind: 'order_requirement' as const,
+          requirement,
+        })),
+      ].filter(({ requirement }) => !isSupportedSubstrateRequirement(requirement))
+
+      if (!unsupportedRequirements.length) {
+        continue
+      }
+
+      const key = ownerKey(owner.ownerKind, owner.ownerId)
+      const slots = slotsByOwnerKey.get(key) ?? []
+      slots.push(...unsupportedRequirements.map(({ kind, requirement }) =>
+        toUnsupportedSubstrateRequirementSlot(owner, contract, kind, requirement),
+      ))
+      slotsByOwnerKey.set(key, slots)
+    }
+  }
+
+  return slotsByOwnerKey
+}
+
+function isSupportedSubstrateRequirement(requirement: SemanticSubstrateRequirement): boolean {
+  return SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS.has(requirementKey(requirement))
+}
+
+function requirementKey(requirement: SemanticSubstrateRequirement): string {
+  return `${requirement.domain}.${requirement.verb}.${requirement.object}`
+}
+
+function toUnsupportedSubstrateRequirementSlot(
+  owner: SemanticContractOwnerRef,
+  contract: SemanticAtomContract,
+  requirementKind: SemanticSubstrateRequirementKind,
+  requirement: SemanticSubstrateRequirement,
+): SemanticSlotState {
+  const key = requirementKey(requirement)
+
+  return {
+    slotKey: `contract.${requirementKind}.${key}`,
+    fieldPath: `${buildContractFieldPath(owner, contract.id)}.${requirementKind}.${key}`,
+    status: 'open',
+    priority: requirementKind === 'order_requirement' ? 'risk' : 'behavior',
+    affectsExecution: true,
+    questionHint: `请补齐 ${requirement.domain} ${requirement.verb} ${requirement.object} 的执行 substrate。`,
+    evidence: {
+      source: 'derived',
+      text: `Unsupported semantic contract ${requirementKind} ${contract.id}: ${key}`,
+    },
+  }
+}
+
+function buildContractOpenSlotMap(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+
+  for (const owner of activeOwners) {
+    for (const contract of owner.contracts) {
+      if (!Array.isArray(contract.openSlots) || !contract.openSlots.length) {
+        continue
+      }
+
+      const key = ownerKey(owner.ownerKind, owner.ownerId)
+      slotsByOwnerKey.set(key, [
+        ...(slotsByOwnerKey.get(key) ?? []),
+        ...contract.openSlots,
+      ])
+    }
+  }
+
+  return slotsByOwnerKey
+}
+
+function hasContractSubstrate(contract: Partial<SemanticAtomContract>): boolean {
+  return Array.isArray(contract.runtimeRequirements)
+    && Array.isArray(contract.stateRequirements)
+    && Array.isArray(contract.orderRequirements)
+    && Array.isArray(contract.openSlots)
 }
 
 function mergeSlotMaps(
@@ -351,7 +630,7 @@ function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
     || ownerHasOpenSlot(state.position)
 }
 
-function ownerHasOpenSlot(owner: { openSlots?: SemanticSlotState[] } | null): boolean {
+function ownerHasOpenSlot(owner: { openSlots?: readonly SemanticSlotState[] } | null): boolean {
   return owner?.openSlots?.some(isBlockingSemanticOpenSlot) ?? false
 }
 
@@ -412,20 +691,31 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status
       continue
     }
 
-    if (openSlots[existingIndex].status !== 'open') {
+    if (openSlots[existingIndex].status !== 'open' && isManagedContractReadinessSlot(slot)) {
       openSlots[existingIndex] = slot
     }
   }
 
+  const nextStatus = openSlots.some(slot => slot.status === 'open')
+    ? 'open'
+    : owner.status === 'open'
+      ? 'locked'
+      : owner.status
+
   return {
     ...owner,
     openSlots,
-    ...(owner.status === 'locked' ? { status: 'open' as const } : {}),
+    ...(nextStatus ? { status: nextStatus } : {}),
   }
 }
 
 function isManagedContractReadinessSlot(slot: SemanticSlotState): boolean {
-  return slot.slotKey.startsWith('contract.requirement.') || slot.slotKey.startsWith('contract.shape.')
+  return slot.slotKey.startsWith('contract.substrate.')
+    || slot.slotKey.startsWith('contract.requirement.')
+    || slot.slotKey.startsWith('contract.shape.')
+    || slot.slotKey.startsWith('contract.runtime_requirement.')
+    || slot.slotKey.startsWith('contract.state_requirement.')
+    || slot.slotKey.startsWith('contract.order_requirement.')
 }
 
 function buildRequirementFieldPath(
@@ -451,6 +741,17 @@ function buildCapabilityShapeFieldPath(
   }
 
   return `${ownerCollection(owner.ownerKind)}[${owner.ownerId}].contracts[${contract.id}].capabilities[${capabilityKey}].shape`
+}
+
+function buildContractFieldPath(
+  owner: SemanticContractOwnerRef,
+  contractId: string,
+): string {
+  if (owner.ownerKind === 'position') {
+    return `position.contracts[${contractId}]`
+  }
+
+  return `${ownerCollection(owner.ownerKind)}[${owner.ownerId}].contracts[${contractId}]`
 }
 
 function ownerCollection(ownerKind: Exclude<SemanticContractOwnerKind, 'position'>): 'triggers' | 'actions' | 'risk' {

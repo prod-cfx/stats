@@ -270,6 +270,10 @@ describe('SemanticAtomInvariantService', () => {
       ],
       requires: [],
       params: {},
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
     }
     const orderProgramContract: SemanticAtomContract = {
       id: 'action-maintain-limit-ladder',
@@ -287,6 +291,10 @@ describe('SemanticAtomInvariantService', () => {
         { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
       ],
       params: {},
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
     }
     const budgetContract: SemanticAtomContract = {
       id: 'position-per-order-budget',
@@ -307,6 +315,10 @@ describe('SemanticAtomInvariantService', () => {
       ],
       requires: [],
       params: {},
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
     }
 
     return {

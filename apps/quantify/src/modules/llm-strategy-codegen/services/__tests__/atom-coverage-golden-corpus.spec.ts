@@ -9,7 +9,10 @@ const extractor = new SemanticSeedExtractorService()
 const builder = new SemanticSeedStateBuilderService()
 const classifier = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
 
-function collectCoverageKeys(state: SemanticState, classification: ReturnType<SemanticSupportClassifierService['classify']>): Set<string> {
+function collectCoverageKeys(
+  state: SemanticState,
+  classification: ReturnType<SemanticSupportClassifierService['classify']>,
+): Set<string> {
   const keys = new Set<string>()
 
   for (const trigger of state.triggers) {
@@ -56,7 +59,47 @@ describe('atom coverage golden corpus', () => {
     expect(atomCoverageGoldenCases.length).toBeLessThanOrEqual(100)
   })
 
-  it.each(atomCoverageGoldenCases)('$name', (goldenCase) => {
+  it('requires phase 0 metadata for every corpus case', () => {
+    for (const goldenCase of atomCoverageGoldenCases) {
+      expect(goldenCase.id).toEqual(expect.any(String))
+      expect(goldenCase.id.length).toBeGreaterThan(0)
+      expect(goldenCase.name).toEqual(expect.any(String))
+      expect(goldenCase.name.length).toBeGreaterThan(0)
+      expect(goldenCase.message).toEqual(expect.any(String))
+      expect(goldenCase.message.length).toBeGreaterThan(0)
+      expect(goldenCase.tags.length).toBeGreaterThan(0)
+      expect(goldenCase.expectedRoute).toEqual(expect.any(String))
+      expect(goldenCase.expectedAtoms.length).toBeGreaterThan(0)
+      for (const expectedAtom of goldenCase.expectedAtoms) {
+        expect(expectedAtom.key).not.toMatch(/^(?:open_slot|unsupported|unknown):/)
+      }
+    }
+  })
+
+  it('marks executable projection gate atoms with minimum contract substrate', () => {
+    for (const goldenCase of atomCoverageGoldenCases) {
+      if (goldenCase.expectedRoute !== 'projection_gate') continue
+
+      for (const expectedAtom of goldenCase.expectedAtoms) {
+        if (expectedAtom.category === 'context') continue
+
+        expect(expectedAtom.minContractSubstrate).toBe(true)
+      }
+    }
+  })
+
+  it('tracks orchestration cases outside the executable projection gate route', () => {
+    const orchestrationCases = atomCoverageGoldenCases.filter(goldenCase =>
+      goldenCase.tags.includes('orchestration'),
+    )
+
+    expect(orchestrationCases.length).toBeGreaterThan(0)
+    for (const goldenCase of orchestrationCases) {
+      expect(goldenCase.expectedRoute).not.toBe('projection_gate')
+    }
+  })
+
+  it.each(atomCoverageGoldenCases)('$name', goldenCase => {
     const patch = extractor.extract(goldenCase.message)
     const state = builder.build(patch)
     expect(state).not.toBeNull()

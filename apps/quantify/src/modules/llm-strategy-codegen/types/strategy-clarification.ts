@@ -26,6 +26,10 @@ export const STRATEGY_CLARIFICATION_REASONS = [
   'missing_semantic_position_sizing',
   'missing_semantic_position_mode',
   'missing_semantic_contract_requirement',
+  'missing_semantic_contract_substrate',
+  'missing_semantic_contract_runtime_requirement',
+  'missing_semantic_contract_state_requirement',
+  'missing_semantic_contract_order_requirement',
 ] as const
 
 export const STRATEGY_CLARIFICATION_ITEM_STATUSES = ['pending', 'answered'] as const

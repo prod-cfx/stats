@@ -23,6 +23,10 @@ describe('SemanticSeedStateBuilderService', () => {
     }],
     requires: [],
     params: {},
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
   }
 
   it('preserves open trigger envelope from semantic seed patch', () => {
@@ -437,6 +441,70 @@ describe('SemanticSeedStateBuilderService', () => {
       }),
     ]))
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
+  })
+
+  it('attaches registry substrate to supported atom contracts', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { indicator: 'ma', fastPeriod: 20, slowPeriod: 50 },
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.triggers[0].contracts?.[0]).toEqual(expect.objectContaining({
+      runtimeRequirements: expect.arrayContaining([
+        expect.objectContaining({ domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' }),
+      ]),
+      stateRequirements: expect.any(Array),
+      orderRequirements: expect.arrayContaining([
+        expect.objectContaining({ domain: 'order', verb: 'support', object: 'market_order' }),
+      ]),
+      openSlots: expect.any(Array),
+    }))
+  })
+
+  it('attaches registry substrate to executable moving-average indicator aliases', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { indicator: 'ema', referenceRole: 'moving_average', 'reference.period': 100 },
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.triggers[0].contracts?.[0]).toEqual(expect.objectContaining({
+      runtimeRequirements: expect.arrayContaining([
+        expect.objectContaining({ domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' }),
+      ]),
+      stateRequirements: expect.any(Array),
+      orderRequirements: expect.arrayContaining([
+        expect.objectContaining({ domain: 'order', verb: 'support', object: 'market_order' }),
+      ]),
+      openSlots: expect.any(Array),
+    }))
+  })
+
+  it('maps supported_requires_slot registry substrate open slots onto synthesized contracts', () => {
+    const state = service.build({
+      risk: [{
+        key: 'risk.falling_knife_guard',
+        params: {},
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.risk[0].contracts?.[0]?.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        status: 'open',
+        affectsExecution: true,
+      }),
+    ]))
   })
 
   it('synthesizes contracts for sequence, rebound and relative-volume atoms without generic contract prompts', () => {
@@ -1139,6 +1207,10 @@ describe('SemanticSeedStateBuilderService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -1157,6 +1229,10 @@ describe('SemanticSeedStateBuilderService', () => {
             { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       risk: [{
@@ -1172,6 +1248,10 @@ describe('SemanticSeedStateBuilderService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       position: {
@@ -1189,6 +1269,10 @@ describe('SemanticSeedStateBuilderService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       },
     })
@@ -1238,6 +1322,10 @@ describe('SemanticSeedStateBuilderService', () => {
             { domain: 'capital', verb: '', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })

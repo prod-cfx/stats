@@ -1,5 +1,12 @@
 import type { CodegenSemanticPatch } from './codegen-semantic-patch'
-import type { SemanticContractKind, SemanticPriority, SemanticSlotState } from './semantic-state'
+import type {
+  SemanticContractKind,
+  SemanticOrderRequirement,
+  SemanticPriority,
+  SemanticRuntimeRequirement,
+  SemanticSlotState,
+  SemanticStateRequirement,
+} from './semantic-state'
 
 export type SemanticAtomSupportStatus =
   | 'supported_executable'
@@ -28,17 +35,54 @@ export interface SemanticAtomOpenSlotSpec {
   questionHint: string
 }
 
-export interface SemanticAtomDefinition {
+export interface SemanticAtomContractSubstrate {
+  runtimeRequirements: readonly SemanticRuntimeRequirement[]
+  stateRequirements: readonly SemanticStateRequirement[]
+  orderRequirements: readonly SemanticOrderRequirement[]
+  openSlots: readonly SemanticAtomOpenSlotSpec[]
+}
+
+interface SemanticAtomDefinitionBase {
   key: string
-  category: SemanticAtomCategory
-  supportStatus: SemanticAtomSupportStatus
+  category: SemanticContractKind
   requiredParams: string[]
   defaultableParams: string[]
   executableProjection: string[]
   openSlots: SemanticAtomOpenSlotSpec[]
-  unsupported?: SemanticAtomUnsupportedMetadata
+}
+
+export interface SemanticSupportedAtomDefinition extends SemanticAtomDefinitionBase {
+  supportStatus: 'supported_executable' | 'supported_requires_slot'
+  contractSubstrate: SemanticAtomContractSubstrate
+  unsupported?: never
+  replacement?: never
+}
+
+export interface SemanticRecognizedUnsupportedAtomDefinition extends SemanticAtomDefinitionBase {
+  supportStatus: 'recognized_unsupported'
+  contractSubstrate?: never
+  unsupported: SemanticAtomUnsupportedMetadata
   replacement?: SemanticAtomReplacementStrategy
 }
+
+export interface SemanticUnknownAtomDefinition {
+  key: string
+  category: 'unknown'
+  supportStatus: 'unsupported_unknown'
+  contractSubstrate?: never
+  unsupported?: never
+  replacement?: never
+}
+
+export type SemanticRegisteredAtomDefinition =
+  | SemanticSupportedAtomDefinition
+  | SemanticRecognizedUnsupportedAtomDefinition
+
+export type SemanticUnsupportedAtomDefinition =
+  | SemanticRecognizedUnsupportedAtomDefinition
+  | SemanticUnknownAtomDefinition
+
+export type SemanticAtomDefinition = SemanticRegisteredAtomDefinition
 
 export interface SemanticAtomSupportMetadata {
   supportStatus: SemanticAtomSupportStatus

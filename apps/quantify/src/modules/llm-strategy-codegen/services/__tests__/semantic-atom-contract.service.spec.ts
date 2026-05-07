@@ -18,6 +18,10 @@ describe('SemanticAtomContractService', () => {
         ],
         requires: [],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       },
       {
         id: 'action-1',
@@ -35,6 +39,10 @@ describe('SemanticAtomContractService', () => {
           { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
         ],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       },
       {
         id: 'position-1',
@@ -49,6 +57,10 @@ describe('SemanticAtomContractService', () => {
         ],
         requires: [],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       },
     ] as const
 
@@ -79,6 +91,10 @@ describe('SemanticAtomContractService', () => {
           { domain: 'price', verb: 'define', object: 'level_set' },
         ],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       },
     ])
 

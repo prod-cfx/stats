@@ -124,6 +124,10 @@ export function buildTriggerCombinationContract(
       phase: input.phase,
       sideScope,
     },
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
   }
 }
 

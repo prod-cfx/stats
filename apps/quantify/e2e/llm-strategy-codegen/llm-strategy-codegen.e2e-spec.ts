@@ -166,7 +166,12 @@ describe('llm strategy codegen (E2E)', () => {
       })
       .overrideProvider(EnvService)
       .useValue({
-        getString: (key: string) => (key === 'APP_SECRET' ? TEST_ENGINE_SECRET : undefined),
+        getString: (key: string) => {
+          if (key === 'APP_SECRET') {
+            return TEST_ENGINE_SECRET
+          }
+          return process.env[key] ?? process.env[`QUANTIFY_${key}`]
+        },
         isProd: () => false,
         isDev: () => false,
         isTest: () => true,
