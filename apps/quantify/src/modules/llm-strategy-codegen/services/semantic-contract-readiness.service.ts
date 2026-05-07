@@ -70,6 +70,8 @@ export class SemanticContractReadinessService {
     const slotsByOwnerKey = mergeSlotMaps(
       providerNormalization.shapeSlotsByOwnerKey,
       buildMissingRequirementSlots(missingRequirements),
+      buildMissingSubstrateSlots(supportedOwners),
+      buildContractOpenSlotMap(supportedOwners),
     )
     const nextState: SemanticState = {
       ...state,
@@ -317,6 +319,67 @@ function buildMissingRequirementSlots(
   return slotsByOwnerKey
 }
 
+function buildMissingSubstrateSlots(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+
+  for (const owner of activeOwners) {
+    for (const contract of owner.contracts) {
+      if (hasContractSubstrate(contract)) {
+        continue
+      }
+
+      const key = ownerKey(owner.ownerKind, owner.ownerId)
+      const slots = slotsByOwnerKey.get(key) ?? []
+      slots.push({
+        slotKey: 'contract.substrate.missing',
+        fieldPath: buildContractFieldPath(owner, contract.id),
+        status: 'open',
+        priority: 'behavior',
+        affectsExecution: true,
+        questionHint: '请补齐该语义合约的执行 substrate。',
+        evidence: {
+          source: 'derived',
+          text: `Missing semantic contract substrate ${contract.id}`,
+        },
+      })
+      slotsByOwnerKey.set(key, slots)
+    }
+  }
+
+  return slotsByOwnerKey
+}
+
+function buildContractOpenSlotMap(
+  activeOwners: readonly SemanticContractOwnerRef[],
+): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+
+  for (const owner of activeOwners) {
+    for (const contract of owner.contracts) {
+      if (!Array.isArray(contract.openSlots) || !contract.openSlots.length) {
+        continue
+      }
+
+      const key = ownerKey(owner.ownerKind, owner.ownerId)
+      slotsByOwnerKey.set(key, [
+        ...(slotsByOwnerKey.get(key) ?? []),
+        ...contract.openSlots,
+      ])
+    }
+  }
+
+  return slotsByOwnerKey
+}
+
+function hasContractSubstrate(contract: Partial<SemanticAtomContract>): boolean {
+  return Array.isArray(contract.runtimeRequirements)
+    && Array.isArray(contract.stateRequirements)
+    && Array.isArray(contract.orderRequirements)
+    && Array.isArray(contract.openSlots)
+}
+
 function mergeSlotMaps(
   ...slotMaps: readonly Map<string, SemanticSlotState[]>[]
 ): Map<string, SemanticSlotState[]> {
@@ -425,7 +488,9 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status
 }
 
 function isManagedContractReadinessSlot(slot: SemanticSlotState): boolean {
-  return slot.slotKey.startsWith('contract.requirement.') || slot.slotKey.startsWith('contract.shape.')
+  return slot.slotKey === 'contract.substrate.missing'
+    || slot.slotKey.startsWith('contract.requirement.')
+    || slot.slotKey.startsWith('contract.shape.')
 }
 
 function buildRequirementFieldPath(
@@ -451,6 +516,17 @@ function buildCapabilityShapeFieldPath(
   }
 
   return `${ownerCollection(owner.ownerKind)}[${owner.ownerId}].contracts[${contract.id}].capabilities[${capabilityKey}].shape`
+}
+
+function buildContractFieldPath(
+  owner: SemanticContractOwnerRef,
+  contractId: string,
+): string {
+  if (owner.ownerKind === 'position') {
+    return `position.contracts[${contractId}]`
+  }
+
+  return `${ownerCollection(owner.ownerKind)}[${owner.ownerId}].contracts[${contractId}]`
 }
 
 function ownerCollection(ownerKind: Exclude<SemanticContractOwnerKind, 'position'>): 'triggers' | 'actions' | 'risk' {

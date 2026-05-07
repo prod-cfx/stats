@@ -52,6 +52,86 @@ describe('SemanticContractReadinessService', () => {
     expect(result.missingRequirements).toEqual([])
   })
 
+  it('fails supported owners whose contracts omit substrate arrays', () => {
+    const legacyContract = {
+      id: 'legacy-trigger-contract',
+      kind: 'trigger',
+      capabilities: [],
+      requires: [],
+      params: {},
+    } as never
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-legacy',
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [legacyContract],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.state.triggers[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'contract.substrate.missing',
+        fieldPath: 'triggers[trigger-legacy].contracts[legacy-trigger-contract]',
+        affectsExecution: true,
+        status: 'open',
+      })],
+    }))
+  })
+
+  it('merges execution-affecting contract open slots into the owner', () => {
+    const state = createSemanticState({
+      risk: [{
+        id: 'risk-falling-knife',
+        key: 'risk.falling_knife_guard',
+        status: 'locked',
+        source: 'derived',
+        params: {},
+        openSlots: [],
+        support: { supportStatus: 'supported_requires_slot' },
+        contracts: [{
+          id: 'risk-contract-falling-knife',
+          kind: 'risk',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [{
+            slotKey: 'risk.falling_knife_guard.definition',
+            fieldPath: 'risk[risk-falling-knife].params.definition',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认“不接飞刀”的判定方式。',
+            affectsExecution: true,
+          }],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    expect(result.state.risk[0]).toEqual(expect.objectContaining({
+      status: 'open',
+      openSlots: [expect.objectContaining({
+        slotKey: 'risk.falling_knife_guard.definition',
+        affectsExecution: true,
+        status: 'open',
+      })],
+    }))
+  })
+
   it('writes missing price and capital requirements to the requiring action open slots', () => {
     const state = createSemanticState({
       actions: [{
