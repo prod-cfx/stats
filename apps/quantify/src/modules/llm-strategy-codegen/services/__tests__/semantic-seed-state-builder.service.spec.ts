@@ -1464,4 +1464,39 @@ describe('SemanticSeedStateBuilderService', () => {
       object: 'partial_take_profit',
     }))
   })
+
+  describe('phase-1 gate atoms', () => {
+    it('builds phase=gate triggers for the 5 phase-1 atoms and never routes them to actions[]', () => {
+      const builder = new SemanticSeedStateBuilderService()
+      const patch = {
+        triggers: [
+          { key: 'volume.threshold', phase: 'gate' as const, sideScope: 'both' as const,
+            params: { metric: 'base_volume', operator: 'GT', value: 100, unit: 'base' } },
+          { key: 'volatility.atr_threshold', phase: 'gate' as const, sideScope: 'both' as const,
+            params: { period: 14, operator: 'GT', threshold: 1, thresholdUnit: 'percent_of_close' } },
+          { key: 'strategy.time_window', phase: 'gate' as const, sideScope: 'both' as const,
+            params: { timezone: 'Asia/Shanghai', windows: [{ start: '09:30', end: '15:00' }] } },
+          { key: 'position.has_position', phase: 'gate' as const, sideScope: 'long' as const, params: {} },
+          { key: 'position.no_position', phase: 'gate' as const, sideScope: 'both' as const, params: {} },
+        ],
+      }
+
+      const state = builder.build(patch as never)
+      const phase1Keys = ['volume.threshold', 'volatility.atr_threshold', 'strategy.time_window',
+        'position.has_position', 'position.no_position']
+
+      expect(state?.triggers).toHaveLength(5)
+      for (const trigger of state?.triggers ?? []) {
+        expect(trigger.phase).toBe('gate')
+        expect(phase1Keys).toContain(trigger.key)
+      }
+      // critic C6 invariant: 5 atoms must NEVER be routed as actions
+      for (const action of state?.actions ?? []) {
+        expect(phase1Keys).not.toContain(action.key)
+      }
+      // sideScope='long' transparently preserved on position.has_position
+      const hasPos = state?.triggers.find(t => t.key === 'position.has_position')
+      expect(hasPos?.sideScope).toBe('long')
+    })
+  })
 })

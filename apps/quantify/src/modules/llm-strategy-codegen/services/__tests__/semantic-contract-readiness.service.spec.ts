@@ -1929,6 +1929,149 @@ describe('SemanticContractReadinessService', () => {
       slotKey: 'orchestration.phase0.unsupported',
     }))
   })
+
+  describe('phase-1 gate atoms readiness', () => {
+    it('accepts volume.threshold as supported when substrate runtime requirements satisfied', () => {
+      const state = createSemanticState({
+        triggers: [{
+          id: 'gate-vol',
+          key: 'volume.threshold',
+          phase: 'gate',
+          params: { metric: 'base_volume', operator: 'GT', value: 100, unit: 'base' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          support: { supportStatus: 'supported_executable' },
+          contracts: [{
+            id: 'gate-vol-contract',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [],
+            params: {},
+            runtimeRequirements: [
+              { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+              { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+              { domain: 'runtime', verb: 'provide', object: 'volume_series' },
+            ],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        }],
+      })
+      const result = new SemanticContractReadinessService().normalize(state)
+      expect(result.ready).toBe(true)
+    })
+
+    it('accepts volatility.atr_threshold as supported when atr substrate satisfied', () => {
+      const state = createSemanticState({
+        triggers: [{
+          id: 'gate-atr',
+          key: 'volatility.atr_threshold',
+          phase: 'gate',
+          params: { period: 14, operator: 'GT', threshold: 1, thresholdUnit: 'percent_of_close' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          support: { supportStatus: 'supported_executable' },
+          contracts: [{
+            id: 'gate-atr-contract',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [],
+            params: {},
+            runtimeRequirements: [
+              { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+              { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+              { domain: 'runtime', verb: 'provide', object: 'atr_helper' },
+            ],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        }],
+      })
+      const result = new SemanticContractReadinessService().normalize(state)
+      expect(result.ready).toBe(true)
+    })
+
+    it('keeps strategy.time_window in supported_requires_slot until timezone slot answered', () => {
+      const state = createSemanticState({
+        triggers: [{
+          id: 'gate-tw',
+          key: 'strategy.time_window',
+          phase: 'gate',
+          params: { windows: [{ start: '09:30', end: '15:00' }] },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'strategy.time_window.timezone',
+            fieldPath: 'gates[*].params.timezone',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请指定该交易时间窗使用的时区，例如 Asia/Shanghai 或 UTC。',
+            affectsExecution: true,
+          }],
+          support: { supportStatus: 'supported_requires_slot' },
+          contracts: [{
+            id: 'gate-tw-contract',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [],
+            params: {},
+            runtimeRequirements: [
+              { domain: 'runtime', verb: 'provide', object: 'bar_timestamp' },
+              { domain: 'runtime', verb: 'provide', object: 'timezone_clock' },
+            ],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [{
+              slotKey: 'strategy.time_window.timezone',
+              fieldPath: 'gates[*].params.timezone',
+              status: 'open',
+              priority: 'context',
+              questionHint: '请指定该交易时间窗使用的时区，例如 Asia/Shanghai 或 UTC。',
+              affectsExecution: true,
+            }],
+          }],
+        }],
+      })
+      const result = new SemanticContractReadinessService().normalize(state)
+      expect(result.ready).toBe(false)
+    })
+
+    it('accepts position.has_position and position.no_position with position-state substrate', () => {
+      for (const key of ['position.has_position', 'position.no_position']) {
+        const state = createSemanticState({
+          triggers: [{
+            id: `gate-${key}`,
+            key,
+            phase: 'gate',
+            params: {},
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            support: { supportStatus: 'supported_executable' },
+            contracts: [{
+              id: `${key}-contract`,
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [
+                { domain: 'state', verb: 'read', object: 'position_state' },
+              ],
+              orderRequirements: [],
+              openSlots: [],
+            }],
+          }],
+        })
+        const result = new SemanticContractReadinessService().normalize(state)
+        expect(result.ready).toBe(true)
+      }
+    })
+  })
 })
 
 function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {

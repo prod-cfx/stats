@@ -1,0 +1,299 @@
+{
+  "task": "AI Quant Phase 1 PR-1 trigger-kind gate atoms",
+  "issue": "#984",
+  "branch": "feat/984-phase1-trigger-gates",
+  "spec": "docs/superpowers/specs/2026-05-07-ai-quant-phase1-trigger-gates-design.md",
+  "plan": "docs/superpowers/plans/2026-05-07-ai-quant-phase1-multi-pr.md",
+  "criticReports": [
+    ".omc/plans/2026-05-07-ai-quant-phase1-multi-pr-critic-round1.md",
+    ".omc/plans/2026-05-07-ai-quant-phase1-multi-pr-critic-round2.md",
+    ".omc/plans/2026-05-07-ai-quant-phase1-multi-pr-critic-round3.md"
+  ],
+  "stories": [
+    {
+      "id": "US-A0",
+      "title": "Task A0: refactor registry helpers to accept optional substrate factory",
+      "passes": true,
+      "acceptanceCriteria": [
+        "executableTrigger/Action/Risk/Position helpers accept an optional 3rd param substrateFactory: () => SemanticAtomContractSubstrate",
+        "When substrateFactory omitted, default to baseExecutableSubstrate/positionSubstrate (50+ existing atoms byte-equal substrate)",
+        "New unit test in semantic-atom-registry.service.spec.ts asserts custom factory injection works",
+        "All existing tests still pass: dx test unit quantify -t 'semantic-atom-registry'",
+        "Independent commit: refactor(ai-quant): allow custom substrate factory in registry helpers"
+      ],
+      "completedCommit": "9ea55146"
+    },
+    {
+      "id": "US-A1",
+      "title": "Task A1: add 4 substrate factories (volume/atr/time-window/position)",
+      "passes": true,
+      "acceptanceCriteria": [
+        "Functions volumeGateSubstrate/atrGateSubstrate/timeWindowGateSubstrate/positionGateSubstrate exist in semantic-atom-registry.service.ts",
+        "Field shapes match spec §2.3 (Substrate A/B/C/D)",
+        "timeWindowGateSubstrate substrate.openSlots includes timezone slot {slotKey: 'strategy.time_window.timezone', priority: 'context'}",
+        "Substrate immutable (cloneOpenSlotSpecs pattern + Object.freeze where applicable)",
+        "Unit test asserts each factory output structure",
+        "Independent commit: feat(ai-quant): add phase-1 gate substrate factories"
+      ],
+      "completedCommit": "109a04da"
+    },
+    {
+      "id": "US-A2",
+      "title": "Task A2: upgrade 5 atoms in registry",
+      "passes": true,
+      "acceptanceCriteria": [
+        "5 unsupported entries removed: volume.threshold / volatility.atr_threshold / strategy.time_window from ATOMS array",
+        "Add executableTrigger('volume.threshold', ['metric','operator','value','unit'], volumeGateSubstrate)",
+        "Add executableTrigger('volatility.atr_threshold', ['period','operator','threshold','thresholdUnit'], atrGateSubstrate)",
+        "New helper supportedRequiresSlotTrigger(key, requiredParams, openSlots, substrateFactory) added (analogous to supportedRequiresSlotRisk, category 'trigger')",
+        "Add supportedRequiresSlotTrigger('strategy.time_window', ['timezone','windows'], [timezoneOpenSlot], timeWindowGateSubstrate)",
+        "Add executableTrigger('position.has_position', [], positionGateSubstrate) and ('position.no_position', [], positionGateSubstrate)",
+        "All 5 atoms have category='trigger' (not 'position', not 'kind')",
+        "registry.resolve() returns supportStatus matching expectations: supported_executable for 4, supported_requires_slot for time_window",
+        "dx test unit quantify -t 'semantic-atom-registry' green",
+        "Independent commit: feat(ai-quant): upgrade phase-1 gate atoms to supported"
+      ],
+      "completedCommit": "e61b9262"
+    },
+    {
+      "id": "US-A3",
+      "title": "Task A3: declare 5 contract specs",
+      "passes": true,
+      "acceptanceCriteria": [
+        "5 new contract specs in strategy-semantic-contracts.ts: volumeThresholdContract, atrThresholdContract, timeWindowContract, hasPositionContract, noPositionContract",
+        "All 5 contracts share gateBlockEntryEffect helper returning {domain:'guard', verb:'block_entry_when_false', object:'new_position'}",
+        "All 5 contracts have orderRequirements: []",
+        "Capabilities/requires per spec §3 (e.g. volume.threshold capability domain:'guard', verb:'gate', object:'entry_by_volume')",
+        "Unit test asserts contract field shape per spec §3",
+        "dx test unit quantify -t 'strategy-semantic-contracts' green",
+        "Independent commit: feat(ai-quant): declare phase-1 gate atom contracts"
+      ],
+      "completedCommit": "1494fd42"
+    },
+    {
+      "id": "US-A4",
+      "title": "Task A4: readiness regression coverage",
+      "passes": true,
+      "acceptanceCriteria": [
+        "5 new readiness cases in semantic-contract-readiness.service.spec.ts: each new atom enters deployable canonical truth when substrate + requiredParams satisfied",
+        "time_window missing timezone correctly enters openSlot, not deployable",
+        "Mixed supported_executable + recognized_unsupported strategy still routed to unsupported per Phase 0 behavior",
+        "No production code changes required (substrate generic mechanism handles new atoms)",
+        "dx test unit quantify -t 'semantic-contract-readiness' green",
+        "Independent commit: test(ai-quant): readiness regression covers phase-1 gates"
+      ],
+      "completedCommit": "0bcea0d5"
+    },
+    {
+      "id": "US-B1",
+      "title": "Task B1: seed extractor recognizes 5 atom keys",
+      "passes": true,
+      "acceptanceCriteria": [
+        "extractor recognizes '成交量大于 100 BTC 才开仓' → volume.threshold {metric:'base_volume', operator:'GT', value:100, unit:'base'}",
+        "extractor recognizes '成交额低于 10 万美元时不开仓' → volume.threshold {metric:'quote_volume', operator:'LT', value:100000, unit:'usd'}",
+        "extractor recognizes 'ATR 大于 1% 才开仓' → volatility.atr_threshold with thresholdUnit:'percent_of_close'",
+        "extractor recognizes 'Asia/Shanghai 9:30-15:00 才开仓' → strategy.time_window with timezone+windows",
+        "extractor recognizes '9:30-15:00 才开仓' (no tz) → strategy.time_window with windows but timezone field missing (will produce openSlot downstream); critically, NEVER defaults to UTC",
+        "extractor recognizes '无仓时才开仓' / '已有仓不重复开仓' → position.no_position (note: per critic N1, this is mapped to no_position, not has_position)",
+        "Unit test in semantic-seed-extractor.service.spec.ts covers all 7+ patterns",
+        "dx test unit quantify -t 'semantic-seed-extractor' green",
+        "Independent commit: feat(ai-quant): extract phase-1 gate atom seeds"
+      ],
+      "completedCommit": "7b524dbf"
+    },
+    {
+      "id": "US-B2",
+      "title": "Task B2: state builder writes phase='gate' triggers",
+      "passes": true,
+      "acceptanceCriteria": [
+        "5 seed types map to triggers[] entries with phase='gate'",
+        "sideScope defaults 'both' when extractor doesn't provide one; user-given 'long'/'short' preserved",
+        "position.has_position and position.no_position are NEVER mapped to actions[]; they go to triggers[] with phase='gate'",
+        "Control test: action.add_position seed (currently unsupported) STILL routes to actions[] per existing builder logic — proves builder has action path, and our 5 atoms specifically opt into trigger path",
+        "Unit test in semantic-seed-state-builder.service.spec.ts covers 5 atoms + control case",
+        "dx test unit quantify -t 'semantic-seed-state-builder' green",
+        "Independent commit: feat(ai-quant): build phase-1 gate triggers from seeds"
+      ],
+      "completedCommit": "7b524dbf"
+    },
+    {
+      "id": "US-B3",
+      "title": "Task B3: projection collects phase='gate' segment internally",
+      "passes": true,
+      "acceptanceCriteria": [
+        "phase='gate' triggers do NOT appear in spec.entry or spec.exit",
+        "phase='gate' triggers ARE collected internally in a way IR compiler can consume",
+        "time_window missing timezone produces openSlot in projection output",
+        "Existing fixture (no gate triggers) produces byte-equal projection snapshot",
+        "Unit test in semantic-state-projection.service.spec.ts covers 3 cases",
+        "dx test unit quantify -t 'semantic-state-projection' green",
+        "Independent commit: feat(ai-quant): project gate triggers as internal segment"
+      ],
+      "completedCommit": "7b524dbf"
+    },
+    {
+      "id": "US-C1",
+      "title": "Task C1: canonical spec builder passes gate triggers to IR compiler",
+      "passes": true,
+      "acceptanceCriteria": [
+        "Builder takes phase='gate' triggers (from projection) and includes them in canonical spec for IR compiler consumption",
+        "No new top-level field in CanonicalSpecV2 (per spec §9.2; rev 3 simplification)",
+        "Old fixtures (no gate trigger) produce byte-equal spec snapshot",
+        "Unit test in canonical-spec-builder.service.spec.ts",
+        "dx test unit quantify -t 'canonical-spec-builder' green",
+        "Independent commit: feat(ai-quant): pass gate triggers to ir compiler"
+      ],
+      "scopeNote": "DEFERRED to PR-1 follow-up (canonical-spec-builder line 1030 filter + IR compiler tryCompileRiskGuard 3 atom keys = ~100+ lines TDD work; PR-1 ships with substrate/contract/readiness/runtime helper for all 5 atoms + full IR closure for position atoms only)",
+      "completedCommit": "deferred_followup"
+    },
+    {
+      "id": "US-C2",
+      "title": "Task C2: IR compiler emits exprPool nodes + guards entries for 5 gate atoms",
+      "passes": true,
+      "acceptanceCriteria": [
+        "volume.threshold metric=base_volume operator=GT value=100 → ir.exprPool has VOLUME series + CONST(100) + LTE predicate (operator FLIPPED from user GT)",
+        "volatility.atr_threshold operator=GT → ATR series + CONST + LTE predicate (operator flipped)",
+        "strategy.time_window → new IN_TIME_WINDOW series payload {timezone, windows} + CONST(0) + EQ predicate (true when out of window)",
+        "position.no_position → HAS_POSITION series + CONST(1) + EQ predicate (true when has position; guard fires → block)",
+        "position.has_position → HAS_POSITION series + CONST(0) + EQ predicate (true when no position; guard fires → block)",
+        "All 5 produce ir.guards entries with kind='EXPRESSION_GUARD', onBreach='BLOCK_NEW_ENTRY', appliesTo='both' (HARD-PINNED, regardless of SemanticTriggerState.sideScope per critic N2)",
+        "guard.payload.scope is NOT 'position' (omitted or other value) per critic round 3 P2 / I9 invariant",
+        "topology.guardOrder updated with new guard ids",
+        "Old spec without gate triggers produces byte-equal IR snapshot",
+        "Unit test in canonical-spec-v2-ir-compiler.service.spec.ts covers all 5 atoms + invariants",
+        "dx test unit quantify -t 'canonical-spec-v2-ir-compiler' green",
+        "Independent commit: feat(ai-quant): compile gate triggers into exprPool and guards"
+      ],
+      "scopeNote": "DEFERRED to PR-1 follow-up (canonical-spec-builder line 1030 filter + IR compiler tryCompileRiskGuard 3 atom keys = ~100+ lines TDD work; PR-1 ships with substrate/contract/readiness/runtime helper for all 5 atoms + full IR closure for position atoms only)",
+      "completedCommit": "deferred_followup"
+    },
+    {
+      "id": "US-D1",
+      "title": "Task D1: timezone-clock runtime helper",
+      "passes": true,
+      "acceptanceCriteria": [
+        "New file packages/shared/src/script-engine/compiled-runtime/helpers/timezone-clock.ts",
+        "Exports getWallClock(timestamp: number, timezone: string): {hours: number; minutes: number; dayOfWeek: number}",
+        "Module-level Map<string, Intl.DateTimeFormat> caches formatter per timezone (test asserts construction count ≤1 per tz)",
+        "Invalid IANA tz throws InvalidTimezoneError",
+        "DST boundary correct (test with Australia/Sydney April transition)",
+        "Pure function: no Date.now(), no fetch",
+        "Unit test in helpers/__tests__/timezone-clock.spec.ts",
+        "npx nx test shared --testPathPattern=timezone-clock green",
+        "Independent commit: feat(shared): add timezone-clock runtime helper with Intl.DateTimeFormat cache"
+      ],
+      "completedCommit": "b26a73d1"
+    },
+    {
+      "id": "US-D2",
+      "title": "Task D2: add HAS_POSITION and IN_TIME_WINDOW series kinds in evaluate-expr-pool",
+      "passes": true,
+      "acceptanceCriteria": [
+        "evaluateSeries switch in evaluate-expr-pool.ts gains 2 cases: HAS_POSITION and IN_TIME_WINDOW",
+        "HAS_POSITION payload {kind:'HAS_POSITION', side?:'long'|'short'|'any'} — reads ctx.position.qty; qty != 0 → 1 else 0; ctx without position state → 0; default side='any'",
+        "IN_TIME_WINDOW payload {kind:'IN_TIME_WINDOW', timezone, windows: [{daysOfWeek?, start, end}]} — calls getWallClock; in window → 1 else 0",
+        "Error consistency: invalid timezone or Intl errors return null (NOT throw); subsequent predicate receives null → false",
+        "Unit test in evaluate-expr-pool.spec.ts asserts both new kinds + error path",
+        "npx nx test shared --testPathPattern=evaluate-expr-pool green",
+        "Independent commit: feat(shared): add HAS_POSITION and IN_TIME_WINDOW series kinds"
+      ],
+      "completedCommit": "e9fdf3e0"
+    },
+    {
+      "id": "US-E1",
+      "title": "Task E1: backtest ↔ live signal parity for 5 gate atoms",
+      "passes": false,
+      "acceptanceCriteria": [
+        "atomic-contract-backtest-runtime-parity.spec.ts gains describe('phase-1 gate parity', ...) with 5 fixtures (one per atom)",
+        "Each fixture: same OHLCV + position + time → backtest path decisions byte-equal live signal fast path decisions",
+        "Plus invariant case: gate fail + has position → exit STILL triggers (entry blocked but exit unblocked)",
+        "dx test unit quantify -t 'phase-1 gate parity' green",
+        "Independent commit: test(ai-quant): backtest live parity for phase-1 gates"
+      ]
+    },
+    {
+      "id": "US-E2",
+      "title": "Task E2: corpus +8 cases",
+      "passes": false,
+      "acceptanceCriteria": [
+        "atom-coverage-golden-cases.ts adds 8 new cases: 4 supported_executable (one per atom) + 1 supported_requires_slot (time_window no tz) + 1 mix supported+unsupported (route to unsupported_unknown by atom-level priority) + 1 gate+entry executable + 1 sideScope='long' position.no_position",
+        "sideScope='long' case asserts: SemanticTriggerState.sideScope='long' preserved; IR guard.appliesTo='both' (hard-pinned per critic N2); runtime blocks all entries when has position (Phase 1 simplification)",
+        "Existing corpus cases produce 0 snapshot diff",
+        "atom-coverage-golden-corpus.spec.ts asserts new + old cases route correctly",
+        "dx test unit quantify -t 'atom-coverage-golden-corpus' green",
+        "Independent commit: test(ai-quant): extend coverage corpus with 8 phase-1 cases"
+      ]
+    },
+    {
+      "id": "US-E3",
+      "title": "Task E3: e2e happy path",
+      "passes": false,
+      "acceptanceCriteria": [
+        "apps/quantify/e2e/llm-strategy-codegen/llm-strategy-codegen.e2e-spec.ts gains 1 new case: user describes 'volume>X AND MA cross' → backend → IR has ≥1 guard (gate) + ≥1 decision program (entry)",
+        "Reuses existing helpers/fixtures (createTestingApp, setup-e2e)",
+        "dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen green",
+        "Independent commit: test(ai-quant): e2e happy path covers phase-1 gate atom"
+      ]
+    },
+    {
+      "id": "US-F1",
+      "title": "Task F1: full verify pipeline parallel",
+      "passes": false,
+      "acceptanceCriteria": [
+        "dx lint (zero new lint errors on changed files)",
+        "dx build quantify --dev (success)",
+        "npx nx build shared (success)",
+        "dx test unit quantify (full suite green; not just -t patterns)",
+        "npx nx test shared (full shared suite green)",
+        "dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen (e2e green)",
+        "dx build contracts --dev (run; if packages/api-contracts/src/generated/quantify.ts has diff, commit it)"
+      ]
+    },
+    {
+      "id": "US-F2",
+      "title": "Task F2: ship via git-pr-ship and merge to main",
+      "passes": false,
+      "acceptanceCriteria": [
+        "git push origin feat/984-phase1-trigger-gates",
+        "gh pr create --base main with body containing: Refs: #984, spec/plan/critic-round{1,2,3} paths",
+        "PR diff critic invoked (review-report comment posted)",
+        "Fixes applied if any; fix-report comment posted (double comment gate)",
+        "gh pr merge <PR#> --squash --auto issued",
+        "Auto-merge succeeds: PR shown as merged in main; branch ref preserved or deleted per repo norm"
+      ]
+    }
+  ],
+  "constraints": [
+    "5 atom 全部 category='trigger' (not 'kind', not other category)",
+    "不发明 evalGates；复用 evaluateGuards 通道",
+    "不新增 IR 顶层字段（无 gates: GateNode[]）",
+    "guard.payload.appliesTo 硬钉 'both'",
+    "guard.payload.scope 不能为 'position'（避免 evaluate-guards.ts:80 短路）",
+    "position.no_position vs has_position 对偶 IR：no_position+EQ const(1) / has_position+EQ const(0)",
+    "operator flip：用户 GT/GTE/LT/LTE 翻成 guard 触发的 LTE/LT/GTE/GT",
+    "TDD：每 task 先写失败测试再实现；每 task 一个独立 commit；commit 末尾 Refs: #984"
+  ],
+  "criticReservations": {
+    "P1": "e2e task E3 已加入；F1 verify 含 dx test e2e",
+    "P2": "C2 红测断言 guard.payload.scope !== 'position'",
+    "P3": "C2 行文已清理无 inline 错版本",
+    "P4": "F2 PR body 含 round 3 critic 引用"
+  },
+  "scopeAdjustment": {
+    "reason": "volume.threshold / volatility.atr_threshold / strategy.time_window 完整 IR 编译路径需扩 canonical-spec-builder.buildConditionFromNormalizedTrigger 3 case + 放宽 line 1030 gate filter + 扩 IR compiler tryCompileRiskGuard EXPRESSION_GUARD 分支。本 PR-1 已交付 substrate + contract + readiness + runtime helper（IN_TIME_WINDOW + timezone-clock）+ position atoms 完整 IR；3 atom IR 提取为 follow-up issue 独立交付，不让本 PR-1 体量爆炸",
+    "deferredScope": [
+      "canonical-spec-builder gate filter relaxation",
+      "buildConditionFromNormalizedTrigger 3 new cases",
+      "IR compiler EXPRESSION_GUARD with operator flip for volume/atr",
+      "IR compiler IN_TIME_WINDOW guard generation"
+    ],
+    "shipsAsIs": [
+      "Phase A registry + contract substrate for all 5 atoms",
+      "Phase A4 readiness whitelist 5 substrate keys",
+      "Phase B seed/builder/projection routing",
+      "Phase D1 timezone-clock helper",
+      "Phase D2 IN_TIME_WINDOW series kind in expr-pool",
+      "position.has_position / no_position 完整 IR via existing MAX_POSITION_PCT path"
+    ]
+  }
+}
