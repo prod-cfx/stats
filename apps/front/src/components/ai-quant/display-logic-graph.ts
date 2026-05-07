@@ -42,6 +42,7 @@ interface DisplayLogicGraphCondition {
   params?: Record<string, unknown>
   left?: DisplayExpressionOperand
   right?: DisplayExpressionOperand
+  children?: DisplayLogicGraphCondition[]
 }
 
 type DisplayExpressionOperand =
@@ -365,6 +366,68 @@ function formatBreakoutCondition(condition: DisplayLogicGraphCondition): string 
   ].filter((item): item is string => Boolean(item)).join('，')
 }
 
+function formatIndicatorLevelCondition(condition: DisplayLogicGraphCondition): string {
+  const indicator = pickString(condition.params?.indicator)?.toUpperCase() ?? 'MA'
+  const period = formatNumber(condition.params?.['reference.period'] ?? condition.params?.period)
+  const timeframe = pickString(condition.params?.timeframe)
+  const relation = condition.key === 'indicator.below' ? '低于' : '在'
+  const suffix = condition.key === 'indicator.below' ? '' : ' 上方'
+  const indicatorText = `${indicator}${period ?? ''}`
+  return [timeframe, `价格${relation} ${indicatorText}${suffix}`].filter(Boolean).join(' ')
+}
+
+function formatCanonicalAtomCondition(condition: DisplayLogicGraphCondition): string {
+  const atomCondition = { ...condition, kind: undefined }
+  switch (condition.key) {
+    case 'indicator.above':
+    case 'indicator.below':
+      return formatIndicatorLevelCondition(condition)
+    case 'price.rolling_extrema_breakout': {
+      const lookbackBars = formatNumber(condition.params?.lookbackBars)
+      const timeframe = pickString(condition.params?.timeframe)
+      const extrema = pickString(condition.params?.extrema) === 'low' ? '最低价' : '最高价'
+      const event = pickString(condition.params?.event)
+      const direction = event === 'breakout_down' || extrema === '最低价' ? '跌破' : '突破'
+      const range = lookbackBars ? `过去 ${lookbackBars} 根 K 线${extrema}` : `过去区间${extrema}`
+      return [timeframe, `${direction}${range}`].filter(Boolean).join(' ')
+    }
+    case 'volume.relative_average': {
+      const lookbackBars = formatNumber(condition.params?.lookbackBars)
+      const multiplier = formatNumber(condition.params?.multiplier)
+      const comparator = pickString(condition.params?.comparator)
+      const direction = comparator === 'lt' || comparator === 'lte' ? '低于' : '高于'
+      const inclusive = comparator === 'gte' || comparator === 'lte' ? '或等于' : ''
+      if (!lookbackBars || !multiplier) return '成交量条件'
+      return `成交量${direction}${inclusive}过去 ${lookbackBars} 根均量的 ${multiplier} 倍`
+    }
+    case 'condition.sequence': {
+      const sequenceKind = pickString(condition.params?.sequenceKind)
+      const lookbackWindow = pickString(condition.params?.lookbackWindow)
+      const lookbackBars = formatNumber(condition.params?.lookbackBars)
+      const windowText = lookbackWindow ? `（${lookbackWindow} 内）` : lookbackBars ? `（${lookbackBars} 根 K 线内）` : ''
+      const memoryKey = pickString(condition.params?.memoryKey)
+      const memoryText = memoryKey ? `，记录位 ${memoryKey}` : ''
+      if (sequenceKind === 'breakout_retest') return `突破后回踩确认${windowText}${memoryText}`
+      if (sequenceKind === 'pullback_reclaim') return `回踩关键位后重新站上${windowText}${memoryText}`
+      return `序列条件${windowText}${memoryText}`
+    }
+    case 'risk.atr_multiple_stop': {
+      const multiple = formatNumber(condition.params?.multiple)
+      return multiple ? `${multiple} 倍 ATR 止损` : 'ATR 止损'
+    }
+    case 'risk.atr_multiple_take_profit': {
+      const multiple = formatNumber(condition.params?.multiple)
+      return multiple ? `${multiple} 倍 ATR 止盈` : 'ATR 止盈'
+    }
+    case 'risk.remembered_level_stop': {
+      const levelKey = pickString(condition.params?.levelKey)
+      return levelKey ? `跌破记录位 ${levelKey} 止损` : '记录位止损'
+    }
+    default:
+      return formatConditionText(atomCondition)
+  }
+}
+
 function formatGridCondition(condition: DisplayLogicGraphCondition): string {
   const payload = isRecord(condition.params)
     ? condition.params
@@ -387,6 +450,15 @@ function formatGridCondition(condition: DisplayLogicGraphCondition): string {
 
 function formatConditionText(condition: DisplayLogicGraphCondition | undefined): string {
   if (!condition) return '条件待补充'
+  if (condition.kind === 'AND' || condition.kind === 'OR') {
+    const joiner = condition.kind === 'AND' ? '，且' : ' 或 '
+    const children = Array.isArray(condition.children) ? condition.children : []
+    const texts = children.map(child => formatConditionText(child)).filter(text => text.length > 0)
+    return texts.length > 0 ? texts.join(joiner) : '条件待补充'
+  }
+  if (condition.kind === 'atom') {
+    return formatCanonicalAtomCondition(condition)
+  }
   if (condition.kind === 'expression') {
     return formatExpressionCondition(condition)
   }
