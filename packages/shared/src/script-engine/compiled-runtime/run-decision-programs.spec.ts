@@ -52,7 +52,23 @@ describe('partial take profit decision gate', () => {
     expect(state.partial_tp_test.tier_0_fired).toBe(true)
   })
 
-  it('resets all partial_take_profit state on entry edge (qty 0 -> non-0)', () => {
+  it('resets only declared partial_take_profit memoryKeys on entry edge (qty 0 -> non-0)', () => {
+    const programA = {
+      id: 'program_ptp_a_tier_0',
+      phase: 'exit' as const,
+      priority: 100,
+      when: 'never',
+      metadata: { partialTakeProfit: { memoryKey: 'partial_tp_a', tierIndex: 0, totalTiers: 1 } },
+      actions: [{ kind: 'REDUCE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 50 } }],
+    }
+    const programB = {
+      id: 'program_ptp_b_tier_0',
+      phase: 'exit' as const,
+      priority: 100,
+      when: 'never',
+      metadata: { partialTakeProfit: { memoryKey: 'partial_tp_b', tierIndex: 0, totalTiers: 1 } },
+      actions: [{ kind: 'REDUCE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 50 } }],
+    }
     const ctx = {
       position: { qty: 1 },
       currentPrice: 100,
@@ -60,14 +76,17 @@ describe('partial take profit decision gate', () => {
       semanticRuntimeState: {
         partial_tp_a: { tier_0_fired: true, tier_1_fired: true },
         partial_tp_b: { tier_0_fired: true },
+        // Sibling-strategy state — must NOT be cleared because no current program declares this key.
+        partial_tp_other: { tier_0_fired: true },
         unrelated_state: { foo: 'bar' },
       },
     } as unknown as Ctx
-    runDecisionPrograms(ctx, [] as unknown as Programs, {}, baseGuard, [])
+    runDecisionPrograms(ctx, [programA, programB] as unknown as Programs, { never: false }, baseGuard, [programA.id, programB.id])
     const state = (ctx as unknown as { semanticRuntimeState: Record<string, Record<string, unknown>> }).semanticRuntimeState
     const compiled = (ctx as unknown as { __compiledDecisionState: { previousPositionQty: number } }).__compiledDecisionState
     expect(state.partial_tp_a).toEqual({})
     expect(state.partial_tp_b).toEqual({})
+    expect(state.partial_tp_other).toEqual({ tier_0_fired: true })
     expect(state.unrelated_state).toEqual({ foo: 'bar' })
     expect(compiled.previousPositionQty).toBe(1)
   })

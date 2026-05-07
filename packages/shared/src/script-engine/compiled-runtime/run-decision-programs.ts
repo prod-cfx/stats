@@ -46,7 +46,8 @@ export function runDecisionPrograms(
   decisionOrder: readonly string[],
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
-  resetPartialTakeProfitStateOnEntryEdge(ctx, compiledState)
+  const declaredPartialTakeProfitKeys = collectPartialTakeProfitMemoryKeys(programs)
+  resetPartialTakeProfitStateOnEntryEdge(ctx, compiledState, declaredPartialTakeProfitKeys)
   if (guardState.forceExit) {
     const currentQty = readCurrentQty(ctx)
     if (currentQty === 0) {
@@ -153,17 +154,29 @@ function ensureCompiledDecisionState(
   return fallback
 }
 
+function collectPartialTakeProfitMemoryKeys(
+  programs: readonly DecisionProgramNode[],
+): ReadonlySet<string> {
+  const keys = new Set<string>()
+  for (const program of programs) {
+    const meta = program.metadata?.partialTakeProfit
+    if (meta?.memoryKey) keys.add(meta.memoryKey)
+  }
+  return keys
+}
+
 function resetPartialTakeProfitStateOnEntryEdge(
   ctx: StrategyExecutionContextV1,
   compiledState: CompiledDecisionState,
+  memoryKeys: ReadonlySet<string>,
 ): void {
   const currentQty = readCurrentQty(ctx)
   const prevQty = compiledState.previousPositionQty
-  if (prevQty === 0 && currentQty !== 0) {
+  if (prevQty === 0 && currentQty !== 0 && memoryKeys.size > 0) {
     const semanticState = (ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }).semanticRuntimeState
     if (semanticState && typeof semanticState === 'object' && !Array.isArray(semanticState)) {
-      for (const key of Object.keys(semanticState)) {
-        if (key.startsWith('partial_tp_')) {
+      for (const key of memoryKeys) {
+        if (Object.prototype.hasOwnProperty.call(semanticState, key)) {
           semanticState[key] = {}
         }
       }
