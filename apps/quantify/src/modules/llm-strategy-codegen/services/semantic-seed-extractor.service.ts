@@ -1465,7 +1465,7 @@ export class SemanticSeedExtractorService {
     }
     // Sum check: only enforce sum ≤ 1 when no tier has reduceRatio = 1.0
     // A tier with reduceRatio = 1.0 means "close all remaining" (e.g., "平剩下"), which is always valid
-    const hasCloseAll = sorted.some((t) => t.reduceRatio === 1.0)
+    const hasCloseAll = sorted.some((t) => t.reduceRatio >= 0.999999)
     if (!hasCloseAll) {
       const sum = sorted.reduce((acc, t) => acc + t.reduceRatio, 0)
       if (sum > 1.000001) return null
