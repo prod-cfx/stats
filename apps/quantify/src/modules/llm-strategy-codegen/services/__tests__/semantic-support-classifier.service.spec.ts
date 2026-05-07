@@ -1,6 +1,11 @@
-import type { SemanticState } from '../../types/semantic-state'
+import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import type { SemanticRegisteredAtomDefinition, SemanticUnknownAtomDefinition } from '../../types/semantic-atom-support'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+
+interface ClassifierInternals {
+  resolveTriggerSupport(trigger: SemanticTriggerState): SemanticRegisteredAtomDefinition | SemanticUnknownAtomDefinition
+}
 
 function baseState(overrides: Partial<SemanticState>): SemanticState {
   return {
@@ -323,6 +328,34 @@ describe('SemanticSupportClassifierService', () => {
     expect(result.route).toBe('projection_gate')
     expect(result.unsupportedAtoms).toEqual([])
     expect(result.state.triggers[0].support).toBeUndefined()
+  })
+
+  it('preserves substrate metadata when resolving executable moving-average indicator aliases', () => {
+    const resolved = (service as unknown as ClassifierInternals).resolveTriggerSupport({
+      id: 'entry-ma',
+      key: 'indicator.above',
+      phase: 'entry',
+      params: {
+        indicator: 'ma',
+        referenceRole: 'long_term',
+        'reference.period': 50,
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    })
+
+    expect(resolved).toMatchObject({
+      key: 'indicator.above',
+      category: 'trigger',
+      supportStatus: 'supported_executable',
+      contractSubstrate: {
+        runtimeRequirements: expect.any(Array),
+        stateRequirements: expect.any(Array),
+        orderRequirements: expect.any(Array),
+        openSlots: expect.any(Array),
+      },
+    })
   })
 
   it('adds registry open slots for supported requires-slot risk atoms with unknown required params', () => {

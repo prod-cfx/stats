@@ -148,10 +148,11 @@ export class SemanticSupportClassifierService {
 
   private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
     if (isExecutableIndicatorReferenceAlias(trigger)) {
+      const resolved = this.registry.get(toExecutableIndicatorReferenceAliasRegistryKey(trigger))
+
       return {
+        ...resolved,
         key: trigger.key,
-        category: 'trigger',
-        supportStatus: 'supported_executable',
         requiredParams: ['indicator', 'referenceRole', 'reference.period'],
         defaultableParams: ['confirmationMode'],
         executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
@@ -183,6 +184,10 @@ export class SemanticSupportClassifierService {
       unknownAtoms.push(resolved.key)
     }
   }
+}
+
+function toExecutableIndicatorReferenceAliasRegistryKey(trigger: SemanticTriggerState): 'indicator.threshold_gte' | 'indicator.threshold_lte' {
+  return trigger.key === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
 }
 
 // MA/SMA/EMA price-vs-reference aliases are projection-supported; non-MA static compares remain recognized unsupported.
