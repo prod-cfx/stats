@@ -13479,6 +13479,95 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expectNoSymbolPrompt(afterExchange.assistantPrompt)
   })
 
+  it('keeps breakout lookback windows out of execution timeframe through clarification flow', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-breakout-window-context-timeframe' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        params: expect.objectContaining({ lookbackWindow: '24h' }),
+      }),
+    ]))
+    expect(started.assistantPrompt).toContain('请确认单笔仓位大小')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-breakout-window-context-timeframe',
+      createPayload,
+      { status: started.status },
+    ))
+    const afterPosition = await service.continueSession('s-breakout-window-context-timeframe', {
+      userId: 'u1',
+      message: '100usdt',
+    })
+    const positionPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(positionPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(afterPosition.assistantPrompt).toContain('请确认交易所')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-breakout-window-context-timeframe',
+      positionPayload,
+      { status: afterPosition.status },
+    ))
+    const afterExchange = await service.continueSession('s-breakout-window-context-timeframe', {
+      userId: 'u1',
+      message: 'okx',
+    })
+    const exchangePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(exchangePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(afterExchange.assistantPrompt).toContain('请确认市场类型')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-breakout-window-context-timeframe',
+      exchangePayload,
+      { status: afterExchange.status },
+    ))
+    const afterMarketType = await service.continueSession('s-breakout-window-context-timeframe', {
+      userId: 'u1',
+      message: '合约',
+    })
+    const marketTypePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(afterMarketType.status).toBe('DRAFTING')
+    expect(marketTypePayload.semanticState.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'perp',
+    }))
+    expect(marketTypePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(afterMarketType.assistantPrompt).toContain('请确认策略主周期')
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalledWith(
+      's-breakout-window-context-timeframe',
+      expect.anything(),
+    )
+  })
+
   it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({

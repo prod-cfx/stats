@@ -201,6 +201,25 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('keeps rolling-window hours out of execution timeframe context', () => {
+    const patch = service.extract('BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+    }))
+    expect(patch.contextSlots?.timeframe).toBeUndefined()
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        params: expect.objectContaining({
+          sequenceKind: 'breakout_retest',
+          lookbackWindow: '24h',
+          memoryKey: 'breakout',
+        }),
+      }),
+    ]))
+  })
+
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
     const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。')
 

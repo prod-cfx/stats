@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common'
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
   SemanticAtomContract,
@@ -32,6 +33,7 @@ const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
 const REDUCED_INDICATOR_CROSS_SIGNATURE_INDICATORS = new Set(['ma', 'ema', 'moving_average', 'macd'])
+const SUPPORTED_EXECUTION_TIMEFRAMES = new Set<string>(MARKET_TIMEFRAMES)
 
 type SemanticAliasContext = {
   bollingerBandParams?: {
@@ -1016,10 +1018,10 @@ export class SemanticSeedExtractorService {
       }
     }
 
-    const timeframes = this.extractAllTimeframes(text)
+    const timeframes = this.extractExecutionContextTimeframes(text)
     const timeframe = this.hasMultiTimeframeMovingAveragePredicateScope(text)
       ? null
-      : (timeframes[0] ?? this.extractFirstTimeframe(text))
+      : (timeframes[0] ?? this.extractFirstExecutionContextTimeframe(text))
     if (timeframe) {
       contextSlots.timeframe = timeframe
     }
@@ -4178,6 +4180,39 @@ export class SemanticSeedExtractorService {
     return null
   }
 
+  private extractFirstExecutionContextTimeframe(text: string): string | null {
+    return this.extractExecutionContextTimeframes(text)[0] ?? null
+  }
+
+  private extractExecutionContextTimeframes(text: string): string[] {
+    const values: string[] = []
+    const seen = new Set<string>()
+    const pushCandidate = (value: string, index: number, length: number) => {
+      if (!SUPPORTED_EXECUTION_TIMEFRAMES.has(value)) return
+      if (this.isRollingWindowTimeframeCandidate(text, index, length)) return
+      if (seen.has(value)) return
+      seen.add(value)
+      values.push(value)
+    }
+
+    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/giu)) {
+      if (!match[1] || !match[2]) continue
+      pushCandidate(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
+    }
+
+    for (const match of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+      if (!match[1] || !match[2]) continue
+      if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
+      pushCandidate(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
+    }
+
+    if (/日线|日\s*K|天线/u.test(text)) {
+      pushCandidate('1d', text.search(/日线|日\s*K|天线/u), 2)
+    }
+
+    return values
+  }
+
   private hasMultiTimeframeMovingAveragePredicateScope(text: string): boolean {
     return this.splitSegments(text).some(segment =>
       this.splitCommaClauses(segment).some(clause =>
@@ -4248,6 +4283,17 @@ export class SemanticSeedExtractorService {
 
     const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 16)
     return /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
+  }
+
+  private isRollingWindowTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {
+    if (matchIndex < 0) return false
+
+    const prefix = text.slice(Math.max(0, matchIndex - 24), matchIndex)
+    const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 32)
+    const hasWindowPrefix = /(?:过去|最近|近|前|last|past|previous|prior|lookback)\s*$/iu.test(prefix)
+    const hasReferenceSuffix = /^\s*(?:的)?\s*(?:最高价|最低价|高点|低点|最高|最低|区间|范围|突破位|breakout|high|low|range)/iu.test(suffix)
+
+    return hasWindowPrefix && hasReferenceSuffix
   }
 
   private extractNumber(text: string, patterns: RegExp[]): number | null {
