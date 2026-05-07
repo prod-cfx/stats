@@ -102,23 +102,29 @@ Define orchestration as a future execution boundary:
 
 ```ts
 interface SemanticOrchestrationState {
-  scopes: SemanticOrchestrationNode[]
-  gates: SemanticOrchestrationNode[]
-  programs: SemanticOrchestrationNode[]
-  portfolioRisk: SemanticOrchestrationNode[]
+  nodes: readonly SemanticOrchestrationNode[]
+  contracts: readonly SemanticOrchestrationContract[]
 }
 
 interface SemanticOrchestrationContract {
   id: string
   kind: 'scope' | 'gate' | 'program' | 'portfolioRisk'
-  target: Record<string, unknown>
-  params: Record<string, unknown>
+  capabilities: readonly SemanticCapability[]
   requires: readonly SemanticRequirement[]
-  effects?: readonly SemanticEffect[]
-  runtimeRequirements: readonly SemanticRuntimeRequirement[]
-  stateRequirements: readonly SemanticStateRequirement[]
-  orderRequirements: readonly SemanticOrderRequirement[]
+  params: Record<string, unknown>
   openSlots: readonly SemanticSlotState[]
+  effects?: readonly SemanticEffect[]
+}
+
+interface SemanticOrchestrationNode {
+  id: string
+  kind: 'scope' | 'gate' | 'program' | 'portfolioRisk'
+  params: Record<string, unknown>
+  status: SemanticNodeStatus
+  source: SemanticSource
+  evidence?: SemanticEvidence
+  openSlots: readonly SemanticSlotState[]
+  contracts: readonly SemanticOrchestrationContract[]
 }
 ```
 

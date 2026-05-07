@@ -172,35 +172,27 @@ Add orchestration node types below `SemanticPositionState`:
 export interface SemanticOrchestrationContract {
   id: string
   kind: SemanticOrchestrationContractKind
-  target: Record<string, unknown>
-  params: Record<string, unknown>
+  capabilities: readonly SemanticCapability[]
   requires: readonly SemanticRequirement[]
-  effects?: readonly SemanticEffect[]
-  runtimeRequirements: readonly SemanticRuntimeRequirement[]
-  stateRequirements: readonly SemanticStateRequirement[]
-  orderRequirements: readonly SemanticOrderRequirement[]
+  params: Record<string, unknown>
   openSlots: readonly SemanticSlotState[]
+  effects?: readonly SemanticEffect[]
 }
 
 export interface SemanticOrchestrationNode {
   id: string
-  key: string
   kind: SemanticOrchestrationContractKind
+  params: Record<string, unknown>
   status: SemanticNodeStatus
   source: SemanticSource
-  target: Record<string, unknown>
-  params: Record<string, unknown>
   evidence?: SemanticEvidence
-  openSlots: SemanticSlotState[]
+  openSlots: readonly SemanticSlotState[]
   contracts: readonly SemanticOrchestrationContract[]
-  support?: SemanticAtomSupportMetadata
 }
 
 export interface SemanticOrchestrationState {
-  scopes: SemanticOrchestrationNode[]
-  gates: SemanticOrchestrationNode[]
-  programs: SemanticOrchestrationNode[]
-  portfolioRisk: SemanticOrchestrationNode[]
+  nodes: readonly SemanticOrchestrationNode[]
+  contracts: readonly SemanticOrchestrationContract[]
 }
 ```
 
@@ -813,37 +805,30 @@ Append:
   it('blocks locked orchestration nodes because Phase 0 has no orchestration runtime', () => {
     const state = createSemanticState({
       orchestration: {
-        scopes: [{
+        nodes: [{
           id: 'scope-1',
-          key: 'orchestration.scope.symbol',
           kind: 'scope',
           status: 'locked',
           source: 'user_explicit',
-          target: { symbol: 'BTCUSDT' },
-          params: {},
+          params: { symbol: 'BTCUSDT' },
           openSlots: [],
           contracts: [{
             id: 'scope-contract-1',
             kind: 'scope',
-            target: { symbol: 'BTCUSDT' },
-            params: {},
+            capabilities: [],
             requires: [],
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
+            params: { symbol: 'BTCUSDT' },
             openSlots: [],
           }],
         }],
-        gates: [],
-        programs: [],
-        portfolioRisk: [],
+        contracts: [],
       },
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.orchestration?.scopes[0].openSlots).toEqual([
+    expect(result.state.orchestration?.nodes[0].openSlots).toEqual([
       expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
         affectsExecution: true,
@@ -855,17 +840,15 @@ Append:
   it('does not block draft orchestration nodes that are still open', () => {
     const state = createSemanticState({
       orchestration: {
-        scopes: [{
+        nodes: [{
           id: 'scope-draft',
-          key: 'orchestration.scope.symbol',
           kind: 'scope',
           status: 'open',
           source: 'user_explicit',
-          target: {},
           params: {},
           openSlots: [{
             slotKey: 'orchestration.scope.symbol',
-            fieldPath: 'orchestration.scopes[scope-draft].target.symbol',
+            fieldPath: 'orchestration.scope[scope-draft].params.symbol',
             status: 'open',
             priority: 'context',
             affectsExecution: true,
@@ -873,16 +856,14 @@ Append:
           }],
           contracts: [],
         }],
-        gates: [],
-        programs: [],
-        portfolioRisk: [],
+        contracts: [],
       },
     })
 
     const result = new SemanticContractReadinessService().normalize(state)
 
     expect(result.ready).toBe(false)
-    expect(result.state.orchestration?.scopes[0].openSlots).toEqual([
+    expect(result.state.orchestration?.nodes[0].openSlots).toEqual([
       expect.objectContaining({ slotKey: 'orchestration.scope.symbol' }),
     ])
   })
@@ -930,17 +911,11 @@ function normalizePhase0Orchestration(
 ): { state?: SemanticState['orchestration']; hasBlockingSlots: boolean } {
   if (!orchestration) return { hasBlockingSlots: false }
 
-  const next = {
-    scopes: orchestration.scopes.map(addPhase0OrchestrationBlocker),
-    gates: orchestration.gates.map(addPhase0OrchestrationBlocker),
-    programs: orchestration.programs.map(addPhase0OrchestrationBlocker),
-    portfolioRisk: orchestration.portfolioRisk.map(addPhase0OrchestrationBlocker),
-  }
+  const nodes = orchestration.nodes.map(addPhase0OrchestrationBlocker)
 
   return {
-    state: next,
-    hasBlockingSlots: [...next.scopes, ...next.gates, ...next.programs, ...next.portfolioRisk]
-      .some(node => node.openSlots.some(isBlockingSemanticOpenSlot)),
+    state: { ...orchestration, nodes },
+    hasBlockingSlots: nodes.some(node => node.openSlots.some(isBlockingSemanticOpenSlot)),
   }
 }
 
