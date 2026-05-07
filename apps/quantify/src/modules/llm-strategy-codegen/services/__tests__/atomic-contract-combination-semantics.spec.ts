@@ -469,6 +469,11 @@ describe('atomic contract combination semantics', () => {
         actionKey: 'open_long',
       })
     }
+    expect(projection.buildConversationView(state).summary).toContain(
+      '入场：15m 价格在 EMA20 / EMA60 / EMA144 上方时做多开仓',
+    )
+    expect(projection.buildConversationView(state).summary).not.toContain('条件：SMA60高于SMA144')
+    expect(state.triggers.filter(trigger => trigger.phase === 'gate')).toEqual([])
     expect(classification.route).not.toBe('unsupported_fallback')
   })
 

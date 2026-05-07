@@ -1740,10 +1740,11 @@ export class SemanticSeedExtractorService {
 
   private pushMovingAverageGateTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     for (const clause of this.splitLogicClauses(segment)) {
-      const pair = clause.match(/\b(?:MA|EMA)\s*(\d{1,4})\s*(?:在|位于)?\s*\b(?:MA|EMA)\s*(\d{1,4})\s*(?:上方|之上|高于)/iu)
-      if (pair?.[1] && pair[2]) {
+      const pair = clause.match(/\b(?:MA|EMA)\s*(\d{1,4})\s*(?:(?:在|位于)\s*\b(?:MA|EMA)\s*(\d{1,4})\s*(?:上方|之上)|(?:高于|大于)\s*\b(?:MA|EMA)\s*(\d{1,4}))/iu)
+      const slowPeriodText = pair?.[2] ?? pair?.[3]
+      if (pair?.[1] && slowPeriodText) {
         const fastPeriod = Number(pair[1])
-        const slowPeriod = Number(pair[2])
+        const slowPeriod = Number(slowPeriodText)
         if (Number.isFinite(fastPeriod) && Number.isFinite(slowPeriod)) {
           this.pushTrigger(triggers, seen, {
             key: 'condition.expression',
@@ -1764,6 +1765,9 @@ export class SemanticSeedExtractorService {
 
       const priceAbove = clause.match(/(?:价格|收盘价)?\s*(?:在|位于)?\s*\b(MA|EMA)\s*(\d{1,4})\s*(?:上方|之上|高于)/iu)
       if (!priceAbove?.[1] || !priceAbove[2]) continue
+      if (this.hasDirectTradeActionIntent(clause) && !/(?:只做多|只做空|只买入|只卖出)/u.test(clause)) {
+        continue
+      }
 
       const period = Number(priceAbove[2])
       if (!Number.isFinite(period)) continue
@@ -1794,6 +1798,10 @@ export class SemanticSeedExtractorService {
             },
       })
     }
+  }
+
+  private hasDirectTradeActionIntent(text: string): boolean {
+    return /(?:买入|卖出|做多|做空|开多|开空|开仓|平多|平空|平仓)/u.test(text)
   }
 
   private pushMovingAverageTrigger(
