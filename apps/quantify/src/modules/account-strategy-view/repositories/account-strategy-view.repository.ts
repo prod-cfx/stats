@@ -292,8 +292,8 @@ export class AccountStrategyViewRepository {
               source: 'account-ai-quant-deploy',
               sourceStrategyInstanceId: existingInstance.id,
               ...snapshotBindingMetadata,
-            },
-          } as any,
+            } as Prisma.InputJsonValue,
+          },
         })
 
         const existingSubscription = await tx.userStrategySubscription.findFirst({
@@ -849,7 +849,7 @@ export class AccountStrategyViewRepository {
           reReadAtNextEligibleExecutionCycle: true,
           ...(input.reason ? { executionConfigUpdateReason: input.reason } : {}),
         } as Prisma.InputJsonValue,
-      } as any,
+      },
     })
   }
 
