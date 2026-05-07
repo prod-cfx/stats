@@ -232,8 +232,9 @@ function upgradeTriggerCombinationContract(
     ?? 'AND'
   const role = readString(contract.params.role) ?? readString(trigger.params.role) ?? 'member'
   const contractActionKeySource = readString(contract.params.actionKeySource)
-  const explicitActionKey = contractActionKeySource === 'explicit'
-    ? readString(contract.params.actionKey)
+  const contractActionKey = readString(contract.params.actionKey)
+  const explicitActionKey = contractActionKeySource !== 'default'
+    ? (contractActionKey ?? readString(trigger.params.actionKey))
     : readString(trigger.params.actionKey)
   const standard = buildTriggerCombinationContract({
     groupId,

@@ -580,6 +580,43 @@ describe('atomic contract combination semantics', () => {
     }))
   })
 
+  it('preserves explicit actionKey from existing combination contracts without actionKeySource', () => {
+    const normalizedState = normalizeSemanticStateCombinationContracts(semanticStateWithTrigger({
+      id: 'existing-short-entry',
+      key: 'indicator.below',
+      phase: 'entry',
+      sideScope: 'short',
+      params: {
+        groupId: 'entry-short-stack',
+        join: 'AND',
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      contracts: [{
+        id: 'legacy-contract-short-entry',
+        kind: 'trigger',
+        capabilities: [],
+        requires: [],
+        params: {
+          groupId: 'entry-short-stack',
+          join: 'AND',
+          actionKey: 'open_short',
+        },
+      }],
+    }))
+    const contract = normalizedState.triggers[0]?.contracts?.find(candidate =>
+      candidate.kind === 'trigger'
+      && candidate.params.groupId === 'entry-short-stack',
+    )
+
+    expect(contract?.params).toEqual(expect.objectContaining({
+      groupId: 'entry-short-stack',
+      actionKey: 'open_short',
+      actionKeySource: 'explicit',
+    }))
+  })
+
   it('upgrades existing standard-like legacy combination contracts without duplicating resolver members', () => {
     const normalizedState = normalizeSemanticStateCombinationContracts(semanticStateWithTrigger({
       id: 'legacy-entry-volume',
