@@ -13568,6 +13568,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('keeps colon-separated seed position and stop loss out of clarification slots', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认交易所。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-colon-position-risk-seed' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里价格低于EMA20平多；止损：5%强制平仓；仓位：10usdt',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        status: 'locked',
+        params: expect.objectContaining({
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ slotKey: 'position.sizing' }),
+      expect.objectContaining({ slotKey: 'risk.protective_exit' }),
+    ]))
+    expect(started.assistantPrompt).not.toContain('请确认单笔仓位大小')
+    expect(started.assistantPrompt).not.toContain('请确认止损')
+  })
+
   it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({

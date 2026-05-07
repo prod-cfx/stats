@@ -1208,10 +1208,10 @@ export class SemanticSeedExtractorService {
     const risk: NonNullable<CodegenSemanticPatch['risk']> = []
 
     const stopLossPatterns = [
-      /亏损\s*(\d+(?:\.\d+)?)\s*%/u,
-      /亏损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-      /止损\s*(\d+(?:\.\d+)?)\s*%/u,
-      /止损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /亏损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /亏损\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /止损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /止损\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ]
@@ -1236,11 +1236,11 @@ export class SemanticSeedExtractorService {
     }
 
     const takeProfit = this.extractPercent(text, [
-      /盈利\s*(\d+(?:\.\d+)?)\s*%/u,
-      /盈利(?:达到|达|到)\s*(\d+(?:\.\d+)?)\s*%/u,
-      /盈利\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-      /止盈\s*(\d+(?:\.\d+)?)\s*%/u,
-      /止盈\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /盈利\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /盈利(?:达到|达|到)?\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /盈利\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /止盈\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /止盈\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止盈|盈利)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
@@ -1262,7 +1262,7 @@ export class SemanticSeedExtractorService {
     }
 
     const trailingStop = this.extractPercent(text, [
-      /移动止损\s*(\d+(?:\.\d+)?)\s*%/u,
+      /移动止损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
       /trailing[_\s-]?stop\D{0,8}(\d+(?:\.\d+)?)\s*%/iu,
     ])
     if (trailingStop !== null && !/(?:ATR|平均真实波幅).{0,12}(?:移动止损|动态止损|止损|trailing)/iu.test(text)) {
