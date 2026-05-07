@@ -1734,6 +1734,7 @@ export class CanonicalSpecV2IrCompilerService {
         id: rule.id,
         kind: rule.condition.key === 'risk.atr_multiple_stop' ? 'atrMultipleStop' : 'atrMultipleTakeProfit',
         params: { multiple },
+        actions: this.compileRiskPredicateActions(rule),
       }
     }
 
@@ -1749,10 +1750,25 @@ export class CanonicalSpecV2IrCompilerService {
         id: rule.id,
         kind: 'rememberedLevelStop',
         params: { levelKey },
+        actions: this.compileRiskPredicateActions(rule),
       }
     }
 
     return null
+  }
+
+  private compileRiskPredicateActions(rule: CanonicalRuleV2): RiskPredicateDef['actions'] {
+    const actions = rule.actions
+      .map(action => action.type)
+      .filter((action): action is 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT' =>
+        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT',
+      )
+
+    if (actions.length === 0) {
+      return [{ kind: 'FORCE_EXIT' }]
+    }
+
+    return Array.from(new Set(actions)).map(kind => ({ kind }))
   }
 
   private tryCompileRiskGuard(rule: CanonicalRuleV2, context: CompileContext): RiskGuard | null {

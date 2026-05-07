@@ -703,6 +703,70 @@ describe('SemanticStateProjectionService', () => {
     ])
   })
 
+  it('renders same-timeframe EMA stack entry as one AND condition block with one action', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [20, 60, 144].map((period): SemanticTriggerState => ({
+        id: `entry-ema-${period}`,
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          timeframe: '15m',
+          indicator: 'ema',
+          'reference.period': period,
+          confirmationMode: 'close_confirm',
+        },
+        contracts: [{
+          id: 'contract-entry-ema-stack',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {
+            groupId: 'entry-ema-stack',
+            join: 'AND',
+            actionKey: 'open_long',
+            actionBinding: 'single_action',
+          },
+        }],
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })),
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 10,
+        positionMode: 'long_only',
+        sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-06T00:00:00.000Z',
+    }
+
+    const view = service.buildConversationView(state)
+    const graph = service.buildDisplayLogicGraph(state)
+    const entryBlock = graph.blocks[0]
+
+    expect(view.summary).toContain('入场：15m 价格在 EMA20 / EMA60 / EMA144 上方时做多开仓')
+    expect(view.summary).not.toContain('入场：15m 价格在 EMA20 上方时做多开仓；入场：15m 价格在 EMA60 上方')
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(entryBlock?.items.filter(item => item.kind === 'condition').map(item => item.text)).toEqual([
+      '15m 价格在 EMA20 / EMA60 / EMA144 上方',
+    ])
+    expect(entryBlock?.items.filter(item => item.kind === 'action').map(item => item.text)).toEqual([
+      '开多 10 USDT',
+    ])
+  })
+
   it('selects entry action by trigger side for bidirectional display logic graph', () => {
     const state: SemanticState = {
       version: 1,

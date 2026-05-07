@@ -73,6 +73,106 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[2].items.map(item => item.text).join(' ')).toContain('永续')
   })
 
+  it('renders canonical v2 conjunctive atomic EMA stack fallback as one entry block', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'semantic-entry-ema-stack',
+            phase: 'entry',
+            condition: {
+              kind: 'AND',
+              children: [20, 60, 144].map(period => ({
+                kind: 'atom',
+                key: 'indicator.above',
+                params: {
+                  indicator: 'ema',
+                  'reference.period': period,
+                  timeframe: '15m',
+                },
+              })),
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' } }],
+          },
+          {
+            id: 'semantic-risk-stop-loss',
+            phase: 'risk',
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              value: 0.05,
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        marketType: 'perp',
+        sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(graph.blocks[0].items.map(item => item.text)).toEqual([
+      '15m 价格在 EMA20 上方，且15m 价格在 EMA60 上方，且15m 价格在 EMA144 上方',
+      '开多 10 USDT',
+    ])
+    expect(text).toContain('风控: 亏损达到 5% -> 平仓')
+    expect(text).not.toContain('不支持的条件')
+    expect(text).not.toContain('待补充')
+  })
+
+  it('renders canonical atomic breakout retest and remembered-level stop fallback without unsupported text', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'semantic-entry-breakout-retest',
+            phase: 'entry',
+            condition: {
+              kind: 'atom',
+              key: 'condition.sequence',
+              params: {
+                sequenceKind: 'breakout_retest',
+                lookbackWindow: '24h',
+                memoryKey: 'breakout',
+              },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'semantic-risk-breakout-stop',
+            phase: 'risk',
+            condition: {
+              kind: 'atom',
+              key: 'risk.remembered_level_stop',
+              params: { levelKey: 'breakout' },
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('突破后回踩确认（24h 内），记录位 breakout')
+    expect(text).toContain('风控: 跌破记录位 breakout 止损 -> 平仓')
+    expect(text).not.toContain('不支持的条件')
+  })
+
   it('displays fixed quote position sizing from canonical spec instead of fallback percent', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

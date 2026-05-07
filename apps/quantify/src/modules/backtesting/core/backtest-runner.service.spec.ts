@@ -1,7 +1,11 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
+import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
 import type { BacktestRunInput, StrategyContext } from '../types/backtesting.types'
-import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
+import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
+import { BacktestStrategyAdapterService } from '../services/backtest-strategy-adapter.service'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from '../report/backtest-reporter.service'
@@ -367,51 +371,32 @@ describe('backtestRunnerService', () => {
 
   it('should consume compiled force-exit decisions and close the active position', async () => {
     const runner = createRunner()
+    const scriptCode = createCompiledForceExitScriptFixture()
+    const strategy = await new BacktestStrategyAdapterService().build({
+      id: 's-compiled-force-exit',
+      protocolVersion: 'v1',
+      scriptCode,
+      params: {},
+    })
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
-      baseTimeframe: '5m',
+      baseTimeframe: '1h',
       stateTimeframes: ['1h'],
       initialCash: 1000,
       leverage: 1,
       execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
-      strategy: {
-        id: 's-compiled-force-exit',
-        params: {},
-        fn: (ctx): StrategyDecisionV1 => {
-          if (ctx.ts === 1) {
-            return {
-              action: 'OPEN_LONG',
-              size: { mode: 'QTY', value: 1 },
-              reason: 'open',
-            }
-          }
-
-          if (ctx.ts === 2) {
-            return runDecisionPrograms(
-              ctx,
-              [],
-              {},
-              {
-                blockNewEntry: false,
-                forceExit: true,
-                strategyHalt: false,
-                cancelOrderPrograms: false,
-                triggered: ['guard-stop-loss'],
-              },
-              [],
-            )
-          }
-
-          return { action: 'NOOP', reason: 'idle' }
-        },
-      },
-      dataRange: { fromTs: 1, toTs: 3 },
-      bars: [
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 99, close: 99 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 95, close: 95 }),
-      ],
+      strategy,
+      dataRange: { fromTs: 1, toTs: 18 },
+      bars: Array.from({ length: 18 }, (_unused, index) => createBar({
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        closeTime: index + 1,
+        open: index < 16 ? 100 : 20,
+        high: index < 16 ? 105 : 25,
+        low: index < 16 ? 95 : 10,
+        close: index < 16 ? 100 : 20,
+      })),
     })
 
     expect(report.openPositions).toEqual([])
@@ -419,6 +404,41 @@ describe('backtestRunnerService', () => {
     expect(report.trades[0]).toMatchObject({
       side: 'LONG',
       exitReason: 'compiled.force_exit',
+      exitSource: 'strategy',
+    })
+  })
+
+  it('should consume compiled OR exit decisions and preserve compiled exit reason from real artifact', async () => {
+    const runner = createRunner()
+    const { expectedExitReason, scriptCode } = createCompiledCombinationScriptFixture()
+    const strategy = await new BacktestStrategyAdapterService().build({
+      id: 's-compiled-or-exit',
+      protocolVersion: 'v1',
+      scriptCode,
+      params: {},
+    })
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy,
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 2, open: 101, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 3, open: 102, close: 102 }),
+      ],
+    })
+
+    expect(report.openPositions).toEqual([])
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.trades[0]).toMatchObject({
+      side: 'LONG',
+      exitReason: expectedExitReason,
       exitSource: 'strategy',
     })
   })
@@ -1006,3 +1026,164 @@ describe('backtestRunnerService', () => {
     expect((riskEvaluator.evaluate as jest.Mock).mock.calls.length).toBe(3)
   })
 })
+
+function createCompiledCombinationScriptFixture(): {
+  expectedExitReason: string
+  scriptCode: string
+} {
+  const ast = new CanonicalStrategyAstCompilerService().compile(createCompiledCombinationIrFixture())
+  const emitter = new CompiledScriptEmitterService()
+  const script = emitter.emit({
+    ast,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+  const projection = new CompiledScriptParserService().parse(script)
+  const exitProgram = projection.decisionPrograms.find(program => program.phase === 'exit')
+
+  if (!exitProgram) {
+    throw new Error('compiled combination fixture missing exit decision program')
+  }
+  return {
+    expectedExitReason: `compiled.${exitProgram.id}`,
+    scriptCode: script,
+  }
+}
+
+function createCompiledForceExitScriptFixture(): string {
+  const ast = new CanonicalStrategyAstCompilerService().compile(createCompiledForceExitIrFixture())
+  const emitter = new CompiledScriptEmitterService()
+
+  return emitter.emit({
+    ast,
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
+
+function createCompiledForceExitIrFixture(): CanonicalStrategyIrV1 {
+  return {
+    ...createCompiledCombinationIrFixture(),
+    signalCatalog: {
+      series: [
+        { id: 'bar_index', kind: 'BAR_INDEX' },
+        { id: 'bar_1', kind: 'CONST', value: 1 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_on_first_bar', kind: 'EQ', args: ['bar_index', 'bar_1'] },
+        { id: 'entry_gate_true', kind: 'EQ', args: ['bar_1', 'bar_1'] },
+        { id: 'entry_and', kind: 'AND', args: ['entry_on_first_bar', 'entry_gate_true'] },
+      ],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_and',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+    ],
+  }
+}
+
+function createCompiledCombinationIrFixture(): CanonicalStrategyIrV1 {
+  return {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'b'.repeat(64)}`,
+      specHash: `sha256:${'c'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['1h'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 25 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 15,
+      maxLookback: 15,
+      requiredTimeframes: ['1h'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'bar_index', kind: 'BAR_INDEX' },
+        { id: 'bar_1', kind: 'CONST', value: 1 },
+        { id: 'bar_2', kind: 'CONST', value: 2 },
+        { id: 'zero', kind: 'CONST', value: 0 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_on_first_bar', kind: 'EQ', args: ['bar_index', 'bar_1'] },
+        { id: 'entry_gate_true', kind: 'EQ', args: ['bar_1', 'bar_1'] },
+        { id: 'entry_and', kind: 'AND', args: ['entry_on_first_bar', 'entry_gate_true'] },
+        { id: 'exit_on_second_bar', kind: 'EQ', args: ['bar_index', 'bar_2'] },
+        { id: 'exit_never', kind: 'EQ', args: ['bar_index', 'zero'] },
+        { id: 'exit_or', kind: 'OR', args: ['exit_never', 'exit_on_second_bar'] },
+      ],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_and',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+      {
+        id: 'exit_long',
+        phase: 'exit',
+        when: 'exit_or',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'risk-atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+}

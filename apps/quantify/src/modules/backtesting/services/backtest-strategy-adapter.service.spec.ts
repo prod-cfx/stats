@@ -84,6 +84,41 @@ strategy`,
     })
   })
 
+  it('executes compiled combination scripts through the parser fast path and force-exits on ATR risk', async () => {
+    const executeAdapter = jest.spyOn(service as any, 'executeAdapter')
+    const strategy = await service.build({
+      id: 'compiled-combination-s1',
+      protocolVersion: 'v1',
+      scriptCode: createCompiledCombinationScriptFixture(),
+      params: {},
+    })
+
+    await expect(strategy.fn({
+      position: { qty: 1, avgEntryPrice: 100 },
+      currentPrice: 75,
+      bars: Array.from({ length: 16 }, (_unused, index) => ({
+        time: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: index === 15 ? 75 : 100,
+        volume: 1,
+      })),
+      __compiledDecisionState: { barIndex: 16, lastTriggeredByProgram: {} },
+    } as any)).resolves.toMatchObject({
+      action: 'CLOSE_LONG',
+      reason: 'compiled.force_exit',
+      meta: expect.objectContaining({
+        compiled: true,
+        guardState: expect.objectContaining({
+          forceExit: true,
+          triggered: ['risk_predicate_01_risk-atr-stop'],
+        }),
+      }),
+    })
+    expect(executeAdapter).not.toHaveBeenCalled()
+  })
+
   it('fails closed when a compiler.v1 generated script fails compiled parser validation', async () => {
     const tamperedScript = createCompiledScriptFixture().replace(
       'export default strategy',
@@ -326,4 +361,111 @@ function createCompiledAtrRiskScriptFixture(): string {
       fillAssumption: 'strict',
     },
   })
+}
+
+function createCompiledCombinationScriptFixture(): string {
+  return emitCompiledScript(createCompiledCombinationIrFixture())
+}
+
+function emitCompiledScript(ir: CanonicalStrategyIrV1): string {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const emitter = new CompiledScriptEmitterService()
+
+  return emitter.emit({
+    ast: compiler.compile(ir),
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
+
+function createCompiledCombinationIrFixture(): CanonicalStrategyIrV1 {
+  return {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'9'.repeat(64)}`,
+      specHash: `sha256:${'a'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['1h'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 25 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 15,
+      maxLookback: 15,
+      requiredTimeframes: ['1h'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'bar_index', kind: 'BAR_INDEX' },
+        { id: 'bar_1', kind: 'CONST', value: 1 },
+        { id: 'bar_2', kind: 'CONST', value: 2 },
+        { id: 'zero', kind: 'CONST', value: 0 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_on_first_bar', kind: 'EQ', args: ['bar_index', 'bar_1'] },
+        { id: 'entry_gate_true', kind: 'EQ', args: ['bar_1', 'bar_1'] },
+        { id: 'entry_and', kind: 'AND', args: ['entry_on_first_bar', 'entry_gate_true'] },
+        { id: 'exit_on_second_bar', kind: 'EQ', args: ['bar_index', 'bar_2'] },
+        { id: 'exit_never', kind: 'EQ', args: ['bar_index', 'zero'] },
+        { id: 'exit_or', kind: 'OR', args: ['exit_never', 'exit_on_second_bar'] },
+      ],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_and',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+      {
+        id: 'exit_long',
+        phase: 'exit',
+        when: 'exit_or',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'risk-atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
 }

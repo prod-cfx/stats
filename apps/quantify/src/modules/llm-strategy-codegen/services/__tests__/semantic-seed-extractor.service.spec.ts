@@ -201,6 +201,44 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('keeps rolling-window hours out of execution timeframe context', () => {
+    const patch = service.extract('BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+    }))
+    expect(patch.contextSlots?.timeframe).toBeUndefined()
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        params: expect.objectContaining({
+          sequenceKind: 'breakout_retest',
+          lookbackWindow: '24h',
+          memoryKey: 'breakout',
+        }),
+      }),
+    ]))
+  })
+
+  it('extracts colon-separated position sizing and stop-loss labels from combination strategy text', () => {
+    const patch = service.extract('15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里价格低于EMA20平多；止损：5%强制平仓；仓位：10usdt')
+
+    expect(patch.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+    }))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+      }),
+    ]))
+  })
+
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
     const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。')
 
@@ -745,6 +783,21 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({
         key: 'risk.atr_stop',
         params: expect.objectContaining({ sourceText: expect.stringContaining('ATR 2 倍移动止损') }),
+      }),
+    ]))
+  })
+
+  it('extracts colon-separated ATR multiple risk labels', () => {
+    const patch = service.extract('ETHUSDT 1h 突破 MA20 买入，止损：2 倍 ATR，止盈：3 倍 ATR，仓位：1%。')
+
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_stop',
+        params: expect.objectContaining({ multiple: 2 }),
+      }),
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        params: expect.objectContaining({ multiple: 3 }),
       }),
     ]))
   })

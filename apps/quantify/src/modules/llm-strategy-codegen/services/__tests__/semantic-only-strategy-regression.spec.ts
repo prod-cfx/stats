@@ -1,4 +1,5 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
+import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import type { SemanticState } from '../../types/semantic-state'
 import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../../types/strategy-normalized-intent'
 import { existsSync, readFileSync } from 'node:fs'
@@ -27,13 +28,30 @@ import { StrategySummaryBuilderService } from '../strategy-summary-builder.servi
 interface PublishedCaseResult {
   semanticState: SemanticState
   canonicalSpec: CanonicalStrategySpecV2
-  publishedSnapshot: Record<string, unknown>
+  publishedSnapshot: PublishedStrategySnapshotRecord
 }
 
 interface RejectedCaseResult {
   semanticState: SemanticState
   canonicalSpec: CanonicalStrategySpecV2
   error: Error
+}
+
+interface PublishedStrategySnapshotRecord extends Record<string, unknown> {
+  compiledIr?: CanonicalStrategyIrV1
+  consistencyReport?: {
+    status?: unknown
+    checks?: unknown
+    semanticConsistency?: {
+      checks?: unknown
+    }
+    compilerConsistency?: {
+      checks?: unknown
+      graphVsIr?: unknown
+      irVsScript?: unknown
+      manifestSelfCheck?: unknown
+    }
+  }
 }
 
 interface SemanticStateFactory {
@@ -118,6 +136,19 @@ describe('semantic-only strategy regression verification', () => {
     }
   }
 
+  function withDefaultPositionSizing(semanticState: SemanticState): SemanticState {
+    return {
+      ...semanticState,
+      position: semanticState.position ?? {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'inferred',
+      },
+    }
+  }
+
   function expectSemanticArtifactsAreChecklistFree(...artifacts: unknown[]): void {
     for (const artifact of artifacts) {
       expect(JSON.stringify(artifact)).not.toMatch(checklistFieldPattern)
@@ -157,6 +188,34 @@ describe('semantic-only strategy regression verification', () => {
 
   function ruleActionTypes(canonicalSpec: CanonicalStrategySpecV2): string[] {
     return canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))
+  }
+
+  function ruleConditionKeysByPhase(canonicalSpec: CanonicalStrategySpecV2, phase: CanonicalRuleV2['phase']): string[] {
+    const keys: string[] = []
+    const visit = (condition: CanonicalRuleV2['condition']) => {
+      if (condition.kind === 'atom') {
+        keys.push(condition.key)
+        return
+      }
+      if (condition.kind === 'expression') {
+        return
+      }
+      for (const child of condition.children) {
+        visit(child)
+      }
+    }
+    for (const rule of canonicalSpec.rules.filter(rule => rule.phase === phase)) {
+      visit(rule.condition)
+    }
+    return keys
+  }
+
+  function rulesByPhase(canonicalSpec: CanonicalStrategySpecV2, phase: CanonicalRuleV2['phase']): CanonicalRuleV2[] {
+    return canonicalSpec.rules.filter(rule => rule.phase === phase)
+  }
+
+  function compiledRiskPredicates(publishedSnapshot: PublishedStrategySnapshotRecord): NonNullable<CanonicalStrategyIrV1['riskPolicy']['riskPredicates']> {
+    return publishedSnapshot.compiledIr?.riskPolicy.riskPredicates ?? []
   }
 
   const legacyAdapterForbiddenCalls = [
@@ -220,6 +279,7 @@ describe('semantic-only strategy regression verification', () => {
       sessionId,
       canonicalSnapshot: artifacts.canonicalSpec as unknown as Record<string, unknown>,
       semanticView: artifacts.semanticView,
+      semanticPredicateGraph: artifacts.semanticPredicateGraph as unknown as Record<string, unknown>,
       graphSnapshot: artifacts.compiled.graphSnapshot,
       clarificationState: { status: 'CLEAR', items: [] },
       ir: artifacts.compiled.ir,
@@ -233,12 +293,15 @@ describe('semantic-only strategy regression verification', () => {
       lockedParams: artifacts.lockedParams,
     })
 
-    const publishedSnapshot = repo.create.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined
+    const publishedSnapshot = repo.create.mock.calls.at(-1)?.[0] as PublishedStrategySnapshotRecord | undefined
     expect(publishedSnapshot).toEqual(expect.objectContaining({
       specSnapshot: artifacts.canonicalSpec,
-      semanticGraph: artifacts.semanticView,
+      semanticGraph: artifacts.semanticPredicateGraph,
       scriptSnapshot: expect.any(String),
     }))
+    if (publishedSnapshot?.consistencyReport?.status !== 'PASSED') {
+      throw new Error(`published consistency must pass: ${JSON.stringify(publishedSnapshot?.consistencyReport)}`)
+    }
     expectSemanticArtifactsAreChecklistFree(
       publishedSnapshot?.specSnapshot,
       publishedSnapshot?.semanticGraph,
@@ -697,6 +760,99 @@ describe('semantic-only strategy regression verification', () => {
     expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining(actions))
   })
 
+  describe('reported combination strategy acceptance', () => {
+    it('publishes reported EMA stack as one conjunctive long entry rule', async () => {
+      const result = await generateAndPublish(
+        'reported-ema-stack-acceptance',
+        withLockedMarketContext(
+          buildSemanticStateFromMessage('入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里价格低于EMA20平多；止损：5%强制平仓；仓位：10usdt'),
+          { exchange: 'okx', marketType: 'perp', symbol: 'BTCUSDT', timeframe: '15m' },
+        ),
+      )
+      const entryRules = rulesByPhase(result.canonicalSpec, 'entry')
+
+      expect(entryRules).toHaveLength(1)
+      expect(entryRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'AND' }))
+      expect(entryRules[0]?.actions.map(action => action.type)).toEqual(['OPEN_LONG'])
+    })
+
+    it('publishes reported ATR risk with stop and take-profit artifacts', async () => {
+      const result = await generateAndPublish(
+        'reported-atr-risk-acceptance',
+        withDefaultPositionSizing(withLockedMarketContext(
+          buildSemanticStateFromMessage('ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈。'),
+          { exchange: 'okx', marketType: 'perp', symbol: 'ETHUSDT', timeframe: '1h' },
+        )),
+      )
+
+      expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining(['OPEN_LONG']))
+      expect(ruleConditionKeysByPhase(result.canonicalSpec, 'risk')).toEqual(expect.arrayContaining([
+        'risk.atr_multiple_stop',
+        'risk.atr_multiple_take_profit',
+      ]))
+      expect(compiledRiskPredicates(result.publishedSnapshot)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'atrMultipleStop' }),
+        expect.objectContaining({ kind: 'atrMultipleTakeProfit' }),
+      ]))
+    })
+
+    it('publishes reported breakout retest with remembered-level stop artifacts', async () => {
+      const result = await generateAndPublish(
+        'reported-breakout-retest-remembered-stop-acceptance',
+        withDefaultPositionSizing(withLockedMarketContext(
+          buildSemanticStateFromMessage('BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。'),
+          { exchange: 'okx', marketType: 'perp', symbol: 'BTCUSDT', timeframe: '1h' },
+        )),
+      )
+
+      expect(ruleConditionKeysByPhase(result.canonicalSpec, 'risk')).toEqual(expect.arrayContaining([
+        'risk.remembered_level_stop',
+      ]))
+      expect(compiledRiskPredicates(result.publishedSnapshot)).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'rememberedLevelStop' }),
+      ]))
+    })
+
+    it('publishes reported MA100 gate plus MACD with conjunctive entry and disjunctive exits', async () => {
+      const result = await generateAndPublish(
+        'reported-ma100-gate-macd-or-exits-acceptance',
+        withDefaultPositionSizing(withLockedMarketContext(
+          buildSemanticStateFromMessage('SOL 30分钟价格在 MA100 上方，MACD 金叉买入；跌破 MA100 或 MACD 死叉卖出。5%止损'),
+          { exchange: 'okx', marketType: 'perp', symbol: 'SOLUSDT', timeframe: '30m' },
+        )),
+      )
+      const entryRules = rulesByPhase(result.canonicalSpec, 'entry')
+      const exitRules = rulesByPhase(result.canonicalSpec, 'exit')
+
+      expect(entryRules).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          condition: expect.objectContaining({ kind: 'AND' }),
+          actions: expect.arrayContaining([expect.objectContaining({ type: 'OPEN_LONG' })]),
+        }),
+      ]))
+      expect(exitRules).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          condition: expect.objectContaining({ kind: 'OR' }),
+        }),
+      ]))
+    })
+  })
+
+  describe('singleton strategy acceptance', () => {
+    it('publishes simple single-leg MACD cross without splitting into another strategy shape', async () => {
+      const result = await generateAndPublish(
+        'singleton-macd-cross-acceptance',
+        withLockedMarketContext(
+          buildSemanticStateFromMessage('BTC 1小时 MACD 金叉买入，MACD 死叉卖出，仓位 10%。'),
+          { exchange: 'okx', marketType: 'perp', symbol: 'BTCUSDT', timeframe: '1h' },
+        ),
+      )
+
+      expect(rulesByPhase(result.canonicalSpec, 'entry')).toHaveLength(1)
+      expect(rulesByPhase(result.canonicalSpec, 'exit')).toHaveLength(1)
+    })
+  })
+
   it('extracts fixed-range grid wording as contracts instead of manufacturing checklist rules', () => {
     const patch = seedExtractor.extract('BTCUSDT 固定区间 60000-80000，按 1% 网格买入，触达上方网格卖出，仓位 1%，单笔最大亏损 2%。')
 
@@ -793,7 +949,10 @@ describe('semantic-only strategy regression verification', () => {
   it('publishes percent-change entry and position-basis exit semantics', async () => {
     const result = await generateAndPublish(
       'percent-change-publish',
-      buildSemanticStateFromMessage('BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入；15m 相对开仓均价上涨 2% 时卖出；5% 止损；10% 仓位。'),
+      withLockedMarketContext(
+        buildSemanticStateFromMessage('BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入；15m 相对开仓均价上涨 2% 时卖出；5% 止损；10% 仓位。'),
+        { exchange: 'binance', marketType: 'spot', symbol: 'BTCUSDT', timeframe: '3m' },
+      ),
     )
 
     expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
@@ -812,7 +971,10 @@ describe('semantic-only strategy regression verification', () => {
   it('publishes on-start market entry semantics with stop loss', async () => {
     const result = await generateAndPublish(
       'on-start-publish',
-      buildSemanticStateFromMessage('立即开始时市价买入一次；1h；BTCUSDT；单笔 10%；亏损 5% 止损。'),
+      withLockedMarketContext(
+        buildSemanticStateFromMessage('立即开始时市价买入一次；1h；BTCUSDT；单笔 10%；亏损 5% 止损。'),
+        { exchange: 'binance', marketType: 'spot', symbol: 'BTCUSDT', timeframe: '1h' },
+      ),
     )
 
     expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
@@ -835,6 +997,10 @@ describe('semantic-only strategy regression verification', () => {
       'price.breakout_up',
       'price.breakout_down',
       'price.detect.indicator_boundary',
+      'price.rolling_extrema_breakout',
+      'volume.relative_average',
+      'condition.sequence',
+      'logical.any_of',
       'indicator.cross_over',
       'indicator.cross_under',
       'indicator.above',

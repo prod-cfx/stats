@@ -1,4 +1,5 @@
 import { Injectable, Optional } from '@nestjs/common'
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
   SemanticAtomContract,
@@ -18,6 +19,7 @@ import { MarketInstrumentSymbolResolverService } from './market-instrument-symbo
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { SemanticEventFrameParserService } from './semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './semantic-event-frame-projector.service'
+import { buildTriggerCombinationContract } from './semantic-state-normalization'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -31,6 +33,7 @@ const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const LEVEL_SET_SPACING_CONFLICT_SLOT_KEY = 'contract.shape.price.level_set.spacing_conflict'
 const GRID_FIXED_LEVEL_SET_SHAPE_FIELD_PATH = 'triggers[grid.range_rebalance].contracts[contract-grid-fixed-levels].capabilities[price.define.level_set].shape'
 const REDUCED_INDICATOR_CROSS_SIGNATURE_INDICATORS = new Set(['ma', 'ema', 'moving_average', 'macd'])
+const SUPPORTED_EXECUTION_TIMEFRAMES = new Set<string>(MARKET_TIMEFRAMES)
 
 type SemanticAliasContext = {
   bollingerBandParams?: {
@@ -44,6 +47,13 @@ type SemanticAliasContext = {
   rsi?: {
     period: number
   }
+}
+
+type TriggerCombinationContractInput = {
+  groupId: string
+  join: 'AND' | 'OR'
+  actionKey?: string
+  actionKeySource?: 'default' | 'explicit'
 }
 
 @Injectable()
@@ -65,14 +75,14 @@ export class SemanticSeedExtractorService {
     const contextSlots = this.extractContextSlots(text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
-    const triggers = this.atomizeTriggers(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
+    const triggers = this.atomizeTriggers(this.withRecognizedTriggerCombinationContracts(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
       this.removeStaticIndicatorTriggersCoveredBySequences(
         this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
           eventFramePatch.triggers ?? [],
           this.extractTriggers(text, aliasContext),
         ))),
       ),
-    )))
+    ))))
     const actions = this.atomizeActions(this.mergeSeedActions(
       eventFramePatch.actions ?? [],
       this.extractActions(text, triggers),
@@ -241,19 +251,244 @@ export class SemanticSeedExtractorService {
   }
 
   private atomizeTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
-    return triggers.map((trigger, index) => (
-      this.hasContracts(trigger)
-        ? trigger
-        : {
-            ...trigger,
-            contracts: [this.buildAtomContract({
-              id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(trigger.key)}`,
-              kind: 'trigger',
-              capability: this.buildTriggerCapability(trigger),
-              params: trigger.params ?? {},
-            })],
-          }
-    ))
+    return triggers.map((trigger, index) => {
+      const contracts = trigger.contracts ?? []
+      if (contracts.some(contract => !this.isTriggerCombinationLikeContract(contract))) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        contracts: [
+          ...contracts,
+          this.buildAtomContract({
+            id: `contract-seed-trigger-${index + 1}-${this.slugifyContractId(trigger.key)}`,
+            kind: 'trigger',
+            capability: this.buildTriggerCapability({
+              ...trigger,
+              params: this.stripTriggerCombinationMarkerParams(trigger.params ?? {}),
+            }),
+            params: this.stripTriggerCombinationMarkerParams(trigger.params ?? {}),
+          }),
+        ],
+      }
+    })
+  }
+
+  private stripTriggerCombinationMarkerParams(params: Record<string, unknown>): Record<string, unknown> {
+    const {
+      groupId: _groupId,
+      semanticGroupId: _semanticGroupId,
+      logicalGroupId: _logicalGroupId,
+      combinationId: _combinationId,
+      atomicCombinationId: _atomicCombinationId,
+      join: _join,
+      logic: _logic,
+      operator: _operator,
+      conditionOperator: _conditionOperator,
+      actionKey: _actionKey,
+      actionBinding: _actionBinding,
+      role: _role,
+      ...stripped
+    } = params
+
+    return stripped
+  }
+
+  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[]): SeedTrigger[] {
+    const movingAverageStackGroups = this.resolveMovingAverageStackCombinationGroups(triggers)
+
+    return triggers.map((trigger, index) => {
+      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index))
+      if (explicit) {
+        return this.withTriggerCombinationContract(trigger, explicit)
+      }
+
+      const legacyGroupId = this.readTriggerGroupMarker(trigger)
+      if (!legacyGroupId) {
+        return trigger
+      }
+
+      const explicitActionKey = this.readString(trigger.params?.actionKey)
+      return this.withTriggerCombinationContract(trigger, {
+        groupId: legacyGroupId,
+        join: this.readTriggerCombinationJoin(trigger.params ?? {}) ?? 'AND',
+        ...(explicitActionKey
+          ? {
+              actionKey: explicitActionKey,
+              actionKeySource: 'explicit' as const,
+            }
+          : {}),
+      })
+    })
+  }
+
+  private resolveRecognizedTriggerCombination(
+    trigger: SeedTrigger,
+    movingAverageStack: TriggerCombinationContractInput | undefined,
+  ): TriggerCombinationContractInput | null {
+    if (movingAverageStack) {
+      return movingAverageStack
+    }
+
+    if (
+      trigger.key === 'logical.any_of'
+      && trigger.phase === 'exit'
+      && this.isMa100MacdExitAnyOf(trigger)
+    ) {
+      return {
+        groupId: 'exit-ma100-macd',
+        join: 'OR',
+      }
+    }
+
+    return null
+  }
+
+  private resolveMovingAverageStackCombinationGroups(
+    triggers: SeedTrigger[],
+  ): Map<number, TriggerCombinationContractInput> {
+    const candidates = new Map<string, Array<{ trigger: SeedTrigger, index: number, period: number }>>()
+
+    triggers.forEach((trigger, index) => {
+      if (!this.isMovingAverageStackCandidate(trigger)) return
+
+      const period = Number(trigger.params?.['reference.period'])
+      const sideScope = trigger.sideScope ?? 'long'
+      const timeframe = typeof trigger.params?.timeframe === 'string' ? trigger.params.timeframe : 'default'
+      const groupKey = [
+        trigger.phase,
+        sideScope,
+        trigger.key,
+        trigger.params?.indicator,
+        timeframe,
+      ].join(':')
+      candidates.set(groupKey, [...(candidates.get(groupKey) ?? []), { trigger, index, period }])
+    })
+
+    const groups = new Map<number, TriggerCombinationContractInput>()
+    for (const members of candidates.values()) {
+      const periods = Array.from(new Set(members.map(member => member.period))).sort((left, right) => left - right)
+      if (periods.length < 2) continue
+
+      const first = members[0]!.trigger
+      const sideScope = first.sideScope ?? 'long'
+      const indicator = String(first.params?.indicator)
+      const direction = first.key === 'indicator.above' ? 'above' : 'below'
+      const timeframe = typeof first.params?.timeframe === 'string' ? `-${first.params.timeframe}` : ''
+      const groupId = `${first.phase}-${sideScope}-${indicator}-${direction}-stack${timeframe}-${periods.join('-')}`
+
+      for (const member of members) {
+        groups.set(member.index, { groupId, join: 'AND' })
+      }
+    }
+
+    return groups
+  }
+
+  private isMovingAverageStackCandidate(trigger: SeedTrigger): boolean {
+    return (trigger.phase === 'entry' || trigger.phase === 'exit')
+      && (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+      && (trigger.params?.indicator === 'ema' || trigger.params?.indicator === 'ma')
+      && typeof trigger.params?.['reference.period'] === 'number'
+      && Number.isFinite(trigger.params['reference.period'])
+  }
+
+  private withTriggerCombinationContract(
+    trigger: SeedTrigger,
+    input: TriggerCombinationContractInput,
+  ): SeedTrigger {
+    if (trigger.contracts?.some(contract => this.isTriggerCombinationLikeContract(contract))) {
+      return {
+        ...trigger,
+        contracts: trigger.contracts.map(contract =>
+          this.isTriggerCombinationLikeContract(contract)
+            ? this.upgradeTriggerCombinationContract(trigger, contract, input)
+            : contract,
+        ),
+      }
+    }
+
+    return {
+      ...trigger,
+      contracts: [
+        ...(trigger.contracts ?? []),
+        buildTriggerCombinationContract({
+          ...input,
+          phase: trigger.phase,
+          sideScope: trigger.sideScope,
+        }),
+      ],
+    }
+  }
+
+  private upgradeTriggerCombinationContract(
+    trigger: SeedTrigger,
+    contract: SemanticAtomContract,
+    input: TriggerCombinationContractInput,
+  ): SemanticAtomContract {
+    const standard = buildTriggerCombinationContract({
+      ...input,
+      phase: trigger.phase,
+      sideScope: trigger.sideScope,
+    })
+
+    return {
+      ...contract,
+      capabilities: this.isTriggerCombinationContract(contract)
+        ? [...contract.capabilities]
+        : [...contract.capabilities, ...standard.capabilities],
+      requires: [...contract.requires],
+      params: {
+        ...contract.params,
+        ...standard.params,
+      },
+      ...(contract.effects ? { effects: [...contract.effects] } : {}),
+    }
+  }
+
+  private isMa100MacdExitAnyOf(trigger: SeedTrigger): boolean {
+    const items = trigger.params?.items
+    if (!Array.isArray(items)) return false
+
+    const hasMa100Breakdown = items.some(item =>
+      this.isPlainObject(item)
+      && item.key === 'indicator.below'
+      && this.isPlainObject(item.params)
+      && item.params.indicator === 'ma'
+      && item.params['reference.period'] === 100,
+    )
+    const hasMacdDeathCross = items.some(item =>
+      this.isPlainObject(item)
+      && item.key === 'indicator.cross_under'
+      && this.isPlainObject(item.params)
+      && item.params.indicator === 'macd',
+    )
+
+    return hasMa100Breakdown && hasMacdDeathCross
+  }
+
+  private readTriggerCombinationJoin(params: Record<string, unknown>): 'AND' | 'OR' | null {
+    for (const key of ['join', 'logic', 'operator', 'conditionOperator']) {
+      const value = params[key]
+      if (typeof value !== 'string') continue
+
+      const normalized = value.trim().toUpperCase()
+      if (normalized === 'AND' || normalized === 'OR') {
+        return normalized
+      }
+    }
+
+    return null
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private defaultTriggerCombinationActionKey(trigger: SeedTrigger): string {
+    const side = trigger.sideScope === 'short' ? 'short' : 'long'
+    return trigger.phase === 'exit' ? `close_${side}` : `open_${side}`
   }
 
   private groupEntryConfirmationTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
@@ -320,7 +555,12 @@ export class SemanticSeedExtractorService {
   private readTriggerGroupMarker(trigger: SeedTrigger): string | null {
     const params = trigger.params
     if (!params) return null
-    const marker = params.groupId ?? params.displayGroupId ?? params.logicalGroupId ?? params.combinationId
+    const marker = params.groupId
+      ?? params.displayGroupId
+      ?? params.semanticGroupId
+      ?? params.logicalGroupId
+      ?? params.combinationId
+      ?? params.atomicCombinationId
     return typeof marker === 'string' && marker.trim().length > 0 ? marker.trim() : null
   }
 
@@ -443,6 +683,19 @@ export class SemanticSeedExtractorService {
 
   private hasContracts(node: { contracts?: SemanticAtomContract[] }): boolean {
     return Array.isArray(node.contracts) && node.contracts.length > 0
+  }
+
+  private isTriggerCombinationContract(contract: SemanticAtomContract): boolean {
+    return contract.kind === 'trigger'
+      && contract.capabilities.some(capability =>
+        capability.domain === 'market'
+        && capability.verb === 'combine'
+        && capability.object === 'predicate_group',
+      )
+  }
+
+  private isTriggerCombinationLikeContract(contract: SemanticAtomContract): boolean {
+    return contract.kind === 'trigger' && this.readString(contract.params.groupId) !== null
   }
 
   private buildAtomContract(input: {
@@ -765,10 +1018,10 @@ export class SemanticSeedExtractorService {
       }
     }
 
-    const timeframes = this.extractAllTimeframes(text)
+    const timeframes = this.extractExecutionContextTimeframes(text)
     const timeframe = this.hasMultiTimeframeMovingAveragePredicateScope(text)
       ? null
-      : (timeframes[0] ?? this.extractFirstTimeframe(text))
+      : (timeframes[0] ?? this.extractFirstExecutionContextTimeframe(text))
     if (timeframe) {
       contextSlots.timeframe = timeframe
     }
@@ -955,10 +1208,10 @@ export class SemanticSeedExtractorService {
     const risk: NonNullable<CodegenSemanticPatch['risk']> = []
 
     const stopLossPatterns = [
-      /亏损\s*(\d+(?:\.\d+)?)\s*%/u,
-      /亏损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-      /止损\s*(\d+(?:\.\d+)?)\s*%/u,
-      /止损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /亏损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /亏损\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /止损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /止损\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ]
@@ -983,11 +1236,11 @@ export class SemanticSeedExtractorService {
     }
 
     const takeProfit = this.extractPercent(text, [
-      /盈利\s*(\d+(?:\.\d+)?)\s*%/u,
-      /盈利(?:达到|达|到)\s*(\d+(?:\.\d+)?)\s*%/u,
-      /盈利\s*百分之?\s*(\d+(?:\.\d+)?)/u,
-      /止盈\s*(\d+(?:\.\d+)?)\s*%/u,
-      /止盈\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /盈利\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /盈利(?:达到|达|到)?\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /盈利\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /止盈\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /止盈\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止盈|盈利)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
@@ -1009,7 +1262,7 @@ export class SemanticSeedExtractorService {
     }
 
     const trailingStop = this.extractPercent(text, [
-      /移动止损\s*(\d+(?:\.\d+)?)\s*%/u,
+      /移动止损\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
       /trailing[_\s-]?stop\D{0,8}(\d+(?:\.\d+)?)\s*%/iu,
     ])
     if (trailingStop !== null && !/(?:ATR|平均真实波幅).{0,12}(?:移动止损|动态止损|止损|trailing)/iu.test(text)) {
@@ -1489,10 +1742,11 @@ export class SemanticSeedExtractorService {
 
   private pushMovingAverageGateTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     for (const clause of this.splitLogicClauses(segment)) {
-      const pair = clause.match(/\b(?:MA|EMA)\s*(\d{1,4})\s*(?:在|位于)?\s*\b(?:MA|EMA)\s*(\d{1,4})\s*(?:上方|之上|高于)/iu)
-      if (pair?.[1] && pair[2]) {
+      const pair = clause.match(/\b(?:MA|EMA)\s*(\d{1,4})\s*(?:(?:在|位于)\s*\b(?:MA|EMA)\s*(\d{1,4})\s*(?:上方|之上)|(?:高于|大于)\s*\b(?:MA|EMA)\s*(\d{1,4}))/iu)
+      const slowPeriodText = pair?.[2] ?? pair?.[3]
+      if (pair?.[1] && slowPeriodText) {
         const fastPeriod = Number(pair[1])
-        const slowPeriod = Number(pair[2])
+        const slowPeriod = Number(slowPeriodText)
         if (Number.isFinite(fastPeriod) && Number.isFinite(slowPeriod)) {
           this.pushTrigger(triggers, seen, {
             key: 'condition.expression',
@@ -1513,6 +1767,9 @@ export class SemanticSeedExtractorService {
 
       const priceAbove = clause.match(/(?:价格|收盘价)?\s*(?:在|位于)?\s*\b(MA|EMA)\s*(\d{1,4})\s*(?:上方|之上|高于)/iu)
       if (!priceAbove?.[1] || !priceAbove[2]) continue
+      if (this.hasDirectTradeActionIntent(clause) && !/(?:只做多|只做空|只买入|只卖出)/u.test(clause)) {
+        continue
+      }
 
       const period = Number(priceAbove[2])
       if (!Number.isFinite(period)) continue
@@ -1543,6 +1800,10 @@ export class SemanticSeedExtractorService {
             },
       })
     }
+  }
+
+  private hasDirectTradeActionIntent(text: string): boolean {
+    return /(?:买入|卖出|做多|做空|开多|开空|开仓|平多|平空|平仓)/u.test(text)
   }
 
   private pushMovingAverageTrigger(
@@ -3919,6 +4180,39 @@ export class SemanticSeedExtractorService {
     return null
   }
 
+  private extractFirstExecutionContextTimeframe(text: string): string | null {
+    return this.extractExecutionContextTimeframes(text)[0] ?? null
+  }
+
+  private extractExecutionContextTimeframes(text: string): string[] {
+    const values: string[] = []
+    const seen = new Set<string>()
+    const pushCandidate = (value: string, index: number, length: number) => {
+      if (!SUPPORTED_EXECUTION_TIMEFRAMES.has(value)) return
+      if (this.isRollingWindowTimeframeCandidate(text, index, length)) return
+      if (seen.has(value)) return
+      seen.add(value)
+      values.push(value)
+    }
+
+    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/giu)) {
+      if (!match[1] || !match[2]) continue
+      pushCandidate(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
+    }
+
+    for (const match of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+      if (!match[1] || !match[2]) continue
+      if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
+      pushCandidate(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
+    }
+
+    if (/日线|日\s*K|天线/u.test(text)) {
+      pushCandidate('1d', text.search(/日线|日\s*K|天线/u), 2)
+    }
+
+    return values
+  }
+
   private hasMultiTimeframeMovingAveragePredicateScope(text: string): boolean {
     return this.splitSegments(text).some(segment =>
       this.splitCommaClauses(segment).some(clause =>
@@ -3989,6 +4283,17 @@ export class SemanticSeedExtractorService {
 
     const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 16)
     return /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
+  }
+
+  private isRollingWindowTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {
+    if (matchIndex < 0) return false
+
+    const prefix = text.slice(Math.max(0, matchIndex - 24), matchIndex)
+    const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 32)
+    const hasWindowPrefix = /(?:过去|最近|近|前|last|past|previous|prior|lookback)\s*$/iu.test(prefix)
+    const hasReferenceSuffix = /^\s*(?:的)?\s*(?:最高价|最低价|高点|低点|最高|最低|区间|范围|突破位|breakout|high|low|range)/iu.test(suffix)
+
+    return hasWindowPrefix && hasReferenceSuffix
   }
 
   private extractNumber(text: string, patterns: RegExp[]): number | null {

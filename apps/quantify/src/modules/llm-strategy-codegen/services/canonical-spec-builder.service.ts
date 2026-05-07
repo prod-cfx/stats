@@ -31,10 +31,11 @@ import {
 } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
-import { normalizeRiskSemantics } from './semantic-state-normalization'
+import { normalizeRiskSemantics, normalizeSemanticStateCombinationContracts } from './semantic-state-normalization'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
+import { SemanticTriggerCombinationContractService } from './semantic-trigger-combination-contract.service'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 interface StrategyLogicSnapshotInput {
@@ -62,6 +63,7 @@ type CapabilityCandidateResolution = {
 } | {
   status: 'conflict'
 }
+type SemanticTriggerCombinationGroup = ReturnType<SemanticTriggerCombinationContractService['resolveExecutableGroups']>[number]
 
 @Injectable()
 export class CanonicalSpecBuilderService {
@@ -69,6 +71,7 @@ export class CanonicalSpecBuilderService {
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
+    private readonly triggerCombinationContracts: SemanticTriggerCombinationContractService = new SemanticTriggerCombinationContractService(),
   ) {}
 
   build(checklist: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
@@ -497,14 +500,15 @@ export class CanonicalSpecBuilderService {
   }
 
   buildFromSemanticState(state: SemanticState): CanonicalStrategySpecV2 {
-    const market = this.resolveSemanticStateMarket(state)
-    const sizing = this.resolveSizingFromSemanticState(state.position)
+    const normalizedState = normalizeSemanticStateCombinationContracts(state)
+    const market = this.resolveSemanticStateMarket(normalizedState)
+    const sizing = this.resolveSizingFromSemanticState(normalizedState.position)
 
-    const orderPrograms = this.buildContractOrderPrograms(state)
+    const orderPrograms = this.buildContractOrderPrograms(normalizedState)
     const rules = this.filterOrderProgramShadowRules(
       [
-        ...this.buildRulesFromSemanticState(state, sizing),
-        ...this.buildBoundaryGuardRulesFromSemanticState(state, orderPrograms),
+        ...this.buildRulesFromSemanticState(normalizedState, sizing),
+        ...this.buildBoundaryGuardRulesFromSemanticState(normalizedState, orderPrograms),
       ],
       orderPrograms,
     )
@@ -515,9 +519,9 @@ export class CanonicalSpecBuilderService {
       market: this.withRequiredMarketTimeframes(
         market,
         requiredTimeframes,
-        state.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
+        normalizedState.triggers.some(trigger => this.readTriggerParamTimeframe(trigger.params)),
       ),
-      indicators: this.resolveIndicatorsFromSemanticTriggers(state.triggers),
+      indicators: this.resolveIndicatorsFromSemanticTriggers(normalizedState.triggers),
       sizing,
       executionPolicy: {
         signalTiming: 'BAR_CLOSE',
@@ -986,11 +990,6 @@ export class CanonicalSpecBuilderService {
       gate: 0,
     }
     const rules: CanonicalRuleV2[] = []
-    const pendingTriggerRules: Array<{
-      trigger: SemanticTriggerState
-      condition: CanonicalConditionNode
-      actions: CanonicalRuleV2['actions']
-    }> = []
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
     const gateConditions = state.triggers
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
@@ -1020,6 +1019,9 @@ export class CanonicalSpecBuilderService {
         }))
         continue
       }
+      if (trigger.phase !== 'gate') {
+        continue
+      }
 
       const condition = this.buildConditionFromSemanticTriggerGroup(triggerGroup, defaultTimeframe)
       if (!condition) {
@@ -1029,115 +1031,225 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const actions = this.buildActionsForSemanticTrigger(trigger, actionKeys, sizing)
+      counters.gate += 1
+      rules.push({
+        id: `semantic-gate-${counters.gate}`,
+        phase: 'gate',
+        sideScope: trigger.sideScope ?? 'both',
+        priority: this.resolveSemanticRulePriority('gate', counters.gate),
+        condition,
+        actions: [{ type: 'BLOCK_NEW_ENTRY' }],
+      })
+    }
+
+    const executableGroups = this.mergeImplicitMultiTimeframeGroups(
+      this.triggerCombinationContracts.resolveExecutableGroups(state.triggers.filter(trigger =>
+        trigger.status === 'locked'
+        && (trigger.phase === 'entry' || trigger.phase === 'exit')
+        && trigger.key !== 'grid.range_rebalance',
+      )),
+    )
+
+    for (const group of executableGroups) {
+      if (group.phase !== 'entry' && group.phase !== 'exit') {
+        continue
+      }
+
+      const condition = this.buildConditionFromSemanticTriggerCombinationGroup(group.members, group.join, defaultTimeframe)
+      if (!condition) {
+        continue
+      }
+
+      if (!this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
+        continue
+      }
+      const actions = this.buildActionsForSemanticActionKey(group.actionKey, sizing)
       if (actions.length === 0) {
         continue
       }
-      const ruleCondition = trigger.phase === 'gate'
-        ? condition
-        : trigger.phase === 'entry'
-          ? this.attachSemanticGateConditions(condition, gateConditions)
-          : condition
 
-      if (trigger.phase === 'entry' || trigger.phase === 'exit') {
-        pendingTriggerRules.push({
-          trigger,
-          condition: ruleCondition,
-          actions,
-        })
-        continue
-      }
-
-      for (const ruleVariant of this.splitSemanticRuleVariants(trigger, actions)) {
-        counters[trigger.phase] += 1
+      const ruleCondition = group.phase === 'entry'
+        ? this.attachSemanticGateConditions(condition, gateConditions)
+        : condition
+      for (const ruleVariant of this.buildSemanticTriggerGroupActionVariants(group, actions, actionKeys, sizing)) {
+        counters[group.phase] += 1
         rules.push({
-          id: `semantic-${trigger.phase}-${counters[trigger.phase]}`,
-          phase: trigger.phase,
+          id: `semantic-${group.phase}-${counters[group.phase]}`,
+          phase: group.phase,
           sideScope: ruleVariant.sideScope,
-          priority: this.resolveSemanticRulePriority(trigger.phase, counters[trigger.phase]),
+          priority: this.resolveSemanticRulePriority(group.phase, counters[group.phase]),
           condition: ruleCondition,
           actions: ruleVariant.actions,
         })
       }
     }
 
-    rules.push(...this.buildGroupedSemanticTriggerRules(pendingTriggerRules, counters))
     rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position))
 
     return rules
   }
 
-  private buildGroupedSemanticTriggerRules(
-    pendingRules: Array<{
-      trigger: SemanticTriggerState
-      condition: CanonicalConditionNode
-      actions: CanonicalRuleV2['actions']
-    }>,
-    counters: Record<'entry' | 'exit' | 'gate', number>,
-  ): CanonicalRuleV2[] {
-    const grouped = new Map<string, typeof pendingRules>()
-    for (const pendingRule of pendingRules) {
-      const groupMarker = this.readSemanticTriggerGroupMarker(pendingRule.trigger)
-      const key = JSON.stringify([
-        pendingRule.trigger.phase,
-        pendingRule.trigger.sideScope ?? null,
-        pendingRule.actions.map(action => action.type).sort(),
-        groupMarker ?? pendingRule.trigger.id,
-      ])
-      const rules = grouped.get(key) ?? []
-      rules.push(pendingRule)
-      grouped.set(key, rules)
+  private isSemanticTriggerGroupActionAllowed(
+    group: SemanticTriggerCombinationGroup,
+    actionKeys: Set<string>,
+  ): boolean {
+    if (actionKeys.has(group.actionKey)) {
+      return true
     }
 
-    const rules: CanonicalRuleV2[] = []
-    for (const group of grouped.values()) {
-      const first = group[0]
-      if (!first) continue
-
-      const condition = group.length === 1
-        ? first.condition
-        : {
-            kind: 'AND' as const,
-            predicateForm: 'generic' as const,
-            children: group.map(item => item.condition),
-          }
-      const actions = first.actions
-      const phase = first.trigger.phase
-      if (phase !== 'entry' && phase !== 'exit') {
-        continue
-      }
-      for (const ruleVariant of this.splitSemanticRuleVariants(first.trigger, actions)) {
-        counters[phase] += 1
-        rules.push({
-          id: `semantic-${phase}-${counters[phase]}`,
-          phase,
-          sideScope: ruleVariant.sideScope,
-          priority: this.resolveSemanticRulePriority(phase, counters[phase]),
-          condition,
-          actions: ruleVariant.actions,
-        })
-      }
-    }
-
-    return rules
+    return group.phase === 'entry'
+      && (group.actionKey === 'open_long' || group.actionKey === 'open_short')
+      && this.isPureExecutionOnStartGroup(group)
   }
 
-  private readSemanticTriggerGroupMarker(trigger: SemanticTriggerState): string | null {
-    const candidates = [
-      trigger.params.groupId,
-      trigger.params.semanticGroupId,
-      trigger.params.logicalGroupId,
-      trigger.params.combinationId,
-      trigger.params.atomicCombinationId,
-    ]
+  private isPureExecutionOnStartGroup(group: SemanticTriggerCombinationGroup): boolean {
+    return group.members.length === 1
+      && group.members[0]?.key === 'execution.on_start'
+  }
 
-    for (const candidate of candidates) {
-      if (typeof candidate === 'string' && candidate.trim().length > 0) {
-        return candidate.trim()
-      }
+  private buildSemanticTriggerGroupActionVariants(
+    group: SemanticTriggerCombinationGroup,
+    actions: CanonicalRuleV2['actions'],
+    actionKeys: Set<string>,
+    sizing: CanonicalStrategySpecV2['sizing'],
+  ): Array<{ sideScope: CanonicalRuleSideScope, actions: CanonicalRuleV2['actions'] }> {
+    if (group.sideScope !== 'both' || this.hasExplicitSemanticTriggerGroupActionKey(group)) {
+      return [{ sideScope: group.sideScope, actions }]
     }
 
-    return null
+    if (group.phase === 'entry') {
+      const variants: Array<{ sideScope: CanonicalRuleSideScope, actions: CanonicalRuleV2['actions'] }> = []
+      const allowDefaultOnStartAction = this.isPureExecutionOnStartGroup(group)
+      if (actionKeys.has('open_long') || allowDefaultOnStartAction) {
+        variants.push({ sideScope: 'long', actions: [this.buildOpenAction('OPEN_LONG', sizing)] })
+      }
+      if (actionKeys.has('open_short') || allowDefaultOnStartAction) {
+        variants.push({ sideScope: 'short', actions: [this.buildOpenAction('OPEN_SHORT', sizing)] })
+      }
+      return variants
+    }
+
+    if (group.phase === 'exit') {
+      const closeActions: CanonicalRuleV2['actions'] = []
+      if (actionKeys.has('close_long')) {
+        closeActions.push({ type: 'CLOSE_LONG' })
+      }
+      if (actionKeys.has('close_short')) {
+        closeActions.push({ type: 'CLOSE_SHORT' })
+      }
+      return closeActions.length > 0
+        ? [{ sideScope: 'both', actions: closeActions }]
+        : []
+    }
+
+    return [{ sideScope: group.sideScope, actions }]
+  }
+
+  private hasExplicitSemanticTriggerGroupActionKey(group: SemanticTriggerCombinationGroup): boolean {
+    return group.members.some(trigger =>
+      trigger.contracts?.some(contract =>
+        contract.params.groupId === group.groupId
+        && Object.prototype.hasOwnProperty.call(contract.params, 'actionKey')
+        && contract.params.actionKeySource !== 'default',
+      ),
+    )
+  }
+
+  private mergeImplicitMultiTimeframeGroups(
+    groups: ReturnType<SemanticTriggerCombinationContractService['resolveExecutableGroups']>,
+  ): ReturnType<SemanticTriggerCombinationContractService['resolveExecutableGroups']> {
+    const mergedByKey = new Map<string, SemanticTriggerCombinationGroup>()
+    const ordered: typeof groups = []
+
+    for (const group of groups) {
+      const member = group.members[0]
+      const multiTimeframeKey = member && group.groupId.startsWith('implicit:')
+        ? this.semanticMultiTimeframeGroupKey(member)
+        : null
+      const mergeKey = multiTimeframeKey
+        ? JSON.stringify([group.phase, group.sideScope, group.actionKey, multiTimeframeKey])
+        : null
+
+      if (!mergeKey) {
+        ordered.push(this.copySemanticTriggerCombinationGroup(group))
+        continue
+      }
+
+      const existing = mergedByKey.get(mergeKey)
+      if (existing) {
+        const merged = {
+          ...existing,
+          members: [...existing.members, ...group.members],
+          rolesByTriggerId: {
+            ...existing.rolesByTriggerId,
+            ...group.rolesByTriggerId,
+          },
+        }
+        const index = ordered.indexOf(existing)
+        if (index >= 0) {
+          ordered[index] = merged
+        }
+        mergedByKey.set(mergeKey, merged)
+        continue
+      }
+
+      const copy = this.copySemanticTriggerCombinationGroup(group)
+      mergedByKey.set(mergeKey, copy)
+      ordered.push(copy)
+    }
+
+    return ordered
+  }
+
+  private copySemanticTriggerCombinationGroup(
+    group: SemanticTriggerCombinationGroup,
+  ): SemanticTriggerCombinationGroup {
+    return {
+      ...group,
+      members: [...group.members],
+      rolesByTriggerId: group.rolesByTriggerId ? { ...group.rolesByTriggerId } : undefined,
+    }
+  }
+
+  private buildConditionFromSemanticTriggerCombinationGroup(
+    triggers: SemanticTriggerState[],
+    join: 'AND' | 'OR',
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    const conditions = triggers
+      .map(trigger => this.buildConditionFromSemanticTriggerGroup([trigger], defaultTimeframe))
+      .filter((condition): condition is CanonicalConditionNode => condition !== null)
+
+    if (conditions.length === 0) {
+      return null
+    }
+    if (conditions.length === 1) {
+      return conditions[0] ?? null
+    }
+
+    return {
+      kind: join,
+      predicateForm: 'generic',
+      children: conditions,
+    }
+  }
+
+  private buildActionsForSemanticActionKey(
+    actionKey: string,
+    sizing: CanonicalStrategySpecV2['sizing'],
+  ): CanonicalRuleV2['actions'] {
+    switch (actionKey) {
+      case 'open_long':
+        return [this.buildOpenAction('OPEN_LONG', sizing)]
+      case 'open_short':
+        return [this.buildOpenAction('OPEN_SHORT', sizing)]
+      case 'close_long':
+        return [{ type: 'CLOSE_LONG' }]
+      case 'close_short':
+        return [{ type: 'CLOSE_SHORT' }]
+      default:
+        return []
+    }
   }
 
   private groupSemanticMultiTimeframeTriggers(
@@ -1577,7 +1689,7 @@ export class CanonicalSpecBuilderService {
         },
         actions: risk.key === 'risk.atr_multiple_stop'
           ? [{ type: 'FORCE_EXIT' }]
-          : [{ type: sideScope === 'short' ? 'CLOSE_SHORT' : 'CLOSE_LONG' }],
+          : this.buildAtrTakeProfitActions(sideScope),
         metadata: {
           semanticKey: risk.key,
         },
@@ -1607,6 +1719,18 @@ export class CanonicalSpecBuilderService {
         semanticKey: risk.key,
       },
     }
+  }
+
+  private buildAtrTakeProfitActions(
+    sideScope: CanonicalRuleV2['sideScope'],
+  ): CanonicalRuleV2['actions'] {
+    if (sideScope === 'short') {
+      return [{ type: 'CLOSE_SHORT' }]
+    }
+    if (sideScope === 'both') {
+      return [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }]
+    }
+    return [{ type: 'CLOSE_LONG' }]
   }
 
   private buildActionsForSemanticRiskExpression(

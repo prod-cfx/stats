@@ -8,6 +8,9 @@ interface RiskPredicateProgramNode {
     id?: string
     kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop'
     params?: Readonly<Record<string, number | string | boolean>>
+    actions?: ReadonlyArray<{
+      kind?: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    }>
   }
 }
 
@@ -33,8 +36,10 @@ export function evaluateRiskPredicates(
       continue
     }
 
-    triggered.push(predicate.id)
-    forceExit = true
+    if (shouldForceExit(ctx, predicate)) {
+      triggered.push(predicate.id)
+      forceExit = true
+    }
   }
 
   return Object.freeze({
@@ -44,6 +49,21 @@ export function evaluateRiskPredicates(
     cancelOrderPrograms: baseGuardState.cancelOrderPrograms,
     triggered: Object.freeze(triggered),
   })
+}
+
+function shouldForceExit(
+  ctx: StrategyExecutionContextV1,
+  predicate: RiskPredicateProgramNode,
+): boolean {
+  const actions = predicate.payload.actions
+  if (!actions || actions.length === 0 || actions.some(action => action.kind === 'FORCE_EXIT')) {
+    return true
+  }
+
+  const qty = readPositionQty(ctx)
+  if (qty > 0) return actions.some(action => action.kind === 'CLOSE_LONG')
+  if (qty < 0) return actions.some(action => action.kind === 'CLOSE_SHORT')
+  return false
 }
 
 function freezeGuardState(

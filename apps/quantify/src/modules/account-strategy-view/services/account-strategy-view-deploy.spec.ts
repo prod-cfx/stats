@@ -1,3 +1,5 @@
+import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
 function createRuntimeExecutionStateService() {
@@ -64,6 +66,96 @@ function createGridOrderProgramAstSnapshot() {
       nodeType: 'series',
       payload: { id: 'grid_upper', kind: 'CONST', value: 110 },
     }],
+  }
+}
+
+function createCombinationDecisionAstSnapshot() {
+  return new CanonicalStrategyAstCompilerService().compile(createDeployCombinationIrFixture())
+}
+
+function createDeployCombinationIrFixture(): CanonicalStrategyIrV1 {
+  return {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'d'.repeat(64)}`,
+      specHash: `sha256:${'e'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'perpetual',
+      symbol: 'ETHUSDT',
+      timeframes: ['15m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 12 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 15,
+      maxLookback: 15,
+      requiredTimeframes: ['15m'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'bar_index', kind: 'BAR_INDEX' },
+        { id: 'bar_1', kind: 'CONST', value: 1 },
+        { id: 'bar_2', kind: 'CONST', value: 2 },
+        { id: 'zero', kind: 'CONST', value: 0 },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_on_first_bar', kind: 'EQ', args: ['bar_index', 'bar_1'] },
+        { id: 'entry_gate_true', kind: 'EQ', args: ['bar_1', 'bar_1'] },
+        { id: 'entry_and', kind: 'AND', args: ['entry_on_first_bar', 'entry_gate_true'] },
+        { id: 'exit_on_second_bar', kind: 'EQ', args: ['bar_index', 'bar_2'] },
+        { id: 'exit_never', kind: 'EQ', args: ['bar_index', 'zero'] },
+        { id: 'exit_or', kind: 'OR', args: ['exit_never', 'exit_on_second_bar'] },
+      ],
+    },
+    runtimeRequirements: {
+      helpers: ['atr'],
+      stateKeys: [],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_and',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 12 } },
+        ],
+      },
+      {
+        id: 'exit_long',
+        phase: 'exit',
+        when: 'exit_or',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+      riskPredicates: [
+        { id: 'risk-atr-stop', kind: 'atrMultipleStop', params: { multiple: 2 } },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'limit',
+      timeInForce: 'ioc',
+      allowPartialFill: false,
+    },
   }
 }
 
@@ -249,6 +341,121 @@ describe('accountStrategyViewService.deployStrategy', () => {
       strategyInstanceId: 'inst-mixed-1',
       publishedSnapshotId: 'snapshot-mixed-1',
     }))
+  })
+
+  it('deploys combination snapshots with publishedSnapshotBinding and snapshot-derived deploymentExecutionConfig', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-combination-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-combination-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const runtimeExecutionStateService = createRuntimeExecutionStateService()
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-combination-1',
+        snapshotHash: 'snapshot-combination-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          marketType: 'perp',
+          positionPct: 12,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'limit',
+          timeInForce: 'IOC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 3,
+          supportedPriceSources: ['mark'],
+          supportedOrderTypes: ['limit'],
+          supportedTimeInForce: ['IOC'],
+        },
+        strategyInstanceId: 'inst-draft-combination-1',
+        strategyTemplateId: 'template-combination-1',
+        compiledManifest: {
+          compileVersion: 'compiler.v1',
+        },
+        astSnapshot: createCombinationDecisionAstSnapshot(),
+      }),
+    }
+    const tradingService = {
+      getLeverageConstraints: jest.fn().mockResolvedValue({
+        minLeverage: 1,
+        maxLeverage: 5,
+      }),
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 1000, locked: 0, total: 1000 },
+      ]),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-combination-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX ETH combination',
+      publishedSnapshotId: 'snapshot-combination-1',
+      deployRequestId: 'deploy-req-combination-1',
+      exchangeAccountId: 'acct-combination-1',
+      deploymentExecutionConfig: {
+        leverage: 2,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'GTC',
+      },
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      positionPct: 99,
+      mode: 'TESTNET',
+    } as any)
+
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '15m',
+      positionPct: 12,
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-combination-1',
+        snapshotHash: 'snapshot-combination-hash-1',
+        sourceStrategyInstanceId: 'inst-draft-combination-1',
+        sourceStrategyTemplateId: 'template-combination-1',
+      },
+      deploymentExecutionConfig: {
+        leverage: 2,
+        priceSource: 'mark',
+        orderType: 'limit',
+        timeInForce: 'IOC',
+      },
+      executionConfigVersion: 1,
+    }))
+    expect(tradingService.getBalance).toHaveBeenCalledWith('user-1', 'okx', 'perp', 'acct-combination-1')
+    expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-combination-1',
+      publishedSnapshotId: 'snapshot-combination-1',
+      snapshotHash: 'snapshot-combination-hash-1',
+      snapshot: expect.objectContaining({ id: 'snapshot-combination-1' }),
+    })
   })
 
   it('initializes runtime execution states from the published snapshot after deploy succeeds and before success is marked', async () => {

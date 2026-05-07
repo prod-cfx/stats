@@ -349,6 +349,25 @@ export class StrategyConsistencyService {
       })
     }
 
+    for (const riskPredicate of projection.riskPredicates ?? []) {
+      const actionProfiles = this.resolveRiskPredicateActionProfiles(
+        riskPredicate.payload.kind,
+        projection.executionModel.positionMode,
+        riskPredicate.payload.actions,
+      )
+      const key = this.inferRuleKeyFromRiskPredicate(riskPredicate.payload.kind)
+      if (!key) continue
+
+      actionProfiles.forEach((profile) => {
+        pushRule({
+          key,
+          action: profile.action,
+          phase: this.resolvePhaseFromAction(profile.action),
+          sideScope: this.resolveRuleSideScope(profile.sideScope, profile.action),
+        })
+      })
+    }
+
     const actions = Array.from(new Set(
       [
         ...projection.decisionPrograms.flatMap(program =>
@@ -359,6 +378,12 @@ export class StrategyConsistencyService {
         ...projection.guards
           .map(guard => this.normalizeAction(guard.payload.onBreach))
           .filter((action): action is CanonicalAction => action !== null),
+        ...(projection.riskPredicates ?? [])
+          .flatMap(predicate => this.resolveRiskPredicateActionProfiles(
+            predicate.payload.kind,
+            projection.executionModel.positionMode,
+            predicate.payload.actions,
+          ).map(profile => profile.action)),
       ],
     ))
 
@@ -675,9 +700,7 @@ export class StrategyConsistencyService {
       const rules = profileRules.flatMap(rule => this.flattenV2Rule(rule))
       return {
         indicators: spec.indicators,
-        actions: Array.from(new Set(
-          profileRules.flatMap(rule => rule.actions.map(action => action.type as CanonicalAction)),
-        )),
+        actions: Array.from(new Set(rules.map(rule => rule.action))),
         ruleMappings: this.toRuleMappings(rules),
         rules,
         sizing: spec.sizing
@@ -1215,6 +1238,57 @@ export class StrategyConsistencyService {
     return null
   }
 
+  private resolveRiskPredicateActionProfiles(
+    kind: string | undefined,
+    positionMode: string | undefined,
+    actions?: ReadonlyArray<{ kind?: string }>,
+  ): Array<Pick<StrategySemanticRuleProfile, 'action' | 'sideScope'>> {
+    const explicitActions = (actions ?? [])
+      .map(action => this.normalizeAction(action.kind ?? ''))
+      .filter((action): action is CanonicalAction =>
+        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT',
+      )
+    if (explicitActions.length > 0) {
+      return Array.from(new Set(explicitActions)).map(action => ({
+        action,
+        sideScope: this.resolveRuleSideScope(this.resolveRiskPredicateSideScope(positionMode), action),
+      }))
+    }
+
+    const sideScope = this.resolveRiskPredicateSideScope(positionMode)
+    if (kind === 'atrMultipleStop' || kind === 'rememberedLevelStop') {
+      return [{ action: 'FORCE_EXIT', sideScope }]
+    }
+    if (kind !== 'atrMultipleTakeProfit') {
+      return []
+    }
+    if (sideScope === 'short') {
+      return [{ action: 'CLOSE_SHORT', sideScope: 'short' }]
+    }
+    if (sideScope === 'both') {
+      return [
+        { action: 'CLOSE_LONG', sideScope: 'long' },
+        { action: 'CLOSE_SHORT', sideScope: 'short' },
+      ]
+    }
+    return [{ action: 'CLOSE_LONG', sideScope: 'long' }]
+  }
+
+  private inferRuleKeyFromRiskPredicate(kind: string | undefined): StrategySemanticRuleKey | null {
+    if (kind === 'atrMultipleStop') return 'risk.atr_multiple_stop'
+    if (kind === 'atrMultipleTakeProfit') return 'risk.atr_multiple_take_profit'
+    if (kind === 'rememberedLevelStop') return 'risk.remembered_level_stop'
+    return null
+  }
+
+  private resolveRiskPredicateSideScope(
+    positionMode: string | undefined,
+  ): StrategySemanticRuleProfile['sideScope'] {
+    if (positionMode === 'long_only') return 'long'
+    if (positionMode === 'short_only') return 'short'
+    return 'both'
+  }
+
   private inferRuleKeyFromPredicate(input: {
     predicateKind: string
     predicateId: string
@@ -1585,12 +1659,30 @@ export class StrategyConsistencyService {
     const keys = this.collectRuleKeys(rule.condition)
     if (keys.length === 0) return []
 
-    return keys.flatMap(key => rule.actions.map((action) => ({
+    return keys.flatMap(key =>
+      rule.actions.flatMap(action => this.resolveV2RuleActionProfiles(rule, action.type as CanonicalAction, key)),
+    )
+  }
+
+  private resolveV2RuleActionProfiles(
+    rule: CanonicalRuleV2,
+    action: CanonicalAction,
+    key: StrategySemanticRuleKey,
+  ): StrategySemanticRuleProfile[] {
+    return [this.createV2RuleProfile(rule, key, action)]
+  }
+
+  private createV2RuleProfile(
+    rule: CanonicalRuleV2,
+    key: StrategySemanticRuleKey,
+    action: CanonicalAction,
+  ): StrategySemanticRuleProfile {
+    return {
       key,
-      phase: this.resolveRuleProfilePhase(rule, action.type as CanonicalAction, key),
-      sideScope: this.resolveRuleSideScope(rule.sideScope ?? 'both', action.type as CanonicalAction),
-      action: action.type as CanonicalAction,
-    })))
+      phase: this.resolveRuleProfilePhase(rule, action, key),
+      sideScope: this.resolveRuleSideScope(rule.sideScope ?? 'both', action),
+      action,
+    }
   }
 
   private resolveRuleProfilePhase(
@@ -1600,7 +1692,7 @@ export class StrategyConsistencyService {
   ): StrategySemanticRuleProfile['phase'] {
     if (
       rule.phase === 'risk'
-      && key === 'risk.take_profit_pct'
+      && (key === 'risk.take_profit_pct' || key === 'risk.atr_multiple_take_profit')
       && (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT')
     ) {
       return 'exit'
@@ -1727,7 +1819,7 @@ export class StrategyConsistencyService {
       return []
     }
     const kind = expr.payload.kind
-    if (kind === 'AND' || kind === 'OR' || kind === 'NOT') {
+    if (kind === 'AND' || kind === 'OR' || kind === 'NOT' || kind === 'allOf' || kind === 'anyOf') {
       const key = this.inferRuleKeyFromPredicate({
         predicateKind: kind,
         predicateId: expr.sourceRef,
@@ -1801,6 +1893,9 @@ export class StrategyConsistencyService {
       || key === 'macd.golden_cross'
       || key === 'macd.death_cross'
       || key === 'position_loss_pct'
+      || key === 'risk.atr_multiple_stop'
+      || key === 'risk.atr_multiple_take_profit'
+      || key === 'risk.remembered_level_stop'
       || key === 'risk.take_profit_pct'
       || key === 'risk.trailing_stop_pct'
       || key === 'risk.cooldown_bars'

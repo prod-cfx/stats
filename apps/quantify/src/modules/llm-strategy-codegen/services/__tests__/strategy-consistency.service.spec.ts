@@ -81,20 +81,7 @@ strategy
 
   it('passes AST projection for atomic scripts with runtime requirements and risk predicates', () => {
     const canonicalSpec = canonicalBuilder.buildFromSemanticState(buildLockedAtomicState('atr-risk'))
-    const compiled = new CanonicalSpecV2IrCompilerService().compile({
-      canonicalSpec,
-      fallback: {
-        exchange: 'okx',
-        symbol: 'BTCUSDT',
-        baseTimeframe: '1h',
-        positionPct: 10,
-      },
-    })
-    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
-    const script = new CompiledScriptEmitterService().emit({
-      ast,
-      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
-    })
+    const { ast, script } = compileCanonicalSpec(canonicalSpec)
 
     const report = consistency.evaluate({
       canonicalSpec,
@@ -103,13 +90,248 @@ strategy
 
     expect(ast.runtimeRequirements?.helpers).toEqual(expect.arrayContaining(['atr']))
     expect(ast.riskPredicates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ payload: expect.objectContaining({ kind: 'atrMultipleStop' }) }),
-      expect.objectContaining({ payload: expect.objectContaining({ kind: 'atrMultipleTakeProfit' }) }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: 'atrMultipleStop',
+          actions: [expect.objectContaining({ kind: 'FORCE_EXIT' })],
+        }),
+      }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: 'atrMultipleTakeProfit',
+          actions: [expect.objectContaining({ kind: 'CLOSE_LONG' })],
+        }),
+      }),
     ]))
     expect(report.checks).toContainEqual(expect.objectContaining({
       key: 'compiler_consistency.ast_projection',
       status: 'passed',
     }))
+  })
+
+  it('passes ATR risk predicates consistency without missing force-exit or close-long actions', () => {
+    const canonicalSpec = canonicalBuilder.buildFromSemanticState(buildLockedAtomicState('atr-risk'))
+    const { script } = compileCanonicalSpec(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.specProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_stop',
+        action: 'FORCE_EXIT',
+        phase: 'risk',
+      }),
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_LONG',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['FORCE_EXIT', 'CLOSE_LONG']))
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_stop',
+        action: 'FORCE_EXIT',
+        phase: 'risk',
+      }),
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_LONG',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(JSON.stringify(report.checks)).not.toContain('脚本缺少关键动作: FORCE_EXIT')
+    expect(JSON.stringify(report.checks)).not.toContain('脚本缺少关键动作: CLOSE_LONG')
+  })
+
+  it('passes ATR risk predicates consistency for short-only take-profit exits', () => {
+    const canonicalSpec = buildAtrTakeProfitSpec('short')
+    const { script } = compileCanonicalSpec(canonicalSpec, 'short_only')
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.specProfile.actions).toEqual(expect.arrayContaining(['CLOSE_SHORT']))
+    expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['CLOSE_SHORT']))
+    expect(report.specProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_SHORT',
+        phase: 'exit',
+        sideScope: 'short',
+      }),
+    ]))
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_SHORT',
+        phase: 'exit',
+        sideScope: 'short',
+      }),
+    ]))
+  })
+
+  it('uses canonical rule actions for both-side ATR take-profit consistency profiles', () => {
+    const canonicalSpec = buildAtrTakeProfitSpec('both')
+    const { script } = compileCanonicalSpec(canonicalSpec, 'long_short')
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.specProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG']))
+    expect(report.specProfile.actions).not.toContain('CLOSE_SHORT')
+    expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG']))
+    expect(report.scriptProfile.actions).not.toContain('CLOSE_SHORT')
+    expect(report.specProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_LONG',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(report.specProfile.rules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_SHORT',
+        phase: 'exit',
+        sideScope: 'short',
+      }),
+    ]))
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_LONG',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(report.scriptProfile.rules).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.atr_multiple_take_profit',
+        action: 'CLOSE_SHORT',
+        phase: 'exit',
+        sideScope: 'short',
+      }),
+    ]))
+  })
+
+  it('passes remembered level stop consistency as a force-exit risk predicate', () => {
+    const canonicalSpec = canonicalBuilder.buildFromSemanticState(buildLockedAtomicState('breakout-retest'))
+    const { script } = compileCanonicalSpec(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['FORCE_EXIT']))
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.remembered_level_stop',
+        action: 'FORCE_EXIT',
+        phase: 'risk',
+      }),
+    ]))
+    expect(JSON.stringify(report.checks)).not.toContain('脚本缺少关键动作: FORCE_EXIT')
+  })
+
+  it('keeps anyOf exit child rule mappings in compiled projections', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'binance' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'spot' as const,
+        timeframe: '1h',
+      },
+      indicators: [
+        { kind: 'rsi' as const, params: { period: 14 } },
+        { kind: 'macd' as const, params: {} },
+      ],
+      sizing: { mode: 'RATIO' as const, value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1h'],
+      },
+      rules: [
+        {
+          id: 'entry-rsi-long',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          priority: 200,
+          condition: {
+            kind: 'atom' as const,
+            key: 'rsi.threshold_lte',
+            semanticScope: 'market' as const,
+            op: 'LTE' as const,
+            value: 30,
+            params: { period: 14 },
+          },
+          actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+        {
+          id: 'exit-any-of-long',
+          phase: 'exit' as const,
+          sideScope: 'long' as const,
+          priority: 100,
+          condition: {
+            kind: 'OR' as const,
+            predicateForm: 'generic' as const,
+            children: [
+              {
+                kind: 'atom' as const,
+                key: 'rsi.threshold_gte',
+                semanticScope: 'market' as const,
+                op: 'GTE' as const,
+                value: 70,
+                params: { period: 14 },
+              },
+              {
+                kind: 'atom' as const,
+                key: 'macd.death_cross',
+                semanticScope: 'market' as const,
+                op: 'CROSS_UNDER' as const,
+              },
+            ],
+          },
+          actions: [{ type: 'CLOSE_LONG' as const }],
+        },
+      ],
+    }
+    const { script } = compileCanonicalSpec(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.scriptProfile.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'macd.death_cross',
+        action: 'CLOSE_LONG',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(JSON.stringify(report.checks)).not.toContain('macd.death_cross:exit:long')
   })
 
   it('keeps AST projection compatible with compiler.v1 scripts emitted before optional atomic constants', () => {
@@ -1523,6 +1745,105 @@ strategy
     )).toBe(true)
   })
 })
+
+function compileCanonicalSpec(
+  canonicalSpec: Parameters<CanonicalSpecV2IrCompilerService['compile']>[0]['canonicalSpec'],
+  positionMode?: Parameters<CompiledScriptExecutionEnvelopeService['build']>[1],
+) {
+  const compiled = new CanonicalSpecV2IrCompilerService().compile({
+    canonicalSpec,
+    fallback: {
+      exchange: canonicalSpec.market.exchange ?? 'okx',
+      symbol: canonicalSpec.market.symbol ?? 'BTCUSDT',
+      baseTimeframe: canonicalSpec.market.defaultTimeframe ?? canonicalSpec.market.timeframe ?? '1h',
+      positionPct: 10,
+    },
+  })
+  const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+  const script = new CompiledScriptEmitterService().emit({
+    ast,
+    executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec, positionMode),
+  })
+
+  return { ast, script }
+}
+
+function buildAtrTakeProfitSpec(sideScope: 'short' | 'both') {
+  const entryRules = sideScope === 'short'
+    ? [{
+        id: 'entry-short-on-start',
+        phase: 'entry' as const,
+        sideScope: 'short' as const,
+        priority: 200,
+        condition: {
+          kind: 'atom' as const,
+          key: 'execution.on_start',
+          semanticScope: 'portfolio' as const,
+        },
+        actions: [{ type: 'OPEN_SHORT' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+      }]
+    : [
+        {
+          id: 'entry-long-on-start',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          priority: 200,
+          condition: {
+            kind: 'atom' as const,
+            key: 'execution.on_start',
+            semanticScope: 'portfolio' as const,
+          },
+          actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+        {
+          id: 'entry-short-on-start',
+          phase: 'entry' as const,
+          sideScope: 'short' as const,
+          priority: 199,
+          condition: {
+            kind: 'atom' as const,
+            key: 'execution.on_start',
+            semanticScope: 'portfolio' as const,
+          },
+          actions: [{ type: 'OPEN_SHORT' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+      ]
+
+  return {
+    version: 2 as const,
+    market: {
+      exchange: 'okx' as const,
+      symbol: 'BTCUSDT',
+      marketType: 'perp' as const,
+      timeframe: '1h',
+    },
+    indicators: [],
+    sizing: { mode: 'RATIO' as const, value: 0.1 },
+    executionPolicy: {
+      signalTiming: 'BAR_CLOSE' as const,
+      fillTiming: 'NEXT_BAR_OPEN' as const,
+    },
+    dataRequirements: {
+      requiredTimeframes: ['1h'],
+    },
+    rules: [
+      ...entryRules,
+      {
+        id: `risk-atr-take-profit-${sideScope}`,
+        phase: 'risk' as const,
+        sideScope,
+        priority: 120,
+        condition: {
+          kind: 'atom' as const,
+          key: 'risk.atr_multiple_take_profit',
+          semanticScope: 'position' as const,
+          params: { multiple: 3 },
+        },
+        actions: [{ type: sideScope === 'short' ? 'CLOSE_SHORT' as const : 'CLOSE_LONG' as const }],
+      },
+    ],
+  }
+}
 
 function createBollingerSemanticGraph() {
   return {

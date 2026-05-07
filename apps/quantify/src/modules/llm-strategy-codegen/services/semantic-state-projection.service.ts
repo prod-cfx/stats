@@ -567,10 +567,8 @@ export class SemanticStateProjectionService {
     trigger: SemanticState['triggers'][number],
     groupedTriggers: Array<SemanticState['triggers'][number]>,
   ): string {
-    const timeframes = this.uniqueSortedTimeframes(groupedTriggers)
-    return timeframes.length > 1
-      ? `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(trigger)}`
-      : this.formatDisplayTriggerCondition(trigger)
+    return this.formatGroupedIndicatorCompareCondition(groupedTriggers)
+      ?? this.formatDisplayTriggerCondition(trigger)
   }
 
   private isDisplayGateCompatibleWithEntry(
@@ -970,11 +968,23 @@ export class SemanticStateProjectionService {
     triggers: SemanticState['triggers'],
   ): Map<string, string> {
     const result = new Map<string, string>()
+    const contractGroups = new Map<string, Array<SemanticState['triggers'][number]>>()
     const groups = new Map<string, Array<SemanticState['triggers'][number]>>()
 
     for (const trigger of triggers) {
       if (!this.isGroupableIndicatorCompareTrigger(trigger)) {
         continue
+      }
+
+      const marker = this.readDisplayRuleGroupMarker(trigger)
+      if (marker) {
+        const groupKey = [
+          marker,
+          trigger.phase,
+          trigger.key,
+          trigger.sideScope ?? '',
+        ].join('|')
+        contractGroups.set(groupKey, [...(contractGroups.get(groupKey) ?? []), trigger])
       }
 
       const groupKey = [
@@ -987,14 +997,37 @@ export class SemanticStateProjectionService {
       groups.set(groupKey, [...(groups.get(groupKey) ?? []), trigger])
     }
 
+    for (const group of contractGroups.values()) {
+      if (group.length <= 1) {
+        continue
+      }
+
+      const condition = this.formatGroupedIndicatorCompareCondition(group)
+      if (!condition) {
+        continue
+      }
+
+      const sortedGroup = this.sortIndicatorCompareGroup(group)
+      const [first, ...rest] = sortedGroup
+      if (!first) continue
+      result.set(first.id, `${this.formatTriggerPhaseLabel(first.phase)}：${condition}${this.formatActionSuffix(first, condition)}`)
+      for (const trigger of rest) {
+        result.set(trigger.id, '')
+      }
+    }
+
     for (const group of groups.values()) {
       const timeframes = this.uniqueSortedTimeframes(group)
       if (timeframes.length <= 1) {
         continue
       }
 
-      const [first, ...rest] = group
+      const sortedGroup = this.sortIndicatorCompareGroup(group)
+      const [first, ...rest] = sortedGroup
       if (!first) continue
+      if (result.has(first.id)) {
+        continue
+      }
       result.set(first.id, this.formatGroupedIndicatorCompareTriggerSummary(first, timeframes))
       for (const trigger of rest) {
         result.set(trigger.id, '')
@@ -1002,6 +1035,42 @@ export class SemanticStateProjectionService {
     }
 
     return result
+  }
+
+  private formatGroupedIndicatorCompareCondition(
+    group: Array<SemanticState['triggers'][number]>,
+  ): string | null {
+    if (group.length <= 1 || !group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) {
+      return null
+    }
+
+    const [first] = group
+    if (!first) return null
+    const sameShape = group.every(trigger =>
+      trigger.phase === first.phase
+      && trigger.key === first.key
+      && (trigger.sideScope ?? '') === (first.sideScope ?? '')
+      && String(trigger.params.indicator ?? 'ma').toLowerCase() === String(first.params.indicator ?? 'ma').toLowerCase(),
+    )
+    if (!sameShape) {
+      return null
+    }
+
+    const timeframes = this.uniqueSortedTimeframes(group)
+    const periods = this.uniqueSortedIndicatorPeriods(group)
+    if (timeframes.length === 1 && periods.length > 1) {
+      const indicator = this.formatIndicatorName(first)
+      const references = periods.map(period => `${indicator}${this.formatNumber(period)}`).join(' / ')
+      return first.key === 'indicator.above'
+        ? `${timeframes[0]} 价格在 ${references} 上方`
+        : `${timeframes[0]} 价格低于 ${references}`
+    }
+
+    if (timeframes.length > 1 && periods.length === 1) {
+      return `${timeframes.join(' / ')} ${this.formatIndicatorCompareCondition(first)}`
+    }
+
+    return null
   }
 
   private buildGroupedAtomicTriggerSummaries(
@@ -1092,13 +1161,41 @@ export class SemanticStateProjectionService {
     const period = typeof trigger.params['reference.period'] === 'number'
       ? this.formatNumber(trigger.params['reference.period'])
       : String(trigger.params['reference.period'] ?? '')
-    const indicator = typeof trigger.params.indicator === 'string' && trigger.params.indicator.trim().length > 0
-      ? trigger.params.indicator.trim().toUpperCase()
-      : 'MA'
+    const indicator = this.formatIndicatorName(trigger)
     const reference = `${indicator}${period}`
     return trigger.key === 'indicator.above'
       ? `价格在 ${reference} 上方`
       : `价格低于 ${reference}`
+  }
+
+  private formatIndicatorName(trigger: SemanticState['triggers'][number]): string {
+    return typeof trigger.params.indicator === 'string' && trigger.params.indicator.trim().length > 0
+      ? trigger.params.indicator.trim().toUpperCase()
+      : 'MA'
+  }
+
+  private uniqueSortedIndicatorPeriods(triggers: Array<SemanticState['triggers'][number]>): number[] {
+    const periods = new Set<number>()
+    for (const trigger of triggers) {
+      if (typeof trigger.params['reference.period'] === 'number') {
+        periods.add(trigger.params['reference.period'])
+      }
+    }
+
+    return Array.from(periods).sort((left, right) => left - right)
+  }
+
+  private sortIndicatorCompareGroup(
+    triggers: Array<SemanticState['triggers'][number]>,
+  ): Array<SemanticState['triggers'][number]> {
+    return [...triggers].sort((left, right) => {
+      const timeframeDelta = String(left.params.timeframe ?? '').localeCompare(String(right.params.timeframe ?? ''))
+      if (timeframeDelta !== 0) return timeframeDelta
+      const leftPeriod = typeof left.params['reference.period'] === 'number' ? left.params['reference.period'] : Number.MAX_SAFE_INTEGER
+      const rightPeriod = typeof right.params['reference.period'] === 'number' ? right.params['reference.period'] : Number.MAX_SAFE_INTEGER
+      if (leftPeriod !== rightPeriod) return leftPeriod - rightPeriod
+      return left.id.localeCompare(right.id)
+    })
   }
 
   private uniqueSortedTimeframes(triggers: Array<SemanticState['triggers'][number]>): string[] {

@@ -13479,6 +13479,137 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expectNoSymbolPrompt(afterExchange.assistantPrompt)
   })
 
+  it('keeps breakout lookback windows out of execution timeframe through clarification flow', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-breakout-window-context-timeframe' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'BTC 突破过去 24 小时高点后不立刻买，等回踩不破突破位再买，跌回突破位下方止损。',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        params: expect.objectContaining({ lookbackWindow: '24h' }),
+      }),
+    ]))
+    expect(started.assistantPrompt).toContain('请确认单笔仓位大小')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-breakout-window-context-timeframe',
+      createPayload,
+      { status: started.status },
+    ))
+    const afterPosition = await service.continueSession('s-breakout-window-context-timeframe', {
+      userId: 'u1',
+      message: '100usdt',
+    })
+    const positionPayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(positionPayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(afterPosition.assistantPrompt).toContain('请确认交易所')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-breakout-window-context-timeframe',
+      positionPayload,
+      { status: afterPosition.status },
+    ))
+    const afterExchange = await service.continueSession('s-breakout-window-context-timeframe', {
+      userId: 'u1',
+      message: 'okx',
+    })
+    const exchangePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(exchangePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(afterExchange.assistantPrompt).toContain('请确认市场类型')
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-breakout-window-context-timeframe',
+      exchangePayload,
+      { status: afterExchange.status },
+    ))
+    const afterMarketType = await service.continueSession('s-breakout-window-context-timeframe', {
+      userId: 'u1',
+      message: '合约',
+    })
+    const marketTypePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+
+    expect(afterMarketType.status).toBe('DRAFTING')
+    expect(marketTypePayload.semanticState.contextSlots.marketType).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'perp',
+    }))
+    expect(marketTypePayload.semanticState.contextSlots.timeframe).toEqual(expect.objectContaining({
+      status: 'open',
+      value: null,
+    }))
+    expect(afterMarketType.assistantPrompt).toContain('请确认策略主周期')
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalledWith(
+      's-breakout-window-context-timeframe',
+      expect.anything(),
+    )
+  })
+
+  it('keeps colon-separated seed position and stop loss out of clarification slots', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请确认交易所。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-colon-position-risk-seed' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里价格低于EMA20平多；止损：5%强制平仓；仓位：10usdt',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      sizing: { kind: 'quote', value: 10, asset: 'USDT' },
+      mode: 'fixed_quote',
+      value: 10,
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        status: 'locked',
+        params: expect.objectContaining({
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ slotKey: 'position.sizing' }),
+      expect.objectContaining({ slotKey: 'risk.protective_exit' }),
+    ]))
+    expect(started.assistantPrompt).not.toContain('请确认单笔仓位大小')
+    expect(started.assistantPrompt).not.toContain('请确认止损')
+  })
+
   it('keeps bidirectional fixed grid density clarification out of generic contract-required prompts', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
