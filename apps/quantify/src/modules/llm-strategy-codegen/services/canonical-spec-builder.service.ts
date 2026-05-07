@@ -1835,7 +1835,12 @@ export class CanonicalSpecBuilderService {
       }
       const derived = Math.min(1, ratio / remaining)
       result.push(Number(derived.toFixed(6)))
-      consumed += ratio
+      // Accumulate based on derived expansion to keep `remaining` accurate
+      // under floating-point inputs (e.g. [0.333, 0.333, 0.334]). When derived
+      // is clamped to 1, the original ratio overshoots — consume only the
+      // actual remaining instead.
+      const consumedNow = derived >= 1 ? remaining : ratio
+      consumed += consumedNow
     }
     return result
   }

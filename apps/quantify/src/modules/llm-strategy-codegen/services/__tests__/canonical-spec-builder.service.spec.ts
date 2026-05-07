@@ -3817,6 +3817,36 @@ describe('canonicalSpecBuilderService', () => {
       expect(ptpRules[2].actions[0].sizing?.value).toBeCloseTo(1.0, 4)
     })
 
+    it('keeps every tier non-zero for floating-point ratios summing to 1.0', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_floatdrift',
+        tiers: [
+          { threshold: 3, reduceRatio: 0.333 },
+          { threshold: 6, reduceRatio: 0.333 },
+          { threshold: 9, reduceRatio: 0.334 },
+        ],
+        sideScope: 'long',
+        positionMode: 'long_only',
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const ptpRules = spec.rules.filter(rule =>
+        rule.phase === 'risk'
+        && rule.metadata
+        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      )
+
+      expect(ptpRules).toHaveLength(3)
+      // Every derived ratio must be > 0 — float drift used to silently drop the final tier.
+      for (const rule of ptpRules) {
+        const value = rule.actions[0].sizing?.value ?? 0
+        expect(value).toBeGreaterThan(0)
+      }
+      // Final tier closes the residual position completely.
+      expect(ptpRules[2].actions[0].sizing?.value).toBeCloseTo(1.0, 4)
+    })
+
     it('honors sideScope long/short/both for REDUCE actions', () => {
       const service = new CanonicalSpecBuilderService()
 
