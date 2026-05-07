@@ -1746,12 +1746,17 @@ export class CanonicalSpecBuilderService {
       : null
     const rawTiers = Array.isArray(risk.params.tiers) ? risk.params.tiers : null
     if (!memoryKey || !rawTiers || rawTiers.length === 0) {
+      // TODO(#984): when tiers/memoryKey are missing surface an open_slot
+      // (risk.partial_take_profit.tiers / .memoryKey) instead of silently
+      // dropping the rule. Builder context here only emits CanonicalRuleV2[];
+      // openSlot routing must thread through the buildFromSemanticState pass.
       return []
     }
 
     const parsedTiers: Array<{ threshold: number; reduceRatio: number }> = []
     for (const raw of rawTiers) {
       if (!raw || typeof raw !== 'object') {
+        // TODO(#984): see open_slot note above — silent drop on malformed tier.
         return []
       }
       const tier = raw as { trigger?: { kind?: unknown; threshold?: unknown }; reduceRatio?: unknown }
@@ -1762,6 +1767,7 @@ export class CanonicalSpecBuilderService {
         ? tier.reduceRatio
         : null
       if (threshold === null || reduceRatio === null) {
+        // TODO(#984): see open_slot note above.
         return []
       }
       parsedTiers.push({ threshold, reduceRatio })
