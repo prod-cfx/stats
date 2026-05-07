@@ -630,7 +630,7 @@ function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
     || ownerHasOpenSlot(state.position)
 }
 
-function ownerHasOpenSlot(owner: { openSlots?: SemanticSlotState[] } | null): boolean {
+function ownerHasOpenSlot(owner: { openSlots?: readonly SemanticSlotState[] } | null): boolean {
   return owner?.openSlots?.some(isBlockingSemanticOpenSlot) ?? false
 }
 
