@@ -1,11 +1,140 @@
 import type { SemanticSupportRoute } from '../../semantic-support-classifier.service'
 
+export type AtomicCoverageTag =
+  | 'trend'
+  | 'mean_reversion'
+  | 'breakout'
+  | 'grid'
+  | 'dca'
+  | 'position_lifecycle'
+  | 'multi_timeframe'
+  | 'state_memory'
+  | 'partial_take_profit'
+  | 'multi_leg'
+  | 'event_driven'
+  | 'portfolio_risk'
+  | 'context'
+  | 'risk'
+  | 'orchestration'
+
+export interface AtomCoverageExpectedAtom {
+  key: string
+  category: 'trigger' | 'action' | 'risk' | 'position' | 'context' | 'orchestration'
+  minContractSubstrate?: boolean
+}
+
 export interface AtomCoverageGoldenCase {
+  id: string
   name: string
   message: string
+  tags: AtomicCoverageTag[]
+  expectedAtoms: AtomCoverageExpectedAtom[]
   expectedKeys: string[]
   forbiddenKeys?: string[]
   expectedRoute: SemanticSupportRoute
+  notes?: string
+}
+
+type AtomCoverageGoldenCaseInput =
+  & Omit<AtomCoverageGoldenCase, 'id' | 'tags' | 'expectedAtoms'>
+  & Partial<Pick<AtomCoverageGoldenCase, 'id' | 'tags' | 'expectedAtoms'>>
+
+function defineAtomCoverageGoldenCases(
+  idPrefix: string,
+  cases: AtomCoverageGoldenCaseInput[],
+): AtomCoverageGoldenCase[] {
+  return cases.map((goldenCase, index) => ({
+    ...goldenCase,
+    id: goldenCase.id ?? `${idPrefix}-${String(index + 1).padStart(3, '0')}-${slugify(goldenCase.name)}`,
+    tags: goldenCase.tags ?? inferCoverageTags(goldenCase),
+    expectedAtoms: goldenCase.expectedAtoms ?? inferExpectedAtoms(goldenCase),
+  }))
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function inferExpectedAtoms(goldenCase: AtomCoverageGoldenCaseInput): AtomCoverageExpectedAtom[] {
+  const unsupportedAtomKeys = new Set(
+    goldenCase.expectedKeys
+      .filter(key => key.startsWith('unsupported:') || key.startsWith('unknown:'))
+      .map(key => key.replace(/^(?:unsupported|unknown):/, '')),
+  )
+
+  return goldenCase.expectedKeys
+    .filter(key => !key.startsWith('open_slot:') && !key.startsWith('unsupported:') && !key.startsWith('unknown:'))
+    .map((key): AtomCoverageExpectedAtom => {
+      const category = inferExpectedAtomCategory(key)
+      const expectedAtom: AtomCoverageExpectedAtom = { key, category }
+
+      if (category !== 'context' && category !== 'orchestration' && !unsupportedAtomKeys.has(key)) {
+        expectedAtom.minContractSubstrate = true
+      }
+
+      return expectedAtom
+    })
+}
+
+function inferExpectedAtomCategory(key: string): AtomCoverageExpectedAtom['category'] {
+  if (key.startsWith('context.')) return 'context'
+  if (key.startsWith('risk.')) return 'risk'
+  if (key.startsWith('position.')) return 'position'
+  if (key.startsWith('strategy.')) return 'orchestration'
+  if (
+    key.startsWith('open_')
+    || key.startsWith('close_')
+    || key.startsWith('action.')
+    || key.startsWith('execution.')
+    || key.startsWith('grid.')
+  ) {
+    return 'action'
+  }
+
+  return 'trigger'
+}
+
+function inferCoverageTags(goldenCase: AtomCoverageGoldenCaseInput): AtomicCoverageTag[] {
+  const tags = new Set<AtomicCoverageTag>()
+  const expectedKeys = goldenCase.expectedKeys
+  const expectedKeySet = new Set(expectedKeys)
+  const message = goldenCase.message.toLowerCase()
+
+  if (expectedKeys.some(key => key.startsWith('context.'))) tags.add('context')
+  if (expectedKeys.some(key => key.startsWith('risk.'))) tags.add('risk')
+  if (expectedKeys.some(key => key.startsWith('grid.'))) tags.add('grid')
+  if (expectedKeys.some(key => key.includes('breakout') || key.includes('rolling_extrema') || key.includes('previous_extrema'))) tags.add('breakout')
+  if (expectedKeys.some(key => key.startsWith('trend.') || key.startsWith('market.')) || message.includes('ma')) tags.add('trend')
+  if (expectedKeys.some(key => key.startsWith('oscillator.') || key.includes('range_position') || key.includes('indicator_boundary') || key.includes('rebound') || key.includes('percent_change'))) tags.add('mean_reversion')
+  if (expectedKeys.some(key => key.startsWith('open_') || key.startsWith('close_') || key.startsWith('action.') || key.startsWith('execution.'))) tags.add('position_lifecycle')
+  if (expectedKeySet.has('position.dca_schedule')) tags.add('dca')
+  if (expectedKeySet.has('strategy.multi_timeframe')) tags.add('multi_timeframe')
+  if (expectedKeySet.has('risk.remembered_level_stop') || message.includes('已有仓位')) tags.add('state_memory')
+  if (expectedKeySet.has('risk.partial_take_profit')) tags.add('partial_take_profit')
+  if (expectedKeySet.has('action.reverse_position') || expectedKeySet.has('action.add_position')) tags.add('multi_leg')
+  if (expectedKeySet.has('external.signal') || expectedKeySet.has('news.sentiment')) tags.add('event_driven')
+  if (expectedKeys.some(key => key.startsWith('portfolio.'))) tags.add('portfolio_risk')
+  if (
+    goldenCase.expectedRoute !== 'projection_gate'
+    && expectedKeys.some(key =>
+      key.startsWith('strategy.')
+      || key === 'position.dca_schedule'
+      || key === 'grid.dynamic_grid'
+      || key === 'action.pause_trading'
+      || key === 'action.reverse_position'
+      || key === 'action.add_position'
+      || key === 'risk.partial_take_profit',
+    )
+  ) {
+    tags.add('orchestration')
+  }
+
+  if (tags.size === 0) tags.add('context')
+
+  return Array.from(tags)
 }
 
 export const ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES = [
@@ -20,7 +149,7 @@ export const ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES = [
   'ETH 1小时突破 MA20 买入，止损设为 2 倍 ATR，盈利达到 3 倍 ATR 后止盈',
 ] as const satisfies readonly string[]
 
-export const atomicContractExecutionUpgradeGoldenCases: AtomCoverageGoldenCase[] = [
+export const atomicContractExecutionUpgradeGoldenCases = defineAtomCoverageGoldenCases('execution-upgrade', [
   {
     name: 'atomic rolling extrema breakout entry and exit',
     message: ATOMIC_CONTRACT_EXECUTION_UPGRADE_CASES[0],
@@ -79,9 +208,9 @@ export const atomicContractExecutionUpgradeGoldenCases: AtomCoverageGoldenCase[]
     forbiddenKeys: ['unsupported:risk.atr_multiple_stop', 'unsupported:risk.atr_multiple_take_profit'],
     expectedRoute: 'projection_gate',
   },
-]
+])
 
-export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
+export const atomCoverageGoldenCases = defineAtomCoverageGoldenCases('golden-corpus', [
   {
     name: 'supported ma cross long with fixed pct risk',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，MA20 下穿 MA50 平多，单笔 10%，止损 5%，止盈 10%。',
@@ -494,4 +623,4 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedKeys: ['indicator.cross_over', 'indicator.cross_under', 'open_long', 'close_long', 'open_slot:position.sizing'],
     expectedRoute: 'open_slots',
   },
-]
+])
