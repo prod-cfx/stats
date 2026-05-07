@@ -132,6 +132,74 @@ describe('SemanticContractReadinessService', () => {
     }))
   })
 
+  it('preserves answered contract-declared owner open slots during readiness normalization', () => {
+    const state = createSemanticState({
+      risk: [{
+        id: 'risk-falling-knife',
+        key: 'risk.falling_knife_guard',
+        status: 'locked',
+        source: 'derived',
+        params: {},
+        openSlots: [{
+          slotKey: 'risk.falling_knife_guard.definition',
+          fieldPath: 'risk[risk-falling-knife].params.definition',
+          value: '反弹站上 MA20 后才允许开仓',
+          status: 'locked',
+          priority: 'risk',
+          questionHint: '请确认“不接飞刀”的判定方式。',
+          affectsExecution: true,
+          evidence: {
+            source: 'user_explicit',
+            text: '反弹站上 MA20 后才允许开仓',
+          },
+        }],
+        support: { supportStatus: 'supported_requires_slot' },
+        contracts: [{
+          id: 'risk-contract-falling-knife',
+          kind: 'risk',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [{
+            slotKey: 'risk.falling_knife_guard.definition',
+            fieldPath: 'risk[risk-falling-knife].params.definition',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认“不接飞刀”的判定方式。',
+            affectsExecution: true,
+            evidence: {
+              source: 'derived',
+              text: 'Missing falling knife definition',
+            },
+          }],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.state.risk[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [{
+        slotKey: 'risk.falling_knife_guard.definition',
+        fieldPath: 'risk[risk-falling-knife].params.definition',
+        value: '反弹站上 MA20 后才允许开仓',
+        status: 'locked',
+        priority: 'risk',
+        questionHint: '请确认“不接飞刀”的判定方式。',
+        affectsExecution: true,
+        evidence: {
+          source: 'user_explicit',
+          text: '反弹站上 MA20 后才允许开仓',
+        },
+      }],
+    }))
+  })
+
   it('writes missing price and capital requirements to the requiring action open slots', () => {
     const state = createSemanticState({
       actions: [{

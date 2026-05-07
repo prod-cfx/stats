@@ -475,22 +475,31 @@ function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status
       continue
     }
 
-    if (openSlots[existingIndex].status !== 'open') {
+    if (openSlots[existingIndex].status !== 'open' && isManagedContractReadinessSlot(slot)) {
       openSlots[existingIndex] = slot
     }
   }
 
+  const nextStatus = openSlots.some(slot => slot.status === 'open')
+    ? 'open'
+    : owner.status === 'open'
+      ? 'locked'
+      : owner.status
+
   return {
     ...owner,
     openSlots,
-    ...(owner.status === 'locked' ? { status: 'open' as const } : {}),
+    ...(nextStatus ? { status: nextStatus } : {}),
   }
 }
 
 function isManagedContractReadinessSlot(slot: SemanticSlotState): boolean {
-  return slot.slotKey === 'contract.substrate.missing'
+  return slot.slotKey.startsWith('contract.substrate.')
     || slot.slotKey.startsWith('contract.requirement.')
     || slot.slotKey.startsWith('contract.shape.')
+    || slot.slotKey.startsWith('contract.runtime_requirement.')
+    || slot.slotKey.startsWith('contract.state_requirement.')
+    || slot.slotKey.startsWith('contract.order_requirement.')
 }
 
 function buildRequirementFieldPath(
