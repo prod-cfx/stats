@@ -871,7 +871,7 @@ describe('SemanticSeedExtractorService', () => {
       const seeds = service.extract('设置分批止盈')
       expect(seeds.risk[0]).toMatchObject({
         key: 'risk.partial_take_profit',
-        status: 'open_slot',
+        status: 'open',
         openSlots: expect.arrayContaining([
           expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
         ]),

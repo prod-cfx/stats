@@ -1377,11 +1377,15 @@ export class SemanticSeedExtractorService {
         this.pushRisk(risk, {
           key: 'risk.partial_take_profit',
           params: { sourceText: matchingClause },
-          status: 'open_slot',
+          status: 'open',
           source: 'user_explicit',
           openSlots: [{
             slotKey: 'risk.partial_take_profit.tiers',
-            question: '请说明分批止盈每档的触发条件（PnL 百分比）和减仓比例',
+            fieldPath: 'risk.params.tiers',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请说明分批止盈每档的触发条件（PnL 百分比）和减仓比例',
+            affectsExecution: true,
           }],
         })
       }

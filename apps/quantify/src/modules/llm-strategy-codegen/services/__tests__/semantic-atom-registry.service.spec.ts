@@ -247,6 +247,7 @@ describe('SemanticAtomRegistryService', () => {
     it('routes to supported_requires_slot with openSlot when tiers absent', () => {
       const atom = service.resolve('risk.partial_take_profit', {})
       expect(atom.supportStatus).toBe('supported_requires_slot')
+      if (atom.supportStatus === 'unsupported_unknown') throw new Error('unexpected unknown atom')
       expect(atom.openSlots).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
@@ -257,6 +258,7 @@ describe('SemanticAtomRegistryService', () => {
     it('routes to supported_requires_slot with openSlot when tiers is empty array', () => {
       const atom = service.resolve('risk.partial_take_profit', { tiers: [], memoryKey: 'partial_tp_abc' })
       expect(atom.supportStatus).toBe('supported_requires_slot')
+      if (atom.supportStatus === 'unsupported_unknown') throw new Error('unexpected unknown atom')
       expect(atom.openSlots).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
