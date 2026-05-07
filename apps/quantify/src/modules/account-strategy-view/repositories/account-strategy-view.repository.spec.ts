@@ -331,6 +331,72 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
   })
 
+  it('rejects deploy with VIEW_ONLY error when source strategy is view-only (not generic NotFound)', async () => {
+    // 用户主动把策略转为只读后，前端 detail 页虽已隐藏入口，但 admin 强制重部署
+    // 或 localStorage 残留 intent 仍可能带 view-only 实例的 sourceStrategyInstanceId
+    // 进来。repo 必须给出准确的「策略已只读」错误归因，而不是误报「策略不存在」。
+    const findFirst = jest.fn()
+      // 第一次：runnable 过滤（archivedAt+viewOnlyAt 都要为 null）→ 不命中
+      .mockResolvedValueOnce(null)
+      // 第二次：unfiltered（仅 id+createdBy）→ 命中 view-only 实例
+      .mockResolvedValueOnce({ viewOnlyAt: new Date('2026-05-01T00:00:00Z'), archivedAt: null })
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
+      },
+      strategyTemplate: { findUnique: jest.fn(), create: jest.fn() },
+      strategyInstance: { findFirst, update: jest.fn(), create: jest.fn() },
+      userStrategySubscription: { findFirst: jest.fn(), create: jest.fn() },
+      userStrategyAccount: { findUnique: jest.fn(), create: jest.fn() },
+    }
+
+    const repo = new AccountStrategyViewRepository(
+      createTxHost(tx) as any,
+      { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any,
+    )
+
+    await expect(repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'view-only deploy attempt',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      marketType: 'spot',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: 'view-only-strategy-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_strategy_view_only',
+    })
+
+    // 第一次调用走 runnable 过滤（包含 viewOnlyAt: null）
+    expect(findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({
+        id: 'view-only-strategy-1',
+        createdBy: 'user-1',
+        archivedAt: null,
+        viewOnlyAt: null,
+      }),
+    }))
+    // 第二次回退查询：不带 archived/view-only 过滤，用于错误归因
+    expect(findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { id: 'view-only-strategy-1', createdBy: 'user-1' },
+      select: { viewOnlyAt: true, archivedAt: true },
+    }))
+    expect(tx.strategyInstance.update).not.toHaveBeenCalled()
+    expect(tx.strategyInstance.create).not.toHaveBeenCalled()
+  })
+
   it('uses provided exchange balance quotes when seeding the internal strategy account', async () => {
     const tx = {
       user: {

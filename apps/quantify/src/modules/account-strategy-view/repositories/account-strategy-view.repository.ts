@@ -13,7 +13,7 @@ import { RUNTIME_BINDING_STATUS } from '@/modules/strategy-signals/types/runtime
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime value import
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
-import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
+import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException, DeployStrategyViewOnlyException } from '../exceptions'
 import { runnableStrategyInstanceWhere, STRATEGY_ARCHIVE_REASON_USER_DELETE, visibleStrategyInstanceWhere } from './strategy-instance-visibility.query'
 
 interface ListStrategiesQuery {
@@ -226,6 +226,15 @@ export class AccountStrategyViewRepository {
         })
 
         if (!existingInstance) {
+          // 区分「真不存在」与「已只读」两种情形，给前端 / 上游服务更准确
+          // 的错误归因。archived 仍归为 not-found（用户视角下已删除）。
+          const retiredInstance = await tx.strategyInstance.findFirst({
+            where: { id: reusableStrategyInstanceId, createdBy: input.userId },
+            select: { viewOnlyAt: true, archivedAt: true },
+          })
+          if (retiredInstance?.viewOnlyAt && !retiredInstance.archivedAt) {
+            throw new DeployStrategyViewOnlyException({ strategyInstanceId: reusableStrategyInstanceId })
+          }
           throw new DeployStrategyInstanceNotFoundException({ strategyInstanceId: reusableStrategyInstanceId })
         }
 
