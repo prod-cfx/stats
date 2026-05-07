@@ -226,11 +226,14 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
-    const params = this.readParams(update.params)
+    const rawParams = this.readParams(update.params)
+    const mergedParams = key === 'risk.partial_take_profit'
+      ? this.attachPartialTakeProfitMemoryKey(rawParams)
+      : rawParams
     const contracts = this.readContracts(update.contracts)
       ?? (this.hasOwnProperty(update, 'contracts')
         ? null
-        : this.synthesizeRiskContracts(key, params, index))
+        : this.synthesizeRiskContracts(key, mergedParams, index))
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -238,10 +241,6 @@ export class SemanticSeedStateBuilderService {
       fieldPath: `risk[${index}].contracts`,
       priority: 'risk',
     })
-
-    const mergedParams = key === 'risk.partial_take_profit'
-      ? this.attachPartialTakeProfitMemoryKey(params)
-      : params
 
     const risk: SemanticRiskState = {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
@@ -1035,7 +1034,10 @@ export class SemanticSeedStateBuilderService {
     atomKey: string,
     contract: SemanticAtomContract,
   ): SemanticAtomContract {
-    const resolved = this.semanticAtomRegistry.resolve(this.resolveContractSubstrateAtomKey(atomKey, contract.params))
+    const resolved = this.semanticAtomRegistry.resolve(
+      this.resolveContractSubstrateAtomKey(atomKey, contract.params),
+      contract.params,
+    )
     if (!('contractSubstrate' in resolved) || !resolved.contractSubstrate) {
       return contract
     }
