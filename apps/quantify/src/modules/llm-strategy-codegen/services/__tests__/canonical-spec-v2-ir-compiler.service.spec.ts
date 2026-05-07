@@ -3498,7 +3498,7 @@ function makePhase1GateSpec(condition: CanonicalStrategySpecV2['rules'][number][
 
 describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
   const fallback = {
-    exchange: 'binance',
+    exchange: 'binance' as const,
     symbol: 'BTCUSDT',
     baseTimeframe: '1m',
     positionPct: 10,
