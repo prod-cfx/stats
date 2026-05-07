@@ -1,5 +1,8 @@
+import type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 import type { StrategyNormalizedIntent } from './strategy-normalized-intent'
 import type { SemanticExpressionOperand, SemanticExpressionOperator } from './semantic-state'
+
+export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 
 export type CanonicalRulePhase = 'entry' | 'exit' | 'risk' | 'rebalance' | 'gate'
 export type CanonicalRuleSideScope = 'long' | 'short' | 'both' | 'flat'
@@ -75,11 +78,7 @@ export interface CanonicalRuleV2 {
   actions: CanonicalRuleAction[]
   metadata?: Record<string, unknown> & {
     normalized?: CanonicalRuleNormalizedMetadata
-    partialTakeProfit?: {
-      memoryKey: string
-      tierIndex: number
-      totalTiers: number
-    }
+    partialTakeProfit?: PartialTakeProfitProgramMetadata
   }
 }
 

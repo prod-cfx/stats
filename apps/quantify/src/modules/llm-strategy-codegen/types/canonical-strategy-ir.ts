@@ -1,3 +1,7 @@
+import type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
+
+export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
+
 export type HashString = `sha256:${string}`
 
 export interface CanonicalStrategyIrV1 {
@@ -152,11 +156,7 @@ export interface RuleBlock {
   guardRefs?: string[]
   actions: ActionDef[]
   metadata?: {
-    partialTakeProfit?: {
-      memoryKey: string
-      tierIndex: number
-      totalTiers: number
-    }
+    partialTakeProfit?: PartialTakeProfitProgramMetadata
   }
 }
 

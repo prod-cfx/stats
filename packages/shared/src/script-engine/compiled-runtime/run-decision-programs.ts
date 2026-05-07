@@ -2,6 +2,9 @@ import type { StrategyDecisionV1, StrategyExecutionContextV1 } from '../../strat
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 
+// MUST match PartialTakeProfitProgramMetadata in
+// apps/quantify/src/modules/llm-strategy-codegen/types/partial-take-profit.ts.
+// `packages/shared` cannot import quantify types, so this is a documented mirror.
 interface PartialTakeProfitMeta {
   memoryKey: string
   tierIndex: number
