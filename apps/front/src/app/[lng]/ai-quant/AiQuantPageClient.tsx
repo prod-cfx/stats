@@ -26,6 +26,7 @@ import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
+import { AiQuantDeletionDialog, type AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import {
   buildAutoAdvanceMessage,
@@ -1758,124 +1759,49 @@ export function AiQuantPageClient({
         }}
       />
 
-      {conversationDeleteDialog && (
-        <div
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4"
-          onClick={() => {
-            if (!conversationDeleteDialog.pending) setConversationDeleteDialog(null)
-          }}
-        >
-          <div
-            className="w-full max-w-[560px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
-            onClick={event => event.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-              {conversationDeleteDialog.status === 'running'
-                ? '当前策略正在运行'
-                : conversationDeleteDialog.status === 'unknown'
-                  ? '暂时无法删除会话'
-                  : '删除 AI Quant 会话'}
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
-              {conversationDeleteDialog.status === 'loading'
-                ? '正在确认关联策略的运行状态。'
-                : conversationDeleteDialog.status === 'running'
-                  ? '当前会话关联的策略正在运行，不能删除。请先前往策略详情停止运行；如有持仓或挂单，可选择仅停止或平仓并停止。'
-                  : conversationDeleteDialog.status === 'unknown'
-                    ? '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。'
-                    : '这个会话已生成过策略，当前策略已停止。默认只删除 AI 对话和生成过程，不删除我的策略列表中的策略记录。'}
-            </p>
-
-            <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
-              <div className="flex justify-between gap-3">
-                <span className="text-[color:var(--cf-muted)]">会话</span>
-                <span className="text-right text-[color:var(--cf-text-strong)]">
-                  {conversationDeleteDialog.conversation.title}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-[color:var(--cf-muted)]">策略</span>
-                <span className="text-right text-[color:var(--cf-text-strong)]">
-                  {conversationDeleteDialog.strategy?.name ?? conversationDeleteDialog.strategyInstanceId}
-                </span>
-              </div>
-            </div>
-
-            {(conversationDeleteDialog.status === 'stopped' || conversationDeleteDialog.status === 'draft') && (
-              <label className="mt-4 flex items-start gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 text-sm text-[color:var(--cf-text)]">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={conversationDeleteDialog.deleteStoppedStrategy}
-                  disabled={conversationDeleteDialog.pending}
-                  onChange={event => {
-                    setConversationDeleteDialog(curr => curr
-                      ? { ...curr, deleteStoppedStrategy: event.target.checked }
-                      : curr)
-                  }}
-                />
-                <span>
-                  同时删除已停止策略记录
-                  <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
-                    删除后该策略将从我的策略列表移除，不能再次运行。
-                  </span>
-                </span>
-              </label>
-            )}
-
-            {conversationDeleteDialog.errorMessage && (
-              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                {conversationDeleteDialog.errorMessage}
-              </div>
-            )}
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              {conversationDeleteDialog.status === 'running' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConversationDeleteDialog(null)
-                    router.push(`/${lng}/account/ai-quant/strategy/${conversationDeleteDialog.strategyInstanceId}`)
-                  }}
-                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  前往运行策略
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  data-testid="confirm-delete-conversation"
-                  disabled={
-                    conversationDeleteDialog.pending
-                    || conversationDeleteDialog.status === 'loading'
-                    || conversationDeleteDialog.status === 'unknown'
-                  }
-                  onClick={() => {
-                    if (
-                      conversationDeleteDialog.deleteStoppedStrategy
-                      && !window.confirm('删除后该策略将从我的策略列表移除，不能再次运行。确认继续？')
-                    ) {
-                      return
-                    }
-                    void confirmDeleteConversation()
-                  }}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {conversationDeleteDialog.deleteStoppedStrategy ? '删除会话和策略' : '仅删除会话'}
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={conversationDeleteDialog.pending}
-                onClick={() => setConversationDeleteDialog(null)}
-                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AiQuantDeletionDialog
+        open={conversationDeleteDialog !== null}
+        kind={((): AiQuantDeletionDialogKind => {
+          const status = conversationDeleteDialog?.status
+          if (status === 'loading') return 'loading'
+          if (status === 'running') return 'running'
+          if (status === 'unknown') return 'unknown'
+          return 'with-conversation'
+        })()}
+        pending={conversationDeleteDialog?.pending ?? false}
+        errorMessage={conversationDeleteDialog?.errorMessage ?? null}
+        conversation={conversationDeleteDialog
+          ? { title: conversationDeleteDialog.conversation.title }
+          : null}
+        strategy={conversationDeleteDialog
+          ? {
+              name: conversationDeleteDialog.strategy?.name ?? null,
+              id: conversationDeleteDialog.strategyInstanceId,
+            }
+          : undefined}
+        deleteStoppedStrategy={conversationDeleteDialog?.deleteStoppedStrategy ?? false}
+        onToggleDeleteStoppedStrategy={(next) => {
+          setConversationDeleteDialog(curr => curr
+            ? { ...curr, deleteStoppedStrategy: next }
+            : curr)
+        }}
+        onConfirm={() => {
+          if (!conversationDeleteDialog) return
+          // 复选框 + dialog 内 inline 警告（destructive-warning）已经构成
+          // 充分的破坏性意图标识；不再使用 window.confirm 二次拦截。
+          void confirmDeleteConversation()
+        }}
+        onGoToRunningStrategy={() => {
+          if (!conversationDeleteDialog) return
+          const strategyInstanceId = conversationDeleteDialog.strategyInstanceId
+          setConversationDeleteDialog(null)
+          router.push(`/${lng}/account/ai-quant/strategy/${strategyInstanceId}`)
+        }}
+        onClose={() => {
+          if (conversationDeleteDialog?.pending) return
+          setConversationDeleteDialog(null)
+        }}
+      />
 
       <DeployDialog
         open={deployOpen}

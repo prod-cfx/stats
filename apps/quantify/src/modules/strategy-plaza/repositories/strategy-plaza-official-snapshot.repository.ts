@@ -1,10 +1,16 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient, PublishedStrategySnapshot, Prisma } from '@/prisma/prisma.types'
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import type { PrismaClient, PublishedStrategySnapshot } from '@/prisma/prisma.types'
 import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+import { runnableStrategyInstanceWhere } from '@/modules/account-strategy-view/repositories/strategy-instance-visibility.query'
+import { Prisma } from '@/prisma/prisma.types'
+import {
+  buildOfficialStrategySnapshotContent,
+  OFFICIAL_STRATEGY_PLAZA_USER_ID,
+} from '../utils/official-strategy-plaza-snapshot-builder'
 import {
   buildOfficialTemplateBacktestConfigDefaults,
   buildOfficialTemplateDataRequirements,
@@ -13,10 +19,6 @@ import {
   buildOfficialTemplateParamsSnapshot,
   buildOfficialTemplateStrategyConfig,
 } from '../utils/official-strategy-plaza-snapshot-content'
-import {
-  buildOfficialStrategySnapshotContent,
-  OFFICIAL_STRATEGY_PLAZA_USER_ID,
-} from '../utils/official-strategy-plaza-snapshot-builder'
 
 const LLM_MODEL = 'official-strategy-plaza'
 
@@ -40,6 +42,13 @@ export class StrategyPlazaOfficialSnapshotRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async resolveOfficialSnapshotForUser(input: {
+    userId: string
+    template: OfficialStrategyPlazaTemplate
+  }): Promise<Pick<PublishedStrategySnapshot, 'id'>> {
+    return this.txHost.withTransaction(async () => this.resolveOfficialSnapshotForUserInTransaction(input))
+  }
+
+  private async resolveOfficialSnapshotForUserInTransaction(input: {
     userId: string
     template: OfficialStrategyPlazaTemplate
   }): Promise<Pick<PublishedStrategySnapshot, 'id'>> {
@@ -107,32 +116,11 @@ export class StrategyPlazaOfficialSnapshotRepository {
       select: { id: true },
     })
 
-    const strategyInstance = await client.strategyInstance.upsert({
-      where: {
-        strategyTemplateId_llmModel_name: {
-          strategyTemplateId: strategyTemplate.id,
-          llmModel: LLM_MODEL,
-          name: this.buildStrategyInstanceName(input.template),
-        },
-      },
-      update: {
-        params: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
-        updatedBy: input.userId,
-        metadata: this.buildOfficialMetadata(input.template, sourceSnapshot) as Prisma.InputJsonValue,
-      },
-      create: {
-        strategyTemplateId: strategyTemplate.id,
-        name: this.buildStrategyInstanceName(input.template),
-        description: input.template.description,
-        llmModel: LLM_MODEL,
-        params: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
-        status: 'draft',
-        mode: 'PAPER',
-        createdBy: input.userId,
-        updatedBy: input.userId,
-        metadata: this.buildOfficialMetadata(input.template, sourceSnapshot) as Prisma.InputJsonValue,
-      },
-      select: { id: true },
+    const strategyInstance = await this.resolveVisibleStrategyInstance({
+      userId: input.userId,
+      template: input.template,
+      sourceSnapshot,
+      strategyTemplateId: strategyTemplate.id,
     })
 
     await client.llmStrategyCodegenSession.update({
@@ -161,6 +149,66 @@ export class StrategyPlazaOfficialSnapshotRepository {
     await this.bindStrategyInstanceToSnapshot(strategyInstance.id, input.template, sourceSnapshot, snapshot)
 
     return { id: snapshot.id }
+  }
+
+  private async resolveVisibleStrategyInstance(input: {
+    userId: string
+    template: OfficialStrategyPlazaTemplate
+    sourceSnapshot: PublishedStrategySnapshot
+    strategyTemplateId: string
+  }): Promise<{ id: string }> {
+    const client = this.txHost.tx
+    const name = this.buildStrategyInstanceName(input.template)
+    await this.lockVisibleStrategyInstanceKey(input.strategyTemplateId, LLM_MODEL, name)
+
+    const params = buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue
+    const metadata = this.buildOfficialMetadata(input.template, input.sourceSnapshot) as Prisma.InputJsonValue
+    const existingVisibleInstance = await client.strategyInstance.findFirst({
+      where: runnableStrategyInstanceWhere({
+        strategyTemplateId: input.strategyTemplateId,
+        llmModel: LLM_MODEL,
+        name,
+        createdBy: input.userId,
+      }),
+      select: { id: true },
+    })
+
+    if (existingVisibleInstance) {
+      return client.strategyInstance.update({
+        where: { id: existingVisibleInstance.id },
+        data: {
+          params,
+          updatedBy: input.userId,
+          metadata,
+        },
+        select: { id: true },
+      })
+    }
+
+    return client.strategyInstance.create({
+      data: {
+        strategyTemplateId: input.strategyTemplateId,
+        name,
+        description: input.template.description,
+        llmModel: LLM_MODEL,
+        params,
+        status: 'draft',
+        mode: 'PAPER',
+        createdBy: input.userId,
+        updatedBy: input.userId,
+        metadata,
+      },
+      select: { id: true },
+    })
+  }
+
+  private async lockVisibleStrategyInstanceKey(
+    strategyTemplateId: string,
+    llmModel: string,
+    name: string,
+  ): Promise<void> {
+    const lockKey = sha256(`${strategyTemplateId}:${llmModel}:${name}`)
+    await this.txHost.tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`)
   }
 
   private async resolveOrCreateOfficialSourceSnapshot(
@@ -235,7 +283,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     sessionId: string,
     sourceSnapshot: PublishedStrategySnapshot,
   ): Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null> {
-    return this.txHost.tx.publishedStrategySnapshot.findFirst({
+    const existing = await this.txHost.tx.publishedStrategySnapshot.findFirst({
       where: {
         sessionId,
         snapshotHash: sourceSnapshot.snapshotHash,
@@ -245,7 +293,21 @@ export class StrategyPlazaOfficialSnapshotRepository {
       },
       orderBy: [{ createdAt: 'desc' }],
       select: { id: true, snapshotHash: true, strategyInstanceId: true },
-    }) as Promise<Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null>
+    }) as Pick<PublishedStrategySnapshot, 'id' | 'snapshotHash' | 'strategyInstanceId'> | null
+
+    if (!existing || !existing.strategyInstanceId) {
+      return null
+    }
+
+    const visibleStrategy = await this.txHost.tx.strategyInstance.findFirst({
+      where: runnableStrategyInstanceWhere({
+        id: existing.strategyInstanceId,
+        createdBy: userId,
+      }),
+      select: { id: true },
+    })
+
+    return visibleStrategy ? existing : null
   }
 
   private async bindStrategyInstanceToSnapshot(

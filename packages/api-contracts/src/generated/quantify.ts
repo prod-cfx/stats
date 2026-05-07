@@ -484,6 +484,8 @@ const AccountStrategyListItemDto = z
     isSubscribed: z.boolean(),
     metrics: AccountStrategyMetricsDto,
     updatedAt: z.string(),
+    viewOnlyAt: z.string().nullish(),
+    hasActiveConversation: z.boolean(),
   })
   .passthrough()
 const AccountStrategyEquityPointDto = z.object({ ts: z.string(), value: z.number() }).passthrough()
@@ -671,6 +673,8 @@ const AccountStrategyDetailResponseDto = z
     isSubscribed: z.boolean(),
     metrics: AccountStrategyMetricsDto,
     updatedAt: z.string(),
+    viewOnlyAt: z.string().nullish(),
+    hasActiveConversation: z.boolean(),
     totalPnl: z.number().nullish(),
     todayPnl: z.number().nullish(),
     equitySeries: z.array(AccountStrategyEquityPointDto),
@@ -2030,6 +2034,11 @@ const endpoints = makeApi([
         name: 'id',
         type: 'Path',
         schema: z.string(),
+      },
+      {
+        name: 'deleteStoppedStrategy',
+        type: 'Query',
+        schema: z.boolean().optional(),
       },
       {
         name: 'authorization',

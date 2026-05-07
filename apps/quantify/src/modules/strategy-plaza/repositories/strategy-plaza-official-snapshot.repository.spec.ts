@@ -3,11 +3,14 @@ import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/b
 import { buildOfficialStrategySnapshotContent } from '../utils/official-strategy-plaza-snapshot-builder'
 import { StrategyPlazaOfficialSnapshotRepository } from './strategy-plaza-official-snapshot.repository'
 
-function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] {
-  return { tx } as ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0]
+function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] & { withTransaction: jest.Mock } {
+  return {
+    tx,
+    withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+  } as unknown as ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] & { withTransaction: jest.Mock }
 }
 
-describe('StrategyPlazaOfficialSnapshotRepository', () => {
+describe('strategyPlazaOfficialSnapshotRepository', () => {
   const template = {
     id: 'ma-cross',
     name: 'MA 均线交叉',
@@ -73,6 +76,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     source?: typeof sourceSnapshot | null
   }) {
     return {
+      $executeRaw: jest.fn().mockResolvedValue(0),
       publishedStrategySnapshot: {
         findUnique: jest.fn().mockResolvedValue(overrides?.source === undefined ? sourceSnapshot : overrides.source),
         findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot ?? null),
@@ -88,8 +92,11 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-template-1' }),
       },
       strategyInstance: {
-        upsert: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
-        update: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot
+          ? { id: overrides.existingSnapshot.strategyInstanceId }
+          : null),
+        create: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
       },
     }
   }
@@ -102,12 +109,14 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       }
       return { id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }
     })
-    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+    const txHost = createTxHost(tx)
+    const repo = new StrategyPlazaOfficialSnapshotRepository(txHost)
 
     await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
       id: 'user-snapshot-1',
     })
 
+    expect(txHost.withTransaction).toHaveBeenCalledTimes(1)
     expect(tx.publishedStrategySnapshot.findUnique).toHaveBeenCalledWith({
       where: { id: 'official-plaza-ma-cross-v1-snapshot' },
     })
@@ -129,7 +138,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         scriptSnapshot: expect.stringContaining('risk.stopLoss'),
       }),
     }))
-    expect(tx.strategyInstance.upsert).toHaveBeenCalled()
+    expect(tx.strategyInstance.create).toHaveBeenCalled()
   })
 
   it('refreshes a legacy official source snapshot that still contains HOLD script', async () => {
@@ -187,6 +196,79 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         scriptHash: sourceSnapshot.scriptHash,
         scriptSnapshot: sourceSnapshot.scriptSnapshot,
       }),
+    }))
+  })
+
+  it('does not reuse an existing user snapshot when its strategy instance is archived', async () => {
+    const existingSnapshot = {
+      id: 'user-snapshot-archived',
+      snapshotHash: sourceSnapshot.snapshotHash,
+      strategyInstanceId: 'archived-strategy-instance',
+    }
+    const tx = buildTx({ existingSnapshot })
+    tx.strategyInstance.findFirst.mockResolvedValue(null)
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.strategyInstance.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'archived-strategy-instance',
+        createdBy: 'user-1',
+        archivedAt: null,
+        // 复用路径同时排除 view-only 实例：用户主动把策略转为只读后，
+        // 不应再被 plaza「再次运行」复活。
+        viewOnlyAt: null,
+      },
+      select: { id: true },
+    })
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        name: 'MA 均线交叉 官方模板',
+        createdBy: 'user-1',
+      }),
+      select: { id: true },
+    }))
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: expect.stringMatching(/^plaza_/) },
+      create: expect.objectContaining({ strategyInstanceId: 'strategy-instance-1' }),
+      update: expect.objectContaining({ strategyInstanceId: 'strategy-instance-1' }),
+    }))
+  })
+
+  it('does not reuse an existing user snapshot when its strategy instance is view-only', async () => {
+    // 用户主动把策略转为只读（viewOnlyAt 非空）后，plaza「再次运行」不应再
+    // 复用同一个 strategyInstance —— 否则只读策略会从只读态被复活，违反规格。
+    const existingSnapshot = {
+      id: 'user-snapshot-view-only',
+      snapshotHash: sourceSnapshot.snapshotHash,
+      strategyInstanceId: 'view-only-strategy-instance',
+    }
+    const tx = buildTx({ existingSnapshot })
+    // findFirst 加了 viewOnlyAt: null 过滤后，只读实例不会被命中。
+    tx.strategyInstance.findFirst.mockResolvedValue(null)
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.strategyInstance.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'view-only-strategy-instance',
+        createdBy: 'user-1',
+        archivedAt: null,
+        viewOnlyAt: null,
+      },
+      select: { id: true },
+    })
+    // 创建一个全新的 strategyInstance，旧的只读实例不被复活也不被改动。
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ createdBy: 'user-1' }),
+      select: { id: true },
     }))
   })
 
@@ -399,18 +481,8 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         }),
       }),
     }))
-    expect(tx.strategyInstance.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: expect.objectContaining({
-        params: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'perp',
-          symbol: 'BTC-USDT-SWAP',
-          timeframe: '15m',
-          positionPct: 10,
-          leverage: 2,
-        }),
-      }),
-      update: expect.objectContaining({
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
         params: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',

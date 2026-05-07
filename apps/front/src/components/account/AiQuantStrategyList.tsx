@@ -3,13 +3,16 @@
 import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import { Activity, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AiQuantDeletionDialog, type AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAccountAiQuantStrategy,
   fetchAccountAiQuantStrategies,
+  listAiQuantConversations,
   performAccountAiQuantStrategyAction,
 } from '@/lib/api'
 import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
@@ -86,19 +89,25 @@ export function AiQuantStrategyPrimarySummary({
   )
 }
 
+interface AccountDeleteDialogState {
+  strategy: AiQuantStrategyRecord
+  kind: AiQuantDeletionDialogKind
+  conversation: { title: string } | null
+  deleteStoppedStrategy: boolean
+  pending: boolean
+  errorMessage: string | null
+}
+
 export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const { t } = useTranslation()
   const { session } = useAuth()
+  const router = useRouter()
   const [strategies, setStrategies] = useState<AiQuantStrategyRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [stopDialogStrategy, setStopDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
-  const [deleteDialogStrategy, setDeleteDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
-  const [deleteDialogError, setDeleteDialogError] = useState<string | null>(null)
-  const deleteDialogRef = useRef<HTMLDivElement | null>(null)
-  const deleteConfirmButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [accountDeleteDialog, setAccountDeleteDialog] = useState<AccountDeleteDialogState | null>(null)
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -121,47 +130,6 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   useEffect(() => {
     void loadStrategies()
   }, [loadStrategies])
-
-  useEffect(() => {
-    if (!deleteDialogStrategy) return
-
-    const previousActiveElement = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-    deleteConfirmButtonRef.current?.focus()
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        if (!pendingDeleteId) setDeleteDialogStrategy(null)
-        return
-      }
-
-      if (event.key !== 'Tab') return
-
-      const focusableElements = Array.from(
-        deleteDialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])') ?? [],
-      )
-      if (focusableElements.length === 0) return
-
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-      if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault()
-        lastElement.focus()
-      } else if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault()
-        firstElement.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      previousActiveElement?.focus()
-    }
-  }, [deleteDialogStrategy, pendingDeleteId])
 
   const handleStatusChange = async (e: React.MouseEvent, id: string, status: 'running' | 'stopped') => {
     e.preventDefault()
@@ -209,33 +177,90 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
   }
 
-  const openDeleteDialog = (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
+  const openDeleteDialog = async (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
     e.preventDefault()
     e.stopPropagation()
     if (!session) return
+
+    setError(null)
+
     if (item.status === 'running') {
-      setError(t('aiQuant.errors.runningStrategyDeleteBlocked', { defaultValue: 'Running strategies cannot be deleted. Stop the strategy first.' }))
+      setAccountDeleteDialog({
+        strategy: item,
+        kind: 'running',
+        conversation: null,
+        deleteStoppedStrategy: false,
+        pending: false,
+        errorMessage: null,
+      })
       return
     }
 
-    setError(null)
-    setDeleteDialogError(null)
-    setDeleteDialogStrategy(item)
+    setAccountDeleteDialog({
+      strategy: item,
+      kind: 'loading',
+      conversation: null,
+      deleteStoppedStrategy: false,
+      pending: false,
+      errorMessage: null,
+    })
+
+    if (item.hasActiveConversation === true) {
+      try {
+        const conversations = await listAiQuantConversations()
+        const matched = conversations.find(c => c.strategyInstanceId === item.id) ?? null
+        const title = matched?.conversationTitle?.trim() || matched?.id || ''
+        setAccountDeleteDialog(curr => curr && curr.strategy.id === item.id
+          ? {
+              ...curr,
+              kind: 'with-conversation',
+              conversation: matched ? { title: title || matched.id } : null,
+            }
+          : curr)
+      } catch (err) {
+        setAccountDeleteDialog(curr => curr && curr.strategy.id === item.id
+          ? {
+              ...curr,
+              kind: 'unknown',
+              errorMessage: err instanceof Error && err.message.trim()
+                ? err.message
+                : t('aiQuant.errors.conversationLookupFailed', { defaultValue: '无法获取关联会话信息' }),
+            }
+          : curr)
+      }
+      return
+    }
+
+    setAccountDeleteDialog(curr => curr && curr.strategy.id === item.id
+      ? { ...curr, kind: 'no-conversation', conversation: null }
+      : curr)
   }
 
-  const handleConfirmDelete = async () => {
-    if (!session || !deleteDialogStrategy) return
+  const closeDeleteDialog = () => {
+    setAccountDeleteDialog(curr => (curr && curr.pending ? curr : null))
+  }
 
-    setPendingDeleteId(deleteDialogStrategy.id)
+  const performDelete = async (deleteStoppedStrategy: boolean) => {
+    if (!session || !accountDeleteDialog) return
+    // 不再使用 window.confirm 二次确认。复选框 + dialog 内的红色警告文本
+    // 已经构成明确的破坏性意图标识，再叠原生 confirm 既破坏 a11y/i18n
+    // 也让自动化测试/截图测试不可靠。
+    const strategyId = accountDeleteDialog.strategy.id
+    setAccountDeleteDialog(curr => curr ? { ...curr, pending: true, errorMessage: null } : curr)
     try {
-      await deleteAccountAiQuantStrategy(deleteDialogStrategy.id, session.userId)
-      setStrategies(prev => prev.filter(strategy => strategy.id !== deleteDialogStrategy.id))
-      setDeleteDialogStrategy(null)
-      setDeleteDialogError(null)
+      await deleteAccountAiQuantStrategy(strategyId, session.userId, { deleteStoppedStrategy })
+      setAccountDeleteDialog(null)
+      await loadStrategies()
     } catch (err) {
-      setDeleteDialogError(err instanceof Error ? err.message : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }))
-    } finally {
-      setPendingDeleteId(null)
+      setAccountDeleteDialog(curr => curr
+        ? {
+            ...curr,
+            pending: false,
+            errorMessage: err instanceof Error && err.message.trim()
+              ? err.message
+              : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }),
+          }
+        : curr)
     }
   }
 
@@ -319,6 +344,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         {strategies.map(item => {
           const statusConfig = STATUS_CONFIG[item.status]
           const StatusIcon = statusConfig.icon
+          // viewOnlyAt 非空即只读：Run/Stop/Delete 全部隐藏，仅留「查看详情」入口。
+          // running + viewOnlyAt 这种异常组合也走只读分支；用户进入详情后自行处理 running。
+          const isViewOnly = Boolean(item.viewOnlyAt)
 
           return (
             <div
@@ -350,43 +378,44 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   </div>
                   <div className="mt-0.5">{fmtTime(item.updatedAt, lng)}</div>
                 </div>
-                
-                {item.status === 'running' ? (
-                  <button
-                    type="button"
-                    onClick={e => openStopDialog(e, item)}
-                    disabled={pendingActionId === item.id}
-                    className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
-                  >
-                    <StopCircle className="h-3 w-3" />
-                    {getStrategyRuntimeActionLabel(item.status, t)}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={e => handleStatusChange(e, item.id, 'running')}
-                    disabled={pendingActionId === item.id}
-                    className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
-                  >
-                    <Play className="h-3 w-3 fill-current" />
-                    {t('aiQuant.actions.run')}
-                  </button>
+
+                {!isViewOnly && (
+                  item.status === 'running' ? (
+                    <button
+                      type="button"
+                      onClick={e => openStopDialog(e, item)}
+                      disabled={pendingActionId === item.id}
+                      className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
+                    >
+                      <StopCircle className="h-3 w-3" />
+                      {getStrategyRuntimeActionLabel(item.status, t)}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={e => handleStatusChange(e, item.id, 'running')}
+                      disabled={pendingActionId === item.id}
+                      className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-600 transition hover:bg-emerald-500/20 dark:text-emerald-400"
+                    >
+                      <Play className="h-3 w-3 fill-current" />
+                      {t('aiQuant.actions.run')}
+                    </button>
+                  )
                 )}
 
-                <button
-                  type="button"
-                  onClick={e => openDeleteDialog(e, item)}
-                  disabled={pendingDeleteId === item.id}
-                  title={item.status === 'running'
-                    ? t('aiQuant.errors.runningStrategyDeleteBlocked', { defaultValue: 'Running strategies cannot be deleted. Stop the strategy first.' })
-                    : undefined}
-                  className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  {pendingDeleteId === item.id
-                    ? t('aiQuant.deleting', { defaultValue: 'Deleting...' })
-                    : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
-                </button>
+                {!isViewOnly && (
+                  <button
+                    type="button"
+                    onClick={e => { void openDeleteDialog(e, item) }}
+                    disabled={accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending}
+                    className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    {accountDeleteDialog?.strategy.id === item.id && accountDeleteDialog.pending
+                      ? t('aiQuant.deleting', { defaultValue: 'Deleting...' })
+                      : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
+                  </button>
+                )}
 
                 <Link
                   href={`/${lng}/account/ai-quant/strategy/${item.id}`}
@@ -417,61 +446,39 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         }}
       />
 
-      {deleteDialogStrategy && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4"
-          onClick={() => {
-            if (!pendingDeleteId) setDeleteDialogStrategy(null)
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ai-quant-delete-strategy-title"
-            ref={deleteDialogRef}
-            className="w-full max-w-[480px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
-            onClick={event => event.stopPropagation()}
-          >
-            <h3 id="ai-quant-delete-strategy-title" className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-              {t('aiQuant.confirmDeleteTitle', { defaultValue: '确认删除策略？' })}
-            </h3>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
-              {t('aiQuant.confirmDeleteStrategy', {
-                defaultValue: `Delete strategy "${deleteDialogStrategy.name}"? This action cannot be undone.`,
-                name: deleteDialogStrategy.name,
-              })}
-            </p>
-            {deleteDialogError && (
-              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                {deleteDialogError}
-              </div>
-            )}
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                ref={deleteConfirmButtonRef}
-                type="button"
-                disabled={pendingDeleteId === deleteDialogStrategy.id}
-                onClick={() => {
-                  void handleConfirmDelete()
-                }}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {pendingDeleteId === deleteDialogStrategy.id
-                  ? t('aiQuant.deleting', { defaultValue: 'Deleting...' })
-                  : t('aiQuant.actions.delete', { defaultValue: 'Delete' })}
-              </button>
-              <button
-                type="button"
-                disabled={pendingDeleteId === deleteDialogStrategy.id}
-                onClick={() => setDeleteDialogStrategy(null)}
-                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {t('common.cancel', { defaultValue: '取消' })}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AiQuantDeletionDialog
+        open={accountDeleteDialog !== null}
+        kind={accountDeleteDialog?.kind ?? 'loading'}
+        pending={accountDeleteDialog?.pending ?? false}
+        errorMessage={accountDeleteDialog?.errorMessage ?? null}
+        conversation={accountDeleteDialog?.conversation ?? null}
+        strategy={accountDeleteDialog
+          ? { name: accountDeleteDialog.strategy.name, id: accountDeleteDialog.strategy.id }
+          : undefined}
+        deleteStoppedStrategy={accountDeleteDialog?.deleteStoppedStrategy ?? false}
+        onToggleDeleteStoppedStrategy={(next) => {
+          setAccountDeleteDialog(curr => curr ? { ...curr, deleteStoppedStrategy: next } : curr)
+        }}
+        onConfirm={() => {
+          if (!accountDeleteDialog) return
+          if (accountDeleteDialog.kind === 'with-conversation') {
+            void performDelete(accountDeleteDialog.deleteStoppedStrategy)
+          } else if (accountDeleteDialog.kind === 'no-conversation') {
+            void performDelete(true)
+          }
+        }}
+        onKeepAsViewOnly={() => {
+          if (!accountDeleteDialog || accountDeleteDialog.kind !== 'no-conversation') return
+          void performDelete(false)
+        }}
+        onGoToRunningStrategy={() => {
+          if (!accountDeleteDialog) return
+          const strategyId = accountDeleteDialog.strategy.id
+          setAccountDeleteDialog(null)
+          router.push(`/${lng}/account/ai-quant/strategy/${strategyId}`)
+        }}
+        onClose={closeDeleteDialog}
+      />
     </section>
   )
 }

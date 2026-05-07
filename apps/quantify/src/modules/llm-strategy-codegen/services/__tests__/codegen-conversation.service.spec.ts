@@ -3493,7 +3493,39 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     await (service as any).deleteConversation('conv-1', 'u1', { deleteStoppedStrategy: true })
 
-    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped')
+    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { deleteStoppedStrategy: true, via: 'conversation-list' })
+    // 兜底：deleteStrategy 静默 return（如策略已归档）也要保证当前 conversation 被归档；
+    // archiveByIdAndUser 对已归档的 conversation 是 no-op，幂等安全。
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
+  })
+
+  it('delegates conversation archive + view-only set to deleteStrategy when deleteStoppedStrategy=false', async () => {
+    mockConversationsRepo.findActiveDeleteContextByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'u1',
+      codegenSessionId: 'session-1',
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'inst-stopped',
+      latestSpecDesc: null,
+      constraintPack: null,
+      latestDraftCode: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+    })
+    mockAccountStrategyViewService.getStrategyDetail.mockResolvedValue({
+      id: 'inst-stopped',
+      status: 'stopped',
+    })
+
+    await service.deleteConversation('conv-1', 'u1')
+
+    expect(mockAccountStrategyViewService.deleteStrategy).toHaveBeenCalledWith('u1', 'inst-stopped', { deleteStoppedStrategy: false, via: 'conversation-list' })
+    // 同上兜底，幂等防御。
     expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 

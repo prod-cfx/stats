@@ -165,10 +165,12 @@ export class AiQuantProxyService {
     userId: string,
     authorization: string | undefined,
     strategyId: string,
+    options: { deleteStoppedStrategy?: boolean } = {},
   ): Promise<void> {
     await this.quantifyClient.deleteAccountStrategy(strategyId, {
       userId,
       headers: this.userHeaders(userId, authorization),
+      deleteStoppedStrategy: options.deleteStoppedStrategy === true,
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 

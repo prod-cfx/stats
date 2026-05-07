@@ -438,15 +438,26 @@ export class CodegenConversationService {
     userId: string,
     options: { deleteStoppedStrategy?: boolean } = {},
   ): Promise<void> {
+    const deleteStoppedStrategy = options.deleteStoppedStrategy === true
     const conversation = await this.conversationsRepo.findActiveDeleteContextByIdAndUser(conversationId, userId)
     if (!conversation) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      this.logger.log({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId: null, deleteStoppedStrategy },
+        reason: 'conversation_not_found_archive_only',
+      })
       return
     }
 
     const strategyInstanceId = await this.resolveConversationStrategyInstanceId(conversation.codegenSessionId)
     if (!strategyInstanceId) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      this.logger.log({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId: null, deleteStoppedStrategy },
+        reason: 'orphan_conversation_archive_only',
+      })
       return
     }
 
@@ -465,6 +476,11 @@ export class CodegenConversationService {
       })
     if (!strategy) {
       await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      this.logger.log({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId, deleteStoppedStrategy },
+        reason: 'strategy_not_found_archive_conversation_only',
+      })
       return
     }
 
@@ -484,11 +500,31 @@ export class CodegenConversationService {
       })
     }
 
-    if (options.deleteStoppedStrategy) {
-      await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId)
+    // 主流程：deleteStrategy 统一归档关联 conversation + viewOnly/archive。
+    await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId, {
+      deleteStoppedStrategy,
+      via: 'conversation-list',
+    })
+    // 兜底：deleteStrategy 仅按 strategyInstance 反查 codegen session 的 conversation；
+    // 若策略层因 archivedAt 过滤等原因静默 return，本入口的 conversationId
+    // 仍需被归档以避免 active 状态残留。archiveByIdAndUser 对已归档的 conversation
+    // 是 no-op（updateMany where archivedAt: null 命中 0 行），幂等安全。
+    // 兜底失败仅 warn 不抛，避免掩盖 deleteStrategy 已经成功的主流程结果。
+    try {
+      await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+    } catch (error) {
+      this.logger.warn({
+        module: 'CodegenConversationService.deleteConversation',
+        input: { userId, conversationId, strategyInstanceId, deleteStoppedStrategy },
+        reason: 'fallback_archive_conversation_failed',
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
-
-    await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+    this.logger.log({
+      module: 'CodegenConversationService.deleteConversation',
+      input: { userId, conversationId, strategyInstanceId, deleteStoppedStrategy },
+      reason: deleteStoppedStrategy ? 'delegated_strategy_archive' : 'delegated_view_only_with_conversation_archive',
+    })
   }
 
   private isStrategyNotFoundError(error: unknown): boolean {

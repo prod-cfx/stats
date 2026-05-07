@@ -94,7 +94,27 @@ describe('aiQuantProxyService', () => {
 
     expect(quantifyClient.deleteAccountStrategy).toHaveBeenCalledWith(
       'strategy-1',
-      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+      {
+        userId: 'user-1',
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+        deleteStoppedStrategy: false,
+      },
+    )
+  })
+
+  it('forwards deleteStoppedStrategy=true through to the quantify client', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.deleteAccountStrategy.mockResolvedValue(undefined)
+
+    await service.deleteAccountStrategy('user-1', 'Bearer token-1', 'strategy-1', { deleteStoppedStrategy: true })
+
+    expect(quantifyClient.deleteAccountStrategy).toHaveBeenCalledWith(
+      'strategy-1',
+      {
+        userId: 'user-1',
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+        deleteStoppedStrategy: true,
+      },
     )
   })
 

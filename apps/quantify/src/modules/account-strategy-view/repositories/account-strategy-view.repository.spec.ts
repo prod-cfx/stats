@@ -331,6 +331,72 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
   })
 
+  it('rejects deploy with VIEW_ONLY error when source strategy is view-only (not generic NotFound)', async () => {
+    // 用户主动把策略转为只读后，前端 detail 页虽已隐藏入口，但 admin 强制重部署
+    // 或 localStorage 残留 intent 仍可能带 view-only 实例的 sourceStrategyInstanceId
+    // 进来。repo 必须给出准确的「策略已只读」错误归因，而不是误报「策略不存在」。
+    const findFirst = jest.fn()
+      // 第一次：runnable 过滤（archivedAt+viewOnlyAt 都要为 null）→ 不命中
+      .mockResolvedValueOnce(null)
+      // 第二次：unfiltered（仅 id+createdBy）→ 命中 view-only 实例
+      .mockResolvedValueOnce({ viewOnlyAt: new Date('2026-05-01T00:00:00Z'), archivedAt: null })
+
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
+      },
+      strategyTemplate: { findUnique: jest.fn(), create: jest.fn() },
+      strategyInstance: { findFirst, update: jest.fn(), create: jest.fn() },
+      userStrategySubscription: { findFirst: jest.fn(), create: jest.fn() },
+      userStrategyAccount: { findUnique: jest.fn(), create: jest.fn() },
+    }
+
+    const repo = new AccountStrategyViewRepository(
+      createTxHost(tx) as any,
+      { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any,
+    )
+
+    await expect(repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'view-only deploy attempt',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      marketType: 'spot',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: 'view-only-strategy-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_strategy_view_only',
+    })
+
+    // 第一次调用走 runnable 过滤（包含 viewOnlyAt: null）
+    expect(findFirst).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: expect.objectContaining({
+        id: 'view-only-strategy-1',
+        createdBy: 'user-1',
+        archivedAt: null,
+        viewOnlyAt: null,
+      }),
+    }))
+    // 第二次回退查询：不带 archived/view-only 过滤，用于错误归因
+    expect(findFirst).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { id: 'view-only-strategy-1', createdBy: 'user-1' },
+      select: { viewOnlyAt: true, archivedAt: true },
+    }))
+    expect(tx.strategyInstance.update).not.toHaveBeenCalled()
+    expect(tx.strategyInstance.create).not.toHaveBeenCalled()
+  })
+
   it('uses provided exchange balance quotes when seeding the internal strategy account', async () => {
     const tx = {
       user: {
@@ -957,50 +1023,120 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
   })
 })
 
-describe('accountStrategyViewRepository.deleteStrategyForUser', () => {
-  it('clears published session and snapshot bindings before deleting the strategy instance', async () => {
+describe('accountStrategyViewRepository unified delete primitives', () => {
+  function buildRepo(tx: Record<string, unknown>) {
+    return new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
+  }
+
+  it('hasActiveConversationsForStrategy returns true when an active conversation exists', async () => {
+    const tx = {
+      llmStrategyCodegenSession: { findMany: jest.fn().mockResolvedValue([{ id: 'session-direct' }]) },
+      publishedStrategySnapshot: { findMany: jest.fn().mockResolvedValue([{ sessionId: 'session-snapshot' }]) },
+      aiQuantConversation: { findFirst: jest.fn().mockResolvedValue({ id: 'conv-1' }) },
+    }
+    const repo = buildRepo(tx)
+    const result = await repo.hasActiveConversationsForStrategy('user-1', 'strategy-instance-1')
+    expect(result).toBe(true)
+    expect(tx.aiQuantConversation.findFirst).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        archivedAt: null,
+        codegenSessionId: { in: ['session-direct', 'session-snapshot'] },
+      },
+      select: { id: true },
+    })
+  })
+
+  it('hasActiveConversationsForStrategy returns false when no linked sessions exist', async () => {
+    const tx = {
+      llmStrategyCodegenSession: { findMany: jest.fn().mockResolvedValue([]) },
+      publishedStrategySnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      aiQuantConversation: { findFirst: jest.fn() },
+    }
+    const repo = buildRepo(tx)
+    const result = await repo.hasActiveConversationsForStrategy('user-1', 'strategy-instance-1')
+    expect(result).toBe(false)
+    expect(tx.aiQuantConversation.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('archiveLinkedConversationsForStrategy archives every active conversation across direct and snapshot sessions', async () => {
+    const tx = {
+      llmStrategyCodegenSession: { findMany: jest.fn().mockResolvedValue([{ id: 'session-a' }, { id: 'session-b' }]) },
+      publishedStrategySnapshot: { findMany: jest.fn().mockResolvedValue([{ sessionId: 'session-c' }]) },
+      aiQuantConversation: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) },
+    }
+    const repo = buildRepo(tx)
+    const result = await repo.archiveLinkedConversationsForStrategy('user-1', 'strategy-instance-1')
+    expect(result).toEqual({ archivedCount: 3 })
+    expect(tx.aiQuantConversation.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        archivedAt: null,
+        codegenSessionId: { in: ['session-a', 'session-b', 'session-c'] },
+      },
+      data: { archivedAt: expect.any(Date) },
+    })
+  })
+
+  it('markStrategyViewOnly is idempotent: only updates when viewOnlyAt is null', async () => {
+    const updateMany = jest.fn().mockResolvedValue({ count: 1 })
+    const tx = { strategyInstance: { updateMany } }
+    const repo = buildRepo(tx)
+    await repo.markStrategyViewOnly('user-1', 'strategy-instance-1')
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'strategy-instance-1',
+        createdBy: 'user-1',
+        archivedAt: null,
+        viewOnlyAt: null,
+      },
+      data: { viewOnlyAt: expect.any(Date), updatedBy: 'user-1' },
+    })
+  })
+
+  it('archiveStrategyInstanceById unbinds sessions+snapshots then archives the strategy', async () => {
     const tx = {
       strategyInstance: {
         findFirst: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
-        delete: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
       },
-      llmStrategyCodegenSession: {
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      publishedStrategySnapshot: {
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
+      llmStrategyCodegenSession: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      publishedStrategySnapshot: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     }
-
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
-
-    await repo.deleteStrategyForUser('user-1', 'strategy-instance-1')
-
+    const repo = buildRepo(tx)
+    await repo.archiveStrategyInstanceById('user-1', 'strategy-instance-1')
     expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenCalledWith({
-      where: {
-        userId: 'user-1',
-        strategyInstanceId: 'strategy-instance-1',
-      },
-      data: {
-        strategyInstanceId: null,
-      },
+      where: { userId: 'user-1', strategyInstanceId: 'strategy-instance-1' },
+      data: { strategyInstanceId: null },
     })
     expect(tx.publishedStrategySnapshot.updateMany).toHaveBeenCalledWith({
-      where: {
-        strategyInstanceId: 'strategy-instance-1',
-        session: {
-          userId: 'user-1',
-        },
-      },
+      where: { strategyInstanceId: 'strategy-instance-1', session: { userId: 'user-1' } },
+      data: { strategyInstanceId: null },
+    })
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
+      where: { id: 'strategy-instance-1' },
       data: {
-        strategyInstanceId: null,
+        archivedAt: expect.any(Date),
+        archivedReason: 'USER_DELETE',
+        archivedByUserId: 'user-1',
+        updatedBy: 'user-1',
       },
     })
-    expect(tx.strategyInstance.delete).toHaveBeenCalledWith({
-      where: {
-        id: 'strategy-instance-1',
+  })
+
+  it('archiveStrategyInstanceById is a no-op when strategy not visible', async () => {
+    const tx = {
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn(),
       },
-    })
+      llmStrategyCodegenSession: { updateMany: jest.fn() },
+      publishedStrategySnapshot: { updateMany: jest.fn() },
+    }
+    const repo = buildRepo(tx)
+    await repo.archiveStrategyInstanceById('user-1', 'strategy-instance-1')
+    expect(tx.strategyInstance.update).not.toHaveBeenCalled()
+    expect(tx.llmStrategyCodegenSession.updateMany).not.toHaveBeenCalled()
   })
 })
 
@@ -1032,6 +1168,7 @@ describe('accountStrategyViewRepository.listStrategiesForUser', () => {
       select: { strategyInstanceId: true },
     })
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ archivedAt: null }),
       skip: 0,
       take: 20,
     }))
@@ -1092,6 +1229,16 @@ describe('accountStrategyViewRepository.findStrategyForUser', () => {
     await repo.findStrategyForUser('user-1', 'inst-1')
 
     expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      // visible 过滤 + 严格按 id + owner-or-subscriber 双分支可见性。
+      // 显式断言 OR 分支以保护 owner 与订阅者列表不被后续重构悄悄缩小。
+      where: expect.objectContaining({
+        id: 'inst-1',
+        archivedAt: null,
+        OR: [
+          { createdBy: 'user-1' },
+          { subscriptions: { some: { userId: 'user-1' } } },
+        ],
+      }),
       include: expect.objectContaining({
         strategyTemplate: {
           select: expect.objectContaining({

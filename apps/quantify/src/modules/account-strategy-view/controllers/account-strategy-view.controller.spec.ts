@@ -115,16 +115,43 @@ describe('accountStrategyViewController', () => {
     )
   })
 
-  it('uses caller identity from authorization for delete request', async () => {
+  it('uses caller identity from authorization for delete request and defaults deleteStoppedStrategy to false', async () => {
     const service = {
       deleteStrategy: jest.fn().mockResolvedValue(undefined),
     }
     const { controller, callerIdentityService } = createController(service)
 
-    await controller.remove('inst-1', 'Bearer token', 'caller-u1')
+    await controller.remove('inst-1', undefined, 'Bearer token', 'caller-u1')
 
     expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
-    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1')
+    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1', { deleteStoppedStrategy: false, via: 'account-list' })
+  })
+
+  it('parses deleteStoppedStrategy=true from query string', async () => {
+    const service = { deleteStrategy: jest.fn().mockResolvedValue(undefined) }
+    const { controller } = createController(service)
+
+    await controller.remove('inst-1', 'true', 'Bearer token', 'caller-u1')
+
+    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1', { deleteStoppedStrategy: true, via: 'account-list' })
+  })
+
+  it('treats deleteStoppedStrategy=false explicitly as false', async () => {
+    const service = { deleteStrategy: jest.fn().mockResolvedValue(undefined) }
+    const { controller } = createController(service)
+
+    await controller.remove('inst-1', 'false', 'Bearer token', 'caller-u1')
+
+    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1', { deleteStoppedStrategy: false, via: 'account-list' })
+  })
+
+  it('treats deleteStoppedStrategy=anything as false', async () => {
+    const service = { deleteStrategy: jest.fn().mockResolvedValue(undefined) }
+    const { controller } = createController(service)
+
+    await controller.remove('inst-1', 'yes', 'Bearer token', 'caller-u1')
+
+    expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1', { deleteStoppedStrategy: false, via: 'account-list' })
   })
 
   it('injects caller userId into deployment leverage update dto', async () => {

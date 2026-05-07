@@ -2,6 +2,7 @@ export { DeployIdempotencyConflictException } from './deploy-idempotency-conflic
 export { DeployModeAccountMismatchException } from './deploy-mode-account-mismatch.exception'
 export { DeploySnapshotRequiresRepublishException } from './deploy-snapshot-requires-republish.exception'
 export { DeployStrategyInstanceNotFoundException } from './deploy-strategy-instance-not-found.exception'
+export { DeployStrategyViewOnlyException } from './deploy-strategy-view-only.exception'
 export { InvalidStrategyActionException } from './invalid-strategy-action.exception'
 export { MissingUserIdentityException } from './missing-user-identity.exception'
 export { StrategyNotFoundException } from './strategy-not-found.exception'

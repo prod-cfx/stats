@@ -11,7 +11,11 @@ import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-s
 import type { StrategyInstanceStatsDto } from '@/modules/strategy-instances/dto/strategy-instance-stats.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient } from '@/prisma/prisma.types'
 import { createHash } from 'node:crypto'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -89,6 +93,11 @@ interface SnapshotPositionSizing {
 }
 
 type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository['findStrategyForUser']>>>
+export type DeleteStrategyVia = 'account-list' | 'conversation-list'
+export interface DeleteStrategyOptions {
+  deleteStoppedStrategy: boolean
+  via: DeleteStrategyVia
+}
 type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: MarketType }
 
 @Injectable()
@@ -111,6 +120,9 @@ export class AccountStrategyViewService {
     @Optional() private readonly positionsService?: PositionsService,
     @Optional() private readonly positionSyncService?: PositionSyncService,
     @Optional() private readonly gridRuntimeService?: GridRuntimeService,
+    // 注入靠后是为了不打乱已有大量按位置 mock 的 spec；deleteStrategy 用 withTransaction
+    // 把归档写操作包成事务，把 tradingService 远程 I/O 留在事务外。
+    @Optional() private readonly txHost?: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {}
 
   async listStrategies(
@@ -181,6 +193,8 @@ export class AccountStrategyViewService {
           tradeCount: this.pickStatsOrFallbackMetric(statsTradeCount, fallback?.tradeCount),
         },
         updatedAt: item.updatedAt.toISOString(),
+        viewOnlyAt: item.viewOnlyAt ? item.viewOnlyAt.toISOString() : null,
+        hasActiveConversation: item.hasActiveConversation === true,
       }
     }))
 
@@ -195,6 +209,7 @@ export class AccountStrategyViewService {
   async getStrategyDetail(userId: string, strategyInstanceId: string): Promise<AccountStrategyDetailResponseDto> {
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
+      this.logDeleteRejected({ userId, strategyInstanceId }, 'strategy_not_found')
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
@@ -488,6 +503,8 @@ export class AccountStrategyViewService {
       ruleSummary: resolvedSnapshot.ruleSummary,
     })
 
+    const detailViewOnlyAt = row.viewOnlyAt ?? null
+    const detailHasActiveConversation = await this.repo.hasActiveConversationsForStrategy(userId, strategyInstanceId)
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
       name: row.name,
@@ -507,6 +524,8 @@ export class AccountStrategyViewService {
           : this.readStatsNumber(stats, 'totalTradesCount'),
       },
       updatedAt: row.updatedAt.toISOString(),
+      viewOnlyAt: detailViewOnlyAt ? detailViewOnlyAt.toISOString() : null,
+      hasActiveConversation: detailHasActiveConversation,
       totalPnl,
       todayPnl,
       equitySeries: derivedEquitySeries,
@@ -875,11 +894,13 @@ export class AccountStrategyViewService {
 
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
+      this.logDeleteRejected({ userId, strategyInstanceId }, 'strategy_not_found')
       throw new StrategyNotFoundException({ strategyInstanceId })
     }
 
     const isOwner = row.createdBy === userId
     if (!isOwner) {
+      this.logDeleteRejected({ userId, strategyInstanceId, ownerId: row.createdBy }, 'owner_mismatch')
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
 
@@ -1407,53 +1428,123 @@ export class AccountStrategyViewService {
     return this.getStrategyDetail(dto.userId, strategyInstanceId)
   }
 
-  async deleteStrategy(userId: string, strategyInstanceId: string): Promise<void> {
+  async deleteStrategy(
+    userId: string,
+    strategyInstanceId: string,
+    options: DeleteStrategyOptions,
+  ): Promise<void> {
     const row = await this.repo.findStrategyForUser(userId, strategyInstanceId)
     if (!row) {
-      throw new StrategyNotFoundException({ strategyInstanceId })
+      this.logDeleteRejected(
+        { userId, strategyInstanceId, deleteStoppedStrategy: options.deleteStoppedStrategy, via: options.via },
+        'not_visible',
+      )
+      return
     }
 
     const isOwner = row.createdBy === userId
     if (!isOwner) {
+      this.logDeleteRejected(
+        { userId, strategyInstanceId, ownerId: row.createdBy, deleteStoppedStrategy: options.deleteStoppedStrategy, via: options.via },
+        'owner_mismatch',
+      )
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
     if (row.status === 'running') {
+      this.logDeleteRejected(
+        { userId, strategyInstanceId, status: row.status, deleteStoppedStrategy: options.deleteStoppedStrategy, via: options.via },
+        'running_blocked',
+      )
       throw new DomainException('account_strategy.delete_running_forbidden', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { strategyInstanceId },
       })
     }
-    if (row.status !== 'draft') {
-      await this.assertNoRuntimeRiskBeforeDelete(userId, row, strategyInstanceId)
+
+    if (!this.txHost) {
+      throw new DomainException('account_strategy.transaction_host_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: { strategyInstanceId },
+      })
+    }
+    const txHost = this.txHost
+
+    const hasConversation = await this.repo.hasActiveConversationsForStrategy(userId, strategyInstanceId)
+
+    if (!options.deleteStoppedStrategy) {
+      // 仅 DB 写入；事务化以保证「conversation 归档」与「viewOnlyAt 标记」原子。
+      await txHost.withTransaction(async () => {
+        if (hasConversation) {
+          await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
+        }
+        await this.repo.markStrategyViewOnly(userId, strategyInstanceId)
+      })
+      this.logDeleteAccepted(
+        { userId, strategyInstanceId, status: row.status, hasConversation, deleteStoppedStrategy: false, via: options.via },
+        hasConversation ? 'view_only_set_with_conversations' : 'view_only_set_no_conversation',
+      )
+      return
     }
 
-    await this.repo.deleteStrategyForUser(userId, strategyInstanceId)
+    // 事务外采集 orphan 持仓/挂单，避免在事务内做远程交易所 HTTP I/O 拉长锁。
+    // 数据仅用于审计日志，不参与归档决策；采集失败不阻断删除。
+    const orphanArtifacts = row.status !== 'draft'
+      ? await this.collectOrphanRuntimeArtifacts(userId, row, strategyInstanceId)
+      : { openPositionsCount: 0, openOrdersCount: 0, auditStatus: 'ok' as const }
+    await txHost.withTransaction(async () => {
+      if (hasConversation) {
+        await this.repo.archiveLinkedConversationsForStrategy(userId, strategyInstanceId)
+      }
+      await this.repo.archiveStrategyInstanceById(userId, strategyInstanceId)
+    })
+    this.logDeleteAccepted(
+      {
+        userId,
+        strategyInstanceId,
+        status: row.status,
+        hasConversation,
+        deleteStoppedStrategy: true,
+        via: options.via,
+        orphanOpenPositionsCount: orphanArtifacts.openPositionsCount,
+        orphanOpenOrdersCount: orphanArtifacts.openOrdersCount,
+        orphanAuditStatus: orphanArtifacts.auditStatus,
+      },
+      hasConversation ? 'archived_with_conversations' : 'archived_no_conversation',
+    )
   }
 
-  private async assertNoRuntimeRiskBeforeDelete(
+  /**
+   * 用户主动停止策略时已经选择是否平仓；删除策略不再硬拦持仓/挂单，
+   * 仅采集 orphan 数量供审计日志记录。
+   */
+  private async collectOrphanRuntimeArtifacts(
     userId: string,
     row: StrategyRow,
     strategyInstanceId: string,
-  ): Promise<void> {
+  ): Promise<{
+    openPositionsCount: number
+    openOrdersCount: number
+    auditStatus: 'ok' | 'orders_skipped' | 'lookup_failed'
+  }> {
     const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    let openPositionsCount = 0
+    let openOrdersCount = 0
+
     const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
     if (account) {
       const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
-      if (openPositions.length > 0) {
-        throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-          args: { strategyInstanceId, openPositionsCount: openPositions.length },
-        })
-      }
+      openPositionsCount = openPositions.length
     }
 
     if (!this.tradingService) {
-      throw new DomainException('account_strategy.trading_service_unavailable', {
-        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-        status: HttpStatus.SERVICE_UNAVAILABLE,
+      this.logger.warn({
+        module: 'AccountStrategyViewService.deleteStrategy',
+        input: { userId, strategyInstanceId, openPositionsCount },
+        reason: 'orphan_check_skipped_trading_service_unavailable',
       })
+      return { openPositionsCount, openOrdersCount, auditStatus: 'orders_skipped' }
     }
 
     const mergedParams = {
@@ -1468,26 +1559,46 @@ export class AccountStrategyViewService {
     )
     const symbol = this.readString(mergedParams, ['symbol'])
     if (!exchangeId || !symbol) {
-      return
+      return { openPositionsCount, openOrdersCount, auditStatus: 'orders_skipped' }
     }
 
-    const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
-    const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
-    const openOrders = await this.tradingService.getOpenOrders(
-      userId,
-      exchangeId,
-      marketType,
-      executionSymbol,
-      sub.exchangeAccount?.id ?? undefined,
-    )
-    const riskyOrders = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled')
-    if (riskyOrders.length > 0) {
-      throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { strategyInstanceId, openOrdersCount: riskyOrders.length },
+    try {
+      const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
+      const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
+      const openOrders = await this.tradingService.getOpenOrders(
+        userId,
+        exchangeId,
+        marketType,
+        executionSymbol,
+        sub.exchangeAccount?.id ?? undefined,
+      )
+      openOrdersCount = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled').length
+      return { openPositionsCount, openOrdersCount, auditStatus: 'ok' }
+    } catch (error) {
+      this.logger.warn({
+        module: 'AccountStrategyViewService.deleteStrategy',
+        input: { userId, strategyInstanceId, exchangeId, symbol },
+        reason: 'orphan_orders_lookup_failed',
+        error: error instanceof Error ? error.message : String(error),
       })
+      return { openPositionsCount, openOrdersCount, auditStatus: 'lookup_failed' }
     }
+  }
+
+  private logDeleteRejected(input: Record<string, unknown>, reason: string): void {
+    this.logger.warn({
+      module: 'AccountStrategyViewService.deleteStrategy',
+      input,
+      reason,
+    })
+  }
+
+  private logDeleteAccepted(input: Record<string, unknown>, reason: string): void {
+    this.logger.log({
+      module: 'AccountStrategyViewService.deleteStrategy',
+      input,
+      reason,
+    })
   }
 
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {

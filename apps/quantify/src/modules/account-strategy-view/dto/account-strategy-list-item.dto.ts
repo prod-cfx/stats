@@ -53,4 +53,10 @@ export class AccountStrategyListItemDto {
 
   @ApiProperty()
   updatedAt!: string
+
+  @ApiPropertyOptional({ description: '只读态时间戳；非空表示策略已转为只读', nullable: true, type: String })
+  viewOnlyAt!: string | null
+
+  @ApiProperty({ description: '是否仍有活跃 AI Quant 关联会话' })
+  hasActiveConversation!: boolean
 }

@@ -117,11 +117,49 @@ describe('accountAiQuantStrategiesController', () => {
     )
   })
 
-  it('deletes strategy with backend-controlled user identity', async () => {
+  it('deletes strategy without deleteStoppedStrategy by default', async () => {
     const { controller, service } = createController()
 
     await controller.remove('user-1', 'Bearer token-1', 'strategy-1')
 
-    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1')
+    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1', {
+      deleteStoppedStrategy: false,
+    })
+  })
+
+  it('forwards deleteStoppedStrategy=true query through to the service', async () => {
+    const { controller, service } = createController()
+
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'true')
+
+    expect(service.deleteAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1', {
+      deleteStoppedStrategy: true,
+    })
+  })
+
+  it('parses boolean query liberally: accepts "true"/"TRUE"/"1" as true and rejects others as false', async () => {
+    const { controller, service } = createController()
+
+    // 'true' (lowercase 由前端默认拼接)
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'true')
+    // 大写
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'TRUE')
+    // 数字 1
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', '1')
+
+    for (const call of (service.deleteAccountStrategy as jest.Mock).mock.calls) {
+      expect(call[3]).toEqual({ deleteStoppedStrategy: true })
+    }
+    ;(service.deleteAccountStrategy as jest.Mock).mockClear()
+
+    // 其它任何值（'false'、'0'、空串、未知字符串）一律视为 false
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'false')
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', '0')
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', '')
+    await controller.remove('user-1', 'Bearer token-1', 'strategy-1', 'no')
+
+    for (const call of (service.deleteAccountStrategy as jest.Mock).mock.calls) {
+      expect(call[3]).toEqual({ deleteStoppedStrategy: false })
+    }
   })
 })
