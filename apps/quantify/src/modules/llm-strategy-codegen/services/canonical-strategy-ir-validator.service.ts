@@ -45,7 +45,19 @@ export class CanonicalStrategyIrValidatorService {
     predicateIndex: Map<string, PredicateDef>,
     seriesIndex: Map<string, SeriesDef>,
   ): void {
-    if (predicate.kind === 'allOf' || predicate.kind === 'anyOf' || predicate.kind === 'NOT') {
+    // 逻辑容器跳过单周期一致性校验（叶子 predicate 由外层循环单独 assert）。
+    // PredicateDef.kind 同时存在大写 (AND/OR/NOT) 与小写 (allOf/anyOf) 两套命名：
+    // canonical-spec-v2-ir-compiler.service.ts 大多数路径走 resolveLogicalKind 输出
+    // allOf/anyOf，NOT 仍大写；但 :411 / :1239 仍直接 upsert 'AND'/'OR' 字面量；
+    // 'sequence' 在 :1355 也是合法逻辑容器。这里取并集保持兼容。
+    if (
+      predicate.kind === 'AND'
+      || predicate.kind === 'OR'
+      || predicate.kind === 'NOT'
+      || predicate.kind === 'allOf'
+      || predicate.kind === 'anyOf'
+      || predicate.kind === 'sequence'
+    ) {
       return
     }
 
