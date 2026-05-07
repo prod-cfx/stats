@@ -466,6 +466,29 @@ describe('SemanticSeedStateBuilderService', () => {
     }))
   })
 
+  it('attaches registry substrate to executable moving-average indicator aliases', () => {
+    const state = service.build({
+      triggers: [{
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { indicator: 'ema', referenceRole: 'moving_average', 'reference.period': 100 },
+      }],
+      actions: [{ key: 'open_long' }],
+    })
+
+    expect(state?.triggers[0].contracts?.[0]).toEqual(expect.objectContaining({
+      runtimeRequirements: expect.arrayContaining([
+        expect.objectContaining({ domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' }),
+      ]),
+      stateRequirements: expect.any(Array),
+      orderRequirements: expect.arrayContaining([
+        expect.objectContaining({ domain: 'order', verb: 'support', object: 'market_order' }),
+      ]),
+      openSlots: expect.any(Array),
+    }))
+  })
+
   it('maps supported_requires_slot registry substrate open slots onto synthesized contracts', () => {
     const state = service.build({
       risk: [{

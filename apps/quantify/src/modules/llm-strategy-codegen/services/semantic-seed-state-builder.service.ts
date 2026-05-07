@@ -1002,7 +1002,7 @@ export class SemanticSeedStateBuilderService {
     atomKey: string,
     contract: SemanticAtomContract,
   ): SemanticAtomContract {
-    const resolved = this.semanticAtomRegistry.resolve(atomKey)
+    const resolved = this.semanticAtomRegistry.resolve(this.resolveContractSubstrateAtomKey(atomKey, contract.params))
     if (!('contractSubstrate' in resolved) || !resolved.contractSubstrate) {
       return contract
     }
@@ -1014,6 +1014,19 @@ export class SemanticSeedStateBuilderService {
       orderRequirements: [...resolved.contractSubstrate.orderRequirements],
       openSlots: resolved.contractSubstrate.openSlots.map(slot => toSemanticSupportOpenSlot(slot)),
     }
+  }
+
+  private resolveContractSubstrateAtomKey(atomKey: string, params: Record<string, unknown>): string {
+    if ((atomKey !== 'indicator.above' && atomKey !== 'indicator.below') || !this.isMovingAverageIndicatorAlias(params)) {
+      return atomKey
+    }
+
+    return atomKey === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+  }
+
+  private isMovingAverageIndicatorAlias(params: Record<string, unknown>): boolean {
+    const indicator = this.readTrimmedString(params.indicator)?.toLowerCase()
+    return indicator === 'ma' || indicator === 'sma' || indicator === 'ema'
   }
 
   private readContracts(value: unknown): SemanticAtomContract[] | null {
