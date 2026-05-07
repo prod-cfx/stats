@@ -1,5 +1,12 @@
 import type { CodegenSemanticPatch } from './codegen-semantic-patch'
-import type { SemanticContractKind, SemanticPriority, SemanticSlotState } from './semantic-state'
+import type {
+  SemanticContractKind,
+  SemanticOrderRequirement,
+  SemanticPriority,
+  SemanticRuntimeRequirement,
+  SemanticSlotState,
+  SemanticStateRequirement,
+} from './semantic-state'
 
 export type SemanticAtomSupportStatus =
   | 'supported_executable'
@@ -36,6 +43,12 @@ export interface SemanticAtomDefinition {
   defaultableParams: string[]
   executableProjection: string[]
   openSlots: SemanticAtomOpenSlotSpec[]
+  contractSubstrate?: {
+    runtimeRequirements: readonly SemanticRuntimeRequirement[]
+    stateRequirements: readonly SemanticStateRequirement[]
+    orderRequirements: readonly SemanticOrderRequirement[]
+    openSlots: readonly SemanticAtomOpenSlotSpec[]
+  }
   unsupported?: SemanticAtomUnsupportedMetadata
   replacement?: SemanticAtomReplacementStrategy
 }

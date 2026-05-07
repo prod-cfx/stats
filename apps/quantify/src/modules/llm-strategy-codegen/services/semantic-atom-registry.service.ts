@@ -8,6 +8,23 @@ import type {
 
 type UnknownSemanticAtomDefinition = Pick<SemanticAtomDefinition, 'category' | 'key' | 'supportStatus'>
 
+const BASE_EXECUTABLE_SUBSTRATE: NonNullable<SemanticAtomDefinition['contractSubstrate']> = {
+  runtimeRequirements: [
+    { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+    { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+  ],
+  stateRequirements: [],
+  orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+  openSlots: [],
+}
+
+const POSITION_SUBSTRATE: NonNullable<SemanticAtomDefinition['contractSubstrate']> = {
+  runtimeRequirements: [],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+}
+
 const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
   triggers: [
     {
@@ -200,6 +217,7 @@ function executableTrigger(key: string, requiredParams: string[]): SemanticAtomD
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
+    contractSubstrate: BASE_EXECUTABLE_SUBSTRATE,
   }
 }
 
@@ -212,6 +230,7 @@ function executableAction(key: string): SemanticAtomDefinition {
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
+    contractSubstrate: BASE_EXECUTABLE_SUBSTRATE,
   }
 }
 
@@ -224,6 +243,7 @@ function executableRisk(key: string, requiredParams: string[]): SemanticAtomDefi
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
+    contractSubstrate: BASE_EXECUTABLE_SUBSTRATE,
   }
 }
 
@@ -240,6 +260,10 @@ function supportedRequiresSlotRisk(
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots,
+    contractSubstrate: {
+      ...BASE_EXECUTABLE_SUBSTRATE,
+      openSlots,
+    },
   }
 }
 
@@ -252,6 +276,7 @@ function executablePosition(key: string, requiredParams: string[]): SemanticAtom
     defaultableParams: [],
     executableProjection: ['semantic_position_contract', 'compiled_runtime'],
     openSlots: [],
+    contractSubstrate: POSITION_SUBSTRATE,
   }
 }
 
