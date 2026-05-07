@@ -75,6 +75,11 @@ export interface CanonicalRuleV2 {
   actions: CanonicalRuleAction[]
   metadata?: Record<string, unknown> & {
     normalized?: CanonicalRuleNormalizedMetadata
+    partialTakeProfit?: {
+      memoryKey: string
+      tierIndex: number
+      totalTiers: number
+    }
   }
 }
 

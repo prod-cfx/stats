@@ -1613,6 +1613,14 @@ export class CanonicalSpecBuilderService {
         }
         continue
       }
+      if (risk.key === 'risk.partial_take_profit') {
+        const ptpRules = this.buildPartialTakeProfitRules(risk, sideScope, priority)
+        if (ptpRules.length > 0) {
+          rules.push(...ptpRules)
+          priority -= ptpRules.length
+        }
+        continue
+      }
       if (!validateSemanticRiskContract(risk).ok) {
         continue
       }
@@ -1726,6 +1734,110 @@ export class CanonicalSpecBuilderService {
         semanticKey: risk.key,
       },
     }
+  }
+
+  private buildPartialTakeProfitRules(
+    risk: SemanticRiskState,
+    fallbackSideScope: 'long' | 'short' | 'both',
+    startPriority: number,
+  ): CanonicalRuleV2[] {
+    const memoryKey = typeof risk.params.memoryKey === 'string' && risk.params.memoryKey.trim().length > 0
+      ? risk.params.memoryKey.trim()
+      : null
+    const rawTiers = Array.isArray(risk.params.tiers) ? risk.params.tiers : null
+    if (!memoryKey || !rawTiers || rawTiers.length === 0) {
+      return []
+    }
+
+    const parsedTiers: Array<{ threshold: number; reduceRatio: number }> = []
+    for (const raw of rawTiers) {
+      if (!raw || typeof raw !== 'object') {
+        return []
+      }
+      const tier = raw as { trigger?: { kind?: unknown; threshold?: unknown }; reduceRatio?: unknown }
+      const threshold = typeof tier.trigger?.threshold === 'number' && Number.isFinite(tier.trigger.threshold)
+        ? tier.trigger.threshold
+        : null
+      const reduceRatio = typeof tier.reduceRatio === 'number' && Number.isFinite(tier.reduceRatio)
+        ? tier.reduceRatio
+        : null
+      if (threshold === null || reduceRatio === null) {
+        return []
+      }
+      parsedTiers.push({ threshold, reduceRatio })
+    }
+
+    const sideScope: 'long' | 'short' | 'both' = risk.params.sideScope === 'long'
+      || risk.params.sideScope === 'short'
+      || risk.params.sideScope === 'both'
+      ? risk.params.sideScope
+      : fallbackSideScope
+    const totalTiers = parsedTiers.length
+    const derived = this.deriveCumulativeReduceRatios(parsedTiers.map(tier => tier.reduceRatio))
+
+    const rules: CanonicalRuleV2[] = []
+    for (let i = 0; i < parsedTiers.length; i += 1) {
+      const ratio = derived[i]
+      if (ratio <= 0) {
+        continue
+      }
+      const sizing = { mode: 'RATIO' as const, value: ratio }
+      const actions: CanonicalRuleV2['actions'] = []
+      if (sideScope === 'long' || sideScope === 'both') {
+        actions.push({ type: 'REDUCE_LONG', sizing })
+      }
+      if (sideScope === 'short' || sideScope === 'both') {
+        actions.push({ type: 'REDUCE_SHORT', sizing })
+      }
+      if (actions.length === 0) {
+        continue
+      }
+
+      rules.push({
+        id: `semantic-risk-ptp-${memoryKey}-tier-${i}`,
+        phase: 'risk',
+        sideScope,
+        priority: startPriority - i,
+        condition: {
+          kind: 'atom',
+          key: 'risk.partial_take_profit',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: parsedTiers[i].threshold,
+          params: {
+            tierIndex: i,
+            totalTiers,
+            memoryKey,
+            basis: 'pnl_pct',
+          },
+        },
+        actions,
+        metadata: {
+          partialTakeProfit: {
+            memoryKey,
+            tierIndex: i,
+            totalTiers,
+          },
+        },
+      })
+    }
+    return rules
+  }
+
+  private deriveCumulativeReduceRatios(originalRatios: number[]): number[] {
+    const result: number[] = []
+    let consumed = 0
+    for (const ratio of originalRatios) {
+      const remaining = 1 - consumed
+      if (remaining <= 0 || !Number.isFinite(ratio) || ratio <= 0) {
+        result.push(0)
+        continue
+      }
+      const derived = Math.min(1, ratio / remaining)
+      result.push(Number(derived.toFixed(6)))
+      consumed += ratio
+    }
+    return result
   }
 
   private buildAtrTakeProfitActions(
