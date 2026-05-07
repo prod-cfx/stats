@@ -561,13 +561,13 @@ describe('AiQuantStrategyList tabs UI', () => {
     tabsItemSeq = 0
   })
 
-  it('requests strategies with limit=200 on mount', async () => {
+  it('requests strategies with limit=100 on mount', async () => {
     mockFetchAccountAiQuantStrategies.mockResolvedValue({ items: [] })
     await act(async () => {
       root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
     })
     await act(async () => {})
-    expect(mockFetchAccountAiQuantStrategies).toHaveBeenCalledWith({ userId: 'user-1', page: 1, limit: 200 })
+    expect(mockFetchAccountAiQuantStrategies).toHaveBeenCalledWith({ userId: 'user-1', page: 1, limit: 100 })
   })
 
   it('renders four tabs with counts and defaults to all', async () => {

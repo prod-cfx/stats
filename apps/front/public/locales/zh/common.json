@@ -158,7 +158,7 @@
       "stopped": "已停止",
       "history": "历史记录",
       "emptyForTab": "当前分类下暂无策略",
-      "capHint": "仅显示最近 200 条策略，更早的请通过分页查询。"
+      "capHint": "仅显示最近 100 条策略，更早的请通过分页查询。"
     },
     "strategyPlazaCard": {
       "pairTimeframe": "交易对 / 周期",

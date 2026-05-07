@@ -158,7 +158,7 @@
       "stopped": "Stopped",
       "history": "History",
       "emptyForTab": "No strategies in this category",
-      "capHint": "Showing the most recent 200 strategies. Use pagination for older entries."
+      "capHint": "Showing the most recent 100 strategies. Use pagination for older entries."
     },
     "strategyPlazaCard": {
       "pairTimeframe": "Pair / Timeframe",
