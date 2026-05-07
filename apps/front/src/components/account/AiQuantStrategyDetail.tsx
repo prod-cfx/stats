@@ -363,7 +363,10 @@ export function AiQuantStrategyDetail({
     [strategy?.paramSchema, strategy?.paramValues],
   )
   const isSpotMarket = strategy?.marketType === 'spot'
-  const canEditLeverage = Boolean(!isSpotMarket && strategy?.canEditDeploymentLeverage && onUpdateLeverage)
+  // viewOnlyAt 非空 = 用户已主动把该策略转为只读：详情页仅作历史审计展示，
+  // 所有运行/部署/编辑/杠杆变更入口都隐藏。
+  const isViewOnly = Boolean(strategy?.viewOnlyAt)
+  const canEditLeverage = Boolean(!isSpotMarket && !isViewOnly && strategy?.canEditDeploymentLeverage && onUpdateLeverage)
   const showsDeploymentLeverage = useMemo(() => (
     !isSpotMarket && (
       typeof strategy?.deploymentExecutionBaseline?.leverage === 'number'
@@ -487,7 +490,16 @@ export function AiQuantStrategyDetail({
         </div>
       </section>
 
-      {(strategy.status === 'running' || strategy.status === 'stopped') && (
+      {isViewOnly && (
+        <section
+          data-testid="strategy-detail-view-only-banner"
+          className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200"
+        >
+          该策略已设为只读，所有操作（重新部署、编辑、停止、调整杠杆等）均已禁用，仅作历史记录展示。
+        </section>
+      )}
+
+      {!isViewOnly && (strategy.status === 'running' || strategy.status === 'stopped') && (
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>

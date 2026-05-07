@@ -888,6 +888,33 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('停止策略')
   })
 
+  it('view-only strategy hides 运行控制 panel and renders read-only banner', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({ status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' })}
+        />,
+      )
+    })
+
+    // 顶部出现只读 banner，提示该策略已设为只读。
+    const banner = container.querySelector('[data-testid="strategy-detail-view-only-banner"]')
+    expect(banner).toBeTruthy()
+    expect(banner?.textContent).toContain('该策略已设为只读')
+
+    // 「运行控制」整段不再渲染：用 h2 标签精确判定（避免 banner 文案
+    // 同时包含「重新部署」「停止」等关键词造成误匹配）。
+    const headings = Array.from(container.querySelectorAll('h2')).map(h => h.textContent ?? '')
+    expect(headings).not.toContain('运行控制')
+
+    // 同时确认 stopped 状态下原本会出现的可交互按钮全部消失。
+    const buttonTexts = Array.from(container.querySelectorAll('button')).map(b => b.textContent ?? '')
+    const linkTexts = Array.from(container.querySelectorAll('a')).map(a => a.textContent ?? '')
+    expect(buttonTexts.some(text => text.includes('停止策略') || text.includes('平仓并停止'))).toBe(false)
+    expect(linkTexts.some(text => text.trim() === '重新部署' || text.trim() === '返回对话修改')).toBe(false)
+  })
+
   it('stores strategy edit session intent before returning to chat for stopped strategy', async () => {
     localStorage.clear()
 
