@@ -338,7 +338,6 @@ function partialTakeProfitSubstrate(memoryKey: string): SemanticAtomContractSubs
       { domain: 'state', verb: 'read_write', object: memoryKey },
     ],
     orderRequirements: [
-      { domain: 'order', verb: 'support', object: 'market_order' },
       { domain: 'order', verb: 'support', object: 'reduce_only' },
     ],
     openSlots: [],
