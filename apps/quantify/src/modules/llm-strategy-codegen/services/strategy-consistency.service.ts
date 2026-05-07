@@ -1828,7 +1828,14 @@ export class StrategyConsistencyService {
       return []
     }
     const kind = expr.payload.kind
-    if (kind === 'AND' || kind === 'OR' || kind === 'NOT' || kind === 'allOf' || kind === 'anyOf') {
+    if (
+      kind === 'AND'
+      || kind === 'OR'
+      || kind === 'NOT'
+      || kind === 'allOf'
+      || kind === 'anyOf'
+      || kind === 'sequence'
+    ) {
       const key = this.inferRuleKeyFromPredicate({
         predicateKind: kind,
         predicateId: expr.sourceRef,
