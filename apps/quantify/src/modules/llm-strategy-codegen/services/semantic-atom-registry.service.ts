@@ -35,62 +35,6 @@ function positionSubstrate(): SemanticAtomContractSubstrate {
   }
 }
 
-function volumeGateSubstrate(): SemanticAtomContractSubstrate {
-  return {
-    runtimeRequirements: [
-      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
-      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
-      { domain: 'runtime', verb: 'provide', object: 'volume_series' },
-    ],
-    stateRequirements: [],
-    orderRequirements: [],
-    openSlots: [],
-  }
-}
-
-function atrGateSubstrate(): SemanticAtomContractSubstrate {
-  return {
-    runtimeRequirements: [
-      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
-      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
-      { domain: 'runtime', verb: 'provide', object: 'atr_helper' },
-    ],
-    stateRequirements: [],
-    orderRequirements: [],
-    openSlots: [],
-  }
-}
-
-const TIME_WINDOW_TIMEZONE_OPEN_SLOT: SemanticAtomOpenSlotSpec = {
-  slotKey: 'strategy.time_window.timezone',
-  fieldPath: 'gates[*].params.timezone',
-  priority: 'context',
-  questionHint: '请指定该交易时间窗使用的时区，例如 Asia/Shanghai 或 UTC。',
-}
-
-function timeWindowGateSubstrate(): SemanticAtomContractSubstrate {
-  return {
-    runtimeRequirements: [
-      { domain: 'runtime', verb: 'provide', object: 'bar_timestamp' },
-      { domain: 'runtime', verb: 'provide', object: 'timezone_clock' },
-    ],
-    stateRequirements: [],
-    orderRequirements: [],
-    openSlots: [],
-  }
-}
-
-function positionGateSubstrate(): SemanticAtomContractSubstrate {
-  return {
-    runtimeRequirements: [],
-    stateRequirements: [
-      { domain: 'state', verb: 'read', object: 'position_state' },
-    ],
-    orderRequirements: [],
-    openSlots: [],
-  }
-}
-
 const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
   triggers: [
     {
@@ -226,22 +170,14 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executablePosition('position.fixed_pct', ['value']),
   executablePosition('position.fixed_notional', ['value', 'asset']),
   executablePosition('position.fixed_quantity', ['value', 'asset']),
-  executableTrigger('volume.threshold', ['metric', 'operator', 'value', 'unit'], volumeGateSubstrate),
-  executableTrigger('volatility.atr_threshold', ['period', 'operator', 'threshold', 'thresholdUnit'], atrGateSubstrate),
-  supportedRequiresSlotTrigger(
-    'strategy.time_window',
-    ['timezone', 'windows'],
-    [{ ...TIME_WINDOW_TIMEZONE_OPEN_SLOT }],
-    timeWindowGateSubstrate,
-  ),
-  executableTrigger('position.has_position', [], positionGateSubstrate),
-  executableTrigger('position.no_position', [], positionGateSubstrate),
   unsupported('market.trend', 'trigger', '市场趋势旧别名', 'market_state_alias_public_beta_unsupported', 'market.trend 是旧状态别名，当前投影仅支持 trend.direction。'),
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
   unsupported('indicator.below', 'trigger', '指标静态低于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态低于条件当前公测暂未支持生成和回测。'),
   unsupported('price.previous_extrema', 'trigger', '前高/前低突破', 'previous_extrema_public_beta_unsupported', '前高/前低结构识别当前公测暂未支持生成和回测。'),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
+  unsupported('volume.threshold', 'trigger', '成交量阈值', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
+  unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
   unsupported('risk.atr_stop', 'risk', 'ATR 动态止损', 'atr_stop_public_beta_unsupported', 'ATR 动态止损当前公测暂未支持生成和回测。'),
   unsupported('risk.partial_take_profit', 'risk', '分批止盈', 'partial_take_profit_public_beta_unsupported', '多档分批止盈当前公测暂未支持生成和回测。'),
   unsupported('action.add_position', 'action', '加仓', 'scale_in_public_beta_unsupported', '复杂加仓当前公测暂未支持生成和回测。'),
@@ -250,6 +186,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('position.leverage', 'position', '策略杠杆声明', 'leverage_contract_public_beta_unsupported', '策略内声明杠杆当前公测暂未支持生成和回测。'),
   unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
   unsupported('grid.dynamic_grid', 'trigger', '动态网格', 'dynamic_grid_public_beta_unsupported', '动态网格当前公测暂未支持生成和回测。'),
+  unsupported('strategy.time_window', 'trigger', '交易时间窗口', 'time_window_public_beta_unsupported', '交易时间窗口当前公测暂未支持生成和回测。'),
   unsupported('strategy.multi_timeframe', 'trigger', '多周期条件', 'multi_timeframe_public_beta_unsupported', '多周期条件当前公测暂未支持生成和回测。'),
   unsupported('indicator.divergence', 'trigger', '指标背离', 'divergence_public_beta_unsupported', '指标背离当前公测暂未支持生成和回测。'),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),
@@ -282,11 +219,7 @@ export class SemanticAtomRegistryService {
   }
 }
 
-function executableTrigger(
-  key: string,
-  requiredParams: string[],
-  substrateFactory: () => SemanticAtomContractSubstrate = baseExecutableSubstrate,
-): SemanticSupportedAtomDefinition {
+function executableTrigger(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'trigger',
@@ -295,14 +228,11 @@ function executableTrigger(
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: substrateFactory(),
+    contractSubstrate: baseExecutableSubstrate(),
   }
 }
 
-function executableAction(
-  key: string,
-  substrateFactory: () => SemanticAtomContractSubstrate = baseExecutableSubstrate,
-): SemanticSupportedAtomDefinition {
+function executableAction(key: string): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'action',
@@ -311,15 +241,11 @@ function executableAction(
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: substrateFactory(),
+    contractSubstrate: baseExecutableSubstrate(),
   }
 }
 
-function executableRisk(
-  key: string,
-  requiredParams: string[],
-  substrateFactory: () => SemanticAtomContractSubstrate = baseExecutableSubstrate,
-): SemanticSupportedAtomDefinition {
+function executableRisk(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -328,7 +254,7 @@ function executableRisk(
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: substrateFactory(),
+    contractSubstrate: baseExecutableSubstrate(),
   }
 }
 
@@ -352,33 +278,7 @@ function supportedRequiresSlotRisk(
   }
 }
 
-function supportedRequiresSlotTrigger(
-  key: string,
-  requiredParams: string[],
-  openSlots: SemanticAtomDefinition['openSlots'],
-  substrateFactory: () => SemanticAtomContractSubstrate,
-): SemanticSupportedAtomDefinition {
-  const substrate = substrateFactory()
-  return {
-    key,
-    category: 'trigger',
-    supportStatus: 'supported_requires_slot',
-    requiredParams,
-    defaultableParams: [],
-    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
-    openSlots,
-    contractSubstrate: {
-      ...substrate,
-      openSlots: cloneOpenSlotSpecs(openSlots),
-    },
-  }
-}
-
-function executablePosition(
-  key: string,
-  requiredParams: string[],
-  substrateFactory: () => SemanticAtomContractSubstrate = positionSubstrate,
-): SemanticSupportedAtomDefinition {
+function executablePosition(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'position',
@@ -387,7 +287,7 @@ function executablePosition(
     defaultableParams: [],
     executableProjection: ['semantic_position_contract', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: substrateFactory(),
+    contractSubstrate: positionSubstrate(),
   }
 }
 

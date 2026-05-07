@@ -1,7 +1,6 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
 import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-indicators'
-import { isWithinTimeWindow } from '../helpers/timezone-clock'
 
 export type CompiledRuntimeValue =
   | number
@@ -108,8 +107,6 @@ function evaluateSeries(
       return readStringContextValue(ctx.trendDirection)
     case 'VOLATILITY_STATE':
       return readStringContextValue(ctx.volatilityState)
-    case 'IN_TIME_WINDOW':
-      return evaluateInTimeWindow(node, ctx)
     default: {
       const firstDep = node.deps?.[0]
       return typeof firstDep === 'string' ? values[firstDep] ?? null : null
@@ -296,37 +293,6 @@ function compareEq(
 
 function readStringContextValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
-}
-
-function evaluateInTimeWindow(
-  node: CompiledExprNode,
-  ctx: StrategyExecutionContextV1,
-): CompiledRuntimeValue {
-  const payload = node.payload as {
-    timezone?: unknown
-    windows?: unknown
-  }
-  if (typeof payload.timezone !== 'string' || !Array.isArray(payload.windows) || payload.windows.length === 0) {
-    return null
-  }
-  const timestamp = typeof ctx.timestamp === 'number'
-    ? ctx.timestamp
-    : (ctx.bars && ctx.bars.length > 0 ? (ctx.bars[ctx.bars.length - 1] as Bar).timestamp : NaN)
-  if (!Number.isFinite(timestamp)) {
-    return null
-  }
-  try {
-    return isWithinTimeWindow(
-      timestamp as number,
-      payload.timezone,
-      payload.windows as Array<{ daysOfWeek?: number[]; start: string; end: string }>,
-    )
-      ? 1
-      : 0
-  }
-  catch {
-    return null
-  }
 }
 
 function touchesLevel(
