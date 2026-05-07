@@ -11,6 +11,8 @@ import {
   AiQuantStrategyPrimarySummary,
   buildParamSummary,
   buildPrimarySummary,
+  computeTabCounts,
+  filterStrategiesByTab,
   getStrategyRuntimeActionLabel,
 } from './AiQuantStrategyList'
 
@@ -467,10 +469,16 @@ describe('AiQuantStrategyList primary summary', () => {
       listItem({ status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' }),
     ])
 
-    const buttons = Array.from(container.querySelectorAll('button'))
-    expect(buttons.find(b => b.textContent?.includes('Delete'))).toBeUndefined()
-    expect(buttons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
-    expect(buttons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
+    // 默认 tab=「全部」会排除 view-only；切到「历史记录」tab 才能看到只读项
+    await act(async () => {
+      ;(container.querySelector('[data-testid="strategy-filter-tab-history"]') as HTMLButtonElement).click()
+    })
+
+    const rowButtons = Array.from(container.querySelectorAll('button'))
+      .filter(b => !b.getAttribute('data-testid')?.startsWith('strategy-filter-tab-'))
+    expect(rowButtons.find(b => b.textContent?.includes('Delete'))).toBeUndefined()
+    expect(rowButtons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
+    expect(rowButtons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
 
     const link = Array.from(container.querySelectorAll('a'))
       .find(a => a.textContent?.includes('aiQuant.viewDetail'))
@@ -504,5 +512,163 @@ describe('AiQuantStrategyList primary summary', () => {
     expect(symbolPos).toBeGreaterThan(exchangePos)
     expect(timeframePos).toBeGreaterThan(symbolPos)
     expect(positionPos).toBeGreaterThan(timeframePos)
+  })
+})
+
+describe('filterStrategiesByTab / computeTabCounts', () => {
+  const running = makeListRecord({ id: 'r', status: 'running', viewOnlyAt: null })
+  const stopped = makeListRecord({ id: 's', status: 'stopped', viewOnlyAt: null })
+  const historyStopped = makeListRecord({ id: 'h1', status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' })
+  const historyRunning = makeListRecord({ id: 'h2', status: 'running', viewOnlyAt: '2026-04-02T00:00:00.000Z' })
+  const all = [running, stopped, historyStopped, historyRunning]
+
+  it('all tab excludes view-only', () => {
+    expect(filterStrategiesByTab(all, 'all').map(x => x.id)).toEqual(['r', 's'])
+  })
+
+  it('running tab excludes view-only running', () => {
+    expect(filterStrategiesByTab(all, 'running').map(x => x.id)).toEqual(['r'])
+  })
+
+  it('stopped tab excludes view-only stopped', () => {
+    expect(filterStrategiesByTab(all, 'stopped').map(x => x.id)).toEqual(['s'])
+  })
+
+  it('history tab includes any viewOnlyAt non-null', () => {
+    expect(filterStrategiesByTab(all, 'history').map(x => x.id).sort()).toEqual(['h1', 'h2'])
+  })
+
+  it('computeTabCounts splits all = running + stopped, history independent', () => {
+    expect(computeTabCounts(all)).toEqual({ all: 2, running: 1, stopped: 1, history: 2 })
+  })
+})
+
+describe('AiQuantStrategyList tabs UI', () => {
+  let tabsItemSeq = 0
+  function tabsListItem(overrides: Partial<AiQuantStrategyRecord> = {}) {
+    tabsItemSeq += 1
+    return makeListRecord({
+      id: `stg-tab-${tabsItemSeq}`,
+      paramSchema: null,
+      paramValues: null,
+      viewOnlyAt: null,
+      ...overrides,
+    })
+  }
+
+  beforeEach(() => {
+    mockSession = { userId: 'user-1' }
+    tabsItemSeq = 0
+  })
+
+  it('requests strategies with limit=200 on mount', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({ items: [] })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+    expect(mockFetchAccountAiQuantStrategies).toHaveBeenCalledWith({ userId: 'user-1', page: 1, limit: 200 })
+  })
+
+  it('renders four tabs with counts and defaults to all', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({
+      items: [
+        tabsListItem({ id: 'r1', status: 'running', viewOnlyAt: null }),
+        tabsListItem({ id: 's1', status: 'stopped', viewOnlyAt: null }),
+        tabsListItem({ id: 's2', status: 'stopped', viewOnlyAt: null }),
+        tabsListItem({ id: 'h1', status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z' }),
+      ],
+    })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+
+    const tabs = container.querySelectorAll('[data-testid^="strategy-filter-tab-"]')
+    expect(tabs.length).toBe(4)
+    const counts = Array.from(tabs).map(el => el.getAttribute('data-count'))
+    expect(counts).toEqual(['3', '1', '2', '1'])
+
+    const active = container.querySelector('[data-testid^="strategy-filter-tab-"][data-active="true"]')
+    expect(active?.getAttribute('data-testid')).toBe('strategy-filter-tab-all')
+  })
+
+  it('clicking history tab filters list to view-only items only', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({
+      items: [
+        tabsListItem({ id: 'r1', status: 'running', viewOnlyAt: null, name: 'R1' }),
+        tabsListItem({ id: 's1', status: 'stopped', viewOnlyAt: null, name: 'S1' }),
+        tabsListItem({ id: 'h1', status: 'stopped', viewOnlyAt: '2026-04-01T00:00:00.000Z', name: 'H1' }),
+      ],
+    })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="strategy-filter-tab-history"]') as HTMLButtonElement).click()
+    })
+
+    const titles = Array.from(container.querySelectorAll('h4')).map(n => n.textContent)
+    expect(titles).toEqual(['H1'])
+  })
+
+  it('shows emptyForTab hint when filtered list is empty but strategies are not', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({
+      items: [tabsListItem({ id: 'r1', status: 'running', viewOnlyAt: null })],
+    })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="strategy-filter-tab-history"]') as HTMLButtonElement).click()
+    })
+
+    expect(container.querySelector('[data-testid="strategy-filter-empty"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('aiQuant.createStrategy')
+  })
+
+  it('still shows large empty state when there are zero strategies', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({ items: [] })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+
+    expect(container.querySelector('[data-testid="strategy-filter-empty"]')).toBeNull()
+    expect(container.querySelector('[data-testid^="strategy-filter-tab-"]')).toBeNull()
+  })
+
+  it('history tab hides Run/Stop/Delete even for running+viewOnly anomaly', async () => {
+    mockFetchAccountAiQuantStrategies.mockResolvedValue({
+      items: [
+        tabsListItem({
+          id: 'h-running',
+          status: 'running',
+          viewOnlyAt: '2026-04-02T00:00:00.000Z',
+          name: 'HistoryRunning',
+        }),
+      ],
+    })
+    await act(async () => {
+      root.render(React.createElement(AiQuantStrategyList, { lng: 'zh' }))
+    })
+    await act(async () => {})
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="strategy-filter-tab-history"]') as HTMLButtonElement).click()
+    })
+
+    const titles = Array.from(container.querySelectorAll('h4')).map(n => n.textContent)
+    expect(titles).toEqual(['HistoryRunning'])
+
+    const rowButtons = Array.from(container.querySelectorAll('button'))
+      .filter(b => !b.getAttribute('data-testid')?.startsWith('strategy-filter-tab-'))
+    expect(rowButtons.find(b => b.textContent?.includes('Run'))).toBeUndefined()
+    expect(rowButtons.find(b => b.textContent?.includes('停止策略'))).toBeUndefined()
+    expect(rowButtons.find(b => b.textContent?.includes('Delete'))).toBeUndefined()
   })
 })

@@ -76,7 +76,7 @@
     "lint": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "cd apps/front && npx eslint --max-warnings=9999 --config ../../eslint.config.js --ext .ts,.tsx src/components/trading/**/*.{ts,tsx}"
+        "command": "bash -c 'cd apps/front && shopt -s globstar && npx eslint --max-warnings=9999 --config ../../eslint.config.js --ext .ts,.tsx src/components/trading/**/*.{ts,tsx}'"
       }
     },
     "type-check": {

@@ -1,12 +1,13 @@
 'use client'
 
 import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
+import type { AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { Activity, Clock, MoreHorizontal, Play, PlayCircle, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AiQuantDeletionDialog, type AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
+import { AiQuantDeletionDialog } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -17,6 +18,103 @@ import {
 } from '@/lib/api'
 import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamSummary } from './dynamic-param-summary'
+
+export const STRATEGY_LIST_FETCH_LIMIT = 200
+
+export type StrategyFilterTabKey = 'all' | 'running' | 'stopped' | 'history'
+
+export interface StrategyFilterCounts {
+  all: number
+  running: number
+  stopped: number
+  history: number
+}
+
+function isHistory(item: Pick<AiQuantStrategyRecord, 'viewOnlyAt'>): boolean {
+  return item.viewOnlyAt != null
+}
+
+export function filterStrategiesByTab(
+  items: AiQuantStrategyRecord[],
+  tab: StrategyFilterTabKey,
+): AiQuantStrategyRecord[] {
+  switch (tab) {
+    case 'all':
+      return items.filter(item => !isHistory(item))
+    case 'running':
+      return items.filter(item => !isHistory(item) && item.status === 'running')
+    case 'stopped':
+      return items.filter(item => !isHistory(item) && item.status === 'stopped')
+    case 'history':
+      return items.filter(isHistory)
+    default: {
+      const _exhaustive: never = tab
+      void _exhaustive
+      return []
+    }
+  }
+}
+
+export function computeTabCounts(items: AiQuantStrategyRecord[]): StrategyFilterCounts {
+  let running = 0
+  let stopped = 0
+  let history = 0
+  for (const item of items) {
+    if (isHistory(item)) {
+      history++
+      continue
+    }
+    if (item.status === 'running') running++
+    else if (item.status === 'stopped') stopped++
+  }
+  return { all: running + stopped, running, stopped, history }
+}
+
+const TAB_ORDER: StrategyFilterTabKey[] = ['all', 'running', 'stopped', 'history']
+
+type StrategyListTranslation = (key: string, options?: { defaultValue?: string }) => string
+
+function StrategyFilterTabs({
+  active,
+  counts,
+  onChange,
+  t,
+}: {
+  active: StrategyFilterTabKey
+  counts: StrategyFilterCounts
+  onChange: (next: StrategyFilterTabKey) => void
+  t: StrategyListTranslation
+}) {
+  return (
+    <div role="tablist" className="flex items-center gap-1 border-b border-[color:var(--cf-border)] px-1">
+      {TAB_ORDER.map((key) => {
+        const isActive = key === active
+        return (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            data-testid={`strategy-filter-tab-${key}`}
+            data-active={isActive ? 'true' : 'false'}
+            data-count={counts[key]}
+            onClick={() => onChange(key)}
+            className={`-mb-px flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${
+              isActive
+                ? 'border-b-2 border-primary font-semibold text-[color:var(--cf-text-strong)]'
+                : 'border-b-2 border-transparent text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text-strong)]'
+            }`}
+          >
+            <span>{t(`aiQuant.filter.${key}`)}</span>
+            <span className="rounded-full bg-[color:var(--cf-surface)] px-2 py-0.5 text-xs font-medium text-[color:var(--cf-muted)] border border-[color:var(--cf-border)]">
+              {counts[key]}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 function fmtTime(ts: string, lng: string) {
   const date = new Date(ts)
@@ -51,8 +149,6 @@ export function buildPrimarySummary(
     `${t('aiQuant.position')} ${item.positionPct}%`,
   ]
 }
-
-type StrategyListTranslation = (key: string, options?: { defaultValue?: string }) => string
 
 export function getStrategyRuntimeActionLabel(
   status: AiQuantStrategyViewState,
@@ -108,6 +204,12 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [stopDialogStrategy, setStopDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [accountDeleteDialog, setAccountDeleteDialog] = useState<AccountDeleteDialogState | null>(null)
+  const [activeTab, setActiveTab] = useState<StrategyFilterTabKey>('all')
+  const counts = useMemo(() => computeTabCounts(strategies), [strategies])
+  const filteredStrategies = useMemo(
+    () => filterStrategiesByTab(strategies, activeTab),
+    [strategies, activeTab],
+  )
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -117,7 +219,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       const response = await fetchAccountAiQuantStrategies({
         userId: session.userId,
         page: 1,
-        limit: 20,
+        limit: STRATEGY_LIST_FETCH_LIMIT,
       })
       setStrategies(response.items.map(mapAccountStrategyListItemToRecord))
     } catch (err) {
@@ -330,9 +432,22 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       <div className="flex items-center justify-between px-1">
         <h3 className="text-lg font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.myStrategies')}</h3>
         <span className="rounded-full bg-[color:var(--cf-surface)] px-2.5 py-0.5 text-xs font-medium text-[color:var(--cf-muted)] border border-[color:var(--cf-border)]">
-          {strategies.length}
+          {counts.all}
         </span>
       </div>
+
+      <StrategyFilterTabs active={activeTab} counts={counts} onChange={setActiveTab} t={t} />
+
+      {strategies.length >= STRATEGY_LIST_FETCH_LIMIT && (
+        <div
+          data-testid="strategy-filter-cap-hint"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400"
+        >
+          {t('aiQuant.filter.capHint', {
+            defaultValue: `仅显示最近 ${STRATEGY_LIST_FETCH_LIMIT} 条策略，更早的请通过分页查询。`,
+          })}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs text-red-400">
@@ -340,8 +455,16 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         </div>
       )}
 
+      {filteredStrategies.length === 0 ? (
+        <div
+          data-testid="strategy-filter-empty"
+          className="rounded-xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-8 text-center text-sm text-[color:var(--cf-muted)]"
+        >
+          {t('aiQuant.filter.emptyForTab', { defaultValue: '当前分类下暂无策略' })}
+        </div>
+      ) : (
       <div className="space-y-3">
-        {strategies.map(item => {
+        {filteredStrategies.map(item => {
           const statusConfig = STATUS_CONFIG[item.status]
           const StatusIcon = statusConfig.icon
           // viewOnlyAt 非空即只读：Run/Stop/Delete 全部隐藏，仅留「查看详情」入口。
@@ -428,6 +551,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
           )
         })}
       </div>
+      )}
 
       <StopRunningStrategyDialog
         open={stopDialogStrategy !== null}

@@ -152,6 +152,14 @@
     "edit": "编辑",
     "strategyPlazaSubtitle": "首次对话可先从推荐策略开始，也可以继续在上面对话自定义。",
     "myStrategies": "我的策略",
+    "filter": {
+      "all": "全部",
+      "running": "运行中",
+      "stopped": "已停止",
+      "history": "历史记录",
+      "emptyForTab": "当前分类下暂无策略",
+      "capHint": "仅显示最近 200 条策略，更早的请通过分页查询。"
+    },
     "strategyPlazaCard": {
       "pairTimeframe": "交易对 / 周期",
       "environment": "环境",

@@ -152,6 +152,14 @@
     "edit": "Edit",
     "strategyPlazaSubtitle": "Start with a preset strategy or customize via chat above.",
     "myStrategies": "My Strategies",
+    "filter": {
+      "all": "All",
+      "running": "Running",
+      "stopped": "Stopped",
+      "history": "History",
+      "emptyForTab": "No strategies in this category",
+      "capHint": "Showing the most recent 200 strategies. Use pagination for older entries."
+    },
     "strategyPlazaCard": {
       "pairTimeframe": "Pair / Timeframe",
       "environment": "Environment",
