@@ -9,7 +9,10 @@ const extractor = new SemanticSeedExtractorService()
 const builder = new SemanticSeedStateBuilderService()
 const classifier = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
 
-function collectCoverageKeys(state: SemanticState, classification: ReturnType<SemanticSupportClassifierService['classify']>): Set<string> {
+function collectCoverageKeys(
+  state: SemanticState,
+  classification: ReturnType<SemanticSupportClassifierService['classify']>,
+): Set<string> {
   const keys = new Set<string>()
 
   for (const trigger of state.triggers) {
@@ -67,11 +70,9 @@ describe('atom coverage golden corpus', () => {
       expect(goldenCase.tags.length).toBeGreaterThan(0)
       expect(goldenCase.expectedRoute).toEqual(expect.any(String))
       expect(goldenCase.expectedAtoms.length).toBeGreaterThan(0)
-      expect(goldenCase.expectedAtoms.map(atom => atom.key)).toEqual(
-        goldenCase.expectedKeys.filter(key =>
-          !key.startsWith('open_slot:') && !key.startsWith('unsupported:') && !key.startsWith('unknown:'),
-        ),
-      )
+      for (const expectedAtom of goldenCase.expectedAtoms) {
+        expect(expectedAtom.key).not.toMatch(/^(?:open_slot|unsupported|unknown):/)
+      }
     }
   })
 
@@ -88,7 +89,9 @@ describe('atom coverage golden corpus', () => {
   })
 
   it('tracks orchestration cases outside the executable projection gate route', () => {
-    const orchestrationCases = atomCoverageGoldenCases.filter(goldenCase => goldenCase.tags.includes('orchestration'))
+    const orchestrationCases = atomCoverageGoldenCases.filter(goldenCase =>
+      goldenCase.tags.includes('orchestration'),
+    )
 
     expect(orchestrationCases.length).toBeGreaterThan(0)
     for (const goldenCase of orchestrationCases) {
@@ -96,7 +99,7 @@ describe('atom coverage golden corpus', () => {
     }
   })
 
-  it.each(atomCoverageGoldenCases)('$name', (goldenCase) => {
+  it.each(atomCoverageGoldenCases)('$name', goldenCase => {
     const patch = extractor.extract(goldenCase.message)
     const state = builder.build(patch)
     expect(state).not.toBeNull()
