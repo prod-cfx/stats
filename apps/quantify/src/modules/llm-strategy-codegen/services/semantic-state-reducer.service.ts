@@ -640,7 +640,20 @@ export class SemanticStateReducerService {
   }
 
   private isSemanticCapabilityDomain(value: string): value is SemanticCapabilityDomain {
-    return ['market', 'price', 'order_program', 'capital', 'exposure', 'margin', 'guard'].includes(value)
+    return [
+      'market',
+      'price',
+      'order_program',
+      'capital',
+      'exposure',
+      'margin',
+      'guard',
+      'runtime',
+      'state',
+      'order',
+      'portfolio',
+      'orchestration',
+    ].includes(value)
   }
 
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {
