@@ -1464,4 +1464,114 @@ describe('SemanticSeedStateBuilderService', () => {
       object: 'partial_take_profit',
     }))
   })
+
+  describe('memoryKey generation for risk.partial_take_profit', () => {
+    const buildPtpSeed = (tiers: unknown[], sourceText: string) => ({
+      triggers: [{
+        id: 'trigger-entry',
+        key: 'price.breakout_up',
+        phase: 'entry',
+        status: 'locked',
+        source: 'user_explicit',
+        params: { reference: 'resistance' },
+        contracts: [{
+          id: 'contract-entry',
+          kind: 'trigger',
+          capabilities: [{ domain: 'price', verb: 'detect', object: 'signal_condition', shape: {} }],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      risk: [{
+        id: 'risk-ptp',
+        key: 'risk.partial_take_profit',
+        status: 'locked',
+        source: 'user_explicit',
+        params: { tiers, sourceText },
+      }],
+    })
+
+    it('assigns stable memoryKey to partial_take_profit risk seed', () => {
+      const seed = buildPtpSeed(
+        [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }, { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 }],
+        '盈利5%平50%，盈利10%平50%',
+      )
+      const stateA = service.build(seed)
+      const ptpRisk = stateA?.risk.find(r => r.key === 'risk.partial_take_profit')
+      expect(ptpRisk?.params.memoryKey).toMatch(/^partial_tp_[a-f0-9]{8}$/)
+
+      // idempotency: same input → same memoryKey
+      const stateA2 = service.build(seed)
+      const ptpRisk2 = stateA2?.risk.find(r => r.key === 'risk.partial_take_profit')
+      expect(ptpRisk2?.params.memoryKey).toBe(ptpRisk?.params.memoryKey)
+    })
+
+    it('different sourceText produces different memoryKey', () => {
+      const tiers = [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }]
+      const stateA = service.build(buildPtpSeed(tiers, 'source-alpha'))
+      const stateB = service.build(buildPtpSeed(tiers, 'source-beta'))
+      const keyA = stateA?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
+      const keyB = stateB?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
+      expect(keyA).toMatch(/^partial_tp_[a-f0-9]{8}$/)
+      expect(keyB).toMatch(/^partial_tp_[a-f0-9]{8}$/)
+      expect(keyA).not.toBe(keyB)
+    })
+
+    it('different tiers produce different memoryKey', () => {
+      const sourceText = 'same source'
+      const stateA = service.build(buildPtpSeed(
+        [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+        sourceText,
+      ))
+      const stateB = service.build(buildPtpSeed(
+        [{ trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 }],
+        sourceText,
+      ))
+      const keyA = stateA?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
+      const keyB = stateB?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
+      expect(keyA).not.toBe(keyB)
+    })
+
+    it('does not overwrite pre-existing memoryKey (idempotent round-trip)', () => {
+      const existingKey = 'partial_tp_abcd1234'
+      const state = service.build({
+        triggers: [{
+          id: 'trigger-entry',
+          key: 'price.breakout_up',
+          phase: 'entry',
+          status: 'locked',
+          source: 'user_explicit',
+          params: { reference: 'resistance' },
+          contracts: [{
+            id: 'contract-entry',
+            kind: 'trigger',
+            capabilities: [{ domain: 'price', verb: 'detect', object: 'signal_condition', shape: {} }],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        }],
+        risk: [{
+          id: 'risk-ptp',
+          key: 'risk.partial_take_profit',
+          status: 'locked',
+          source: 'user_explicit',
+          params: {
+            tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+            sourceText: 'some text',
+            memoryKey: existingKey,
+          },
+        }],
+      })
+      const ptpRisk = state?.risk.find(r => r.key === 'risk.partial_take_profit')
+      expect(ptpRisk?.params.memoryKey).toBe(existingKey)
+    })
+  })
 })

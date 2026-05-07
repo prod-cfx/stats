@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+
 import { Injectable } from '@nestjs/common'
 
 import type {
@@ -237,10 +239,14 @@ export class SemanticSeedStateBuilderService {
       priority: 'risk',
     })
 
+    const mergedParams = key === 'risk.partial_take_profit'
+      ? this.attachPartialTakeProfitMemoryKey(params)
+      : params
+
     const risk: SemanticRiskState = {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
       key,
-      params,
+      params: mergedParams,
       status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
@@ -870,6 +876,21 @@ export class SemanticSeedStateBuilderService {
       return 'falling_knife_guard'
     }
     return null
+  }
+
+  private attachPartialTakeProfitMemoryKey(params: Record<string, unknown>): Record<string, unknown> {
+    const existing = typeof params.memoryKey === 'string' && params.memoryKey.startsWith('partial_tp_')
+      ? params.memoryKey
+      : null
+    const memoryKey = existing ?? this.derivePartialTakeProfitMemoryKey(params)
+    return { ...params, memoryKey }
+  }
+
+  private derivePartialTakeProfitMemoryKey(params: Record<string, unknown>): string {
+    const tiersJson = JSON.stringify(params.tiers ?? [])
+    const sourceText = typeof params.sourceText === 'string' ? params.sourceText : ''
+    const hash = createHash('sha256').update(`${tiersJson}|${sourceText}`).digest('hex').slice(0, 8)
+    return `partial_tp_${hash}`
   }
 
   private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {

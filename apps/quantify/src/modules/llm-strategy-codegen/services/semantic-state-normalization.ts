@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import type { SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type {
   NormalizedTriggerAtom,
@@ -325,6 +327,17 @@ export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): Seman
           ...params,
         },
         openSlots: risk.openSlots.filter(slot => !isRiskBasisOpenSlot(slot.slotKey, slot.fieldPath)),
+      }
+    }
+
+    if (risk.key === 'risk.partial_take_profit' && typeof params.memoryKey !== 'string') {
+      const tiersJson = JSON.stringify(params.tiers ?? [])
+      const sourceText = typeof params.sourceText === 'string' ? params.sourceText : ''
+      const hash = createHash('sha256').update(`${tiersJson}|${sourceText}`).digest('hex').slice(0, 8)
+      return {
+        ...risk,
+        params: { ...params, memoryKey: `partial_tp_${hash}` },
+        openSlots: [...risk.openSlots],
       }
     }
 
