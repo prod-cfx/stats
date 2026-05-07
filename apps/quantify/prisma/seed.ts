@@ -13,6 +13,7 @@ import {
   OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
   OFFICIAL_STRATEGY_PLAZA_USER_ID,
 } from '../src/modules/strategy-plaza/utils/official-strategy-plaza-snapshot-builder'
+import { upsertSeedStrategyInstance } from './seed-strategy-instance'
 
 // Load environment variables using the shared loader.
 const rootDir = path.resolve(__dirname, '../../..')
@@ -149,7 +150,9 @@ async function seedOfficialStrategyPlazaSnapshots() {
     upsert: (args: unknown) => Promise<{ id: string }>
   }
   interface StrategyInstanceDelegate {
-    upsert: (args: unknown) => Promise<{ id: string }>
+    findFirst: (args: unknown) => Promise<{ id: string } | null>
+    update: (args: unknown) => Promise<{ id: string }>
+    create: (args: unknown) => Promise<{ id: string }>
   }
   interface PublishedStrategySnapshotDelegate {
     upsert: (args: unknown) => Promise<unknown>
@@ -242,40 +245,19 @@ async function seedOfficialStrategyPlazaSnapshots() {
       },
     })
 
-    const strategyInstance = await client.strategyInstance.upsert({
-      where: {
-        strategyTemplateId_llmModel_name: {
-          strategyTemplateId: strategyTemplate.id,
-          llmModel: OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
-          name: instanceName,
-        },
-      },
-      update: {
-        description: template.description,
-        params: content.paramsSnapshot,
-        updatedBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
-        metadata: {
-          source: 'strategy-plaza-official-template',
-          officialTemplateId: template.id,
-          officialSnapshotId: template.runConfig.publishedSnapshotId,
-        },
-      },
-      create: {
-        strategyTemplateId: strategyTemplate.id,
-        name: instanceName,
-        description: template.description,
-        llmModel: OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
-        params: content.paramsSnapshot,
-        status: 'draft',
-        mode: 'PAPER',
-        createdBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
-        updatedBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
-        metadata: {
-          source: 'strategy-plaza-official-template',
-          officialTemplateId: template.id,
-          officialSnapshotId: template.runConfig.publishedSnapshotId,
-        },
-      },
+    const officialMetadata = {
+      source: 'strategy-plaza-official-template',
+      officialTemplateId: template.id,
+      officialSnapshotId: template.runConfig.publishedSnapshotId,
+    }
+    const strategyInstance = await upsertSeedStrategyInstance(client, {
+      strategyTemplateId: strategyTemplate.id,
+      name: instanceName,
+      description: template.description,
+      llmModel: OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
+      params: content.paramsSnapshot,
+      userId: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+      metadata: officialMetadata,
     })
 
     await client.publishedStrategySnapshot.upsert({
