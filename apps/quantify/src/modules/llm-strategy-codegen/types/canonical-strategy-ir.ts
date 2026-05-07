@@ -151,6 +151,13 @@ export interface RuleBlock {
   cooldownBars?: number
   guardRefs?: string[]
   actions: ActionDef[]
+  metadata?: {
+    partialTakeProfit?: {
+      memoryKey: string
+      tierIndex: number
+      totalTiers: number
+    }
+  }
 }
 
 export interface QuantityDef {
