@@ -160,33 +160,6 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
     requiredParams: ['condition', 'effect', 'scope', 'capabilityStatus'],
     editableSlots: [],
   },
-  'volume.threshold': {
-    semanticKey: 'volume.threshold',
-    family: 'trigger',
-    requiredParams: ['metric', 'operator', 'value', 'unit'],
-  },
-  'volatility.atr_threshold': {
-    semanticKey: 'volatility.atr_threshold',
-    family: 'trigger',
-    requiredParams: ['period', 'operator', 'threshold', 'thresholdUnit'],
-  },
-  'strategy.time_window': {
-    semanticKey: 'strategy.time_window',
-    family: 'trigger',
-    requiredParams: ['timezone', 'windows'],
-  },
-  'position.has_position': {
-    semanticKey: 'position.has_position',
-    family: 'trigger',
-    requiredParams: [],
-    optionalParams: ['sideScope'],
-  },
-  'position.no_position': {
-    semanticKey: 'position.no_position',
-    family: 'trigger',
-    requiredParams: [],
-    optionalParams: ['sideScope'],
-  },
 }
 
 const SUPPORTED_EXPRESSION_OPERATORS = new Set<string>(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'CROSS_OVER', 'CROSS_UNDER'])
