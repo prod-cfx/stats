@@ -1326,7 +1326,9 @@ export class SemanticSeedExtractorService {
   }
 
   private pushRecognizedUnsupportedRisk(text: string, risk: SeedRisk[]): void {
-    for (const clause of this.splitRiskClauses(text)) {
+    const clauses = this.splitRiskClauses(text)
+
+    for (const clause of clauses) {
       if (this.hasNegatedUnsupportedContext(clause)) continue
 
       if (this.hasAtrStopSemantics(clause)) {
@@ -1338,17 +1340,133 @@ export class SemanticSeedExtractorService {
           openSlots: [],
         })
       }
+    }
 
-      if (/(?:分批止盈|部分止盈|多档止盈|平一半|scale\s*out)/iu.test(clause)) {
+    this.pushPartialTakeProfitRisk(text, clauses, risk)
+  }
+
+  private readonly partialTakeProfitPhraseRe = /(?:分批止盈|部分止盈|多档止盈|分.{1,3}档止盈|平一半|scale\s*out|take\s*profit)/iu
+
+  private pushPartialTakeProfitRisk(text: string, clauses: string[], risk: SeedRisk[]): void {
+    const allNegated = clauses.every((c) => this.hasNegatedUnsupportedContext(c))
+    if (allNegated) return
+
+    const matchingClause = clauses.find(
+      (clause) =>
+        !this.hasNegatedUnsupportedContext(clause) &&
+        this.partialTakeProfitPhraseRe.test(clause),
+    )
+
+    // Try full text first (captures multi-tier expressions joined by separators)
+    const tiersFromText = this.extractPartialTakeProfitTiers(text)
+
+    // Case A: explicit phrase trigger found
+    if (matchingClause) {
+      const tiers = tiersFromText ?? this.extractPartialTakeProfitTiers(matchingClause)
+      const sourceText = tiersFromText ? text : matchingClause
+      if (tiers && tiers.length > 0) {
         this.pushRisk(risk, {
           key: 'risk.partial_take_profit',
-          params: { sourceText: clause },
+          params: { tiers, sourceText },
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
         })
       }
+      else {
+        this.pushRisk(risk, {
+          key: 'risk.partial_take_profit',
+          params: { sourceText: matchingClause },
+          status: 'open_slot',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'risk.partial_take_profit.tiers',
+            question: '请说明分批止盈每档的触发条件（PnL 百分比）和减仓比例',
+          }],
+        })
+      }
+      return
     }
+
+    // Case B: no explicit phrase, but structured multi-tier pattern detected on full text
+    if (tiersFromText && tiersFromText.length >= 2) {
+      this.pushRisk(risk, {
+        key: 'risk.partial_take_profit',
+        params: { tiers: tiersFromText, sourceText: text },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      })
+    }
+  }
+
+  private extractPartialTakeProfitTiers(clause: string): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
+    const tiers: Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> = []
+
+    // 模式 4: "第N档 +X% 减/平 Y%"（最具结构，优先）
+    const tierPattern = /第[一二三四五六七八九十]+档\s*\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:减|平)\s*(\d+(?:\.\d+)?)\s*%/giu
+    let match
+    while ((match = tierPattern.exec(clause)) !== null) {
+      tiers.push({
+        trigger: { kind: 'pnl_pct', threshold: Number(match[1]) },
+        reduceRatio: Number(match[2]) / 100,
+      })
+    }
+    if (tiers.length > 0) return this.normalizePartialTakeProfitTiers(tiers)
+
+    // 模式 1: "盈利/赚 X% 平/减/止盈 Y%"
+    const cnPattern = /(?:盈利|赚)\s*\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:平|减|止盈)\s*(\d+(?:\.\d+)?)\s*%/giu
+    while ((match = cnPattern.exec(clause)) !== null) {
+      tiers.push({
+        trigger: { kind: 'pnl_pct', threshold: Number(match[1]) },
+        reduceRatio: Number(match[2]) / 100,
+      })
+    }
+    if (tiers.length > 0) return this.normalizePartialTakeProfitTiers(tiers)
+
+    // 模式 2: "+X% 平一半/剩下/全部/Y%"（中文口语）
+    const cnColloqPattern = /\+?\s*(\d+(?:\.\d+)?)\s*%\s*(?:平|减)\s*(?:(\d+(?:\.\d+)?)\s*%|(一半|剩下|全部|全平))/giu
+    while ((match = cnColloqPattern.exec(clause)) !== null) {
+      const threshold = Number(match[1])
+      const ratioPct = match[2] ? Number(match[2]) : null
+      const colloquial = match[3] ?? null
+      const reduceRatio = ratioPct !== null ? ratioPct / 100 : (colloquial === '一半' ? 0.5 : 1.0)
+      tiers.push({ trigger: { kind: 'pnl_pct', threshold }, reduceRatio })
+    }
+    if (tiers.length > 0) return this.normalizePartialTakeProfitTiers(tiers)
+
+    // 模式 3: 英文 "Y% at +X%"
+    const enPattern = /(\d+(?:\.\d+)?)\s*%\s*(?:at|@)\s*\+?\s*(\d+(?:\.\d+)?)\s*%/giu
+    while ((match = enPattern.exec(clause)) !== null) {
+      tiers.push({
+        trigger: { kind: 'pnl_pct', threshold: Number(match[2]) },
+        reduceRatio: Number(match[1]) / 100,
+      })
+    }
+    if (tiers.length > 0) return this.normalizePartialTakeProfitTiers(tiers)
+
+    return null
+  }
+
+  private normalizePartialTakeProfitTiers(
+    tiers: Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }>,
+  ): Array<{ trigger: { kind: 'pnl_pct'; threshold: number }; reduceRatio: number }> | null {
+    const sorted = [...tiers].sort((a, b) => a.trigger.threshold - b.trigger.threshold)
+    for (let i = 1; i < sorted.length; i += 1) {
+      if (sorted[i].trigger.threshold <= sorted[i - 1].trigger.threshold) return null
+    }
+    // Validate each ratio in range (0, 1]
+    for (const tier of sorted) {
+      if (!Number.isFinite(tier.reduceRatio) || tier.reduceRatio <= 0 || tier.reduceRatio > 1) return null
+    }
+    // Sum check: only enforce sum ≤ 1 when no tier has reduceRatio = 1.0
+    // A tier with reduceRatio = 1.0 means "close all remaining" (e.g., "平剩下"), which is always valid
+    const hasCloseAll = sorted.some((t) => t.reduceRatio === 1.0)
+    if (!hasCloseAll) {
+      const sum = sorted.reduce((acc, t) => acc + t.reduceRatio, 0)
+      if (sum > 1.000001) return null
+    }
+    return sorted
   }
 
   private pushAtrMultipleRisk(text: string, risk: SeedRisk[]): void {
