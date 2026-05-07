@@ -365,7 +365,7 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         params: {},
         support: action.support,
         status: action.status,
-        openSlots: action.openSlots,
+        openSlots: action.openSlots ?? [],
         contracts: action.contracts,
       })
     }

@@ -52,6 +52,33 @@ describe('SemanticContractReadinessService', () => {
     expect(result.missingRequirements).toEqual([])
   })
 
+  it('accepts action owners without an openSlots array', () => {
+    const state = createSemanticState({
+      actions: [{
+        id: 'action-without-open-slots',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        contracts: [{
+          id: 'action-contract-without-open-slots',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.state.actions[0].openSlots).toBeUndefined()
+  })
+
   it('keeps executable indicator above and below MA aliases supported during readiness', () => {
     const state = createSemanticState({
       triggers: [{
