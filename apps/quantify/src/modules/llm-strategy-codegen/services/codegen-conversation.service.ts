@@ -3666,6 +3666,13 @@ export class CodegenConversationService {
       return riskSlot
     }
 
+    const orchestrationSlot = state.orchestration?.nodes
+      .flatMap(node => node.openSlots)
+      .find(isBlockingSemanticOpenSlot)
+    if (orchestrationSlot) {
+      return orchestrationSlot
+    }
+
     return Object.values(state.contextSlots).find(isBlockingSemanticOpenSlot) ?? null
   }
 

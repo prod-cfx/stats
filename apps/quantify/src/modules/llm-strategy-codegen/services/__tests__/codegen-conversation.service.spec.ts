@@ -2608,6 +2608,34 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect((service as any).findNextOpenSemanticSlot(result)).toBeNull()
   })
 
+  it('returns orchestration.phase0.unsupported from orchestration node open slots', () => {
+    const state = buildLockedMaSemanticState({
+      orchestration: {
+        nodes: [{
+          id: 'scope-1',
+          kind: 'scope',
+          params: { symbol: 'BTCUSDT' },
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'orchestration.phase0.unsupported',
+            fieldPath: 'orchestration.scope[scope-1]',
+            status: 'open',
+            priority: 'behavior',
+            questionHint: 'Phase 0 暂不支持部署 orchestration runtime。',
+            affectsExecution: true,
+          }],
+          contracts: [],
+        }],
+        contracts: [],
+      },
+    })
+
+    expect((service as any).findNextOpenSemanticSlot(state)).toEqual(expect.objectContaining({
+      slotKey: 'orchestration.phase0.unsupported',
+    }))
+  })
+
   it('ignores legacy-only planner logic when updating semantic triggers and actions', () => {
     const currentState = (service as any).createEmptySemanticState()
 
