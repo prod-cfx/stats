@@ -8695,6 +8695,28 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('maps contract readiness semantic slots without treating them as state gates', () => {
+    const item = (service as any).buildSemanticClarificationItem({
+      slotKey: 'contract.runtime_requirement.runtime.provide.orderbook_depth',
+      fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].runtimeRequirements[0]',
+      status: 'open',
+      priority: 'behavior',
+      questionHint: 'Phase 0 暂不支持 orderbook depth runtime。',
+      affectsExecution: true,
+    })
+
+    expect(item).toEqual(expect.objectContaining({
+      key: 'semantic.contract.runtime_requirement.runtime.provide.orderbook_depth',
+      reason: 'missing_semantic_contract_runtime_requirement',
+      field: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].runtimeRequirements[0]',
+      question: 'Phase 0 暂不支持 orderbook depth runtime。',
+      slotKey: 'contract.runtime_requirement.runtime.provide.orderbook_depth',
+      fieldPath: 'actions[action-grid-ladder].contracts[action-contract-grid-ladder].runtimeRequirements[0]',
+    }))
+    expect(item.reason).not.toBe('ambiguous_state_gate')
+    expect(item.field).not.toBe('stateGates.marketRegime')
+  })
+
   it('does not auto-bind freeform semantic answers when another clarification item is currently active', () => {
     const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
       {
