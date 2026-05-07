@@ -1502,7 +1502,7 @@ describe('SemanticSeedStateBuilderService', () => {
       )
       const stateA = service.build(seed)
       const ptpRisk = stateA?.risk.find(r => r.key === 'risk.partial_take_profit')
-      expect(ptpRisk?.params.memoryKey).toMatch(/^partial_tp_[a-f0-9]{8}$/)
+      expect(ptpRisk?.params.memoryKey).toMatch(/^partial_tp_[a-f0-9]{16}$/)
 
       // idempotency: same input → same memoryKey
       const stateA2 = service.build(seed)
@@ -1516,8 +1516,8 @@ describe('SemanticSeedStateBuilderService', () => {
       const stateB = service.build(buildPtpSeed(tiers, 'source-beta'))
       const keyA = stateA?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
       const keyB = stateB?.risk.find(r => r.key === 'risk.partial_take_profit')?.params.memoryKey
-      expect(keyA).toMatch(/^partial_tp_[a-f0-9]{8}$/)
-      expect(keyB).toMatch(/^partial_tp_[a-f0-9]{8}$/)
+      expect(keyA).toMatch(/^partial_tp_[a-f0-9]{16}$/)
+      expect(keyB).toMatch(/^partial_tp_[a-f0-9]{16}$/)
       expect(keyA).not.toBe(keyB)
     })
 
