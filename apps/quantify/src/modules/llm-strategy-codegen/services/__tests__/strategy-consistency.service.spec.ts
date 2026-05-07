@@ -90,8 +90,18 @@ strategy
 
     expect(ast.runtimeRequirements?.helpers).toEqual(expect.arrayContaining(['atr']))
     expect(ast.riskPredicates).toEqual(expect.arrayContaining([
-      expect.objectContaining({ payload: expect.objectContaining({ kind: 'atrMultipleStop' }) }),
-      expect.objectContaining({ payload: expect.objectContaining({ kind: 'atrMultipleTakeProfit' }) }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: 'atrMultipleStop',
+          actions: [expect.objectContaining({ kind: 'FORCE_EXIT' })],
+        }),
+      }),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: 'atrMultipleTakeProfit',
+          actions: [expect.objectContaining({ kind: 'CLOSE_LONG' })],
+        }),
+      }),
     ]))
     expect(report.checks).toContainEqual(expect.objectContaining({
       key: 'compiler_consistency.ast_projection',
@@ -182,7 +192,8 @@ strategy
     expect(report.status).toBe('PASSED')
     expect(report.specProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG']))
     expect(report.specProfile.actions).not.toContain('CLOSE_SHORT')
-    expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG', 'CLOSE_SHORT']))
+    expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG']))
+    expect(report.scriptProfile.actions).not.toContain('CLOSE_SHORT')
     expect(report.specProfile.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.atr_multiple_take_profit',
@@ -206,6 +217,8 @@ strategy
         phase: 'exit',
         sideScope: 'long',
       }),
+    ]))
+    expect(report.scriptProfile.rules).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.atr_multiple_take_profit',
         action: 'CLOSE_SHORT',

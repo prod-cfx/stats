@@ -133,6 +133,11 @@ export interface RiskPredicateDef {
   id: string
   kind: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop'
   params: Record<string, number | string | boolean>
+  actions?: RiskPredicateActionDef[]
+}
+
+export interface RiskPredicateActionDef {
+  kind: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
 }
 
 export interface RuleBlock {

@@ -353,6 +353,7 @@ export class StrategyConsistencyService {
       const actionProfiles = this.resolveRiskPredicateActionProfiles(
         riskPredicate.payload.kind,
         projection.executionModel.positionMode,
+        riskPredicate.payload.actions,
       )
       const key = this.inferRuleKeyFromRiskPredicate(riskPredicate.payload.kind)
       if (!key) continue
@@ -381,6 +382,7 @@ export class StrategyConsistencyService {
           .flatMap(predicate => this.resolveRiskPredicateActionProfiles(
             predicate.payload.kind,
             projection.executionModel.positionMode,
+            predicate.payload.actions,
           ).map(profile => profile.action)),
       ],
     ))
@@ -1239,7 +1241,20 @@ export class StrategyConsistencyService {
   private resolveRiskPredicateActionProfiles(
     kind: string | undefined,
     positionMode: string | undefined,
+    actions?: ReadonlyArray<{ kind?: string }>,
   ): Array<Pick<StrategySemanticRuleProfile, 'action' | 'sideScope'>> {
+    const explicitActions = (actions ?? [])
+      .map(action => this.normalizeAction(action.kind ?? ''))
+      .filter((action): action is CanonicalAction =>
+        action === 'FORCE_EXIT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT',
+      )
+    if (explicitActions.length > 0) {
+      return Array.from(new Set(explicitActions)).map(action => ({
+        action,
+        sideScope: this.resolveRuleSideScope(this.resolveRiskPredicateSideScope(positionMode), action),
+      }))
+    }
+
     const sideScope = this.resolveRiskPredicateSideScope(positionMode)
     if (kind === 'atrMultipleStop' || kind === 'rememberedLevelStop') {
       return [{ action: 'FORCE_EXIT', sideScope }]

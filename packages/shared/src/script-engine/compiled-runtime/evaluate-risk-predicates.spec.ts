@@ -72,4 +72,43 @@ describe('evaluateRiskPredicates', () => {
     expect(guardState.forceExit).toBe(true)
     expect(guardState.triggered).toEqual(['risk_predicate_01_remembered_level'])
   })
+
+  it('does not force a short exit when an ATR take-profit only declares CLOSE_LONG', () => {
+    const guardState = evaluateRiskPredicates(
+      {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 75,
+        bars: Array.from({ length: 16 }, (_, index) => ({
+          open: 100,
+          high: 105,
+          low: 95,
+          close: index === 15 ? 75 : 100,
+          volume: 1,
+          timestamp: index + 1,
+        })),
+      },
+      [
+        {
+          id: 'risk_predicate_01_take_profit',
+          payload: {
+            id: 'risk-atr-take-profit',
+            kind: 'atrMultipleTakeProfit',
+            params: { multiple: 2 },
+            actions: [{ kind: 'CLOSE_LONG' }],
+          },
+        },
+      ],
+      {
+        strategyHalt: false,
+        blockNewEntry: false,
+        forceExit: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['risk_predicate_01_take_profit'],
+    )
+
+    expect(guardState.forceExit).toBe(false)
+    expect(guardState.triggered).toEqual([])
+  })
 })
