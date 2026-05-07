@@ -1614,7 +1614,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
 
     expect(entryBlocks).toHaveLength(1)
     expect(entryPredicate).toEqual(expect.objectContaining({
-      kind: 'AND',
+      kind: 'allOf',
       args: expect.any(Array),
     }))
     expect(entryPredicate?.args).toHaveLength(3)
