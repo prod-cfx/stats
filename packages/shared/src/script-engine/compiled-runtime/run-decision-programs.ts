@@ -2,12 +2,21 @@ import type { StrategyDecisionV1, StrategyExecutionContextV1 } from '../../strat
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 
+interface PartialTakeProfitMeta {
+  memoryKey: string
+  tierIndex: number
+  totalTiers: number
+}
+
 interface DecisionProgramNode {
   id: string
   phase: 'entry' | 'exit' | 'rebalance'
   priority: number
   when: string
   cooldownBars?: number
+  metadata?: {
+    partialTakeProfit?: PartialTakeProfitMeta
+  }
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT'
     quantity: {
@@ -15,6 +24,12 @@ interface DecisionProgramNode {
       value: number
     }
   }>
+}
+
+interface CompiledDecisionState {
+  barIndex: number
+  lastTriggeredByProgram: Record<string, number>
+  previousPositionQty: number
 }
 
 const PHASE_RANK: Record<DecisionProgramNode['phase'], number> = {
@@ -31,6 +46,7 @@ export function runDecisionPrograms(
   decisionOrder: readonly string[],
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
+  resetPartialTakeProfitStateOnEntryEdge(ctx, compiledState)
   if (guardState.forceExit) {
     const currentQty = readCurrentQty(ctx)
     if (currentQty === 0) {
@@ -86,10 +102,18 @@ export function runDecisionPrograms(
       continue
     }
 
+    const ptpMeta = program.metadata?.partialTakeProfit
+    if (ptpMeta && isPartialTakeProfitTierFired(ctx, ptpMeta)) {
+      continue
+    }
+
     const decision = buildFirstApplicableDecision(program, ctx)
     if (!decision) continue
 
     compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
+    if (ptpMeta) {
+      markPartialTakeProfitTierFired(ctx, ptpMeta)
+    }
     return Object.freeze(decision)
   }
 
@@ -101,10 +125,7 @@ export function runDecisionPrograms(
 
 function ensureCompiledDecisionState(
   ctx: StrategyExecutionContextV1,
-): {
-  barIndex: number
-  lastTriggeredByProgram: Record<string, number>
-} {
+): CompiledDecisionState {
   const current = (ctx as Record<string, unknown>).__compiledDecisionState
   if (
     current
@@ -113,15 +134,66 @@ function ensureCompiledDecisionState(
     && typeof (current as { barIndex?: unknown }).barIndex === 'number'
     && typeof (current as { lastTriggeredByProgram?: unknown }).lastTriggeredByProgram === 'object'
   ) {
-    return current as {
+    const c = current as Partial<CompiledDecisionState> & {
       barIndex: number
       lastTriggeredByProgram: Record<string, number>
     }
+    if (typeof c.previousPositionQty !== 'number') {
+      c.previousPositionQty = 0
+    }
+    return c as CompiledDecisionState
   }
 
-  const fallback = { barIndex: 0, lastTriggeredByProgram: {} as Record<string, number> }
+  const fallback: CompiledDecisionState = {
+    barIndex: 0,
+    lastTriggeredByProgram: {},
+    previousPositionQty: readCurrentQty(ctx),
+  }
   ;(ctx as Record<string, unknown>).__compiledDecisionState = fallback
   return fallback
+}
+
+function resetPartialTakeProfitStateOnEntryEdge(
+  ctx: StrategyExecutionContextV1,
+  compiledState: CompiledDecisionState,
+): void {
+  const currentQty = readCurrentQty(ctx)
+  const prevQty = compiledState.previousPositionQty
+  if (prevQty === 0 && currentQty !== 0) {
+    const semanticState = (ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }).semanticRuntimeState
+    if (semanticState && typeof semanticState === 'object' && !Array.isArray(semanticState)) {
+      for (const key of Object.keys(semanticState)) {
+        if (key.startsWith('partial_tp_')) {
+          semanticState[key] = {}
+        }
+      }
+    }
+  }
+  compiledState.previousPositionQty = currentQty
+}
+
+function isPartialTakeProfitTierFired(
+  ctx: StrategyExecutionContextV1,
+  meta: PartialTakeProfitMeta,
+): boolean {
+  const semanticState = (ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }).semanticRuntimeState
+  const slot = semanticState?.[meta.memoryKey]
+  if (!slot || typeof slot !== 'object') return false
+  return slot[`tier_${meta.tierIndex}_fired`] === true
+}
+
+function markPartialTakeProfitTierFired(
+  ctx: StrategyExecutionContextV1,
+  meta: PartialTakeProfitMeta,
+): void {
+  const root = ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }
+  if (!root.semanticRuntimeState || typeof root.semanticRuntimeState !== 'object') {
+    root.semanticRuntimeState = {}
+  }
+  if (!root.semanticRuntimeState[meta.memoryKey] || typeof root.semanticRuntimeState[meta.memoryKey] !== 'object') {
+    root.semanticRuntimeState[meta.memoryKey] = {}
+  }
+  root.semanticRuntimeState[meta.memoryKey][`tier_${meta.tierIndex}_fired`] = true
 }
 
 function buildFirstApplicableDecision(
