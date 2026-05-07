@@ -662,6 +662,20 @@ describe('atomic contract backtest/runtime parity', () => {
 
       expect(backtest).toEqual(live)
       expect(backtest.every(d => d.action === 'NOOP')).toBe(true)
+
+      // tier_fired must NOT be written when the path is NOOP (regression guard:
+      // a future change that pre-writes state before the noop guard would fail here).
+      const probeCtx: Record<string, unknown> = {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 94,
+        baseTimeframeBar: { ...bars[2] },
+        bars: bars.slice(0, 3),
+        semanticRuntimeState: { partial_tp_p6: {} as Record<string, unknown> },
+        __compiledDecisionState: { barIndex: 2, lastTriggeredByProgram: {}, previousPositionQty: -1 },
+      }
+      executeProjection(projection, probeCtx as unknown as StrategyExecutionContextV1)
+      const semantic = probeCtx.semanticRuntimeState as Record<string, Record<string, unknown>>
+      expect(semantic.partial_tp_p6?.tier_0_fired).toBeUndefined()
     })
   })
 
