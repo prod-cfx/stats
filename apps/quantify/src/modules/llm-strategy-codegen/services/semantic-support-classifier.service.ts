@@ -74,7 +74,10 @@ export class SemanticSupportClassifierService {
         return { ...riskState }
       }
 
-      const resolved = this.registry.resolve(riskState.key)
+      const riskParams = 'params' in riskState && riskState.params !== undefined
+        ? riskState.params as Record<string, unknown>
+        : {}
+      const resolved = this.registry.resolve(riskState.key, riskParams)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
     })

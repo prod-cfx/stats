@@ -851,9 +851,9 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_long',
       'position.fixed_pct',
       'risk.partial_take_profit',
-      'unsupported:risk.partial_take_profit',
+      'open_slot:risk.partial_take_profit.tiers',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-028-recognized-unsupported-add-position',
@@ -1313,8 +1313,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'OKX BTCUSDT perp 15m，MA20 cross above MA50 open long，scale out half at 5% profit，10% position.',
     tags: ['risk', 'trend', 'partial_take_profit', 'orchestration'],
     expectedAtoms: [{ key: 'risk.partial_take_profit', category: 'risk' }],
-    expectedKeys: ['risk.partial_take_profit', 'unsupported:risk.partial_take_profit'],
-    expectedRoute: 'unsupported_fallback',
+    expectedKeys: ['risk.partial_take_profit', 'open_slot:risk.partial_take_profit.tiers'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-053-recognized-unsupported-no-false-negative-with-supported-trailing-phrase',
