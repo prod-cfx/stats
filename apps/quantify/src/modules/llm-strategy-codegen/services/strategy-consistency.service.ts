@@ -1654,20 +1654,6 @@ export class StrategyConsistencyService {
     action: CanonicalAction,
     key: StrategySemanticRuleKey,
   ): StrategySemanticRuleProfile[] {
-    if (key === 'risk.atr_multiple_take_profit') {
-      const sideScope = rule.sideScope ?? 'both'
-      if (sideScope === 'short') {
-        return [this.createV2RuleProfile(rule, key, 'CLOSE_SHORT')]
-      }
-      if (sideScope === 'both') {
-        return [
-          this.createV2RuleProfile({ ...rule, sideScope: 'long' }, key, 'CLOSE_LONG'),
-          this.createV2RuleProfile({ ...rule, sideScope: 'short' }, key, 'CLOSE_SHORT'),
-        ]
-      }
-      return [this.createV2RuleProfile(rule, key, 'CLOSE_LONG')]
-    }
-
     return [this.createV2RuleProfile(rule, key, action)]
   }
 

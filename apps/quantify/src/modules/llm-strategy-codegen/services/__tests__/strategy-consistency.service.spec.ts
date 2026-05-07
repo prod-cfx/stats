@@ -170,7 +170,7 @@ strategy
     ]))
   })
 
-  it('passes ATR risk predicates consistency for long-short take-profit exits', () => {
+  it('uses canonical rule actions for both-side ATR take-profit consistency profiles', () => {
     const canonicalSpec = buildAtrTakeProfitSpec('both')
     const { script } = compileCanonicalSpec(canonicalSpec, 'long_short')
 
@@ -180,7 +180,8 @@ strategy
     })
 
     expect(report.status).toBe('PASSED')
-    expect(report.specProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG', 'CLOSE_SHORT']))
+    expect(report.specProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG']))
+    expect(report.specProfile.actions).not.toContain('CLOSE_SHORT')
     expect(report.scriptProfile.actions).toEqual(expect.arrayContaining(['CLOSE_LONG', 'CLOSE_SHORT']))
     expect(report.specProfile.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -189,6 +190,8 @@ strategy
         phase: 'exit',
         sideScope: 'long',
       }),
+    ]))
+    expect(report.specProfile.rules).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.atr_multiple_take_profit',
         action: 'CLOSE_SHORT',
