@@ -128,8 +128,8 @@ importers:
         specifier: 19.8.14
         version: 19.8.14(@babel/traverse@7.28.5)(@types/node@22.19.1)(nx@19.8.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.2)
       '@ranger1/dx':
-        specifier: 0.1.9
-        version: 0.1.9
+        specifier: 0.1.99
+        version: 0.1.99
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
@@ -3941,8 +3941,8 @@ packages:
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
 
-  '@ranger1/dx@0.1.9':
-    resolution: {integrity: sha512-CEZRJeG/wXAuIpSBUwGME9hDpQvQP++5lLrBOwvO8awKKOQVR0DdvDr7GHcsJpehYex55Fa82/jVdAr34jfbWg==}
+  '@ranger1/dx@0.1.99':
+    resolution: {integrity: sha512-TcRHtHDToWW3eEKfyTmhxPGAJbQ64duEHzt927tLP55IlQLgk3iuc5qXP5aaL5ehurHQXPydqXPLa6If3SNPsQ==}
     engines: {node: '>=20.11.0'}
     hasBin: true
 
@@ -15406,7 +15406,7 @@ snapshots:
 
   '@radix-ui/rect@1.1.1': {}
 
-  '@ranger1/dx@0.1.9':
+  '@ranger1/dx@0.1.99':
     dependencies:
       strip-json-comments: 5.0.3
       yaml: 2.8.4

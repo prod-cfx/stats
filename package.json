@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "nx run-many --target=dev --projects=backend,front,admin-front --parallel",
     "lint": "nx run-many --target=lint --all",
-    "test": "nx run-many --target=test --all",
+    "test": "nx run-many --target=test --all && pnpm run test:scripts:contracts",
+    "test:scripts:contracts": "node --test scripts/__tests__/*.spec.cjs",
     "build": "nx run-many --target=build --all",
     "clean:artifacts": "bash scripts/cleanup-local-artifacts.sh",
     "clean:artifacts:dry-run": "bash scripts/cleanup-local-artifacts.sh --dry-run",
@@ -44,7 +45,7 @@
     "@nx/eslint": "19.8.14",
     "@nx/jest": "19.8.14",
     "@nx/webpack": "19.8.14",
-    "@ranger1/dx": "0.1.9",
+    "@ranger1/dx": "0.1.99",
     "@tailwindcss/postcss": "^4.1.18",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.7.5",
