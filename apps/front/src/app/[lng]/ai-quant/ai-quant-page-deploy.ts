@@ -7,6 +7,7 @@ import {
   fetchUserExchangeAccountStatuses,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
+import { toast } from '@/lib/toast'
 import { extractCodegenErrorMessage } from './ai-quant-page-codegen'
 import { mapExchangeStatusesToDeployAccounts } from './ai-quant-page-conversation'
 
@@ -196,21 +197,12 @@ export async function confirmAiQuantDeploy(args: {
     }
     setDeployOpen(false)
     setDeployRequestId(null)
-    updateActiveConversation(curr => ({
-      ...curr,
-      messages: [
-        ...curr.messages,
-        {
-          id: `deploy-ok-${Date.now()}`,
-          role: 'assistant',
-          content: t('aiQuant.messages.deploySuccess', {
-            exchange: selectedDeployExchange.toUpperCase(),
-            account: account.accountName,
-          }),
-        },
-      ],
-      updatedAt: Date.now(),
-    }))
+    toast.success({
+      title: t('aiQuant.messages.deploySuccess', {
+        exchange: selectedDeployExchange.toUpperCase(),
+        account: account.accountName,
+      }),
+    })
   } catch (error) {
     const deployErrorMessage = extractCodegenErrorMessage(
       error,
@@ -218,21 +210,12 @@ export async function confirmAiQuantDeploy(args: {
         defaultValue: 'Strategy deployment failed. Please try again later.',
       }),
     )
-    updateActiveConversation(curr => ({
-      ...curr,
-      messages: [
-        ...curr.messages,
-        {
-          id: `deploy-fail-${Date.now()}`,
-          role: 'assistant',
-          content: t('aiQuant.messages.deployFailedWithReason', {
-            reason: deployErrorMessage,
-            defaultValue: `Strategy deployment failed: ${deployErrorMessage}`,
-          }),
-        },
-      ],
-      updatedAt: Date.now(),
-    }))
+    toast.error({
+      title: t('aiQuant.messages.deployFailedWithReason', {
+        reason: deployErrorMessage,
+        defaultValue: `Strategy deployment failed: ${deployErrorMessage}`,
+      }),
+    })
     throw error instanceof ApiError
       ? error
       : new ApiError(deployErrorMessage, 'AI_QUANT_DEPLOY_FAILED', 500, { error })
