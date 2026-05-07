@@ -52,8 +52,10 @@ interface SemanticContractOwnerRef {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
   atomKey: string
+  params: Record<string, unknown>
   support?: SemanticAtomSupportMetadata
   status: SemanticNodeStatus
+  openSlots: SemanticSlotState[]
   contracts: SemanticAtomContract[]
 }
 
@@ -231,7 +233,7 @@ export class SemanticContractReadinessService {
   }
 
   private isUnsupportedOrUnknownOwner(owner: SemanticContractOwnerRef): boolean {
-    const resolved = this.semanticAtomRegistry.resolve(owner.atomKey)
+    const resolved = this.resolveOwnerSupport(owner)
     if (isSupportedAtom(resolved)) {
       return false
     }
@@ -248,6 +250,18 @@ export class SemanticContractReadinessService {
     }
 
     return false
+  }
+
+  private resolveOwnerSupport(owner: SemanticContractOwnerRef): ReturnType<SemanticAtomRegistryService['resolve']> {
+    if (isExecutableIndicatorReferenceAlias(owner)) {
+      const registryKey = owner.atomKey === 'indicator.above' ? 'indicator.threshold_gte' : 'indicator.threshold_lte'
+      return {
+        ...this.semanticAtomRegistry.get(registryKey),
+        key: owner.atomKey,
+      }
+    }
+
+    return this.semanticAtomRegistry.resolve(owner.atomKey)
   }
 }
 
@@ -333,8 +347,10 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'trigger',
         ownerId: trigger.id,
         atomKey: trigger.key,
+        params: trigger.params,
         support: trigger.support,
         status: trigger.status,
+        openSlots: trigger.openSlots,
         contracts: trigger.contracts,
       })
     }
@@ -346,8 +362,10 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'action',
         ownerId: action.id,
         atomKey: action.key,
+        params: {},
         support: action.support,
         status: action.status,
+        openSlots: action.openSlots,
         contracts: action.contracts,
       })
     }
@@ -359,8 +377,10 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
         ownerKind: 'risk',
         ownerId: risk.id,
         atomKey: risk.key,
+        params: risk.params,
         support: risk.support,
         status: risk.status,
+        openSlots: risk.openSlots,
         contracts: risk.contracts,
       })
     }
@@ -371,13 +391,45 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       ownerKind: 'position',
       ownerId: positionOwnerId(),
       atomKey: toPositionAtomKey(state.position.mode),
+      params: {
+        mode: state.position.mode,
+        value: state.position.value,
+        positionMode: state.position.positionMode,
+        sizing: state.position.sizing,
+      },
       support: state.position.support,
       status: state.position.status,
+      openSlots: state.position.openSlots ?? [],
       contracts: state.position.contracts,
     })
   }
 
   return owners
+}
+
+function isExecutableIndicatorReferenceAlias(owner: SemanticContractOwnerRef): boolean {
+  if (owner.ownerKind !== 'trigger' || (owner.atomKey !== 'indicator.above' && owner.atomKey !== 'indicator.below')) {
+    return false
+  }
+
+  const indicator = readParamString(owner.params, 'indicator')?.toLowerCase() ?? ''
+  const referenceRole = readParamString(owner.params, 'referenceRole') ?? ''
+  const referencePeriod = owner.params['reference.period']
+  const hasReferencePeriod = typeof referencePeriod === 'number' && Number.isFinite(referencePeriod) && referencePeriod > 0
+  const hasReferencePeriodOpenSlot = owner.openSlots.some(slot =>
+    slot.status === 'open'
+    && slot.affectsExecution
+    && /reference\.period/u.test(`${slot.slotKey}.${slot.fieldPath}`),
+  )
+
+  return (indicator === 'ma' || indicator === 'sma' || indicator === 'ema')
+    && referenceRole.length > 0
+    && (hasReferencePeriod || hasReferencePeriodOpenSlot)
+}
+
+function readParamString(params: Record<string, unknown>, key: string): string | null {
+  const value = params[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function buildMissingRequirementSlots(

@@ -52,6 +52,83 @@ describe('SemanticContractReadinessService', () => {
     expect(result.missingRequirements).toEqual([])
   })
 
+  it('keeps executable indicator above and below MA aliases supported during readiness', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-price-above-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'moving_average',
+          'reference.period': 100,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-price-above-ma',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }, {
+        id: 'trigger-price-below-ema',
+        key: 'indicator.below',
+        phase: 'exit',
+        params: {
+          indicator: 'ema',
+          referenceRole: 'moving_average',
+          'reference.period': 50,
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-price-below-ema',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [{
+        id: 'action-open-long',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'action-contract-open-long',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([])
+    expect(result.state.triggers[1].openSlots).toEqual([])
+  })
+
   it('accepts known runtime state and order requirements', () => {
     const state = createSemanticState({
       triggers: [{
