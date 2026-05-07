@@ -2,27 +2,37 @@ import { Injectable } from '@nestjs/common'
 
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type {
+  SemanticAtomContractSubstrate,
   SemanticAtomDefinition,
+  SemanticAtomOpenSlotSpec,
   SemanticAtomReplacementStrategy,
+  SemanticRecognizedUnsupportedAtomDefinition,
+  SemanticRegisteredAtomDefinition,
+  SemanticSupportedAtomDefinition,
+  SemanticUnknownAtomDefinition,
 } from '../types/semantic-atom-support'
 
-type UnknownSemanticAtomDefinition = Pick<SemanticAtomDefinition, 'category' | 'key' | 'supportStatus'>
+type UnknownSemanticAtomDefinition = SemanticUnknownAtomDefinition
 
-const BASE_EXECUTABLE_SUBSTRATE: NonNullable<SemanticAtomDefinition['contractSubstrate']> = {
-  runtimeRequirements: [
-    { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
-    { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
-  ],
-  stateRequirements: [],
-  orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
-  openSlots: [],
+function baseExecutableSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+    ],
+    stateRequirements: [],
+    orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+    openSlots: [],
+  }
 }
 
-const POSITION_SUBSTRATE: NonNullable<SemanticAtomDefinition['contractSubstrate']> = {
-  runtimeRequirements: [],
-  stateRequirements: [],
-  orderRequirements: [],
-  openSlots: [],
+function positionSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
+  }
 }
 
 const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
@@ -92,7 +102,7 @@ const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {
   patch: DEFAULT_REPLACEMENT_PATCH,
 }
 
-const ATOMS: SemanticAtomDefinition[] = [
+const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
   executableTrigger('condition.expression', []),
   executableTrigger('semantic.missing_entry_atom', []),
@@ -187,28 +197,29 @@ const ATOMS: SemanticAtomDefinition[] = [
 export class SemanticAtomRegistryService {
   private readonly atoms = new Map(ATOMS.map(atom => [atom.key, atom]))
 
-  get(key: string): SemanticAtomDefinition {
+  get(key: string): SemanticRegisteredAtomDefinition {
     const atom = this.atoms.get(key)
     if (!atom) {
       throw new Error(`semantic_atom_not_registered:${key}`)
     }
-    return atom
+    return cloneAtom(atom)
   }
 
-  resolve(key: string): SemanticAtomDefinition | UnknownSemanticAtomDefinition {
-    return this.atoms.get(key) ?? {
+  resolve(key: string): SemanticRegisteredAtomDefinition | UnknownSemanticAtomDefinition {
+    const atom = this.atoms.get(key)
+    return atom ? cloneAtom(atom) : {
       key,
       category: 'unknown',
       supportStatus: 'unsupported_unknown',
     }
   }
 
-  list(): SemanticAtomDefinition[] {
-    return [...this.atoms.values()]
+  list(): SemanticRegisteredAtomDefinition[] {
+    return [...this.atoms.values()].map(atom => cloneAtom(atom))
   }
 }
 
-function executableTrigger(key: string, requiredParams: string[]): SemanticAtomDefinition {
+function executableTrigger(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'trigger',
@@ -217,11 +228,11 @@ function executableTrigger(key: string, requiredParams: string[]): SemanticAtomD
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: BASE_EXECUTABLE_SUBSTRATE,
+    contractSubstrate: baseExecutableSubstrate(),
   }
 }
 
-function executableAction(key: string): SemanticAtomDefinition {
+function executableAction(key: string): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'action',
@@ -230,11 +241,11 @@ function executableAction(key: string): SemanticAtomDefinition {
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: BASE_EXECUTABLE_SUBSTRATE,
+    contractSubstrate: baseExecutableSubstrate(),
   }
 }
 
-function executableRisk(key: string, requiredParams: string[]): SemanticAtomDefinition {
+function executableRisk(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -243,7 +254,7 @@ function executableRisk(key: string, requiredParams: string[]): SemanticAtomDefi
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: BASE_EXECUTABLE_SUBSTRATE,
+    contractSubstrate: baseExecutableSubstrate(),
   }
 }
 
@@ -251,7 +262,7 @@ function supportedRequiresSlotRisk(
   key: string,
   requiredParams: string[],
   openSlots: SemanticAtomDefinition['openSlots'],
-): SemanticAtomDefinition {
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -261,13 +272,13 @@ function supportedRequiresSlotRisk(
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots,
     contractSubstrate: {
-      ...BASE_EXECUTABLE_SUBSTRATE,
-      openSlots,
+      ...baseExecutableSubstrate(),
+      openSlots: cloneOpenSlotSpecs(openSlots),
     },
   }
 }
 
-function executablePosition(key: string, requiredParams: string[]): SemanticAtomDefinition {
+function executablePosition(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'position',
@@ -276,7 +287,7 @@ function executablePosition(key: string, requiredParams: string[]): SemanticAtom
     defaultableParams: [],
     executableProjection: ['semantic_position_contract', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: POSITION_SUBSTRATE,
+    contractSubstrate: positionSubstrate(),
   }
 }
 
@@ -286,7 +297,7 @@ function unsupported(
   displayName: string,
   reasonCode: string,
   publicReason: string,
-): SemanticAtomDefinition {
+): SemanticRecognizedUnsupportedAtomDefinition {
   return {
     key,
     category,
@@ -301,5 +312,48 @@ function unsupported(
       publicReason,
     },
     replacement: DEFAULT_REPLACEMENT,
+  }
+}
+
+function cloneAtom(atom: SemanticRegisteredAtomDefinition): SemanticRegisteredAtomDefinition {
+  if (atom.supportStatus === 'recognized_unsupported') {
+    return {
+      ...atom,
+      requiredParams: [...atom.requiredParams],
+      defaultableParams: [...atom.defaultableParams],
+      executableProjection: [...atom.executableProjection],
+      openSlots: cloneOpenSlotSpecs(atom.openSlots),
+      unsupported: { ...atom.unsupported },
+      ...(atom.replacement ? { replacement: cloneReplacement(atom.replacement) } : {}),
+    }
+  }
+
+  return {
+    ...atom,
+    requiredParams: [...atom.requiredParams],
+    defaultableParams: [...atom.defaultableParams],
+    executableProjection: [...atom.executableProjection],
+    openSlots: cloneOpenSlotSpecs(atom.openSlots),
+    contractSubstrate: cloneContractSubstrate(atom.contractSubstrate),
+  }
+}
+
+function cloneContractSubstrate(substrate: SemanticAtomContractSubstrate): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: substrate.runtimeRequirements.map(requirement => ({ ...requirement })),
+    stateRequirements: substrate.stateRequirements.map(requirement => ({ ...requirement })),
+    orderRequirements: substrate.orderRequirements.map(requirement => ({ ...requirement })),
+    openSlots: cloneOpenSlotSpecs(substrate.openSlots),
+  }
+}
+
+function cloneOpenSlotSpecs(openSlots: readonly SemanticAtomOpenSlotSpec[]): SemanticAtomOpenSlotSpec[] {
+  return openSlots.map(slot => ({ ...slot }))
+}
+
+function cloneReplacement(replacement: SemanticAtomReplacementStrategy): SemanticAtomReplacementStrategy {
+  return {
+    ...replacement,
+    patch: structuredClone(replacement.patch) as CodegenSemanticPatch,
   }
 }

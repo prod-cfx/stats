@@ -167,6 +167,24 @@ describe('SemanticAtomRegistryService', () => {
     }
   })
 
+  it('isolates returned substrate metadata from runtime requirement mutation', () => {
+    const atom = service.get('indicator.cross_over')
+    const anotherAtom = service.get('price.percent_change')
+    const originalAtomRuntimeRequirements = atom.contractSubstrate.runtimeRequirements.length
+    const originalAnotherRuntimeRequirements = anotherAtom.contractSubstrate.runtimeRequirements.length
+
+    ;(atom.contractSubstrate.runtimeRequirements as unknown[]).push({
+      domain: 'runtime',
+      verb: 'provide',
+      object: 'mutated_runtime_requirement',
+    })
+
+    expect(anotherAtom.contractSubstrate.runtimeRequirements).toHaveLength(originalAnotherRuntimeRequirements)
+    expect(service.get('indicator.cross_over').contractSubstrate.runtimeRequirements).toHaveLength(
+      originalAtomRuntimeRequirements,
+    )
+  })
+
   it('provides a fallback patch that closes trigger contracts in the current semantic builder', () => {
     const replacement = service.get('risk.atr_stop').replacement
     expect(replacement?.description).toBe('MA20 上穿 MA50 开多，MA20 下穿 MA50 平仓，5% 止损，10% 止盈，单笔 10% 仓位。')
