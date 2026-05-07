@@ -1972,12 +1972,14 @@ export class CanonicalSpecV2IrCompilerService {
       return null
     }
 
+    // Partial take profit firing is gated by tier_*_fired flags in
+    // semanticRuntimeState (see run-decision-programs.ts), so cooldownBars
+    // would be redundant and could only mask a real bug. Intentionally drop it.
     return {
       id: rule.id,
       phase: 'exit',
       when: predicateRef,
       priority: rule.priority,
-      ...(typeof rule.cooldownBars === 'number' && rule.cooldownBars > 0 ? { cooldownBars: rule.cooldownBars } : {}),
       actions: compiledActions,
       metadata: { partialTakeProfit: { ...ptpMeta } },
     }
