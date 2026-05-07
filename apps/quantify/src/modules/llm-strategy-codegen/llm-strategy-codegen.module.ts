@@ -44,6 +44,7 @@ import { SemanticSupportClassifierService } from './services/semantic-support-cl
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
+import { SemanticTriggerCombinationContractService } from './services/semantic-trigger-combination-contract.service'
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
 import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
@@ -77,6 +78,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticStateProjectionService,
     SpecDescBuilderService,
     CanonicalSpecBuilderService,
+    SemanticTriggerCombinationContractService,
     StrategyCompileabilityDecisionService,
     CanonicalSpecV2DigestService,
     CanonicalSpecV2ValidatorService,
