@@ -75,6 +75,42 @@ const PLANNER_READY_JSON = JSON.stringify({
   },
 })
 
+const PLANNER_READY_PARTIAL_TAKE_PROFIT_JSON = JSON.stringify({
+  related: true,
+  logicReady: true,
+  assistantPrompt: '逻辑已完整，请确认后生成代码。',
+  semanticPatch: {
+    families: ['single-leg'],
+    triggers: [
+      {
+        key: 'price.percent_change',
+        phase: 'entry',
+        params: { valuePct: -1, window: '3m', basis: 'prev_close' },
+      },
+    ],
+    actions: [{ key: 'open_long' }],
+    risk: [
+      { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+      {
+        key: 'risk.partial_take_profit',
+        params: {
+          tiers: [
+            { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+            { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 },
+          ],
+        },
+      },
+    ],
+    position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+    contextSlots: {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+    },
+  },
+})
+
 const VALID_STRATEGY_SCRIPT = 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }'
 const ENGINE_TEST_CANONICAL_SPEC = {
   version: 2,
@@ -238,6 +274,42 @@ describe('llm strategy codegen (E2E)', () => {
     expect(versions[0]?.staticPassed).toBe(true)
     expect(versions[0]?.runtimePassed).toBe(true)
     expect(versions[0]?.outputPassed).toBe(true)
+  })
+
+  it('compiles partial take profit strategy end-to-end', async () => {
+    jest.spyOn(aiService, 'chat')
+      .mockResolvedValueOnce({ content: PLANNER_READY_PARTIAL_TAKE_PROFIT_JSON })
+
+    const server = app.getHttpServer()
+
+    const startRes = await supertestRequest(server)
+      .post(buildApiUrl('llm-strategy-codegen/sessions'))
+      .send({
+        userId: 'u-e2e-ptp',
+        initialMessage: '3分钟跌1%买入，止损5%',
+      })
+      .set(withBearer('u-e2e-ptp'))
+      .expect(201)
+
+    const startPayload = startRes.body.data ?? startRes.body
+    expect(startPayload.canonicalDigest).toBeTruthy()
+    expect(startPayload.status).toBe('CONFIRM_GATE')
+
+    const rules = (startPayload.specDesc?.rules ?? []) as Array<{
+      phase?: string
+      metadata?: { partialTakeProfit?: { tierIndex?: number, totalTiers?: number, memoryKey?: string } }
+    }>
+    const ptpRules = rules.filter(rule => rule.metadata?.partialTakeProfit !== undefined)
+    expect(ptpRules.length).toBeGreaterThanOrEqual(2)
+    expect(ptpRules.every(rule => rule.phase === 'risk')).toBe(true)
+    const memoryKeys = new Set(ptpRules.map(rule => rule.metadata?.partialTakeProfit?.memoryKey))
+    expect(memoryKeys.size).toBe(1)
+    const [onlyMemoryKey] = memoryKeys
+    expect(onlyMemoryKey).toMatch(/^partial_tp_/)
+    const tierIndices = ptpRules
+      .map(rule => rule.metadata?.partialTakeProfit?.tierIndex)
+      .sort((a, b) => Number(a) - Number(b))
+    expect(tierIndices).toEqual([0, 1])
   })
 
   it('tests engine endpoint with provider/model overrides', async () => {
