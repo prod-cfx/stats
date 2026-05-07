@@ -552,6 +552,62 @@ describe('canonicalSpecBuilderService', () => {
       expect(exitRules[0]?.actions).toEqual([expect.objectContaining({ type: 'CLOSE_LONG' })])
     })
 
+    it('does not default execution.on_start actions inside mixed trigger groups', () => {
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'entry-on-start',
+            key: 'execution.on_start',
+            phase: 'entry',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: {},
+            contracts: [{
+              id: 'contract-entry-on-start-with-filter',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'entry-on-start-with-filter',
+                join: 'AND',
+                actionKey: 'open_long',
+                actionBinding: 'single_action',
+              },
+            }],
+          },
+          {
+            id: 'entry-filter',
+            key: 'condition.expression',
+            phase: 'entry',
+            sideScope: 'long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            params: { expression: closeOpenPredicate('GT') },
+            contracts: [{
+              id: 'contract-entry-on-start-with-filter',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'entry-on-start-with-filter',
+                join: 'AND',
+                actionKey: 'open_long',
+                actionBinding: 'single_action',
+              },
+            }],
+          },
+        ],
+        actions: [],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+
+      expect(spec.rules.filter(rule => rule.phase === 'entry')).toEqual([])
+    })
+
     it('keeps ungrouped simple both-side exit as one rule with aggregated close actions', () => {
       const state = createSemanticState({
         triggers: [

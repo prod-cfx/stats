@@ -1099,7 +1099,12 @@ export class CanonicalSpecBuilderService {
 
     return group.phase === 'entry'
       && (group.actionKey === 'open_long' || group.actionKey === 'open_short')
-      && group.members.some(trigger => trigger.key === 'execution.on_start')
+      && this.isPureExecutionOnStartGroup(group)
+  }
+
+  private isPureExecutionOnStartGroup(group: SemanticTriggerCombinationGroup): boolean {
+    return group.members.length === 1
+      && group.members[0]?.key === 'execution.on_start'
   }
 
   private buildSemanticTriggerGroupActionVariants(
@@ -1114,10 +1119,11 @@ export class CanonicalSpecBuilderService {
 
     if (group.phase === 'entry') {
       const variants: Array<{ sideScope: CanonicalRuleSideScope, actions: CanonicalRuleV2['actions'] }> = []
-      if (actionKeys.has('open_long') || group.members.some(trigger => trigger.key === 'execution.on_start')) {
+      const allowDefaultOnStartAction = this.isPureExecutionOnStartGroup(group)
+      if (actionKeys.has('open_long') || allowDefaultOnStartAction) {
         variants.push({ sideScope: 'long', actions: [this.buildOpenAction('OPEN_LONG', sizing)] })
       }
-      if (actionKeys.has('open_short') || group.members.some(trigger => trigger.key === 'execution.on_start')) {
+      if (actionKeys.has('open_short') || allowDefaultOnStartAction) {
         variants.push({ sideScope: 'short', actions: [this.buildOpenAction('OPEN_SHORT', sizing)] })
       }
       return variants
