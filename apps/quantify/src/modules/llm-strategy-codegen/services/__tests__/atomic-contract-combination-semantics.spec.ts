@@ -608,6 +608,10 @@ describe('atomic contract combination semantics', () => {
           join: 'AND',
           actionKey: 'open_short',
         },
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       }],
     }))
     const contract = normalizedState.triggers[0]?.contracts?.find(candidate =>
@@ -645,6 +649,10 @@ describe('atomic contract combination semantics', () => {
           join: 'AND',
           legacyField: 'keep-me',
         },
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       }],
     }))
 

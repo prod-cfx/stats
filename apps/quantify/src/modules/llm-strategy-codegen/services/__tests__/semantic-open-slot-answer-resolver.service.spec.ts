@@ -58,6 +58,10 @@ describe('SemanticOpenSlotAnswerResolverService', () => {
           }],
           requires: [{ domain: 'price', verb: 'define', object: 'level_set' }],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })
@@ -1583,6 +1587,10 @@ function createLevelSetContract(id: string, shape: SemanticCapabilityShape): Non
     }],
     requires: [],
     params: {},
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
   }
 }
 

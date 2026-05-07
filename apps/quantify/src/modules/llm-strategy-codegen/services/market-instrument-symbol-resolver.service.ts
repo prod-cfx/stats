@@ -74,6 +74,10 @@ export class MarketInstrumentSymbolResolverService {
         source: resolution.source,
         quoteSource: resolution.quoteSource,
       },
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
     }
   }
 

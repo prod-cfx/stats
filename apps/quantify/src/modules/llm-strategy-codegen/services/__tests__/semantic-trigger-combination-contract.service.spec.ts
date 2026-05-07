@@ -34,6 +34,10 @@ describe('SemanticTriggerCombinationContractService', () => {
           capabilities: [],
           requires: [],
           params: { threshold: 20 },
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }),
     ])
@@ -233,5 +237,9 @@ function combinationContract(params: Record<string, unknown>): SemanticAtomContr
     capabilities: [],
     requires: [],
     params,
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
   }
 }

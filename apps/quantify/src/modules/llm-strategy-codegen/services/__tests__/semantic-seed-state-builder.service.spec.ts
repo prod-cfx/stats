@@ -23,6 +23,10 @@ describe('SemanticSeedStateBuilderService', () => {
     }],
     requires: [],
     params: {},
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
   }
 
   it('preserves open trigger envelope from semantic seed patch', () => {
@@ -1139,6 +1143,10 @@ describe('SemanticSeedStateBuilderService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       actions: [{
@@ -1157,6 +1165,10 @@ describe('SemanticSeedStateBuilderService', () => {
             { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       risk: [{
@@ -1172,6 +1184,10 @@ describe('SemanticSeedStateBuilderService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
       position: {
@@ -1189,6 +1205,10 @@ describe('SemanticSeedStateBuilderService', () => {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       },
     })
@@ -1238,6 +1258,10 @@ describe('SemanticSeedStateBuilderService', () => {
             { domain: 'capital', verb: '', object: 'per_order_budget' },
           ],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       }],
     })

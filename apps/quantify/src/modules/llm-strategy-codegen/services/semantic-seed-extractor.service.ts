@@ -710,6 +710,10 @@ export class SemanticSeedExtractorService {
       capabilities: [input.capability],
       requires: [],
       params: input.params,
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
     }
   }
 
@@ -1173,6 +1177,10 @@ export class SemanticSeedExtractorService {
         ],
         requires: [],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       }],
     }
   }
@@ -1461,6 +1469,10 @@ export class SemanticSeedExtractorService {
         }],
         requires: [],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       }],
     }
   }
@@ -2319,6 +2331,10 @@ export class SemanticSeedExtractorService {
           }],
           requires: [],
           params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
         }],
       })
       return
@@ -2407,6 +2423,10 @@ export class SemanticSeedExtractorService {
         }],
         requires: [],
         params: {},
+        runtimeRequirements: [],
+        stateRequirements: [],
+        orderRequirements: [],
+        openSlots: [],
       }],
     })
   }
