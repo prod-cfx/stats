@@ -163,7 +163,10 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
   'risk.partial_take_profit': {
     semanticKey: 'risk.partial_take_profit',
     family: 'risk',
-    requiredParams: ['memoryKey', 'tiers'],
+    // requiredParams is owned by the semantic atom registry
+    // (semantic-atom-registry.service.ts: ['tiers', 'memoryKey']). Keep
+    // empty here to avoid drift between two sources of truth.
+    requiredParams: [],
     editableSlots: [],
   },
 }
