@@ -8,7 +8,20 @@ export type SemanticExpression = SemanticPredicateExpression | SemanticLogicalEx
 export type SemanticPredicateJoin = 'allOf' | 'anyOf'
 export type SemanticSequenceKind = 'rsi_reclaim' | 'pullback_reclaim' | 'breakout_retest' | 'consecutive_candles'
 export type SemanticContractKind = 'trigger' | 'action' | 'risk' | 'position' | 'context'
-export type SemanticCapabilityDomain = 'market' | 'price' | 'order_program' | 'capital' | 'exposure' | 'margin' | 'guard'
+export type SemanticCapabilityDomain =
+  | 'market'
+  | 'price'
+  | 'order_program'
+  | 'capital'
+  | 'exposure'
+  | 'margin'
+  | 'guard'
+  | 'runtime'
+  | 'state'
+  | 'order'
+  | 'portfolio'
+  | 'orchestration'
+export type SemanticOrchestrationContractKind = 'scope' | 'gate' | 'program' | 'portfolioRisk'
 
 export interface SemanticSeriesReference {
   source: 'price' | 'volume' | 'indicator' | 'memory'
@@ -100,6 +113,18 @@ export interface SemanticRequirement {
   object: string
 }
 
+export interface SemanticRuntimeRequirement extends SemanticRequirement {
+  shape?: SemanticCapabilityShape
+}
+
+export interface SemanticStateRequirement extends SemanticRequirement {
+  shape?: SemanticCapabilityShape
+}
+
+export interface SemanticOrderRequirement extends SemanticRequirement {
+  shape?: SemanticCapabilityShape
+}
+
 export interface SemanticEffect {
   domain: SemanticCapabilityDomain
   verb: string
@@ -113,6 +138,10 @@ export interface SemanticAtomContract {
   capabilities: readonly SemanticCapability[]
   requires: readonly SemanticRequirement[]
   params: Record<string, unknown>
+  runtimeRequirements: readonly SemanticRuntimeRequirement[]
+  stateRequirements: readonly SemanticStateRequirement[]
+  orderRequirements: readonly SemanticOrderRequirement[]
+  openSlots: readonly SemanticSlotState[]
   effects?: readonly SemanticEffect[]
 }
 
@@ -223,6 +252,32 @@ export interface SemanticPositionState {
   support?: SemanticAtomSupportMetadata
 }
 
+export interface SemanticOrchestrationContract {
+  id: string
+  kind: SemanticOrchestrationContractKind
+  capabilities: readonly SemanticCapability[]
+  requires: readonly SemanticRequirement[]
+  params: Record<string, unknown>
+  openSlots: readonly SemanticSlotState[]
+  effects?: readonly SemanticEffect[]
+}
+
+export interface SemanticOrchestrationNode {
+  id: string
+  kind: SemanticOrchestrationContractKind
+  params: Record<string, unknown>
+  status: SemanticNodeStatus
+  source: SemanticSource
+  evidence?: SemanticEvidence
+  openSlots: readonly SemanticSlotState[]
+  contracts: readonly SemanticOrchestrationContract[]
+}
+
+export interface SemanticOrchestrationState {
+  nodes: readonly SemanticOrchestrationNode[]
+  contracts: readonly SemanticOrchestrationContract[]
+}
+
 export interface SemanticState {
   version: 1
   families: string[]
@@ -234,5 +289,6 @@ export interface SemanticState {
   normalizationNotes: string[]
   updatedAt: string
   updatedTurnId?: string
+  orchestration?: SemanticOrchestrationState
   unsupportedFallback?: UnsupportedFallbackState | null
 }

@@ -2,6 +2,56 @@ import type { SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
 describe('SemanticContractReadinessService', () => {
+  it('accepts supported contracts with explicit empty substrate arrays', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-1',
+        key: 'condition.expression',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'trigger-contract-1',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [{
+        id: 'action-1',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'action-contract-1',
+          kind: 'action',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+  })
+
   it('writes missing price and capital requirements to the requiring action open slots', () => {
     const state = createSemanticState({
       actions: [{
