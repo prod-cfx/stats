@@ -352,7 +352,7 @@ function evaluatePositionLifecycle(
 
   const addMeta = program.metadata?.addPosition
   if (addMeta) {
-    if (!hasPositionSnapshot(ctx)) {
+    if (!hasSameSidePositionSnapshot(ctx, program)) {
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.position_snapshot_missing`,
@@ -392,7 +392,7 @@ function evaluatePositionLifecycle(
 
   const dcaMeta = program.metadata?.dcaSchedule
   if (dcaMeta && Number.isFinite(dcaMeta.maxCount)) {
-    if (!hasPositionSnapshot(ctx)) {
+    if (!hasSameSidePositionSnapshot(ctx, program)) {
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.position_snapshot_missing`,
@@ -921,8 +921,26 @@ function readCurrentQty(ctx: StrategyExecutionContextV1): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-function hasPositionSnapshot(ctx: StrategyExecutionContextV1): boolean {
-  return Boolean(ctx.position && typeof ctx.position === 'object' && !Array.isArray(ctx.position))
+function hasSameSidePositionSnapshot(
+  ctx: StrategyExecutionContextV1,
+  program: DecisionProgramNode,
+): boolean {
+  const nextAction = findFirstAddAction(program)
+  if (!nextAction || !ctx.position || typeof ctx.position !== 'object' || Array.isArray(ctx.position)) {
+    return false
+  }
+
+  const currentQty = readCurrentQtyValue(ctx)
+  if (currentQty === null || currentQty === 0) {
+    return false
+  }
+
+  return nextAction.kind === 'ADD_LONG' ? currentQty > 0 : currentQty < 0
+}
+
+function readCurrentQtyValue(ctx: StrategyExecutionContextV1): number | null {
+  const value = ctx.position?.qty
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function readCurrentPrice(ctx: StrategyExecutionContextV1): number {

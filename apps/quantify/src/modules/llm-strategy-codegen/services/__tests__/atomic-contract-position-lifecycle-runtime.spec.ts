@@ -105,31 +105,84 @@ describe('atomic contract position lifecycle compiled runtime', () => {
   })
 
   it('blocks add_position when position snapshot is missing', () => {
-    const decision = runLifecycleProgram(
-      {
-        id: 'add-long',
-        phase: 'entry',
-        priority: 100,
-        when: 'ready',
-        metadata: {
-          addPosition: { maxLayers: 3, stateKey: 'pyramiding_layer_count' },
-        },
-        actions: [
-          { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 20 } },
-        ],
+    const program = {
+      id: 'add-long',
+      phase: 'entry',
+      priority: 100,
+      when: 'ready',
+      metadata: {
+        addPosition: { maxLayers: 3, stateKey: 'pyramiding_layer_count' },
       },
-      {
-        currentPrice: 100,
-        accountEquity: 1_000,
-        semanticRuntimeState: {
-          pyramiding_layer_count: { value: 1 },
-        },
-      } as Ctx,
-    )
+      actions: [
+        { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 20 } },
+      ],
+    }
+    const baseCtx = {
+      currentPrice: 100,
+      accountEquity: 1_000,
+      semanticRuntimeState: {
+        pyramiding_layer_count: { value: 1 },
+      },
+    } as Ctx
 
-    expect(decision).toEqual({
+    expect(runLifecycleProgram(program, baseCtx)).toEqual({
       action: 'NOOP',
       reason: 'compiled.add-long.position_snapshot_missing',
+    })
+    expect(runLifecycleProgram(program, {
+      ...baseCtx,
+      position: { side: 'flat', qty: 0 },
+    } as Ctx)).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.add-long.position_snapshot_missing',
+    })
+    expect(runLifecycleProgram(program, {
+      ...baseCtx,
+      position: { side: 'short', qty: -1 },
+    } as Ctx)).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.add-long.position_snapshot_missing',
+    })
+  })
+
+  it('blocks dca when position snapshot is missing or not same-side', () => {
+    const program = {
+      id: 'dca-long',
+      phase: 'entry',
+      priority: 100,
+      when: 'ready',
+      metadata: {
+        dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
+      },
+      actions: [
+        { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100 } },
+      ],
+    }
+    const baseCtx = {
+      currentPrice: 100,
+      accountEquity: 1_000,
+      semanticRuntimeState: {
+        dca_fired_count: { value: 1 },
+      },
+    } as Ctx
+
+    expect(runLifecycleProgram(program, baseCtx)).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.dca-long.position_snapshot_missing',
+    })
+    expect(runLifecycleProgram(program, {
+      ...baseCtx,
+      position: { side: 'flat', qty: 0 },
+    } as Ctx)).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.dca-long.position_snapshot_missing',
+    })
+    expect(runLifecycleProgram(program, {
+      ...baseCtx,
+      position: { side: 'short', qty: -1 },
+    } as Ctx)).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.dca-long.position_snapshot_missing',
     })
   })
 
@@ -155,7 +208,9 @@ describe('atomic contract position lifecycle compiled runtime', () => {
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 20 } },
         ],
       },
-      ctx,
+      {
+        ...ctx,
+      },
     )
 
     expect(decision).toMatchObject({
@@ -547,35 +602,6 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.dca-long.dca_state_missing',
     })
     expect(decision.action).not.toBe('OPEN_LONG')
-  })
-
-  it('blocks dca when position snapshot is missing', () => {
-    const decision = runLifecycleProgram(
-      {
-        id: 'dca-long',
-        phase: 'entry',
-        priority: 100,
-        when: 'ready',
-        metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
-        },
-        actions: [
-          { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100 } },
-        ],
-      },
-      {
-        currentPrice: 100,
-        accountEquity: 1_000,
-        semanticRuntimeState: {
-          dca_fired_count: { value: 1 },
-        },
-      } as Ctx,
-    )
-
-    expect(decision).toEqual({
-      action: 'NOOP',
-      reason: 'compiled.dca-long.position_snapshot_missing',
-    })
   })
 
   it('executes dca when runtime dca state slot is initialized empty', () => {
