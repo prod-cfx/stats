@@ -1661,7 +1661,7 @@ export class CanonicalSpecBuilderService {
     sideScope: CanonicalRuleSideScope,
   ): CanonicalConditionNode {
     const matchingGateConditions = gateConditions
-      .filter(gate => gate.sideScope === 'both' || gate.sideScope === sideScope || sideScope === 'both')
+      .filter(gate => gate.sideScope === 'both' || gate.sideScope === sideScope)
       .map(gate => gate.condition)
 
     if (matchingGateConditions.length === 0) {
