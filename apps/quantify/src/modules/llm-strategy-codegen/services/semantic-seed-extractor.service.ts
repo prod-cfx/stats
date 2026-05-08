@@ -1249,7 +1249,7 @@ export class SemanticSeedExtractorService {
           toSide,
           sameBarPolicy: /允许.{0,12}(?:同一根|同根).{0,8}K|(?:同一根|同根).{0,8}K.{0,12}允许/u.test(text)
             ? 'allow'
-            : 'next_bar',
+            : 'next_bar_only',
           sizingSource: /沿用(?:原|当前)?仓位|原仓位|当前仓位|same\s+size/iu.test(text)
             ? 'current_position'
             : 'explicit',

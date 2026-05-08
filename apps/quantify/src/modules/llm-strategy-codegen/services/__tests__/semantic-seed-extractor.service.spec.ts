@@ -384,6 +384,17 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.position?.mode).not.toBe('position.dca_schedule')
   })
 
+  it('extracts canonical next-bar policy for reverse positions by default', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，MA20 下穿 MA50 反手做空，单笔 10%。')
+
+    expect(patch.actions ?? []).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'action.reverse_position',
+        params: expect.objectContaining({ sameBarPolicy: 'next_bar_only' }),
+      }),
+    ]))
+  })
+
   it('preserves USDC quote assets in DCA schedule sizing and capital cap', () => {
     const patch = service.extract('每跌 5% 补仓一次，每次 100 USDC，最多 4 次，总投入不超过 500 USDC，跌破前低停止。')
     const dcaSchedule = patch.position?.constraints?.find(constraint => constraint.key === 'position.dca_schedule')
