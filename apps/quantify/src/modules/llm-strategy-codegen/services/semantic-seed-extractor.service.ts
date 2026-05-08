@@ -24,6 +24,8 @@ import { buildTriggerCombinationContract } from './semantic-state-normalization'
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
 type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
+type SeedPositionConstraint = NonNullable<NonNullable<CodegenSemanticPatch['position']>['constraints']>[number]
+type QuoteAsset = 'USDT' | 'USDC' | 'USD'
 type FixedGridRange = {
   lower: number
   upper: number
@@ -100,6 +102,7 @@ export class SemanticSeedExtractorService {
       this.extractPosition(text, triggers),
       lifecycleConstraints,
       lifecycleActions.length > 0,
+      this.resolveLifecyclePositionMode(text, lifecycleActions, lifecycleConstraints),
     ))
 
     const patch: CodegenSemanticPatch = {}
@@ -1200,13 +1203,16 @@ export class SemanticSeedExtractorService {
       actions.push(action)
     }
 
-    if (/(?:减仓|scale\s*out)/iu.test(text) && !this.hasNegatedPositionLifecycleActionContext(text)) {
-      const reducePercent = this.extractPercentAfterKeywords(text, ['减仓', '减'])
+    for (const clause of this.splitPositionLifecycleClauses(text)) {
+      if (!/(?:减仓|scale\s*out)/iu.test(clause) || this.hasNegatedPositionLifecycleActionContext(clause)) {
+        continue
+      }
+      const reducePercent = this.extractPercentAfterKeywords(clause, ['减仓', '减'])
       if (reducePercent !== null && reducePercent > 0 && reducePercent <= 100) {
         push({
           key: 'action.reduce_position',
           params: {
-            sideScope: this.resolveLifecycleSideScope(text),
+            sideScope: this.resolveLifecycleSideScope(clause),
             reduceBasis: 'ratio',
             reduceValue: reducePercent / 100,
           },
@@ -1214,12 +1220,15 @@ export class SemanticSeedExtractorService {
       }
     }
 
-    if (/(?:加仓|scale\s*in)/iu.test(text) && !/(?:DCA|定投|每跌|补仓)/iu.test(text) && !this.hasNegatedPositionLifecycleActionContext(text)) {
-      const sizingPercent = this.extractPercentAfterKeywords(text, ['每次加仓', '加仓', '每次'])
+    for (const clause of this.extractAddPositionLifecycleTexts(text)) {
+      if (this.hasNegatedPositionLifecycleActionContext(clause)) {
+        continue
+      }
+      const sizingPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
       push({
         key: 'action.add_position',
         params: {
-          sideScope: this.resolveLifecycleSideScope(text),
+          sideScope: this.resolveLifecycleSideScope(clause),
           ...(sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
             ? { sizing: { kind: 'ratio', value: sizingPercent / 100, unit: 'ratio' } }
             : {}),
@@ -1227,8 +1236,11 @@ export class SemanticSeedExtractorService {
       })
     }
 
-    if (/(?:反手|reverse\s+position|flip\s+position)/iu.test(text) && !this.hasNegatedPositionLifecycleActionContext(text)) {
-      const fromSide = /平空|空单/u.test(text) && /做多|开多/u.test(text) ? 'short' : 'long'
+    for (const clause of this.splitPositionLifecycleClauses(text)) {
+      if (!/(?:反手|reverse\s+position|flip\s+position)/iu.test(clause) || this.hasNegatedPositionLifecycleActionContext(clause)) {
+        continue
+      }
+      const fromSide = /平空|空单/u.test(clause) && /做多|开多/u.test(clause) ? 'short' : 'long'
       const toSide = fromSide === 'long' ? 'short' : 'long'
       push({
         key: 'action.reverse_position',
@@ -1249,11 +1261,14 @@ export class SemanticSeedExtractorService {
   }
 
   private extractPositionLifecycleConstraints(text: string): NonNullable<CodegenSemanticPatch['position']>['constraints'] {
-    const constraints: NonNullable<NonNullable<CodegenSemanticPatch['position']>['constraints']> = []
+    const constraints: SeedPositionConstraint[] = []
 
-    if (/(?:加仓|scale\s*in)/iu.test(text) && !/(?:DCA|定投|每跌|补仓)/iu.test(text) && !this.hasNegatedPositionLifecycleActionContext(text)) {
-      const maxLayers = this.extractNumberBefore(text, ['次', '层'], /(?:次|层)/u)
-      const layerPercent = this.extractPercentAfterKeywords(text, ['每次加仓', '加仓', '每次'])
+    for (const clause of this.extractAddPositionLifecycleTexts(text)) {
+      if (this.hasNegatedPositionLifecycleActionContext(clause)) {
+        continue
+      }
+      const maxLayers = this.extractNumberBefore(clause, ['次', '层'], /(?:次|层)/u)
+      const layerPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
       if (maxLayers !== null && maxLayers > 0) {
         constraints.push({
           key: 'position.pyramiding_limit',
@@ -1267,12 +1282,12 @@ export class SemanticSeedExtractorService {
       }
     }
 
-    if (this.hasPositiveDcaScheduleContext(text)) {
-      const maxCount = this.extractNumberBefore(text, ['次'], /(?:次|回)/u)
-      const perOrderSizing = this.extractQuoteAmountAfter(text, '每次')
-      const capitalCap = this.extractQuoteAmountAfter(text, '总投入不超过')
-        ?? this.extractQuoteAmountAfter(text, '总投入')
-      const exitRule = this.hasDcaExitRule(text) ? this.resolveDcaExitRule(text) : null
+    for (const clause of this.extractDcaLifecycleTexts(text)) {
+      const maxCount = this.extractNumberBefore(clause, ['次'], /(?:次|回)/u)
+      const perOrderSizing = this.extractQuoteAmountAfter(clause, '每次')
+      const capitalCap = this.extractQuoteAmountAfter(clause, '总投入不超过')
+        ?? this.extractQuoteAmountAfter(clause, '总投入')
+      const exitRule = this.hasDcaExitRule(clause) ? this.resolveDcaExitRule(clause) : null
       constraints.push({
         key: 'position.dca_schedule',
         params: {
@@ -1292,6 +1307,7 @@ export class SemanticSeedExtractorService {
     position: NonNullable<CodegenSemanticPatch['position']> | null,
     lifecycleConstraints: NonNullable<NonNullable<CodegenSemanticPatch['position']>['constraints']>,
     hasLifecycleActions = false,
+    lifecyclePositionMode: 'long_only' | 'short_only' | 'long_short' = 'long_only',
   ): NonNullable<CodegenSemanticPatch['position']> | null {
     if (lifecycleConstraints.length === 0 && !hasLifecycleActions) {
       return position
@@ -1301,7 +1317,7 @@ export class SemanticSeedExtractorService {
       return {
         mode: 'constraint_only',
         value: 0,
-        positionMode: 'long_only',
+        positionMode: lifecyclePositionMode,
         ...(lifecycleConstraints.length > 0 ? { constraints: lifecycleConstraints } : {}),
       }
     }
@@ -1313,6 +1329,96 @@ export class SemanticSeedExtractorService {
         ...lifecycleConstraints,
       ],
     }
+  }
+
+  private resolveLifecyclePositionMode(
+    text: string,
+    actions: readonly SeedAction[],
+    constraints: readonly SeedPositionConstraint[],
+  ): 'long_only' | 'short_only' | 'long_short' {
+    const sideScopes = actions
+      .map(action => action.params?.sideScope)
+      .filter((value): value is 'long' | 'short' | 'both' => value === 'long' || value === 'short' || value === 'both')
+
+    if (constraints.length > 0 && sideScopes.length === 0) {
+      sideScopes.push(this.resolveLifecycleSideScope(text))
+    }
+
+    const uniqueSides = new Set(sideScopes)
+    if (uniqueSides.has('both') || (uniqueSides.has('long') && uniqueSides.has('short'))) {
+      return 'long_short'
+    }
+    if (uniqueSides.has('short')) {
+      return 'short_only'
+    }
+    return 'long_only'
+  }
+
+  private extractAddPositionLifecycleTexts(text: string): string[] {
+    const texts: string[] = []
+    for (const segment of this.splitPositionLifecycleSegments(text)) {
+      const clauses = this.splitPositionLifecycleClauses(segment)
+      const addClauses = clauses.filter(clause =>
+        /(?:加仓|scale\s*in)/iu.test(clause)
+        && !this.isDcaLifecycleClause(clause)
+        && !this.hasNegatedPositionLifecycleActionContext(clause),
+      )
+      if (addClauses.length === 0) continue
+
+      texts.push(addClauses.join('，'))
+    }
+
+    return texts
+  }
+
+  private extractDcaLifecycleTexts(text: string): string[] {
+    const texts: string[] = []
+    for (const segment of this.splitPositionLifecycleSegments(text)) {
+      const clauses = this.splitPositionLifecycleClauses(segment)
+      const startIndex = clauses.findIndex(clause => this.isDcaLifecycleClause(clause))
+      if (startIndex < 0) continue
+
+      const dcaClauses: string[] = []
+      for (const clause of clauses.slice(startIndex)) {
+        if (
+          dcaClauses.length > 0
+          && /(?:加仓|减仓|反手|scale\s*in|scale\s*out|reverse\s+position|flip\s+position)/iu.test(clause)
+          && !this.isDcaLifecycleClause(clause)
+        ) {
+          break
+        }
+        dcaClauses.push(clause)
+      }
+
+      if (dcaClauses.length > 0) {
+        texts.push(dcaClauses.join('，'))
+      }
+    }
+
+    return texts
+  }
+
+  private splitPositionLifecycleSegments(text: string): string[] {
+    return text
+      .split(/[；;。]/u)
+      .map(segment => segment.trim())
+      .filter(Boolean)
+  }
+
+  private splitPositionLifecycleClauses(text: string): string[] {
+    return text
+      .split(/[，,.]/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+  }
+
+  private isDcaLifecycleClause(clause: string): boolean {
+    if (this.hasNegatedUnsupportedPositionContext(clause)) {
+      return false
+    }
+
+    return /(?:DCA|dca|定投)/u.test(clause)
+      || (/(?:每跌|每下跌)/u.test(clause) && /补仓/u.test(clause))
   }
 
   private withInheritedLifecycleContextSlots(
@@ -1379,15 +1485,23 @@ export class SemanticSeedExtractorService {
     return null
   }
 
-  private extractQuoteAmountAfter(text: string, keyword: string): { kind: 'quote'; value: number; asset: 'USDT' } | null {
+  private extractQuoteAmountAfter(text: string, keyword: string): { kind: 'quote'; value: number; asset: QuoteAsset } | null {
     const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-    const match = text.match(new RegExp(`${escaped}.{0,12}?(\\d+(?:\\.\\d+)?)\\s*(USDT|U|u)`, 'iu'))
-    if (!match?.[1]) return null
+    const match = text.match(new RegExp(`${escaped}.{0,12}?(\\d+(?:\\.\\d+)?)\\s*(USDT|USDC|USD|U)(?![A-Z0-9])`, 'iu'))
+    if (!match?.[1] || !match[2]) return null
 
     const value = Number(match[1])
     if (!Number.isFinite(value) || value <= 0) return null
 
-    return { kind: 'quote', value, asset: 'USDT' }
+    const asset = this.normalizeQuoteAsset(match[2])
+    return { kind: 'quote', value, asset }
+  }
+
+  private normalizeQuoteAsset(asset: string): QuoteAsset {
+    const normalized = asset.toUpperCase()
+    if (normalized === 'USDC') return 'USDC'
+    if (normalized === 'USD') return 'USD'
+    return 'USDT'
   }
 
   private hasDcaExitRule(text: string): boolean {
@@ -3398,10 +3512,10 @@ export class SemanticSeedExtractorService {
   }
 
   private pushDcaPercentChangeTrigger(text: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!this.hasPositiveDcaScheduleContext(text)) return
-
-    const valuePct = this.extractPercentAfterKeywords(text, ['每跌', '每下跌'])
-    if (valuePct === null || valuePct <= 0) return
+    const valuePct = this.extractDcaLifecycleTexts(text)
+      .map(clause => this.extractPercentAfterKeywords(clause, ['每跌', '每下跌']))
+      .find((value): value is number => value !== null && value > 0)
+    if (valuePct === undefined) return
 
     this.pushTrigger(triggers, seen, {
       key: 'price.percent_change',
@@ -3857,12 +3971,7 @@ export class SemanticSeedExtractorService {
   }
 
   private hasPositiveDcaScheduleContext(text: string): boolean {
-    return this.splitSegments(text).some(segment =>
-      this.splitLogicClauses(segment).some(clause =>
-        /(?:DCA|定投|补仓|每跌\s*\d+(?:\.\d+)?\s*%)/iu.test(clause)
-        && !this.hasNegatedUnsupportedPositionContext(clause),
-      ),
-    )
+    return this.extractDcaLifecycleTexts(text).length > 0
   }
 
   private pushTrigger(triggers: SeedTrigger[], seen: Set<string>, trigger: SeedTrigger): void {
