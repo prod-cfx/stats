@@ -392,9 +392,9 @@ describe('atomic contract combination semantics', () => {
       expect.objectContaining({ slotKey: expect.stringContaining('confirmationMode') }),
     ]))
     const summary = projection.buildClarificationView(state).summary
-    expect(summary).toContain('触及布林带下轨')
+    expect(summary).toContain('触及 BOLL 下轨（20, 2）')
     expect(summary).toContain('成交量高于过去 20 根均量的 1.5 倍')
-    expect(summary).not.toMatch(/入场：触及布林带.?下轨.*；入场：成交量/u)
+    expect(summary).not.toMatch(/入场：触及 (?:BOLL|布林带).?下轨.*；入场：成交量/u)
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
     expect(classification.route).not.toBe('unsupported_fallback')
   })
