@@ -53,6 +53,22 @@ function maxExposurePctSubstrate(): SemanticAtomContractSubstrate {
   }
 }
 
+function timeStopBarsSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+      { domain: 'runtime', verb: 'read', object: 'position.bars_held' },
+    ],
+    stateRequirements: [],
+    orderRequirements: [
+      { domain: 'order', verb: 'support', object: 'market_order' },
+      { domain: 'order', verb: 'submit', object: 'market_close' },
+    ],
+    openSlots: [],
+  }
+}
+
 const DCA_SCHEDULE_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
   {
     slotKey: 'position.dca_schedule.max_count',
@@ -316,6 +332,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableRisk('risk.max_drawdown_pct', ['valuePct']),
   executableRisk('risk.max_single_loss_pct', ['valuePct']),
   executableRisk('risk.cooldown_bars', ['bars']),
+  executableRisk('risk.time_stop_bars', ['maxBars', 'scope', 'effect'], timeStopBarsSubstrate()),
   executablePosition('position.fixed_pct', ['value']),
   executablePosition('position.fixed_notional', ['value', 'asset']),
   executablePosition('position.fixed_quantity', ['value', 'asset']),
@@ -399,7 +416,11 @@ function executableAction(key: string): SemanticSupportedAtomDefinition {
   }
 }
 
-function executableRisk(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
+function executableRisk(
+  key: string,
+  requiredParams: string[],
+  contractSubstrate: SemanticAtomContractSubstrate = baseExecutableSubstrate(),
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -408,7 +429,7 @@ function executableRisk(key: string, requiredParams: string[]): SemanticSupporte
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: baseExecutableSubstrate(),
+    contractSubstrate,
   }
 }
 

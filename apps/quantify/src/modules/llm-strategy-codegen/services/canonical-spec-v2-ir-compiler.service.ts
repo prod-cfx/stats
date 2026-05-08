@@ -1782,6 +1782,30 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    if (rule.condition.key === 'risk.time_stop_bars') {
+      const params = rule.condition.params ?? {}
+      const maxBarsRaw = params.maxBars
+      const maxBars = typeof maxBarsRaw === 'number' ? maxBarsRaw : Number(maxBarsRaw)
+      if (!Number.isInteger(maxBars) || maxBars <= 0) {
+        return null
+      }
+      const scopeRaw = typeof params.scope === 'string' ? params.scope : 'both'
+      const scope = scopeRaw === 'long' || scopeRaw === 'short' ? scopeRaw : 'both'
+      const effect = typeof params.effect === 'string' ? params.effect : 'close_position'
+      // MVP: only effect=close_position routes through risk predicate (force_exit / close-side action).
+      // effect=reduce_position requires a partial-reduce rule block + reducePct; out of scope this PR.
+      if (effect !== 'close_position') {
+        return null
+      }
+      context.runtimeRequirements.helpers.add('positionBarsHeld')
+      return {
+        id: rule.id,
+        kind: 'timeStopBars',
+        params: { maxBars, scope },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
     if (rule.condition.key === 'risk.remembered_level_stop') {
       const levelKey = typeof rule.condition.params?.levelKey === 'string' && rule.condition.params.levelKey.trim().length > 0
         ? rule.condition.params.levelKey.trim()
