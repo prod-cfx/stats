@@ -45,7 +45,7 @@ function makeTimeStopRiskSpec(params: {
           key: 'risk.time_stop_bars',
           semanticScope: 'position',
           op: 'GTE',
-          params: conditionParams,
+          params: conditionParams as Record<string, number | string | boolean>,
         },
         actions: [{ type: params.actionType ?? 'FORCE_EXIT' }],
       },
