@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common'
 import type {
   SemanticSlotIdentity,
   SemanticActionState,
+  SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -59,6 +60,8 @@ export class SemanticSupportClassifierService {
       return withRegistryOpenSlots(withSupportMetadata(trigger, resolved), resolved)
     })
 
+    const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms)
+
     const actions = state.actions.map((action) => {
       if (action.status === 'superseded') {
         return { ...action }
@@ -66,7 +69,10 @@ export class SemanticSupportClassifierService {
 
       const resolved = this.registry.resolve(action.key)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-      return withRegistryOpenSlots(withSupportMetadata(action, resolved), resolved)
+      return withAddPositionConstraintOpenSlot(
+        withRegistryOpenSlots(withSupportMetadata(action, resolved), resolved),
+        position,
+      )
     })
 
     const risk = state.risk.map((riskState) => {
@@ -82,7 +88,6 @@ export class SemanticSupportClassifierService {
       return withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
     })
 
-    const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms)
     const nextState: SemanticState = {
       ...state,
       triggers,
@@ -144,9 +149,21 @@ export class SemanticSupportClassifierService {
       return { ...position }
     }
 
+    const constraints = position.constraints?.map((constraint) => {
+      if (constraint.status === 'superseded') {
+        return { ...constraint }
+      }
+
+      const resolved = this.registry.resolve(constraint.key, constraint.params)
+      this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
+      return withRegistryOpenSlots(withSupportMetadata(constraint, resolved), resolved)
+    })
     const resolved = this.registry.resolve(toPositionAtomKey(position.mode))
     this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
-    return withRegistryOpenSlots(withSupportMetadata(position, resolved), resolved)
+    return {
+      ...withRegistryOpenSlots(withSupportMetadata(position, resolved), resolved),
+      ...(constraints ? { constraints } : {}),
+    }
   }
 
   private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
@@ -215,7 +232,7 @@ function isExecutableIndicatorReferenceAlias(trigger: SemanticTriggerState): boo
 }
 
 function withSupportMetadata<
-  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | SemanticPositionConstraintState,
 >(node: T, resolved: ResolvedSemanticAtom): T {
   return isSupportedAtom(resolved)
     ? withoutSupportMetadata(node)
@@ -227,14 +244,14 @@ function isSupportedAtom(resolved: ResolvedSemanticAtom): boolean {
 }
 
 function withoutSupportMetadata<
-  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | SemanticPositionConstraintState,
 >(node: T): T {
   const { support: _support, ...nextNode } = node
   return nextNode as T
 }
 
 function withRegistryOpenSlots<
-  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+  T extends SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | SemanticPositionConstraintState,
 >(node: T, resolved: ResolvedSemanticAtom): T {
   if (resolved.supportStatus !== 'supported_requires_slot' || !hasRequiredParamOpenSlotSpecs(resolved)) {
     return node
@@ -260,6 +277,52 @@ function withRegistryOpenSlots<
   }
 }
 
+function withAddPositionConstraintOpenSlot(
+  action: SemanticActionState,
+  position: SemanticPositionState | null,
+): SemanticActionState {
+  if (action.key !== 'action.add_position' || action.status === 'superseded') {
+    return action
+  }
+
+  const currentOpenSlots = action.openSlots ?? []
+  const hasConstraint = hasActiveAddPositionConstraint(position)
+  const openSlots = hasConstraint
+    ? currentOpenSlots.filter(slot => slot.slotKey !== 'action.add_position.constraint')
+    : currentOpenSlots
+
+  if (hasConstraint) {
+    return openSlots.length === currentOpenSlots.length
+      ? action
+      : { ...action, openSlots }
+  }
+
+  const slot: SemanticSlotState = {
+    slotKey: 'action.add_position.constraint',
+    fieldPath: `actions[${action.id}].params.constraint`,
+    status: 'open',
+    priority: 'risk',
+    questionHint: '请确认加仓的约束，例如最大加仓次数或最大总敞口比例。',
+    affectsExecution: true,
+  }
+
+  if (openSlots.some(item => buildSemanticSlotId(item) === buildSemanticSlotId(slot))) {
+    return action
+  }
+
+  return {
+    ...action,
+    openSlots: [...openSlots, slot],
+  }
+}
+
+function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
+  return position?.constraints?.some(constraint =>
+    constraint.status !== 'superseded'
+    && (constraint.key === 'position.pyramiding_limit' || constraint.key === 'position.max_exposure_pct'),
+  ) ?? false
+}
+
 function toSlotId(slot: SemanticSlotIdentity): string {
   return buildSemanticSlotId(slot)
 }
@@ -271,7 +334,7 @@ function hasRequiredParamOpenSlotSpecs(
 }
 
 function hasMissingRequiredParam(
-  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
+  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | SemanticPositionConstraintState,
   requiredParams: string[],
 ): boolean {
   if (requiredParams.length === 0 || !hasParams(node)) {
@@ -282,8 +345,8 @@ function hasMissingRequiredParam(
 }
 
 function hasParams(
-  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState,
-): node is SemanticTriggerState | SemanticRiskState | (SemanticActionState & { params: Record<string, unknown> }) {
+  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | SemanticPositionConstraintState,
+): node is SemanticTriggerState | SemanticRiskState | SemanticPositionConstraintState | (SemanticActionState & { params: Record<string, unknown> }) {
   return 'params' in node && node.params !== undefined
 }
 
@@ -347,12 +410,13 @@ function collectOpenSlots(state: SemanticState): SemanticSlotState[] {
     ...state.actions.flatMap(action => readNodeOpenSlots(action)),
     ...state.risk.flatMap(risk => readNodeOpenSlots(risk)),
     ...readNodeOpenSlots(state.position),
+    ...(state.position?.constraints ?? []).flatMap(constraint => readNodeOpenSlots(constraint)),
     ...Object.values(state.contextSlots).filter(isOpenSlot),
   ]
 }
 
 function readNodeOpenSlots(
-  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | null,
+  node: SemanticTriggerState | SemanticActionState | SemanticRiskState | SemanticPositionState | SemanticPositionConstraintState | null,
 ): SemanticSlotState[] {
   if (!node || node.status === 'superseded') {
     return []

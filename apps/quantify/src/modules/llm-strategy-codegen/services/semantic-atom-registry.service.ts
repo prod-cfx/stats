@@ -35,6 +35,40 @@ function positionSubstrate(): SemanticAtomContractSubstrate {
   }
 }
 
+function pyramidingLimitSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'position_snapshot' }],
+    stateRequirements: [{ domain: 'state', verb: 'read_write', object: 'pyramiding_layer_count' }],
+    orderRequirements: [],
+    openSlots: [],
+  }
+}
+
+function maxExposurePctSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'position_snapshot' }],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
+  }
+}
+
+const DCA_SCHEDULE_EXIT_RULE_OPEN_SLOT: SemanticAtomOpenSlotSpec = {
+  slotKey: 'position.dca_schedule.exit_rule',
+  fieldPath: 'position.constraints.params.exitRule',
+  priority: 'risk',
+  questionHint: '请确认 DCA 停止或退出规则，例如跌破前低停止 / 达到止损退出 / 反向信号退出。',
+}
+
+function dcaScheduleSubstrate(openSlots: SemanticAtomOpenSlotSpec[] = []): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'position_snapshot' }],
+    stateRequirements: [{ domain: 'state', verb: 'read_write', object: 'dca_fired_count' }],
+    orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+    openSlots,
+  }
+}
+
 const DEFAULT_REPLACEMENT_PATCH: CodegenSemanticPatch = {
   triggers: [
     {
@@ -141,8 +175,31 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableAction('close_long'),
   executableAction('close_short'),
   executableAction('close_position'),
+  executableAction('action.reduce_position'),
   executableAction('reduce_long'),
   executableAction('reduce_short'),
+  supportedRequiresSlotAction('action.add_position', [], [
+    {
+      slotKey: 'action.add_position.constraint',
+      fieldPath: 'actions.params.constraint',
+      priority: 'risk',
+      questionHint: '请确认加仓的约束，例如最大加仓次数或最大总敞口比例。',
+    },
+  ]),
+  supportedRequiresSlotAction('action.reverse_position', ['sameBarPolicy', 'sizingSource'], [
+    {
+      slotKey: 'action.reverse_position.same_bar_policy',
+      fieldPath: 'actions.params.sameBarPolicy',
+      priority: 'behavior',
+      questionHint: '请确认反手是否允许在同一根 K 线内完成。',
+    },
+    {
+      slotKey: 'action.reverse_position.sizing_source',
+      fieldPath: 'actions.params.sizingSource',
+      priority: 'risk',
+      questionHint: '请确认反手仓位大小来源，例如沿用原仓位或使用固定仓位。',
+    },
+  ]),
   executableAction('action.grid_ladder'),
   executableAction('place_limit_grid'),
   executableRisk('risk.condition_expression', []),
@@ -170,6 +227,11 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executablePosition('position.fixed_pct', ['value']),
   executablePosition('position.fixed_notional', ['value', 'asset']),
   executablePosition('position.fixed_quantity', ['value', 'asset']),
+  executablePosition('position.pyramiding_limit', [], pyramidingLimitSubstrate()),
+  executablePosition('position.max_exposure_pct', [], maxExposurePctSubstrate()),
+  supportedRequiresSlotPosition('position.dca_schedule', ['maxCount', 'capitalCap', 'perOrderSizing', 'triggerMode', 'exitRule'], [
+    DCA_SCHEDULE_EXIT_RULE_OPEN_SLOT,
+  ], dcaScheduleSubstrate([DCA_SCHEDULE_EXIT_RULE_OPEN_SLOT])),
   unsupported('market.trend', 'trigger', '市场趋势旧别名', 'market_state_alias_public_beta_unsupported', 'market.trend 是旧状态别名，当前投影仅支持 trend.direction。'),
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
@@ -180,9 +242,6 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
   unsupported('risk.atr_stop', 'risk', 'ATR 动态止损', 'atr_stop_public_beta_unsupported', 'ATR 动态止损当前公测暂未支持生成和回测。'),
   unsupported('risk.partial_take_profit', 'risk', '分批止盈', 'partial_take_profit_public_beta_unsupported', '多档分批止盈当前公测暂未支持生成和回测。'),
-  unsupported('action.add_position', 'action', '加仓', 'scale_in_public_beta_unsupported', '复杂加仓当前公测暂未支持生成和回测。'),
-  unsupported('action.reverse_position', 'action', '反手', 'reverse_position_public_beta_unsupported', '反手交易当前公测暂未支持生成和回测。'),
-  unsupported('position.dca_schedule', 'position', 'DCA 定投/补仓', 'dca_public_beta_unsupported', 'DCA 定投/补仓当前公测暂未支持生成和回测。'),
   unsupported('position.leverage', 'position', '策略杠杆声明', 'leverage_contract_public_beta_unsupported', '策略内声明杠杆当前公测暂未支持生成和回测。'),
   unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
   unsupported('grid.dynamic_grid', 'trigger', '动态网格', 'dynamic_grid_public_beta_unsupported', '动态网格当前公测暂未支持生成和回测。'),
@@ -281,7 +340,31 @@ function supportedRequiresSlotRisk(
   }
 }
 
-function executablePosition(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
+function supportedRequiresSlotAction(
+  key: string,
+  requiredParams: string[],
+  openSlots: SemanticAtomDefinition['openSlots'],
+): SemanticSupportedAtomDefinition {
+  return {
+    key,
+    category: 'action',
+    supportStatus: 'supported_requires_slot',
+    requiredParams,
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots,
+    contractSubstrate: {
+      ...baseExecutableSubstrate(),
+      openSlots: cloneOpenSlotSpecs(openSlots),
+    },
+  }
+}
+
+function executablePosition(
+  key: string,
+  requiredParams: string[],
+  contractSubstrate: SemanticAtomContractSubstrate = positionSubstrate(),
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'position',
@@ -290,7 +373,28 @@ function executablePosition(key: string, requiredParams: string[]): SemanticSupp
     defaultableParams: [],
     executableProjection: ['semantic_position_contract', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: positionSubstrate(),
+    contractSubstrate,
+  }
+}
+
+function supportedRequiresSlotPosition(
+  key: string,
+  requiredParams: string[],
+  openSlots: SemanticAtomDefinition['openSlots'],
+  contractSubstrate: SemanticAtomContractSubstrate = {
+    ...positionSubstrate(),
+    openSlots: cloneOpenSlotSpecs(openSlots),
+  },
+): SemanticSupportedAtomDefinition {
+  return {
+    key,
+    category: 'position',
+    supportStatus: 'supported_requires_slot',
+    requiredParams,
+    defaultableParams: [],
+    executableProjection: ['semantic_position_contract', 'compiled_runtime'],
+    openSlots,
+    contractSubstrate,
   }
 }
 

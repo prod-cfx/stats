@@ -18,6 +18,7 @@ import type {
   SemanticEvidence,
   SemanticNodeStatus,
   SemanticOrderRequirement,
+  SemanticPositionConstraintState,
   SemanticPositionSizingContract,
   SemanticPriority,
   SemanticRequirement,
@@ -50,6 +51,7 @@ const CONTEXT_QUESTION_HINTS: Record<ContextField, string> = {
 }
 const SYNTHESIZABLE_TRIGGER_KEYS = new Set<string>(FIRST_WAVE_TRIGGER_ATOMS)
 const SYNTHESIZABLE_ACTION_KEYS = new Set(['open_long', 'close_long', 'open_short', 'close_short'])
+const SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS = new Set(['action.reduce_position', 'action.add_position', 'action.reverse_position'])
 const SYNTHESIZABLE_GRID_ACTION_KEYS = new Set(['place_limit_grid', 'grid_ladder', 'grid.ladder', 'action.grid_ladder', 'maintain_limit_ladder'])
 const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fixed_qty'])
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
@@ -273,6 +275,11 @@ export class SemanticSeedStateBuilderService {
     }
 
     const openSlots = this.readOpenSlots(update.openSlots)
+    const constraints = Array.isArray(update.constraints)
+      ? update.constraints
+          .map((item, index) => this.toPositionConstraintState(item, index))
+          .filter((item): item is SemanticPositionConstraintState => item !== null)
+      : []
     const sizingProvided = this.hasOwnProperty(update, 'sizing')
     const positionMode = this.normalizePositionSideMode(update.positionMode) ?? update.positionMode
     const normalizedMode = this.normalizePositionSizingMode(update.mode)
@@ -304,6 +311,45 @@ export class SemanticSeedStateBuilderService {
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
       openSlots: contractCoverage.openSlots,
+      ...(contracts ? { contracts } : {}),
+      ...(constraints.length > 0 ? { constraints } : {}),
+    }
+  }
+
+  private toPositionConstraintState(update: unknown, index: number): SemanticPositionConstraintState | null {
+    if (!this.isRecord(update)) return null
+    const key = this.readTrimmedString(update.key)
+    if (
+      key !== 'position.pyramiding_limit'
+      && key !== 'position.max_exposure_pct'
+      && key !== 'position.dca_schedule'
+    ) {
+      return null
+    }
+
+    const params = this.readParams(update.params)
+    const openSlots = this.readOpenSlots(update.openSlots)
+    const evidence = this.readEvidence(update.evidence)
+    const supersedes = this.readStringArray(update.supersedes)
+    const contracts = this.readContracts(update.contracts)
+      ?? (this.hasOwnProperty(update, 'contracts') ? null : this.synthesizePositionConstraintContracts(key, params, index))
+    const contractCoverage = this.resolveContractCoverage({
+      contracts,
+      openSlots,
+      statusValue: update.status,
+      fieldPath: `position.constraints[${index}].contracts`,
+      priority: 'behavior',
+    })
+
+    return {
+      id: this.readTrimmedString(update.id) ?? `planner-position-constraint-${index + 1}`,
+      key,
+      params,
+      status: contractCoverage.status,
+      source: this.readSource(update.source),
+      ...(evidence ? { evidence } : {}),
+      openSlots: contractCoverage.openSlots,
+      ...(supersedes ? { supersedes } : {}),
       ...(contracts ? { contracts } : {}),
     }
   }
@@ -538,13 +584,17 @@ export class SemanticSeedStateBuilderService {
 
   private readFiniteNumberParam(params: Record<string, unknown>, keys: readonly string[]): number | null {
     for (const key of keys) {
-      const value = params[key]
-      if (typeof value === 'number' && Number.isFinite(value)) {
+      const value = this.readFiniteNumber(params[key])
+      if (value !== null) {
         return value
       }
     }
 
     return null
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
   }
 
   private buildTriggerCapability(
@@ -737,6 +787,10 @@ export class SemanticSeedStateBuilderService {
       return [this.withRegistryContractSubstrate(key, this.buildGridActionContract(key, params, index))]
     }
 
+    if (SYNTHESIZABLE_POSITION_LIFECYCLE_ACTION_KEYS.has(key)) {
+      return [this.buildPositionLifecycleActionContract(key, params, index)]
+    }
+
     if (!SYNTHESIZABLE_ACTION_KEYS.has(key)) {
       return null
     }
@@ -783,6 +837,71 @@ export class SemanticSeedStateBuilderService {
       },
       params,
     })
+  }
+
+  private buildPositionLifecycleActionContract(
+    key: string,
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract {
+    const intent = this.resolvePositionLifecycleActionIntent(key)
+    const contract = this.withRegistryContractSubstrate(key, this.buildAtomContract({
+      id: `contract-seed-action-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'action',
+      capability: {
+        domain: 'order_program',
+        verb: 'execute',
+        object: 'order_action',
+        shape: this.toCapabilityShape({
+          key,
+          intent,
+          ...params,
+        }),
+      },
+      params,
+    }))
+
+    if (key === 'action.reduce_position') {
+      return {
+        ...contract,
+        orderRequirements: [
+          ...contract.orderRequirements,
+          { domain: 'order', verb: 'enforce', object: 'no_exposure_increase' },
+        ],
+        effects: [
+          { domain: 'exposure', verb: 'reduce', object: 'position' },
+        ],
+      }
+    }
+
+    if (key === 'action.add_position') {
+      return {
+        ...contract,
+        effects: [
+          { domain: 'exposure', verb: 'increase', object: 'position' },
+        ],
+      }
+    }
+
+    return {
+      ...contract,
+      effects: [
+        { domain: 'exposure', verb: 'reduce', object: 'position', shape: this.toCapabilityShape({ phase: 'close_current' }) },
+        { domain: 'exposure', verb: 'increase', object: 'position', shape: this.toCapabilityShape({ phase: 'open_opposite' }) },
+      ],
+    }
+  }
+
+  private resolvePositionLifecycleActionIntent(key: string): 'reduce' | 'add' | 'reverse' {
+    if (key === 'action.reduce_position') {
+      return 'reduce'
+    }
+
+    if (key === 'action.add_position') {
+      return 'add'
+    }
+
+    return 'reverse'
   }
 
   private synthesizeRiskContracts(
@@ -1009,6 +1128,90 @@ export class SemanticSeedStateBuilderService {
         positionMode: position.positionMode,
       },
     })]
+  }
+
+  private synthesizePositionConstraintContracts(
+    key: SemanticPositionConstraintState['key'],
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract[] | null {
+    if (key === 'position.dca_schedule') {
+      return [this.synthesizeDcaScheduleContract(key, params, index)]
+    }
+
+    const object = key === 'position.pyramiding_limit'
+      ? 'pyramiding_layers'
+      : 'max_exposure_pct'
+    const contract = this.withRegistryContractSubstrate(key, this.buildAtomContract({
+      id: `contract-seed-position-constraint-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'position',
+      capability: {
+        domain: 'exposure',
+        verb: 'limit',
+        object,
+        shape: this.toCapabilityShape({
+          key,
+          ...params,
+        }),
+      },
+      params,
+    }))
+
+    return [{
+      ...contract,
+      effects: [
+        { domain: 'guard', verb: 'block', object: 'exposure_increase' },
+      ],
+    }]
+  }
+
+  private synthesizeDcaScheduleContract(
+    key: SemanticPositionConstraintState['key'],
+    params: Record<string, unknown>,
+    index: number,
+  ): SemanticAtomContract {
+    const exitRuleShape = this.readUnknownShape(params.exitRule)
+    const contract = this.withRegistryContractSubstrate(key, {
+      id: `contract-seed-position-constraint-${index + 1}-${this.slugifyContractId(key)}`,
+      kind: 'position',
+      capabilities: [
+        {
+          domain: 'runtime',
+          verb: 'schedule',
+          object: 'dca_orders',
+          shape: this.toCapabilityShape({
+            key,
+            maxCount: this.readFiniteNumber(params.maxCount),
+            capitalCap: this.readFiniteNumber(params.capitalCap),
+            perOrderSizing: this.readUnknownShape(params.perOrderSizing) ?? params.perOrderSizing,
+            triggerMode: params.triggerMode,
+          }),
+        },
+        ...(exitRuleShape
+          ? [{
+              domain: 'guard' as const,
+              verb: 'define',
+              object: 'dca_exit_rule',
+              shape: exitRuleShape,
+            }]
+          : []),
+      ],
+      requires: [
+        { domain: 'guard', verb: 'define', object: 'dca_exit_rule' },
+      ],
+      params,
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
+    })
+
+    return {
+      ...contract,
+      effects: [
+        { domain: 'exposure', verb: 'increase', object: 'position' },
+      ],
+    }
   }
 
   private buildAtomContract(input: {
@@ -1683,6 +1886,28 @@ export class SemanticSeedStateBuilderService {
       }
     }
     return shape
+  }
+
+  private readUnknownShape(value: unknown): SemanticCapabilityShape | null {
+    const normalizedValue = this.toCapabilityShapeValue(value)
+    if (normalizedValue === undefined) {
+      return null
+    }
+
+    if (
+      normalizedValue === null
+      || typeof normalizedValue === 'string'
+      || typeof normalizedValue === 'number'
+      || typeof normalizedValue === 'boolean'
+    ) {
+      return { value: normalizedValue }
+    }
+
+    if (Array.isArray(normalizedValue)) {
+      return { items: normalizedValue }
+    }
+
+    return normalizedValue
   }
 
   private toCapabilityShapeValue(

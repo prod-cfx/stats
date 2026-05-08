@@ -3,6 +3,7 @@ import type {
   SemanticEvidence,
   SemanticExpression,
   SemanticNodeStatus,
+  SemanticPositionConstraintKey,
   SemanticPositionSizingContract,
   SemanticSlotState,
   SemanticSource,
@@ -48,5 +49,10 @@ export interface CodegenSemanticPatch {
     value: number
     positionMode: string
     contracts?: SemanticAtomContract[]
+    constraints?: Array<CodegenSemanticNodeEnvelope & {
+      key: SemanticPositionConstraintKey
+      params?: Record<string, unknown>
+      contracts?: SemanticAtomContract[]
+    }>
   }) | null
 }
