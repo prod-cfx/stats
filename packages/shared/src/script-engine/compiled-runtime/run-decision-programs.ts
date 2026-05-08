@@ -60,6 +60,11 @@ interface CompiledDecisionState {
   barIndex: number
   lastTriggeredByProgram: Record<string, number>
   previousPositionQty: number
+  pendingReverseByProgram: Record<string, {
+    toSide: ReversePositionMeta['toSide']
+    actionKind: 'OPEN_LONG' | 'OPEN_SHORT'
+    quantity: DecisionProgramNode['actions'][number]['quantity']
+  }>
 }
 
 const PHASE_RANK: Record<DecisionProgramNode['phase'], number> = {
@@ -118,6 +123,12 @@ export function runDecisionPrograms(
   for (const program of orderedPrograms) {
     if (program.phase === 'entry' && guardState.blockNewEntry) {
       continue
+    }
+
+    const pendingReverseDecision = evaluatePendingReverse(program, ctx)
+    if (pendingReverseDecision) {
+      compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
+      return Object.freeze(pendingReverseDecision)
     }
 
     if (
@@ -181,6 +192,13 @@ function ensureCompiledDecisionState(
     if (typeof c.previousPositionQty !== 'number') {
       c.previousPositionQty = 0
     }
+    if (
+      !c.pendingReverseByProgram
+      || typeof c.pendingReverseByProgram !== 'object'
+      || Array.isArray(c.pendingReverseByProgram)
+    ) {
+      c.pendingReverseByProgram = {}
+    }
     return c as CompiledDecisionState
   }
 
@@ -188,6 +206,7 @@ function ensureCompiledDecisionState(
     barIndex: 0,
     lastTriggeredByProgram: {},
     previousPositionQty: 0,
+    pendingReverseByProgram: {},
   }
   ;(ctx as Record<string, unknown>).__compiledDecisionState = fallback
   return fallback
@@ -267,6 +286,11 @@ function evaluatePositionLifecycle(
       }
     }
 
+    const openAction = findReverseOpenAction(program, reverseMeta.toSide)
+    if (openAction) {
+      markPendingReverse(ctx, program.id, reverseMeta.toSide, openAction)
+    }
+
     return {
       action: reverseMeta.fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
       size: {
@@ -318,6 +342,79 @@ function evaluatePositionLifecycle(
   }
 
   return null
+}
+
+function evaluatePendingReverse(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+): StrategyDecisionV1 | null {
+  const reverseMeta = program.metadata?.reversePosition
+  const pendingReverse = reverseMeta
+    ? readPendingReverse(ctx, program.id, reverseMeta.toSide)
+    : null
+  if (!pendingReverse) {
+    return null
+  }
+
+  if (readCurrentQty(ctx) !== 0) {
+    return {
+      action: 'NOOP',
+      reason: `compiled.${program.id}.reverse.awaiting_flat_position`,
+    }
+  }
+
+  clearPendingReverse(ctx, program.id)
+  return {
+    action: pendingReverse.actionKind,
+    size: {
+      mode: mapSizeMode(pendingReverse.quantity.mode),
+      value: normalizeSizeValue(pendingReverse.quantity.mode, pendingReverse.quantity.value),
+    },
+    reason: `compiled.${program.id}.reverse.open_after_close`,
+  }
+}
+
+function findReverseOpenAction(
+  program: DecisionProgramNode,
+  toSide: ReversePositionMeta['toSide'],
+): DecisionProgramNode['actions'][number] | null {
+  const expectedKind = toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT'
+  return program.actions.find(action => action.kind === expectedKind) ?? null
+}
+
+function readPendingReverse(
+  ctx: StrategyExecutionContextV1,
+  programId: string,
+  toSide: ReversePositionMeta['toSide'],
+): CompiledDecisionState['pendingReverseByProgram'][string] | null {
+  const compiledState = ensureCompiledDecisionState(ctx)
+  const pending = compiledState.pendingReverseByProgram[programId]
+  if (!pending || pending.toSide !== toSide) {
+    return null
+  }
+  return pending
+}
+
+function markPendingReverse(
+  ctx: StrategyExecutionContextV1,
+  programId: string,
+  toSide: ReversePositionMeta['toSide'],
+  action: DecisionProgramNode['actions'][number],
+): void {
+  const compiledState = ensureCompiledDecisionState(ctx)
+  compiledState.pendingReverseByProgram[programId] = {
+    toSide,
+    actionKind: action.kind === 'OPEN_LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
+    quantity: action.quantity,
+  }
+}
+
+function clearPendingReverse(
+  ctx: StrategyExecutionContextV1,
+  programId: string,
+): void {
+  const compiledState = ensureCompiledDecisionState(ctx)
+  delete compiledState.pendingReverseByProgram[programId]
 }
 
 function readSemanticRuntimeStateNumber(

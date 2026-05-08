@@ -168,36 +168,50 @@ describe('atomic contract position lifecycle compiled runtime', () => {
   })
 
   it('closes the current long before opening a reverse short', () => {
-    const decision = runLifecycleProgram(
-      {
-        id: 'reverse-short',
-        phase: 'rebalance',
-        priority: 100,
-        when: 'ready',
-        metadata: {
-          reversePosition: {
-            fromSide: 'long',
-            toSide: 'short',
-            sameBarPolicy: 'allow',
-            sizingSource: 'current_position',
-          },
+    const program = {
+      id: 'reverse-short',
+      phase: 'rebalance',
+      priority: 100,
+      when: 'ready',
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'allow',
+          sizingSource: 'current_position',
         },
-        actions: [
-          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
-          { kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 100 } },
-        ],
       },
-      {
+      actions: [
+        { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        { kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+      ],
+    }
+    const ctx = {
         position: { side: 'long', qty: 2 },
         currentPrice: 100,
         accountEquity: 1_000,
-      } as Ctx,
-    )
+      } as Ctx
+
+    const decision = runLifecycleProgram(program, ctx)
 
     expect(decision).toEqual({
       action: 'CLOSE_LONG',
       size: { mode: 'QTY', value: 2 },
       reason: 'compiled.reverse-short.reverse.close_first',
+    })
+
+    const followUpDecision = runLifecycleProgram(
+      program,
+      {
+        ...ctx,
+        position: { side: 'flat', qty: 0 },
+      } as Ctx,
+    )
+
+    expect(followUpDecision).toEqual({
+      action: 'OPEN_SHORT',
+      size: { mode: 'RATIO', value: 1 },
+      reason: 'compiled.reverse-short.reverse.open_after_close',
     })
   })
 
