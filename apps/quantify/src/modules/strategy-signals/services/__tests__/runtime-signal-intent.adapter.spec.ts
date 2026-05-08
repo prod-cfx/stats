@@ -325,11 +325,59 @@ describe('RuntimeSignalIntentAdapter', () => {
     }))
   })
 
-  it('returns missing_required_truth when action is unsupported', () => {
+  it('maps ADJUST_POSITION delta decisions to adjustment signals', () => {
     const result = adapter.fromDecision({
       action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: { mode: 'QTY', value: -0.4 },
+      reason: 'compiled.reduce',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 100,
+    })
+
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
+      direction: 'SELL',
+      signalType: 'ADJUSTMENT',
+      positionSizeQuote: 40,
+      entryPrice: 100,
+      reasoning: 'compiled.reduce',
+    }))
+  })
+
+  it('maps ADJUST_POSITION target decisions using current quantity', () => {
+    const result = adapter.fromDecision({
+      action: 'ADJUST_POSITION',
+      adjustMode: 'TARGET',
+      size: { mode: 'QTY', value: -1 },
+      reason: 'compiled.reverse',
+    }, {
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      referencePrice: 100,
+      currentQty: 2,
+    })
+
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
+      direction: 'SELL',
+      signalType: 'ADJUSTMENT',
+      positionSizeQuote: 300,
+      entryPrice: 100,
+      reasoning: 'compiled.reverse',
+    }))
+  })
+
+  it('returns missing_required_truth when ADJUST_POSITION target current quantity is missing', () => {
+    const result = adapter.fromDecision({
+      action: 'ADJUST_POSITION',
+      adjustMode: 'TARGET',
       size: { mode: 'QTY', value: 1 },
-      reason: 'compiled.unsupported',
+      reason: 'compiled.adjust',
     }, {
       exchange: 'okx',
       marketType: 'spot',
@@ -340,8 +388,8 @@ describe('RuntimeSignalIntentAdapter', () => {
 
     expect(result).toEqual(expect.objectContaining({
       kind: 'missing_required_truth',
-      reasonCode: 'RUNTIME_SIGNAL_ACTION_UNSUPPORTED',
-      fields: expect.arrayContaining(['action']),
+      reasonCode: 'RUNTIME_SIGNAL_CURRENT_QTY_MISSING',
+      fields: expect.arrayContaining(['currentQty']),
     }))
   })
 })

@@ -1,7 +1,7 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
 
 type RuntimeSignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
-type RuntimeSignalType = 'ENTRY' | 'EXIT'
+type RuntimeSignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT'
 
 export type RuntimeSignalIntentResult =
   | {
@@ -27,14 +27,11 @@ export interface RuntimeDecisionContext {
   symbol: string
   timeframe: string
   referencePrice?: number
+  currentQty?: number
 }
 
 export class RuntimeSignalIntentAdapter {
   fromDecision(decision: StrategyDecisionV1, ctx: RuntimeDecisionContext): RuntimeSignalIntentResult {
-    if (decision.action === 'ADJUST_POSITION') {
-      return this.missingRequiredTruth('RUNTIME_SIGNAL_ACTION_UNSUPPORTED', ['action'])
-    }
-
     const reason = this.resolveReason(decision.reason)
     if (!reason) {
       return this.missingRequiredTruth('RUNTIME_SIGNAL_REASONING_MISSING', ['reason'])
@@ -78,6 +75,10 @@ export class RuntimeSignalIntentAdapter {
       }
     }
 
+    if (decision.action === 'ADJUST_POSITION') {
+      return this.buildAdjustPositionSignal(decision, ctx, reason)
+    }
+
     return {
       kind: 'signal',
       signal: {
@@ -85,6 +86,52 @@ export class RuntimeSignalIntentAdapter {
         signalType: 'EXIT',
         entryPrice: ctx.referencePrice,
         reasoning: reason,
+        ...this.buildOptionalSignalFields(decision),
+      },
+    }
+  }
+
+  private buildAdjustPositionSignal(
+    decision: StrategyDecisionV1,
+    ctx: RuntimeDecisionContext,
+    reason: string,
+  ): RuntimeSignalIntentResult {
+    if (!decision.size) {
+      return this.missingRequiredTruth('RUNTIME_SIGNAL_SIZE_MISSING', ['size'])
+    }
+
+    if (decision.size.mode !== 'QTY') {
+      return this.missingRequiredTruth('RUNTIME_SIGNAL_ADJUST_SIZE_MODE_UNSUPPORTED', ['size.mode'])
+    }
+
+    if (!this.isFiniteNumber(decision.size.value)) {
+      return this.missingRequiredTruth('RUNTIME_SIGNAL_ADJUST_SIZE_VALUE_INVALID', ['size.value'])
+    }
+
+    const adjustMode = decision.adjustMode ?? 'TARGET'
+    const currentQty = ctx.currentQty
+    if (adjustMode === 'TARGET' && !this.isFiniteNumber(currentQty)) {
+      return this.missingRequiredTruth('RUNTIME_SIGNAL_CURRENT_QTY_MISSING', ['currentQty'])
+    }
+
+    const deltaQty = adjustMode === 'DELTA'
+      ? decision.size.value
+      : decision.size.value - (currentQty ?? 0)
+    if (deltaQty === 0) {
+      return {
+        kind: 'noop',
+        reason,
+      }
+    }
+
+    return {
+      kind: 'signal',
+      signal: {
+        direction: deltaQty > 0 ? 'BUY' : 'SELL',
+        signalType: 'ADJUSTMENT',
+        entryPrice: ctx.referencePrice,
+        reasoning: reason,
+        positionSizeQuote: Math.abs(deltaQty) * ctx.referencePrice,
         ...this.buildOptionalSignalFields(decision),
       },
     }
@@ -133,5 +180,9 @@ export class RuntimeSignalIntentAdapter {
 
   private isFinitePositiveNumber(value: unknown): value is number {
     return typeof value === 'number' && Number.isFinite(value) && value > 0
+  }
+
+  private isFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value)
   }
 }
