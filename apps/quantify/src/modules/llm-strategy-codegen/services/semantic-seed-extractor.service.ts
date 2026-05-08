@@ -4932,7 +4932,11 @@ export class SemanticSeedExtractorService {
 
     const matchedText = text.slice(matchIndex, matchIndex + matchLength)
     const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 16)
-    return /(?:日|天)/u.test(matchedText) && /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
+    if (/(?:日|天)/u.test(matchedText)) {
+      return /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
+    }
+    return /(?:分钟|分|小时|时)/u.test(matchedText)
+      && /^\s*(?:EMA|SMA|MA|均线)(?!\s*\d)/iu.test(suffix)
   }
 
   private isRollingWindowTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {

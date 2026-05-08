@@ -187,6 +187,12 @@ describe('SemanticSeedExtractorService', () => {
     expect(service.extract('20 日均线上穿 50 日均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
     expect(service.extract('7日EMA 上穿 21日MA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
     expect(service.extract('50日SMA 下穿 100日SMA 开空，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('20小时均线上穿50小时均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('5分钟EMA 上穿 20分钟EMA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('15分MA 上穿 30分MA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('BTC 1小时 MA50 上方开多，单笔10%').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '1h',
+    }))
   })
 
   it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
