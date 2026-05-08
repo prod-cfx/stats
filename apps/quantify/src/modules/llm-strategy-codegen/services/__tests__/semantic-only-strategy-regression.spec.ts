@@ -251,7 +251,7 @@ describe('semantic-only strategy regression verification', () => {
         return
       }
       if (condition.kind === 'expression') {
-        expressions.push(condition.expression)
+        expressions.push(condition)
         return
       }
       for (const child of condition.children) {
