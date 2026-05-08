@@ -84,6 +84,8 @@ export type CanonicalAction =
   | 'CLOSE_SHORT'
   | 'REDUCE_LONG'
   | 'REDUCE_SHORT'
+  | 'ADD_LONG'
+  | 'ADD_SHORT'
   | 'FORCE_EXIT'
   | 'BLOCK_NEW_ENTRY'
   | 'ADJUST_POSITION'

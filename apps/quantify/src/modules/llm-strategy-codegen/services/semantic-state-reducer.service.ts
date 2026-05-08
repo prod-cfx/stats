@@ -7,6 +7,7 @@ import type {
   SemanticCapabilityShape,
   SemanticEvidence,
   SemanticExpression,
+  SemanticPositionConstraintState,
   SemanticPositionSizingContract,
   SemanticSlotState,
   SemanticState,
@@ -61,6 +62,9 @@ export class SemanticStateReducerService {
         ? {
             ...input.currentState.position,
             openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
+            ...(input.currentState.position.constraints
+              ? { constraints: structuredClone(input.currentState.position.constraints) }
+              : {}),
           }
         : null,
       contextSlots: {
@@ -140,9 +144,10 @@ export class SemanticStateReducerService {
         break
       }
 
+      const paramKey = this.resolveActionParamKey(slot)
       action.params = {
         ...(action.params ?? {}),
-        [this.resolveActionParamKey(slot)]: answerText,
+        [paramKey]: answerText,
       }
       slot.value = answerText
       slot.status = 'locked'
@@ -152,6 +157,9 @@ export class SemanticStateReducerService {
         source: 'user_explicit',
       }
       action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (action.key === 'action.add_position' && paramKey === 'constraint') {
+        this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
+      }
       break
     }
 
@@ -187,6 +195,41 @@ export class SemanticStateReducerService {
       if (this.applyContractRequirementAnswer(nextState.position, positionSlot, answerText, input.messageIndex)) {
         nextState.position.status = nextState.position.openSlots?.every(item => item.status !== 'open') ? 'locked' : 'open'
       }
+    }
+
+    for (const constraint of nextState.position?.constraints ?? []) {
+      const slot = constraint.openSlots.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+      })
+      if (!slot || slot.status !== 'open') continue
+
+      if (this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(constraint, slot, answerText, input.messageIndex)) {
+          constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
+        break
+      }
+
+      const paramKey = this.resolvePositionConstraintParamKey(slot)
+      if (!paramKey) {
+        break
+      }
+
+      constraint.params[paramKey] = this.parsePositionConstraintParamAnswer(paramKey, answerText, input.messageIndex)
+      slot.value = answerText
+      slot.status = 'locked'
+      slot.evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit',
+      }
+      constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
     }
 
     let riskChanged = false
@@ -312,6 +355,136 @@ export class SemanticStateReducerService {
     return slotKeyPath?.[1] ?? null
   }
 
+  private resolvePositionConstraintParamKey(slot: SemanticSlotState): keyof SemanticPositionConstraintState['params'] | null {
+    const paramsPath = slot.fieldPath.match(/(?:^|\.)params\.([A-Za-z0-9_]+)$/u)
+    if (paramsPath?.[1]) {
+      return paramsPath[1]
+    }
+
+    if (slot.slotKey === 'position.dca_schedule.exit_rule') {
+      return 'exitRule'
+    }
+
+    const slotKeyPath = slot.slotKey.match(/\.([A-Za-z0-9_]+)$/u)
+    if (!slotKeyPath?.[1]) {
+      return null
+    }
+
+    return this.toCamelCaseParamKey(slotKeyPath[1])
+  }
+
+  private toCamelCaseParamKey(value: string): string {
+    return value.replace(/_([a-z0-9])/giu, (_, item: string) => item.toUpperCase())
+  }
+
+  private parsePositionConstraintParamAnswer(
+    paramKey: string,
+    answerText: string,
+    messageIndex?: number,
+  ): unknown {
+    if (paramKey === 'maxCount') {
+      const value = this.parsePositiveIntegerAnswer(answerText)
+      return value ?? answerText
+    }
+
+    if (paramKey === 'capitalCap' || paramKey === 'perOrderSizing') {
+      return this.parsePositionSizingContractAnswer(answerText, messageIndex)?.sizing ?? answerText
+    }
+
+    if (paramKey === 'triggerMode') {
+      if (/价格|跌|涨|price/iu.test(answerText)) return 'price_interval'
+      if (/时间|每隔|周期|time/iu.test(answerText)) return 'time_interval'
+      if (/信号|确认|signal/iu.test(answerText)) return 'signal'
+      return answerText
+    }
+
+    return answerText
+  }
+
+  private applyAddPositionConstraintAnswer(
+    state: SemanticState,
+    answerText: string,
+    messageIndex?: number,
+  ): void {
+    const parsed = this.parseAddPositionConstraintAnswer(answerText)
+    if (!parsed) {
+      return
+    }
+
+    if (!state.position) {
+      state.position = {
+        mode: 'constraint_only',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        constraints: [],
+      }
+    }
+
+    const constraints = state.position.constraints ?? []
+    const existing = constraints.find(constraint => constraint.key === parsed.key)
+    const evidence: SemanticEvidence = {
+      text: answerText,
+      messageIndex,
+      source: 'user_explicit',
+    }
+
+    if (existing) {
+      existing.params = { ...existing.params, ...parsed.params }
+      existing.status = existing.openSlots.every(slot => slot.status !== 'open') ? 'locked' : existing.status
+      existing.evidence = evidence
+    } else {
+      constraints.push({
+        id: parsed.key === 'position.pyramiding_limit'
+          ? 'clarified-position-pyramiding-limit'
+          : 'clarified-position-max-exposure',
+        key: parsed.key,
+        params: parsed.params,
+        status: 'locked',
+        source: 'user_explicit',
+        evidence,
+        openSlots: [],
+      })
+    }
+
+    state.position.constraints = constraints
+  }
+
+  private parseAddPositionConstraintAnswer(
+    answerText: string,
+  ): { key: 'position.pyramiding_limit', params: { maxLayers: number } } | { key: 'position.max_exposure_pct', params: { maxExposurePct: number } } | null {
+    const layerMatch = answerText.match(/(?:最多|不超过|上限|限制)?\s*(\d+)\s*(?:次|层|笔)/u)
+    if (layerMatch?.[1]) {
+      const maxLayers = Number(layerMatch[1])
+      if (Number.isInteger(maxLayers) && maxLayers > 0) {
+        return { key: 'position.pyramiding_limit', params: { maxLayers } }
+      }
+    }
+
+    const exposureMatch = answerText.match(/(?:敞口|仓位|总仓位|总敞口|exposure)[^\d]*(\d+(?:\.\d+)?)\s*%/iu)
+      ?? answerText.match(/(\d+(?:\.\d+)?)\s*%[^\n]*(?:敞口|仓位|总仓位|总敞口|exposure)/iu)
+    if (exposureMatch?.[1]) {
+      const maxExposurePct = Number(exposureMatch[1])
+      if (Number.isFinite(maxExposurePct) && maxExposurePct > 0) {
+        return { key: 'position.max_exposure_pct', params: { maxExposurePct } }
+      }
+    }
+
+    return null
+  }
+
+  private parsePositiveIntegerAnswer(answerText: string): number | null {
+    const match = answerText.match(/\d+/u)
+    if (!match) {
+      return null
+    }
+
+    const value = Number(match[0])
+    return Number.isInteger(value) && value > 0 ? value : null
+  }
+
   private applyContractRequirementAnswer(
     owner: { contracts?: SemanticAtomContract[] },
     slot: SemanticSlotState,
@@ -409,6 +582,10 @@ export class SemanticStateReducerService {
 
     if (domain === 'guard' && verb === 'enforce') {
       return this.parseGuardEnforcementCapabilityShape(answerText, slot)
+    }
+
+    if (domain === 'guard' && verb === 'define' && object === 'dca_exit_rule') {
+      return { rule: answerText }
     }
 
     return null

@@ -242,6 +242,24 @@ export type SemanticPositionSizingContract =
   | { kind: 'quote'; value: number; asset: 'USDT' | 'USDC' | 'USD' }
   | { kind: 'base'; value: number; asset: string }
 
+export type SemanticPositionConstraintKey =
+  | 'position.pyramiding_limit'
+  | 'position.max_exposure_pct'
+  | 'position.dca_schedule'
+
+export interface SemanticPositionConstraintState {
+  id: string
+  key: SemanticPositionConstraintKey
+  params: Record<string, unknown>
+  status: SemanticNodeStatus
+  source: SemanticSource
+  evidence?: SemanticEvidence
+  openSlots: SemanticSlotState[]
+  supersedes?: string[]
+  contracts?: SemanticAtomContract[]
+  support?: SemanticAtomSupportMetadata
+}
+
 export interface SemanticPositionState {
   sizing?: SemanticPositionSizingContract | null
   mode: string
@@ -252,6 +270,7 @@ export interface SemanticPositionState {
   evidence?: SemanticEvidence
   openSlots?: SemanticSlotState[]
   contracts?: SemanticAtomContract[]
+  constraints?: SemanticPositionConstraintState[]
   support?: SemanticAtomSupportMetadata
 }
 

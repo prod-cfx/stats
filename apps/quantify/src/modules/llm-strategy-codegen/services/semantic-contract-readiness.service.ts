@@ -6,6 +6,8 @@ import type {
   SemanticCapabilityDomain,
   SemanticNodeStatus,
   SemanticOrderRequirement,
+  SemanticPositionConstraintState,
+  SemanticPositionState,
   SemanticPriority,
   SemanticRequirement,
   SemanticRuntimeRequirement,
@@ -93,6 +95,7 @@ export class SemanticContractReadinessService {
       buildMissingSubstrateSlots(supportedOwners),
       buildUnsupportedSubstrateRequirementSlots(supportedOwners),
       buildContractOpenSlotMap(supportedOwners),
+      buildAddPositionConstraintRelationshipSlots(state),
     )
     const nextState: SemanticState = {
       ...state,
@@ -105,9 +108,7 @@ export class SemanticContractReadinessService {
       risk: state.risk.map(risk =>
         mergeOwnerOpenSlots(risk, slotsByOwnerKey.get(ownerKey('risk', risk.id))),
       ),
-      position: state.position
-        ? mergeOwnerOpenSlots(state.position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
-        : null,
+      position: mergePositionOpenSlots(state.position, slotsByOwnerKey),
       orchestration: orchestrationResult.state,
     }
 
@@ -386,7 +387,12 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     }
   }
 
-  if (state.position && state.position.status !== 'superseded' && state.position.contracts?.length) {
+  if (
+    state.position
+    && state.position.mode !== 'constraint_only'
+    && state.position.status !== 'superseded'
+    && state.position.contracts?.length
+  ) {
     owners.push({
       ownerKind: 'position',
       ownerId: positionOwnerId(),
@@ -402,6 +408,21 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
       openSlots: state.position.openSlots ?? [],
       contracts: state.position.contracts,
     })
+  }
+
+  for (const constraint of state.position?.constraints ?? []) {
+    if (constraint.status !== 'superseded' && constraint.contracts?.length) {
+      owners.push({
+        ownerKind: 'position',
+        ownerId: positionConstraintOwnerId(constraint),
+        atomKey: constraint.key,
+        params: constraint.params,
+        support: constraint.support,
+        status: constraint.status,
+        openSlots: constraint.openSlots,
+        contracts: constraint.contracts,
+      })
+    }
   }
 
   return owners
@@ -485,16 +506,20 @@ const SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS = new Set([
   'runtime.provide.indicator_helper',
   'runtime.provide.compiled_predicate_runtime',
   'runtime.provide.position_pnl_pct',
+  'runtime.provide.position_snapshot',
   'state.read.none',
   'state.write.none',
   'state.read.sequence_state',
   'state.write.sequence_state',
   'state.read.remembered_level',
   'state.write.remembered_level',
+  'state.read_write.pyramiding_layer_count',
+  'state.read_write.dca_fired_count',
   'order.support.market_order',
   'order.support.close_position',
   'order.support.reduce_position',
   'order.support.reduce_only',
+  'order.enforce.no_exposure_increase',
 ])
 
 const SUPPORTED_SUBSTRATE_REQUIREMENT_KEY_PREFIXES: readonly string[] = [
@@ -601,6 +626,41 @@ function buildContractOpenSlotMap(
   return slotsByOwnerKey
 }
 
+function buildAddPositionConstraintRelationshipSlots(state: SemanticState): Map<string, SemanticSlotState[]> {
+  const slotsByOwnerKey = new Map<string, SemanticSlotState[]>()
+  if (hasActiveAddPositionConstraint(state.position)) {
+    return slotsByOwnerKey
+  }
+
+  for (const action of state.actions) {
+    if (action.status === 'superseded' || action.key !== 'action.add_position') {
+      continue
+    }
+
+    slotsByOwnerKey.set(ownerKey('action', action.id), [{
+      slotKey: 'action.add_position.constraint',
+      fieldPath: `actions[${action.id}].params.constraint`,
+      status: 'open',
+      priority: 'risk',
+      affectsExecution: true,
+      questionHint: '请确认加仓的约束，例如最大加仓次数或最大总敞口比例。',
+      evidence: {
+        source: 'derived',
+        text: `Missing exposure guard for add_position action ${action.id}`,
+      },
+    }])
+  }
+
+  return slotsByOwnerKey
+}
+
+function hasActiveAddPositionConstraint(position: SemanticPositionState | null): boolean {
+  return position?.constraints?.some(constraint =>
+    constraint.status !== 'superseded'
+    && (constraint.key === 'position.pyramiding_limit' || constraint.key === 'position.max_exposure_pct'),
+  ) ?? false
+}
+
 function hasContractSubstrate(contract: Partial<SemanticAtomContract>): boolean {
   return Array.isArray(contract.runtimeRequirements)
     && Array.isArray(contract.stateRequirements)
@@ -640,6 +700,7 @@ function hasBlockingOwnerOpenSlots(state: SemanticState): boolean {
     || state.actions.some(ownerHasOpenSlot)
     || state.risk.some(ownerHasOpenSlot)
     || ownerHasOpenSlot(state.position)
+    || (state.position?.constraints ?? []).some(ownerHasOpenSlot)
 }
 
 function ownerHasOpenSlot(owner: { openSlots?: readonly SemanticSlotState[] } | null): boolean {
@@ -661,6 +722,26 @@ function toOpenSlot(requirement: MissingSemanticContractRequirement): SemanticSl
       text: `Missing semantic contract requirement ${requirement.contractId}: ${capabilityKey}`,
     },
   }
+}
+
+function mergePositionOpenSlots(
+  position: SemanticPositionState | null,
+  slotsByOwnerKey: Map<string, SemanticSlotState[]>,
+): SemanticPositionState | null {
+  if (!position) {
+    return null
+  }
+
+  const constraints = position.constraints?.map(constraint =>
+    mergeOwnerOpenSlots(
+      constraint,
+      slotsByOwnerKey.get(ownerKey('position', positionConstraintOwnerId(constraint))),
+    ),
+  )
+  const nextPosition = mergeOwnerOpenSlots(position, slotsByOwnerKey.get(ownerKey('position', positionOwnerId())))
+  return constraints
+    ? { ...nextPosition, constraints }
+    : nextPosition
 }
 
 function mergeOwnerOpenSlots<T extends { openSlots?: SemanticSlotState[]; status?: SemanticNodeStatus }>(
@@ -728,12 +809,17 @@ function isManagedContractReadinessSlot(slot: SemanticSlotState): boolean {
     || slot.slotKey.startsWith('contract.runtime_requirement.')
     || slot.slotKey.startsWith('contract.state_requirement.')
     || slot.slotKey.startsWith('contract.order_requirement.')
+    || slot.slotKey === 'action.add_position.constraint'
 }
 
 function buildRequirementFieldPath(
   requirement: MissingSemanticContractRequirement,
   capabilityKey: string,
 ): string {
+  if (requirement.ownerKind === 'position' && isPositionConstraintOwnerId(requirement.ownerId)) {
+    return `position.constraints[${positionConstraintIdFromOwnerId(requirement.ownerId)}].contracts[${requirement.contractId}].requires.${capabilityKey}`
+  }
+
   if (requirement.ownerKind === 'position') {
     return `position.contracts[${requirement.contractId}].requires.${capabilityKey}`
   }
@@ -748,6 +834,10 @@ function buildCapabilityShapeFieldPath(
 ): string {
   const capabilityKey = `${capability.domain}.${capability.verb}.${capability.object}`
 
+  if (owner.ownerKind === 'position' && isPositionConstraintOwnerId(owner.ownerId)) {
+    return `position.constraints[${positionConstraintIdFromOwnerId(owner.ownerId)}].contracts[${contract.id}].capabilities[${capabilityKey}].shape`
+  }
+
   if (owner.ownerKind === 'position') {
     return `position.contracts[${contract.id}].capabilities[${capabilityKey}].shape`
   }
@@ -759,6 +849,10 @@ function buildContractFieldPath(
   owner: SemanticContractOwnerRef,
   contractId: string,
 ): string {
+  if (owner.ownerKind === 'position' && isPositionConstraintOwnerId(owner.ownerId)) {
+    return `position.constraints[${positionConstraintIdFromOwnerId(owner.ownerId)}].contracts[${contractId}]`
+  }
+
   if (owner.ownerKind === 'position') {
     return `position.contracts[${contractId}]`
   }
@@ -798,6 +892,18 @@ function positionOwnerId(): string {
   return 'position'
 }
 
+function positionConstraintOwnerId(constraint: Pick<SemanticPositionConstraintState, 'id'>): string {
+  return `position-constraint:${constraint.id}`
+}
+
+function isPositionConstraintOwnerId(ownerId: string): boolean {
+  return ownerId.startsWith('position-constraint:')
+}
+
+function positionConstraintIdFromOwnerId(ownerId: string): string {
+  return ownerId.slice('position-constraint:'.length)
+}
+
 function toPositionAtomKey(mode: string): string {
   if (mode === 'fixed_ratio') {
     return 'position.fixed_pct'
@@ -811,5 +917,19 @@ function toPositionAtomKey(mode: string): string {
     return 'position.fixed_quantity'
   }
 
+  if (isPositionLifecycleConstraintKey(mode)) {
+    return `position.main_mode.${mode}`
+  }
+
+  if (mode === 'constraint_only') {
+    return 'position.main_mode.constraint_only'
+  }
+
   return mode
+}
+
+function isPositionLifecycleConstraintKey(mode: string): boolean {
+  return mode === 'position.pyramiding_limit'
+    || mode === 'position.max_exposure_pct'
+    || mode === 'position.dca_schedule'
 }

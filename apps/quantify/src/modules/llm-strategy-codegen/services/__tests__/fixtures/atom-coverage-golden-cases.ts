@@ -237,7 +237,85 @@ export const atomicContractExecutionUpgradeGoldenCases: AtomCoverageGoldenCase[]
   },
 ]
 
+export const positionLifecycleGoldenCases: AtomCoverageGoldenCase[] = [
+  {
+    id: 'phase2-001-reduce-position-percent',
+    name: 'reduce position by percent after profit',
+    message: '盈利 5% 后减仓 30%。',
+    tags: ['position_lifecycle', 'risk'],
+    expectedAtoms: [
+      { key: 'risk.take_profit_pct', category: 'risk', minContractSubstrate: true },
+      { key: 'action.reduce_position', category: 'action', minContractSubstrate: true },
+    ],
+    expectedKeys: ['risk.take_profit_pct', 'action.reduce_position'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-002-add-position-with-pyramiding-limit',
+    name: 'add position with pyramiding limit',
+    message: 'BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次。',
+    tags: ['position_lifecycle', 'mean_reversion'],
+    expectedAtoms: [
+      { key: 'condition.sequence', category: 'trigger', minContractSubstrate: true },
+      { key: 'action.add_position', category: 'action', minContractSubstrate: true },
+      { key: 'position.pyramiding_limit', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: ['condition.sequence', 'action.add_position', 'position.pyramiding_limit'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-003-add-position-missing-constraint',
+    name: 'add position asks for exposure guard',
+    message: 'BTC 回踩 MA20 不破后加仓，每次加仓 20%。',
+    tags: ['position_lifecycle', 'mean_reversion'],
+    expectedAtoms: [
+      { key: 'condition.sequence', category: 'trigger', minContractSubstrate: true },
+      { key: 'action.add_position', category: 'action', minContractSubstrate: true },
+    ],
+    expectedKeys: ['condition.sequence', 'action.add_position', 'open_slot:action.add_position.constraint'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    id: 'phase2-004-reverse-position',
+    name: 'reverse position close then open opposite',
+    message: '跌破 MA50 平多并反手做空，反手仓位沿用原仓位，允许同一根 K 线内反手。',
+    tags: ['position_lifecycle', 'trend'],
+    expectedAtoms: [
+      { key: 'indicator.below', category: 'trigger', minContractSubstrate: true },
+      { key: 'action.reverse_position', category: 'action', minContractSubstrate: true },
+    ],
+    expectedKeys: ['indicator.below', 'action.reverse_position'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-005-dca-fixed-schedule',
+    name: 'fixed DCA schedule with cap and exit',
+    message: '每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。',
+    tags: ['position_lifecycle', 'dca', 'risk'],
+    expectedAtoms: [
+      { key: 'price.percent_change', category: 'trigger', minContractSubstrate: true },
+      { key: 'position.dca_schedule', category: 'position', minContractSubstrate: true },
+      { key: 'risk.remembered_level_stop', category: 'risk', minContractSubstrate: true },
+    ],
+    expectedKeys: ['price.percent_change', 'position.dca_schedule', 'risk.remembered_level_stop'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-006-dca-missing-exit-rule',
+    name: 'DCA asks for exit rule',
+    message: '每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT。',
+    tags: ['position_lifecycle', 'dca'],
+    expectedAtoms: [
+      { key: 'price.percent_change', category: 'trigger', minContractSubstrate: true },
+      { key: 'position.dca_schedule', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: ['price.percent_change', 'position.dca_schedule', 'open_slot:position.dca_schedule.exit_rule'],
+    expectedRoute: 'open_slots',
+  },
+]
+
 export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
+  ...positionLifecycleGoldenCases,
   {
     id: 'golden-corpus-001-supported-ma-cross-long-with-fixed-pct-risk',
     name: 'supported ma cross long with fixed pct risk',
@@ -856,10 +934,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-028-recognized-unsupported-add-position',
-    name: 'recognized unsupported add position',
+    id: 'golden-corpus-028-supported-add-position-open-slots',
+    name: 'supported add position asks constraint',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，盈利 2% 后加仓，单笔 10%。',
-    tags: ['trend', 'position_lifecycle', 'multi_leg', 'orchestration'],
+    tags: ['trend', 'position_lifecycle', 'multi_leg'],
     expectedAtoms: [
       { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
       { key: 'open_long', category: 'action', minContractSubstrate: true },
@@ -871,19 +949,19 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_long',
       'action.add_position',
       'position.fixed_pct',
-      'unsupported:action.add_position',
+      'open_slot:action.add_position.constraint',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-029-recognized-unsupported-reverse-position',
-    name: 'recognized unsupported reverse position',
+    id: 'golden-corpus-029-supported-reverse-position',
+    name: 'supported reverse position',
     message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，MA20 下穿 MA50 反手做空，单笔 10%。',
-    tags: ['trend', 'position_lifecycle', 'multi_leg', 'orchestration'],
+    tags: ['trend', 'position_lifecycle', 'multi_leg'],
     expectedAtoms: [
       { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
       { key: 'open_long', category: 'action', minContractSubstrate: true },
-      { key: 'action.reverse_position', category: 'action' },
+      { key: 'action.reverse_position', category: 'action', minContractSubstrate: true },
       { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
     ],
     expectedKeys: [
@@ -891,9 +969,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_long',
       'action.reverse_position',
       'position.fixed_pct',
-      'unsupported:action.reverse_position',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'projection_gate',
   },
   {
     id: 'golden-corpus-030-recognized-unsupported-leverage',
@@ -932,8 +1009,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-032-recognized-unsupported-dca-schedule',
-    name: 'recognized unsupported dca schedule',
+    id: 'golden-corpus-032-supported-dca-schedule-open-slots',
+    name: 'supported dca schedule asks slots',
     message: 'OKX 现货 BTCUSDT 1h，RSI14 低于 30 开始 DCA 定投，RSI14 高于 70 卖出。',
     tags: ['mean_reversion', 'dca', 'orchestration'],
     expectedAtoms: [
@@ -945,9 +1022,13 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'oscillator.rsi_lte',
       'oscillator.rsi_gte',
       'position.dca_schedule',
-      'unsupported:position.dca_schedule',
+      'open_slot:position.dca_schedule.max_count',
+      'open_slot:position.dca_schedule.capital_cap',
+      'open_slot:position.dca_schedule.per_order_sizing',
+      'open_slot:position.dca_schedule.trigger_mode',
+      'open_slot:position.dca_schedule.exit_rule',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-033-recognized-unsupported-dynamic-grid',
@@ -1336,13 +1417,18 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-054-recognized-unsupported-dca-chinese-add-funds',
-    name: 'recognized unsupported dca chinese add funds',
+    id: 'golden-corpus-054-supported-dca-chinese-add-funds-open-slots',
+    name: 'supported dca chinese add funds asks slots',
     message: 'OKX 现货 BTCUSDT 1h，价格每跌 5% 补仓一次，最多补三次。',
     tags: ['dca', 'orchestration'],
     expectedAtoms: [{ key: 'position.dca_schedule', category: 'position' }],
-    expectedKeys: ['position.dca_schedule', 'unsupported:position.dca_schedule'],
-    expectedRoute: 'unsupported_fallback',
+    expectedKeys: [
+      'position.dca_schedule',
+      'open_slot:position.dca_schedule.capital_cap',
+      'open_slot:position.dca_schedule.per_order_sizing',
+      'open_slot:position.dca_schedule.exit_rule',
+    ],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-055-recognized-unsupported-margin-cross',
@@ -1363,22 +1449,21 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-056-recognized-unsupported-reverse-from-short',
-    name: 'recognized unsupported reverse from short',
+    id: 'golden-corpus-056-supported-reverse-from-short',
+    name: 'supported reverse from short',
     message: 'OKX 合约 BTCUSDT 15m，MA20 下穿 MA50 开空，MA20 上穿 MA50 反手做多。',
-    tags: ['trend', 'position_lifecycle', 'multi_leg', 'orchestration'],
+    tags: ['trend', 'position_lifecycle', 'multi_leg'],
     expectedAtoms: [
       { key: 'indicator.cross_under', category: 'trigger', minContractSubstrate: true },
       { key: 'open_short', category: 'action', minContractSubstrate: true },
-      { key: 'action.reverse_position', category: 'action' },
+      { key: 'action.reverse_position', category: 'action', minContractSubstrate: true },
     ],
     expectedKeys: [
       'indicator.cross_under',
       'open_short',
       'action.reverse_position',
-      'unsupported:action.reverse_position',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'projection_gate',
   },
   {
     id: 'golden-corpus-057-supported-existing-position-gate-does-not-add-unsupported-scale-in',
@@ -1691,8 +1776,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-071-partial-take-profit-with-unsupported-atom-fallback',
-    name: 'partial take profit with unsupported atom unsupported fallback',
+    id: 'golden-corpus-071-partial-take-profit-with-add-position-open-slots',
+    name: 'partial take profit with add position open slots',
     message:
       'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，盈利 5% 平 50%，盈利 10% 平 50%，单笔 10%，盈利 2% 后加仓。',
     tags: ['risk', 'trend', 'position_lifecycle', 'partial_take_profit', 'multi_leg', 'orchestration'],
@@ -1709,8 +1794,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'action.add_position',
       'position.fixed_pct',
       'risk.partial_take_profit',
-      'unsupported:action.add_position',
+      'open_slot:action.add_position.constraint',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
 ]

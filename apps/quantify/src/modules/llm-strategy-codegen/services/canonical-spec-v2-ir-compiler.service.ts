@@ -173,6 +173,8 @@ export class CanonicalSpecV2IrCompilerService {
       if (actions.length === 0) {
         continue
       }
+      this.collectPositionLifecycleRuntimeRequirements(rule, actions, context)
+      const metadata = rule.metadata ? this.toRuleBlockMetadata(rule.metadata) : undefined
 
       ruleBlocks.push({
         id: rule.id,
@@ -181,6 +183,7 @@ export class CanonicalSpecV2IrCompilerService {
         priority: rule.priority,
         cooldownBars: typeof rule.cooldownBars === 'number' && rule.cooldownBars > 0 ? rule.cooldownBars : undefined,
         actions,
+        ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
       })
     }
 
@@ -188,6 +191,7 @@ export class CanonicalSpecV2IrCompilerService {
     const positionMode = hasOrderPrograms
       ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
       : this.resolvePositionMode(input.canonicalSpec.rules)
+    const lifecyclePyramiding = this.resolveLifecyclePyramiding(input.canonicalSpec.rules)
 
     return {
       irVersion: 'csi.v1',
@@ -207,8 +211,8 @@ export class CanonicalSpecV2IrCompilerService {
         positionMode,
         sizing: this.resolvePortfolioSizing(input.canonicalSpec, input.fallback.positionPct),
         maxConcurrentPositions: hasOrderPrograms ? orderProgramLevelCount : 1,
-        allowPyramiding: hasOrderPrograms,
-        maxPyramidingLayers: hasOrderPrograms ? orderProgramLevelCount : 1,
+        allowPyramiding: hasOrderPrograms || lifecyclePyramiding.allow,
+        maxPyramidingLayers: hasOrderPrograms ? orderProgramLevelCount : lifecyclePyramiding.maxLayers,
       },
       dataRequirements: {
         warmupBars: maxLookback,
@@ -2114,6 +2118,8 @@ export class CanonicalSpecV2IrCompilerService {
       switch (action.type) {
         case 'OPEN_LONG':
         case 'OPEN_SHORT':
+        case 'ADD_LONG':
+        case 'ADD_SHORT':
           actions.push({
             kind: action.type,
             quantity: this.resolveActionQuantity(action, spec.sizing, fallbackPositionPct),
@@ -2153,6 +2159,42 @@ export class CanonicalSpecV2IrCompilerService {
     return actions
   }
 
+  private collectPositionLifecycleRuntimeRequirements(
+    rule: CanonicalRuleV2,
+    actions: ActionDef[],
+    context: CompileContext,
+  ): void {
+    if (!this.isPositionLifecycleRule(rule, actions)) {
+      return
+    }
+
+    context.runtimeRequirements.helpers.add('positionLifecycle')
+    if (rule.metadata?.addPosition) {
+      context.runtimeRequirements.stateKeys.add(rule.metadata.addPosition.stateKey)
+    }
+    if (rule.metadata?.dcaSchedule) {
+      context.runtimeRequirements.stateKeys.add(rule.metadata.dcaSchedule.stateKey)
+    }
+  }
+
+  private isPositionLifecycleRule(rule: CanonicalRuleV2, actions: ActionDef[]): boolean {
+    return actions.some(action => action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT')
+      || Boolean(rule.metadata?.reversePosition || rule.metadata?.addPosition || rule.metadata?.dcaSchedule)
+      || rule.actions.some(action =>
+        (action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
+        && action.params?.lifecycle === true,
+      )
+  }
+
+  private toRuleBlockMetadata(metadata: NonNullable<CanonicalRuleV2['metadata']>): RuleBlock['metadata'] {
+    return {
+      ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
+      ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
+      ...(metadata.addPosition ? { addPosition: { ...metadata.addPosition } } : {}),
+      ...(metadata.dcaSchedule ? { dcaSchedule: { ...metadata.dcaSchedule } } : {}),
+    }
+  }
+
   private resolveReduceActionQuantity(
     action: CanonicalRuleAction,
     defaultSizing: CanonicalStrategySpecV2['sizing'],
@@ -2175,6 +2217,13 @@ export class CanonicalSpecV2IrCompilerService {
     fallbackPositionPct: number,
   ): ActionDef['quantity'] {
     const sizing = action.sizing ?? defaultSizing
+    if (action.params?.quantityMode === 'position_pct' && sizing?.mode === 'RATIO') {
+      return {
+        mode: 'position_pct',
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
+      }
+    }
+
     if (!sizing) {
       return {
         mode: 'pct_equity',
@@ -2237,6 +2286,23 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+  private resolveLifecyclePyramiding(rules: CanonicalRuleV2[]): { allow: boolean, maxLayers: number } {
+    const addPositionMetadata = rules
+      .map(rule => rule.metadata?.addPosition)
+      .filter((metadata): metadata is NonNullable<NonNullable<CanonicalRuleV2['metadata']>['addPosition']> => metadata !== undefined)
+    const hasAddAction = rules.some(rule => rule.actions.some(action => action.type === 'ADD_LONG' || action.type === 'ADD_SHORT'))
+    const maxLayers = Math.max(1, ...addPositionMetadata.map(metadata =>
+      typeof metadata.maxLayers === 'number' && Number.isFinite(metadata.maxLayers) && metadata.maxLayers > 0
+        ? Math.floor(metadata.maxLayers)
+        : 1,
+    ))
+
+    return {
+      allow: hasAddAction || addPositionMetadata.length > 0,
+      maxLayers,
+    }
+  }
+
   private mapRulePhase(rule: CanonicalRuleV2, actions: ActionDef[]): RuleBlock['phase'] {
     if (rule.phase === 'entry' || rule.phase === 'exit') {
       return rule.phase
@@ -2250,10 +2316,12 @@ export class CanonicalSpecV2IrCompilerService {
     const hasLong = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_LONG'
       || action.type === 'REDUCE_LONG'
+      || action.type === 'ADD_LONG'
     )))
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
       || action.type === 'REDUCE_SHORT'
+      || action.type === 'ADD_SHORT'
     )))
 
     if (hasLong && hasShort) return 'long_short'
@@ -2429,8 +2497,10 @@ export class CanonicalSpecV2IrCompilerService {
   private mapGraphAction(action: CanonicalRuleAction): StrategyLogicGraphSnapshot['actions'][number]['action'] | null {
     switch (action.type) {
       case 'OPEN_LONG':
+      case 'ADD_LONG':
         return 'BUY'
       case 'OPEN_SHORT':
+      case 'ADD_SHORT':
         return 'SELL'
       case 'CLOSE_LONG':
       case 'CLOSE_SHORT':

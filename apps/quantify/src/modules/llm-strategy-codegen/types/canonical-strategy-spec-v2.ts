@@ -1,4 +1,5 @@
 import type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
+import type { PositionLifecycleActionMetadata } from './canonical-strategy-ir'
 import type { StrategyNormalizedIntent } from './strategy-normalized-intent'
 import type { SemanticExpressionOperand, SemanticExpressionOperator } from './semantic-state'
 
@@ -41,6 +42,8 @@ export type CanonicalRuleActionType =
   | 'CLOSE_SHORT'
   | 'REDUCE_LONG'
   | 'REDUCE_SHORT'
+  | 'ADD_LONG'
+  | 'ADD_SHORT'
   | 'FORCE_EXIT'
   | 'BLOCK_NEW_ENTRY'
 
@@ -68,6 +71,12 @@ export interface CanonicalStrategySpecNormalizedMetadata {
   intent: StrategyNormalizedIntent
 }
 
+export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
+  [key: string]: unknown
+  normalized?: CanonicalRuleNormalizedMetadata
+  partialTakeProfit?: PartialTakeProfitProgramMetadata
+}
+
 export interface CanonicalRuleV2 {
   id: string
   phase: CanonicalRulePhase
@@ -76,10 +85,7 @@ export interface CanonicalRuleV2 {
   cooldownBars?: number
   condition: CanonicalConditionNode
   actions: CanonicalRuleAction[]
-  metadata?: Record<string, unknown> & {
-    normalized?: CanonicalRuleNormalizedMetadata
-    partialTakeProfit?: PartialTakeProfitProgramMetadata
-  }
+  metadata?: CanonicalRuleMetadata
 }
 
 export interface CanonicalStrategySpecV2 {

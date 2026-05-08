@@ -384,6 +384,84 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.position?.mode).not.toBe('position.dca_schedule')
   })
 
+  it('extracts canonical next-bar policy for reverse positions by default', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，MA20 下穿 MA50 反手做空，单笔 10%。')
+
+    expect(patch.actions ?? []).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'action.reverse_position',
+        params: expect.objectContaining({ sameBarPolicy: 'next_bar_only' }),
+      }),
+    ]))
+  })
+
+  it('preserves USDC quote assets in DCA schedule sizing and capital cap', () => {
+    const patch = service.extract('每跌 5% 补仓一次，每次 100 USDC，最多 4 次，总投入不超过 500 USDC，跌破前低停止。')
+    const dcaSchedule = patch.position?.constraints?.find(constraint => constraint.key === 'position.dca_schedule')
+
+    expect(dcaSchedule?.params).toEqual(expect.objectContaining({
+      perOrderSizing: { kind: 'quote', value: 100, asset: 'USDC' },
+      capitalCap: { kind: 'quote', value: 500, asset: 'USDC' },
+    }))
+  })
+
+  it('keeps add-position and DCA counts scoped to their own clauses', () => {
+    const patch = service.extract('BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次；另有每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。')
+    const pyramidingLimit = patch.position?.constraints?.find(constraint => constraint.key === 'position.pyramiding_limit')
+    const dcaSchedule = patch.position?.constraints?.find(constraint => constraint.key === 'position.dca_schedule')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'action.add_position' }),
+    ]))
+    expect(pyramidingLimit?.params).toEqual(expect.objectContaining({ maxLayers: 3 }))
+    expect(dcaSchedule?.params).toEqual(expect.objectContaining({ maxCount: 4 }))
+  })
+
+  it('extracts reduce-position after a semicolon-separated negated add-position clause', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，不加仓；盈利 5% 后减仓 30%。')
+
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'action.reduce_position',
+        params: expect.objectContaining({
+          reduceBasis: 'ratio',
+          reduceValue: 0.3,
+        }),
+      }),
+    ]))
+  })
+
+  it('extracts DCA when every-drop trigger and replenish wording are adjacent clauses', () => {
+    const patch = service.extract('每跌 5%，补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。')
+    const dcaSchedule = patch.position?.constraints?.find(constraint => constraint.key === 'position.dca_schedule')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.percent_change',
+        params: expect.objectContaining({
+          direction: 'down',
+          valuePct: -5,
+        }),
+      }),
+    ]))
+    expect(dcaSchedule?.params).toEqual(expect.objectContaining({
+      maxCount: 4,
+      perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+      capitalCap: { kind: 'quote', value: 500, asset: 'USDT' },
+      triggerMode: 'price_interval',
+      exitRule: expect.any(Object),
+    }))
+  })
+
+  it('uses short-only constraint context for short-side lifecycle actions without normal sizing', () => {
+    const patch = service.extract('空单盈利 5% 后减仓 30%。')
+
+    expect(patch.position).toEqual(expect.objectContaining({
+      mode: 'constraint_only',
+      positionMode: 'short_only',
+    }))
+  })
+
   it('extracts position sizing base contracts from seed text', () => {
     const patch = service.extract('BTCUSDT 1m，收盘价高于开盘价开多，每次买 0.001 BTC')
 
