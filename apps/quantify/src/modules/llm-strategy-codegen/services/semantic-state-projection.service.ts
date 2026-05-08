@@ -66,6 +66,10 @@ export interface SemanticDisplayLogicGraph {
 
 type SemanticDisplaySideScope = 'long' | 'short' | 'both'
 
+const UNSAFE_DISPLAY_FALLBACK_PLACEHOLDER = '已识别条件，等待展示文案完善'
+const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
+  = /(?:^|[^\w.])(?:generic_boundary|[a-z]\w*(?:\.[a-z]\w*)+)(?=$|\W)/u
+
 @Injectable()
 export class SemanticStateProjectionService {
   constructor(
@@ -356,7 +360,7 @@ export class SemanticStateProjectionService {
     }
 
     const summary = this.buildTriggerSummary([trigger], true)
-    return this.assertNoInternalDisplayKey(summary)
+    return this.sanitizeDisplayFallbackText(summary)
       .replace(/^(入场|出场|条件)：/u, '')
       .replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
       .trim()
@@ -395,9 +399,9 @@ export class SemanticStateProjectionService {
     })
   }
 
-  private assertNoInternalDisplayKey(text: string): string {
-    if (/\b(?:generic_boundary|indicator\.(?:above|below)|price\.detect\.indicator_boundary)\b/u.test(text)) {
-      return ''
+  private sanitizeDisplayFallbackText(text: string): string {
+    if (INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN.test(text)) {
+      return UNSAFE_DISPLAY_FALLBACK_PLACEHOLDER
     }
     return text
   }

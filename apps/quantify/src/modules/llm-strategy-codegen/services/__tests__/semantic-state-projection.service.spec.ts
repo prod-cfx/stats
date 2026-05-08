@@ -578,6 +578,56 @@ describe('SemanticStateProjectionService', () => {
     expect(executeText).toContain('风控: risk.custom_unknown 已识别，参数待补充 -> 平仓')
   })
 
+  it('keeps unsafe semantic fallback condition visible without leaking internal atom keys', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-threshold',
+          key: 'indicator.threshold_gte',
+          phase: 'entry',
+          sideScope: 'long',
+          params: {
+            indicator: 'rsi',
+            value: 70,
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] },
+      ],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    }
+
+    const graph = service.buildDisplayLogicGraph(state)
+    const serializedGraph = JSON.stringify(graph)
+    const ruleBlocks = graph.blocks.filter(block => block.type !== 'EXECUTE')
+    const conditionItems = ruleBlocks.flatMap(block => block.items.filter(item => item.kind === 'condition'))
+
+    expect(ruleBlocks).toHaveLength(1)
+    expect(conditionItems).toEqual([
+      expect.objectContaining({
+        id: 'condition-entry-threshold',
+        kind: 'condition',
+        text: '已识别条件，等待展示文案完善',
+      }),
+    ])
+    expect(serializedGraph).not.toContain('indicator.threshold_gte')
+  })
+
   it('skips malformed expression operands instead of throwing while building display graph', () => {
     const state = {
       version: 1,
