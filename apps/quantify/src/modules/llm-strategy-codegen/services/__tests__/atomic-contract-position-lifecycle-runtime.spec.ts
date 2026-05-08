@@ -232,7 +232,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
     })
   })
 
-  it('closes the current long before opening a reverse short', () => {
+  it('closes the current long before opening a reverse short on the next bar', () => {
     const program = {
       id: 'reverse-short',
       phase: 'rebalance',
@@ -242,7 +242,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         reversePosition: {
           fromSide: 'long',
           toSide: 'short',
-          sameBarPolicy: 'allow',
+          sameBarPolicy: 'next_bar_only',
           sizingSource: 'current_position',
         },
       },
@@ -277,6 +277,41 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       action: 'OPEN_SHORT',
       size: { mode: 'RATIO', value: 1 },
       reason: 'compiled.reverse-short.reverse.open_after_close',
+    })
+  })
+
+  it('executes same-bar reverse as a single delta adjustment', () => {
+    const decision = runLifecycleProgram(
+      {
+        id: 'reverse-short',
+        phase: 'rebalance',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          reversePosition: {
+            fromSide: 'long',
+            toSide: 'short',
+            sameBarPolicy: 'allow',
+            sizingSource: 'current_position',
+          },
+        },
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+          { kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+      {
+        position: { side: 'long', qty: 2 },
+        currentPrice: 100,
+        accountEquity: 1_000,
+      } as Ctx,
+    )
+
+    expect(decision).toEqual({
+      action: 'ADJUST_POSITION',
+      adjustMode: 'DELTA',
+      size: { mode: 'QTY', value: -4 },
+      reason: 'compiled.reverse-short.reverse.same_bar',
     })
   })
 

@@ -308,6 +308,27 @@ function evaluatePositionLifecycle(
     }
 
     const openAction = findReverseOpenAction(program, reverseMeta.toSide)
+    if (reverseMeta.sameBarPolicy === 'allow' && openAction) {
+      const oppositeQty = resolveOpenActionQty(openAction, ctx, Math.abs(currentQty))
+      if (oppositeQty <= 0) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.reverse.open_size_unresolved`,
+        }
+      }
+
+      const deltaDirection = reverseMeta.toSide === 'long' ? 1 : -1
+      return {
+        action: 'ADJUST_POSITION',
+        adjustMode: 'DELTA',
+        size: {
+          mode: 'QTY',
+          value: (-currentQty) + (deltaDirection * oppositeQty),
+        },
+        reason: `compiled.${program.id}.reverse.same_bar`,
+      }
+    }
+
     if (openAction) {
       markPendingReverse(ctx, program.id, reverseMeta.toSide, openAction)
     }
@@ -795,6 +816,31 @@ function resolveReduceDeltaQty(
   }
 
   return direction * Math.min(requestedQty, Math.abs(context.currentQty))
+}
+
+function resolveOpenActionQty(
+  action: DecisionProgramNode['actions'][number],
+  ctx: StrategyExecutionContextV1,
+  currentAbsQty: number,
+): number {
+  const rawValue = action.quantity.value
+  if (!Number.isFinite(rawValue) || rawValue <= 0) return 0
+
+  switch (action.quantity.mode) {
+    case 'position_pct':
+      return currentAbsQty * rawValue / 100
+    case 'fixed_base':
+      return rawValue
+    case 'fixed_quote': {
+      const currentPrice = readCurrentPrice(ctx)
+      return currentPrice > 0 ? rawValue / currentPrice : 0
+    }
+    case 'pct_equity': {
+      const currentPrice = readCurrentPrice(ctx)
+      const equity = readEquity(ctx)
+      return currentPrice > 0 && equity > 0 ? equity * rawValue / 100 / currentPrice : 0
+    }
+  }
 }
 
 function readCurrentQty(ctx: StrategyExecutionContextV1): number {
