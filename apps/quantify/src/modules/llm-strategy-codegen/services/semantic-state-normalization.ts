@@ -136,7 +136,81 @@ export function buildTriggerCombinationContract(
 export function normalizeTriggerCombinationContracts(
   triggers: SemanticTriggerState[],
 ): SemanticTriggerState[] {
-  return triggers.map(trigger => normalizeTriggerCombinationContract(trigger))
+  return triggers.map(trigger => normalizeConditionSequenceTrigger(normalizeTriggerCombinationContract(trigger)))
+}
+
+/**
+ * Normalize `condition.sequence` triggers for cache/hash key stability.
+ *
+ * Behaviors:
+ * - If `params.memoryKey` is not a non-empty string, auto-generate one based
+ *   on a canonical, key-sorted JSON of the relevant params (sequenceKind,
+ *   steps, lookbackWindow, threshold, count, direction, lookbackBars, reference).
+ *   `steps` are treated as ordered (no resort) but each step's keys are sorted
+ *   to make equivalent rewrites collapse to the same hash.
+ * - Equivalent rewrites: omitted optional fields equal explicit `undefined`
+ *   (already excluded). Empty-string `lookbackWindow` is treated as absent.
+ * - User-explicit `memoryKey` always wins.
+ */
+export function normalizeConditionSequenceTrigger(trigger: SemanticTriggerState): SemanticTriggerState {
+  if (trigger.key !== 'condition.sequence') return trigger
+
+  const params = trigger.params as Record<string, unknown>
+  const sequenceKind = readString(params.sequenceKind)
+  if (!sequenceKind) return trigger
+
+  if (typeof params.memoryKey === 'string' && params.memoryKey.trim().length > 0) {
+    return trigger
+  }
+
+  const hashInput: Record<string, unknown> = { sequenceKind }
+  const lookbackWindow = readString(params.lookbackWindow)
+  if (lookbackWindow) hashInput.lookbackWindow = lookbackWindow
+  if (typeof params.threshold === 'number' && Number.isFinite(params.threshold)) {
+    hashInput.threshold = params.threshold
+  }
+  if (typeof params.count === 'number' && Number.isFinite(params.count)) {
+    hashInput.count = params.count
+  }
+  const direction = readString(params.direction)
+  if (direction) hashInput.direction = direction
+  if (typeof params.lookbackBars === 'number' && Number.isFinite(params.lookbackBars)) {
+    hashInput.lookbackBars = params.lookbackBars
+  }
+  if (params.reference && typeof params.reference === 'object') {
+    hashInput.reference = canonicalize(params.reference)
+  }
+  if (Array.isArray(params.steps)) {
+    hashInput.steps = params.steps.map(step => canonicalize(step))
+  }
+
+  const json = JSON.stringify(hashInput)
+  const hash = createHash('sha256').update(json).digest('hex').slice(0, 16)
+
+  return {
+    ...trigger,
+    params: { ...trigger.params, memoryKey: `condseq_${hash}` },
+    openSlots: [...trigger.openSlots],
+    ...(trigger.contracts ? { contracts: [...trigger.contracts] } : {}),
+  }
+}
+
+/**
+ * Canonicalize an arbitrary value for hashing: sort object keys recursively,
+ * preserve array order, drop `undefined` properties.
+ */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item => canonicalize(item))
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => [k, canonicalize(v)] as const)
+    return Object.fromEntries(entries)
+  }
+  return value
 }
 
 export function normalizeSemanticStateCombinationContracts(state: SemanticState): SemanticState {
