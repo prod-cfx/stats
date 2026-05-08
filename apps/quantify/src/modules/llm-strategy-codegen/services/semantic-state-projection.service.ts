@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
@@ -73,7 +74,7 @@ const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
 @Injectable()
 export class SemanticStateProjectionService {
   constructor(
-    private readonly presentationRegistry: SemanticPresentationRegistryService = new SemanticPresentationRegistryService(),
+    private readonly presentationRegistry: SemanticPresentationRegistryService = createDefaultPresentationRegistry(),
   ) {}
 
   buildConversationView(state: SemanticState): SemanticConversationView {
@@ -2101,4 +2102,8 @@ export class SemanticStateProjectionService {
     if (unit === 'd') return value * 1440
     return value * 10080
   }
+}
+
+function createDefaultPresentationRegistry(): SemanticPresentationRegistryService {
+  return new SemanticPresentationRegistryService(new SemanticAtomRegistryService())
 }

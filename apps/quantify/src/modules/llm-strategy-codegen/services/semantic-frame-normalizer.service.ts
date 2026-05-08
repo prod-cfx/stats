@@ -96,7 +96,7 @@ export class SemanticFrameNormalizerService {
     return [frame.groupId, frame.sideScope, frame.operator, frame.indicator].join(':')
   }
 
-  private toCombinationEvidenceKey(frame: SemanticCombinationFrame): string {
+  private toCombinationEvidenceKey(frame: Pick<SemanticCombinationFrame, 'groupId' | 'sideScope'>): string {
     return [frame.groupId, frame.sideScope].join(':')
   }
 
