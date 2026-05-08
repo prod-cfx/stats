@@ -24,6 +24,8 @@ interface CompiledExprNode {
     inputs?: string[]
     value?: number | string
     params?: Record<string, number | string | boolean>
+    memoryKey?: string
+    path?: string[]
   }
 }
 
@@ -107,6 +109,8 @@ function evaluateSeries(
       return readStringContextValue(ctx.trendDirection)
     case 'VOLATILITY_STATE':
       return readStringContextValue(ctx.volatilityState)
+    case 'MEMORY':
+      return evaluateMemoryOperand(node, ctx)
     default: {
       const firstDep = node.deps?.[0]
       return typeof firstDep === 'string' ? values[firstDep] ?? null : null
@@ -1020,4 +1024,41 @@ function readPositionPnlPct(
   }
 
   return ((avgEntryPrice - currentPrice) / avgEntryPrice) * 100
+}
+
+function evaluateMemoryOperand(
+  node: CompiledExprNode,
+  ctx: StrategyExecutionContextV1,
+): CompiledRuntimeValue {
+  const memoryKey = typeof node.payload.memoryKey === 'string' ? node.payload.memoryKey : null
+  if (!memoryKey) return null
+
+  const root = (ctx as Record<string, unknown>).semanticRuntimeState
+  if (!root || typeof root !== 'object' || Array.isArray(root)) return null
+
+  let cur: unknown = (root as Record<string, unknown>)[memoryKey]
+  if (cur === undefined || cur === null) return null
+
+  const path = Array.isArray(node.payload.path) ? node.payload.path : []
+  for (const seg of path) {
+    if (cur == null || typeof cur !== 'object' || Array.isArray(cur)) return null
+    cur = (cur as Record<string, unknown>)[seg]
+    if (cur === undefined) return null
+  }
+
+  if (cur === null) return null
+  if (typeof cur === 'number' || typeof cur === 'string' || typeof cur === 'boolean') {
+    return cur
+  }
+  return null
+}
+
+export function invalidateMemoryOperand(
+  ctx: { semanticRuntimeState?: Record<string, unknown> | Record<string, Record<string, unknown>> } | StrategyExecutionContextV1,
+  memoryKey: string,
+): void {
+  const state = (ctx as { semanticRuntimeState?: Record<string, unknown> }).semanticRuntimeState
+  if (state && Object.prototype.hasOwnProperty.call(state, memoryKey)) {
+    delete state[memoryKey]
+  }
 }
