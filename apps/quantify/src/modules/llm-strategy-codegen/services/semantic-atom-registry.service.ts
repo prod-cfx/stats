@@ -162,6 +162,72 @@ const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {
   patch: DEFAULT_REPLACEMENT_PATCH,
 }
 
+// 多周期 HTF 过滤：5 个解构参数对应 IR EXPRESSION_GUARD 的 series.indicator/period + COMPARE.op + rhs
+// 与 canonical-spec-v2-ir-compiler.service.ts compilePhase1GateAtom() 的 strategy.multi_timeframe 分支严格对齐：
+//   - htfTimeframe: 高周期标签（如 '4h' / '1d'），用于 ensureIndicatorSeries / ensurePriceSeries 的 timeframe
+//   - htfIndicator: 'ma' | 'sma' | 'ema' | 'rsi'，决定 SMA/EMA/RSI 系列
+//   - htfPeriod: 指标周期（>0 的整数）
+//   - htfOp: 'GT' | 'GTE' | 'LT' | 'LTE'，会被 flipGateOperator 反转为 guard 触发条件
+//   - htfRhs: 'price' | 'value'，'price' 走 HTF close 序列；'value' 时 htfValue 必填
+// htfCondition 自由文本由 seed-extractor 解析为上述 5 键后再注入；不再作为 required slot。
+const MULTI_TIMEFRAME_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'strategy.multi_timeframe.htfTimeframe',
+    fieldPath: 'trigger.params.htfTimeframe',
+    priority: 'core',
+    questionHint: '请指明高周期过滤所用的时间周期，例如 4h / 1d。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfIndicator',
+    fieldPath: 'trigger.params.htfIndicator',
+    priority: 'core',
+    questionHint: '请选择高周期使用的指标：ma / sma / ema / rsi。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfPeriod',
+    fieldPath: 'trigger.params.htfPeriod',
+    priority: 'core',
+    questionHint: '请给出高周期指标的周期长度，例如 50 / 14。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfOp',
+    fieldPath: 'trigger.params.htfOp',
+    priority: 'core',
+    questionHint: '请指明高周期判定的比较方向：GT / GTE / LT / LTE。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfRhs',
+    fieldPath: 'trigger.params.htfRhs',
+    priority: 'core',
+    questionHint: '请指明高周期判定的比较右值：price（与 HTF 收盘价比较）或 value（与固定数值比较，需另填 htfValue）。',
+  },
+]
+
+function multiTimeframeTrigger(): SemanticSupportedAtomDefinition {
+  return {
+    key: 'strategy.multi_timeframe',
+    category: 'trigger',
+    supportStatus: 'supported_requires_slot',
+    // 与 IR compiler 5 解构键严格对齐；htfValue 仅在 htfRhs === 'value' 时必填，
+    // 由 IR compiler 内做条件 readiness 校验（fail-closed 进入 supported_requires_slot），
+    // 故归入 defaultableParams，避免在 readiness 层强制全部用户答辩。
+    requiredParams: ['htfTimeframe', 'htfIndicator', 'htfPeriod', 'htfOp', 'htfRhs'],
+    defaultableParams: ['htfValue'],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [...MULTI_TIMEFRAME_OPEN_SLOTS],
+    contractSubstrate: {
+      runtimeRequirements: [
+        { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+        { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+        { domain: 'runtime', verb: 'feed', object: 'multi_timeframe', shape: { aligned: true } },
+      ],
+      stateRequirements: [],
+      orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+      openSlots: cloneOpenSlotSpecs(MULTI_TIMEFRAME_OPEN_SLOTS),
+    },
+  }
+}
+
 const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
   executableTrigger('condition.expression', []),
@@ -272,7 +338,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
   unsupported('grid.dynamic_grid', 'trigger', '动态网格', 'dynamic_grid_public_beta_unsupported', '动态网格当前公测暂未支持生成和回测。'),
   unsupported('strategy.time_window', 'trigger', '交易时间窗口', 'time_window_public_beta_unsupported', '交易时间窗口当前公测暂未支持生成和回测。'),
-  unsupported('strategy.multi_timeframe', 'trigger', '多周期条件', 'multi_timeframe_public_beta_unsupported', '多周期条件当前公测暂未支持生成和回测。'),
+  multiTimeframeTrigger(),
   unsupported('indicator.divergence', 'trigger', '指标背离', 'divergence_public_beta_unsupported', '指标背离当前公测暂未支持生成和回测。'),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),
   unsupported('action.pause_trading', 'action', '暂停交易', 'pause_trading_public_beta_unsupported', '暂停交易动作当前公测暂未支持生成和回测。'),

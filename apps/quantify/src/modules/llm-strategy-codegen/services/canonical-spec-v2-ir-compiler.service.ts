@@ -1865,7 +1865,8 @@ export class CanonicalSpecV2IrCompilerService {
       rule.phase === 'gate'
       && (rule.condition.key === 'volume.threshold'
         || rule.condition.key === 'volatility.atr_threshold'
-        || rule.condition.key === 'strategy.time_window')
+        || rule.condition.key === 'strategy.time_window'
+        || rule.condition.key === 'strategy.multi_timeframe')
       && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
     ) {
       const predicateRef = this.compilePhase1GateAtom(rule.condition, context, rule.id)
@@ -2073,6 +2074,76 @@ export class CanonicalSpecV2IrCompilerService {
         `${seed}_atr_threshold`,
         predicateKind,
         [atrRef, constRef],
+      )
+    }
+
+    if (atom.key === 'strategy.multi_timeframe') {
+      // strategy.multi_timeframe 的 IR EXPRESSION_GUARD 由 5 个解构参数构成：
+      //   htfTimeframe (string)   -> ensureIndicatorSeries / ensurePriceSeries 的 timeframe
+      //   htfIndicator (string)   -> 'ma' | 'sma' | 'ema' | 'rsi'，决定 SMA/EMA/RSI 系列
+      //   htfPeriod    (number>0) -> 指标周期
+      //   htfOp        (compare)  -> 'GT' | 'GTE' | 'LT' | 'LTE'，flipGateOperator 反转后即 guard 触发条件
+      //   htfRhs       (enum)     -> 'price' | 'value'；为 'value' 时 htfValue 必填
+      // 与 semantic-atom-registry.service.ts MULTI_TIMEFRAME_OPEN_SLOTS / requiredParams 严格对齐。
+      // 任一键不合法 -> return null -> tryCompileRiskGuard 返回 null -> compileCondition 走 default
+      //   throw `codegen.canonical_spec_v2_condition_unsupported:strategy.multi_timeframe`，
+      //   保持 fail-closed 而非静默吞掉 BLOCK_NEW_ENTRY guard。
+      const htfTimeframe = typeof atom.params?.htfTimeframe === 'string' && atom.params.htfTimeframe.trim().length > 0
+        ? atom.params.htfTimeframe.trim()
+        : null
+      const htfIndicator = typeof atom.params?.htfIndicator === 'string'
+        ? atom.params.htfIndicator.trim().toLowerCase()
+        : null
+      const htfOp = atom.params?.htfOp
+      const htfPeriod = this.readNumber([atom.params?.htfPeriod], Number.NaN)
+      const htfRhs = typeof atom.params?.htfRhs === 'string' ? atom.params.htfRhs.trim().toLowerCase() : null
+
+      if (
+        !htfTimeframe
+        || !htfIndicator
+        || (htfOp !== 'GT' && htfOp !== 'GTE' && htfOp !== 'LT' && htfOp !== 'LTE')
+        || !Number.isFinite(htfPeriod)
+        || htfPeriod <= 0
+      ) {
+        return null
+      }
+
+      // htfRhs 显式白名单：避免 typo（如 'pric' / 'rpice'）静默落入数值分支改语义。
+      if (htfRhs !== 'price' && htfRhs !== 'value') {
+        return null
+      }
+
+      let leftRef: string
+      if (htfIndicator === 'ema') {
+        leftRef = this.ensureIndicatorSeries(context, 'EMA', htfPeriod, htfTimeframe)
+      }
+      else if (htfIndicator === 'rsi') {
+        leftRef = this.ensureIndicatorSeries(context, 'RSI', htfPeriod, htfTimeframe)
+      }
+      else if (htfIndicator === 'ma' || htfIndicator === 'sma') {
+        leftRef = this.ensureIndicatorSeries(context, 'SMA', htfPeriod, htfTimeframe)
+      }
+      else {
+        return null
+      }
+
+      let rightRef: string
+      if (htfRhs === 'price') {
+        rightRef = this.ensurePriceSeries(context, 'close', htfTimeframe)
+      }
+      else {
+        // htfRhs === 'value'：htfValue 必填。
+        const htfValue = this.readNumber([atom.params?.htfValue], Number.NaN)
+        if (!Number.isFinite(htfValue)) return null
+        rightRef = this.ensureConstSeries(context, htfValue)
+      }
+
+      const predicateKind = this.flipGateOperator(htfOp)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_multi_timeframe`,
+        predicateKind,
+        [leftRef, rightRef],
       )
     }
 
