@@ -1549,10 +1549,12 @@ export class CanonicalSpecBuilderService {
     if (dcaSchedule) {
       const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
       const capitalCap = this.readDcaCapitalCapValue(dcaSchedule.params.capitalCap)
+      const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
       if (maxCount !== null && capitalCap !== null) {
         metadata.dcaSchedule = {
           maxCount,
           capitalCap,
+          ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
           stateKey: 'dca_fired_count',
         }
       }

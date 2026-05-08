@@ -19,6 +19,7 @@ export interface PositionLifecycleActionMetadata {
   dcaSchedule?: {
     maxCount: number
     capitalCap: number
+    maxExposurePct?: number
     stateKey: string
   }
 }

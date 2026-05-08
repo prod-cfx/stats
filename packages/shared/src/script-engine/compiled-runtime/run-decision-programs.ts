@@ -27,6 +27,7 @@ interface ReversePositionMeta {
 interface DcaScheduleMeta {
   maxCount: number
   capitalCap: number
+  maxExposurePct?: number
   stateKey: string
 }
 
@@ -419,6 +420,17 @@ function evaluatePositionLifecycle(
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.dca_capital_cap`,
+      }
+    }
+
+    if (
+      typeof dcaMeta.maxExposurePct === 'number'
+      && Number.isFinite(dcaMeta.maxExposurePct)
+      && exceedsMaxExposurePct(program, ctx, dcaMeta.maxExposurePct)
+    ) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_max_exposure_pct`,
       }
     }
   }

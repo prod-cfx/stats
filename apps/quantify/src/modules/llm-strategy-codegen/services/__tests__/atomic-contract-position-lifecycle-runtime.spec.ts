@@ -672,4 +672,39 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.dca-long.dca_capital_cap',
     })
   })
+
+  it('blocks dca when projected exposure would exceed max exposure percentage', () => {
+    const decision = runLifecycleProgram(
+      {
+        id: 'dca-long',
+        phase: 'entry',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          dcaSchedule: {
+            maxCount: 4,
+            capitalCap: 500,
+            maxExposurePct: 45,
+            stateKey: 'dca_fired_count',
+          },
+        },
+        actions: [
+          { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100 } },
+        ],
+      },
+      {
+        position: { side: 'long', qty: 1, exposurePct: 40 },
+        currentPrice: 100,
+        accountEquity: 1_000,
+        semanticRuntimeState: {
+          dca_fired_count: { value: 1 },
+        },
+      } as Ctx,
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.dca-long.dca_max_exposure_pct',
+    })
+  })
 })
