@@ -13744,6 +13744,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ slotKey: 'position.sizing' }),
       expect.objectContaining({ slotKey: 'risk.protective_exit' }),
     ]))
+    expect(started.assistantPrompt).toContain('入场：15m 价格在 EMA20 / EMA60 / EMA144 上方时做多开仓')
+    expect(started.assistantPrompt).not.toContain('入场：15m 价格在 EMA20 上方时做多开仓；入场：15m 价格在 EMA60 上方')
+    expect(started.assistantPrompt).not.toContain('入场：价格在 EMA20 上方时做多开仓；入场：价格在 EMA60 上方')
     expect(started.assistantPrompt).not.toContain('请确认单笔仓位大小')
     expect(started.assistantPrompt).not.toContain('请确认止损')
   })

@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing'
+import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { BacktestingModule } from './backtesting.module'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
@@ -31,6 +32,8 @@ describe('backtestingModule', () => {
       .useValue({ findSymbolsByCodes: jest.fn(), findBars: jest.fn(), aggregateCoverage: jest.fn() })
       .overrideProvider(BacktestMarketDataService)
       .useValue({ resolveCoverage: jest.fn(), loadBars: jest.fn() })
+      .overrideProvider(AiQuantConversationsRepository)
+      .useValue({ updateLastBacktestRef: jest.fn() })
       .overrideProvider(PublishedStrategySnapshotsRepository)
       .useValue({ findById: jest.fn() })
       .overrideProvider(BacktestSnapshotLoaderService)

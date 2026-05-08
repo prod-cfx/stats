@@ -133,16 +133,6 @@ export class ConversationSemanticEditService {
       }
     }
 
-    const contextOperation = this.extractReplacementContextOperation(message)
-    if (contextOperation) {
-      return {
-        kind: 'APPLY_TO_SEMANTIC_STATE',
-        patch: {
-          operations: [{ op: 'replace_context', ...contextOperation }],
-        },
-      }
-    }
-
     const positionPct = this.extractReplacementPositionPct(message)
     if (positionPct !== null) {
       return {
@@ -169,6 +159,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_action', text: message }],
+        },
+      }
+    }
+
+    const contextOperation = this.extractReplacementContextOperation(message)
+    if (contextOperation) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_context', ...contextOperation }],
         },
       }
     }

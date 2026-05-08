@@ -39,6 +39,25 @@ const PUBLISHED_RUNTIME_SCRIPT = `const strategy: StrategyAdapterV1 = {
 }
 strategy`
 
+function buildExecutionConstraints(input: {
+  exchangeId?: 'binance' | 'okx' | 'hyperliquid'
+  marketType: 'spot' | 'perp'
+  symbol: string
+}) {
+  return {
+    exchangeId: input.exchangeId ?? 'binance',
+    marketType: input.marketType,
+    symbol: input.symbol,
+    rawSymbol: input.marketType === 'perp' ? 'BTCUSDT:PERP' : 'BTCUSDT',
+    priceTickSize: '0.01',
+    quantityStepSize: '0.000001',
+    minQuantity: '0.000001',
+    ...(input.marketType === 'perp' ? { contractValue: '1' } : {}),
+    clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+    raw: {},
+  }
+}
+
 describe('StrategySignals (E2E, DB only)', () => {
   let app: INestApplication
   let moduleFixture: TestingModule
@@ -334,6 +353,24 @@ describe('StrategySignals (E2E, DB only)', () => {
       }
       return originalGet(key)
     })
+
+    const tradingService = app.get(TradingService)
+    jest.spyOn(tradingService, 'getInstrumentConstraints').mockImplementation(
+      async (_userId, exchangeId, marketType, symbol) => buildExecutionConstraints({
+        exchangeId,
+        marketType,
+        symbol,
+      }) as any,
+    )
+    jest.spyOn(tradingService, 'getPositions').mockResolvedValue([{
+      symbol: 'BTC/USDT:PERP',
+      marketType: 'perp',
+      side: 'long',
+      size: 0.01,
+      entryPrice: 60000,
+      unrealizedPnl: 0,
+      raw: {},
+    }] as any)
 
     // 准备用户
     await upsertTestUser(prisma, {
@@ -991,7 +1028,7 @@ describe('StrategySignals (E2E, DB only)', () => {
     const RUNTIME_ACCOUNT_ID = 'e2e-runtime-account'
     const RUNTIME_EXCHANGE_ACCOUNT_ID = 'e2e-runtime-exchange-account'
     const RUNTIME_SYMBOL_ID = 'e2e-runtime-symbol'
-    const RUNTIME_SYMBOL_CODE = 'E2E-RUNTIME-BTCUSDT:SPOT'
+    const RUNTIME_SYMBOL_CODE = 'E2ERUNTIMEBTCUSDT:SPOT'
     const RUNTIME_SESSION_ID = 'e2e-runtime-session'
     const RUNTIME_SNAPSHOT_ID = 'e2e-runtime-snapshot'
     const RUNTIME_SNAPSHOT_HASH = 'e2e-runtime-snapshot-hash'
