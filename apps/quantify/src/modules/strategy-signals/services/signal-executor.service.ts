@@ -1,4 +1,4 @@
-import type { PositionSide, SignalDirection, SignalStatus, TradeSide } from '@ai/shared'
+import type { MarketTimeframe, PositionSide, SignalDirection, SignalStatus, TradeSide } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
@@ -19,7 +19,7 @@ import type {
   StrategyInstanceRiskProfile,
 } from '@/prisma/prisma.types'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { LedgerEntryType } from '@ai/shared'
+import { LedgerEntryType, MARKET_TIMEFRAMES } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
@@ -1595,9 +1595,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
   private readSignalEntryTimeframe(
     signal: { metadata?: Prisma.JsonValue | null; marketContext?: Prisma.JsonValue | null },
-  ): string | undefined {
+  ): MarketTimeframe | undefined {
     const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
-    const fromRuntime = this.readTrimmedString(runtimeProvenance?.timeframe)
+    const fromRuntime = this.readMarketTimeframe(runtimeProvenance?.timeframe)
     if (fromRuntime) return fromRuntime
 
     const marketContext = signal.marketContext
@@ -1605,13 +1605,13 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       return undefined
     }
 
-    return this.readTrimmedString((marketContext as Prisma.JsonObject).timeframe) ?? undefined
+    return this.readMarketTimeframe((marketContext as Prisma.JsonObject).timeframe) ?? undefined
   }
 
-  private readTrimmedString(value: unknown): string | null {
+  private readMarketTimeframe(value: unknown): MarketTimeframe | null {
     if (typeof value !== 'string') return null
     const trimmed = value.trim()
-    return trimmed.length > 0 ? trimmed : null
+    return (MARKET_TIMEFRAMES as readonly string[]).includes(trimmed) ? trimmed as MarketTimeframe : null
   }
 
   private mergeSignalMetadata(

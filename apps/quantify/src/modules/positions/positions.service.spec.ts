@@ -115,12 +115,22 @@ describe('positionsService', () => {
       fee: '0',
       provider: 'okx',
       executedAt: '2026-04-01T00:00:00.000Z',
-      entryTimeframe: '15m',
+      entryTimeframe: ' 15m ' as any,
     })
 
     expect(positionsRepository.createPosition).toHaveBeenCalledWith(expect.objectContaining({
       entryTimeframe: '15m',
     }))
+  })
+
+  it('rejects invalid entry timeframe values before writing a position', () => {
+    const service = createService()
+
+    expect(() => (service as any).normalizeEntryTimeframe(' 2m ')).toThrow(
+      expect.objectContaining({
+        code: ErrorCode.MARKET_INVALID_TIMEFRAME,
+      }),
+    )
   })
 
   it('credits spot close principal back to the account when recording a sell trade', async () => {

@@ -1,8 +1,10 @@
-import { PositionSide, TradeSide } from '@ai/shared'
+import { MARKET_TIMEFRAMES, PositionSide, TradeSide, type MarketTimeframe } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { Transform } from 'class-transformer'
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -63,10 +65,12 @@ export class RecordTradeDto {
   @Matches(POSITIVE_DECIMAL_PATTERN, { message: 'leverage 必须是大于 0 的数字字符串' })
   leverage?: string
 
-  @ApiPropertyOptional({ description: '开仓时使用的策略主周期', example: '15m' })
+  @ApiPropertyOptional({ description: '开仓时使用的策略主周期', example: '15m', enum: MARKET_TIMEFRAMES })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsOptional()
-  @IsString()
-  entryTimeframe?: string
+  @IsIn(MARKET_TIMEFRAMES)
+  @MaxLength(8)
+  entryTimeframe?: MarketTimeframe
 
   @ApiPropertyOptional({ description: '交易所订单 ID' })
   @IsOptional()
@@ -94,4 +98,3 @@ export class RecordTradeDto {
   @IsObject()
   metadata?: Record<string, unknown>
 }
-
