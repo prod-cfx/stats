@@ -315,6 +315,63 @@ describe('atomic contract position lifecycle compiled runtime', () => {
     })
   })
 
+  it('continues scanning other programs while a pending reverse waits for a flat position', () => {
+    const reverseProgram = {
+      id: 'reverse-short',
+      phase: 'rebalance',
+      priority: 100,
+      when: 'reverseReady',
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'current_position',
+        },
+      },
+      actions: [
+        { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        { kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+      ],
+    }
+    const forceCloseProgram = {
+      id: 'force-close',
+      phase: 'exit',
+      priority: 100,
+      when: 'forceCloseReady',
+      actions: [
+        { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+      ],
+    }
+    const ctx = {
+      position: { side: 'long', qty: 2 },
+      currentPrice: 100,
+      accountEquity: 1_000,
+    } as Ctx
+
+    expect(runDecisionPrograms(
+      ctx,
+      [reverseProgram] as unknown as Programs,
+      { reverseReady: true },
+      baseGuard,
+      ['reverse-short'],
+    )).toMatchObject({ action: 'CLOSE_LONG' })
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [reverseProgram, forceCloseProgram] as unknown as Programs,
+      { reverseReady: true, forceCloseReady: true },
+      baseGuard,
+      ['reverse-short', 'force-close'],
+    )
+
+    expect(decision).toEqual({
+      action: 'CLOSE_LONG',
+      size: { mode: 'RATIO', value: 1 },
+      reason: 'compiled.force-close',
+    })
+  })
+
   it('blocks reverse when current signed quantity does not match fromSide', () => {
     const decision = runLifecycleProgram(
       {

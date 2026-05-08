@@ -130,6 +130,9 @@ export function runDecisionPrograms(
       compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
       return Object.freeze(pendingReverseDecision)
     }
+    if (hasPendingReverseForProgram(program, ctx)) {
+      continue
+    }
 
     if (
       typeof program.cooldownBars === 'number'
@@ -434,10 +437,7 @@ function evaluatePendingReverse(
   }
 
   if (readCurrentQty(ctx) !== 0) {
-    return {
-      action: 'NOOP',
-      reason: `compiled.${program.id}.reverse.awaiting_flat_position`,
-    }
+    return null
   }
 
   clearPendingReverse(ctx, program.id)
@@ -449,6 +449,14 @@ function evaluatePendingReverse(
     },
     reason: `compiled.${program.id}.reverse.open_after_close`,
   }
+}
+
+function hasPendingReverseForProgram(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+): boolean {
+  const reverseMeta = program.metadata?.reversePosition
+  return reverseMeta ? readPendingReverse(ctx, program.id, reverseMeta.toSide) !== null : false
 }
 
 function findReverseOpenAction(
