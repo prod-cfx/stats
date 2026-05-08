@@ -451,7 +451,8 @@ function evaluatePendingReverse(
     return null
   }
 
-  if (readCurrentQty(ctx) !== 0) {
+  const currentQty = readCurrentQtyValue(ctx)
+  if (currentQty === null || currentQty !== 0) {
     return null
   }
 
