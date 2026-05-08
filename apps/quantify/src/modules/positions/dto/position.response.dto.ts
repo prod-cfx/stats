@@ -23,7 +23,7 @@ export class PositionResponseDto {
   @ApiProperty({ description: '平均开仓价' })
   avgEntryPrice!: string
 
-  @ApiPropertyOptional({ description: '开仓时使用的策略主周期', example: '15m' })
+  @ApiPropertyOptional({ description: '开仓时使用的策略主周期', example: '15m', nullable: true })
   entryTimeframe?: string | null
 
   @ApiProperty({ description: '累计已实现盈亏' })
@@ -47,5 +47,4 @@ export class PositionResponseDto {
   @ApiPropertyOptional({ description: '市场类型', example: 'perp' })
   marketType?: string | null
 }
-
 
