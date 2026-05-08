@@ -92,7 +92,7 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
   })
 
   it('compiles DCA drop triggers as downside price-change predicates', () => {
-    const { spec } = compileLifecycleMessage('每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。')
+    const { spec, ir, ast } = compileLifecycleMessage('每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。')
 
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -100,6 +100,29 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
           key: 'price.change_pct',
           op: 'LTE',
           value: -0.05,
+        }),
+      }),
+    ]))
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          dcaSchedule: expect.objectContaining({
+            maxCount: 4,
+            stateKey: expect.any(String),
+          }),
+        }),
+        actions: [
+          {
+            kind: 'ADD_LONG',
+            quantity: { mode: 'fixed_quote', value: 100, asset: 'USDT' },
+          },
+        ],
+      }),
+    ]))
+    expect(ast.decisionPrograms).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          dcaSchedule: expect.objectContaining({ maxCount: 4 }),
         }),
       }),
     ]))

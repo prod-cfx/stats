@@ -1242,9 +1242,9 @@ export class SemanticSeedStateBuilderService {
             }]
           : []),
       ],
-      requires: [
-        { domain: 'guard', verb: 'define', object: 'dca_exit_rule' },
-      ],
+      requires: exitRuleShape
+        ? []
+        : [{ domain: 'guard', verb: 'define', object: 'dca_exit_rule' }],
       params,
       runtimeRequirements: [],
       stateRequirements: [],
@@ -1254,10 +1254,36 @@ export class SemanticSeedStateBuilderService {
 
     return {
       ...contract,
+      openSlots: this.filterSatisfiedDcaContractOpenSlots(contract.openSlots, params),
       effects: [
         { domain: 'exposure', verb: 'increase', object: 'position' },
       ],
     }
+  }
+
+  private filterSatisfiedDcaContractOpenSlots(
+    openSlots: readonly SemanticSlotState[],
+    params: Record<string, unknown>,
+  ): SemanticSlotState[] {
+    return openSlots.filter((slot) => {
+      if (slot.slotKey === 'position.dca_schedule.max_count') {
+        return this.readFiniteNumber(params.maxCount) === null
+      }
+      if (slot.slotKey === 'position.dca_schedule.capital_cap') {
+        return this.readCapitalCapShape(params.capitalCap) === null
+      }
+      if (slot.slotKey === 'position.dca_schedule.per_order_sizing') {
+        return this.readUnknownShape(params.perOrderSizing) === null
+      }
+      if (slot.slotKey === 'position.dca_schedule.trigger_mode') {
+        return typeof params.triggerMode !== 'string' || params.triggerMode.length === 0
+      }
+      if (slot.slotKey === 'position.dca_schedule.exit_rule') {
+        return this.readUnknownShape(params.exitRule) === null
+      }
+
+      return true
+    })
   }
 
   private readCapitalCapShape(value: unknown): number | SemanticCapabilityShape | null {

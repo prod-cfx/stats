@@ -1099,7 +1099,7 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(group, state.actions)
+      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(group, state.actions, state.position)
       if (!lifecycleAction && !this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
         continue
       }
@@ -1312,10 +1312,34 @@ export class CanonicalSpecBuilderService {
   private resolveLifecycleActionForTriggerGroup(
     group: SemanticTriggerCombinationGroup,
     actions: SemanticActionState[],
+    position: SemanticPositionState | null,
   ): SemanticActionState | null {
     const lockedActions = actions.filter(action => action.status === 'locked')
     if (group.phase === 'entry') {
-      return lockedActions.find(action => action.key === 'action.add_position') ?? null
+      const explicitAddPosition = lockedActions.find(action => action.key === 'action.add_position')
+      if (explicitAddPosition) {
+        return explicitAddPosition
+      }
+
+      const dcaSchedule = this.findPositionConstraint(position, 'position.dca_schedule')
+      if (dcaSchedule && (group.actionKey === 'open_long' || group.sideScope === 'long')) {
+        return {
+          id: `${dcaSchedule.id}:action.add_position`,
+          key: 'action.add_position',
+          status: 'locked',
+          source: dcaSchedule.source,
+          evidence: dcaSchedule.evidence,
+          params: {
+            actionSide: 'long',
+            sizing: dcaSchedule.params.perOrderSizing,
+          },
+          openSlots: [],
+          contracts: dcaSchedule.contracts,
+          support: dcaSchedule.support,
+        }
+      }
+
+      return null
     }
 
     if (group.phase === 'exit') {
@@ -1438,7 +1462,7 @@ export class CanonicalSpecBuilderService {
     const dcaSchedule = this.findPositionConstraint(position, 'position.dca_schedule')
     if (dcaSchedule) {
       const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
-      const capitalCap = this.readFiniteNumber(dcaSchedule.params.capitalCap)
+      const capitalCap = this.readDcaCapitalCapValue(dcaSchedule.params.capitalCap)
       if (maxCount !== null && capitalCap !== null) {
         metadata.dcaSchedule = {
           maxCount,
@@ -1449,6 +1473,18 @@ export class CanonicalSpecBuilderService {
     }
 
     return Object.keys(metadata).length > 0 ? metadata : undefined
+  }
+
+  private readDcaCapitalCapValue(value: unknown): number | null {
+    const direct = this.readFiniteNumber(value)
+    if (direct !== null) {
+      return direct
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    return this.readFiniteNumber((value as { value?: unknown }).value)
   }
 
   private resolveLifecycleActionSideScope(
