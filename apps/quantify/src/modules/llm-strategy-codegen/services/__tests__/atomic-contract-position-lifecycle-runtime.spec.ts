@@ -169,6 +169,40 @@ describe('atomic contract position lifecycle compiled runtime', () => {
     expect(decision.action).not.toBe('OPEN_LONG')
   })
 
+  it('blocks add_position when projected exposure would exceed max exposure percentage', () => {
+    const decision = runLifecycleProgram(
+      {
+        id: 'add-long',
+        phase: 'entry',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          addPosition: {
+            maxLayers: 3,
+            maxExposurePct: 50,
+            stateKey: 'pyramiding_layer_count',
+          },
+        },
+        actions: [
+          { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 20 } },
+        ],
+      },
+      {
+        position: { side: 'long', qty: 1, exposurePct: 40 },
+        currentPrice: 100,
+        accountEquity: 1_000,
+        semanticRuntimeState: {
+          pyramiding_layer_count: { value: 1 },
+        },
+      } as Ctx,
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.add-long.max_exposure_pct',
+    })
+  })
+
   it('closes the current long before opening a reverse short', () => {
     const program = {
       id: 'reverse-short',
@@ -292,7 +326,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 0.5, stateKey: 'dca_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -322,7 +356,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 0.5, stateKey: 'dca_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -359,7 +393,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 0.5, stateKey: 'dca_fired_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -385,7 +419,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 0.5, stateKey: 'dca_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -406,5 +440,35 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.dca-long.dca_state_missing',
     })
     expect(decision.action).not.toBe('OPEN_LONG')
+  })
+
+  it('blocks dca when next order would exceed capital cap', () => {
+    const decision = runLifecycleProgram(
+      {
+        id: 'dca-long',
+        phase: 'entry',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          dcaSchedule: { maxCount: 4, capitalCap: 250, stateKey: 'dca_fired_count' },
+        },
+        actions: [
+          { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100 } },
+        ],
+      },
+      {
+        position: { side: 'long', qty: 1 },
+        currentPrice: 100,
+        accountEquity: 1_000,
+        semanticRuntimeState: {
+          dca_fired_count: { value: 2 },
+        },
+      } as Ctx,
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.dca-long.dca_capital_cap',
+    })
   })
 })

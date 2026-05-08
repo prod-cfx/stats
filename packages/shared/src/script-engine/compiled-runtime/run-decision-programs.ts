@@ -342,6 +342,17 @@ function evaluatePositionLifecycle(
         reason: `compiled.${program.id}.pyramiding_limit`,
       }
     }
+
+    if (
+      typeof addMeta.maxExposurePct === 'number'
+      && Number.isFinite(addMeta.maxExposurePct)
+      && exceedsMaxExposurePct(program, ctx, addMeta.maxExposurePct)
+    ) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.max_exposure_pct`,
+      }
+    }
   }
 
   const dcaMeta = program.metadata?.dcaSchedule
@@ -358,6 +369,16 @@ function evaluatePositionLifecycle(
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.dca_max_count`,
+      }
+    }
+
+    if (
+      Number.isFinite(dcaMeta.capitalCap)
+      && exceedsDcaCapitalCap(program, ctx, currentCount.value, dcaMeta.capitalCap)
+    ) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_capital_cap`,
       }
     }
   }
@@ -436,6 +457,142 @@ function clearPendingReverse(
 ): void {
   const compiledState = ensureCompiledDecisionState(ctx)
   delete compiledState.pendingReverseByProgram[programId]
+}
+
+function exceedsMaxExposurePct(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+  maxExposurePct: number,
+): boolean {
+  if (maxExposurePct < 0) {
+    return false
+  }
+  const equity = readEquity(ctx)
+  if (equity <= 0) {
+    return true
+  }
+
+  const currentExposurePct = readPositionExposurePct(ctx, equity)
+  const nextAction = findFirstAddAction(program)
+  const nextExposurePct = nextAction
+    ? quantityToExposurePct(nextAction.quantity, ctx, equity)
+    : 0
+
+  return currentExposurePct + nextExposurePct > maxExposurePct
+}
+
+function exceedsDcaCapitalCap(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+  currentCount: number,
+  capitalCap: number,
+): boolean {
+  if (capitalCap < 0) {
+    return false
+  }
+  const nextAction = findFirstAddAction(program)
+  if (!nextAction) {
+    return false
+  }
+
+  const nextQuote = quantityToQuoteValue(nextAction.quantity, ctx)
+  if (nextQuote === null) {
+    return true
+  }
+
+  return (currentCount * nextQuote) + nextQuote > capitalCap
+}
+
+function findFirstAddAction(
+  program: DecisionProgramNode,
+): DecisionProgramNode['actions'][number] | null {
+  return program.actions.find(action => action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT') ?? null
+}
+
+function readPositionExposurePct(
+  ctx: StrategyExecutionContextV1,
+  equity: number,
+): number {
+  const directPct = readFirstFinitePositiveOrZeroNumber([
+    ctx.position?.exposurePct,
+    ctx.position?.positionPct,
+    ctx.position?.notionalPct,
+    ctx.position?.exposurePercent,
+    ctx.position?.positionPercent,
+    ctx.position?.notionalPercent,
+  ])
+  if (directPct !== null) {
+    return directPct
+  }
+
+  const notional = readFirstFinitePositiveOrZeroNumber([
+    ctx.position?.notional,
+    ctx.position?.notionalValue,
+    ctx.position?.marketValue,
+    ctx.position?.value,
+  ])
+  if (notional !== null) {
+    return (Math.abs(notional) / equity) * 100
+  }
+
+  const currentPrice = readCurrentPrice(ctx)
+  const qty = Math.abs(readCurrentQty(ctx))
+  if (currentPrice <= 0 || qty === 0) {
+    return 0
+  }
+
+  return (qty * currentPrice / equity) * 100
+}
+
+function quantityToExposurePct(
+  quantity: DecisionProgramNode['actions'][number]['quantity'],
+  ctx: StrategyExecutionContextV1,
+  equity: number,
+): number {
+  const quoteValue = quantityToQuoteValue(quantity, ctx)
+  if (quoteValue === null) {
+    return 0
+  }
+
+  return (quoteValue / equity) * 100
+}
+
+function quantityToQuoteValue(
+  quantity: DecisionProgramNode['actions'][number]['quantity'],
+  ctx: StrategyExecutionContextV1,
+): number | null {
+  const rawValue = quantity.value
+  if (!Number.isFinite(rawValue) || rawValue <= 0) {
+    return null
+  }
+
+  switch (quantity.mode) {
+    case 'fixed_quote':
+      return rawValue
+    case 'pct_equity': {
+      const equity = readEquity(ctx)
+      return equity > 0 ? equity * rawValue / 100 : null
+    }
+    case 'fixed_base': {
+      const currentPrice = readCurrentPrice(ctx)
+      return currentPrice > 0 ? rawValue * currentPrice : null
+    }
+    case 'position_pct': {
+      const currentPrice = readCurrentPrice(ctx)
+      const currentQty = Math.abs(readCurrentQty(ctx))
+      return currentPrice > 0 ? currentQty * currentPrice * rawValue / 100 : null
+    }
+  }
+}
+
+function readFirstFinitePositiveOrZeroNumber(candidates: unknown[]): number | null {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate
+    }
+  }
+
+  return null
 }
 
 function readSemanticRuntimeStateNumber(
