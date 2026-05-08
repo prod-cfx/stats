@@ -38,6 +38,7 @@ import { SemanticEventFrameParserService } from './services/semantic-event-frame
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
+import { SemanticPresentationRegistryService } from './services/semantic-presentation-registry.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
@@ -116,6 +117,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticMissingPlaceholderReconcilerService,
     MarketInstrumentSymbolResolverService,
     SemanticOpenSlotAnswerResolverService,
+    SemanticPresentationRegistryService,
     SemanticSupportClassifierService,
     UnsupportedFallbackService,
   ],
