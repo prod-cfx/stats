@@ -3173,6 +3173,7 @@ export class SemanticSeedExtractorService {
           key: 'indicator.cross_over',
           phase: intent.phase,
           sideScope: intent.sideScope,
+          evidence: { text: clause, source: 'user_explicit' },
           params: {
             indicator: 'rsi',
             period,
@@ -3188,6 +3189,7 @@ export class SemanticSeedExtractorService {
           key: 'indicator.cross_under',
           phase: intent.phase,
           sideScope: intent.sideScope,
+          evidence: { text: clause, source: 'user_explicit' },
           params: {
             indicator: 'rsi',
             period,
@@ -3203,6 +3205,7 @@ export class SemanticSeedExtractorService {
           key: 'oscillator.rsi_gte',
           phase: intent.phase,
           sideScope: intent.sideScope,
+          evidence: { text: clause, source: 'user_explicit' },
           params: {
             period,
             value: threshold,
@@ -3217,6 +3220,7 @@ export class SemanticSeedExtractorService {
           key: 'oscillator.rsi_lte',
           phase: intent.phase,
           sideScope: intent.sideScope,
+          evidence: { text: clause, source: 'user_explicit' },
           params: {
             period,
             value: threshold,

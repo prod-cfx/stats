@@ -1317,12 +1317,12 @@ export class CanonicalSpecBuilderService {
     const lockedActions = actions.filter(action => action.status === 'locked')
     if (group.phase === 'entry') {
       const explicitAddPosition = lockedActions.find(action => action.key === 'action.add_position')
-      if (explicitAddPosition) {
+      if (explicitAddPosition && this.shouldBindAddPositionAction(group, position)) {
         return explicitAddPosition
       }
 
       const dcaSchedule = this.findPositionConstraint(position, 'position.dca_schedule')
-      if (dcaSchedule && (group.actionKey === 'open_long' || group.sideScope === 'long')) {
+      if (dcaSchedule && this.shouldBindDcaScheduleAction(group)) {
         return {
           id: `${dcaSchedule.id}:action.add_position`,
           key: 'action.add_position',
@@ -1344,12 +1344,93 @@ export class CanonicalSpecBuilderService {
     }
 
     if (group.phase === 'exit') {
-      return lockedActions.find(action => action.key === 'action.reduce_position')
-        ?? lockedActions.find(action => action.key === 'action.reverse_position')
+      return lockedActions.find(action =>
+        action.key === 'action.reduce_position' && this.shouldBindReducePositionAction(group, action),
+      )
+        ?? lockedActions.find(action =>
+          action.key === 'action.reverse_position' && this.shouldBindReversePositionAction(group, action),
+        )
         ?? null
     }
 
     return null
+  }
+
+  private shouldBindAddPositionAction(
+    group: SemanticTriggerCombinationGroup,
+    position: SemanticPositionState | null,
+  ): boolean {
+    if (group.actionKey === 'action.add_position') {
+      return true
+    }
+
+    if (group.members.some(trigger => this.textContainsPositionLifecycleAction(trigger.evidence?.text, /加仓|补仓|scale\s*in/iu))) {
+      return true
+    }
+
+    return Boolean(
+      this.findPositionConstraint(position, 'position.pyramiding_limit')
+      && group.members.some(trigger =>
+        trigger.key === 'condition.sequence'
+        || trigger.key === 'risk.take_profit_pct'
+        || trigger.key === 'price.percent_change',
+      ),
+    )
+  }
+
+  private shouldBindDcaScheduleAction(group: SemanticTriggerCombinationGroup): boolean {
+    if (group.actionKey === 'action.add_position' || group.actionKey === 'position.dca_schedule') {
+      return true
+    }
+
+    return group.members.some(trigger =>
+      trigger.key === 'price.percent_change'
+      || trigger.key === 'oscillator.rsi_lte'
+      || this.textContainsPositionLifecycleAction(trigger.evidence?.text, /DCA|定投|补仓/iu),
+    )
+  }
+
+  private shouldBindReducePositionAction(
+    group: SemanticTriggerCombinationGroup,
+    action: SemanticActionState,
+  ): boolean {
+    if (group.actionKey === 'action.reduce_position') {
+      return true
+    }
+
+    const actionSide = this.readActionSideScope(action.params) ?? 'long'
+    if (group.sideScope !== 'both' && actionSide !== group.sideScope) {
+      return false
+    }
+
+    return group.members.some(trigger =>
+      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /减仓|scale\s*out/iu)
+      || trigger.key === 'risk.take_profit_pct',
+    )
+  }
+
+  private shouldBindReversePositionAction(
+    group: SemanticTriggerCombinationGroup,
+    action: SemanticActionState,
+  ): boolean {
+    if (group.actionKey === 'action.reverse_position') {
+      return true
+    }
+
+    const fromSide = this.readSideParam(action.params?.fromSide)
+    if (fromSide && group.sideScope !== 'both' && group.sideScope !== fromSide) {
+      return false
+    }
+
+    return group.members.some(trigger =>
+      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /反手|reverse\s+position|flip\s+position/iu)
+      || trigger.key === 'indicator.below'
+      || trigger.key === 'indicator.cross_under',
+    )
+  }
+
+  private textContainsPositionLifecycleAction(text: string | undefined, pattern: RegExp): boolean {
+    return typeof text === 'string' && pattern.test(text)
   }
 
   private buildActionsForSemanticLifecycleAction(

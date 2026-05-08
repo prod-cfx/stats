@@ -89,6 +89,34 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
     expect(ir.ruleBlocks.some(block => block.actions.some(action => action.kind === 'CLOSE_LONG'))).toBe(false)
   })
 
+  it('keeps ordinary entry and exit groups from being hijacked by lifecycle actions', () => {
+    const { ir } = compileLifecycleMessage('MA20 上穿 MA50 开多，MA20 下穿 MA50 平多；BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次；RSI 高于 70 卖出减仓 30%。')
+
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'ADD_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [expect.objectContaining({ kind: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [
+          {
+            kind: 'REDUCE_LONG',
+            quantity: { mode: 'position_pct', value: 30 },
+          },
+        ],
+      }),
+    ]))
+  })
+
   it('compiles add_position constraints into pyramiding portfolio and runtime state', () => {
     const { ir } = compileLifecycleMessage('BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次。')
 
