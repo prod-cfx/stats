@@ -1,22 +1,21 @@
-import type { TestingModule } from '@nestjs/testing';
+import type { TestingModule } from '@nestjs/testing'
 import type { CreateOpenInterestDto } from './dto/open-interest.dto'
 import { Test } from '@nestjs/testing'
+import { ErrorCode } from '@ai/shared'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { Prisma } from '@/prisma/prisma.types'
-import { PrismaService } from '../../prisma/prisma.service'
+import { OpenInterestRepository } from './open-interest.repository'
 import { OpenInterestService } from './open-interest.service'
 
 describe('openInterestService', () => {
   let service: OpenInterestService
-  let prismaService: PrismaService
 
-  const mockPrismaService = {
-    openInterest: {
-      upsert: jest.fn(),
-      findMany: jest.fn(),
-      findFirst: jest.fn(),
-      count: jest.fn(),
-    },
-    $queryRaw: jest.fn(),
+  const mockRepository = {
+    upsert: jest.fn(),
+    findMany: jest.fn(),
+    count: jest.fn(),
+    findLatest: jest.fn(),
+    queryRawStats: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -24,14 +23,13 @@ describe('openInterestService', () => {
       providers: [
         OpenInterestService,
         {
-          provide: PrismaService,
-          useValue: mockPrismaService,
+          provide: OpenInterestRepository,
+          useValue: mockRepository,
         },
       ],
     }).compile()
 
     service = module.get<OpenInterestService>(OpenInterestService)
-    prismaService = module.get<PrismaService>(PrismaService)
   })
 
   afterEach(() => {
@@ -39,7 +37,7 @@ describe('openInterestService', () => {
   })
 
   describe('upsert', () => {
-    it('should create or update open interest data', async () => {
+    it('delegates upsert to the repository', async () => {
       const mockData: CreateOpenInterestDto = {
         exchange: 'All',
         symbol: 'BTC',
@@ -65,26 +63,16 @@ describe('openInterestService', () => {
         updatedAt: new Date(),
       }
 
-      mockPrismaService.openInterest.upsert.mockResolvedValue(mockResult)
+      mockRepository.upsert.mockResolvedValue(mockResult)
 
       const result = await service.upsert(mockData)
 
       expect(result).toEqual(mockResult)
-      expect(prismaService.openInterest.upsert).toHaveBeenCalledTimes(1)
-      expect(prismaService.openInterest.upsert).toHaveBeenCalledWith({
-        where: {
-          unique_oi_record: {
-            exchange: mockData.exchange,
-            symbol: mockData.symbol,
-            dataTimestamp: new Date(mockData.data_timestamp),
-          },
-        },
-        update: expect.any(Object),
-        create: expect.any(Object),
-      })
+      expect(mockRepository.upsert).toHaveBeenCalledTimes(1)
+      expect(mockRepository.upsert).toHaveBeenCalledWith(mockData)
     })
 
-    it('should handle errors when upserting', async () => {
+    it('propagates repository errors', async () => {
       const mockData: CreateOpenInterestDto = {
         exchange: 'All',
         symbol: 'BTC',
@@ -93,16 +81,14 @@ describe('openInterestService', () => {
         data_timestamp: '2025-12-24T10:00:00Z',
       } as CreateOpenInterestDto
 
-      mockPrismaService.openInterest.upsert.mockRejectedValue(
-        new Error('Database error'),
-      )
+      mockRepository.upsert.mockRejectedValue(new Error('Database error'))
 
       await expect(service.upsert(mockData)).rejects.toThrow('Database error')
     })
   })
 
   describe('batchUpsert', () => {
-    it('should batch upsert multiple records', async () => {
+    it('upserts each record in the batch', async () => {
       const mockDataList: CreateOpenInterestDto[] = [
         {
           exchange: 'All',
@@ -120,24 +106,24 @@ describe('openInterestService', () => {
         } as CreateOpenInterestDto,
       ]
 
-      mockPrismaService.openInterest.upsert.mockResolvedValue({})
+      mockRepository.upsert.mockResolvedValue({})
 
       const result = await service.batchUpsert(mockDataList)
 
       expect(result).toHaveLength(2)
-      expect(prismaService.openInterest.upsert).toHaveBeenCalledTimes(2)
+      expect(mockRepository.upsert).toHaveBeenCalledTimes(2)
     })
 
-    it('should return empty array for empty input', async () => {
+    it('returns an empty array for empty input', async () => {
       const result = await service.batchUpsert([])
 
       expect(result).toEqual([])
-      expect(prismaService.openInterest.upsert).not.toHaveBeenCalled()
+      expect(mockRepository.upsert).not.toHaveBeenCalled()
     })
   })
 
   describe('query', () => {
-    it('should query open interest data with filters', async () => {
+    it('forwards filters and pagination to the repository', async () => {
       const mockQuery = {
         exchange: 'All',
         symbol: 'BTC',
@@ -157,19 +143,19 @@ describe('openInterestService', () => {
         },
       ]
 
-      mockPrismaService.openInterest.findMany.mockResolvedValue(mockData)
-      mockPrismaService.openInterest.count.mockResolvedValue(1)
+      mockRepository.findMany.mockResolvedValue(mockData)
+      mockRepository.count.mockResolvedValue(1)
 
       const result = await service.query(mockQuery)
 
-      expect(result).toEqual({
-        data: mockData,
+      expect(result).toEqual(expect.objectContaining({
+        items: mockData,
         total: 1,
+        page: 1,
         limit: 100,
-        offset: 0,
-      })
-      expect(prismaService.openInterest.findMany).toHaveBeenCalledWith({
-        where: {
+      }))
+      expect(mockRepository.findMany).toHaveBeenCalledWith(
+        {
           exchange: 'All',
           symbol: 'BTC',
           dataTimestamp: {
@@ -177,15 +163,15 @@ describe('openInterestService', () => {
             lte: new Date(mockQuery.endTime),
           },
         },
-        orderBy: { dataTimestamp: 'desc' },
-        take: 100,
-        skip: 0,
-      })
+        100,
+        0,
+      )
+      expect(mockRepository.count).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('getLatest', () => {
-    it('should get the latest open interest data', async () => {
+    it('returns the latest record from the repository', async () => {
       const mockData = {
         id: 1,
         exchange: 'All',
@@ -194,15 +180,12 @@ describe('openInterestService', () => {
         dataTimestamp: new Date(),
       }
 
-      mockPrismaService.openInterest.findFirst.mockResolvedValue(mockData)
+      mockRepository.findLatest.mockResolvedValue(mockData)
 
       const result = await service.getLatest('All', 'BTC')
 
       expect(result).toEqual(mockData)
-      expect(prismaService.openInterest.findFirst).toHaveBeenCalledWith({
-        where: { exchange: 'All', symbol: 'BTC' },
-        orderBy: { dataTimestamp: 'desc' },
-      })
+      expect(mockRepository.findLatest).toHaveBeenCalledWith('All', 'BTC')
     })
   })
 
@@ -237,8 +220,8 @@ describe('openInterestService', () => {
       }
     }
 
-    it('should calculate statistics for a time range', async () => {
-      mockPrismaService.$queryRaw.mockResolvedValue([buildRow()])
+    it('calculates statistics for a time range', async () => {
+      mockRepository.queryRawStats.mockResolvedValue([buildRow()])
 
       const result = await service.getStats('BTC', startTime, endTime)
 
@@ -255,19 +238,19 @@ describe('openInterestService', () => {
         change: 1_000_000_000,
         changePercent: (1_000_000_000 / 57_000_000_000) * 100,
       })
-      expect(mockPrismaService.$queryRaw).toHaveBeenCalledTimes(1)
+      expect(mockRepository.queryRawStats).toHaveBeenCalledWith('BTC', startTime, endTime)
     })
 
-    it('should return null when no data is found', async () => {
-      mockPrismaService.$queryRaw.mockResolvedValue([])
+    it('returns null when no data is found', async () => {
+      mockRepository.queryRawStats.mockResolvedValue([])
 
       const result = await service.getStats('BTC', startTime, endTime)
 
       expect(result).toBeNull()
     })
 
-    it('should handle zero earliest value', async () => {
-      mockPrismaService.$queryRaw.mockResolvedValue([
+    it('handles a zero earliest value', async () => {
+      mockRepository.queryRawStats.mockResolvedValue([
         buildRow({ earliest: '0', latest: '58000000000' }),
       ])
 
@@ -277,28 +260,35 @@ describe('openInterestService', () => {
       expect(result?.changePercent).toBe(0)
     })
 
-    it('should throw error when startTime is after endTime', async () => {
+    it('rejects when startTime is after endTime', async () => {
       const invalidStart = new Date('2025-12-25T00:00:00Z')
       const invalidEnd = new Date('2025-12-24T00:00:00Z')
 
-      await expect(
-        service.getStats('BTC', invalidStart, invalidEnd),
-      ).rejects.toThrow('startTime must be before endTime')
+      await expect(service.getStats('BTC', invalidStart, invalidEnd))
+        .rejects.toMatchObject({
+          name: DomainException.name,
+          code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS,
+          args: { reason: 'startTime must be before endTime' },
+        })
     })
 
-    it('should throw error when parameters are missing', async () => {
-      await expect(
-        service.getStats('', startTime, endTime),
-      ).rejects.toThrow('Symbol, startTime, and endTime are required')
+    it('rejects when parameters are missing', async () => {
+      await expect(service.getStats('', startTime, endTime))
+        .rejects.toMatchObject({
+          name: DomainException.name,
+          code: ErrorCode.OPEN_INTEREST_INVALID_PARAMS,
+        })
     })
 
-    it('should reject when range exceeds 31 days', async () => {
+    it('rejects when range exceeds 31 days', async () => {
       const longStart = new Date('2025-01-01T00:00:00Z')
       const longEnd = new Date('2025-03-15T00:00:00Z')
 
-      await expect(
-        service.getStats('BTC', longStart, longEnd),
-      ).rejects.toThrow('Time range cannot exceed 31 days')
+      await expect(service.getStats('BTC', longStart, longEnd))
+        .rejects.toMatchObject({
+          name: DomainException.name,
+          code: ErrorCode.OPEN_INTEREST_RANGE_EXCEEDED,
+        })
     })
   })
 })
