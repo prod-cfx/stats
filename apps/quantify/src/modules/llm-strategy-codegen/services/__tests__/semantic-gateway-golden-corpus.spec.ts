@@ -45,11 +45,14 @@ describe('semantic gateway golden corpus', () => {
 
     expect(classified.state).toBeDefined()
     expect(normalized.state).toBeDefined()
+    expectRawP0Frames(frames)
+    expectP0ContextState(normalized.state)
     expect(displayText).toEqual(expect.stringContaining('EMA20'))
     expect(displayText).toEqual(expect.stringContaining('EMA60'))
     expect(displayText).toEqual(expect.stringContaining('EMA144'))
     expect(displayText).toEqual(expect.stringContaining('BOLL'))
     expect(displayText).not.toMatch(/generic_boundary|indicator\.above|indicator\.below|price\.detect\.indicator_boundary/u)
+    expectP0Clarification(stateProjection, normalized.state)
 
     expect(normalized.ready).toBe(false)
     expect(openSlots).toEqual(expect.arrayContaining([
@@ -69,6 +72,7 @@ describe('semantic gateway golden corpus', () => {
       rules: expect.any(Array),
     }))
     expect(canonicalSpec.rules.length).toBeGreaterThan(0)
+    expectCanonicalP0Market(canonicalSpec)
     expectCanonicalP0Rules(canonicalSpec.rules)
 
     const canonicalJson = JSON.stringify(canonicalSpec)
@@ -80,7 +84,73 @@ describe('semantic gateway golden corpus', () => {
   })
 })
 
+function expectRawP0Frames(frames: ReturnType<NaturalLanguageGatewayService['parse']>): void {
+  expect(frames).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      kind: 'context',
+      field: 'timeframe',
+      value: '15m',
+    }),
+    expect.objectContaining({
+      kind: 'context',
+      field: 'exchange',
+      value: 'binance',
+    }),
+    expect.objectContaining({
+      kind: 'context',
+      field: 'symbol',
+      value: 'BTCUSDT',
+    }),
+    expect.objectContaining({
+      kind: 'context',
+      field: 'marketType',
+      value: 'perp',
+    }),
+    expect.objectContaining({
+      kind: 'action',
+      actionKey: 'open_long',
+    }),
+    expect.objectContaining({
+      kind: 'action',
+      actionKey: 'open_short',
+    }),
+    expect.objectContaining({
+      kind: 'risk',
+      riskKey: 'risk.stop_loss_pct',
+      valuePct: 5,
+    }),
+    expect.objectContaining({
+      kind: 'boundary_touch',
+      indicator: 'bollinger',
+      boundaryRole: 'lower',
+      sideScope: 'long',
+    }),
+    expect.objectContaining({
+      kind: 'boundary_touch',
+      indicator: 'bollinger',
+      boundaryRole: 'upper',
+      sideScope: 'short',
+    }),
+  ]))
+}
+
 function expectGatewayPatch(gatewayPatch: ReturnType<SemanticFrameNormalizerService['normalize']>): void {
+  expect(gatewayPatch.contextSlots).toEqual(expect.objectContaining({
+    timeframe: '15m',
+    exchange: 'binance',
+    symbol: 'BTCUSDT',
+    marketType: 'perp',
+  }))
+  expect(gatewayPatch.actions).toEqual(expect.arrayContaining([
+    expect.objectContaining({ key: 'open_long' }),
+    expect.objectContaining({ key: 'open_short' }),
+  ]))
+  expect(gatewayPatch.risk).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      key: 'risk.stop_loss_pct',
+      params: expect.objectContaining({ valuePct: 5 }),
+    }),
+  ]))
   expect(gatewayPatch.triggers).toEqual(expect.arrayContaining([
     expect.objectContaining({
       key: 'condition.expression',
@@ -107,6 +177,42 @@ function expectGatewayPatch(gatewayPatch: ReturnType<SemanticFrameNormalizerServ
   ]))
   expectConditionExpression(findGatewayExpression(gatewayPatch, 'long'), 'GT')
   expectConditionExpression(findGatewayExpression(gatewayPatch, 'short'), 'LT')
+}
+
+function expectP0ContextState(state: SemanticState): void {
+  expect(state.contextSlots.timeframe).toEqual(expect.objectContaining({
+    slotKey: 'timeframe',
+    fieldPath: 'contextSlots.timeframe',
+    status: 'locked',
+    value: '15m',
+  }))
+  expect(state.contextSlots.symbol).toEqual(expect.objectContaining({
+    slotKey: 'symbol',
+    fieldPath: 'contextSlots.symbol',
+    status: 'locked',
+    value: 'BTCUSDT',
+  }))
+  expect(state.contextSlots.exchange).toEqual(expect.objectContaining({
+    slotKey: 'exchange',
+    fieldPath: 'contextSlots.exchange',
+    status: 'locked',
+    value: 'binance',
+  }))
+  expect(state.contextSlots.marketType).toEqual(expect.objectContaining({
+    slotKey: 'marketType',
+    fieldPath: 'contextSlots.marketType',
+    status: 'locked',
+    value: 'perp',
+  }))
+}
+
+function expectP0Clarification(projection: SemanticStateProjectionService, state: SemanticState): void {
+  const clarification = projection.buildClarificationView(state)
+  const clarificationText = [clarification.summary, clarification.nextQuestion].filter(Boolean).join(' ')
+
+  expect(clarification.nextQuestion).toEqual(expect.stringMatching(/单笔仓位|position sizing/iu))
+  expect(clarification.nextQuestion).not.toMatch(/boll|布林|上轨|下轨|boundary|交易所|exchange|标的|symbol|周期|timeframe|市场类型|market\s*type|perp|perpetual/iu)
+  expect(clarificationText).not.toMatch(/contextSlots|position\.sizing|risk\.stop_loss_pct|price\.detect\.indicator_boundary|generic_boundary|open_long|open_short|indicator\.above|indicator\.below/u)
 }
 
 function findGatewayExpression(
@@ -146,6 +252,15 @@ function emaClosePredicate(op: 'GT' | 'LT', period: number): object {
     left: { kind: 'series', source: 'bar', field: 'close' },
     right: { kind: 'indicator', name: 'ema', params: { period } },
   })
+}
+
+function expectCanonicalP0Market(canonicalSpec: ReturnType<CanonicalSpecBuilderService['build']>): void {
+  expect(canonicalSpec.market).toEqual(expect.objectContaining({
+    exchange: 'binance',
+    symbol: 'BTCUSDT',
+    marketType: 'perp',
+    defaultTimeframe: '15m',
+  }))
 }
 
 function expectCanonicalP0Rules(rules: CanonicalRuleV2[]): void {
