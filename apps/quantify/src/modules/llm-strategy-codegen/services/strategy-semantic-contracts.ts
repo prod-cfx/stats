@@ -160,6 +160,16 @@ const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
     requiredParams: ['condition', 'effect', 'scope', 'capabilityStatus'],
     editableSlots: [],
   },
+  'risk.partial_take_profit': {
+    semanticKey: 'risk.partial_take_profit',
+    family: 'risk',
+    // TODO(#984 follow-up): requiredParams is owned by semantic-atom-registry
+    // (['tiers', 'memoryKey']). This entry only exists to satisfy the
+    // SUPPORTED_RISK_KEYS gate. Remove this duplicate config entirely once
+    // strategy consistency uses the registry directly.
+    requiredParams: [],
+    editableSlots: [],
+  },
 }
 
 const SUPPORTED_EXPRESSION_OPERATORS = new Set<string>(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'CROSS_OVER', 'CROSS_UNDER'])
@@ -177,6 +187,7 @@ const SUPPORTED_RISK_KEYS = new Set<string>([
   'risk.max_drawdown_pct',
   'risk.max_single_loss_pct',
   'risk.condition_expression',
+  'risk.partial_take_profit',
 ])
 const SUPPORTED_RISK_EFFECT_TYPES = new Set<string>(['close_position', 'reduce_position', 'notify_only', 'pause_strategy'])
 const SUPPORTED_RISK_SCOPES = new Set<string>(['current_position', 'long', 'short', 'both', 'strategy', 'account'])

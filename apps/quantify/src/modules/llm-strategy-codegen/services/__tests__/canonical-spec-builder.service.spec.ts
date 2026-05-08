@@ -3698,4 +3698,215 @@ describe('canonicalSpecBuilderService', () => {
       }),
     ]))
   })
+
+  describe('partial take profit canonical rules', () => {
+    function makePartialTakeProfitSemanticState(input: {
+      memoryKey: string
+      tiers: Array<{ threshold: number; reduceRatio: number }>
+      sideScope?: 'long' | 'short' | 'both'
+      positionMode?: string
+    }) {
+      const params: Record<string, unknown> = {
+        memoryKey: input.memoryKey,
+        tiers: input.tiers.map(tier => ({
+          trigger: { kind: 'pnl_pct', threshold: tier.threshold },
+          reduceRatio: tier.reduceRatio,
+        })),
+      }
+      if (input.sideScope) {
+        params.sideScope = input.sideScope
+      }
+      return createSemanticState({
+        positionMode: input.positionMode,
+        risk: [
+          {
+            id: 'partial-take-profit',
+            key: 'risk.partial_take_profit',
+            params,
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+      })
+    }
+
+    it('emits one risk-phase rule per tier with derivedRatio cumulative expansion (two equal tiers)', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_abc12345',
+        tiers: [
+          { threshold: 5, reduceRatio: 0.5 },
+          { threshold: 10, reduceRatio: 0.5 },
+        ],
+        sideScope: 'long',
+        positionMode: 'long_only',
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const ptpRules = spec.rules.filter(rule =>
+        rule.phase === 'risk'
+        && rule.metadata
+        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      )
+
+      expect(ptpRules).toHaveLength(2)
+      expect(ptpRules[0].id).toBe('semantic-risk-ptp-partial_tp_abc12345-tier-0')
+      expect(ptpRules[1].id).toBe('semantic-risk-ptp-partial_tp_abc12345-tier-1')
+
+      expect(ptpRules[0].condition).toEqual(expect.objectContaining({
+        kind: 'atom',
+        key: 'risk.partial_take_profit',
+        semanticScope: 'position',
+        op: 'GTE',
+        value: 5,
+        params: expect.objectContaining({
+          tierIndex: 0,
+          totalTiers: 2,
+          memoryKey: 'partial_tp_abc12345',
+          basis: 'pnl_pct',
+        }),
+      }))
+      expect(ptpRules[1].condition).toEqual(expect.objectContaining({
+        value: 10,
+        params: expect.objectContaining({ tierIndex: 1, totalTiers: 2 }),
+      }))
+
+      const tier0Sizing = ptpRules[0].actions[0].sizing
+      const tier1Sizing = ptpRules[1].actions[0].sizing
+      expect(tier0Sizing?.mode).toBe('RATIO')
+      expect(tier0Sizing?.value).toBeCloseTo(0.5, 6)
+      expect(tier1Sizing?.mode).toBe('RATIO')
+      expect(tier1Sizing?.value).toBeCloseTo(1.0, 6)
+
+      expect(ptpRules[0].metadata?.partialTakeProfit).toEqual({
+        memoryKey: 'partial_tp_abc12345',
+        tierIndex: 0,
+        totalTiers: 2,
+      })
+      expect(ptpRules[1].metadata?.partialTakeProfit).toEqual({
+        memoryKey: 'partial_tp_abc12345',
+        tierIndex: 1,
+        totalTiers: 2,
+      })
+    })
+
+    it('computes derivedRatio for three asymmetric tiers (0.3 / 0.5 / 0.2)', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_three',
+        tiers: [
+          { threshold: 3, reduceRatio: 0.3 },
+          { threshold: 6, reduceRatio: 0.5 },
+          { threshold: 9, reduceRatio: 0.2 },
+        ],
+        sideScope: 'long',
+        positionMode: 'long_only',
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const ptpRules = spec.rules.filter(rule =>
+        rule.phase === 'risk'
+        && rule.metadata
+        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      )
+
+      expect(ptpRules).toHaveLength(3)
+      expect(ptpRules[0].actions[0].sizing?.value).toBeCloseTo(0.3, 4)
+      expect(ptpRules[1].actions[0].sizing?.value).toBeCloseTo(0.7142857, 4)
+      expect(ptpRules[2].actions[0].sizing?.value).toBeCloseTo(1.0, 4)
+    })
+
+    it('keeps every tier non-zero for floating-point ratios summing to 1.0', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_floatdrift',
+        tiers: [
+          { threshold: 3, reduceRatio: 0.333 },
+          { threshold: 6, reduceRatio: 0.333 },
+          { threshold: 9, reduceRatio: 0.334 },
+        ],
+        sideScope: 'long',
+        positionMode: 'long_only',
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const ptpRules = spec.rules.filter(rule =>
+        rule.phase === 'risk'
+        && rule.metadata
+        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      )
+
+      expect(ptpRules).toHaveLength(3)
+      // Every derived ratio must be > 0 — float drift used to silently drop the final tier.
+      for (const rule of ptpRules) {
+        const value = rule.actions[0].sizing?.value ?? 0
+        expect(value).toBeGreaterThan(0)
+      }
+      // Final tier closes the residual position completely.
+      expect(ptpRules[2].actions[0].sizing?.value).toBeCloseTo(1.0, 4)
+    })
+
+    it('honors sideScope long/short/both for REDUCE actions', () => {
+      const service = new CanonicalSpecBuilderService()
+
+      const longState = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_long',
+        tiers: [{ threshold: 5, reduceRatio: 0.5 }, { threshold: 10, reduceRatio: 0.5 }],
+        sideScope: 'long',
+        positionMode: 'long_only',
+      })
+      const longRules = service.buildFromSemanticState(longState).rules.filter(rule =>
+        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+      )
+      expect(longRules[0].sideScope).toBe('long')
+      expect(longRules[0].actions.map(action => action.type)).toEqual(['REDUCE_LONG'])
+
+      const shortState = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_short',
+        tiers: [{ threshold: 5, reduceRatio: 0.5 }, { threshold: 10, reduceRatio: 0.5 }],
+        sideScope: 'short',
+        positionMode: 'short_only',
+      })
+      const shortRules = service.buildFromSemanticState(shortState).rules.filter(rule =>
+        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+      )
+      expect(shortRules[0].sideScope).toBe('short')
+      expect(shortRules[0].actions.map(action => action.type)).toEqual(['REDUCE_SHORT'])
+
+      const bothState = makePartialTakeProfitSemanticState({
+        memoryKey: 'partial_tp_both',
+        tiers: [{ threshold: 5, reduceRatio: 0.5 }, { threshold: 10, reduceRatio: 0.5 }],
+        sideScope: 'both',
+        positionMode: 'long_short',
+      })
+      const bothRules = service.buildFromSemanticState(bothState).rules.filter(rule =>
+        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+      )
+      expect(bothRules[0].sideScope).toBe('both')
+      expect(bothRules[0].actions.map(action => action.type)).toEqual(['REDUCE_LONG', 'REDUCE_SHORT'])
+    })
+
+    it('does not affect spec output when no partial_take_profit atom is present', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({
+        risk: [
+          {
+            id: 'stop-loss',
+            key: 'risk.stop_loss_pct',
+            params: { valuePct: 5 },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+      })
+
+      const spec = service.buildFromSemanticState(state)
+      const ptpRules = spec.rules.filter(rule =>
+        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+      )
+      expect(ptpRules).toHaveLength(0)
+    })
+  })
 })

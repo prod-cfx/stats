@@ -284,6 +284,401 @@ describe('atomic contract backtest/runtime parity', () => {
     }))
   })
 
+  describe('phase-1 partial take profit parity', () => {
+    interface PartialTakeProfitTier {
+      threshold: number
+      derivedRatioPct: number
+    }
+    interface PtpFixture {
+      memoryKey: string
+      tiers: PartialTakeProfitTier[]
+      sideScope: 'long' | 'short' | 'both'
+    }
+    interface BarFixture {
+      open: number
+      high: number
+      low: number
+      close: number
+      volume: number
+      timestamp: number
+    }
+    interface PositionFixture {
+      qty: number
+      avgEntryPrice: number
+    }
+
+    function makePartialTakeProfitAst(fixture: PtpFixture): StrategyAstV1 {
+      const exprPool: StrategyAstV1['exprPool'] = []
+      const exprOrder: string[] = []
+
+      const pnlSeriesId = 'series.position_pnl_pct'
+      exprPool.push({
+        id: pnlSeriesId,
+        sourceRef: 'ptp.pnl',
+        nodeType: 'series',
+        payload: { id: pnlSeriesId, kind: 'POSITION_PNL_PCT' },
+        deps: [],
+      })
+      exprOrder.push(pnlSeriesId)
+
+      const decisionPrograms: StrategyAstV1['decisionPrograms'] = []
+      const decisionOrder: string[] = []
+
+      fixture.tiers.forEach((tier, index) => {
+        const constId = `series.const.tier_${index}_threshold`
+        exprPool.push({
+          id: constId,
+          sourceRef: `ptp.const.${index}`,
+          nodeType: 'series',
+          payload: { id: constId, kind: 'CONST', value: tier.threshold },
+          deps: [],
+        })
+        exprOrder.push(constId)
+
+        const predId = `predicate.ptp_tier_${index}`
+        exprPool.push({
+          id: predId,
+          sourceRef: `ptp.predicate.${index}`,
+          nodeType: 'predicate',
+          payload: { id: predId, kind: 'GTE', args: [pnlSeriesId, constId] },
+          deps: [pnlSeriesId, constId],
+        })
+        exprOrder.push(predId)
+
+        const programId = `program_ptp_${fixture.memoryKey}_tier_${index}`
+        const reduceActions: Array<{
+          kind: 'REDUCE_LONG' | 'REDUCE_SHORT'
+          quantity: { mode: 'position_pct'; value: number }
+        }> = []
+        if (fixture.sideScope === 'long' || fixture.sideScope === 'both') {
+          reduceActions.push({
+            kind: 'REDUCE_LONG',
+            quantity: { mode: 'position_pct', value: tier.derivedRatioPct },
+          })
+        }
+        if (fixture.sideScope === 'short' || fixture.sideScope === 'both') {
+          reduceActions.push({
+            kind: 'REDUCE_SHORT',
+            quantity: { mode: 'position_pct', value: tier.derivedRatioPct },
+          })
+        }
+
+        decisionPrograms.push({
+          id: programId,
+          sourceRef: `ptp.program.${index}`,
+          phase: 'exit',
+          priority: 100 + index,
+          when: predId,
+          actions: reduceActions as unknown as StrategyAstV1['decisionPrograms'][number]['actions'],
+          metadata: {
+            partialTakeProfit: {
+              memoryKey: fixture.memoryKey,
+              tierIndex: index,
+              totalTiers: fixture.tiers.length,
+            },
+          },
+        } as unknown as StrategyAstV1['decisionPrograms'][number])
+        decisionOrder.push(programId)
+      })
+
+      return {
+        astVersion: 'csa.v1',
+        manifest: {
+          irVersion: 'csi.v1',
+          irHash: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+          specHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+          compileVersion: 'compiler.v1',
+          structuralDigest: 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+        },
+        executionModel: {
+          venue: 'okx',
+          instrumentType: 'spot',
+          symbol: 'BTCUSDT',
+          primaryTimeframe: '1h',
+          timeframeAlignment: 'strict',
+          signalEvaluation: 'bar_close',
+          fillPolicy: 'next_bar_open',
+          defaultOrderType: 'market',
+          allowPartialFill: false,
+        },
+        dataRequirements: {
+          warmupBars: 0,
+          maxLookback: 0,
+          requiredTimeframes: ['1h'],
+        },
+        runtimeRequirements: {
+          helpers: ['position_pnl_pct'],
+          stateKeys: [fixture.memoryKey],
+        },
+        exprPool,
+        guards: [],
+        decisionPrograms,
+        orderPrograms: [],
+        topology: {
+          exprOrder,
+          guardOrder: [],
+          decisionOrder,
+          orderProgramOrder: [],
+        },
+      }
+    }
+
+    function makeProjection(fixture: PtpFixture): CompiledScriptProjection {
+      const ast = makePartialTakeProfitAst(fixture)
+      const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope: createExecutionEnvelope() })
+      return new CompiledScriptParserService().parse(script)
+    }
+
+    /**
+     * Drives the projection across bars in two paths and returns both decision sequences.
+     *
+     * - "backtest" path: persistent ctx mutated in place across bars (matches
+     *   BacktestRunnerService loop).
+     * - "live signal" path: per-bar fresh ctx with state restored from a
+     *   serialised store, mutated, then snapshotted back. Matches the live
+     *   workflow where signals are stateless processes reading prior state
+     *   from persistence.
+     */
+    function runDualPaths(
+      projection: CompiledScriptProjection,
+      bars: readonly BarFixture[],
+      positionTrack: readonly PositionFixture[],
+    ): { backtest: StrategyDecisionV1[], live: StrategyDecisionV1[] } {
+      // Backtest path — single shared ctx, mutated in place
+      const backtestCtx: Record<string, unknown> = {
+        position: { ...positionTrack[0] },
+        currentPrice: bars[0].close,
+        baseTimeframeBar: { ...bars[0] },
+        bars: [bars[0]],
+        semanticRuntimeState: {
+          [(projection.runtimeRequirements?.stateKeys?.[0]) ?? '__unused']: {},
+        },
+        __compiledDecisionState: {
+          barIndex: 0,
+          lastTriggeredByProgram: {},
+          previousPositionQty: 0,
+        },
+      }
+      const backtestDecisions: StrategyDecisionV1[] = []
+      for (let i = 0; i < bars.length; i++) {
+        const pos = positionTrack[i]
+        backtestCtx.position = { ...pos }
+        backtestCtx.currentPrice = bars[i].close
+        backtestCtx.baseTimeframeBar = { ...bars[i] }
+        backtestCtx.bars = bars.slice(0, i + 1)
+        ;(backtestCtx.__compiledDecisionState as { barIndex: number }).barIndex = i
+        backtestDecisions.push(executeProjection(projection, backtestCtx as unknown as StrategyExecutionContextV1))
+      }
+
+      // Live signal path — fresh ctx each bar, state restored from a store
+      const liveDecisions: StrategyDecisionV1[] = []
+      const semanticStore: Record<string, Record<string, unknown>> = {
+        [(projection.runtimeRequirements?.stateKeys?.[0]) ?? '__unused']: {},
+      }
+      let compiledStore: { barIndex: number, lastTriggeredByProgram: Record<string, number>, previousPositionQty: number } = {
+        barIndex: 0,
+        lastTriggeredByProgram: {},
+        previousPositionQty: 0,
+      }
+      for (let i = 0; i < bars.length; i++) {
+        const pos = positionTrack[i]
+        const semanticSnapshot: Record<string, Record<string, unknown>> = {}
+        for (const key of Object.keys(semanticStore)) {
+          semanticSnapshot[key] = { ...semanticStore[key] }
+        }
+        const liveCtx: Record<string, unknown> = {
+          position: { ...pos },
+          currentPrice: bars[i].close,
+          baseTimeframeBar: { ...bars[i] },
+          bars: bars.slice(0, i + 1),
+          semanticRuntimeState: semanticSnapshot,
+          __compiledDecisionState: {
+            barIndex: i,
+            lastTriggeredByProgram: { ...compiledStore.lastTriggeredByProgram },
+            previousPositionQty: compiledStore.previousPositionQty,
+          },
+        }
+        liveDecisions.push(executeProjection(projection, liveCtx as unknown as StrategyExecutionContextV1))
+        // snapshot state back into store
+        const writtenSemantic = liveCtx.semanticRuntimeState as Record<string, Record<string, unknown>>
+        for (const key of Object.keys(writtenSemantic)) {
+          semanticStore[key] = { ...writtenSemantic[key] }
+        }
+        const writtenCompiled = liveCtx.__compiledDecisionState as typeof compiledStore
+        compiledStore = {
+          barIndex: writtenCompiled.barIndex,
+          lastTriggeredByProgram: { ...writtenCompiled.lastTriggeredByProgram },
+          previousPositionQty: writtenCompiled.previousPositionQty,
+        }
+      }
+
+      return { backtest: backtestDecisions, live: liveDecisions }
+    }
+
+    function staticPosition(qty: number, avgEntryPrice: number, count: number): PositionFixture[] {
+      return Array.from({ length: count }, () => ({ qty, avgEntryPrice }))
+    }
+
+    function makeBars(closes: readonly number[]): BarFixture[] {
+      return closes.map((close, idx) => ({
+        open: idx === 0 ? close : closes[idx - 1],
+        high: Math.max(close, idx === 0 ? close : closes[idx - 1]),
+        low: Math.min(close, idx === 0 ? close : closes[idx - 1]),
+        close,
+        volume: 1,
+        timestamp: idx * 60_000,
+      }))
+    }
+
+    it('case 1: 单档 50% 在阈值 bar 触发后停止', () => {
+      const projection = makeProjection({
+        memoryKey: 'partial_tp_p1',
+        tiers: [{ threshold: 5, derivedRatioPct: 50 }],
+        sideScope: 'long',
+      })
+      const bars = makeBars([100, 103, 106, 108])
+      const positions = staticPosition(1, 100, bars.length)
+      const { backtest, live } = runDualPaths(projection, bars, positions)
+
+      expect(backtest).toEqual(live)
+      expect(backtest[0]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[1]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[2]).toMatchObject({ action: 'ADJUST_POSITION' })
+      expect(backtest[3]).toMatchObject({ action: 'NOOP' })
+    })
+
+    it('case 2: 双档 50/50 在两 bar 跨阈值各 fire 一次', () => {
+      // derivedRatio: tier0 = 0.5/1 = 0.5 → 50%, tier1 = 0.5/0.5 = 1.0 → 100%
+      const projection = makeProjection({
+        memoryKey: 'partial_tp_p2',
+        tiers: [
+          { threshold: 5, derivedRatioPct: 50 },
+          { threshold: 10, derivedRatioPct: 100 },
+        ],
+        sideScope: 'long',
+      })
+      const bars = makeBars([100, 106, 108, 112])
+      const positions = staticPosition(1, 100, bars.length)
+      const { backtest, live } = runDualPaths(projection, bars, positions)
+
+      expect(backtest).toEqual(live)
+      expect(backtest[0]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[1]).toMatchObject({ action: 'ADJUST_POSITION' })
+      expect(backtest[2]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[3]).toMatchObject({ action: 'ADJUST_POSITION' })
+    })
+
+    it('case 3: 双档 sum<1 [{0.3, 0.5}] 终态保留 20%', () => {
+      // derivedRatio: tier0 = 0.3/1 = 0.3 → 30%, tier1 = 0.5/0.7 ≈ 71.4286%
+      const tier1Ratio = (0.5 / 0.7) * 100
+      const projection = makeProjection({
+        memoryKey: 'partial_tp_p3',
+        tiers: [
+          { threshold: 5, derivedRatioPct: 30 },
+          { threshold: 10, derivedRatioPct: tier1Ratio },
+        ],
+        sideScope: 'long',
+      })
+      const bars = makeBars([100, 106, 112])
+      // Position track simulates the runner reducing qty after each fire.
+      // After tier 0 fires at bar 1: qty 1 → 0.7 (reduced by 30%).
+      // After tier 1 fires at bar 2: qty 0.7 → 0.7 × (1 - 5/7) = 0.2.
+      const positions: PositionFixture[] = [
+        { qty: 1, avgEntryPrice: 100 },
+        { qty: 1, avgEntryPrice: 100 },
+        { qty: 0.7, avgEntryPrice: 100 },
+      ]
+      const { backtest, live } = runDualPaths(projection, bars, positions)
+
+      expect(backtest).toEqual(live)
+      expect(backtest[0]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[1]).toMatchObject({ action: 'ADJUST_POSITION' })
+      expect(backtest[2]).toMatchObject({ action: 'ADJUST_POSITION' })
+
+      // Verify the cumulative reduction lands at ~20% kept.
+      const tier0Delta = (backtest[1].size?.value ?? 0) // negative qty
+      const tier1Delta = (backtest[2].size?.value ?? 0)
+      // tier 0: -1 × 0.3 = -0.3 (reduces qty 1 → 0.7)
+      // tier 1: -0.7 × (5/7) = -0.5 (reduces qty 0.7 → 0.2)
+      expect(tier0Delta).toBeCloseTo(-0.3, 6)
+      expect(tier1Delta).toBeCloseTo(-0.5, 6)
+      expect(1 + tier0Delta + tier1Delta).toBeCloseTo(0.2, 6)
+    })
+
+    it('case 4: PnL 反复 5%→7%→4%→8% T1 仅 fire 一次', () => {
+      const projection = makeProjection({
+        memoryKey: 'partial_tp_p4',
+        tiers: [{ threshold: 5, derivedRatioPct: 50 }],
+        sideScope: 'long',
+      })
+      const bars = makeBars([105, 107, 104, 108])
+      const positions = staticPosition(1, 100, bars.length)
+      const { backtest, live } = runDualPaths(projection, bars, positions)
+
+      expect(backtest).toEqual(live)
+      expect(backtest[0]).toMatchObject({ action: 'ADJUST_POSITION' })
+      expect(backtest[1]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[2]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[3]).toMatchObject({ action: 'NOOP' })
+    })
+
+    it('case 5: close + reopen 同 tier 重新可 fire', () => {
+      const projection = makeProjection({
+        memoryKey: 'partial_tp_p5',
+        tiers: [{ threshold: 5, derivedRatioPct: 50 }],
+        sideScope: 'long',
+      })
+      // Bars: open at 100, fire at 106 (PnL=6%), close (qty=0), reopen at 100, fire again at 106.
+      const bars = makeBars([100, 106, 106, 100, 106])
+      const positions: PositionFixture[] = [
+        { qty: 1, avgEntryPrice: 100 }, // bar 0: open
+        { qty: 1, avgEntryPrice: 100 }, // bar 1: T1 fires
+        { qty: 0, avgEntryPrice: 0 }, // bar 2: position closed externally
+        { qty: 1, avgEntryPrice: 100 }, // bar 3: re-opened (entry edge)
+        { qty: 1, avgEntryPrice: 100 }, // bar 4: T1 fires again
+      ]
+      const { backtest, live } = runDualPaths(projection, bars, positions)
+
+      expect(backtest).toEqual(live)
+      expect(backtest[0]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[1]).toMatchObject({ action: 'ADJUST_POSITION' })
+      expect(backtest[2]).toMatchObject({ action: 'NOOP' })
+      expect(backtest[3]).toMatchObject({ action: 'NOOP' })
+      // After entry edge reset, T1 must be eligible again.
+      expect(backtest[4]).toMatchObject({ action: 'ADJUST_POSITION' })
+    })
+
+    it('case 6: sideScope=long short 持仓时不触发减仓', () => {
+      const projection = makeProjection({
+        memoryKey: 'partial_tp_p6',
+        tiers: [{ threshold: 5, derivedRatioPct: 50 }],
+        sideScope: 'long',
+      })
+      // Short: qty=-1, avgEntryPrice=100. Bar close 94 → short PnL = (100-94)/100 = 6% > 5%.
+      // Predicate fires but action=REDUCE_LONG; runtime resolveReduceDeltaQty returns 0 for currentQty<0 → NOOP.
+      const bars = makeBars([100, 96, 94, 92])
+      const positions = staticPosition(-1, 100, bars.length)
+      const { backtest, live } = runDualPaths(projection, bars, positions)
+
+      expect(backtest).toEqual(live)
+      expect(backtest.every(d => d.action === 'NOOP')).toBe(true)
+
+      // tier_fired must NOT be written when the path is NOOP (regression guard:
+      // a future change that pre-writes state before the noop guard would fail here).
+      const probeCtx: Record<string, unknown> = {
+        position: { qty: -1, avgEntryPrice: 100 },
+        currentPrice: 94,
+        baseTimeframeBar: { ...bars[2] },
+        bars: bars.slice(0, 3),
+        semanticRuntimeState: { partial_tp_p6: {} as Record<string, unknown> },
+        __compiledDecisionState: { barIndex: 2, lastTriggeredByProgram: {}, previousPositionQty: -1 },
+      }
+      executeProjection(projection, probeCtx as unknown as StrategyExecutionContextV1)
+      const semantic = probeCtx.semanticRuntimeState as Record<string, Record<string, unknown>>
+      expect(semantic.partial_tp_p6?.tier_0_fired).toBeUndefined()
+    })
+  })
+
   it('executes emitted ATR risk predicates before decision programs', () => {
     const ast = createAtrRiskAst()
     const emitter = new CompiledScriptEmitterService()

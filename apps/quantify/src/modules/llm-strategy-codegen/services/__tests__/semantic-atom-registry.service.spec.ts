@@ -213,4 +213,77 @@ describe('SemanticAtomRegistryService', () => {
       supportStatus: 'unsupported_unknown',
     })
   })
+
+  describe('risk.partial_take_profit', () => {
+    it('registers as supported_executable with substrate when tiers and memoryKey provided', () => {
+      const atom = service.resolve('risk.partial_take_profit', {
+        tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+        memoryKey: 'partial_tp_abc',
+      })
+      expect(atom.category).toBe('risk')
+      expect(atom.supportStatus).toBe('supported_executable')
+      // atom.contractSubstrate exists because supportStatus === 'supported_executable'
+      const substrate = (atom as import('../../types/semantic-atom-support').SemanticSupportedAtomDefinition).contractSubstrate
+      // position_pnl_pct helper present in runtimeRequirements
+      expect(substrate.runtimeRequirements).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ domain: 'runtime', object: 'position_pnl_pct' }),
+        ]),
+      )
+      // memoryKey state key present in stateRequirements
+      expect(substrate.stateRequirements).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ domain: 'state', object: 'partial_tp_abc' }),
+        ]),
+      )
+      // reduce_only order capability present in orderRequirements
+      expect(substrate.orderRequirements).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ domain: 'order', object: 'reduce_only' }),
+        ]),
+      )
+    })
+
+    it('routes to supported_requires_slot with openSlot when tiers absent', () => {
+      const atom = service.resolve('risk.partial_take_profit', {})
+      expect(atom.supportStatus).toBe('supported_requires_slot')
+      if (atom.supportStatus === 'unsupported_unknown') throw new Error('unexpected unknown atom')
+      expect(atom.openSlots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
+        ]),
+      )
+    })
+
+    it('routes to supported_requires_slot with openSlot when tiers is empty array', () => {
+      const atom = service.resolve('risk.partial_take_profit', { tiers: [], memoryKey: 'partial_tp_abc' })
+      expect(atom.supportStatus).toBe('supported_requires_slot')
+      if (atom.supportStatus === 'unsupported_unknown') throw new Error('unexpected unknown atom')
+      expect(atom.openSlots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
+        ]),
+      )
+    })
+
+    it('routes to supported_requires_slot when memoryKey missing', () => {
+      const atom = service.resolve('risk.partial_take_profit', {
+        tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+      })
+      expect(atom.supportStatus).toBe('supported_requires_slot')
+    })
+
+    it('routes to supported_requires_slot when memoryKey does not start with partial_tp_', () => {
+      const atom = service.resolve('risk.partial_take_profit', {
+        tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+        memoryKey: 'wrong_key_abc',
+      })
+      expect(atom.supportStatus).toBe('supported_requires_slot')
+    })
+
+    it('static get() returns recognized_unsupported for backward compat (no params path)', () => {
+      const atom = service.get('risk.partial_take_profit')
+      expect(atom.supportStatus).toBe('recognized_unsupported')
+    })
+  })
 })

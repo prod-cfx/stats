@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import type { SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import type {
   NormalizedTriggerAtom,
@@ -325,6 +327,29 @@ export function normalizeRiskSemantic(risk: SemanticRiskState, index = 0): Seman
           ...params,
         },
         openSlots: risk.openSlots.filter(slot => !isRiskBasisOpenSlot(slot.slotKey, slot.fieldPath)),
+      }
+    }
+
+    if (risk.key === 'risk.partial_take_profit' && typeof params.memoryKey !== 'string') {
+      const rawTiers = Array.isArray(params.tiers) ? params.tiers : []
+      // Sort by trigger.threshold so equivalent tier sets — regardless of LLM
+      // insertion order — produce identical memoryKey and reuse runtime state.
+      const sortedTiers = [...rawTiers].sort((a, b) => {
+        const ta = typeof (a as { trigger?: { threshold?: unknown } })?.trigger?.threshold === 'number'
+          ? (a as { trigger: { threshold: number } }).trigger.threshold
+          : 0
+        const tb = typeof (b as { trigger?: { threshold?: unknown } })?.trigger?.threshold === 'number'
+          ? (b as { trigger: { threshold: number } }).trigger.threshold
+          : 0
+        return ta - tb
+      })
+      const tiersJson = JSON.stringify(sortedTiers)
+      const sourceText = typeof params.sourceText === 'string' ? params.sourceText : ''
+      const hash = createHash('sha256').update(`${tiersJson}|${sourceText}`).digest('hex').slice(0, 16)
+      return {
+        ...risk,
+        params: { ...params, memoryKey: `partial_tp_${hash}` },
+        openSlots: [...risk.openSlots],
       }
     }
 

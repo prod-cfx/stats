@@ -1825,8 +1825,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         semanticPatch: {
           risk: [
             {
-              key: 'risk.partial_take_profit',
-              params: { levels: [{ valuePct: 5, reducePct: 50 }] },
+              key: 'risk.atr_stop',
+              params: {},
             },
           ],
           contextSlots: {
@@ -1841,7 +1841,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-unsupported-fallback-accept' })
     await service.startSession({
       userId: 'u1',
-      initialMessage: 'OKX BTCUSDT 15m 分批止盈，仓位 10%',
+      initialMessage: 'OKX BTCUSDT 15m ATR 止损，仓位 10%',
     })
     const created = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
@@ -1873,7 +1873,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ key: 'indicator.cross_under' }),
     ]))
     expect(nextState.risk).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'risk.partial_take_profit' }),
+      expect.objectContaining({ key: 'risk.atr_stop' }),
     ]))
     expect(mockAi.chat).not.toHaveBeenCalled()
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()

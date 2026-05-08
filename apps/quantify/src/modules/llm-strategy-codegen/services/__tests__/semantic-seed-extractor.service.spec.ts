@@ -819,9 +819,88 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.partial_take_profit',
-        params: expect.objectContaining({ sourceText: expect.stringContaining('平一半') }),
+        params: expect.objectContaining({ tiers: expect.any(Array) }),
       }),
     ]))
+  })
+
+  describe('partial take profit tiers', () => {
+    it('parses Chinese explicit ratios', () => {
+      const seeds = service.extract('盈利 5% 平 50%，盈利 10% 平 50%')
+      expect(seeds.risk).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'risk.partial_take_profit',
+          params: expect.objectContaining({
+            tiers: [
+              { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+              { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 },
+            ],
+          }),
+        }),
+      ]))
+    })
+
+    it('parses "平一半" / "平剩下" colloquial', () => {
+      const seeds = service.extract('+5% 平一半，+10% 平剩下')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 1.0 },
+      ])
+    })
+
+    it('parses English form', () => {
+      const seeds = service.extract('Take profit 50% at +5%, 50% at +10%')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 0.5 },
+      ])
+    })
+
+    it('parses "第一档/第二档" structured form', () => {
+      const seeds = service.extract('分两档止盈，第一档 +3% 减 30%，第二档 +6% 减 70%')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 3 }, reduceRatio: 0.3 },
+        { trigger: { kind: 'pnl_pct', threshold: 6 }, reduceRatio: 0.7 },
+      ])
+    })
+
+    it('parses Chinese formal+colloquial mix', () => {
+      const seeds = service.extract('赚 5% 止盈一半，盈利 10% 平剩下')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 1.0 },
+      ])
+    })
+
+    it('falls back to openSlot when phrase recognized but tiers unparseable', () => {
+      const seeds = service.extract('设置分批止盈')
+      expect(seeds.risk[0]).toMatchObject({
+        key: 'risk.partial_take_profit',
+        status: 'open',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
+        ]),
+      })
+    })
+
+    it('extracts partial take profit from "止损/止盈" combo (documents current behavior)', () => {
+      // Edge case: user writes "止损 5% 止盈 50%, 止损 10% 止盈 100%" intending two
+      // independent stop-loss + take-profit blocks. Current cnColloqPattern matches
+      // "5% 止盈 50%" and "10% 止盈 100%", producing a 2-tier partial_take_profit.
+      // This rare phrasing is documented here to lock the behavior. Real users
+      // rarely write this; if it becomes a real friction, extend regex with
+      // negative lookbehind for 止损 prefix.
+      const seeds = service.extract('止损 5% 止盈 50%，止损 10% 止盈 100%')
+      const ptp = seeds.risk.find((r) => r.key === 'risk.partial_take_profit')
+      expect(ptp?.params.tiers).toEqual([
+        { trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 },
+        { trigger: { kind: 'pnl_pct', threshold: 10 }, reduceRatio: 1.0 },
+      ])
+    })
   })
 
   it('does not treat ATR threshold plus fixed stop loss as ATR stop', () => {

@@ -1,3 +1,5 @@
+import { createHash } from 'crypto'
+
 import { Injectable } from '@nestjs/common'
 
 import type {
@@ -224,11 +226,14 @@ export class SemanticSeedStateBuilderService {
     const openSlots = this.readOpenSlots(update.openSlots)
     const evidence = this.readEvidence(update.evidence)
     const supersedes = this.readStringArray(update.supersedes)
-    const params = this.readParams(update.params)
+    const rawParams = this.readParams(update.params)
+    const mergedParams = key === 'risk.partial_take_profit'
+      ? this.attachPartialTakeProfitMemoryKey(rawParams)
+      : rawParams
     const contracts = this.readContracts(update.contracts)
       ?? (this.hasOwnProperty(update, 'contracts')
         ? null
-        : this.synthesizeRiskContracts(key, params, index))
+        : this.synthesizeRiskContracts(key, mergedParams, index))
     const contractCoverage = this.resolveContractCoverage({
       contracts,
       openSlots,
@@ -240,7 +245,7 @@ export class SemanticSeedStateBuilderService {
     const risk: SemanticRiskState = {
       id: this.readTrimmedString(update.id) ?? `planner-risk-${index + 1}`,
       key,
-      params,
+      params: mergedParams,
       status: contractCoverage.status,
       source: this.readSource(update.source),
       ...(evidence ? { evidence } : {}),
@@ -872,6 +877,33 @@ export class SemanticSeedStateBuilderService {
     return null
   }
 
+  private attachPartialTakeProfitMemoryKey(params: Record<string, unknown>): Record<string, unknown> {
+    const existing = typeof params.memoryKey === 'string' && params.memoryKey.startsWith('partial_tp_')
+      ? params.memoryKey
+      : null
+    const memoryKey = existing ?? this.derivePartialTakeProfitMemoryKey(params)
+    return { ...params, memoryKey }
+  }
+
+  private derivePartialTakeProfitMemoryKey(params: Record<string, unknown>): string {
+    const rawTiers = Array.isArray(params.tiers) ? params.tiers : []
+    // Sort by trigger.threshold so equivalent tier sets — regardless of LLM
+    // insertion order — produce identical memoryKey and reuse runtime state.
+    const sortedTiers = [...rawTiers].sort((a, b) => {
+      const ta = typeof (a as { trigger?: { threshold?: unknown } })?.trigger?.threshold === 'number'
+        ? (a as { trigger: { threshold: number } }).trigger.threshold
+        : 0
+      const tb = typeof (b as { trigger?: { threshold?: unknown } })?.trigger?.threshold === 'number'
+        ? (b as { trigger: { threshold: number } }).trigger.threshold
+        : 0
+      return ta - tb
+    })
+    const tiersJson = JSON.stringify(sortedTiers)
+    const sourceText = typeof params.sourceText === 'string' ? params.sourceText : ''
+    const hash = createHash('sha256').update(`${tiersJson}|${sourceText}`).digest('hex').slice(0, 16)
+    return `partial_tp_${hash}`
+  }
+
   private withRequiredSeedOpenSlots(state: SemanticState): SemanticState {
     const hasExecutableSemantics = state.triggers.length > 0 || state.actions.length > 0
     if (!hasExecutableSemantics) {
@@ -1002,7 +1034,10 @@ export class SemanticSeedStateBuilderService {
     atomKey: string,
     contract: SemanticAtomContract,
   ): SemanticAtomContract {
-    const resolved = this.semanticAtomRegistry.resolve(this.resolveContractSubstrateAtomKey(atomKey, contract.params))
+    const resolved = this.semanticAtomRegistry.resolve(
+      this.resolveContractSubstrateAtomKey(atomKey, contract.params),
+      contract.params,
+    )
     if (!('contractSubstrate' in resolved) || !resolved.contractSubstrate) {
       return contract
     }

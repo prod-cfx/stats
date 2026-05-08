@@ -152,6 +152,12 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
 
+      const partialTakeProfitBlock = this.tryCompileReduceActionRule(rule, input.canonicalSpec, input.fallback.positionPct, context)
+      if (partialTakeProfitBlock) {
+        ruleBlocks.push(partialTakeProfitBlock)
+        continue
+      }
+
       const compiledGuards = this.tryCompileRiskGuards(rule, context)
       if (compiledGuards.length > 0) {
         guards.push(...compiledGuards)
@@ -1918,6 +1924,65 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return null
+  }
+
+  private tryCompileReduceActionRule(
+    rule: CanonicalRuleV2,
+    spec: CanonicalStrategySpecV2,
+    fallbackPositionPct: number,
+    context: CompileContext,
+  ): RuleBlock | null {
+    const ptpMeta = rule.metadata?.partialTakeProfit
+    if (
+      !ptpMeta
+      || rule.phase !== 'risk'
+      || rule.condition.kind !== 'atom'
+      || rule.condition.key !== 'risk.partial_take_profit'
+    ) {
+      return null
+    }
+
+    const reduceActions = rule.actions.filter(action =>
+      action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT',
+    )
+    if (reduceActions.length === 0) {
+      return null
+    }
+
+    const threshold = this.readNumber([rule.condition.value], Number.NaN)
+    if (!Number.isFinite(threshold)) {
+      return null
+    }
+
+    const pnlSeriesId = this.ensurePositionSeries(context, 'POSITION_PNL_PCT', 'position_pnl_pct')
+    const constSeriesId = this.ensureConstSeries(context, threshold)
+    const predicateRef = this.upsertPredicate(
+      context.predicateMap,
+      `${rule.id}_pnl_gte`,
+      'GTE',
+      [pnlSeriesId, constSeriesId],
+    )
+
+    const compiledActions = this.compileActions(
+      { ...rule, actions: reduceActions },
+      spec,
+      fallbackPositionPct,
+    )
+    if (compiledActions.length === 0) {
+      return null
+    }
+
+    // Partial take profit firing is gated by tier_*_fired flags in
+    // semanticRuntimeState (see run-decision-programs.ts), so cooldownBars
+    // would be redundant and could only mask a real bug. Intentionally drop it.
+    return {
+      id: rule.id,
+      phase: 'exit',
+      when: predicateRef,
+      priority: rule.priority,
+      actions: compiledActions,
+      metadata: { partialTakeProfit: { ...ptpMeta } },
+    }
   }
 
   private tryCompileRiskGuards(rule: CanonicalRuleV2, context: CompileContext): RiskGuard[] {

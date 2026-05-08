@@ -3625,4 +3625,173 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
     const result = compiler.compile({ canonicalSpec: spec, fallback })
     expect(result.ir.riskPolicy.guards.filter(guard => guard.kind === 'EXPRESSION_GUARD')).toEqual([])
   })
+
+  describe('partial take profit ir compile', () => {
+    const ptpFallback = {
+      exchange: 'binance' as const,
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 10,
+    }
+
+    function makePartialTakeProfitState(input: {
+      memoryKey: string
+      tiers: Array<{ threshold: number, reduceRatio: number }>
+      sideScope?: 'long' | 'short' | 'both'
+    }): SemanticState {
+      const params: Record<string, unknown> = {
+        memoryKey: input.memoryKey,
+        tiers: input.tiers.map(tier => ({
+          trigger: { kind: 'pnl_pct', threshold: tier.threshold },
+          reduceRatio: tier.reduceRatio,
+        })),
+      }
+      if (input.sideScope) {
+        params.sideScope = input.sideScope
+      }
+      return {
+        version: 1,
+        families: ['single-leg'],
+        contextSlots: {
+          exchange: {
+            slotKey: 'context.exchange',
+            fieldPath: 'exchange',
+            value: 'binance',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '',
+            affectsExecution: true,
+          },
+          symbol: {
+            slotKey: 'context.symbol',
+            fieldPath: 'symbol',
+            value: 'BTCUSDT',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '',
+            affectsExecution: true,
+          },
+          marketType: {
+            slotKey: 'context.marketType',
+            fieldPath: 'marketType',
+            value: 'perp',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '',
+            affectsExecution: true,
+          },
+          timeframe: {
+            slotKey: 'context.timeframe',
+            fieldPath: 'timeframe',
+            value: '15m',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '',
+            affectsExecution: true,
+          },
+        },
+        position: null,
+        triggers: [
+          {
+            id: 'entry-on-start',
+            key: 'execution.on_start',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            status: 'locked' as const,
+            source: 'user_explicit' as const,
+            openSlots: [],
+            params: {},
+          },
+        ],
+        actions: [
+          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        ],
+        risk: [
+          {
+            id: 'partial-take-profit',
+            key: 'risk.partial_take_profit',
+            params,
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        normalizationNotes: [],
+        updatedAt: '2026-05-07T00:00:00.000Z',
+      }
+    }
+
+    it('compiles N risk rules into N exit rule blocks with POSITION_PNL_PCT predicates', () => {
+      const builder = new CanonicalSpecBuilderService()
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const state = makePartialTakeProfitState({
+        memoryKey: 'partial_tp_test',
+        tiers: [
+          { threshold: 5, reduceRatio: 0.5 },
+          { threshold: 10, reduceRatio: 0.5 },
+        ],
+        sideScope: 'long',
+      })
+      const canonicalSpec = builder.buildFromSemanticState(state)
+      const result = compiler.compile({ canonicalSpec, fallback: ptpFallback })
+
+      const ptpBlocks = result.ir.ruleBlocks.filter(block => block.metadata?.partialTakeProfit !== undefined)
+      expect(ptpBlocks).toHaveLength(2)
+
+      expect(ptpBlocks[0]).toMatchObject({
+        phase: 'exit',
+        metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 0, totalTiers: 2 } },
+      })
+      expect(ptpBlocks[0].actions).toEqual([
+        { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 50 } },
+      ])
+      expect(ptpBlocks[1]).toMatchObject({
+        phase: 'exit',
+        metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 1, totalTiers: 2 } },
+      })
+      expect(ptpBlocks[1].actions).toEqual([
+        { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+      ])
+
+      const tier0Predicate = findPredicate(result.ir.signalCatalog.predicates, p => p.id === ptpBlocks[0].when)
+      expect(tier0Predicate.kind).toBe('GTE')
+      const pnlSeries = findSeries(result.ir.signalCatalog.series, s => s.id === tier0Predicate.args[0])
+      expect(pnlSeries.kind).toBe('POSITION_PNL_PCT')
+      const constSeriesTier0 = findSeries(result.ir.signalCatalog.series, s => s.id === tier0Predicate.args[1])
+      expect(constSeriesTier0).toMatchObject({ kind: 'CONST', value: 5 })
+
+      const tier1Predicate = findPredicate(result.ir.signalCatalog.predicates, p => p.id === ptpBlocks[1].when)
+      expect(tier1Predicate.kind).toBe('GTE')
+      const constSeriesTier1 = findSeries(result.ir.signalCatalog.series, s => s.id === tier1Predicate.args[1])
+      expect(constSeriesTier1).toMatchObject({ kind: 'CONST', value: 10 })
+
+      // No leak into riskPolicy.guards for partial_take_profit
+      expect(result.ir.riskPolicy.guards.some(guard => guard.id.includes('ptp'))).toBe(false)
+    })
+
+    it('emits REDUCE_SHORT only when sideScope=short', () => {
+      const builder = new CanonicalSpecBuilderService()
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const state = makePartialTakeProfitState({
+        memoryKey: 'partial_tp_short',
+        tiers: [{ threshold: 5, reduceRatio: 0.5 }],
+        sideScope: 'short',
+      })
+      const canonicalSpec = builder.buildFromSemanticState(state)
+      const result = compiler.compile({ canonicalSpec, fallback: ptpFallback })
+
+      const ptpBlocks = result.ir.ruleBlocks.filter(block => block.metadata?.partialTakeProfit !== undefined)
+      expect(ptpBlocks).toHaveLength(1)
+      expect(ptpBlocks[0].actions).toEqual([
+        { kind: 'REDUCE_SHORT', quantity: { mode: 'position_pct', value: 50 } },
+      ])
+    })
+
+    it('does not affect ir for specs without partial_take_profit (regression byte-equal)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = createSizingCanonicalSpec({ mode: 'RATIO', value: 0.1 })
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expect(result.ir.ruleBlocks.some(block => block.metadata?.partialTakeProfit !== undefined)).toBe(false)
+    })
+  })
 })

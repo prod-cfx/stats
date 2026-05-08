@@ -484,6 +484,7 @@ const SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS = new Set([
   'runtime.provide.bar_ohlcv',
   'runtime.provide.indicator_helper',
   'runtime.provide.compiled_predicate_runtime',
+  'runtime.provide.position_pnl_pct',
   'state.read.none',
   'state.write.none',
   'state.read.sequence_state',
@@ -493,7 +494,14 @@ const SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS = new Set([
   'order.support.market_order',
   'order.support.close_position',
   'order.support.reduce_position',
+  'order.support.reduce_only',
 ])
+
+const SUPPORTED_SUBSTRATE_REQUIREMENT_KEY_PREFIXES: readonly string[] = [
+  // partial_take_profit allocates a per-strategy state slot whose object is the
+  // dynamic memoryKey (`partial_tp_<hash>`); accept the family wholesale.
+  'state.read_write.partial_tp_',
+]
 
 function buildUnsupportedSubstrateRequirementSlots(
   activeOwners: readonly SemanticContractOwnerRef[],
@@ -538,7 +546,11 @@ function buildUnsupportedSubstrateRequirementSlots(
 }
 
 function isSupportedSubstrateRequirement(requirement: SemanticSubstrateRequirement): boolean {
-  return SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS.has(requirementKey(requirement))
+  const key = requirementKey(requirement)
+  if (SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS.has(key)) {
+    return true
+  }
+  return SUPPORTED_SUBSTRATE_REQUIREMENT_KEY_PREFIXES.some(prefix => key.startsWith(prefix))
 }
 
 function requirementKey(requirement: SemanticSubstrateRequirement): string {

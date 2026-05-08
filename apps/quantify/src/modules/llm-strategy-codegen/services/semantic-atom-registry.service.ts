@@ -205,7 +205,10 @@ export class SemanticAtomRegistryService {
     return cloneAtom(atom)
   }
 
-  resolve(key: string): SemanticRegisteredAtomDefinition | UnknownSemanticAtomDefinition {
+  resolve(key: string, params?: Record<string, unknown>): SemanticRegisteredAtomDefinition | UnknownSemanticAtomDefinition {
+    if (key === 'risk.partial_take_profit') {
+      return resolvePartialTakeProfitAtom(params ?? {})
+    }
     const atom = this.atoms.get(key)
     return atom ? cloneAtom(atom) : {
       key,
@@ -312,6 +315,68 @@ function unsupported(
       publicReason,
     },
     replacement: DEFAULT_REPLACEMENT,
+  }
+}
+
+const PARTIAL_TAKE_PROFIT_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'risk.partial_take_profit.tiers',
+    fieldPath: 'risk.params.tiers',
+    priority: 'risk',
+    questionHint: '请说明分批止盈每档的触发条件（PnL 百分比）和减仓比例',
+  },
+]
+
+function partialTakeProfitSubstrate(memoryKey: string): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+      { domain: 'runtime', verb: 'provide', object: 'position_pnl_pct' },
+    ],
+    stateRequirements: [
+      { domain: 'state', verb: 'read_write', object: memoryKey },
+    ],
+    orderRequirements: [
+      { domain: 'order', verb: 'support', object: 'reduce_only' },
+    ],
+    openSlots: [],
+  }
+}
+
+function resolvePartialTakeProfitAtom(
+  params: Record<string, unknown>,
+): SemanticRegisteredAtomDefinition {
+  const tiers = params.tiers
+  const memoryKey = params.memoryKey
+  const hasValidTiers = Array.isArray(tiers) && tiers.length > 0
+  const hasValidMemoryKey = typeof memoryKey === 'string' && memoryKey.startsWith('partial_tp_')
+
+  if (hasValidTiers && hasValidMemoryKey) {
+    return {
+      key: 'risk.partial_take_profit',
+      category: 'risk',
+      supportStatus: 'supported_executable',
+      requiredParams: ['tiers', 'memoryKey'],
+      defaultableParams: [],
+      executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+      openSlots: [],
+      contractSubstrate: partialTakeProfitSubstrate(memoryKey as string),
+    }
+  }
+
+  return {
+    key: 'risk.partial_take_profit',
+    category: 'risk',
+    supportStatus: 'supported_requires_slot',
+    requiredParams: ['tiers', 'memoryKey'],
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [...PARTIAL_TAKE_PROFIT_OPEN_SLOTS],
+    contractSubstrate: {
+      ...baseExecutableSubstrate(),
+      openSlots: [...PARTIAL_TAKE_PROFIT_OPEN_SLOTS],
+    },
   }
 }
 
