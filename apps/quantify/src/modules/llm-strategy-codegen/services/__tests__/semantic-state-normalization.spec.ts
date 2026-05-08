@@ -1,5 +1,10 @@
-import type { SemanticRiskState } from '../../types/semantic-state'
-import { normalizeRiskSemantics } from '../semantic-state-normalization'
+import type { SemanticRiskState, SemanticTriggerState } from '../../types/semantic-state'
+import {
+  normalizeConditionSequenceTrigger,
+  normalizeRiskSemantics,
+  normalizeTriggerCombinationContracts,
+} from '../semantic-state-normalization'
+import { buildLockedAtomicState } from './fixtures/semantic-state-golden-cases'
 
 describe('normalizeRiskSemantics', () => {
   it('defaults plain stop loss basis and removes basis open slots', () => {
@@ -163,5 +168,143 @@ describe('normalizeRiskSemantics', () => {
     expect(normalized[0].params).not.toBe(risks[0].params)
     expect(normalized[0].openSlots).not.toBe(risks[0].openSlots)
     expect(normalized[0].openSlots).toEqual([])
+  })
+})
+
+describe('normalizeConditionSequenceTrigger', () => {
+  function buildSequenceTrigger(
+    params: Record<string, unknown>,
+    overrides: Partial<SemanticTriggerState> = {},
+  ): SemanticTriggerState {
+    return {
+      id: 'trigger-condseq',
+      key: 'condition.sequence',
+      phase: 'entry',
+      sideScope: 'long',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params,
+      ...overrides,
+    }
+  }
+
+  it('auto-generates a stable memoryKey when one is missing', () => {
+    const trigger = buildSequenceTrigger({
+      sequenceKind: 'pullback_reclaim',
+      lookbackWindow: '24h',
+      reference: { indicator: 'ma', period: 20 },
+    })
+
+    const a = normalizeConditionSequenceTrigger(trigger)
+    const b = normalizeConditionSequenceTrigger(trigger)
+
+    expect(typeof a.params.memoryKey).toBe('string')
+    expect(a.params.memoryKey).toMatch(/^condseq_[0-9a-f]{16}$/)
+    expect(a.params.memoryKey).toBe(b.params.memoryKey)
+  })
+
+  it('treats equivalent rewrites as the same hash (key order, undefined fields)', () => {
+    const triggerA = buildSequenceTrigger({
+      sequenceKind: 'pullback_reclaim',
+      lookbackWindow: '24h',
+      reference: { indicator: 'ma', period: 20 },
+      threshold: undefined,
+    })
+    const triggerB = buildSequenceTrigger({
+      reference: { period: 20, indicator: 'ma' },
+      lookbackWindow: '24h',
+      sequenceKind: 'pullback_reclaim',
+    })
+
+    const a = normalizeConditionSequenceTrigger(triggerA)
+    const b = normalizeConditionSequenceTrigger(triggerB)
+
+    expect(a.params.memoryKey).toBe(b.params.memoryKey)
+  })
+
+  it('produces different hashes for materially different params', () => {
+    const triggerA = buildSequenceTrigger({
+      sequenceKind: 'pullback_reclaim',
+      lookbackWindow: '24h',
+    })
+    const triggerB = buildSequenceTrigger({
+      sequenceKind: 'rsi_reclaim',
+      lookbackWindow: '24h',
+    })
+    const triggerC = buildSequenceTrigger({
+      sequenceKind: 'pullback_reclaim',
+      lookbackWindow: '12h',
+    })
+
+    const a = normalizeConditionSequenceTrigger(triggerA).params.memoryKey
+    const b = normalizeConditionSequenceTrigger(triggerB).params.memoryKey
+    const c = normalizeConditionSequenceTrigger(triggerC).params.memoryKey
+
+    expect(a).not.toBe(b)
+    expect(a).not.toBe(c)
+    expect(b).not.toBe(c)
+  })
+
+  it('preserves user-explicit memoryKey', () => {
+    const trigger = buildSequenceTrigger({
+      sequenceKind: 'breakout_retest',
+      lookbackWindow: '24h',
+      memoryKey: 'breakout',
+    })
+
+    const normalized = normalizeConditionSequenceTrigger(trigger)
+    expect(normalized.params.memoryKey).toBe('breakout')
+  })
+
+  it('preserves steps order while ignoring step key order', () => {
+    const triggerA = buildSequenceTrigger({
+      sequenceKind: 'consecutive_candles',
+      steps: [{ direction: 'up', count: 3 }, { direction: 'down', count: 1 }],
+    })
+    const triggerB = buildSequenceTrigger({
+      sequenceKind: 'consecutive_candles',
+      steps: [{ count: 3, direction: 'up' }, { count: 1, direction: 'down' }],
+    })
+    const triggerSwapped = buildSequenceTrigger({
+      sequenceKind: 'consecutive_candles',
+      steps: [{ direction: 'down', count: 1 }, { direction: 'up', count: 3 }],
+    })
+
+    const a = normalizeConditionSequenceTrigger(triggerA).params.memoryKey
+    const b = normalizeConditionSequenceTrigger(triggerB).params.memoryKey
+    const swapped = normalizeConditionSequenceTrigger(triggerSwapped).params.memoryKey
+
+    expect(a).toBe(b)
+    expect(a).not.toBe(swapped)
+  })
+
+  it('keeps existing breakout-retest fixture memoryKey unchanged (corpus stability)', () => {
+    const state = buildLockedAtomicState('breakout-retest')
+    const normalized = normalizeTriggerCombinationContracts(state.triggers)
+    const sequence = normalized.find(t => t.key === 'condition.sequence')
+
+    expect(sequence?.params.memoryKey).toBe('breakout')
+  })
+
+  it('integrates with normalizeTriggerCombinationContracts for missing memoryKey', () => {
+    const triggers: SemanticTriggerState[] = [
+      {
+        id: 'trigger-condseq-auto',
+        key: 'condition.sequence',
+        phase: 'entry',
+        sideScope: 'long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        params: {
+          sequenceKind: 'pullback_reclaim',
+          lookbackWindow: '24h',
+        },
+      },
+    ]
+
+    const normalized = normalizeTriggerCombinationContracts(triggers)
+    expect(normalized[0]?.params.memoryKey).toMatch(/^condseq_[0-9a-f]{16}$/)
   })
 })
