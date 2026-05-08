@@ -27,6 +27,7 @@ const MAX_ALLOWED_NOTIONAL = 5
 const DEFAULT_MAX_LIMIT_PRICE_TO_LAST_RATIO = 0.5
 const CANCEL_ATTEMPTS = 3
 const CANCEL_POLL_ATTEMPTS = 5
+const CLIENT_ORDER_LOOKUP_ATTEMPTS = 5
 const CANCEL_POLL_INTERVAL_MS = 500
 
 interface LiveOrderSmokeConfig {
@@ -180,34 +181,35 @@ async function resolveLiveSmokeOrderIdForCleanup(
     return orderId
   }
 
-  let order: UnifiedOrder | null
-  try {
-    order = await tradingService.getOrderByClientOrderId(
-      config.userId,
-      'okx',
-      'spot',
-      clientOrderId,
-      config.symbol,
-      config.accountId,
-    )
-  }
-  catch (error) {
-    throw new Error(
-      `OKX live smoke order did not return orderId and cleanup lookup by clientOrderId ${clientOrderId} failed. `
-      + `Manually inspect and cancel account ${config.accountId} ${config.symbol}. `
-      + `Lookup error: ${error instanceof Error ? error.message : String(error)}`,
-    )
+  let lastLookupError: unknown
+  for (let attempt = 1; attempt <= CLIENT_ORDER_LOOKUP_ATTEMPTS; attempt += 1) {
+    try {
+      const order = await tradingService.getOrderByClientOrderId(
+        config.userId,
+        'okx',
+        'spot',
+        clientOrderId,
+        config.symbol,
+        config.accountId,
+      )
+      if (order) {
+        assertOrderWasNotFilled(order, config)
+        return isCanceled(order) ? undefined : order.id
+      }
+    }
+    catch (error) {
+      lastLookupError = error
+    }
+
+    await sleep(CANCEL_POLL_INTERVAL_MS)
   }
 
-  if (!order) {
-    throw new Error(
-      `OKX live smoke order did not return orderId and no order was found by clientOrderId ${clientOrderId}. `
-      + `Manually inspect account ${config.accountId} ${config.symbol} before retrying.`,
-    )
-  }
-
-  assertOrderWasNotFilled(order, config)
-  return isCanceled(order) ? undefined : order.id
+  throw new Error(
+    `OKX live smoke order did not return orderId and no order was found by clientOrderId ${clientOrderId} `
+    + `after ${CLIENT_ORDER_LOOKUP_ATTEMPTS} lookup attempts. `
+    + `Manually inspect account ${config.accountId} ${config.symbol} before retrying. `
+    + `Last lookup error: ${lastLookupError instanceof Error ? lastLookupError.message : String(lastLookupError ?? 'none')}`,
+  )
 }
 
 describe('OKX live order smoke (opt-in)', () => {
