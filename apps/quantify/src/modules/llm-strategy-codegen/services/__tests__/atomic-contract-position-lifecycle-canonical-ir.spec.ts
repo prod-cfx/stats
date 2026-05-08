@@ -108,7 +108,7 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
         metadata: expect.objectContaining({
           dcaSchedule: expect.objectContaining({
             maxCount: 4,
-            stateKey: expect.any(String),
+            stateKey: 'dca_fired_count',
           }),
         }),
         actions: [

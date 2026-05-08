@@ -1468,7 +1468,7 @@ export class CanonicalSpecBuilderService {
         metadata.dcaSchedule = {
           maxCount,
           capitalCap,
-          stateKey: 'dca_schedule_count',
+          stateKey: 'dca_fired_count',
         }
       }
     }
