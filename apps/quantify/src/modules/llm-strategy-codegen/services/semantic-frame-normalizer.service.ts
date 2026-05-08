@@ -1,6 +1,7 @@
 import type {
   SemanticActionFrame,
   SemanticBoundaryTouchFrame,
+  SemanticCombinationFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
   SemanticRiskFrame,
@@ -13,8 +14,13 @@ import { Injectable } from '@nestjs/common'
 export class SemanticFrameNormalizerService {
   normalize(frames: readonly SemanticNaturalLanguageFrame[]): CodegenSemanticPatch {
     const patch: CodegenSemanticPatch = {}
-    const indicatorCompareGroups = new Map<string, SemanticIndicatorCompareFrame[]>()
+    const indicatorCompareGroups = new Map<string, {
+      groupId: string
+      frames: SemanticIndicatorCompareFrame[]
+    }>()
+    const combinationEvidenceByKey = new Map<string, SemanticEvidence>()
     const actionsByKey = new Map<SemanticActionFrame['actionKey'], SemanticActionFrame>()
+    const riskByKey = new Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>()
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -28,7 +34,7 @@ export class SemanticFrameNormalizerService {
           patch.triggers = [...(patch.triggers ?? []), this.normalizeBoundaryTouch(frame)]
           break
         case 'indicator_compare':
-          indicatorCompareGroups.set(frame.groupId, [...(indicatorCompareGroups.get(frame.groupId) ?? []), frame])
+          this.appendIndicatorCompareGroup(indicatorCompareGroups, frame)
           break
         case 'action':
           if (!actionsByKey.has(frame.actionKey)) {
@@ -36,15 +42,16 @@ export class SemanticFrameNormalizerService {
           }
           break
         case 'risk':
-          patch.risk = [...(patch.risk ?? []), this.normalizeRisk(frame)]
+          this.setRisk(riskByKey, frame)
           break
         case 'combination':
+          combinationEvidenceByKey.set(this.toCombinationEvidenceKey(frame), this.toEvidence(frame))
           break
       }
     }
 
-    const gateTriggers = Array.from(indicatorCompareGroups.entries()).map(([groupId, groupFrames]) =>
-      this.normalizeIndicatorCompareGroup(groupId, groupFrames),
+    const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
+      this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationEvidenceByKey),
     )
     if (gateTriggers.length > 0) {
       patch.triggers = [...gateTriggers, ...(patch.triggers ?? [])]
@@ -58,7 +65,31 @@ export class SemanticFrameNormalizerService {
       patch.actions = actions
     }
 
+    const risk = Array.from(riskByKey.values())
+    if (risk.length > 0) {
+      patch.risk = risk
+    }
+
     return patch
+  }
+
+  private appendIndicatorCompareGroup(
+    groups: Map<string, { groupId: string, frames: SemanticIndicatorCompareFrame[] }>,
+    frame: SemanticIndicatorCompareFrame,
+  ): void {
+    const groupKey = this.toIndicatorCompareGroupKey(frame)
+    const group = groups.get(groupKey) ?? { groupId: frame.groupId, frames: [] }
+
+    group.frames.push(frame)
+    groups.set(groupKey, group)
+  }
+
+  private toIndicatorCompareGroupKey(frame: SemanticIndicatorCompareFrame): string {
+    return [frame.groupId, frame.sideScope, frame.operator, frame.indicator].join(':')
+  }
+
+  private toCombinationEvidenceKey(frame: SemanticCombinationFrame): string {
+    return [frame.groupId, frame.sideScope].join(':')
   }
 
   private normalizeBoundaryTouch(frame: SemanticBoundaryTouchFrame): NonNullable<CodegenSemanticPatch['triggers']>[number] {
@@ -78,19 +109,23 @@ export class SemanticFrameNormalizerService {
   private normalizeIndicatorCompareGroup(
     groupId: string,
     frames: readonly SemanticIndicatorCompareFrame[],
+    combinationEvidenceByKey: ReadonlyMap<string, SemanticEvidence>,
   ): NonNullable<CodegenSemanticPatch['triggers']>[number] {
     const sortedFrames = [...frames].sort((left, right) => left.period - right.period)
+    const firstFrame = sortedFrames[0]
 
     return {
       key: 'condition.expression',
       phase: 'gate',
-      sideScope: sortedFrames[0]?.sideScope,
+      sideScope: firstFrame?.sideScope,
       params: {
         expression: this.toAndExpression(sortedFrames),
         displayGroupId: groupId,
         label: this.toGroupLabel(sortedFrames),
       },
-      evidence: sortedFrames[0] ? this.toEvidence(sortedFrames[0]) : undefined,
+      evidence: firstFrame
+        ? this.toGroupEvidence(firstFrame, sortedFrames, combinationEvidenceByKey)
+        : undefined,
     }
   }
 
@@ -101,7 +136,7 @@ export class SemanticFrameNormalizerService {
         kind: 'predicate',
         op: frame.operator,
         left: this.barCloseOperand(),
-        right: this.emaOperand(frame.period),
+        right: this.indicatorOperand(frame),
       })),
     }
   }
@@ -110,15 +145,29 @@ export class SemanticFrameNormalizerService {
     return { kind: 'series', source: 'bar', field: 'close' }
   }
 
-  private emaOperand(period: number): SemanticExpressionOperand {
-    return { kind: 'indicator', name: 'ema', params: { period } }
+  private indicatorOperand(frame: SemanticIndicatorCompareFrame): SemanticExpressionOperand {
+    const name = frame.indicator === 'ma' ? 'sma' : frame.indicator
+
+    return { kind: 'indicator', name, params: { period: frame.period } }
   }
 
   private toGroupLabel(frames: readonly SemanticIndicatorCompareFrame[]): string {
-    const periods = frames.map(frame => `EMA${frame.period}`).join('、')
+    const indicatorName = frames[0]?.indicator === 'ma' ? 'MA' : (frames[0]?.indicator ?? 'ema').toUpperCase()
+    const periods = frames.map(frame => `${indicatorName}${frame.period}`).join('、')
     const directionText = frames[0]?.operator === 'LT' ? '下方' : '上方'
 
     return `价格同时位于 ${periods} ${directionText}`
+  }
+
+  private toGroupEvidence(
+    firstFrame: SemanticIndicatorCompareFrame,
+    frames: readonly SemanticIndicatorCompareFrame[],
+    combinationEvidenceByKey: ReadonlyMap<string, SemanticEvidence>,
+  ): SemanticEvidence {
+    return combinationEvidenceByKey.get([firstFrame.groupId, firstFrame.sideScope].join(':')) ?? {
+      text: frames.map(frame => frame.evidenceText).join(' '),
+      source: 'user_explicit',
+    }
   }
 
   private normalizeRisk(frame: SemanticRiskFrame): NonNullable<CodegenSemanticPatch['risk']>[number] {
@@ -133,6 +182,18 @@ export class SemanticFrameNormalizerService {
         scope: 'current_position',
       },
       evidence: this.toEvidence(frame),
+    }
+  }
+
+  private setRisk(
+    risks: Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>,
+    frame: SemanticRiskFrame,
+  ): void {
+    const risk = this.normalizeRisk(frame)
+    const riskKey = JSON.stringify([risk.key, risk.params])
+
+    if (!risks.has(riskKey)) {
+      risks.set(riskKey, risk)
     }
   }
 

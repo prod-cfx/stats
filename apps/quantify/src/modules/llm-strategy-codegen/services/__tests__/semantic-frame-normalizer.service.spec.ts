@@ -1,3 +1,4 @@
+import type { SemanticNaturalLanguageFrame } from '../../types/semantic-natural-language-frame'
 import type { SemanticExpression } from '../../types/semantic-state'
 import { NaturalLanguageGatewayService } from '../natural-language-gateway.service'
 import { SemanticFrameNormalizerService } from '../semantic-frame-normalizer.service'
@@ -50,6 +51,87 @@ describe('SemanticFrameNormalizerService', () => {
       trigger => trigger.key === 'condition.expression' && trigger.sideScope === 'short',
     )?.params?.expression, 'LT')
   })
+
+  it('splits indicator compare frames with the same group id into internally consistent gates', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      indicatorCompareFrame({ id: 'compare-long-20', operator: 'GT', sideScope: 'long', period: 20 }),
+      indicatorCompareFrame({ id: 'compare-short-20', operator: 'LT', sideScope: 'short', period: 20 }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const gateTriggers = patch.triggers?.filter(trigger => trigger.key === 'condition.expression') ?? []
+
+    expect(gateTriggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'gate', sideScope: 'long' }),
+      expect.objectContaining({ phase: 'gate', sideScope: 'short' }),
+    ]))
+    expect(gateTriggers).toHaveLength(2)
+    for (const trigger of gateTriggers) {
+      const expression = trigger.params?.expression
+      expect(expression).toEqual(expect.objectContaining({ kind: 'AND' }))
+
+      if (!expression || expression.kind !== 'AND') {
+        throw new Error('Expected an AND semantic expression')
+      }
+
+      for (const child of expression.children) {
+        expect(child).toEqual(
+          expect.objectContaining({ kind: 'predicate', op: trigger.sideScope === 'long' ? 'GT' : 'LT' }),
+        )
+      }
+    }
+  })
+
+  it('deduplicates identical risk frames by key and params', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      riskFrame({ id: 'risk-1', valuePct: 5, evidenceText: '亏损百分5止损' }),
+      riskFrame({ id: 'risk-2', valuePct: 5, evidenceText: '亏损百分5止损' }),
+      riskFrame({ id: 'risk-3', valuePct: 7, evidenceText: '亏损百分7止损' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.risk).toEqual([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 7 }) }),
+    ])
+  })
+
+  it('uses combination frame evidence for matching compare groups', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20 }),
+      {
+        kind: 'combination',
+        id: 'combination-long',
+        groupId: 'mixed-gate',
+        join: 'AND',
+        sideScope: 'long',
+        evidenceText: '价格都位于ema20上方时候只开多',
+        confidence: 0.9,
+      },
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.triggers?.[0]?.evidence).toEqual({
+      text: '价格都位于ema20上方时候只开多',
+      source: 'user_explicit',
+    })
+  })
+
+  it('joins compare frame evidence when group combination evidence is unavailable', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20, evidenceText: 'ema20' }),
+      indicatorCompareFrame({ id: 'compare-60', operator: 'GT', sideScope: 'long', period: 60, evidenceText: 'ema60' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.triggers?.[0]?.evidence).toEqual({
+      text: 'ema20 ema60',
+      source: 'user_explicit',
+    })
+  })
 })
 
 function expectConditionExpression(expression: SemanticExpression | undefined, op: 'GT' | 'LT'): void {
@@ -76,4 +158,30 @@ function emaClosePredicate(op: 'GT' | 'LT', period: number): object {
     left: { kind: 'series', source: 'bar', field: 'close' },
     right: { kind: 'indicator', name: 'ema', params: { period } },
   })
+}
+
+function indicatorCompareFrame(input: {
+  id: string
+  operator: 'GT' | 'LT'
+  sideScope: 'long' | 'short'
+  period: number
+  evidenceText?: string
+}): SemanticNaturalLanguageFrame {
+  return {
+    kind: 'indicator_compare',
+    indicator: 'ema',
+    groupId: 'mixed-gate',
+    confidence: 0.9,
+    evidenceText: input.evidenceText ?? `ema${input.period}`,
+    ...input,
+  }
+}
+
+function riskFrame(input: { id: string, valuePct: number, evidenceText: string }): SemanticNaturalLanguageFrame {
+  return {
+    kind: 'risk',
+    riskKey: 'risk.stop_loss_pct',
+    confidence: 0.9,
+    ...input,
+  }
 }
