@@ -165,6 +165,7 @@ export function runDecisionPrograms(
     if (ptpMeta) {
       markPartialTakeProfitTierFired(ctx, ptpMeta)
     }
+    markPositionLifecycleState(ctx, program, decision)
     return Object.freeze(decision)
   }
 
@@ -264,6 +265,26 @@ function markPartialTakeProfitTierFired(
     ctx.semanticRuntimeState[meta.memoryKey] = {}
   }
   ctx.semanticRuntimeState[meta.memoryKey][`tier_${meta.tierIndex}_fired`] = true
+}
+
+function markPositionLifecycleState(
+  ctx: StrategyExecutionContextV1,
+  program: DecisionProgramNode,
+  decision: Readonly<StrategyDecisionV1>,
+): void {
+  if (decision.action !== 'OPEN_LONG' && decision.action !== 'OPEN_SHORT') {
+    return
+  }
+
+  const addMeta = program.metadata?.addPosition
+  if (addMeta) {
+    incrementSemanticRuntimeStateNumber(ctx, addMeta.stateKey)
+  }
+
+  const dcaMeta = program.metadata?.dcaSchedule
+  if (dcaMeta) {
+    incrementSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+  }
 }
 
 function evaluatePositionLifecycle(
@@ -441,6 +462,26 @@ function readSemanticRuntimeStateNumber(
   }
 
   return { present: false, value: 0 }
+}
+
+function incrementSemanticRuntimeStateNumber(
+  ctx: StrategyExecutionContextV1,
+  stateKey: string,
+): void {
+  const current = readSemanticRuntimeStateNumber(ctx, stateKey)
+  if (!current.present) {
+    return
+  }
+
+  if (!ctx.semanticRuntimeState) {
+    ctx.semanticRuntimeState = {}
+  }
+  const slot = ctx.semanticRuntimeState[stateKey]
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+    return
+  }
+
+  slot.value = current.value + 1
 }
 
 function doesPositionQtyMatchSide(

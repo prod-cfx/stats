@@ -1331,6 +1331,7 @@ export class CanonicalSpecBuilderService {
           evidence: dcaSchedule.evidence,
           params: {
             actionSide: 'long',
+            lifecycleKind: 'dca_schedule',
             sizing: dcaSchedule.params.perOrderSizing,
           },
           openSlots: [],
@@ -1438,7 +1439,7 @@ export class CanonicalSpecBuilderService {
   ): CanonicalRuleV2['metadata'] | undefined {
     const metadata: NonNullable<CanonicalRuleV2['metadata']> = {}
 
-    if (action.key === 'action.add_position') {
+    if (action.key === 'action.add_position' && action.params?.lifecycleKind !== 'dca_schedule') {
       const pyramidingLimit = this.findPositionConstraint(position, 'position.pyramiding_limit')
       const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
       metadata.addPosition = {

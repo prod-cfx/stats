@@ -105,6 +105,14 @@ describe('atomic contract position lifecycle compiled runtime', () => {
   })
 
   it('executes add_position when pyramiding runtime state slot is initialized empty', () => {
+    const ctx = {
+      position: { side: 'long', qty: 1 },
+      currentPrice: 100,
+      accountEquity: 1_000,
+      semanticRuntimeState: {
+        pyramiding_layer_count: {},
+      },
+    } as Ctx
     const decision = runLifecycleProgram(
       {
         id: 'add-long',
@@ -118,14 +126,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 20 } },
         ],
       },
-      {
-        position: { side: 'long', qty: 1 },
-        currentPrice: 100,
-        accountEquity: 1_000,
-        semanticRuntimeState: {
-          pyramiding_layer_count: {},
-        },
-      } as Ctx,
+      ctx,
     )
 
     expect(decision).toMatchObject({
@@ -134,6 +135,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.add-long',
     })
     expect(decision.reason).not.toBe('compiled.add-long.pyramiding_state_missing')
+    expect(ctx.semanticRuntimeState?.pyramiding_layer_count).toEqual({ value: 1 })
   })
 
   it('blocks add_position when pyramiding runtime state value is corrupt', () => {
@@ -249,6 +251,14 @@ describe('atomic contract position lifecycle compiled runtime', () => {
   })
 
   it('executes add_position when pyramiding layer count is below max layers', () => {
+    const ctx = {
+      position: { side: 'long', qty: 1 },
+      currentPrice: 100,
+      accountEquity: 1_000,
+      semanticRuntimeState: {
+        pyramiding_layer_count: { value: 2 },
+      },
+    } as Ctx
     const decision = runLifecycleProgram(
       {
         id: 'add-long',
@@ -262,14 +272,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 20 } },
         ],
       },
-      {
-        position: { side: 'long', qty: 1 },
-        currentPrice: 100,
-        accountEquity: 1_000,
-        semanticRuntimeState: {
-          pyramiding_layer_count: { value: 2 },
-        },
-      } as Ctx,
+      ctx,
     )
 
     expect(decision).toMatchObject({
@@ -278,6 +281,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.add-long',
     })
     expect(decision.action).not.toBe('NOOP')
+    expect(ctx.semanticRuntimeState?.pyramiding_layer_count).toEqual({ value: 3 })
   })
 
   it('blocks dca when runtime dca count reaches max count', () => {
@@ -340,6 +344,14 @@ describe('atomic contract position lifecycle compiled runtime', () => {
   })
 
   it('executes dca when runtime dca state slot is initialized empty', () => {
+    const ctx = {
+      position: { side: 'long', qty: 1 },
+      currentPrice: 100,
+      accountEquity: 1_000,
+      semanticRuntimeState: {
+        dca_fired_count: {},
+      },
+    } as Ctx
     const decision = runLifecycleProgram(
       {
         id: 'dca-long',
@@ -353,14 +365,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
         ],
       },
-      {
-        position: { side: 'long', qty: 1 },
-        currentPrice: 100,
-        accountEquity: 1_000,
-        semanticRuntimeState: {
-          dca_fired_count: {},
-        },
-      } as Ctx,
+      ctx,
     )
 
     expect(decision).toMatchObject({
@@ -369,6 +374,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.dca-long',
     })
     expect(decision.reason).not.toBe('compiled.dca-long.dca_state_missing')
+    expect(ctx.semanticRuntimeState?.dca_fired_count).toEqual({ value: 1 })
   })
 
   it('blocks dca when runtime dca state value is corrupt', () => {
