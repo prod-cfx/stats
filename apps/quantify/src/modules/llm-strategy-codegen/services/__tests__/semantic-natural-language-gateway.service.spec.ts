@@ -89,6 +89,21 @@ describe('NaturalLanguageGatewayService', () => {
     expect(combinationFrames(frames).filter(frame => frame.sideScope === 'short')).toHaveLength(0)
   })
 
+  it('keeps bidirectional EMA gates scoped to their own EMA blocks', () => {
+    const frames = service.parse('EMA20 EMA60 上方只开多，EMA50 EMA100 下方只开空')
+
+    expect(indicatorCompareFrames(frames)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ period: 20, operator: 'GT', sideScope: 'long' }),
+      expect.objectContaining({ period: 60, operator: 'GT', sideScope: 'long' }),
+      expect.objectContaining({ period: 50, operator: 'LT', sideScope: 'short' }),
+      expect.objectContaining({ period: 100, operator: 'LT', sideScope: 'short' }),
+    ]))
+    expect(indicatorCompareFrames(frames)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ period: 20, operator: 'LT', sideScope: 'short' }),
+      expect.objectContaining({ period: 60, operator: 'LT', sideScope: 'short' }),
+    ]))
+  })
+
   it('does not create boundary or action frames for negated BOLL entry intent', () => {
     const frames = service.parse('BOLL 下轨不要开多')
 

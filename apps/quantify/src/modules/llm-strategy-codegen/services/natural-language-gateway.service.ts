@@ -113,55 +113,58 @@ export class NaturalLanguageGatewayService {
     const frames: Array<IndicatorCompareFrameDraft | CombinationFrameDraft> = []
 
     for (const clause of this.toClauses(text)) {
-      const emaBlock = this.findEmaBlock(clause)
-      if (!emaBlock) continue
+      const emaBlocks = this.findEmaBlocks(clause)
+      if (emaBlocks.length === 0) continue
 
-      if (this.hasEmaGate(clause, emaBlock, '上方', ['只开多', '开多', '做多'])) {
-        frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'GT', 'long', 'ema-gate-long', emaBlock.evidenceText))
-        frames.push({
-          kind: 'combination',
-          groupId: 'ema-gate-long',
-          join: 'AND',
-          sideScope: 'long',
-          evidenceText: emaBlock.evidenceText,
-        })
-      }
+      for (const emaBlock of emaBlocks) {
+        if (this.hasEmaGate(clause, emaBlock, '上方', ['只开多', '开多', '做多'])) {
+          frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'GT', 'long', 'ema-gate-long', emaBlock.evidenceText))
+          frames.push({
+            kind: 'combination',
+            groupId: 'ema-gate-long',
+            join: 'AND',
+            sideScope: 'long',
+            evidenceText: emaBlock.evidenceText,
+          })
+        }
 
-      if (this.hasEmaGate(clause, emaBlock, '下方', ['只开空', '开空', '做空'])) {
-        frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'LT', 'short', 'ema-gate-short', emaBlock.evidenceText))
-        frames.push({
-          kind: 'combination',
-          groupId: 'ema-gate-short',
-          join: 'AND',
-          sideScope: 'short',
-          evidenceText: emaBlock.evidenceText,
-        })
+        if (this.hasEmaGate(clause, emaBlock, '下方', ['只开空', '开空', '做空'])) {
+          frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'LT', 'short', 'ema-gate-short', emaBlock.evidenceText))
+          frames.push({
+            kind: 'combination',
+            groupId: 'ema-gate-short',
+            join: 'AND',
+            sideScope: 'short',
+            evidenceText: emaBlock.evidenceText,
+          })
+        }
       }
     }
 
     return frames
   }
 
-  private findEmaBlock(text: string): { periods: number[], evidenceText: string } | undefined {
-    const blockMatch = /((?:\bema\s*\d+\b[\s,，、]*){2,})(?=[^。；;]*[上下]方)/iu.exec(text)
-    if (!blockMatch) return undefined
-
-    const periods = Array.from(blockMatch[1].matchAll(/\bema\s*(\d+)\b/giu)).map(match => Number(match[1]))
-    if (periods.length === 0) return undefined
-
-    return {
-      periods,
-      evidenceText: blockMatch[1].trim(),
-    }
+  private findEmaBlocks(text: string): Array<{ periods: number[], evidenceText: string, index: number }> {
+    return Array.from(text.matchAll(/((?:\bema\s*\d+\b[\s,，、]*){2,})(?=[^。；;,，]*[上下]方)/giu))
+      .map((match) => {
+        const evidenceText = match[1].trim()
+        const periods = Array.from(evidenceText.matchAll(/\bema\s*(\d+)\b/giu)).map(item => Number(item[1]))
+        return {
+          periods,
+          evidenceText,
+          index: match.index ?? 0,
+        }
+      })
+      .filter(block => block.periods.length > 0)
   }
 
   private hasEmaGate(
     clause: string,
-    emaBlock: { evidenceText: string },
+    emaBlock: { evidenceText: string, index: number },
     directionText: '上方' | '下方',
     actionTexts: string[],
   ): boolean {
-    const blockIndex = clause.indexOf(emaBlock.evidenceText)
+    const blockIndex = emaBlock.index
     if (blockIndex < 0) return false
 
     const localText = this.takeUntilNextIndicator(clause.slice(blockIndex + emaBlock.evidenceText.length))
@@ -177,7 +180,7 @@ export class NaturalLanguageGatewayService {
   }
 
   private takeUntilNextIndicator(text: string): string {
-    return text.split(/\b(?:rsi|macd|kdj|boll)\b|布林带?/iu)[0]
+    return text.split(/[,，]|\b(?:ema|ma|sma|rsi|macd|kdj|boll)\b|布林带?/iu)[0]
   }
 
   private toEmaCompareFrames(
