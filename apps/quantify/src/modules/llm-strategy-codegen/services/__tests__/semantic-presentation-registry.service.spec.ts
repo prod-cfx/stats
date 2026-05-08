@@ -25,9 +25,36 @@ describe('SemanticPresentationRegistryService', () => {
         publicName: expect.any(String),
         aliases: expect.arrayContaining([expect.any(String)]),
         positiveExamples: expect.arrayContaining([expect.any(String)]),
+        negativeExamples: expect.arrayContaining([expect.any(String)]),
+        goldenUtterances: expect.arrayContaining([expect.any(String)]),
         displayRenderer: expect.any(Function),
         clarificationRenderer: expect.any(Function),
       }))
+    }
+  })
+
+  it('rejects missing presentation metadata instead of generating supported fallbacks', () => {
+    expect(() => presentation.get('market.trend')).toThrow('semantic_presentation_not_registered:market.trend')
+  })
+
+  it('keeps presentation metadata free of internal atom identifiers', () => {
+    const internalKeys = atomRegistry.list().map(atom => atom.key)
+    const internalPattern = new RegExp(
+      `(^|[^A-Za-z0-9_.])(?:${internalKeys.map(escapeRegExp).join('|')}|generic_boundary)(?=$|[^A-Za-z0-9_])`,
+      'u',
+    )
+
+    for (const supportedAtom of atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))) {
+      const metadata = presentation.get(supportedAtom.key)
+      const publicText = [
+        metadata.publicName,
+        ...metadata.aliases,
+        ...metadata.positiveExamples,
+        ...metadata.negativeExamples,
+        ...metadata.goldenUtterances,
+      ].join('\n')
+
+      expect(publicText).not.toMatch(internalPattern)
     }
   })
 
@@ -80,3 +107,7 @@ describe('SemanticPresentationRegistryService', () => {
     expect(text).not.toContain('valuePct')
   })
 })
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}

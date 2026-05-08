@@ -8,6 +8,7 @@ export interface SemanticPresentationMetadata {
   aliases: readonly string[]
   positiveExamples: readonly string[]
   negativeExamples: readonly string[]
+  goldenUtterances: readonly string[]
   displayRenderer: (input: SemanticPresentationRenderInput) => string
   clarificationRenderer: (slotKey: string, params: Record<string, unknown>) => string
 }
