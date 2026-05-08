@@ -1,6 +1,12 @@
 import type { StrategyAstV1 } from '../../types/canonical-strategy-ast'
+import type { CompiledScriptProjection } from '../../types/compiled-script-projection'
 import type { SemanticState } from '../../types/semantic-state'
-import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
+import {
+  evaluateExprPool,
+  evaluateGuards,
+  evaluateRiskPredicates,
+  runDecisionPrograms,
+} from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
@@ -14,8 +20,6 @@ import { SemanticSupportClassifierService } from '../semantic-support-classifier
 
 type DecisionPrograms = Parameters<typeof runDecisionPrograms>[1]
 type DecisionContext = Parameters<typeof runDecisionPrograms>[0]
-type ExprValues = Parameters<typeof runDecisionPrograms>[2]
-type GuardState = Parameters<typeof runDecisionPrograms>[3]
 
 function compileLifecycleMessage(message: string): StrategyAstV1 {
   const extractor = new SemanticSeedExtractorService()
@@ -71,19 +75,78 @@ function createExecutionEnvelope() {
   }
 }
 
-function exprValuesForPrograms(programs: DecisionPrograms): ExprValues {
-  return Object.fromEntries(programs.map(program => [program.when, true])) as ExprValues
+function runParsedCompiledPipeline(
+  parsed: CompiledScriptProjection,
+  ctx: DecisionContext,
+) {
+  const exprValues = evaluateExprPool(
+    ctx,
+    parsed.exprPool as Parameters<typeof evaluateExprPool>[1],
+    parsed.topology.exprOrder,
+    parsed.executionModel as unknown as Parameters<typeof evaluateExprPool>[3],
+  )
+  const baseGuardState = evaluateGuards(
+    ctx,
+    parsed.guards as Parameters<typeof evaluateGuards>[1],
+    exprValues,
+    parsed.topology.guardOrder,
+  )
+  const guardState = evaluateRiskPredicates(
+    ctx,
+    parsed.riskPredicates as Parameters<typeof evaluateRiskPredicates>[1],
+    baseGuardState,
+    parsed.topology.riskPredicateOrder,
+  )
+  const decision = runDecisionPrograms(
+    ctx,
+    parsed.decisionPrograms as DecisionPrograms,
+    exprValues,
+    guardState,
+    parsed.topology.decisionOrder,
+  )
+
+  return { decision, exprValues, guardState }
 }
 
 function createRuntimeContext(): DecisionContext {
   return {
+    symbol: 'BTCUSDT',
+    timeframe: '1h',
+    bars: createMa20ReclaimBars(),
     position: { side: 'long', qty: 1 },
-    currentPrice: 100,
+    currentPrice: 110,
     accountEquity: 1_000,
     semanticRuntimeState: {
       pyramiding_layer_count: {},
     },
   } as DecisionContext
+}
+
+function cloneRuntimeContext(): DecisionContext {
+  return structuredClone(createRuntimeContext()) as DecisionContext
+}
+
+function createMa20ReclaimBars() {
+  const previousBars = Array.from({ length: 20 }, (_, index) => ({
+    open: 100,
+    high: 101,
+    low: 99,
+    close: 100,
+    volume: 10,
+    timestamp: index + 1,
+  }))
+
+  return [
+    ...previousBars,
+    {
+      open: 100,
+      high: 111,
+      low: 99,
+      close: 110,
+      volume: 10,
+      timestamp: 21,
+    },
+  ]
 }
 
 describe('atomic contract position lifecycle compiled parity', () => {
@@ -94,6 +157,10 @@ describe('atomic contract position lifecycle compiled parity', () => {
       executionEnvelope: createExecutionEnvelope(),
     })
     const parsed = new CompiledScriptParserService().parse(script)
+
+    const addProgram = parsed.decisionPrograms.find(program =>
+      program.actions.some(action => action.kind === 'ADD_LONG'),
+    )
 
     expect(parsed.decisionPrograms).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -108,28 +175,19 @@ describe('atomic contract position lifecycle compiled parity', () => {
       }),
     ]))
 
-    const decisionPrograms = parsed.decisionPrograms as DecisionPrograms
-    const exprValues = exprValuesForPrograms(decisionPrograms)
-    const guardState = {} as GuardState
-    const decisionOrder = parsed.topology.decisionOrder
+    expect(addProgram).toBeDefined()
+    if (!addProgram) {
+      throw new Error('add_program_not_found')
+    }
 
-    const backtestStyleDecision = runDecisionPrograms(
-      createRuntimeContext(),
-      decisionPrograms,
-      exprValues,
-      guardState,
-      decisionOrder,
-    )
-    const liveStyleDecision = runDecisionPrograms(
-      createRuntimeContext(),
-      decisionPrograms,
-      exprValues,
-      guardState,
-      decisionOrder,
-    )
+    const backtestStyleRun = runParsedCompiledPipeline(parsed, cloneRuntimeContext())
+    const liveStyleRun = runParsedCompiledPipeline(parsed, cloneRuntimeContext())
 
-    expect(backtestStyleDecision).toEqual(liveStyleDecision)
-    expect(backtestStyleDecision).toMatchObject({
+    expect(backtestStyleRun.exprValues[addProgram.when]).toBe(true)
+    expect(backtestStyleRun.guardState.forceExit).toBe(false)
+
+    expect(backtestStyleRun.decision).toEqual(liveStyleRun.decision)
+    expect(backtestStyleRun.decision).toMatchObject({
       action: 'OPEN_LONG',
       size: { mode: 'RATIO', value: 0.2 },
     })
