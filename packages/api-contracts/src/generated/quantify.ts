@@ -882,6 +882,9 @@ const RecordTradeDto = z
     fee: z.string().optional().default('0'),
     feeCurrency: z.string().optional(),
     leverage: z.string().optional(),
+    entryTimeframe: z
+      .enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])
+      .optional(),
     orderId: z.string().optional(),
     externalTradeId: z.string().optional(),
     provider: z.string().optional(),
@@ -928,6 +931,7 @@ const PositionResponseDto = z
     leverage: z.string().nullable(),
     quantity: z.string(),
     avgEntryPrice: z.string(),
+    entryTimeframe: z.string().nullish(),
     realizedPnl: z.string(),
     unrealizedPnl: z.string(),
     status: z.enum(['OPEN', 'CLOSED']),

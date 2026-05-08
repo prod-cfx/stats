@@ -464,7 +464,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       const lower = typeof intent.levelSet.lower === 'number' ? intent.levelSet.lower : 1
       const upper = typeof intent.levelSet.upper === 'number' ? intent.levelSet.upper : lower
-      const ratio = Math.pow(upper / lower, 1 / Math.max(1, levelCount - 1)) - 1
+      const ratio = (upper / lower)**(1 / Math.max(1, levelCount - 1)) - 1
       return {
         mode: 'pct',
         value: Number((ratio * 100).toFixed(8)),
@@ -860,7 +860,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'constant':
         if (typeof operand.value === 'boolean') {
-          throw new Error('codegen.semantic_expression_operand_unsupported:constant:boolean')
+          throw new TypeError('codegen.semantic_expression_operand_unsupported:constant:boolean')
         }
         return this.ensureConstSeries(context, operand.value)
 
@@ -1191,6 +1191,44 @@ export class CanonicalSpecV2IrCompilerService {
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           atom.key === 'breakout.channel_high_break' ? 'CROSS_OVER' : 'CROSS_UNDER',
+          [closeRef, channelRef],
+        )
+      }
+
+      case 'price.previous_extrema': {
+        // Phase 3 MVP — price.previous_extrema：
+        //   - kind: 'prev_high'|'swing_high' -> HIGHEST_HIGH，触发 close >= channel
+        //   - kind: 'prev_low'|'swing_low'  -> LOWEST_LOW， 触发 close <= channel
+        //   - lookback: 滚动窗口；缺失或非正整数 -> 直接抛 fail-closed
+        //   - memoryKey: contract 占位，runtime 由 ensureChannelSeries 通道供给序列；通过
+        //                runtimeRequirements.stateKeys.add(memoryKey) 让 contract 体现 state write 意图
+        // 任一参数非法 -> 抛 codegen.canonical_spec_v2_condition_unsupported:price.previous_extrema，fail-closed，
+        // 与 readiness 层"未补齐 supported_requires_slot 不应进入 IR"形成双层保护。
+        const kindRaw = typeof atom.params?.kind === 'string' ? atom.params.kind : null
+        if (kindRaw !== 'prev_high' && kindRaw !== 'prev_low' && kindRaw !== 'swing_high' && kindRaw !== 'swing_low') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
+        }
+        const lookback = this.readNumber([atom.params?.lookback], Number.NaN)
+        // ensureChannelSeries / series id / 上游 LRU 都假定 lookback 是正整数；
+        // fallback 故意置为 NaN，避免悄悄落入默认值绕过 readiness。
+        if (!Number.isInteger(lookback) || lookback <= 0) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
+        }
+        const closeRef = this.ensurePriceSeries(context, 'close')
+        const isHigh = kindRaw === 'prev_high' || kindRaw === 'swing_high'
+        const channelRef = isHigh
+          ? this.ensureChannelSeries(context, 'HIGHEST_HIGH', lookback)
+          : this.ensureChannelSeries(context, 'LOWEST_LOW', lookback)
+        const memoryKey = typeof atom.params?.memoryKey === 'string' && atom.params.memoryKey.trim().length > 0
+          ? atom.params.memoryKey.trim()
+          : null
+        if (memoryKey) {
+          context.runtimeRequirements.stateKeys.add(memoryKey)
+        }
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_previous_extrema_${kindRaw}_${lookback}`,
+          isHigh ? 'GTE' : 'LTE',
           [closeRef, channelRef],
         )
       }
@@ -1782,6 +1820,30 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    if (rule.condition.key === 'risk.time_stop_bars') {
+      const params = rule.condition.params ?? {}
+      const maxBarsRaw = params.maxBars
+      const maxBars = typeof maxBarsRaw === 'number' ? maxBarsRaw : Number(maxBarsRaw)
+      if (!Number.isInteger(maxBars) || maxBars <= 0) {
+        return null
+      }
+      const scopeRaw = typeof params.scope === 'string' ? params.scope : 'both'
+      const scope = scopeRaw === 'long' || scopeRaw === 'short' ? scopeRaw : 'both'
+      const effect = typeof params.effect === 'string' ? params.effect : 'close_position'
+      // MVP: only effect=close_position routes through risk predicate (force_exit / close-side action).
+      // effect=reduce_position requires a partial-reduce rule block + reducePct; out of scope this PR.
+      if (effect !== 'close_position') {
+        return null
+      }
+      context.runtimeRequirements.helpers.add('positionBarsHeld')
+      return {
+        id: rule.id,
+        kind: 'timeStopBars',
+        params: { maxBars, scope },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
     if (rule.condition.key === 'risk.remembered_level_stop') {
       const levelKey = typeof rule.condition.params?.levelKey === 'string' && rule.condition.params.levelKey.trim().length > 0
         ? rule.condition.params.levelKey.trim()
@@ -1865,7 +1927,8 @@ export class CanonicalSpecV2IrCompilerService {
       rule.phase === 'gate'
       && (rule.condition.key === 'volume.threshold'
         || rule.condition.key === 'volatility.atr_threshold'
-        || rule.condition.key === 'strategy.time_window')
+        || rule.condition.key === 'strategy.time_window'
+        || rule.condition.key === 'strategy.multi_timeframe')
       && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
     ) {
       const predicateRef = this.compilePhase1GateAtom(rule.condition, context, rule.id)
@@ -2073,6 +2136,76 @@ export class CanonicalSpecV2IrCompilerService {
         `${seed}_atr_threshold`,
         predicateKind,
         [atrRef, constRef],
+      )
+    }
+
+    if (atom.key === 'strategy.multi_timeframe') {
+      // strategy.multi_timeframe 的 IR EXPRESSION_GUARD 由 5 个解构参数构成：
+      //   htfTimeframe (string)   -> ensureIndicatorSeries / ensurePriceSeries 的 timeframe
+      //   htfIndicator (string)   -> 'ma' | 'sma' | 'ema' | 'rsi'，决定 SMA/EMA/RSI 系列
+      //   htfPeriod    (number>0) -> 指标周期
+      //   htfOp        (compare)  -> 'GT' | 'GTE' | 'LT' | 'LTE'，flipGateOperator 反转后即 guard 触发条件
+      //   htfRhs       (enum)     -> 'price' | 'value'；为 'value' 时 htfValue 必填
+      // 与 semantic-atom-registry.service.ts MULTI_TIMEFRAME_OPEN_SLOTS / requiredParams 严格对齐。
+      // 任一键不合法 -> return null -> tryCompileRiskGuard 返回 null -> compileCondition 走 default
+      //   throw `codegen.canonical_spec_v2_condition_unsupported:strategy.multi_timeframe`，
+      //   保持 fail-closed 而非静默吞掉 BLOCK_NEW_ENTRY guard。
+      const htfTimeframe = typeof atom.params?.htfTimeframe === 'string' && atom.params.htfTimeframe.trim().length > 0
+        ? atom.params.htfTimeframe.trim()
+        : null
+      const htfIndicator = typeof atom.params?.htfIndicator === 'string'
+        ? atom.params.htfIndicator.trim().toLowerCase()
+        : null
+      const htfOp = atom.params?.htfOp
+      const htfPeriod = this.readNumber([atom.params?.htfPeriod], Number.NaN)
+      const htfRhs = typeof atom.params?.htfRhs === 'string' ? atom.params.htfRhs.trim().toLowerCase() : null
+
+      if (
+        !htfTimeframe
+        || !htfIndicator
+        || (htfOp !== 'GT' && htfOp !== 'GTE' && htfOp !== 'LT' && htfOp !== 'LTE')
+        || !Number.isFinite(htfPeriod)
+        || htfPeriod <= 0
+      ) {
+        return null
+      }
+
+      // htfRhs 显式白名单：避免 typo（如 'pric' / 'rpice'）静默落入数值分支改语义。
+      if (htfRhs !== 'price' && htfRhs !== 'value') {
+        return null
+      }
+
+      let leftRef: string
+      if (htfIndicator === 'ema') {
+        leftRef = this.ensureIndicatorSeries(context, 'EMA', htfPeriod, htfTimeframe)
+      }
+      else if (htfIndicator === 'rsi') {
+        leftRef = this.ensureIndicatorSeries(context, 'RSI', htfPeriod, htfTimeframe)
+      }
+      else if (htfIndicator === 'ma' || htfIndicator === 'sma') {
+        leftRef = this.ensureIndicatorSeries(context, 'SMA', htfPeriod, htfTimeframe)
+      }
+      else {
+        return null
+      }
+
+      let rightRef: string
+      if (htfRhs === 'price') {
+        rightRef = this.ensurePriceSeries(context, 'close', htfTimeframe)
+      }
+      else {
+        // htfRhs === 'value'：htfValue 必填。
+        const htfValue = this.readNumber([atom.params?.htfValue], Number.NaN)
+        if (!Number.isFinite(htfValue)) return null
+        rightRef = this.ensureConstSeries(context, htfValue)
+      }
+
+      const predicateKind = this.flipGateOperator(htfOp)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_multi_timeframe`,
+        predicateKind,
+        [leftRef, rightRef],
       )
     }
 

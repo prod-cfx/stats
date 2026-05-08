@@ -67,6 +67,7 @@ export type SemanticExpressionOperand =
   | { kind: 'position'; field: 'avg_price' | 'pnl_pct' | 'bars_held' | 'has_position'; side?: 'long' | 'short' | 'both' }
   | { kind: 'account'; field: 'drawdown_pct' }
   | { kind: 'constant'; value: number | string | boolean; unit?: 'quote' | 'base' | 'ratio' | 'percent' | 'price' }
+  | { kind: 'memory'; memoryKey: string; path?: string[] }
 
 export interface SemanticSlotIdentity {
   slotKey: string

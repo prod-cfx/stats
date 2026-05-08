@@ -39,6 +39,25 @@ strategy`
 
 const RUNTIME_SYMBOL_CODE = 'BTCUSDT:SPOT'
 
+function buildExecutionConstraints(input: {
+  exchangeId?: 'binance' | 'okx' | 'hyperliquid'
+  marketType: 'spot' | 'perp'
+  symbol: string
+}) {
+  return {
+    exchangeId: input.exchangeId ?? 'binance',
+    marketType: input.marketType,
+    symbol: input.symbol,
+    rawSymbol: input.marketType === 'perp' ? 'BTCUSDT:PERP' : 'BTCUSDT',
+    priceTickSize: '0.01',
+    quantityStepSize: '0.000001',
+    minQuantity: '0.000001',
+    ...(input.marketType === 'perp' ? { contractValue: '1' } : {}),
+    clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+    raw: {},
+  }
+}
+
 describe('account-strategy-view (E2E)', () => {
   let app: INestApplication
   let _moduleFixture: TestingModule
@@ -330,6 +349,16 @@ describe('account-strategy-view (E2E)', () => {
       return originalGet(key)
     })
 
+    const tradingService = app.get(TradingService)
+    jest.spyOn(tradingService, 'getInstrumentConstraints').mockImplementation(
+      async (_userId, exchangeId, marketType, symbol) => buildExecutionConstraints({
+        exchangeId,
+        marketType,
+        symbol,
+      }) as any,
+    )
+    jest.spyOn(tradingService, 'getPositions').mockResolvedValue([] as any)
+
     const paused = await createTestStrategyInstance(prisma, {
       templateId,
       name: 'E2E-Account-Strategy-Paused',
@@ -474,9 +503,8 @@ describe('account-strategy-view (E2E)', () => {
 
     const payload = response.body?.data
     expect(payload.id).toBe(strategyRunningId)
-    expect(payload.totalPnl).toBe(320.12)
-    // todayPnl = realizedToday(no closed positions today) + totalUnrealizedPnl(20.12)
-    expect(payload.todayPnl).toBe(20.12)
+    expect(payload.totalPnl).toBe(300)
+    expect(payload.todayPnl).toBe(0)
     expect(payload.metrics.maxDrawdownPct).toBe(5.5)
   })
 

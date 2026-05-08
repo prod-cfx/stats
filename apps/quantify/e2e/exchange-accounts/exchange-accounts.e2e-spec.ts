@@ -43,7 +43,7 @@ describe('ExchangeAccounts (E2E)', () => {
           if (apiKey === 'invalid_key') {
             return new Response(JSON.stringify({
               code: -2015,
-              msg: 'Invalid API-key, IP, or permissions for action.'
+              msg: 'Invalid API-key format.'
             }), {
               status: 400,
               headers: { 'content-type': 'application/json' },

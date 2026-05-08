@@ -131,6 +131,7 @@ interface PublishedRuntimePositionContext {
   qty: number
   avgEntryPrice?: number
   entryPrice?: number
+  entryTimeframe?: string
   positionSide?: string
 }
 
@@ -1258,6 +1259,10 @@ export class SignalGeneratorService {
     }
 
     const latestBar = normalizedBars[normalizedBars.length - 1]
+    if (!latestBar || latestBar.isFinal === false) {
+      return normalizedBars.slice(0, -1)
+    }
+
     if (!options.timeframe || this.isClosedRuntimeBar(latestBar, options.timeframe)) {
       return normalizedBars
     }
@@ -1600,6 +1605,7 @@ export class SignalGeneratorService {
         runtimeSignalOutcome.payload,
         {
           ...runtimeProvenance,
+          timeframe,
           ...(marketType ? { marketType } : {}),
           ...(activeRuntimeState
             ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
@@ -1913,6 +1919,7 @@ export class SignalGeneratorService {
     return {
       qty: signedQty,
       ...(avgEntryPrice !== null ? { avgEntryPrice, entryPrice: avgEntryPrice } : {}),
+      ...(position.entryTimeframe ? { entryTimeframe: position.entryTimeframe } : {}),
       positionSide: position.positionSide,
     }
   }
@@ -2124,6 +2131,63 @@ export class SignalGeneratorService {
     return this.candidateStage.loadMultiLegDataBatch(legs, dataRequirements, marketType)
   }
 
+  /**
+   * Live signal HTF 对齐 gate（#1017）。
+   *
+   * 仅评估 base TF 之外的 timeframe（HTF）。每个 HTF 至少需要一根已闭合 bar，
+   * 且最新 bar 的 closeTime ≤ currentTs（即不是未来 bar）。任何 leg 上任意
+   * HTF 不满足，则视为未对齐。
+   *
+   * 仅当策略 dataRequirements 显式声明 HTF 时此 gate 才会生效；空声明
+   * 时返回 aligned=true 以保持旧行为（never break userspace）。
+   */
+  private evaluateLiveHtfGate(
+    legs: StrategyLegDefinition[],
+    dataRequirements: StrategyDataRequirements,
+    multiLegData: Record<string, Record<string, any>>,
+    baseTimeframe: AppMarketTimeframe,
+    currentTs: number,
+  ): { aligned: boolean; missingTimeframes: string[] } {
+    const missing: string[] = []
+    for (const leg of legs) {
+      const required = dataRequirements[leg.id]
+      if (!required || required.length === 0) {
+        continue
+      }
+      const legBars = multiLegData[leg.id] ?? {}
+      for (const timeframe of required) {
+        // 跳过 base TF —— gate 仅验证 HTF
+        if (timeframe === baseTimeframe) {
+          continue
+        }
+        if (!this.isLiveHtfAligned(legBars[timeframe]?.bars, timeframe, currentTs)) {
+          missing.push(`${leg.id}:${timeframe}`)
+        }
+      }
+    }
+    return { aligned: missing.length === 0, missingTimeframes: missing }
+  }
+
+  /**
+   * 单个 HTF 对齐判定：bars 至少 1 根，最新 bar 的 closeTime ≤ currentTs。
+   */
+  private isLiveHtfAligned(
+    bars: ReadonlyArray<{ timestamp: number }> | undefined,
+    timeframe: AppMarketTimeframe,
+    currentTs: number,
+  ): boolean {
+    if (!bars || bars.length === 0) {
+      return false
+    }
+    const latest = bars[bars.length - 1]
+    if (!latest || typeof latest.timestamp !== 'number') {
+      return false
+    }
+    const tfMs = getMarketTimeframeMs(timeframe)
+    const closeTime = latest.timestamp + tfMs
+    return closeTime <= currentTs
+  }
+
   private async generateSignalForMultiLegStrategy(
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
@@ -2242,6 +2306,30 @@ export class SignalGeneratorService {
           return
         }
       }
+    }
+
+    // 2.2 HTF 对齐 gate（#1017）：仅当 dataRequirements 显式声明 HTF 时启用。
+    // 对每个 leg 的非 base TF（HTF）检查最新 bar 的 closeTime 必须 ≤ currentTs；
+    // 缺失或未来 bar → 跳过 entry，但保留 exit/risk 路径（此处尚未走到决策评估，直接 return 等下个 tick 重试）。
+    const htfGateResult = this.evaluateLiveHtfGate(
+      legs,
+      dataRequirements,
+      multiLegData,
+      execution.timeframe,
+      Date.now(),
+    )
+    if (!htfGateResult.aligned) {
+      this.logger.debug(
+        `Strategy ${strategy.id} live HTF gate not aligned, skipping entry. ` +
+          `Missing: ${htfGateResult.missingTimeframes.join(', ')}`,
+      )
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'live_htf_not_aligned',
+      })
+      return
     }
 
     // 3. 构建脚本上下文

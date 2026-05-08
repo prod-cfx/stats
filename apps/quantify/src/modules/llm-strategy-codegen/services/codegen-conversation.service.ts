@@ -5689,6 +5689,7 @@ export class CodegenConversationService {
   private withClarificationSummary(
     clarificationState: StrategyClarificationState | null | undefined,
     checklist: StrategyLogicSnapshot,
+    normalizedIntent?: StrategyNormalizedIntent | null,
   ): StrategyClarificationStateWithSummary | null {
     if (!clarificationState) return null
     if (clarificationState.status !== 'NEEDS_CLARIFICATION') {
@@ -5700,7 +5701,7 @@ export class CodegenConversationService {
 
     return {
       ...clarificationState,
-      summary: this.buildClarificationSummary(checklist),
+      summary: this.buildClarificationSummary(checklist, normalizedIntent),
     }
   }
 
@@ -5724,6 +5725,7 @@ export class CodegenConversationService {
         atomicResolution,
       }),
       checklist,
+      normalization.normalizedIntent,
     ) as StrategyClarificationStateWithSummary
     const clarificationState = this.filterLegacyClarificationState(rawClarificationState, normalization)
     const shouldUseExecutionContextAmbiguities = clarificationState.items.some(item => item.key.startsWith('executionContext.'))

@@ -347,6 +347,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     })
     expect(detail.latestOrders[0]).toEqual({
       executedAt: '2026-03-20T11:01:00.000Z',
+      executionStatus: null,
       side: 'BUY',
       symbol: 'BTCUSDT',
       price: 68000,
@@ -354,6 +355,9 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       fee: 51.737672883,
       feeCurrency: 'DOGE',
       orderId: 'ord-1',
+      source: 'ledger',
+      ledgerApplied: true,
+      reconcileRequired: false,
     })
     expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
       'user-1',
@@ -1848,106 +1852,111 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
   })
 
   it('refreshes local open positions before computing detail pnl', async () => {
-    const repo = {
-      hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
-      findStrategyForUser: jest.fn().mockResolvedValue({
-        id: 'inst-sync-before-detail',
-        name: 'Sync before detail',
-        status: 'running',
-        createdBy: 'user-1',
-        params: { symbol: 'BTCUSDT:PERP', exchange: 'okx', marketType: 'perp' },
-        strategyTemplateId: 'tpl-sync-before-detail',
-        strategyTemplate: {
-          defaultParams: { timeframe: '1m' },
-        },
-        subscriptions: [{
-          userId: 'user-1',
-          status: 'active',
-          customParams: {},
-          exchangeAccount: { id: 'exchange-account-1', exchangeId: 'okx', name: 'OKX demo' },
-        }],
-        startedAt: new Date('2026-04-29T03:48:46.000Z'),
-        updatedAt: new Date('2026-04-29T04:06:00.000Z'),
-      }),
-      findUserStrategyAccount: jest.fn().mockResolvedValue({
-        id: 'acc-sync-before-detail',
-        baseCurrency: 'USDT',
-        initialBalance: 31076.79,
-        balance: 31076.68,
-        equity: 34561.81,
-        totalRealizedPnl: 0,
-        totalUnrealizedPnl: 3485.02,
-      }),
-      loadEquitySeries: jest.fn().mockResolvedValue([]),
-      loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
-      loadClosedPositionPnlSeries: jest.fn()
-        .mockResolvedValue([{
-          openedAt: new Date('2026-04-29T03:48:46.000Z'),
-          closedAt: new Date('2026-04-29T04:05:04.000Z'),
-          realizedPnl: -0.11,
-        }]),
-      loadPositionFinancials: jest.fn()
-        .mockResolvedValue({
-          openCostBasis: 0,
-          totalRealizedPnl: -0.11,
-          totalUnrealizedPnl: 0,
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-29T05:00:00.000Z'))
+    try {
+      const repo = {
+        hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
+        findStrategyForUser: jest.fn().mockResolvedValue({
+          id: 'inst-sync-before-detail',
+          name: 'Sync before detail',
+          status: 'running',
+          createdBy: 'user-1',
+          params: { symbol: 'BTCUSDT:PERP', exchange: 'okx', marketType: 'perp' },
+          strategyTemplateId: 'tpl-sync-before-detail',
+          strategyTemplate: {
+            defaultParams: { timeframe: '1m' },
+          },
+          subscriptions: [{
+            userId: 'user-1',
+            status: 'active',
+            customParams: {},
+            exchangeAccount: { id: 'exchange-account-1', exchangeId: 'okx', name: 'OKX demo' },
+          }],
+          startedAt: new Date('2026-04-29T03:48:46.000Z'),
+          updatedAt: new Date('2026-04-29T04:06:00.000Z'),
         }),
-      loadOpenPositionsForValuation: jest.fn()
-        .mockResolvedValue([]),
-      loadTradeStats: jest.fn()
-        .mockResolvedValue({ tradeCount: 2, closedCount: 1, winningCount: 0 }),
-      loadPositionOverview: jest.fn()
-        .mockResolvedValueOnce({ openCount: 1, closedCount: 0 })
-        .mockResolvedValueOnce({ openCount: 0, closedCount: 1 }),
-      loadTimeline: jest.fn().mockResolvedValue({
-        instance: { createdAt: new Date('2026-04-29T03:48:00.000Z') },
-        subscription: null,
-        signalExecutions: [],
-        trades: [],
-      }),
-    }
-    const positionSyncService = {
-      syncUserPositions: jest.fn().mockResolvedValue({
-        success: true,
-        differences: [{ action: 'closed' }],
-      }),
-    }
-    const service = new AccountStrategyViewService(
-      repo as any,
-      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
-      { updateInstance: jest.fn() } as any,
-      { ensureSymbolsSubscribed: jest.fn() } as any,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      positionSyncService as any,
-    )
+        findUserStrategyAccount: jest.fn().mockResolvedValue({
+          id: 'acc-sync-before-detail',
+          baseCurrency: 'USDT',
+          initialBalance: 31076.79,
+          balance: 31076.68,
+          equity: 34561.81,
+          totalRealizedPnl: 0,
+          totalUnrealizedPnl: 3485.02,
+        }),
+        loadEquitySeries: jest.fn().mockResolvedValue([]),
+        loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
+        loadClosedPositionPnlSeries: jest.fn()
+          .mockResolvedValue([{
+            openedAt: new Date('2026-04-29T03:48:46.000Z'),
+            closedAt: new Date('2026-04-29T04:05:04.000Z'),
+            realizedPnl: -0.11,
+          }]),
+        loadPositionFinancials: jest.fn()
+          .mockResolvedValue({
+            openCostBasis: 0,
+            totalRealizedPnl: -0.11,
+            totalUnrealizedPnl: 0,
+          }),
+        loadOpenPositionsForValuation: jest.fn()
+          .mockResolvedValue([]),
+        loadTradeStats: jest.fn()
+          .mockResolvedValue({ tradeCount: 2, closedCount: 1, winningCount: 0 }),
+        loadPositionOverview: jest.fn()
+          .mockResolvedValueOnce({ openCount: 1, closedCount: 0 })
+          .mockResolvedValueOnce({ openCount: 0, closedCount: 1 }),
+        loadTimeline: jest.fn().mockResolvedValue({
+          instance: { createdAt: new Date('2026-04-29T03:48:00.000Z') },
+          subscription: null,
+          signalExecutions: [],
+          trades: [],
+        }),
+      }
+      const positionSyncService = {
+        syncUserPositions: jest.fn().mockResolvedValue({
+          success: true,
+          differences: [{ action: 'closed' }],
+        }),
+      }
+      const service = new AccountStrategyViewService(
+        repo as any,
+        { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+        { updateInstance: jest.fn() } as any,
+        { ensureSymbolsSubscribed: jest.fn() } as any,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        positionSyncService as any,
+      )
 
-    const detail = await service.getStrategyDetail('user-1', 'inst-sync-before-detail')
+      const detail = await service.getStrategyDetail('user-1', 'inst-sync-before-detail')
 
-    expect(positionSyncService.syncUserPositions).toHaveBeenCalledWith(
-      'user-1',
-      'acc-sync-before-detail',
-      'okx',
-      'perp',
-      'auto',
-      'account-strategy-detail',
-      'exchange-account-1',
-    )
-    expect(detail.positionOverview).toEqual({
-      openPositionsCount: 0,
-      closedPositionsCount: 1,
-      totalRealizedPnl: -0.11,
-      totalUnrealizedPnl: 0,
-    })
-    expect(detail.accountOverview).toEqual(expect.objectContaining({
-      totalPnl: -0.11,
-      todayPnl: -0.11,
-      totalEquity: 31076.68,
-    }))
+      expect(positionSyncService.syncUserPositions).toHaveBeenCalledWith(
+        'user-1',
+        'acc-sync-before-detail',
+        'okx',
+        'perp',
+        'auto',
+        'account-strategy-detail',
+        'exchange-account-1',
+      )
+      expect(detail.positionOverview).toEqual({
+        openPositionsCount: 0,
+        closedPositionsCount: 1,
+        totalRealizedPnl: -0.11,
+        totalUnrealizedPnl: 0,
+      })
+      expect(detail.accountOverview).toEqual(expect.objectContaining({
+        totalPnl: -0.11,
+        todayPnl: -0.11,
+        totalEquity: 31076.68,
+      }))
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('revalues open positions from latest market quotes when stored unrealized pnl is stale', async () => {

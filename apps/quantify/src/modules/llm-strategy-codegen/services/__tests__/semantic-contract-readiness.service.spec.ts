@@ -1931,6 +1931,348 @@ describe('SemanticContractReadinessService', () => {
   })
 })
 
+describe('SemanticContractReadinessService timeframe pairing', () => {
+  const baseAction = {
+    id: 'action-open-long',
+    key: 'open_long',
+    status: 'locked' as const,
+    source: 'user_explicit' as const,
+    openSlots: [],
+    contracts: [{
+      id: 'action-contract-open-long',
+      kind: 'action' as const,
+      capabilities: [],
+      requires: [],
+      params: {},
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
+    }],
+  }
+
+  function timeframeSlot(value: string) {
+    return {
+      slotKey: 'context.timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      value,
+      status: 'locked' as const,
+      priority: 'core' as const,
+      affectsExecution: true,
+      questionHint: '',
+    }
+  }
+
+  it('reports ready=true when trigger timeframe aligns with execution context timeframe', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: timeframeSlot('1h'),
+      },
+      triggers: [{
+        id: 'trigger-aligned',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: { timeframe: '1h', indicator: 'ma', referenceRole: 'moving_average', 'reference.period': 50 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-aligned',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
+  })
+
+  it('reports timeframe mismatch when trigger timeframe differs from execution context', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: timeframeSlot('1h'),
+      },
+      triggers: [{
+        id: 'trigger-misaligned',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { timeframe: '4h' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-misaligned',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    const mismatches = result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')
+    expect(mismatches).toHaveLength(1)
+    expect(mismatches[0]).toMatchObject({
+      kind: 'timeframe_mismatch',
+      errorCode: 'READINESS_TIMEFRAME_MISMATCH',
+      ownerKind: 'trigger',
+      ownerId: 'trigger-misaligned',
+      producer: { ownerKind: 'trigger', ownerId: 'trigger-misaligned', timeframe: '4h' },
+      consumer: { source: 'context_slot', timeframe: '1h' },
+    })
+    expect(result.state.triggers[0].openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'contract.timeframe_mismatch.trigger.trigger-misaligned',
+        affectsExecution: true,
+        status: 'open',
+      }),
+    ]))
+  })
+
+  it('reports every misaligned indicator across multiple triggers', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: timeframeSlot('1h'),
+      },
+      triggers: [{
+        id: 'trigger-aligned',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { timeframe: '1h' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-aligned',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }, {
+        id: 'trigger-misaligned-a',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { timeframe: '4h' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-misaligned-a',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }, {
+        id: 'trigger-misaligned-b',
+        key: 'indicator.cross_over',
+        phase: 'exit',
+        params: { timeframe: '15m' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-misaligned-b',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(false)
+    const mismatches = result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')
+    expect(mismatches.map(m => m.ownerId).sort()).toEqual(['trigger-misaligned-a', 'trigger-misaligned-b'])
+  })
+
+  it('does not raise timeframe mismatch when execution context timeframe is missing', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-no-context',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { timeframe: '4h' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-no-context',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
+  })
+
+  it('honors explicit timeframeOverride and skips mismatch reporting', () => {
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: timeframeSlot('1h'),
+      },
+      triggers: [{
+        id: 'trigger-override',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: { timeframe: '4h', timeframeOverride: true },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-override',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
+    expect(result.ready).toBe(true)
+  })
+
+  it('skips timeframe mismatch for indicator.above HTF filter trigger with timeframeOverride', () => {
+    // 执行 TF=15m，HTF filter trigger 使用 1h EMA，带 timeframeOverride=true，应豁免
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: timeframeSlot('15m'),
+      },
+      triggers: [{
+        id: 'trigger-htf-above',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: { indicator: 'ema', 'reference.period': 200, timeframe: '1h', timeframeOverride: true },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-htf-above',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    // 核心断言：timeframe_mismatch 被豁免（timeframeOverride=true）
+    expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
+  })
+
+  it('skips timeframe mismatch for indicator.below HTF filter trigger with timeframeOverride', () => {
+    // 执行 TF=15m，HTF filter 使用 1h MA50 跌破，带 timeframeOverride=true，应豁免
+    const state = createSemanticState({
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: timeframeSlot('15m'),
+      },
+      triggers: [{
+        id: 'trigger-htf-below',
+        key: 'indicator.below',
+        phase: 'exit',
+        params: { indicator: 'ma', 'reference.period': 50, timeframe: '1h', timeframeOverride: true },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'trigger-contract-htf-below',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      actions: [baseAction],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    // 核心断言：timeframe_mismatch 被豁免（timeframeOverride=true）
+    expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
+  })
+})
+
 function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {
   return {
     version: 1,

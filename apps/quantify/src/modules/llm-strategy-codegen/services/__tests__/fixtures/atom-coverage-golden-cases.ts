@@ -1,4 +1,6 @@
 import type { SemanticSupportRoute } from '../../semantic-support-classifier.service'
+import { phase3MtfCases } from './phase3-mtf-cases'
+import { phase3PreviousExtremaCases } from './phase3-previous-extrema-cases'
 
 export type AtomicCoverageTag =
   | 'trend'
@@ -1061,8 +1063,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-035-recognized-unsupported-multi-timeframe',
-    name: 'recognized unsupported multi timeframe',
+    id: 'golden-corpus-035-supported-requires-slot-multi-timeframe',
+    name: 'supported requires slot multi timeframe',
     message: 'OKX 合约 BTCUSDT 15m，先看 4h 趋势向上，再用 15m MA20 上穿 MA50 开多，单笔 10%。',
     tags: ['trend', 'position_lifecycle', 'multi_timeframe', 'orchestration'],
     expectedAtoms: [
@@ -1078,10 +1080,14 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',
-      'unsupported:strategy.multi_timeframe',
+      'open_slot:strategy.multi_timeframe.htfTimeframe',
+      'open_slot:strategy.multi_timeframe.htfIndicator',
+      'open_slot:strategy.multi_timeframe.htfPeriod',
+      'open_slot:strategy.multi_timeframe.htfOp',
+      'open_slot:strategy.multi_timeframe.htfRhs',
     ],
     forbiddenKeys: ['market.trend', 'market.range'],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-036-recognized-unsupported-divergence',
@@ -1117,8 +1123,12 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-038-recognized-unsupported-previous-high-low-extrema',
-    name: 'recognized unsupported previous high low extrema',
+    // Phase 3 MVP — price.previous_extrema 已升 supported_requires_slot；
+    // seed-extractor 当前给出的 params 仅含 reference/event，缺 kind/lookback，
+    // 因而仍处于 readiness 不足的 projection_gate；待 seed-extractor 跟进后
+    // 即可走 supported 通道。
+    id: 'golden-corpus-038-supported-requires-slot-previous-high-low-extrema',
+    name: 'supported requires slot previous high low extrema',
     message: 'OKX 合约 BTCUSDT 15m，前高突破买入，跌破前低卖出，单笔 10%。',
     tags: ['breakout', 'position_lifecycle'],
     expectedAtoms: [
@@ -1132,9 +1142,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_long',
       'close_long',
       'position.fixed_pct',
-      'unsupported:price.previous_extrema',
+      'open_slot:price.previous_extrema.kind',
+      'open_slot:price.previous_extrema.lookback',
+      'open_slot:price.previous_extrema.memoryKey',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-039-recognized-unsupported-pause-trading',
@@ -1798,4 +1810,6 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedRoute: 'open_slots',
   },
+  ...phase3MtfCases,
+  ...phase3PreviousExtremaCases,
 ]

@@ -1,10 +1,10 @@
-// Smoke 测试用真实 LLM 调用：仅当本地配 QUANTIFY_UNIAPI_API_KEY 时跑
+// Smoke 测试用真实 LLM 调用：当前阶段 Mastra 不随全量单测默认启用。
 //
 // 关键约束：本文件**不能**在顶部静态 import MastraService / @mastra/core，
 // 因为 jest unit run 默认不 transform ESM transitive deps（如 p-map@7+）。
 // 顶层 import 会让 jest 把整个文件标记为 numRuntimeErrorTestSuites。
 // 解决：用 require() 延迟到测试体内，配合 describe.skip 时 require 永远不执行。
-const SMOKE_ENABLED = !!process.env.QUANTIFY_UNIAPI_API_KEY
+const SMOKE_ENABLED = process.env.QUANTIFY_MASTRA_SMOKE_ENABLED === 'true' && !!process.env.QUANTIFY_UNIAPI_API_KEY
 const describeSmoke = SMOKE_ENABLED ? describe : describe.skip
 
 describeSmoke('MastraService smoke (requires QUANTIFY_UNIAPI_API_KEY in env)', () => {

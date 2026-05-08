@@ -1,4 +1,4 @@
-import { evaluateExprPool } from './evaluate-expr-pool'
+import { evaluateExprPool, invalidateMemoryOperand } from './evaluate-expr-pool'
 
 describe('evaluateExprPool', () => {
   it('evaluates state-gate equality predicates from runtime context values', () => {
@@ -516,5 +516,99 @@ describe('evaluateExprPool', () => {
 
     expect(values.highest_high_3_1h).toBe(104)
     expect(values.breakout).toBe(true)
+  })
+
+  describe('MEMORY operand', () => {
+    function buildMemoryNode(id: string, memoryKey: string, path?: string[]) {
+      return {
+        id,
+        nodeType: 'series' as const,
+        sourceRef: id,
+        payload: { kind: 'MEMORY', memoryKey, path },
+      }
+    }
+
+    it('returns null when memoryKey missing in semanticRuntimeState', () => {
+      const node = buildMemoryNode('mem_missing', 'absent_key')
+      const values = evaluateExprPool(
+        { bars: [], semanticRuntimeState: {} },
+        [node],
+        ['mem_missing'],
+      )
+      expect(values.mem_missing).toBeNull()
+    })
+
+    it('reads primitive leaf via single-segment path', () => {
+      const node = buildMemoryNode('mem_simple', 'phase_state', ['count'])
+      const values = evaluateExprPool(
+        { bars: [], semanticRuntimeState: { phase_state: { count: 3 } } },
+        [node],
+        ['mem_simple'],
+      )
+      expect(values.mem_simple).toBe(3)
+    })
+
+    it('walks nested object path to leaf primitive', () => {
+      const node = buildMemoryNode('mem_nested', 'breakout', ['confirmation', 'tier1', 'fired'])
+      const values = evaluateExprPool(
+        {
+          bars: [],
+          semanticRuntimeState: {
+            breakout: { confirmation: { tier1: { fired: true } } },
+          },
+        },
+        [node],
+        ['mem_nested'],
+      )
+      expect(values.mem_nested).toBe(true)
+    })
+
+    it('returns null when path breaks at intermediate undefined segment', () => {
+      const node = buildMemoryNode('mem_broken', 'breakout', ['confirmation', 'missing', 'fired'])
+      const values = evaluateExprPool(
+        {
+          bars: [],
+          semanticRuntimeState: { breakout: { confirmation: {} } },
+        },
+        [node],
+        ['mem_broken'],
+      )
+      expect(values.mem_broken).toBeNull()
+    })
+
+    it('returns null after invalidateMemoryOperand clears the slot', () => {
+      const ctx: { bars: never[], semanticRuntimeState: Record<string, Record<string, unknown>> } = {
+        bars: [],
+        semanticRuntimeState: { breakout: { fired: true } },
+      }
+      const node = buildMemoryNode('mem_after_inv', 'breakout', ['fired'])
+
+      const before = evaluateExprPool(ctx, [node], ['mem_after_inv'])
+      expect(before.mem_after_inv).toBe(true)
+
+      invalidateMemoryOperand(ctx, 'breakout')
+
+      const after = evaluateExprPool(ctx, [node], ['mem_after_inv'])
+      expect(after.mem_after_inv).toBeNull()
+      expect(Object.prototype.hasOwnProperty.call(ctx.semanticRuntimeState, 'breakout')).toBe(false)
+    })
+
+    it('invalidate does not affect other memoryKeys', () => {
+      const ctx: { bars: never[], semanticRuntimeState: Record<string, Record<string, unknown>> } = {
+        bars: [],
+        semanticRuntimeState: {
+          alpha: { score: 1 },
+          beta: { score: 2 },
+        },
+      }
+
+      invalidateMemoryOperand(ctx, 'alpha')
+
+      const node = buildMemoryNode('mem_beta', 'beta', ['score'])
+      const values = evaluateExprPool(ctx, [node], ['mem_beta'])
+      expect(values.mem_beta).toBe(2)
+      expect(Object.prototype.hasOwnProperty.call(ctx.semanticRuntimeState, 'alpha')).toBe(false)
+      expect(Object.prototype.hasOwnProperty.call(ctx.semanticRuntimeState, 'beta')).toBe(true)
+    })
   })
 })

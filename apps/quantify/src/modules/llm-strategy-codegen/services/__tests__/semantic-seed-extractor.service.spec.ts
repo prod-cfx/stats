@@ -3955,4 +3955,76 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'indicator.below' }),
     ]))
   })
+
+  it('injects timeframeOverride:true on indicator.above and indicator.below triggers', () => {
+    // 15m 执行 TF + 1h HTF EMA 过滤器 — 典型多时间框架场景
+    const patch = service.extract('BTCUSDT 15m，价格在 1h EMA200 上方时才做多；EMA7 上穿 EMA21 开多；单笔 10%。')
+
+    const aboveTriggers = patch.triggers?.filter(t => t.key === 'indicator.above') ?? []
+    expect(aboveTriggers.length).toBeGreaterThan(0)
+    for (const trigger of aboveTriggers) {
+      expect(trigger.params).toEqual(expect.objectContaining({ timeframeOverride: true }))
+    }
+  })
+
+  it('injects timeframeOverride:true on indicator.below triggers from pushMovingAverageTrigger', () => {
+    // 跌破 MA 出场，同样应携带 timeframeOverride
+    const patch = service.extract('BTCUSDT 15m，价格跌破 1h MA50 平多；单笔 10%。')
+
+    const belowTriggers = patch.triggers?.filter(t => t.key === 'indicator.below') ?? []
+    expect(belowTriggers.length).toBeGreaterThan(0)
+    for (const trigger of belowTriggers) {
+      expect(trigger.params).toEqual(expect.objectContaining({ timeframeOverride: true }))
+    }
+  })
+
+  describe('chinese numeral and phrase timeframe recognition (#1015)', () => {
+    const baseSuffix = '，收盘价高于开盘价开多，收盘价低于开盘价平多，固定使用 10 USDT，止损 5%。'
+
+    const expectTimeframe = (message: string, expected: string) => {
+      const patch = service.extract(message)
+      expect(patch.contextSlots?.timeframe).toBe(expected)
+    }
+
+    it('recognizes chinese numeral hours like 四小时 / 十二小时', () => {
+      expectTimeframe(`BTCUSDT 四小时${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 十二小时${baseSuffix}`, '12h')
+      expectTimeframe(`BTCUSDT 一小时${baseSuffix}`, '1h')
+    })
+
+    it('recognizes chinese numeral minutes like 三十分钟', () => {
+      expectTimeframe(`BTCUSDT 三十分钟${baseSuffix}`, '30m')
+      expectTimeframe(`BTCUSDT 十五分钟${baseSuffix}`, '15m')
+    })
+
+    it('recognizes timeframe suffixes 级别 / 周期 / 线', () => {
+      expectTimeframe(`BTCUSDT 4小时级别${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 4小时周期${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 日线${baseSuffix}`, '1d')
+      expectTimeframe(`BTCUSDT 四小时级别${baseSuffix}`, '4h')
+    })
+
+    it('recognizes special phrases 半小时 / 刻钟 / 半天', () => {
+      expectTimeframe(`BTCUSDT 半小时${baseSuffix}`, '30m')
+      expectTimeframe(`BTCUSDT 刻钟${baseSuffix}`, '15m')
+      expectTimeframe(`BTCUSDT 一刻钟${baseSuffix}`, '15m')
+      expectTimeframe(`BTCUSDT 半天${baseSuffix}`, '12h')
+    })
+
+    it('recognizes mixed CJK timeframe with symbol context', () => {
+      const patch = service.extract(`BTCUSDT 四小时级别${baseSuffix}`)
+      expect(patch.contextSlots?.timeframe).toBe('4h')
+      expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({ value: 'BTCUSDT' }))
+    })
+
+    it('recognizes english timeframe phrases with optional level/tf suffix', () => {
+      expectTimeframe(`BTCUSDT 4h timeframe${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 15m tf${baseSuffix}`, '15m')
+    })
+
+    it('falls back to numeric arabic forms unchanged (backward compat)', () => {
+      expectTimeframe(`BTCUSDT 1m${baseSuffix}`, '1m')
+      expectTimeframe(`BTCUSDT 4小时${baseSuffix}`, '4h')
+    })
+  })
 })

@@ -1,6 +1,5 @@
-import { Injectable } from '@nestjs/common'
-
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+
 import type {
   SemanticAtomContractSubstrate,
   SemanticAtomDefinition,
@@ -11,6 +10,7 @@ import type {
   SemanticSupportedAtomDefinition,
   SemanticUnknownAtomDefinition,
 } from '../types/semantic-atom-support'
+import { Injectable } from '@nestjs/common'
 
 type UnknownSemanticAtomDefinition = SemanticUnknownAtomDefinition
 
@@ -49,6 +49,22 @@ function maxExposurePctSubstrate(): SemanticAtomContractSubstrate {
     runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'position_snapshot' }],
     stateRequirements: [],
     orderRequirements: [],
+    openSlots: [],
+  }
+}
+
+function timeStopBarsSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+      { domain: 'runtime', verb: 'read', object: 'position.bars_held' },
+    ],
+    stateRequirements: [],
+    orderRequirements: [
+      { domain: 'order', verb: 'support', object: 'market_order' },
+      { domain: 'order', verb: 'submit', object: 'market_close' },
+    ],
     openSlots: [],
   }
 }
@@ -162,6 +178,125 @@ const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {
   patch: DEFAULT_REPLACEMENT_PATCH,
 }
 
+// 多周期 HTF 过滤：5 个解构参数对应 IR EXPRESSION_GUARD 的 series.indicator/period + COMPARE.op + rhs
+// 与 canonical-spec-v2-ir-compiler.service.ts compilePhase1GateAtom() 的 strategy.multi_timeframe 分支严格对齐：
+//   - htfTimeframe: 高周期标签（如 '4h' / '1d'），用于 ensureIndicatorSeries / ensurePriceSeries 的 timeframe
+//   - htfIndicator: 'ma' | 'sma' | 'ema' | 'rsi'，决定 SMA/EMA/RSI 系列
+//   - htfPeriod: 指标周期（>0 的整数）
+//   - htfOp: 'GT' | 'GTE' | 'LT' | 'LTE'，会被 flipGateOperator 反转为 guard 触发条件
+//   - htfRhs: 'price' | 'value'，'price' 走 HTF close 序列；'value' 时 htfValue 必填
+// htfCondition 自由文本由 seed-extractor 解析为上述 5 键后再注入；不再作为 required slot。
+const MULTI_TIMEFRAME_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'strategy.multi_timeframe.htfTimeframe',
+    fieldPath: 'trigger.params.htfTimeframe',
+    priority: 'core',
+    questionHint: '请指明高周期过滤所用的时间周期，例如 4h / 1d。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfIndicator',
+    fieldPath: 'trigger.params.htfIndicator',
+    priority: 'core',
+    questionHint: '请选择高周期使用的指标：ma / sma / ema / rsi。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfPeriod',
+    fieldPath: 'trigger.params.htfPeriod',
+    priority: 'core',
+    questionHint: '请给出高周期指标的周期长度，例如 50 / 14。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfOp',
+    fieldPath: 'trigger.params.htfOp',
+    priority: 'core',
+    questionHint: '请指明高周期判定的比较方向：GT / GTE / LT / LTE。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfRhs',
+    fieldPath: 'trigger.params.htfRhs',
+    priority: 'core',
+    questionHint: '请指明高周期判定的比较右值：price（与 HTF 收盘价比较）或 value（与固定数值比较，需另填 htfValue）。',
+  },
+]
+
+function multiTimeframeTrigger(): SemanticSupportedAtomDefinition {
+  return {
+    key: 'strategy.multi_timeframe',
+    category: 'trigger',
+    supportStatus: 'supported_requires_slot',
+    // 与 IR compiler 5 解构键严格对齐；htfValue 仅在 htfRhs === 'value' 时必填，
+    // 由 IR compiler 内做条件 readiness 校验（fail-closed 进入 supported_requires_slot），
+    // 故归入 defaultableParams，避免在 readiness 层强制全部用户答辩。
+    requiredParams: ['htfTimeframe', 'htfIndicator', 'htfPeriod', 'htfOp', 'htfRhs'],
+    defaultableParams: ['htfValue'],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [...MULTI_TIMEFRAME_OPEN_SLOTS],
+    contractSubstrate: {
+      runtimeRequirements: [
+        { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+        { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+        { domain: 'runtime', verb: 'feed', object: 'multi_timeframe', shape: { aligned: true } },
+      ],
+      stateRequirements: [],
+      orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+      openSlots: cloneOpenSlotSpecs(MULTI_TIMEFRAME_OPEN_SLOTS),
+    },
+  }
+}
+
+// Phase 3 MVP — price.previous_extrema 升级为 supported_requires_slot：
+// requiredParams 与 IR compiler `compileConditionAtom` 中 'price.previous_extrema' 分支严格对齐：
+//   - kind: 'prev_high' | 'prev_low' | 'swing_high' | 'swing_low'，决定走 HIGHEST_HIGH 或 LOWEST_LOW
+//   - lookback: 滚动窗口大小（>0 的整数）
+//   - memoryKey: 给后续 cross-atom 复用预留的 contract 占位；缺失时由 semantic-state-normalization 自动以 hash 补齐
+// pivotStrength / confirmationBars 当前 MVP 用 IR 默认值，不强制用户答辩，故归入 defaultableParams。
+const PREVIOUS_EXTREMA_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'price.previous_extrema.kind',
+    fieldPath: 'trigger.params.kind',
+    priority: 'core',
+    questionHint: '请指明前高/前低判定类型：prev_high / prev_low / swing_high / swing_low。',
+  },
+  {
+    slotKey: 'price.previous_extrema.lookback',
+    fieldPath: 'trigger.params.lookback',
+    priority: 'core',
+    questionHint: '请给出滚动窗口长度，例如 20。',
+  },
+  {
+    slotKey: 'price.previous_extrema.memoryKey',
+    fieldPath: 'trigger.params.memoryKey',
+    priority: 'behavior',
+    questionHint: '请提供 memoryKey，用于跨 atom 复用 remembered level（缺失时系统会以 hash 自动补全）。',
+  },
+]
+
+function previousExtremaSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+      { domain: 'runtime', verb: 'compute', object: 'rolling_extrema' },
+    ],
+    stateRequirements: [{ domain: 'state', verb: 'write', object: 'memoryKey' }],
+    orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+    openSlots: PREVIOUS_EXTREMA_OPEN_SLOTS.map(slot => ({ ...slot })),
+  }
+}
+
+function previousExtremaTrigger(): SemanticSupportedAtomDefinition {
+  return {
+    key: 'price.previous_extrema',
+    category: 'trigger',
+    supportStatus: 'supported_requires_slot',
+    requiredParams: ['kind', 'lookback', 'memoryKey'],
+    defaultableParams: ['pivotStrength', 'confirmationBars'],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: PREVIOUS_EXTREMA_OPEN_SLOTS.map(slot => ({ ...slot })),
+    contractSubstrate: previousExtremaSubstrate(),
+  }
+}
+
 const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
   executableTrigger('condition.expression', []),
@@ -250,6 +385,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableRisk('risk.max_drawdown_pct', ['valuePct']),
   executableRisk('risk.max_single_loss_pct', ['valuePct']),
   executableRisk('risk.cooldown_bars', ['bars']),
+  executableRisk('risk.time_stop_bars', ['maxBars', 'scope', 'effect'], timeStopBarsSubstrate()),
   executablePosition('position.fixed_pct', ['value']),
   executablePosition('position.fixed_notional', ['value', 'asset']),
   executablePosition('position.fixed_quantity', ['value', 'asset']),
@@ -262,7 +398,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
   unsupported('indicator.below', 'trigger', '指标静态低于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态低于条件当前公测暂未支持生成和回测。'),
-  unsupported('price.previous_extrema', 'trigger', '前高/前低突破', 'previous_extrema_public_beta_unsupported', '前高/前低结构识别当前公测暂未支持生成和回测。'),
+  previousExtremaTrigger(),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   unsupported('volume.threshold', 'trigger', '成交量阈值', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
@@ -272,7 +408,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
   unsupported('grid.dynamic_grid', 'trigger', '动态网格', 'dynamic_grid_public_beta_unsupported', '动态网格当前公测暂未支持生成和回测。'),
   unsupported('strategy.time_window', 'trigger', '交易时间窗口', 'time_window_public_beta_unsupported', '交易时间窗口当前公测暂未支持生成和回测。'),
-  unsupported('strategy.multi_timeframe', 'trigger', '多周期条件', 'multi_timeframe_public_beta_unsupported', '多周期条件当前公测暂未支持生成和回测。'),
+  multiTimeframeTrigger(),
   unsupported('indicator.divergence', 'trigger', '指标背离', 'divergence_public_beta_unsupported', '指标背离当前公测暂未支持生成和回测。'),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),
   unsupported('action.pause_trading', 'action', '暂停交易', 'pause_trading_public_beta_unsupported', '暂停交易动作当前公测暂未支持生成和回测。'),
@@ -333,7 +469,11 @@ function executableAction(key: string): SemanticSupportedAtomDefinition {
   }
 }
 
-function executableRisk(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
+function executableRisk(
+  key: string,
+  requiredParams: string[],
+  contractSubstrate: SemanticAtomContractSubstrate = baseExecutableSubstrate(),
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -342,7 +482,7 @@ function executableRisk(key: string, requiredParams: string[]): SemanticSupporte
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: baseExecutableSubstrate(),
+    contractSubstrate,
   }
 }
 
