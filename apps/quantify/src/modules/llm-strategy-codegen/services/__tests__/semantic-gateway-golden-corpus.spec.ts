@@ -1,3 +1,4 @@
+import type { CanonicalConditionNode, CanonicalRuleV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticExpression, SemanticSlotState, SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { NaturalLanguageGatewayService } from '../natural-language-gateway.service'
@@ -67,6 +68,15 @@ describe('semantic gateway golden corpus', () => {
       market: expect.any(Object),
       rules: expect.any(Array),
     }))
+    expect(canonicalSpec.rules.length).toBeGreaterThan(0)
+    expectCanonicalP0Rules(canonicalSpec.rules)
+
+    const canonicalJson = JSON.stringify(canonicalSpec)
+    expect(canonicalJson).toContain('OPEN_LONG')
+    expect(canonicalJson).toContain('OPEN_SHORT')
+    expect(canonicalJson).toContain('bollinger.lower_break')
+    expect(canonicalJson).toContain('bollinger.upper_break')
+    expect(canonicalJson).not.toMatch(/generic_boundary|indicator\.above|indicator\.below/u)
   })
 })
 
@@ -132,6 +142,91 @@ function expectConditionExpression(expression: SemanticExpression | undefined, o
 function emaClosePredicate(op: 'GT' | 'LT', period: number): object {
   return expect.objectContaining({
     kind: 'predicate',
+    op,
+    left: { kind: 'series', source: 'bar', field: 'close' },
+    right: { kind: 'indicator', name: 'ema', params: { period } },
+  })
+}
+
+function expectCanonicalP0Rules(rules: CanonicalRuleV2[]): void {
+  const longEntryRule = findCanonicalEntryRule(rules, 'long', 'OPEN_LONG')
+  const shortEntryRule = findCanonicalEntryRule(rules, 'short', 'OPEN_SHORT')
+
+  expect(longEntryRule).toBeDefined()
+  expect(shortEntryRule).toBeDefined()
+  expect(rules).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      phase: 'risk',
+      sideScope: 'both',
+      condition: expect.objectContaining({
+        kind: 'atom',
+        key: 'position_loss_pct',
+        op: 'GTE',
+        value: 0.05,
+      }),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ type: 'FORCE_EXIT' }),
+      ]),
+    }),
+  ]))
+
+  if (!longEntryRule || !shortEntryRule) {
+    throw new Error('Expected canonical long and short entry rules')
+  }
+
+  expect(conditionContainsAtom(longEntryRule.condition, 'bollinger.lower_break')).toBe(true)
+  expect(conditionContainsAtom(shortEntryRule.condition, 'bollinger.upper_break')).toBe(true)
+  expectCanonicalEmaGate(longEntryRule.condition, 'GT')
+  expectCanonicalEmaGate(shortEntryRule.condition, 'LT')
+}
+
+function findCanonicalEntryRule(
+  rules: CanonicalRuleV2[],
+  sideScope: 'long' | 'short',
+  actionType: 'OPEN_LONG' | 'OPEN_SHORT',
+): CanonicalRuleV2 | undefined {
+  return rules.find(rule =>
+    rule.phase === 'entry'
+    && rule.sideScope === sideScope
+    && rule.actions.some(action => action.type === actionType),
+  )
+}
+
+function conditionContainsAtom(condition: CanonicalConditionNode, key: string): boolean {
+  if (condition.kind === 'atom') {
+    return condition.key === key
+  }
+  if (condition.kind === 'expression') {
+    return false
+  }
+
+  return condition.children.some(child => conditionContainsAtom(child, key))
+}
+
+function expectCanonicalEmaGate(condition: CanonicalConditionNode, op: 'GT' | 'LT'): void {
+  expect(collectCanonicalExpressions(condition)).toEqual(expect.arrayContaining([
+    canonicalEmaCloseExpression(op, 20),
+    canonicalEmaCloseExpression(op, 60),
+    canonicalEmaCloseExpression(op, 144),
+  ]))
+}
+
+function collectCanonicalExpressions(
+  condition: CanonicalConditionNode,
+): Extract<CanonicalConditionNode, { kind: 'expression' }>[] {
+  if (condition.kind === 'expression') {
+    return [condition]
+  }
+  if (condition.kind === 'atom') {
+    return []
+  }
+
+  return condition.children.flatMap(child => collectCanonicalExpressions(child))
+}
+
+function canonicalEmaCloseExpression(op: 'GT' | 'LT', period: number): object {
+  return expect.objectContaining({
+    kind: 'expression',
     op,
     left: { kind: 'series', source: 'bar', field: 'close' },
     right: { kind: 'indicator', name: 'ema', params: { period } },
