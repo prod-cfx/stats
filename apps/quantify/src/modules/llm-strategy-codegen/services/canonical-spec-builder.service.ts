@@ -1543,7 +1543,9 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    const dcaSchedule = this.findPositionConstraint(position, 'position.dca_schedule')
+    const dcaSchedule = action.key === 'action.add_position' && action.params?.lifecycleKind === 'dca_schedule'
+      ? this.findPositionConstraint(position, 'position.dca_schedule')
+      : null
     if (dcaSchedule) {
       const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
       const capitalCap = this.readDcaCapitalCapValue(dcaSchedule.params.capitalCap)

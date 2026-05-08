@@ -173,6 +173,17 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
     ]))
   })
 
+  it('does not attach DCA metadata to non-DCA lifecycle exits', () => {
+    const { ir } = compileLifecycleMessage('每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止；RSI 高于 70 卖出减仓 30%。')
+
+    const reduceBlock = ir.ruleBlocks.find(block =>
+      block.actions.some(action => action.kind === 'REDUCE_LONG'),
+    )
+
+    expect(reduceBlock).toBeDefined()
+    expect(reduceBlock?.metadata?.dcaSchedule).toBeUndefined()
+  })
+
   it('compiles reverse_position into close and open actions with AST metadata preserved', () => {
     const { ir, ast } = compileLifecycleMessage('跌破 MA50 平多并反手做空，反手仓位沿用原仓位，允许同一根 K 线内反手。')
 
