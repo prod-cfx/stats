@@ -84,6 +84,7 @@ export function runDecisionPrograms(
   const declaredPartialTakeProfitKeys = collectPartialTakeProfitMemoryKeys(programs)
   resetPartialTakeProfitStateOnEntryEdge(ctx, compiledState, declaredPartialTakeProfitKeys)
   if (guardState.forceExit) {
+    clearAllPendingReverse(ctx)
     const currentQty = readCurrentQty(ctx)
     if (currentQty === 0) {
       return Object.freeze({
@@ -103,6 +104,7 @@ export function runDecisionPrograms(
   }
 
   if (guardState.strategyHalt) {
+    clearAllPendingReverse(ctx)
     return Object.freeze({
       action: 'NOOP',
       reason: 'compiled.strategy_halt',
@@ -500,6 +502,11 @@ function clearPendingReverse(
 ): void {
   const compiledState = ensureCompiledDecisionState(ctx)
   delete compiledState.pendingReverseByProgram[programId]
+}
+
+function clearAllPendingReverse(ctx: StrategyExecutionContextV1): void {
+  const compiledState = ensureCompiledDecisionState(ctx)
+  compiledState.pendingReverseByProgram = {}
 }
 
 function exceedsMaxExposurePct(

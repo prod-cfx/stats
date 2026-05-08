@@ -372,6 +372,57 @@ describe('atomic contract position lifecycle compiled runtime', () => {
     })
   })
 
+  it('clears pending reverse intent when strategy halt guard fires', () => {
+    const program = {
+      id: 'reverse-short',
+      phase: 'rebalance',
+      priority: 100,
+      when: 'ready',
+      metadata: {
+        reversePosition: {
+          fromSide: 'long',
+          toSide: 'short',
+          sameBarPolicy: 'next_bar_only',
+          sizingSource: 'current_position',
+        },
+      },
+      actions: [
+        { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        { kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+      ],
+    }
+    const ctx = {
+      position: { side: 'long', qty: 2 },
+      currentPrice: 100,
+      accountEquity: 1_000,
+    } as Ctx
+
+    expect(runLifecycleProgram(program, ctx)).toMatchObject({ action: 'CLOSE_LONG' })
+    expect(runDecisionPrograms(ctx, [program] as unknown as Programs, { ready: true }, {
+      ...baseGuard,
+      strategyHalt: true,
+    }, ['reverse-short'])).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.strategy_halt',
+    })
+
+    const followUpDecision = runDecisionPrograms(
+      {
+        ...ctx,
+        position: { side: 'flat', qty: 0 },
+      } as Ctx,
+      [program] as unknown as Programs,
+      { ready: false },
+      baseGuard,
+      ['reverse-short'],
+    )
+
+    expect(followUpDecision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.noop',
+    })
+  })
+
   it('blocks reverse when current signed quantity does not match fromSide', () => {
     const decision = runLifecycleProgram(
       {
