@@ -170,6 +170,46 @@ async function cancelLiveSmokeOrderWithConfirmation(
   )
 }
 
+async function resolveLiveSmokeOrderIdForCleanup(
+  tradingService: TradingService,
+  config: LiveOrderSmokeConfig,
+  orderId: string | undefined,
+  clientOrderId: string,
+): Promise<string | undefined> {
+  if (orderId) {
+    return orderId
+  }
+
+  let order: UnifiedOrder | null
+  try {
+    order = await tradingService.getOrderByClientOrderId(
+      config.userId,
+      'okx',
+      'spot',
+      clientOrderId,
+      config.symbol,
+      config.accountId,
+    )
+  }
+  catch (error) {
+    throw new Error(
+      `OKX live smoke order did not return orderId and cleanup lookup by clientOrderId ${clientOrderId} failed. `
+      + `Manually inspect and cancel account ${config.accountId} ${config.symbol}. `
+      + `Lookup error: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  if (!order) {
+    throw new Error(
+      `OKX live smoke order did not return orderId and no order was found by clientOrderId ${clientOrderId}. `
+      + `Manually inspect account ${config.accountId} ${config.symbol} before retrying.`,
+    )
+  }
+
+  assertOrderWasNotFilled(order, config)
+  return isCanceled(order) ? undefined : order.id
+}
+
 describe('OKX live order smoke (opt-in)', () => {
   let app: INestApplication | undefined
   let moduleFixture: TestingModule | undefined
@@ -230,7 +270,12 @@ describe('OKX live order smoke (opt-in)', () => {
     await assertLimitPriceIsNonMarketable(tradingService, config)
 
     const input = buildLimitBuyOrderInput(config)
+    if (!input.clientOrderId) {
+      throw new Error('OKX live smoke order input must include clientOrderId for cleanup')
+    }
+
     let orderId: string | undefined
+    let placeOrderError: unknown
 
     try {
       const order = await tradingService.placeOrder(
@@ -252,9 +297,21 @@ describe('OKX live order smoke (opt-in)', () => {
       expect(order.price).toBeLessThanOrEqual(config.limitPrice)
       expect(order.amount * config.limitPrice).toBeLessThanOrEqual(MAX_ALLOWED_NOTIONAL)
     }
+    catch (error) {
+      placeOrderError = error
+      throw error
+    }
     finally {
-      if (orderId) {
-        await cancelLiveSmokeOrderWithConfirmation(tradingService, config, orderId)
+      if (orderId || placeOrderError) {
+        const cleanupOrderId = await resolveLiveSmokeOrderIdForCleanup(
+          tradingService,
+          config,
+          orderId,
+          input.clientOrderId,
+        )
+        if (cleanupOrderId) {
+          await cancelLiveSmokeOrderWithConfirmation(tradingService, config, cleanupOrderId)
+        }
       }
     }
   })
