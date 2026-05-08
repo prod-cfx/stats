@@ -144,9 +144,10 @@ export class SemanticStateReducerService {
         break
       }
 
+      const paramKey = this.resolveActionParamKey(slot)
       action.params = {
         ...(action.params ?? {}),
-        [this.resolveActionParamKey(slot)]: answerText,
+        [paramKey]: answerText,
       }
       slot.value = answerText
       slot.status = 'locked'
@@ -156,6 +157,9 @@ export class SemanticStateReducerService {
         source: 'user_explicit',
       }
       action.status = (action.openSlots ?? []).every(item => item.status !== 'open') ? 'locked' : 'open'
+      if (action.key === 'action.add_position' && paramKey === 'constraint') {
+        this.applyAddPositionConstraintAnswer(nextState, answerText, input.messageIndex)
+      }
       break
     }
 
@@ -395,6 +399,80 @@ export class SemanticStateReducerService {
     }
 
     return answerText
+  }
+
+  private applyAddPositionConstraintAnswer(
+    state: SemanticState,
+    answerText: string,
+    messageIndex?: number,
+  ): void {
+    const parsed = this.parseAddPositionConstraintAnswer(answerText)
+    if (!parsed) {
+      return
+    }
+
+    if (!state.position) {
+      state.position = {
+        mode: 'constraint_only',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        constraints: [],
+      }
+    }
+
+    const constraints = state.position.constraints ?? []
+    const existing = constraints.find(constraint => constraint.key === parsed.key)
+    const evidence: SemanticEvidence = {
+      text: answerText,
+      messageIndex,
+      source: 'user_explicit',
+    }
+
+    if (existing) {
+      existing.params = { ...existing.params, ...parsed.params }
+      existing.status = existing.openSlots.every(slot => slot.status !== 'open') ? 'locked' : existing.status
+      existing.evidence = evidence
+    } else {
+      constraints.push({
+        id: parsed.key === 'position.pyramiding_limit'
+          ? 'clarified-position-pyramiding-limit'
+          : 'clarified-position-max-exposure',
+        key: parsed.key,
+        params: parsed.params,
+        status: 'locked',
+        source: 'user_explicit',
+        evidence,
+        openSlots: [],
+      })
+    }
+
+    state.position.constraints = constraints
+  }
+
+  private parseAddPositionConstraintAnswer(
+    answerText: string,
+  ): { key: 'position.pyramiding_limit', params: { maxLayers: number } } | { key: 'position.max_exposure_pct', params: { maxExposurePct: number } } | null {
+    const layerMatch = answerText.match(/(?:最多|不超过|上限|限制)?\s*(\d+)\s*(?:次|层|笔)/u)
+    if (layerMatch?.[1]) {
+      const maxLayers = Number(layerMatch[1])
+      if (Number.isInteger(maxLayers) && maxLayers > 0) {
+        return { key: 'position.pyramiding_limit', params: { maxLayers } }
+      }
+    }
+
+    const exposureMatch = answerText.match(/(?:敞口|仓位|总仓位|总敞口|exposure)[^\d]*(\d+(?:\.\d+)?)\s*%/iu)
+      ?? answerText.match(/(\d+(?:\.\d+)?)\s*%[^\n]*(?:敞口|仓位|总仓位|总敞口|exposure)/iu)
+    if (exposureMatch?.[1]) {
+      const maxExposurePct = Number(exposureMatch[1])
+      if (Number.isFinite(maxExposurePct) && maxExposurePct > 0) {
+        return { key: 'position.max_exposure_pct', params: { maxExposurePct } }
+      }
+    }
+
+    return null
   }
 
   private parsePositiveIntegerAnswer(answerText: string): number | null {

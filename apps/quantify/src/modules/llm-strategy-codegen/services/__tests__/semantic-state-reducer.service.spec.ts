@@ -105,6 +105,62 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('turns add-position constraint clarification into a position lifecycle constraint', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [{
+          id: 'action-add-position',
+          key: 'action.add_position',
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'action.add_position.constraint',
+            fieldPath: 'actions[action.add_position].params.constraint',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认加仓约束。',
+            affectsExecution: true,
+          }],
+        }],
+        risk: [],
+        position: {
+          mode: 'constraint_only',
+          value: 0,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          constraints: [],
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-08T10:00:00.000Z',
+      },
+      targetSlotKey: 'action.add_position.constraint',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'action.add_position.constraint',
+        fieldPath: 'actions[action.add_position].params.constraint',
+      }),
+      answer: '最多加仓 3 次',
+      messageIndex: 9,
+    })
+
+    expect(next.actions[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({ constraint: '最多加仓 3 次' }),
+    }))
+    expect(next.position?.constraints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'position.pyramiding_limit',
+        status: 'locked',
+        params: { maxLayers: 3 },
+      }),
+    ]))
+  })
+
   it.each([
     {
       slotKey: 'position.dca_schedule.max_count',
