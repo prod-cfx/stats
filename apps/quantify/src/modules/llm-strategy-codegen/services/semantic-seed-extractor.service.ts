@@ -16,14 +16,17 @@ import type {
 } from '../types/semantic-state'
 import type { MarketInstrumentSymbolResolution } from '../types/market-instrument-symbol'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { NaturalLanguageGatewayService } from './natural-language-gateway.service'
 import { PositionSizingContractService } from './position-sizing-contract.service'
 import { SemanticEventFrameParserService } from './semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './semantic-event-frame-projector.service'
+import { SemanticFrameNormalizerService } from './semantic-frame-normalizer.service'
 import { buildTriggerCombinationContract } from './semantic-state-normalization'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
 type SeedRisk = NonNullable<CodegenSemanticPatch['risk']>[number]
+type SeedContextSlots = NonNullable<CodegenSemanticPatch['contextSlots']>
 type SeedPositionConstraint = NonNullable<NonNullable<CodegenSemanticPatch['position']>['constraints']>[number]
 type QuoteAsset = 'USDT' | 'USDC' | 'USD'
 type FixedGridRange = {
@@ -66,6 +69,8 @@ export class SemanticSeedExtractorService {
     private readonly eventFrameProjector: SemanticEventFrameProjectorService = new SemanticEventFrameProjectorService(),
     @Optional()
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
+    private readonly naturalLanguageGateway: NaturalLanguageGatewayService = new NaturalLanguageGatewayService(),
+    private readonly frameNormalizer: SemanticFrameNormalizerService = new SemanticFrameNormalizerService(),
   ) {}
 
   extract(message?: string): CodegenSemanticPatch {
@@ -77,27 +82,36 @@ export class SemanticSeedExtractorService {
     const lifecycleActions = this.extractPositionLifecycleActions(text)
     const lifecycleConstraints = this.extractPositionLifecycleConstraints(text) ?? []
     const hasPositionLifecycleSemantics = lifecycleActions.length > 0 || lifecycleConstraints.length > 0
-    const contextSlots = hasPositionLifecycleSemantics
+    const legacyContextSlots = hasPositionLifecycleSemantics
       ? this.withInheritedLifecycleContextSlots(this.extractContextSlots(text))
       : this.extractContextSlots(text)
+    const gatewayPatch = this.frameNormalizer.normalize(this.naturalLanguageGateway.parse(text))
+    const shouldMergeGatewayExecutables = this.shouldMergeGatewayExecutables(gatewayPatch)
+    const contextSlots = this.mergeContextSlots(gatewayPatch.contextSlots ?? {}, legacyContextSlots, text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
     const triggers = this.atomizeTriggers(this.withRecognizedTriggerCombinationContracts(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
       this.removeStaticIndicatorTriggersCoveredBySequences(
         this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
-          eventFramePatch.triggers ?? [],
-          this.extractTriggers(text, aliasContext),
+          shouldMergeGatewayExecutables ? (gatewayPatch.triggers ?? []) : [],
+          this.mergeSeedTriggers(eventFramePatch.triggers ?? [], this.extractTriggers(text, aliasContext)),
         ))),
       ),
     ))))
     const actions = this.atomizeActions(this.mergeSeedActions(
+      shouldMergeGatewayExecutables ? (gatewayPatch.actions ?? []) : [],
       this.mergeSeedActions(
-        eventFramePatch.actions ?? [],
-        this.extractActions(text, triggers),
+        this.mergeSeedActions(
+          eventFramePatch.actions ?? [],
+          this.extractActions(text, triggers),
+        ),
+        lifecycleActions,
       ),
-      lifecycleActions,
     ))
-    const risk = this.atomizeRisk(this.extractRisk(text))
+    const risk = this.atomizeRisk(this.mergeSeedRisk(
+      shouldMergeGatewayExecutables ? (gatewayPatch.risk ?? []) : [],
+      this.extractRisk(text),
+    ))
     const position = this.atomizePosition(this.withPositionLifecycleConstraints(
       this.extractPosition(text, triggers),
       lifecycleConstraints,
@@ -126,6 +140,62 @@ export class SemanticSeedExtractorService {
     return patch
   }
 
+  private shouldMergeGatewayExecutables(gatewayPatch: CodegenSemanticPatch): boolean {
+    return gatewayPatch.triggers?.some(trigger => (
+      trigger.key === 'condition.expression'
+      && trigger.phase === 'gate'
+      && typeof trigger.params?.displayGroupId === 'string'
+    )) ?? false
+  }
+
+  private mergeContextSlots(
+    gatewayContextSlots: SeedContextSlots,
+    legacyContextSlots: SeedContextSlots,
+    text: string,
+  ): SeedContextSlots {
+    const merged: SeedContextSlots = {
+      ...legacyContextSlots,
+      ...gatewayContextSlots,
+    }
+
+    if (
+      this.isPlainObject(legacyContextSlots.symbol)
+      && typeof gatewayContextSlots.symbol === 'string'
+    ) {
+      merged.symbol = legacyContextSlots.symbol
+    }
+
+    if (!this.shouldUseGatewayTimeframe(gatewayContextSlots, legacyContextSlots, text)) {
+      if (legacyContextSlots.timeframe !== undefined) {
+        merged.timeframe = legacyContextSlots.timeframe
+      }
+      else {
+        delete merged.timeframe
+      }
+    }
+
+    return merged
+  }
+
+  private shouldUseGatewayTimeframe(
+    gatewayContextSlots: SeedContextSlots,
+    legacyContextSlots: SeedContextSlots,
+    text: string,
+  ): boolean {
+    if (gatewayContextSlots.timeframe === undefined) {
+      return false
+    }
+
+    if (
+      legacyContextSlots.timeframe !== undefined
+      && legacyContextSlots.timeframe !== gatewayContextSlots.timeframe
+    ) {
+      return false
+    }
+
+    return !this.hasMultiTimeframeMovingAveragePredicateScope(text)
+  }
+
   private mergeSeedTriggers(
     primaryTriggers: readonly SeedTrigger[],
     secondaryTriggers: readonly SeedTrigger[],
@@ -135,6 +205,9 @@ export class SemanticSeedExtractorService {
     const looseIndicatorIndex = new Map<string, number>()
 
     for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
+      if (this.isGenericBoundaryFallbackCoveredByMergedTrigger(trigger, merged)) continue
+      if (this.isStaticIndicatorTriggerCoveredByMergedGate(trigger, merged)) continue
+
       const signature = this.buildTriggerMergeSignature(trigger)
       if (seen.has(signature)) continue
 
@@ -161,6 +234,87 @@ export class SemanticSeedExtractorService {
     }
 
     return merged
+  }
+
+  private isGenericBoundaryFallbackCoveredByMergedTrigger(
+    trigger: SeedTrigger,
+    merged: readonly SeedTrigger[],
+  ): boolean {
+    if (
+      trigger.key !== 'price.detect.indicator_boundary'
+      || !this.isPlainObject(trigger.params?.indicator)
+      || trigger.params.indicator.name !== 'generic_boundary'
+      || typeof trigger.params.boundaryRole !== 'string'
+    ) {
+      return false
+    }
+
+    return merged.some(candidate => (
+      candidate.key === trigger.key
+      && candidate.phase === trigger.phase
+      && candidate.sideScope === trigger.sideScope
+      && candidate.params?.boundaryRole === trigger.params?.boundaryRole
+      && this.isPlainObject(candidate.params?.indicator)
+      && candidate.params.indicator.name !== 'generic_boundary'
+    ))
+  }
+
+  private isStaticIndicatorTriggerCoveredByMergedGate(
+    trigger: SeedTrigger,
+    merged: readonly SeedTrigger[],
+  ): boolean {
+    if (
+      trigger.key !== 'indicator.above'
+      && trigger.key !== 'indicator.below'
+    ) {
+      return false
+    }
+
+    const indicator = typeof trigger.params?.indicator === 'string'
+      ? trigger.params.indicator.toLowerCase()
+      : null
+    const period = typeof trigger.params?.['reference.period'] === 'number' && Number.isFinite(trigger.params['reference.period'])
+      ? trigger.params['reference.period']
+      : null
+    if (!indicator || period === null) {
+      return false
+    }
+
+    return merged.some(candidate => (
+      candidate.key === 'condition.expression'
+      && candidate.phase === 'gate'
+      && candidate.sideScope === trigger.sideScope
+      && typeof candidate.params?.displayGroupId === 'string'
+      && this.expressionCoversIndicatorCompare(candidate.params.expression, indicator, period)
+    ))
+  }
+
+  private expressionCoversIndicatorCompare(
+    expression: unknown,
+    indicator: string,
+    period: number,
+  ): boolean {
+    if (!this.isPlainObject(expression)) {
+      return false
+    }
+
+    if (expression.kind === 'AND' && Array.isArray(expression.children)) {
+      return expression.children.some(child => this.expressionCoversIndicatorCompare(child, indicator, period))
+    }
+
+    if (expression.kind !== 'predicate' || !this.isPlainObject(expression.right)) {
+      return false
+    }
+
+    const rightName = typeof expression.right.name === 'string'
+      ? expression.right.name.toLowerCase()
+      : null
+    const normalizedIndicator = indicator === 'ma' ? 'sma' : indicator
+    if (rightName !== normalizedIndicator || !this.isPlainObject(expression.right.params)) {
+      return false
+    }
+
+    return expression.right.params.period === period
   }
 
   private buildLooseIndicatorCrossMergeSignature(trigger: SeedTrigger): string | null {
@@ -246,6 +400,26 @@ export class SemanticSeedExtractorService {
       if (seen.has(signature)) continue
       seen.add(signature)
       merged.push(action)
+    }
+
+    return merged
+  }
+
+  private mergeSeedRisk(
+    primaryRisk: readonly SeedRisk[],
+    secondaryRisk: readonly SeedRisk[],
+  ): SeedRisk[] {
+    const merged: SeedRisk[] = []
+    const seen = new Set<string>()
+
+    for (const risk of [...primaryRisk, ...secondaryRisk]) {
+      const signature = JSON.stringify({
+        key: risk.key,
+        params: this.stableValue(risk.params ?? {}),
+      })
+      if (seen.has(signature)) continue
+      seen.add(signature)
+      merged.push(risk)
     }
 
     return merged
