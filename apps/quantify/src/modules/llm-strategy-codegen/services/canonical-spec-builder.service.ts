@@ -1344,7 +1344,9 @@ export class CanonicalSpecBuilderService {
     }
 
     if (group.phase === 'exit') {
-      return lockedActions.find(action => action.key === 'action.reverse_position') ?? null
+      return lockedActions.find(action => action.key === 'action.reduce_position')
+        ?? lockedActions.find(action => action.key === 'action.reverse_position')
+        ?? null
     }
 
     return null

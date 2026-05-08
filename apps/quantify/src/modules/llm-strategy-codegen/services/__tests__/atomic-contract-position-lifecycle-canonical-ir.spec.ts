@@ -72,6 +72,23 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
     ]))
   })
 
+  it('binds exit trigger groups to reduce_position before generic close actions', () => {
+    const { ir } = compileLifecycleMessage('RSI 高于 70 卖出减仓 30%。')
+
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [
+          {
+            kind: 'REDUCE_LONG',
+            quantity: { mode: 'position_pct', value: 30 },
+          },
+        ],
+      }),
+    ]))
+    expect(ir.ruleBlocks.some(block => block.actions.some(action => action.kind === 'CLOSE_LONG'))).toBe(false)
+  })
+
   it('compiles add_position constraints into pyramiding portfolio and runtime state', () => {
     const { ir } = compileLifecycleMessage('BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次。')
 
