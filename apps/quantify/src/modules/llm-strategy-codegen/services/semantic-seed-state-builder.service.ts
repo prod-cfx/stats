@@ -264,6 +264,11 @@ export class SemanticSeedStateBuilderService {
       return null
     }
 
+    const mainMode = this.readTrimmedString(update.mode)
+    if (this.isPositionConstraintKey(mainMode)) {
+      return this.toPositionStateWithConstraintMode(update, mainMode)
+    }
+
     const sizing = this.readPositionSizing(update.sizing)
     if (
       typeof update.mode !== 'string'
@@ -316,14 +321,50 @@ export class SemanticSeedStateBuilderService {
     }
   }
 
+  private toPositionStateWithConstraintMode(
+    update: SemanticPatchRecord,
+    key: SemanticPositionConstraintState['key'],
+  ): SemanticState['position'] {
+    const explicitConstraint = this.toPositionConstraintState({
+      id: this.readTrimmedString(update.id) ?? `planner-${this.slugifyContractId(key)}`,
+      key,
+      params: this.readParams(update.params),
+      status: update.status,
+      source: update.source,
+      evidence: update.evidence,
+      openSlots: update.openSlots,
+      contracts: update.contracts,
+      supersedes: update.supersedes,
+    }, 0)
+    const nestedConstraints = Array.isArray(update.constraints)
+      ? update.constraints
+          .map((item, index) => this.toPositionConstraintState(item, index + 1))
+          .filter((item): item is SemanticPositionConstraintState => item !== null)
+      : []
+    const constraints = [
+      ...(explicitConstraint ? [explicitConstraint] : []),
+      ...nestedConstraints,
+    ]
+    const positionMode = typeof update.positionMode === 'string'
+      ? this.normalizePositionSideMode(update.positionMode) ?? update.positionMode
+      : 'long_only'
+
+    return {
+      mode: 'fixed_ratio',
+      value: 0,
+      sizing: null,
+      positionMode,
+      status: 'locked',
+      source: this.readSource(update.source),
+      openSlots: [],
+      ...(constraints.length > 0 ? { constraints } : {}),
+    }
+  }
+
   private toPositionConstraintState(update: unknown, index: number): SemanticPositionConstraintState | null {
     if (!this.isRecord(update)) return null
     const key = this.readTrimmedString(update.key)
-    if (
-      key !== 'position.pyramiding_limit'
-      && key !== 'position.max_exposure_pct'
-      && key !== 'position.dca_schedule'
-    ) {
+    if (!this.isPositionConstraintKey(key)) {
       return null
     }
 
@@ -404,6 +445,12 @@ export class SemanticSeedStateBuilderService {
       return 'long_short'
     }
     return null
+  }
+
+  private isPositionConstraintKey(value: string | null): value is SemanticPositionConstraintState['key'] {
+    return value === 'position.pyramiding_limit'
+      || value === 'position.max_exposure_pct'
+      || value === 'position.dca_schedule'
   }
 
   private isSupportedPositionSideMode(positionMode: string): boolean {

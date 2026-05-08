@@ -105,6 +105,139 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('writes position constraint params from clarification answers without mutating sizing', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          constraints: [{
+            id: 'dca',
+            key: 'position.dca_schedule',
+            params: { maxCount: 4 },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [{
+              slotKey: 'position.dca_schedule.exit_rule',
+              fieldPath: 'position.constraints[position.dca_schedule].params.exitRule',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '请确认 DCA 停止或退出规则。',
+              affectsExecution: true,
+            }],
+          }],
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-08T10:00:00.000Z',
+      },
+      targetSlotKey: 'position.dca_schedule.exit_rule',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'position.dca_schedule.exit_rule',
+        fieldPath: 'position.constraints[position.dca_schedule].params.exitRule',
+      }),
+      answer: '跌破前低停止补仓',
+      messageIndex: 8,
+    })
+
+    expect(next.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+    }))
+    expect(next.position?.constraints?.[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining({
+        maxCount: 4,
+        exitRule: '跌破前低停止补仓',
+      }),
+      openSlots: [expect.objectContaining({
+        slotKey: 'position.dca_schedule.exit_rule',
+        status: 'locked',
+        value: '跌破前低停止补仓',
+      })],
+    }))
+  })
+
+  it('answers position constraint contract requirement slots', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          constraints: [{
+            id: 'dca',
+            key: 'position.dca_schedule',
+            params: {},
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [{
+              slotKey: 'contract.requirement.guard.define.dca_exit_rule',
+              fieldPath: 'position.constraints[dca].contracts[dca-contract].requires.guard.define.dca_exit_rule',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '请补充 guard define dca_exit_rule 的执行语义。',
+              affectsExecution: true,
+            }],
+            contracts: [{
+              id: 'dca-contract',
+              kind: 'position',
+              capabilities: [],
+              requires: [{ domain: 'guard', verb: 'define', object: 'dca_exit_rule' }],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            }],
+          }],
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-08T10:00:00.000Z',
+      },
+      targetSlotKey: 'contract.requirement.guard.define.dca_exit_rule',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'contract.requirement.guard.define.dca_exit_rule',
+        fieldPath: 'position.constraints[dca].contracts[dca-contract].requires.guard.define.dca_exit_rule',
+      }),
+      answer: '跌破前低停止补仓',
+      messageIndex: 9,
+    })
+
+    expect(next.position?.constraints?.[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [expect.objectContaining({ status: 'locked' })],
+      contracts: [expect.objectContaining({
+        capabilities: [expect.objectContaining({
+          domain: 'guard',
+          verb: 'define',
+          object: 'dca_exit_rule',
+        })],
+      })],
+    }))
+  })
+
   it('turns budget contract requirement clarification answers into structured owner capabilities', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

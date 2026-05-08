@@ -912,5 +912,15 @@ function toPositionAtomKey(mode: string): string {
     return 'position.fixed_quantity'
   }
 
+  if (isPositionLifecycleConstraintKey(mode)) {
+    return `position.main_mode.${mode}`
+  }
+
   return mode
+}
+
+function isPositionLifecycleConstraintKey(mode: string): boolean {
+  return mode === 'position.pyramiding_limit'
+    || mode === 'position.max_exposure_pct'
+    || mode === 'position.dca_schedule'
 }

@@ -53,12 +53,38 @@ function maxExposurePctSubstrate(): SemanticAtomContractSubstrate {
   }
 }
 
-const DCA_SCHEDULE_EXIT_RULE_OPEN_SLOT: SemanticAtomOpenSlotSpec = {
-  slotKey: 'position.dca_schedule.exit_rule',
-  fieldPath: 'position.constraints.params.exitRule',
-  priority: 'risk',
-  questionHint: '请确认 DCA 停止或退出规则，例如跌破前低停止 / 达到止损退出 / 反向信号退出。',
-}
+const DCA_SCHEDULE_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'position.dca_schedule.max_count',
+    fieldPath: 'position.constraints[position.dca_schedule].params.maxCount',
+    priority: 'risk',
+    questionHint: '请确认 DCA 最多执行几次。',
+  },
+  {
+    slotKey: 'position.dca_schedule.capital_cap',
+    fieldPath: 'position.constraints[position.dca_schedule].params.capitalCap',
+    priority: 'risk',
+    questionHint: '请确认 DCA 总资金上限是多少。',
+  },
+  {
+    slotKey: 'position.dca_schedule.per_order_sizing',
+    fieldPath: 'position.constraints[position.dca_schedule].params.perOrderSizing',
+    priority: 'risk',
+    questionHint: '请确认每次 DCA 补仓多少。',
+  },
+  {
+    slotKey: 'position.dca_schedule.trigger_mode',
+    fieldPath: 'position.constraints[position.dca_schedule].params.triggerMode',
+    priority: 'behavior',
+    questionHint: '请确认 DCA 触发方式，例如价格间隔、时间间隔或信号触发。',
+  },
+  {
+    slotKey: 'position.dca_schedule.exit_rule',
+    fieldPath: 'position.constraints[position.dca_schedule].params.exitRule',
+    priority: 'risk',
+    questionHint: '请确认 DCA 停止或退出规则，例如跌破前低停止 / 达到止损退出 / 反向信号退出。',
+  },
+]
 
 function dcaScheduleSubstrate(openSlots: SemanticAtomOpenSlotSpec[] = []): SemanticAtomContractSubstrate {
   return {
@@ -230,8 +256,8 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executablePosition('position.pyramiding_limit', [], pyramidingLimitSubstrate()),
   executablePosition('position.max_exposure_pct', [], maxExposurePctSubstrate()),
   supportedRequiresSlotPosition('position.dca_schedule', ['maxCount', 'capitalCap', 'perOrderSizing', 'triggerMode', 'exitRule'], [
-    DCA_SCHEDULE_EXIT_RULE_OPEN_SLOT,
-  ], dcaScheduleSubstrate([DCA_SCHEDULE_EXIT_RULE_OPEN_SLOT])),
+    ...DCA_SCHEDULE_OPEN_SLOTS,
+  ], dcaScheduleSubstrate(DCA_SCHEDULE_OPEN_SLOTS)),
   unsupported('market.trend', 'trigger', '市场趋势旧别名', 'market_state_alias_public_beta_unsupported', 'market.trend 是旧状态别名，当前投影仅支持 trend.direction。'),
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),

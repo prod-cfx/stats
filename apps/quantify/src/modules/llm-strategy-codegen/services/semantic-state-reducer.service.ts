@@ -7,6 +7,7 @@ import type {
   SemanticCapabilityShape,
   SemanticEvidence,
   SemanticExpression,
+  SemanticPositionConstraintState,
   SemanticPositionSizingContract,
   SemanticSlotState,
   SemanticState,
@@ -61,6 +62,9 @@ export class SemanticStateReducerService {
         ? {
             ...input.currentState.position,
             openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
+            ...(input.currentState.position.constraints
+              ? { constraints: structuredClone(input.currentState.position.constraints) }
+              : {}),
           }
         : null,
       contextSlots: {
@@ -189,6 +193,41 @@ export class SemanticStateReducerService {
       }
     }
 
+    for (const constraint of nextState.position?.constraints ?? []) {
+      const slot = constraint.openSlots.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+      })
+      if (!slot || slot.status !== 'open') continue
+
+      if (this.isContractRequirementSlot(slot)) {
+        if (this.applyContractRequirementAnswer(constraint, slot, answerText, input.messageIndex)) {
+          constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+        }
+        break
+      }
+
+      const paramKey = this.resolvePositionConstraintParamKey(slot)
+      if (!paramKey) {
+        break
+      }
+
+      constraint.params[paramKey] = answerText
+      slot.value = answerText
+      slot.status = 'locked'
+      slot.evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit',
+      }
+      constraint.status = constraint.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
+    }
+
     let riskChanged = false
     for (const risk of nextState.risk) {
       const slot = risk.openSlots.find((item) => {
@@ -312,6 +351,28 @@ export class SemanticStateReducerService {
     return slotKeyPath?.[1] ?? null
   }
 
+  private resolvePositionConstraintParamKey(slot: SemanticSlotState): keyof SemanticPositionConstraintState['params'] | null {
+    const paramsPath = slot.fieldPath.match(/(?:^|\.)params\.([A-Za-z0-9_]+)$/u)
+    if (paramsPath?.[1]) {
+      return paramsPath[1]
+    }
+
+    if (slot.slotKey === 'position.dca_schedule.exit_rule') {
+      return 'exitRule'
+    }
+
+    const slotKeyPath = slot.slotKey.match(/\.([A-Za-z0-9_]+)$/u)
+    if (!slotKeyPath?.[1]) {
+      return null
+    }
+
+    return this.toCamelCaseParamKey(slotKeyPath[1])
+  }
+
+  private toCamelCaseParamKey(value: string): string {
+    return value.replace(/_([a-z0-9])/giu, (_, item: string) => item.toUpperCase())
+  }
+
   private applyContractRequirementAnswer(
     owner: { contracts?: SemanticAtomContract[] },
     slot: SemanticSlotState,
@@ -409,6 +470,10 @@ export class SemanticStateReducerService {
 
     if (domain === 'guard' && verb === 'enforce') {
       return this.parseGuardEnforcementCapabilityShape(answerText, slot)
+    }
+
+    if (domain === 'guard' && verb === 'define' && object === 'dca_exit_rule') {
+      return { rule: answerText }
     }
 
     return null
