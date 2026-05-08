@@ -549,6 +549,9 @@ function exceedsMaxExposurePct(
   const nextExposurePct = nextAction
     ? quantityToExposurePct(nextAction.quantity, ctx, equity)
     : 0
+  if (nextExposurePct === null) {
+    return true
+  }
 
   return currentExposurePct + nextExposurePct > maxExposurePct
 }
@@ -630,10 +633,10 @@ function quantityToExposurePct(
   quantity: DecisionProgramNode['actions'][number]['quantity'],
   ctx: StrategyExecutionContextV1,
   equity: number,
-): number {
+): number | null {
   const quoteValue = quantityToQuoteValue(quantity, ctx)
   if (quoteValue === null) {
-    return 0
+    return null
   }
 
   return (quoteValue / equity) * 100

@@ -287,6 +287,39 @@ describe('atomic contract position lifecycle compiled runtime', () => {
     })
   })
 
+  it('blocks add_position max exposure when next exposure cannot be estimated', () => {
+    const decision = runLifecycleProgram(
+      {
+        id: 'add-long',
+        phase: 'entry',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          addPosition: {
+            maxLayers: 3,
+            maxExposurePct: 50,
+            stateKey: 'pyramiding_layer_count',
+          },
+        },
+        actions: [
+          { kind: 'ADD_LONG', quantity: { mode: 'fixed_base', value: 2 } },
+        ],
+      },
+      {
+        position: { side: 'long', qty: 1, exposurePct: 20 },
+        accountEquity: 1_000,
+        semanticRuntimeState: {
+          pyramiding_layer_count: { value: 1 },
+        },
+      } as Ctx,
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.add-long.max_exposure_pct',
+    })
+  })
+
   it('closes the current long before opening a reverse short on the next bar', () => {
     const program = {
       id: 'reverse-short',
