@@ -29,6 +29,7 @@ export interface PositionView {
   realizedPnl: number
   unrealizedPnl: number
   barsHeld?: number
+  entryTimeframe?: Timeframe
   highestPriceSinceEntry?: number
   lowestPriceSinceEntry?: number
 }

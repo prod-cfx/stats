@@ -131,6 +131,7 @@ interface PublishedRuntimePositionContext {
   qty: number
   avgEntryPrice?: number
   entryPrice?: number
+  entryTimeframe?: string
   positionSide?: string
 }
 
@@ -1604,6 +1605,7 @@ export class SignalGeneratorService {
         runtimeSignalOutcome.payload,
         {
           ...runtimeProvenance,
+          timeframe,
           ...(marketType ? { marketType } : {}),
           ...(activeRuntimeState
             ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
@@ -1917,6 +1919,7 @@ export class SignalGeneratorService {
     return {
       qty: signedQty,
       ...(avgEntryPrice !== null ? { avgEntryPrice, entryPrice: avgEntryPrice } : {}),
+      ...(position.entryTimeframe ? { entryTimeframe: position.entryTimeframe } : {}),
       positionSide: position.positionSide,
     }
   }

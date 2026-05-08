@@ -345,6 +345,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const positionSide = this.mapPositionSide(direction)
       if (!tradeSide || !positionSide) return 'skipped'
       const runtimeProvenance = this.readSignalRuntimeProvenance(resolvedSignal)
+      const entryTimeframe = this.readSignalEntryTimeframe(resolvedSignal)
       const expectedMarketType = this.readExpectedRuntimeMarketType(resolvedSignal)
 
       const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide)
@@ -648,6 +649,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
               quantity: executedQuantity.toString(),
               fee: executedFee > 0 ? executedFee.toString() : '0',
               feeCurrency,
+              entryTimeframe,
               orderId: order.id,
               externalTradeId: order.id,
               provider: effectiveExchangeId,
@@ -1585,5 +1587,26 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     const raw = runtimeProvenance?.marketType
     if (raw === 'spot' || raw === 'perp') return raw
     return null
+  }
+
+  private readSignalEntryTimeframe(
+    signal: { metadata?: Prisma.JsonValue | null; marketContext?: Prisma.JsonValue | null },
+  ): string | undefined {
+    const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
+    const fromRuntime = this.readTrimmedString(runtimeProvenance?.timeframe)
+    if (fromRuntime) return fromRuntime
+
+    const marketContext = signal.marketContext
+    if (!marketContext || Array.isArray(marketContext) || typeof marketContext !== 'object') {
+      return undefined
+    }
+
+    return this.readTrimmedString((marketContext as Prisma.JsonObject).timeframe) ?? undefined
+  }
+
+  private readTrimmedString(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
   }
 }

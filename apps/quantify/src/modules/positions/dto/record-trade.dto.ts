@@ -63,6 +63,11 @@ export class RecordTradeDto {
   @Matches(POSITIVE_DECIMAL_PATTERN, { message: 'leverage 必须是大于 0 的数字字符串' })
   leverage?: string
 
+  @ApiPropertyOptional({ description: '开仓时使用的策略主周期', example: '15m' })
+  @IsOptional()
+  @IsString()
+  entryTimeframe?: string
+
   @ApiPropertyOptional({ description: '交易所订单 ID' })
   @IsOptional()
   @IsString()
@@ -89,5 +94,4 @@ export class RecordTradeDto {
   @IsObject()
   metadata?: Record<string, unknown>
 }
-
 

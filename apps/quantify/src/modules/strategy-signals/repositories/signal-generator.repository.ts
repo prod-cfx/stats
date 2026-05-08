@@ -255,6 +255,7 @@ export class SignalGeneratorRepository {
         positionSide: true,
         quantity: true,
         avgEntryPrice: true,
+        entryTimeframe: true,
       },
     })
   }

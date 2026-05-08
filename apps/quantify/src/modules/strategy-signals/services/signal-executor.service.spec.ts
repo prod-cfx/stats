@@ -2132,6 +2132,7 @@ describe('signalExecutorService', () => {
           runtimeProvenance: {
             publishedSnapshotId: 'snapshot-1',
             snapshotHash: 'snapshot-hash-1',
+            timeframe: '15m',
           },
         },
       },
@@ -2234,6 +2235,7 @@ describe('signalExecutorService', () => {
           runtimeProvenance: {
             publishedSnapshotId: 'snapshot-1',
             snapshotHash: 'snapshot-hash-1',
+            timeframe: '15m',
           },
         },
       },
@@ -2242,6 +2244,7 @@ describe('signalExecutorService', () => {
     )
 
     expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      entryTimeframe: '15m',
       metadata: expect.objectContaining({
         signalId: 'sig-1',
         executionId: 'exec-1',

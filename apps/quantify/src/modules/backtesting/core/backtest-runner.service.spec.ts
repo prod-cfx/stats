@@ -626,7 +626,7 @@ describe('backtestRunnerService', () => {
 
   it('injects backtest position runtime state for held bars and trailing anchors', async () => {
     const runner = createRunner()
-    const seen: Array<{ ts: number; barsHeld?: number; highest?: number; lowest?: number }> = []
+    const seen: Array<{ ts: number; barsHeld?: number; entryTimeframe?: string; highest?: number; lowest?: number }> = []
 
     await runner.run({
       symbols: ['BTCUSDT'],
@@ -645,6 +645,7 @@ describe('backtestRunnerService', () => {
           seen.push({
             ts: ctx.ts,
             barsHeld: ctx.position?.barsHeld,
+            entryTimeframe: ctx.position?.entryTimeframe,
             highest: ctx.position?.highestPriceSinceEntry,
             lowest: ctx.position?.lowestPriceSinceEntry,
           })
@@ -661,9 +662,9 @@ describe('backtestRunnerService', () => {
     })
 
     expect(seen).toEqual([
-      { ts: 2, barsHeld: 1, highest: 110, lowest: 98 },
-      { ts: 3, barsHeld: 2, highest: 112, lowest: 97 },
-      { ts: 4, barsHeld: 3, highest: 112, lowest: 96 },
+      { ts: 2, barsHeld: 1, entryTimeframe: '5m', highest: 110, lowest: 98 },
+      { ts: 3, barsHeld: 2, entryTimeframe: '5m', highest: 112, lowest: 97 },
+      { ts: 4, barsHeld: 3, entryTimeframe: '5m', highest: 112, lowest: 96 },
     ])
   })
 
