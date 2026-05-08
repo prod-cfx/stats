@@ -78,17 +78,17 @@ export class CanonicalSpecBuilderService {
     private readonly triggerCombinationContracts: SemanticTriggerCombinationContractService = new SemanticTriggerCombinationContractService(),
   ) {}
 
-  build(checklist: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
-    if (this.isSemanticState(checklist.semanticState)) {
-      return this.buildFromSemanticState(checklist.semanticState, checklist.market)
+  buildFromLegacyChecklistForTestsOnly(legacySnapshot: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
+    if (this.isSemanticState(legacySnapshot.semanticState)) {
+      return this.buildFromSemanticState(legacySnapshot.semanticState, legacySnapshot.market)
     }
 
-    const normalizedLogicSnapshot = checklist as StrategyLogicSnapshotInput & Parameters<typeof buildStrategyRuleDrafts>[0]
+    const normalizedLogicSnapshot = legacySnapshot as StrategyLogicSnapshotInput & Parameters<typeof buildStrategyRuleDrafts>[0]
     const ruleDrafts = buildStrategyRuleDrafts(normalizedLogicSnapshot)
-    const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
-    const exitRules = Array.isArray(checklist.exitRules) ? checklist.exitRules : []
-    const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)
-      ? checklist.riskRules as Record<string, unknown>
+    const entryRules = Array.isArray(legacySnapshot.entryRules) ? legacySnapshot.entryRules : []
+    const exitRules = Array.isArray(legacySnapshot.exitRules) ? legacySnapshot.exitRules : []
+    const riskRules = legacySnapshot.riskRules && typeof legacySnapshot.riskRules === 'object' && !Array.isArray(legacySnapshot.riskRules)
+      ? legacySnapshot.riskRules as Record<string, unknown>
       : {}
     const entryTexts = entryRules.map(item => String(item))
     const exitTexts = exitRules.map(item => String(item))

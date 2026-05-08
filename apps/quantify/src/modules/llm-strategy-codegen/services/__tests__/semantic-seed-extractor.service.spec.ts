@@ -220,6 +220,27 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('keeps breakout retest open when the breakout reference is undefined', () => {
+    const patch = service.extract('BTC 突破后不立刻买，等回踩再买。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        status: 'open',
+        params: expect.objectContaining({
+          sequenceKind: 'breakout_retest',
+          memoryKey: 'breakout',
+        }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'trigger.breakout_retest.reference_definition',
+            affectsExecution: true,
+          }),
+        ]),
+      }),
+    ]))
+  })
+
   it('extracts colon-separated position sizing and stop-loss labels from combination strategy text', () => {
     const patch = service.extract('15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里价格低于EMA20平多；止损：5%强制平仓；仓位：10usdt')
 
@@ -3665,6 +3686,31 @@ describe('SemanticSeedExtractorService', () => {
 
     const signatures = boundaryTriggers.map(trigger => `${trigger.params?.boundaryRole}:${trigger.phase}:${trigger.sideScope}`)
     expect(new Set(signatures).size).toBe(signatures.length)
+  })
+
+  it('does not infer touch mode when a split boundary clause has a nearby breakout verb', () => {
+    const patch = service.extract('15min 突破布林带下轨买入，上轨卖出')
+    const lowerBoundary = patch.triggers?.find(trigger =>
+      trigger.key === 'price.detect.indicator_boundary'
+      && trigger.params?.boundaryRole === 'lower',
+    )
+    const upperBoundary = patch.triggers?.find(trigger =>
+      trigger.key === 'price.detect.indicator_boundary'
+      && trigger.params?.boundaryRole === 'upper',
+    )
+
+    expect(lowerBoundary).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        boundaryRole: 'lower',
+        confirmationMode: 'breakout',
+      }),
+    }))
+    expect(upperBoundary).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        boundaryRole: 'upper',
+        confirmationMode: 'touch',
+      }),
+    }))
   })
 
   it.each([

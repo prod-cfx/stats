@@ -31,7 +31,7 @@ function compileLifecycleMessage(message: string): CompiledLifecycle {
 
   const normalized = readiness.normalize(classifier.classify(seedState).state)
   const canonicalBuilder = new CanonicalSpecBuilderService()
-  const buildInput: Parameters<CanonicalSpecBuilderService['build']>[0] & { semanticState: SemanticState } = {
+  const buildInput: Parameters<CanonicalSpecBuilderService['buildFromLegacyChecklistForTestsOnly']>[0] & { semanticState: SemanticState } = {
     semanticState: normalized.state,
     market: {
       exchange: 'okx',
@@ -40,7 +40,7 @@ function compileLifecycleMessage(message: string): CompiledLifecycle {
       timeframe: '1h',
     },
   }
-  const spec = canonicalBuilder.build(buildInput)
+  const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly(buildInput)
   const ir = new CanonicalSpecV2IrCompilerService().compile({
     canonicalSpec: spec,
     fallback: {

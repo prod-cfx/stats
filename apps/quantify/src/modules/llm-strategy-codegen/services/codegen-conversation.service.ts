@@ -174,6 +174,7 @@ const STRUCTURED_LEVEL_SET_KNOWN_SLOT_KEYS = new Set([
   ...STRUCTURED_LEVEL_SET_RESOLVABLE_SLOT_KEYS,
 ])
 const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
+const MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT = '当前会话缺少语义状态，请重新输入完整策略。'
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   type: 'object',
@@ -333,13 +334,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     initialSemanticState = this.normalizeSemanticContractReadiness(initialSemanticState)
-    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(initialSemanticState, {})
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(initialSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
     const normalization = semanticArtifacts.normalization
     const initialCanonicalSpec = this.buildCanonicalSpecForConversation(initialSemanticState, normalization)
     const decision = this.buildStrategyDecision({
-      checklist,
       semanticState: initialSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
@@ -1246,6 +1245,7 @@ export class CodegenConversationService {
     let currentSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState),
     )
+    const startedFromChecklistOnlySession = this.shouldRejectChecklistOnlySession(session, currentSemanticState)
     const unsupportedFallbackOutcome = await this.handlePendingUnsupportedFallback({
       session,
       semanticState: currentSemanticState,
@@ -1275,6 +1275,13 @@ export class CodegenConversationService {
         message: dto.message,
         semanticState: currentSemanticState,
       })
+    const hasChecklistOnlyNonReplacementEditIntent = startedFromChecklistOnlySession
+      && semanticEditDecision.kind !== 'REPLACE_STRATEGY_DRAFT'
+      && this.conversationSemanticEdit.hasEditIntent({
+        status: session.status,
+        message: dto.message,
+        semanticState: currentSemanticState,
+      })
     const hasTerminalPlannerEditIntent = this.stateMachine.isTerminalStatus(session.status)
       && semanticEditDecision.kind === 'NO_EDIT'
       && this.conversationSemanticEdit.hasEditIntent({
@@ -1292,6 +1299,9 @@ export class CodegenConversationService {
         status: HttpStatus.CONFLICT,
         args: { sessionId, status: session.status },
       })
+    }
+    if (hasChecklistOnlyNonReplacementEditIntent) {
+      return this.rejectChecklistOnlySession(session, sessionUserId)
     }
     if (dto.confirmGenerate === true) {
       return this.continueConfirmedSession(session, dto, sessionUserId)
@@ -1341,6 +1351,11 @@ export class CodegenConversationService {
         allowServerSideConfirmationDigest: true,
       })
     }
+    if (startedFromChecklistOnlySession
+      && semanticEditDecision.kind !== 'NO_EDIT'
+      && semanticEditDecision.kind !== 'REPLACE_STRATEGY_DRAFT') {
+      return this.rejectChecklistOnlySession(session, sessionUserId)
+    }
     const baseClarificationState = this.readClarificationState(session.clarificationState)
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
@@ -1355,6 +1370,13 @@ export class CodegenConversationService {
       : dto.clarificationAnswers
     const hasStructuredClarificationAnswers = Boolean(
       effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
+    )
+    const hasSemanticNativeClarificationAnswers = Boolean(
+      effectiveClarificationAnswers
+      && activeClarificationState.items.some(item =>
+        Object.prototype.hasOwnProperty.call(effectiveClarificationAnswers, item.key)
+        && this.isSemanticClarificationItem(item),
+      ),
     )
     const rawSemanticStateAfterAnswers = this.reconcileSemanticMissingPlaceholders(
       this.applySemanticClarificationAnswers(
@@ -1419,17 +1441,15 @@ export class CodegenConversationService {
       },
     )
     const baseSemanticState = this.reconcileSemanticMissingPlaceholders(inferredConfirmation.semanticState)
-    const baseLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(baseSemanticState, {})
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveSemanticClarificationArtifacts(baseSemanticState).clarificationState
-      : this.withClarificationSummary(baseClarificationState, baseLogicSnapshot)
+      : this.attachSemanticSummaryToClarification(baseClarificationState, baseSemanticState)
     const preMergedSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.mergeSemanticPatchIntoState(
         baseSemanticState,
         this.extractSemanticPatchFromMessage(dto.message),
       ),
     )
-    const preMergedLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(preMergedSemanticState, {})
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
@@ -1462,11 +1482,10 @@ export class CodegenConversationService {
       supportGateResponse.semanticState,
     )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(semanticStateBeforeRequiredSlots, preMergedLogicSnapshot, {
+      this.withRequiredSemanticOpenSlots(semanticStateBeforeRequiredSlots, {}, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
       }),
     )
-    const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
@@ -1486,7 +1505,6 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const decision = this.buildStrategyDecision({
-      checklist: canonicalLogicSnapshot,
       semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
@@ -1596,10 +1614,16 @@ export class CodegenConversationService {
     }
 
     if (!plan.related) {
+      const recoveredExecutableSemantics = this.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'entry')
+        || this.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'exit')
+        || this.hasCompleteOrderProgramSemantics(semanticStateBeforeRequiredSlots)
+      if (startedFromChecklistOnlySession && !inferredConfirmation.consumed && !recoveredExecutableSemantics && !hasSemanticNativeClarificationAnswers) {
+        return this.rejectChecklistOnlySession(session, sessionUserId)
+      }
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
           session,
-          checklist: baseLogicSnapshot,
+          checklist: {},
           semanticState: baseSemanticState,
           clarificationState: clarificationStateAfterAnswers,
           constraintPack,
@@ -1705,9 +1729,8 @@ export class CodegenConversationService {
     const semanticStateAfterSupport = this.normalizeSemanticContractReadiness(
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
     )
-    const logicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticStateAfterSupport, {})
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, logicSnapshot, {
+      this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, {}, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterSupport.position),
       }),
     )
@@ -1724,7 +1747,6 @@ export class CodegenConversationService {
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const nextConstraintPack = this.withGuidePrompt(args.constraintPack, guidePrompt, recommendationStyle)
     const decision = this.buildStrategyDecision({
-      checklist: this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {}),
       semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
@@ -2006,10 +2028,8 @@ export class CodegenConversationService {
         semanticState: replacementState,
       })
       const canonicalDigest = this.readCanonicalDigest(specDesc)
-      const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(replacementState, {})
       const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
       const strategyDecision = this.buildStrategyDecision({
-        checklist: canonicalLogicSnapshot,
         semanticState: replacementState,
         clarification: semanticArtifacts,
         effectiveBlockingReasons: semanticArtifacts.blockingReasons,
@@ -2168,10 +2188,8 @@ export class CodegenConversationService {
       semanticState: reducedSemanticState,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
     const strategyDecision = this.buildStrategyDecision({
-      checklist: canonicalLogicSnapshot,
       semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
@@ -2289,13 +2307,12 @@ export class CodegenConversationService {
     const persistedSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.readSemanticState(session.semanticState),
     )
+    if (this.shouldRejectChecklistOnlySession(session, persistedSemanticState)) {
+      return this.rejectChecklistOnlySession(session, sessionUserId)
+    }
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
       : this.resolveSemanticClarificationArtifacts(persistedSemanticState).clarificationState
-    const persistedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
-      session.latestSpecDesc,
-      this.buildLegacyLogicSnapshotProjectionForCompatibility(persistedSemanticState, {}),
-    )
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       activeClarificationState,
       dto.message,
@@ -2327,15 +2344,6 @@ export class CodegenConversationService {
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
     )
-    const confirmationBaseLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(
-      semanticStateAfterAnswers,
-      persistedLogicSnapshot,
-    )
-    const baseLogicSnapshot = this.applyClarificationAnswers(
-      confirmationBaseLogicSnapshot,
-      baseClarificationState,
-      effectiveClarificationAnswers,
-    )
     const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers)
     const confirmationViewNormalization = confirmationViewArtifacts.normalization
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
@@ -2351,7 +2359,7 @@ export class CodegenConversationService {
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
         this.reconcileSemanticMissingPlaceholders(semanticStateAfterAnswers),
-        baseLogicSnapshot,
+        {},
         {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
         },
@@ -2579,6 +2587,72 @@ export class CodegenConversationService {
     )
   }
 
+  private shouldRejectChecklistOnlySession(
+    session: PersistedConversationSessionForContinue,
+    semanticState: SemanticState,
+  ): boolean {
+    return this.isEmptySemanticState(semanticState) && this.hasCompatibilitySnapshotData(session.checklist)
+  }
+
+  private isEmptySemanticState(semanticState: SemanticState): boolean {
+    return semanticState.triggers.length === 0
+      && semanticState.actions.length === 0
+      && semanticState.risk.length === 0
+      && semanticState.position === null
+      && Object.values(semanticState.contextSlots).every(slot => slot === null)
+  }
+
+  private hasCompatibilitySnapshotData(payload: Prisma.JsonValue | null | undefined): boolean {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return false
+    }
+    const snapshot = payload as Record<string, unknown>
+    const hasNonEmptyArray = (key: string) => Array.isArray(snapshot[key]) && snapshot[key].length > 0
+    const hasNonEmptyRecord = (key: string) =>
+      Boolean(snapshot[key] && typeof snapshot[key] === 'object' && !Array.isArray(snapshot[key]) && Object.keys(snapshot[key]).length > 0)
+
+    return hasNonEmptyArray('symbols')
+      || hasNonEmptyArray('timeframes')
+      || hasNonEmptyArray('entryRules')
+      || hasNonEmptyArray('exitRules')
+      || hasNonEmptyRecord('riskRules')
+      || hasNonEmptyRecord('grid')
+      || hasNonEmptyRecord('market')
+  }
+
+  private async rejectChecklistOnlySession(
+    session: PersistedConversationSessionForContinue,
+    sessionUserId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const clarificationState: StrategyClarificationStateWithSummary = {
+      status: 'NEEDS_CLARIFICATION',
+      summary: null,
+      items: [{
+        key: 'semanticState.missing',
+        reason: 'missing_semantic_trigger',
+        field: 'semanticState',
+        blocking: true,
+        question: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+        status: 'pending',
+      }],
+    }
+    await this.sessionsRepo.updateSession(session.id, {
+      status: 'REJECTED',
+      rejectReason: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+    } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+
+    const response = this.finalizeSessionResponse({
+      id: session.id,
+      status: 'REJECTED',
+      missingFields: [],
+      assistantPrompt: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+      clarificationState,
+      rejectReason: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+    })
+    return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+  }
+
   private applySemanticClarificationAnswers(
     currentState: SemanticState,
     clarificationState: StrategyClarificationState | null,
@@ -2766,9 +2840,9 @@ export class CodegenConversationService {
    * compatibility data into SemanticState. Do not use this for canonical
    * generation, publication authority, or new conversation mainline logic.
    */
-  private buildFallbackSemanticStateForLegacyCompatibility(checklist: StrategyLogicSnapshot): SemanticState {
-    const normalization = this.intentNormalizer.normalize(checklist)
-    const executionContext = this.executionContext.resolve(checklist)
+  private buildFallbackSemanticStateForLegacyCompatibility(compatibilitySnapshot: StrategyLogicSnapshot): SemanticState {
+    const normalization = this.intentNormalizer.normalize(compatibilitySnapshot)
+    const executionContext = this.executionContext.resolve(compatibilitySnapshot)
 
     const state: SemanticState = {
       version: 1,
@@ -2824,7 +2898,7 @@ export class CodegenConversationService {
       updatedAt: new Date().toISOString(),
     }
 
-    return this.withRequiredSemanticOpenSlots(this.reconcileSemanticMissingPlaceholders(state), checklist)
+    return this.withRequiredSemanticOpenSlots(this.reconcileSemanticMissingPlaceholders(state), compatibilitySnapshot)
   }
 
   private withRequiredSemanticOpenSlots(
@@ -2979,8 +3053,8 @@ export class CodegenConversationService {
     }
   }
 
-  private withDeterministicContextSlots(state: SemanticState, checklist: StrategyLogicSnapshot): SemanticState {
-    const executionContext = this.executionContext.resolve(checklist)
+  private withDeterministicContextSlots(state: SemanticState, compatibilitySnapshot: StrategyLogicSnapshot): SemanticState {
+    const executionContext = this.executionContext.resolve(compatibilitySnapshot)
     const questionHints = {
       exchange: '请确认交易所（binance / okx / hyperliquid）。',
       symbol: '请确认策略交易标的（例如 BTCUSDT）。',
@@ -3762,32 +3836,16 @@ export class CodegenConversationService {
 
   private buildClarificationFromSemanticState(
     semanticState: SemanticState,
-    fallbackLogicSnapshot: StrategyLogicSnapshot,
-    options?: { preserveLegacyFallback?: boolean },
   ): StrategyClarificationStateWithSummary {
     const normalizedSemanticState = this.ensureExecutableAtomSlots(semanticState)
-    const rawFallbackState = this.resolveClarificationArtifacts(fallbackLogicSnapshot).clarificationState
     const semanticSafetyItems = this.buildSemanticSafetyClarificationItems(normalizedSemanticState)
-    const fallbackState = options?.preserveLegacyFallback === true
-      || !this.hasSemanticMainFlowEvidence(normalizedSemanticState)
-      ? rawFallbackState
-      : {
-          ...rawFallbackState,
-          items: [
-            ...rawFallbackState.items.filter(item => this.isSafetyClarificationItem(item)),
-            ...semanticSafetyItems,
-          ],
-          status: rawFallbackState.items.some(item => this.isSafetyClarificationItem(item)) || semanticSafetyItems.length > 0
-            ? 'NEEDS_CLARIFICATION' as const
-            : 'CLEAR' as const,
-        }
+    const semanticBaseState: StrategyClarificationStateWithSummary = {
+      status: semanticSafetyItems.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
+      items: semanticSafetyItems,
+      summary: this.buildSemanticClarificationSummary(normalizedSemanticState),
+    }
 
-    return this.mergeSemanticClarificationState(normalizedSemanticState, fallbackState)
-  }
-
-  private isSafetyClarificationItem(item: StrategyClarificationItem): boolean {
-    return item.blocking
-      && (item.reason === 'invalid_spot_short_combo' || item.reason === 'conflicting_market_scope')
+    return this.mergeSemanticClarificationState(normalizedSemanticState, semanticBaseState)
   }
 
   private buildSemanticSafetyClarificationItems(state: SemanticState): StrategyClarificationItem[] {
@@ -3949,7 +4007,7 @@ export class CodegenConversationService {
    * paths that have not been migrated yet. Do not use this for canonical
    * generation or publication authority.
    */
-  private buildLegacyLogicSnapshotProjectionForCompatibility(
+  private projectSemanticStateToStrategySnapshotForCompatibility(
     state: SemanticState,
     fallbackLogicSnapshot: StrategyLogicSnapshot,
   ): StrategyLogicSnapshot {
@@ -5032,25 +5090,17 @@ export class CodegenConversationService {
       args.constraintPack.conversationHistory ?? [],
       args.message,
     )
-    const projectedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
-      args.session.latestSpecDesc,
-      this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticState, args.checklist),
-    )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(
         semanticState,
-        projectedLogicSnapshot,
+        {},
         {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticState.position),
         },
       ),
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
-    const semanticClarificationState = this.buildClarificationFromSemanticState(
-      reducedSemanticState,
-      projectedLogicSnapshot,
-      { preserveLegacyFallback: false },
-    )
+    const semanticClarificationState = this.buildClarificationFromSemanticState(reducedSemanticState)
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
       const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
@@ -5086,7 +5136,6 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const decision = this.buildStrategyDecision({
-      checklist: projectedLogicSnapshot,
       semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(semanticClarificationState),
@@ -5686,9 +5735,9 @@ export class CodegenConversationService {
       )
   }
 
-  private withClarificationSummary(
+  private attachCompatibilityRuleSummary(
     clarificationState: StrategyClarificationState | null | undefined,
-    checklist: StrategyLogicSnapshot,
+    compatibilitySnapshot: StrategyLogicSnapshot,
     normalizedIntent?: StrategyNormalizedIntent | null,
   ): StrategyClarificationStateWithSummary | null {
     if (!clarificationState) return null
@@ -5701,11 +5750,25 @@ export class CodegenConversationService {
 
     return {
       ...clarificationState,
-      summary: this.buildClarificationSummary(checklist, normalizedIntent),
+      summary: this.buildCompatibilityRuleSummary(compatibilitySnapshot, normalizedIntent),
     }
   }
 
-  private resolveClarificationArtifacts(checklist: StrategyLogicSnapshot): {
+  private attachSemanticSummaryToClarification(
+    clarificationState: StrategyClarificationState | null | undefined,
+    semanticState: SemanticState,
+  ): StrategyClarificationStateWithSummary | null {
+    if (!clarificationState) return null
+
+    return {
+      ...clarificationState,
+      summary: clarificationState.status === 'NEEDS_CLARIFICATION'
+        ? this.buildSemanticClarificationSummary(semanticState)
+        : null,
+    }
+  }
+
+  private resolveCompatibilityClarificationArtifacts(compatibilitySnapshot: StrategyLogicSnapshot): {
     normalization: NormalizationResult
     executionContext: ReturnType<StrategyExecutionContextService['resolve']>
     atomicResolution: ReturnType<StrategyIntentResolutionService['resolve']>
@@ -5714,17 +5777,17 @@ export class CodegenConversationService {
     blockingReasons: StrategyBlockingReason[]
     inferredAssumptions: StrategyInferredAssumption[]
   } {
-    const normalization = this.intentNormalizer.normalize(checklist)
-    const executionContext = this.executionContext.resolve(checklist)
+    const normalization = this.intentNormalizer.normalize(compatibilitySnapshot)
+    const executionContext = this.executionContext.resolve(compatibilitySnapshot)
     const atomicResolution = this.intentResolution.resolve({
       normalizedIntent: normalization.normalizedIntent,
     })
-    const rawClarificationState = this.withClarificationSummary(
+    const rawClarificationState = this.attachCompatibilityRuleSummary(
       this.clarificationRules.detectFromAmbiguities({
         executionContext,
         atomicResolution,
       }),
-      checklist,
+      compatibilitySnapshot,
       normalization.normalizedIntent,
     ) as StrategyClarificationStateWithSummary
     const clarificationState = this.filterLegacyClarificationState(rawClarificationState, normalization)
@@ -5751,7 +5814,7 @@ export class CodegenConversationService {
       clarificationState,
       clarificationPrompt,
     ) as StrategyClarificationStateWithSummary
-    const clarificationEvidence = this.clarificationRules.collectEvidence(checklist)
+    const clarificationEvidence = this.clarificationRules.collectEvidence(compatibilitySnapshot)
     const blockingReasons: StrategyBlockingReason[] = [
       ...executionContext.evidence
         .filter((item): item is { key: string, reason: string, priority: number, question: string } => typeof item.question === 'string')
@@ -5776,7 +5839,7 @@ export class CodegenConversationService {
           question: '该布林带条件是触碰即触发，还是收盘确认后触发？',
         })),
     ]
-    const inferredAssumptions = this.collectInferredAssumptions(checklist)
+    const inferredAssumptions = this.collectInferredAssumptions(compatibilitySnapshot)
 
     return {
       normalization,
@@ -5838,7 +5901,7 @@ export class CodegenConversationService {
       || item.reason === 'missing_take_profit_rule'
   }
 
-  private buildClarificationSummary(
+  private buildCompatibilityRuleSummary(
     checklist: StrategyLogicSnapshot,
     normalizedIntent?: StrategyNormalizedIntent | null,
   ): string | null {
@@ -6005,7 +6068,7 @@ export class CodegenConversationService {
     checklist: StrategyLogicSnapshot,
     normalizedIntent?: StrategyNormalizedIntent | null,
   ): string {
-    const summary = this.buildClarificationSummary(checklist, normalizedIntent)
+    const summary = this.buildCompatibilityRuleSummary(checklist, normalizedIntent)
     if (summary) {
       return `我当前理解的策略是：${summary}。请确认逻辑图；请确认是否按此逻辑生成。`
     }
@@ -6049,7 +6112,7 @@ export class CodegenConversationService {
     const rawTimeframe = resolveStrategyDefaultTimeframe(checklist) ?? ''
 
     const resolvedContext = typeof this.executionContext?.resolve === 'function'
-      ? this.executionContext.resolve(checklist).context
+      ? this.executionContext.resolve({ ...checklist }).context
       : null
 
     return {
@@ -6110,7 +6173,7 @@ export class CodegenConversationService {
     checklist: StrategyLogicSnapshot,
     normalization: NormalizationResult,
   ): string {
-    const summary = this.buildClarificationSummary(checklist, normalization.normalizedIntent)
+    const summary = this.buildCompatibilityRuleSummary(checklist, normalization.normalizedIntent)
     const normalizedFamilies = normalization.normalizedIntent.families.join('、')
     const normalizedLine = normalizedFamilies
       ? `当前已归一到的语义族：${normalizedFamilies}。`
@@ -6891,8 +6954,7 @@ export class CodegenConversationService {
   }
 
   private buildStrategyDecision(input: {
-    checklist: StrategyLogicSnapshot
-    semanticState?: SemanticState
+    semanticState: SemanticState
     clarification: {
       clarificationState: StrategyClarificationStateWithSummary
       blockingReasons: StrategyBlockingReason[]
@@ -6901,20 +6963,28 @@ export class CodegenConversationService {
     constraintPack: ConstraintPackSnapshot
   }) {
     const normalizedSummary = input.clarification.clarificationState.summary?.trim()
-      || this.buildClarificationSummary(input.checklist)
+      || this.buildSemanticClarificationSummary(input.semanticState)
       || '已识别部分条件，但仍未完整。'
 
-    const inferredAssumptions = this.collectInferredAssumptions(
-      input.checklist,
+    const inferredAssumptions = this.collectSemanticInferredAssumptions(
+      input.semanticState,
       input.constraintPack,
     ).filter(assumption =>
-      !input.semanticState
-      || !this.isNonBlockingRiskBasisDefault(input.semanticState, assumption.key),
+      !this.isNonBlockingRiskBasisDefault(input.semanticState, assumption.key),
     )
+    const blockingReasons = input.effectiveBlockingReasons ?? input.clarification.blockingReasons
+    const effectiveBlockingReasons = blockingReasons.length === 0 && !this.hasDeterministicStrategySemantics(input.semanticState)
+      ? [{
+          key: 'semantic.strategy',
+          reason: 'missing_semantic_trigger',
+          priority: 90,
+          question: '请补充明确的入场与出场规则。',
+        }]
+      : blockingReasons
 
     return this.uniquenessDecision.decide({
       normalizedSummary,
-      blockingReasons: input.effectiveBlockingReasons ?? input.clarification.blockingReasons,
+      blockingReasons: effectiveBlockingReasons,
       inferredAssumptions,
     })
   }
@@ -7212,9 +7282,8 @@ export class CodegenConversationService {
       unsupportedFallback: null,
       updatedAt: new Date().toISOString(),
     })
-    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(supportedState, {})
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
-      this.withRequiredSemanticOpenSlots(supportedState, checklist, {
+      this.withRequiredSemanticOpenSlots(supportedState, {}, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(supportedState.position),
       }),
     )
@@ -7230,7 +7299,6 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const decision = this.buildStrategyDecision({
-      checklist: this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {}),
       semanticState: reducedSemanticState,
       clarification: semanticArtifacts,
       effectiveBlockingReasons: semanticArtifacts.blockingReasons,
@@ -7663,6 +7731,43 @@ export class CodegenConversationService {
     return assumptions
   }
 
+  private collectSemanticInferredAssumptions(
+    semanticState: SemanticState,
+    constraintPack: ConstraintPackSnapshot = createDefaultConstraintPack(),
+  ): StrategyInferredAssumption[] {
+    const semanticDefaults = this.buildInferredConfirmationSemanticDefaults(semanticState)
+    const consumedKeys = new Set([
+      ...(Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+        ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+      ...(Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+        ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+    ])
+    const inferredKeys = Array.isArray(semanticDefaults.inferredKeys)
+      ? semanticDefaults.inferredKeys.filter((item): item is string => typeof item === 'string' && !consumedKeys.has(item))
+      : []
+    const assumptions: StrategyInferredAssumption[] = []
+
+    if (inferredKeys.includes('risk.stopLossBasis') && semanticDefaults.stopLossBasis === 'entry_avg_price') {
+      assumptions.push({
+        key: 'risk.stopLossBasis',
+        value: 'entry_avg_price',
+        source: 'system_default',
+      })
+    }
+
+    if (inferredKeys.includes('risk.takeProfitBasis') && semanticDefaults.takeProfitBasis === 'entry_avg_price') {
+      assumptions.push({
+        key: 'risk.takeProfitBasis',
+        value: 'entry_avg_price',
+        source: 'system_default',
+      })
+    }
+
+    return assumptions
+  }
+
   private buildNormalizationFromSemanticState(
     semanticState: SemanticState,
   ): NormalizationResult {
@@ -7690,12 +7795,7 @@ export class CodegenConversationService {
     blockingReasons: StrategyBlockingReason[]
     clarificationPrompt: string | null
   } {
-    const projectedLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticState, {})
-    const clarificationState = this.buildClarificationFromSemanticState(
-      semanticState,
-      projectedLogicSnapshot,
-      { preserveLegacyFallback: false },
-    )
+    const clarificationState = this.buildClarificationFromSemanticState(semanticState)
     const normalization = this.buildNormalizationFromSemanticState(semanticState)
     const executionContext = this.executionContext.resolveFromSemanticState(semanticState)
     const blockingReasons = this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState)
@@ -7723,9 +7823,7 @@ export class CodegenConversationService {
     }> {
     const normalizedSemanticState = this.normalizeSemanticContractReadiness(this.normalizeRiskState(semanticState))
     const clarification = this.resolveSemanticClarificationArtifacts(normalizedSemanticState)
-    const checklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(normalizedSemanticState, {})
     const decision = this.buildStrategyDecision({
-      checklist,
       semanticState: normalizedSemanticState,
       clarification,
       constraintPack,
@@ -7739,7 +7837,7 @@ export class CodegenConversationService {
         : []),
     ])
     const nonBlockingRiskBasisDefaultKeys = [
-      ...this.collectInferredAssumptions(checklist, constraintPack).map(item => item.key),
+      ...this.collectSemanticInferredAssumptions(normalizedSemanticState, constraintPack).map(item => item.key),
       ...(this.buildInferredConfirmationSemanticDefaults(normalizedSemanticState).inferredKeys ?? []),
     ]
       .filter((key): key is string => typeof key === 'string')

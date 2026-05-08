@@ -2556,6 +2556,8 @@ export class SemanticSeedExtractorService {
 
       const confirmationMode = this.extractBoundaryConfirmationMode(clause)
         ?? this.extractConfirmationMode(segment)
+        ?? this.inferBoundaryBreakoutMode(boundaryRole, segment)
+        ?? this.inferPlainBoundaryTouchMode(boundaryRole, clause, segment)
 
       this.pushTrigger(triggers, seen, {
         key: 'price.detect.indicator_boundary',
@@ -2612,6 +2614,62 @@ export class SemanticSeedExtractorService {
       return { phase: 'exit', sideScope: 'long' }
     }
     return null
+  }
+
+  private inferPlainBoundaryTouchMode(
+    boundaryRole: 'upper' | 'lower' | 'middle',
+    clause: string,
+    segment: string,
+  ): 'touch' | null {
+    if (/突破|跌破|上破|下破|穿越|cross/iu.test(clause)) return null
+    if (this.hasBoundaryBreakoutVerb(boundaryRole, segment)) return null
+    if (boundaryRole === 'lower' && /下轨.{0,40}买入|买入.{0,40}下轨/u.test(segment)) return 'touch'
+    if (boundaryRole === 'upper' && /上轨.{0,40}卖出|卖出.{0,40}上轨/u.test(segment)) return 'touch'
+    return null
+  }
+
+  private hasBoundaryBreakoutVerb(boundaryRole: 'upper' | 'lower' | 'middle', segment: string): boolean {
+    const boundaryMatches = Array.from(segment.matchAll(/上轨|下轨|中轨|上沿|下沿|中线|上边界|下边界|upper|lower|middle|midline/giu))
+      .map(match => ({
+        index: match.index ?? 0,
+        length: match[0].length,
+        role: this.resolveBoundaryRole(match[0]),
+      }))
+      .filter((match): match is { index: number, length: number, role: 'upper' | 'lower' | 'middle' } => match.role !== null)
+
+    for (let index = 0; index < boundaryMatches.length; index += 1) {
+      const match = boundaryMatches[index]
+      if (!match || match.role !== boundaryRole) continue
+
+      const previousBoundary = boundaryMatches[index - 1]
+      const nextBoundary = boundaryMatches[index + 1]
+      const previousDelimiter = Math.max(
+        segment.lastIndexOf('，', match.index),
+        segment.lastIndexOf(',', match.index),
+        segment.lastIndexOf('；', match.index),
+        segment.lastIndexOf(';', match.index),
+        segment.lastIndexOf('。', match.index),
+      )
+      const nextDelimiterCandidates = ['，', ',', '；', ';', '。']
+        .map(delimiter => segment.indexOf(delimiter, match.index + match.length))
+        .filter(candidate => candidate >= 0)
+      const nextDelimiter = nextDelimiterCandidates.length > 0 ? Math.min(...nextDelimiterCandidates) : segment.length
+      const contextStart = Math.max(previousDelimiter + 1, previousBoundary ? previousBoundary.index + previousBoundary.length : 0)
+      const contextEnd = Math.min(nextDelimiter, nextBoundary?.index ?? segment.length)
+      const localContext = segment.slice(contextStart, contextEnd)
+      if (/(?:突破|跌破|上破|下破|穿越|cross)/iu.test(localContext)) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private inferBoundaryBreakoutMode(
+    boundaryRole: 'upper' | 'lower' | 'middle',
+    segment: string,
+  ): 'breakout' | null {
+    return this.hasBoundaryBreakoutVerb(boundaryRole, segment) ? 'breakout' : null
   }
 
   private resolveExplicitCloseSideScope(clause: string): 'long' | 'short' | null {
@@ -2814,18 +2872,32 @@ export class SemanticSeedExtractorService {
     const intent = /(?:买入|买|做多|开多)/u.test(segment)
       ? { phase: 'entry' as const, sideScope: 'long' as const }
       : (this.resolveTradeIntent(segment) ?? { phase: 'entry' as const, sideScope: 'long' as const })
+    const hasReferenceDefinition = hours !== null || bars !== null
 
     this.pushTrigger(triggers, seen, {
       key: 'condition.sequence',
       phase: intent.phase,
       sideScope: intent.sideScope,
-      status: 'open',
+      status: hasReferenceDefinition ? 'locked' : 'open',
       params: {
         sequenceKind: 'breakout_retest',
         memoryKey: 'breakout',
         ...(hours !== null ? { lookbackWindow: `${hours}h` } : {}),
         ...(bars !== null ? { lookbackBars: bars } : {}),
       },
+      ...(hasReferenceDefinition
+        ? {}
+        : {
+            openSlots: [{
+              slotKey: 'trigger.breakout_retest.reference_definition',
+              fieldPath: `triggers[${triggers.length}].params.memoryKey`,
+              status: 'open' as const,
+              priority: 'core' as const,
+              questionHint: '请确认突破位如何定义，例如过去多少根 K 线高点或过去多少小时高点。',
+              affectsExecution: true,
+              evidence: { text: '突破位', source: 'user_explicit' as const },
+            }],
+          }),
     })
   }
 
@@ -4858,8 +4930,9 @@ export class SemanticSeedExtractorService {
       return true
     }
 
+    const matchedText = text.slice(matchIndex, matchIndex + matchLength)
     const suffix = text.slice(matchIndex + matchLength, matchIndex + matchLength + 16)
-    return /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
+    return /(?:日|天)/u.test(matchedText) && /^\s*(?:EMA|SMA|MA|均线)/iu.test(suffix)
   }
 
   private isRollingWindowTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {

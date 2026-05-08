@@ -40,7 +40,7 @@ function compileLifecycleMessage(message: string): StrategyAstV1 {
   expect(normalized.ready).toBe(true)
 
   const canonicalBuilder = new CanonicalSpecBuilderService()
-  const buildInput: Parameters<CanonicalSpecBuilderService['build']>[0] & { semanticState: SemanticState } = {
+  const buildInput: Parameters<CanonicalSpecBuilderService['buildFromLegacyChecklistForTestsOnly']>[0] & { semanticState: SemanticState } = {
     semanticState: normalized.state,
     market: {
       exchange: 'okx',
@@ -49,7 +49,7 @@ function compileLifecycleMessage(message: string): StrategyAstV1 {
       timeframe: '1h',
     },
   }
-  const spec = canonicalBuilder.build(buildInput)
+  const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly(buildInput)
   const ir = new CanonicalSpecV2IrCompilerService().compile({
     canonicalSpec: spec,
     fallback: {

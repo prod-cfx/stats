@@ -2054,7 +2054,8 @@ describe('canonicalSpecBuilderService', () => {
   it('does not treat a bare asset symbol as a canonical market symbol', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    // Isolated legacy parser coverage only. Main conversation flow must not call this method.
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTC'],
       timeframes: ['1h'],
       entryRules: ['3m 内下跌 1% 买入'],
@@ -2215,7 +2216,7 @@ describe('canonicalSpecBuilderService', () => {
   it('fills default entry-price basis for stop-loss and take-profit when checklist omits them', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['ETHUSDT'],
       timeframes: ['15m'],
       entryRules: ['15 分钟上涨 1% 买入'],
@@ -2250,7 +2251,7 @@ describe('canonicalSpecBuilderService', () => {
   it('preserves executable clarified stop-loss basis and compiles position-pnl take-profit as an expression', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['收盘价突破上轨时做空'],
@@ -2292,7 +2293,7 @@ describe('canonicalSpecBuilderService', () => {
   it('emits canonical default timeframe and per-rule timeframe params for multi-timeframe strategies', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['3m', '15m'],
       entryRules: ['3m 内下跌 1% 买入'],
@@ -2328,7 +2329,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds explicit position-pnl risk rules as canonical expressions', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['ETHUSDT'],
       timeframes: ['15m'],
       entryRules: ['15 分钟上涨 1% 买入'],
@@ -2371,7 +2372,7 @@ describe('canonicalSpecBuilderService', () => {
   it('does not inject sma when clarified bollinger middle-band semantics use a moving-average alias', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['收盘价突破上轨时做空'],
@@ -2395,7 +2396,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds independent Bollinger rules for upper-short, lower-long, middle-close, and outside-band full close', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -2620,7 +2621,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds outside-band reduce rules when earlyStop asks to reduce exposure', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -2663,7 +2664,7 @@ describe('canonicalSpecBuilderService', () => {
   it('treats direct close wording as full exit for outside-band risk', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -2697,7 +2698,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds outside-band full close from exitRules without requiring riskRules.earlyStop', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -2737,7 +2738,7 @@ describe('canonicalSpecBuilderService', () => {
   it('prefers clarified exitRules over stale earlyStop text for outside-band action semantics', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -2769,7 +2770,7 @@ describe('canonicalSpecBuilderService', () => {
   it('emits empty v2 rules when checklist has no recognizable trigger patterns', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       entryRules: ['基于盘口情绪择机入场'],
       exitRules: ['根据主观判断离场'],
     })
@@ -2785,7 +2786,7 @@ describe('canonicalSpecBuilderService', () => {
   it('does not inject implicit market/sizing/sma defaults when checklist is missing them', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       entryRules: ['价格收盘确认突破关键阻力位入场'],
       exitRules: ['价格跌破关键支撑位出场'],
     })
@@ -2804,7 +2805,7 @@ describe('canonicalSpecBuilderService', () => {
   it('parses moving-average short entry and short exit without forcing golden-entry/death-exit defaults', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['短均线下穿长均线（死叉）时做空'],
@@ -2833,7 +2834,7 @@ describe('canonicalSpecBuilderService', () => {
   it('uses checklist riskRules.exchange as canonical market exchange when provided', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['短均线上穿长均线时做多'],
@@ -2856,7 +2857,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds RSI threshold entry and exit rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],
@@ -2887,7 +2888,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds MACD cross entry and exit rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['MACD 金叉时做多'],
@@ -2918,7 +2919,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds MA 6/48 crossover periods into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['MA6 上穿 MA48 时做多开仓'],
@@ -2955,7 +2956,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds grid entry and exit rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['在 60000-80000 固定区间按步长 1% 共 21 格执行区间网格买入'],
@@ -2998,7 +2999,7 @@ describe('canonicalSpecBuilderService', () => {
   it('normalizes per-mille grid steps into percent while keeping grid params explicit', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['在 60000-80000 固定区间按千分之5步长共 21 格执行区间网格买入'],
@@ -3037,7 +3038,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds short-grid entry and exit rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['在 60000-80000 固定区间按步长 1% 共 21 格执行上方网格做空'],
@@ -3070,7 +3071,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds bidirectional grid rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -3252,7 +3253,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds breakout, take-profit, trailing-stop and time-stop rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['突破前20根K线最高价时做多，冷却 5 根K线'],
@@ -3296,7 +3297,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds Donchian breakout aliases into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['突破唐奇安上轨时做多'],
@@ -3319,7 +3320,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds short breakout and short-side trade management rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['跌破前20根K线最低价时做空，冷却 5 根K线'],
@@ -3371,7 +3372,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds partial take-profit rules into canonical spec v2 using reduce actions', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],
@@ -3397,7 +3398,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds partial take-profit rules with explicit reduce ratio', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],
@@ -3430,7 +3431,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds price-change entry and exit rules from buy/sell wording', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['3m', '15m'],
       entryRules: ['3m 内下跌 1% 买入'],
@@ -3475,7 +3476,7 @@ describe('canonicalSpecBuilderService', () => {
   it('preserves explicit Bollinger parameters from rule text', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
@@ -3499,7 +3500,7 @@ describe('canonicalSpecBuilderService', () => {
   it('preserves explicit moving-average periods from crossover wording', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['5日线上穿20日线买入'],
@@ -3529,7 +3530,7 @@ describe('canonicalSpecBuilderService', () => {
   it('builds price-change rules from raw Chinese minute and percent wording', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['3m', '15m'],
       entryRules: ['3分钟之内跌百分1买入'],
@@ -3673,7 +3674,7 @@ describe('canonicalSpecBuilderService', () => {
   it('defaults generic sell wording to close short when the strategy only has short-side entries', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.build({
+    const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['EMA7 下穿 EMA21 做空'],
