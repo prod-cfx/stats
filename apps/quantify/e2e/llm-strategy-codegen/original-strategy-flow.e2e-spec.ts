@@ -8,6 +8,7 @@ import { EnvModule } from '@/common/modules/env.module'
 import { EnvService } from '@/common/services/env.service'
 import { AiService } from '@/modules/ai/ai.service'
 import { LlmStrategyCodegenModule } from '@/modules/llm-strategy-codegen/llm-strategy-codegen.module'
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { CallerIdentityService } from '@/modules/llm-strategy-codegen/services/caller-identity.service'
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { MarketSymbolCatalogService } from '@/modules/market-data/services/market-symbol-catalog.service'
@@ -60,11 +61,45 @@ function collectAiChatText(aiService: AiService): string {
     .join('\n')
 }
 
-function normalizedTriggerKeys(payload: Record<string, unknown>): string[] {
-  const specDesc = payload.specDesc as { normalizedIntent?: { triggers?: Array<{ key?: unknown }> } } | null | undefined
-  return (specDesc?.normalizedIntent?.triggers ?? [])
-    .map(trigger => trigger.key)
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function publishedSnapshotConditionKeys(specSnapshot: unknown): string[] {
+  const spec = asRecord(specSnapshot)
+  const ruleConditionKeys = Array.isArray(spec?.rules)
+    ? spec.rules.flatMap(rule => collectConditionKeys(asRecord(rule)?.condition))
+    : []
+  if (ruleConditionKeys.length > 0) {
+    return ruleConditionKeys
+  }
+
+  const metadata = asRecord(spec?.metadata)
+  const normalized = asRecord(metadata?.normalized)
+  const intent = asRecord(normalized?.intent)
+  const triggers = Array.isArray(intent?.triggers) ? intent.triggers : []
+  return triggers
+    .map(trigger => asRecord(trigger)?.key)
     .filter((key): key is string => typeof key === 'string')
+}
+
+function collectConditionKeys(condition: unknown): string[] {
+  const record = asRecord(condition)
+  if (!record) {
+    return []
+  }
+
+  if (record.kind === 'atom') {
+    return typeof record.key === 'string' ? [record.key] : []
+  }
+
+  if (Array.isArray(record.children)) {
+    return record.children.flatMap(collectConditionKeys)
+  }
+
+  return []
 }
 
 async function waitForPublicationTerminalSession(
@@ -96,6 +131,7 @@ const ORIGINAL_STRATEGY_CASES = [
     id: 'ema-stack',
     userId: 'u-e2e-original-ema-stack',
     originalText: '入场：15m k线里面 价格在ema20 ema60 ema144上方时做多开仓；出场：15m k线里面 价格低于ema20时平多；止损：5%；仓位：10usdt',
+    expectedPublishedConditionKeys: ['indicator.above', 'indicator.above', 'indicator.above', 'indicator.below'],
     plannerContent: {
       related: true,
       logicReady: true,
@@ -168,6 +204,7 @@ const ORIGINAL_STRATEGY_CASES = [
     id: 'okx-percent-window',
     userId: 'u-e2e-original-okx-percent-window',
     originalText: '策略一：在okx交易所 我想买btc  3分钟之内跌百分1买入  15分钟之内涨百分2卖出  单笔用百分10资金 止损5% 止盈10%',
+    expectedPublishedConditionKeys: ['price.change_pct', 'price.change_pct'],
     plannerContent: {
       related: true,
       logicReady: true,
@@ -207,6 +244,7 @@ const ORIGINAL_STRATEGY_CASES = [
     id: 'bollinger-dual-side',
     userId: 'u-e2e-original-bollinger-dual-side',
     originalText: '策略二：OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+    expectedPublishedConditionKeys: ['bollinger.upper_break', 'bollinger.lower_break', 'bollinger.middle_revert'],
     plannerContent: {
       related: true,
       logicReady: true,
@@ -263,6 +301,7 @@ describe('llm strategy codegen original strategy flow (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let aiService: AiService
+  let publishedSnapshotsRepo: PublishedStrategySnapshotsRepository
 
   beforeAll(async () => {
     const moduleFixture = await Test.createTestingModule({
@@ -319,6 +358,7 @@ describe('llm strategy codegen original strategy flow (E2E)', () => {
 
     prisma = moduleFixture.get(PrismaService)
     aiService = moduleFixture.get(AiService)
+    publishedSnapshotsRepo = moduleFixture.get(PublishedStrategySnapshotsRepository)
   })
 
   afterEach(async () => {
@@ -333,7 +373,7 @@ describe('llm strategy codegen original strategy flow (E2E)', () => {
 
   it.each(ORIGINAL_STRATEGY_CASES)(
     'runs original text $id from start through publication terminal with semanticPatch only',
-    async ({ userId, originalText, plannerContent }) => {
+    async ({ userId, originalText, plannerContent, expectedPublishedConditionKeys }) => {
       expect(plannerContent).toHaveProperty('semanticPatch')
       expectNoLegacyChecklistFields(plannerContent)
       jest.spyOn(aiService, 'chat')
@@ -375,9 +415,12 @@ describe('llm strategy codegen original strategy flow (E2E)', () => {
       expect(finalPayload.status).toBe('PUBLISHED')
       expect(finalPayload.publishedSnapshotId).toBeTruthy()
       expect(finalPayload.scriptCode).toEqual(expect.stringContaining('@generated by compiler.v1'))
-      expect(normalizedTriggerKeys(finalPayload)).toEqual(expect.arrayContaining(
-        plannerContent.semanticPatch.triggers.map(trigger => trigger.key),
-      ))
+      const publishedSnapshot = await publishedSnapshotsRepo.findByIdForUser(String(finalPayload.publishedSnapshotId), userId)
+      expect(publishedSnapshot).toEqual(expect.objectContaining({
+        id: finalPayload.publishedSnapshotId,
+      }))
+      expect(publishedSnapshotConditionKeys(publishedSnapshot?.specSnapshot))
+        .toEqual(expect.arrayContaining(expectedPublishedConditionKeys))
     },
   )
 })
