@@ -1228,7 +1228,7 @@ export class SemanticSeedStateBuilderService {
           shape: this.toCapabilityShape({
             key,
             maxCount: this.readFiniteNumber(params.maxCount),
-            capitalCap: this.readFiniteNumber(params.capitalCap),
+            capitalCap: this.readCapitalCapShape(params.capitalCap),
             perOrderSizing: this.readUnknownShape(params.perOrderSizing) ?? params.perOrderSizing,
             triggerMode: params.triggerMode,
           }),
@@ -1258,6 +1258,15 @@ export class SemanticSeedStateBuilderService {
         { domain: 'exposure', verb: 'increase', object: 'position' },
       ],
     }
+  }
+
+  private readCapitalCapShape(value: unknown): number | SemanticCapabilityShape | null {
+    const finiteNumber = this.readFiniteNumber(value)
+    if (finiteNumber !== null) {
+      return finiteNumber
+    }
+
+    return this.readUnknownShape(value)
   }
 
   private buildAtomContract(input: {

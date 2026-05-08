@@ -244,6 +244,43 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('preserves structured DCA capital cap in synthesized contract shape', () => {
+    const capitalCap = { kind: 'quote', value: 500, asset: 'USDT' }
+    const state = service.build({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        constraints: [{
+          key: 'position.dca_schedule',
+          params: {
+            maxCount: 4,
+            capitalCap,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+            triggerMode: 'price_interval',
+            exitRule: { rule: 'stop_below_previous_low' },
+          },
+        }],
+      },
+    })
+
+    expect(state?.position?.constraints?.[0]?.contracts?.[0]?.capabilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'runtime',
+        verb: 'schedule',
+        object: 'dca_orders',
+        shape: expect.objectContaining({
+          capitalCap,
+          perOrderSizing: expect.objectContaining({
+            kind: 'quote',
+            value: 100,
+            asset: 'USDT',
+          }),
+        }),
+      }),
+    ]))
+  })
+
   it('closes synthesized fixed grid density slots from percent spacing answers', () => {
     const state = service.build({
       triggers: [{
