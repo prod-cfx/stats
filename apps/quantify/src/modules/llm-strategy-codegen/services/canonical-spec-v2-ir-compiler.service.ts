@@ -1209,7 +1209,9 @@ export class CanonicalSpecV2IrCompilerService {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
         }
         const lookback = this.readNumber([atom.params?.lookback], Number.NaN)
-        if (!Number.isFinite(lookback) || lookback <= 0) {
+        // ensureChannelSeries / series id / 上游 LRU 都假定 lookback 是正整数；
+        // fallback 故意置为 NaN，避免悄悄落入默认值绕过 readiness。
+        if (!Number.isInteger(lookback) || lookback <= 0) {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
         }
         const closeRef = this.ensurePriceSeries(context, 'close')

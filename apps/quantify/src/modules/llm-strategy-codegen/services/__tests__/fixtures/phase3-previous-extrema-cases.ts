@@ -34,7 +34,7 @@ export const phase3PreviousExtremaCases: AtomCoverageGoldenCase[] = [
     notes: 'Phase 3 MVP：seed extractor 暂未把"前高突破"自由文本解析为 kind/lookback/memoryKey 三键，路由到 open_slots。',
   },
   {
-    id: 'phase3-previous-extrema-002-prev-low-and-swing-low-open-slots',
+    id: 'phase3-previous-extrema-002-prev-low-breakdown-open-slots',
     name: 'phase3 previous extrema prev low requires slots',
     message: 'OKX 合约 BTCUSDT 15m，跌破前低卖出，单笔 10%。',
     tags: ['breakout', 'position_lifecycle'],

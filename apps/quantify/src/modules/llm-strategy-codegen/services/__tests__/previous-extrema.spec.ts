@@ -179,6 +179,22 @@ describe('phase 3 price.previous_extrema', () => {
         /codegen\.canonical_spec_v2_condition_unsupported:price\.previous_extrema/,
       )
     })
+
+    it('fails closed when lookback is not a positive integer (fractional / negative)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      for (const badLookback of [2.5, -3, 0]) {
+        const spec = makePreviousExtremaSpec({
+          kind: 'atom',
+          key: 'price.previous_extrema',
+          semanticScope: 'market',
+          op: 'GT',
+          params: { kind: 'prev_high', lookback: badLookback, memoryKey: 'mZ' },
+        })
+        expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+          /codegen\.canonical_spec_v2_condition_unsupported:price\.previous_extrema/,
+        )
+      }
+    })
   })
 
   describe('semantic state normalization', () => {
@@ -201,6 +217,14 @@ describe('phase 3 price.previous_extrema', () => {
       const trigger = makeTrigger({ kind: 'prev_high', lookback: 20, memoryKey: 'user_supplied_key' })
       const [normalized] = normalizeTriggerCombinationContracts([trigger])
       expect(normalized.params.memoryKey).toBe('user_supplied_key')
+    })
+
+    it('treats empty / whitespace memoryKey as missing and auto-fills hash', () => {
+      for (const blank of ['', '   ']) {
+        const trigger = makeTrigger({ kind: 'prev_high', lookback: 20, sourceText: '前高突破', memoryKey: blank })
+        const [normalized] = normalizeTriggerCombinationContracts([trigger])
+        expect(normalized.params.memoryKey as string).toMatch(/^previous_extrema_[0-9a-f]{16}$/)
+      }
     })
 
     it('does not touch triggers with other keys', () => {
