@@ -2591,7 +2591,7 @@ export class CodegenConversationService {
     session: PersistedConversationSessionForContinue,
     semanticState: SemanticState,
   ): boolean {
-    return this.isEmptySemanticState(semanticState) && this.hasCompatibilitySnapshotData(session.checklist)
+    return this.isEmptySemanticState(semanticState) && !this.hasPersistedSemanticState(session.semanticState)
   }
 
   private isEmptySemanticState(semanticState: SemanticState): boolean {
@@ -2600,24 +2600,6 @@ export class CodegenConversationService {
       && semanticState.risk.length === 0
       && semanticState.position === null
       && Object.values(semanticState.contextSlots).every(slot => slot === null)
-  }
-
-  private hasCompatibilitySnapshotData(payload: Prisma.JsonValue | null | undefined): boolean {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return false
-    }
-    const snapshot = payload as Record<string, unknown>
-    const hasNonEmptyArray = (key: string) => Array.isArray(snapshot[key]) && snapshot[key].length > 0
-    const hasNonEmptyRecord = (key: string) =>
-      Boolean(snapshot[key] && typeof snapshot[key] === 'object' && !Array.isArray(snapshot[key]) && Object.keys(snapshot[key]).length > 0)
-
-    return hasNonEmptyArray('symbols')
-      || hasNonEmptyArray('timeframes')
-      || hasNonEmptyArray('entryRules')
-      || hasNonEmptyArray('exitRules')
-      || hasNonEmptyRecord('riskRules')
-      || hasNonEmptyRecord('grid')
-      || hasNonEmptyRecord('market')
   }
 
   private async rejectChecklistOnlySession(
