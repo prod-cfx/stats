@@ -49,6 +49,13 @@ export class NaturalLanguageGatewayService {
     return (input ?? '').replace(/\s+/gu, ' ').trim()
   }
 
+  private toClauses(text: string): string[] {
+    return text
+      .split(/[；;。]/u)
+      .map(clause => clause.trim())
+      .filter(clause => clause.length > 0)
+  }
+
   private parseContext(text: string): ContextFrameDraft[] {
     const frames: ContextFrameDraft[] = []
 
@@ -96,33 +103,33 @@ export class NaturalLanguageGatewayService {
   }
 
   private parseEmaGates(text: string): Array<IndicatorCompareFrameDraft | CombinationFrameDraft> {
-    const emaBlock = this.findEmaBlock(text)
-    if (!emaBlock) return []
-
     const frames: Array<IndicatorCompareFrameDraft | CombinationFrameDraft> = []
-    const hasLongGate = /上方/u.test(text) && /(只开多|开多|做多)/u.test(text)
-    const hasShortGate = /下方/u.test(text) && /(只开空|开空|做空)/u.test(text)
 
-    if (hasLongGate) {
-      frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'GT', 'long', 'ema-gate-long', emaBlock.evidenceText))
-      frames.push({
-        kind: 'combination',
-        groupId: 'ema-gate-long',
-        join: 'AND',
-        sideScope: 'long',
-        evidenceText: emaBlock.evidenceText,
-      })
-    }
+    for (const clause of this.toClauses(text)) {
+      const emaBlock = this.findEmaBlock(clause)
+      if (!emaBlock) continue
 
-    if (hasShortGate) {
-      frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'LT', 'short', 'ema-gate-short', emaBlock.evidenceText))
-      frames.push({
-        kind: 'combination',
-        groupId: 'ema-gate-short',
-        join: 'AND',
-        sideScope: 'short',
-        evidenceText: emaBlock.evidenceText,
-      })
+      if (this.hasEmaGate(clause, emaBlock, '上方', ['只开多', '开多', '做多'])) {
+        frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'GT', 'long', 'ema-gate-long', emaBlock.evidenceText))
+        frames.push({
+          kind: 'combination',
+          groupId: 'ema-gate-long',
+          join: 'AND',
+          sideScope: 'long',
+          evidenceText: emaBlock.evidenceText,
+        })
+      }
+
+      if (this.hasEmaGate(clause, emaBlock, '下方', ['只开空', '开空', '做空'])) {
+        frames.push(...this.toEmaCompareFrames(emaBlock.periods, 'LT', 'short', 'ema-gate-short', emaBlock.evidenceText))
+        frames.push({
+          kind: 'combination',
+          groupId: 'ema-gate-short',
+          join: 'AND',
+          sideScope: 'short',
+          evidenceText: emaBlock.evidenceText,
+        })
+      }
     }
 
     return frames
@@ -139,6 +146,23 @@ export class NaturalLanguageGatewayService {
       periods,
       evidenceText: blockMatch[1].trim(),
     }
+  }
+
+  private hasEmaGate(
+    clause: string,
+    emaBlock: { evidenceText: string },
+    directionText: '上方' | '下方',
+    actionTexts: string[],
+  ): boolean {
+    const blockIndex = clause.indexOf(emaBlock.evidenceText)
+    if (blockIndex < 0) return false
+
+    const localText = this.takeUntilNextIndicator(clause.slice(blockIndex + emaBlock.evidenceText.length))
+    return localText.includes(directionText) && actionTexts.some(actionText => localText.includes(actionText))
+  }
+
+  private takeUntilNextIndicator(text: string): string {
+    return text.split(/\b(?:rsi|macd|kdj|boll)\b|布林带?/iu)[0]
   }
 
   private toEmaCompareFrames(
@@ -161,71 +185,100 @@ export class NaturalLanguageGatewayService {
 
   private parseBoundaryTouches(text: string): BoundaryTouchFrameDraft[] {
     const frames: BoundaryTouchFrameDraft[] = []
-    const hasBollingerContext = /(boll|布林带?|BOLL)/iu.test(text)
 
-    if (hasBollingerContext && /下轨\s*(?:开多|做多|买入|买)/iu.test(text)) {
+    for (const clause of this.toClauses(text)) {
+      frames.push(...this.parseBoundaryTouchClause(clause))
+    }
+
+    return frames
+  }
+
+  private parseBoundaryTouchClause(clause: string): BoundaryTouchFrameDraft[] {
+    const frames: BoundaryTouchFrameDraft[] = []
+    const lowerMatch = /(boll|布林带?)\s*下轨\s*(开多|做多|买入)/iu.exec(clause)
+    const upperMatch = /(boll|布林带?)\s*上轨\s*(开空|做空|卖空)/iu.exec(clause)
+    const inheritedUpperMatch = /\s上轨\s*(开空|做空|卖空)/iu.exec(clause)
+
+    if (lowerMatch && this.isAffirmativeMatch(clause, lowerMatch.index)) {
       frames.push({
         kind: 'boundary_touch',
         indicator: 'bollinger',
         boundaryRole: 'lower',
         sideScope: 'long',
         phase: 'entry',
-        evidenceText: this.boundaryEvidence(text, 'lower'),
+        evidenceText: lowerMatch[0].trim(),
       })
     }
 
-    if (hasBollingerContext && /上轨\s*(?:开空|做空|卖空)/iu.test(text)) {
+    if (upperMatch && this.isAffirmativeMatch(clause, upperMatch.index)) {
       frames.push({
         kind: 'boundary_touch',
         indicator: 'bollinger',
         boundaryRole: 'upper',
         sideScope: 'short',
         phase: 'entry',
-        evidenceText: this.boundaryEvidence(text, 'upper'),
+        evidenceText: upperMatch[0].trim(),
+      })
+      return frames
+    }
+
+    if (frames.length > 0 && inheritedUpperMatch && this.isAffirmativeMatch(clause, inheritedUpperMatch.index)) {
+      frames.push({
+        kind: 'boundary_touch',
+        indicator: 'bollinger',
+        boundaryRole: 'upper',
+        sideScope: 'short',
+        phase: 'entry',
+        evidenceText: inheritedUpperMatch[0].trim(),
       })
     }
 
     return frames
-  }
-
-  private boundaryEvidence(text: string, boundaryRole: SemanticBoundaryTouchFrame['boundaryRole']): string {
-    const boundary = boundaryRole === 'upper' ? '上轨' : '下轨'
-    const match = new RegExp(`(?:boll|布林带?|BOLL)?\\s*${boundary}\\s*(?:开多|做多|买入|买|开空|做空|卖空)`, 'iu').exec(text)
-
-    return match?.[0].trim() ?? boundary
   }
 
   private parseActions(text: string): ActionFrameDraft[] {
     const frames: ActionFrameDraft[] = []
 
-    if (/(开多|做多|买入|买)/u.test(text)) {
-      frames.push({
-        kind: 'action',
-        actionKey: 'open_long',
-        evidenceText: '开多',
-      })
-    }
+    for (const clause of this.toClauses(text)) {
+      const openLongMatch = /(开多|做多|买入)/u.exec(clause)
+      if (openLongMatch && this.isAffirmativeMatch(clause, openLongMatch.index)) {
+        frames.push({
+          kind: 'action',
+          actionKey: 'open_long',
+          evidenceText: openLongMatch[0],
+        })
+      }
 
-    if (/(开空|做空|卖空)/u.test(text)) {
-      frames.push({
-        kind: 'action',
-        actionKey: 'open_short',
-        evidenceText: '开空',
-      })
+      const openShortMatch = /(卖出开空|开空|做空|卖空)/u.exec(clause)
+      if (openShortMatch && this.isAffirmativeMatch(clause, openShortMatch.index)) {
+        frames.push({
+          kind: 'action',
+          actionKey: 'open_short',
+          evidenceText: openShortMatch[0],
+        })
+      }
     }
 
     return frames
+  }
+
+  private isAffirmativeMatch(clause: string, matchIndex: number): boolean {
+    const prefix = clause.slice(Math.max(0, matchIndex - 4), matchIndex)
+    return !/(不要|禁止|不).{0,3}$/u.test(prefix)
   }
 
   private parseRisk(text: string): RiskFrameDraft[] {
     const match = /亏损\s*(?:百分之?|%?\s*)?(\d+(?:\.\d+)?)\s*%?\s*止损/u.exec(text)
     if (!match) return []
 
+    const valuePct = Number(match[1])
+    if (valuePct <= 0 || valuePct >= 100) return []
+
     return [
       {
         kind: 'risk',
         riskKey: 'risk.stop_loss_pct',
-        valuePct: Number(match[1]),
+        valuePct,
         evidenceText: match[0],
       },
     ]

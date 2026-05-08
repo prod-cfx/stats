@@ -75,6 +75,40 @@ describe('NaturalLanguageGatewayService', () => {
       ])
     },
   )
+
+  it('does not create short EMA compare frames from a different clause', () => {
+    const frames = service.parse('EMA20 EMA60 上方只开多；RSI 下方只开空')
+
+    expect(indicatorCompareFrames(frames)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ period: 20, operator: 'GT', sideScope: 'long' }),
+        expect.objectContaining({ period: 60, operator: 'GT', sideScope: 'long' }),
+      ]),
+    )
+    expect(indicatorCompareFrames(frames).filter(frame => frame.sideScope === 'short')).toHaveLength(0)
+    expect(combinationFrames(frames).filter(frame => frame.sideScope === 'short')).toHaveLength(0)
+  })
+
+  it('does not create boundary or action frames for negated BOLL entry intent', () => {
+    const frames = service.parse('BOLL 下轨不要开多')
+
+    expect(boundaryTouchFrames(frames)).toHaveLength(0)
+    expect(actionFrames(frames)).toHaveLength(0)
+  })
+
+  it('does not create action frames from ambiguous buy wording', () => {
+    expect(actionFrames(service.parse('买卖规则先说明，不买入'))).toHaveLength(0)
+  })
+
+  it('does not attach global BOLL context to unrelated later boundary wording', () => {
+    const frames = service.parse('使用 BOLL 观察波动；突破上边界开空')
+
+    expect(boundaryTouchFrames(frames)).toHaveLength(0)
+  })
+
+  it('does not emit risk frames for clearly invalid stop-loss percentages', () => {
+    expect(riskFrames(service.parse('亏损百分500止损'))).toHaveLength(0)
+  })
 })
 
 function contextFrames(
@@ -97,6 +131,10 @@ function boundaryTouchFrames(
 
 function riskFrames(frames: ReturnType<NaturalLanguageGatewayService['parse']>): SemanticRiskFrame[] {
   return frames.filter(frame => frame.kind === 'risk')
+}
+
+function actionFrames(frames: ReturnType<NaturalLanguageGatewayService['parse']>) {
+  return frames.filter(frame => frame.kind === 'action')
 }
 
 function indicatorCompareFrames(
