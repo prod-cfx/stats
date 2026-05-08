@@ -117,6 +117,69 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
     ]))
   })
 
+  it('keeps ordinary percent-change entries from being hijacked by add_position', () => {
+    const { ir } = compileLifecycleMessage('15分钟内上涨 2% 开多；BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次。')
+
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'ADD_LONG' })],
+      }),
+    ]))
+  })
+
+  it('keeps ordinary RSI entries from being hijacked by DCA schedules', () => {
+    const { ir } = compileLifecycleMessage('RSI 低于 30 买入；每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。')
+
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          dcaSchedule: expect.objectContaining({
+            maxCount: 4,
+            stateKey: 'dca_fired_count',
+          }),
+        }),
+        actions: [
+          {
+            kind: 'ADD_LONG',
+            quantity: { mode: 'fixed_quote', value: 100, asset: 'USDT' },
+          },
+        ],
+      }),
+    ]))
+  })
+
+  it('keeps ordinary cross-under exits from being hijacked by reverse_position', () => {
+    const { ir } = compileLifecycleMessage('MA20 上穿 MA50 开多，MA20 下穿 MA50 平多；跌破 MA50 平多并反手做空，反手仓位沿用原仓位，允许同一根 K 线内反手。')
+
+    expect(ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [expect.objectContaining({ kind: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          reversePosition: expect.objectContaining({
+            fromSide: 'long',
+            toSide: 'short',
+          }),
+        }),
+        actions: [
+          expect.objectContaining({ kind: 'CLOSE_LONG' }),
+          expect.objectContaining({ kind: 'OPEN_SHORT' }),
+        ],
+      }),
+    ]))
+  })
+
   it('compiles add_position constraints into pyramiding portfolio and runtime state', () => {
     const { ir } = compileLifecycleMessage('BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次。')
 
