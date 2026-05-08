@@ -38,10 +38,16 @@ interface Phase0OrchestrationNormalizationResult {
   hasBlockingSlots: boolean
 }
 
+export type MissingSemanticContractRequirementKind = 'capability_missing' | 'timeframe_mismatch'
+
 export interface MissingSemanticContractRequirement extends SemanticRequirement {
   ownerKind: SemanticContractOwnerKind
   ownerId: string
   contractId: string
+  kind?: MissingSemanticContractRequirementKind
+  errorCode?: string
+  producer?: { ownerKind: SemanticContractOwnerKind; ownerId: string; timeframe: string }
+  consumer?: { source: 'context_slot'; timeframe: string | null }
 }
 
 export interface SemanticContractReadinessNormalizationResult {
@@ -88,7 +94,10 @@ export class SemanticContractReadinessService {
     const providerNormalization = this.normalizeProviderContracts(supportedOwners)
     const providerContracts = providerNormalization.contracts
     const resolution = this.semanticAtomContractService.resolve(providerContracts)
-    const missingRequirements = this.collectMissingRequirements(supportedOwners, resolution.capabilities)
+    const missingRequirements = [
+      ...this.collectMissingRequirements(supportedOwners, resolution.capabilities),
+      ...this.validateTimeframePairing(supportedOwners, state),
+    ]
     const slotsByOwnerKey = mergeSlotMaps(
       providerNormalization.shapeSlotsByOwnerKey,
       buildMissingRequirementSlots(missingRequirements),
@@ -196,6 +205,46 @@ export class SemanticContractReadinessService {
           })),
       ),
     )
+  }
+
+  private validateTimeframePairing(
+    activeOwners: readonly SemanticContractOwnerRef[],
+    state: SemanticState,
+  ): MissingSemanticContractRequirement[] {
+    const consumerTimeframe = readContextSlotTimeframe(state)
+    if (!consumerTimeframe) {
+      return []
+    }
+
+    const mismatches: MissingSemanticContractRequirement[] = []
+
+    for (const owner of activeOwners) {
+      if (isTimeframeOverride(owner.params)) {
+        continue
+      }
+
+      const declared = readDeclaredTimeframe(owner)
+      if (!declared || declared === consumerTimeframe) {
+        continue
+      }
+
+      const targetContractId = owner.contracts[0]?.id ?? `${owner.ownerKind}:${owner.ownerId}`
+
+      mismatches.push({
+        ownerKind: owner.ownerKind,
+        ownerId: owner.ownerId,
+        contractId: targetContractId,
+        domain: 'runtime',
+        verb: 'align',
+        object: 'timeframe',
+        kind: 'timeframe_mismatch',
+        errorCode: 'READINESS_TIMEFRAME_MISMATCH',
+        producer: { ownerKind: owner.ownerKind, ownerId: owner.ownerId, timeframe: declared },
+        consumer: { source: 'context_slot', timeframe: consumerTimeframe },
+      })
+    }
+
+    return mismatches
   }
 
   private hasCapability(
@@ -708,6 +757,23 @@ function ownerHasOpenSlot(owner: { openSlots?: readonly SemanticSlotState[] } | 
 }
 
 function toOpenSlot(requirement: MissingSemanticContractRequirement): SemanticSlotState {
+  if (requirement.kind === 'timeframe_mismatch') {
+    const producerTf = requirement.producer?.timeframe ?? 'unknown'
+    const consumerTf = requirement.consumer?.timeframe ?? 'unknown'
+    return {
+      slotKey: `contract.timeframe_mismatch.${requirement.ownerKind}.${requirement.ownerId}`,
+      fieldPath: buildTimeframeMismatchFieldPath(requirement),
+      status: 'open',
+      priority: 'behavior',
+      affectsExecution: true,
+      questionHint: `${requirement.ownerKind} 声明的 timeframe (${producerTf}) 与执行上下文 timeframe (${consumerTf}) 不一致，请对齐。`,
+      evidence: {
+        source: 'derived',
+        text: `Timeframe mismatch on ${requirement.ownerKind} ${requirement.ownerId}: producer=${producerTf} consumer=${consumerTf}`,
+      },
+    }
+  }
+
   const capabilityKey = `${requirement.domain}.${requirement.verb}.${requirement.object}`
 
   return {
@@ -809,7 +875,47 @@ function isManagedContractReadinessSlot(slot: SemanticSlotState): boolean {
     || slot.slotKey.startsWith('contract.runtime_requirement.')
     || slot.slotKey.startsWith('contract.state_requirement.')
     || slot.slotKey.startsWith('contract.order_requirement.')
+    || slot.slotKey.startsWith('contract.timeframe_mismatch.')
     || slot.slotKey === 'action.add_position.constraint'
+}
+
+function readContextSlotTimeframe(state: SemanticState): string | null {
+  const value = state.contextSlots?.timeframe?.value
+  if (typeof value !== 'string') {
+    return null
+  }
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function readDeclaredTimeframe(owner: SemanticContractOwnerRef): string | null {
+  const direct = readParamString(owner.params, 'timeframe')
+  if (direct) {
+    return direct
+  }
+
+  for (const contract of owner.contracts) {
+    const fromContractParams = readParamString(contract.params ?? {}, 'timeframe')
+    if (fromContractParams) {
+      return fromContractParams
+    }
+  }
+
+  return null
+}
+
+function isTimeframeOverride(params: Record<string, unknown>): boolean {
+  return params.timeframeOverride === true
+}
+
+function buildTimeframeMismatchFieldPath(requirement: MissingSemanticContractRequirement): string {
+  if (requirement.ownerKind === 'position') {
+    return isPositionConstraintOwnerId(requirement.ownerId)
+      ? `position.constraints[${positionConstraintIdFromOwnerId(requirement.ownerId)}].params.timeframe`
+      : 'position.params.timeframe'
+  }
+
+  return `${ownerCollection(requirement.ownerKind)}[${requirement.ownerId}].params.timeframe`
 }
 
 function buildRequirementFieldPath(
