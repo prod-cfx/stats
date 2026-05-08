@@ -1175,6 +1175,13 @@ export class SemanticAtomInvariantService {
         field: operand.field,
       })
     }
+    if (operand.kind === 'memory') {
+      return JSON.stringify({
+        kind: operand.kind,
+        memoryKey: operand.memoryKey,
+        path: operand.path ?? [],
+      })
+    }
     return JSON.stringify({
       kind: operand.kind,
       value: operand.value,
