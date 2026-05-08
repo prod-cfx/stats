@@ -127,7 +127,10 @@ export class SignalGenerationPersistenceStage {
         } satisfies Prisma.JsonValue,
         metadata: {
           generatorVersion: 'v1',
-          runtimeProvenance,
+          runtimeProvenance: {
+            ...runtimeProvenance,
+            timeframe: reverseMapTimeframe(group.timeframe),
+          },
         },
       })
 
@@ -230,7 +233,10 @@ export class SignalGenerationPersistenceStage {
         }) satisfies Prisma.JsonValue,
         metadata: {
           generatorVersion: 'v2-multi-leg',
-          runtimeProvenance,
+          runtimeProvenance: {
+            ...runtimeProvenance,
+            timeframe: execution.timeframe,
+          },
         },
       })
 

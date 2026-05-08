@@ -1087,6 +1087,7 @@ describe('signalGeneratorService coordinator behavior', () => {
           positionSide: 'LONG',
           quantity: '2',
           avgEntryPrice: '100',
+          entryTimeframe: '15m',
         }),
         updateStrategyInstanceMetadata: jest.fn().mockResolvedValue({ id: 'instance-1' }),
       },
@@ -1157,7 +1158,7 @@ describe('signalGeneratorService coordinator behavior', () => {
       103,
       undefined,
       { breakout: { rememberedLevel: 102, confirmed: true } },
-      { qty: 2, avgEntryPrice: 100, entryPrice: 100, positionSide: 'LONG' },
+      { qty: 2, avgEntryPrice: 100, entryPrice: 100, entryTimeframe: '15m', positionSide: 'LONG' },
     )
     expect(generatorRepository.updateStrategyInstanceMetadata).toHaveBeenCalledWith(
       'instance-1',

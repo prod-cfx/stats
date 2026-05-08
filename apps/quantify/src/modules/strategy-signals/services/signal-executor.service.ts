@@ -1,4 +1,4 @@
-import type { PositionSide, SignalDirection, SignalStatus, TradeSide } from '@ai/shared'
+import type { MarketTimeframe, PositionSide, SignalDirection, SignalStatus, TradeSide } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
@@ -19,7 +19,7 @@ import type {
   StrategyInstanceRiskProfile,
 } from '@/prisma/prisma.types'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { LedgerEntryType } from '@ai/shared'
+import { LedgerEntryType, MARKET_TIMEFRAMES } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable, Logger } from '@nestjs/common'
@@ -255,7 +255,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
     if (!accounts.length) {
       this.logger.debug(`No subscribed accounts for signal ${signal.id}`)
-      await this.tradingSignalRepository.updateStatus(signal.id, 'FAILED', { reason: 'NO_SUBSCRIBERS' })
+      await this.tradingSignalRepository.updateStatus(
+        signal.id,
+        'FAILED',
+        this.mergeSignalMetadata(signal.metadata, { reason: 'NO_SUBSCRIBERS' }),
+      )
       return
     }
 
@@ -277,9 +281,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     else if (executed === 0 && failed > 0) status = 'FAILED'
     else status = 'PARTIAL'
 
-    await this.tradingSignalRepository.updateStatus(signal.id, status, {
+    await this.tradingSignalRepository.updateStatus(signal.id, status, this.mergeSignalMetadata(signal.metadata, {
       executions: { total, executed, failed, skipped },
-    })
+    }))
 
     if (signal.strategyInstanceId) {
       if (status === 'FAILED') {
@@ -345,6 +349,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       const positionSide = this.mapPositionSide(direction)
       if (!tradeSide || !positionSide) return 'skipped'
       const runtimeProvenance = this.readSignalRuntimeProvenance(resolvedSignal)
+      const entryTimeframe = this.readSignalEntryTimeframe(resolvedSignal)
       const expectedMarketType = this.readExpectedRuntimeMarketType(resolvedSignal)
 
       const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide)
@@ -648,6 +653,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
               quantity: executedQuantity.toString(),
               fee: executedFee > 0 ? executedFee.toString() : '0',
               feeCurrency,
+              entryTimeframe,
               orderId: order.id,
               externalTradeId: order.id,
               provider: effectiveExchangeId,
@@ -1585,5 +1591,36 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     const raw = runtimeProvenance?.marketType
     if (raw === 'spot' || raw === 'perp') return raw
     return null
+  }
+
+  private readSignalEntryTimeframe(
+    signal: { metadata?: Prisma.JsonValue | null; marketContext?: Prisma.JsonValue | null },
+  ): MarketTimeframe | undefined {
+    const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
+    const fromRuntime = this.readMarketTimeframe(runtimeProvenance?.timeframe)
+    if (fromRuntime) return fromRuntime
+
+    const marketContext = signal.marketContext
+    if (!marketContext || Array.isArray(marketContext) || typeof marketContext !== 'object') {
+      return undefined
+    }
+
+    return this.readMarketTimeframe((marketContext as Prisma.JsonObject).timeframe) ?? undefined
+  }
+
+  private readMarketTimeframe(value: unknown): MarketTimeframe | null {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return (MARKET_TIMEFRAMES as readonly string[]).includes(trimmed) ? trimmed as MarketTimeframe : null
+  }
+
+  private mergeSignalMetadata(
+    metadata: Prisma.JsonValue | null | undefined,
+    patch: Prisma.JsonObject,
+  ): Prisma.JsonObject {
+    const base = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? metadata as Prisma.JsonObject
+      : {}
+    return { ...base, ...patch }
   }
 }

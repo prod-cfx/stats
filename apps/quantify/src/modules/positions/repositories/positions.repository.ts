@@ -180,6 +180,7 @@ export class PositionsRepository {
         "leverage",
         "quantity",
         "avg_entry_price" AS "avgEntryPrice",
+        "entry_timeframe" AS "entryTimeframe",
         "realized_pnl" AS "realizedPnl",
         "unrealized_pnl" AS "unrealizedPnl",
         "status",

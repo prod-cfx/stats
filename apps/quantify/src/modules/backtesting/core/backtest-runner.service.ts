@@ -59,6 +59,7 @@ interface CompiledDecisionRuntimeState {
 
 interface PositionRuntimeState {
   side: 'LONG' | 'SHORT'
+  entryTimeframe: Timeframe
   barsHeld: number
   highestPriceSinceEntry: number
   lowestPriceSinceEntry: number
@@ -987,6 +988,7 @@ export class BacktestRunnerService {
       position: {
         ...input.position,
         barsHeld: input.positionRuntimeState?.barsHeld,
+        entryTimeframe: input.positionRuntimeState?.entryTimeframe,
         highestPriceSinceEntry: input.positionRuntimeState?.highestPriceSinceEntry,
         lowestPriceSinceEntry: input.positionRuntimeState?.lowestPriceSinceEntry,
       },
@@ -1040,12 +1042,14 @@ export class BacktestRunnerService {
     const next = !existing || existing.side !== side
       ? {
           side,
+          entryTimeframe: bar.timeframe,
           barsHeld: 1,
           highestPriceSinceEntry: bar.high,
           lowestPriceSinceEntry: bar.low,
         }
       : {
           side,
+          entryTimeframe: existing.entryTimeframe,
           barsHeld: existing.barsHeld + 1,
           highestPriceSinceEntry: Math.max(existing.highestPriceSinceEntry, bar.high),
           lowestPriceSinceEntry: Math.min(existing.lowestPriceSinceEntry, bar.low),
