@@ -498,7 +498,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -509,7 +509,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         currentPrice: 100,
         accountEquity: 1_000,
         semanticRuntimeState: {
-          dca_count: { value: 4 },
+          dca_fired_count: { value: 4 },
         },
       } as Ctx,
     )
@@ -528,7 +528,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -620,7 +620,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         priority: 100,
         when: 'ready',
         metadata: {
-          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_count' },
+          dcaSchedule: { maxCount: 4, capitalCap: 500, stateKey: 'dca_fired_count' },
         },
         actions: [
           { kind: 'ADD_LONG', quantity: { mode: 'pct_equity', value: 10 } },
@@ -631,7 +631,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         currentPrice: 100,
         accountEquity: 1_000,
         semanticRuntimeState: {
-          dca_count: { value: 'bad' },
+          dca_fired_count: { value: 'bad' },
         },
       } as Ctx,
     )
