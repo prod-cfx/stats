@@ -31,6 +31,16 @@ describe('SemanticClarificationQuestionRendererService', () => {
     })).toBe('请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。')
   })
 
+  it('renders position sizing from public wording instead of leaking fallback internals', () => {
+    const question = service.render({
+      slotKey: 'position.sizing',
+      fallback: '请补充 position.sizing。',
+    })
+
+    expect(question).toMatch(/仓位|单笔|10%|USDT|BTC/u)
+    expect(question).not.toContain('position.sizing')
+  })
+
   it.each([
     [
       'trigger.percent_change.magnitude',

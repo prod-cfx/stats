@@ -1,9 +1,12 @@
 import type { SemanticRiskState, SemanticState, SemanticTriggerState } from '../../types/semantic-state'
+import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 import { buildLockedAtomicState } from './fixtures/semantic-state-golden-cases'
 
 describe('SemanticStateProjectionService', () => {
   const service = new SemanticStateProjectionService()
+  const p0Input = '15min k线 在价格都位于ema20 ema60 ema144 上方时候只开多 都位于下方时候只开空 入场时机是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损百分5止损'
 
   function flattenDisplayGraphText(state: SemanticState): string {
     return service
@@ -11,6 +14,12 @@ describe('SemanticStateProjectionService', () => {
       .blocks
       .flatMap(block => block.items.map(item => item.text))
       .join(' ')
+  }
+
+  function buildStateFromSeed(message: string): SemanticState {
+    const state = new SemanticSeedStateBuilderService().build(new SemanticSeedExtractorService().extract(message))
+    expect(state).not.toBeNull()
+    return state as SemanticState
   }
 
   it('builds display logic graph from locked semantic atoms for previous candle breakout strategy', () => {
@@ -164,10 +173,10 @@ describe('SemanticStateProjectionService', () => {
     const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
 
     expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
-    expect(firstBlockText).toContain('布林带下轨')
+    expect(firstBlockText).toContain('BOLL 下轨')
     expect(firstBlockText).toContain('成交量高于过去 20 根均量的 1.5 倍')
     expect(firstBlockText).toContain('开多 10%')
-    expect(text).toContain('布林带上轨')
+    expect(text).toContain('BOLL 上轨')
     expect(executeText).toContain('交易所: OKX')
     expect(executeText).toContain('标的: BTCUSDT')
     expect(executeText).toContain('周期: 15m')
@@ -1552,6 +1561,29 @@ describe('SemanticStateProjectionService', () => {
     expect(result.summary).toContain('出场：触及布林带 20 周期 2 倍标准差中轨时平多')
     expect(result.summary).toContain('出场：触及布林带 20 周期 2 倍标准差中轨时平空')
     expect(result.summary).not.toContain('price.detect.indicator_boundary')
+  })
+
+  it('projects P0 EMA stack and BOLL boundary display text without internal keys', () => {
+    const state = buildStateFromSeed(p0Input)
+    const conversation = service.buildConversationView(state)
+    const graphText = flattenDisplayGraphText(state)
+    const displayText = `${conversation.summary} ${graphText}`
+
+    expect(displayText).toContain('EMA20')
+    expect(displayText).toContain('EMA60')
+    expect(displayText).toContain('EMA144')
+    expect(displayText).toContain('BOLL')
+    expect(displayText).toContain('下轨')
+    expect(displayText).toContain('上轨')
+    expect(displayText).not.toMatch(/generic_boundary|indicator\.above|indicator\.below|price\.detect\.indicator_boundary/u)
+  })
+
+  it('asks for missing P0 sizing without leaking display or context clarification internals', () => {
+    const state = buildStateFromSeed(p0Input)
+    const question = service.buildClarificationView(state).nextQuestion ?? ''
+
+    expect(question).toMatch(/仓位|单笔|10%|USDT|BTC/u)
+    expect(question).not.toMatch(/generic_boundary|上轨还是下轨|交易所|标的|周期/u)
   })
 
   it('surfaces unsupported open work as a blocking fallback next question instead of hiding it', () => {
