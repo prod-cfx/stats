@@ -5,8 +5,8 @@ const mockToastError = jest.fn()
 
 jest.mock('@/lib/toast', () => ({
   toast: {
-    success: (opts: unknown) => mockToastSuccess(opts),
-    error: (opts: unknown) => mockToastError(opts),
+    success: mockToastSuccess,
+    error: mockToastError,
     warning: jest.fn(),
     info: jest.fn(),
   },
@@ -17,12 +17,13 @@ const mockFetchAccounts = jest.fn()
 const mockFetchDeployResult = jest.fn()
 
 jest.mock('@/lib/api', () => ({
-  deployAccountAiQuantStrategy: (...args: unknown[]) => mockDeploy(...args),
-  fetchAccountAiQuantDeployResult: (...args: unknown[]) => mockFetchDeployResult(...args),
-  fetchUserExchangeAccountStatuses: (...args: unknown[]) => mockFetchAccounts(...args),
+  deployAccountAiQuantStrategy: mockDeploy,
+  fetchAccountAiQuantDeployResult: mockFetchDeployResult,
+  fetchUserExchangeAccountStatuses: mockFetchAccounts,
 }))
 
 import { confirmAiQuantDeploy } from './ai-quant-page-deploy'
+import type { ConversationState } from './ai-quant-page-conversation'
 
 const t = (key: string, options?: Record<string, unknown>) => {
   if (key === 'aiQuant.messages.deploySuccess') {
@@ -39,16 +40,17 @@ const t = (key: string, options?: Record<string, unknown>) => {
 
 function makeArgs() {
   const updateActiveConversation = jest.fn()
+  const activeConversation = {
+    id: 'conv-1',
+    title: 'My Strategy',
+    messages: [],
+    backtestResult: { drawdownPct: 5 },
+    publishedSnapshotId: 'snap-1',
+    publishedSnapshotCompatibilityMetadata: null,
+  } satisfies Partial<ConversationState>
   return {
     args: {
-      activeConversation: {
-        id: 'conv-1',
-        title: 'My Strategy',
-        messages: [],
-        backtestResult: { drawdownPct: 5 },
-        publishedSnapshotId: 'snap-1',
-        publishedSnapshotCompatibilityMetadata: null,
-      } as never,
+      activeConversation: activeConversation as unknown as ConversationState,
       apiConfigHref: '/api-config',
       deployRequestId: null,
       selectedDeployAccountId: 'acct-1',
