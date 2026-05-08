@@ -11,7 +11,7 @@
  */
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
-import type { CreateOrderInput } from '@/modules/trading/core/types'
+import type { CreateOrderInput, UnifiedOrder } from '@/modules/trading/core/types'
 import { ConfigModule } from '@nestjs/config'
 import { EventEmitterModule } from '@nestjs/event-emitter'
 import { Test } from '@nestjs/testing'
@@ -25,6 +25,9 @@ const LIVE_SMOKE_ENABLED = process.env.QUANTIFY_OKX_LIVE_ORDER_SMOKE === 'true'
 const ALLOWED_SYMBOLS = new Set(['BTC/USDT', 'ETH/USDT'])
 const MAX_ALLOWED_NOTIONAL = 5
 const DEFAULT_MAX_LIMIT_PRICE_TO_LAST_RATIO = 0.5
+const CANCEL_ATTEMPTS = 3
+const CANCEL_POLL_ATTEMPTS = 5
+const CANCEL_POLL_INTERVAL_MS = 500
 
 interface LiveOrderSmokeConfig {
   userId: string
@@ -93,6 +96,10 @@ function buildLimitBuyOrderInput(config: LiveOrderSmokeConfig): CreateOrderInput
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 async function assertLimitPriceIsNonMarketable(
   tradingService: TradingService,
   config: LiveOrderSmokeConfig,
@@ -110,6 +117,57 @@ async function assertLimitPriceIsNonMarketable(
       + `of current OKX last price (${lastPrice}) to avoid marketable live smoke orders`,
     )
   }
+}
+
+function isCanceled(order: UnifiedOrder): boolean {
+  return order.status === 'canceled' || order.status === 'rejected'
+}
+
+function assertOrderWasNotFilled(order: UnifiedOrder, config: LiveOrderSmokeConfig): void {
+  if (order.status === 'closed' || order.filled > 0) {
+    throw new Error(
+      `OKX live smoke order ${order.id} appears filled (${order.status}, filled=${order.filled}). `
+      + `Review account ${config.accountId} for ${config.symbol} immediately.`,
+    )
+  }
+}
+
+async function cancelLiveSmokeOrderWithConfirmation(
+  tradingService: TradingService,
+  config: LiveOrderSmokeConfig,
+  orderId: string,
+): Promise<void> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= CANCEL_ATTEMPTS; attempt += 1) {
+    try {
+      const canceled = await tradingService.cancelOrder(config.userId, 'okx', 'spot', orderId, config.symbol, config.accountId)
+      assertOrderWasNotFilled(canceled, config)
+      if (isCanceled(canceled)) {
+        return
+      }
+    }
+    catch (error) {
+      lastError = error
+    }
+
+    await sleep(CANCEL_POLL_INTERVAL_MS)
+  }
+
+  for (let attempt = 1; attempt <= CANCEL_POLL_ATTEMPTS; attempt += 1) {
+    const order = await tradingService.getOrder(config.userId, 'okx', 'spot', orderId, config.symbol, config.accountId)
+    assertOrderWasNotFilled(order, config)
+    if (isCanceled(order)) {
+      return
+    }
+    await sleep(CANCEL_POLL_INTERVAL_MS)
+  }
+
+  throw new Error(
+    `Failed to confirm OKX live smoke order ${orderId} was canceled. `
+    + `Manually inspect and cancel account ${config.accountId} ${config.symbol}. `
+    + `Last cancel error: ${lastError instanceof Error ? lastError.message : String(lastError ?? 'none')}`,
+  )
 }
 
 describe('OKX live order smoke (opt-in)', () => {
@@ -196,7 +254,7 @@ describe('OKX live order smoke (opt-in)', () => {
     }
     finally {
       if (orderId) {
-        await tradingService.cancelOrder(config.userId, 'okx', 'spot', orderId, config.symbol, config.accountId)
+        await cancelLiveSmokeOrderWithConfirmation(tradingService, config, orderId)
       }
     }
   })
