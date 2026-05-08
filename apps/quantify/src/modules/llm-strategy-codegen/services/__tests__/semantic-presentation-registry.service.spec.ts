@@ -46,4 +46,24 @@ describe('SemanticPresentationRegistryService', () => {
     expect(emaText).toBe('价格同时位于 EMA20、EMA60、EMA144 上方')
     expect(`${bollText} ${emaText}`).not.toMatch(/generic_boundary|indicator\.above|indicator\.below|price\.detect\.indicator_boundary/u)
   })
+
+  it('rejects display output that contains P0 internal identifiers', () => {
+    expect(() => presentation.renderDisplay('condition.expression', {
+      label: 'risk.stop_loss_pct',
+    })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+    expect(() => presentation.renderDisplay('condition.expression', {
+      label: 'position.fixed_pct',
+    })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+    expect(() => presentation.renderDisplay('condition.expression', {
+      label: 'open_long',
+    })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+  })
+
+  it('renders clarification text without leaking raw slot keys', () => {
+    const text = presentation.renderClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
+
+    expect(text).toBe('请补充百分比止损的止损比例。')
+    expect(text).not.toContain('risk.stop_loss_pct.valuePct')
+    expect(text).not.toContain('valuePct')
+  })
 })

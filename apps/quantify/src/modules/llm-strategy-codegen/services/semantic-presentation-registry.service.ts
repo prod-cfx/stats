@@ -3,8 +3,9 @@ import { Injectable } from '@nestjs/common'
 import type {
   SemanticPresentationMetadata,
 } from '../types/semantic-presentation'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 
-const INTERNAL_KEY_LEAK_PATTERN = /generic_boundary|indicator\.above|indicator\.below|price\.detect\.indicator_boundary/u
+const EXTRA_INTERNAL_IDENTIFIERS = ['generic_boundary']
 
 const PRESENTATIONS: SemanticPresentationMetadata[] = [
   presentation({
@@ -81,6 +82,12 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
   }),
 ]
 
+const INTERNAL_IDENTIFIER_LEAK_PATTERN = buildInternalIdentifierPattern()
+
+const SLOT_LABELS: Record<string, string> = {
+  'risk.stop_loss_pct.valuePct': '止损比例',
+}
+
 @Injectable()
 export class SemanticPresentationRegistryService {
   private readonly presentations = new Map(PRESENTATIONS.map(metadata => [metadata.key, metadata]))
@@ -95,10 +102,12 @@ export class SemanticPresentationRegistryService {
 
   renderDisplay(key: string, params: Record<string, unknown>): string {
     const output = this.get(key).displayRenderer({ params })
-    if (INTERNAL_KEY_LEAK_PATTERN.test(output)) {
-      throw new Error(`semantic_presentation_internal_key_leak:${key}`)
-    }
-    return output
+    return guardPublicText(key, output)
+  }
+
+  renderClarification(key: string, slotKey: string, params: Record<string, unknown>): string {
+    const output = this.get(key).clarificationRenderer(slotKey, params)
+    return guardPublicText(key, output)
   }
 }
 
@@ -109,12 +118,17 @@ function presentation(
 ): SemanticPresentationMetadata {
   return {
     ...metadata,
-    clarificationRenderer: metadata.clarificationRenderer ?? defaultClarificationRenderer,
+    clarificationRenderer: metadata.clarificationRenderer
+      ?? ((slotKey, params) => defaultClarificationRenderer(metadata.publicName, slotKey, params)),
   }
 }
 
-function defaultClarificationRenderer(slotKey: string): string {
-  return `请补充 ${slotKey}。`
+function defaultClarificationRenderer(
+  publicName: string,
+  slotKey: string,
+  _params: Record<string, unknown>,
+): string {
+  return `请补充${publicName}的${SLOT_LABELS[slotKey] ?? '缺失信息'}。`
 }
 
 function renderIndicatorBoundaryTouch(params: Record<string, unknown>): string {
@@ -153,4 +167,24 @@ function stringParam(params: Record<string, unknown>, key: string, fallback: str
 function numberParam(params: Record<string, unknown>, key: string, fallback: number): number {
   const value = params[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function guardPublicText(key: string, output: string): string {
+  if (INTERNAL_IDENTIFIER_LEAK_PATTERN.test(output)) {
+    throw new Error(`semantic_presentation_internal_key_leak:${key}`)
+  }
+  return output
+}
+
+function buildInternalIdentifierPattern(): RegExp {
+  const registeredAtomKeys = new SemanticAtomRegistryService().list().map(atom => atom.key)
+  const identifiers = [...new Set([...registeredAtomKeys, ...EXTRA_INTERNAL_IDENTIFIERS])]
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+
+  return new RegExp(`(^|[^A-Za-z0-9_.])(?:${identifiers.join('|')})(?=$|[^A-Za-z0-9_.])`, 'u')
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
 }
