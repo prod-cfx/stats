@@ -261,7 +261,49 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
     ]))
-    expect(JSON.stringify(patch)).not.toMatch(/generic_boundary|indicator\.above|indicator\.below/u)
+    expect(JSON.stringify(patch)).not.toMatch(/generic_boundary/u)
+  })
+
+  it('keeps legacy EMA indicator atoms for existing stack flows while P0 gateway gates remain separate', () => {
+    const patch = service.extract('BTC 15分钟价格在 EMA20 EMA60 EMA144 上方做多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 20 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 60 }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
+  })
+
+  it('merges BOLL-only gateway triggers actions and risk without requiring expression gates', () => {
+    const patch = service.extract('BOLL下轨开多，亏损5%止损')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+    ]))
   })
 
   it('merges gateway atoms without duplicating legacy stop-loss risk or open actions', () => {

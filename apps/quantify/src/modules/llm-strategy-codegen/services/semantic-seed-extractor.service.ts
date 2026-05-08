@@ -86,20 +86,26 @@ export class SemanticSeedExtractorService {
       ? this.withInheritedLifecycleContextSlots(this.extractContextSlots(text))
       : this.extractContextSlots(text)
     const gatewayPatch = this.frameNormalizer.normalize(this.naturalLanguageGateway.parse(text))
-    const shouldMergeGatewayExecutables = this.shouldMergeGatewayExecutables(gatewayPatch)
     const contextSlots = this.mergeContextSlots(gatewayPatch.contextSlots ?? {}, legacyContextSlots, text)
     const aliasContext = this.extractAliasContext(text)
     const eventFramePatch = this.eventFrameProjector.project(this.eventFrameParser.parse(text))
+    const eventFrameTriggers = eventFramePatch.triggers ?? []
+    const legacyTriggers = this.extractTriggers(text, aliasContext)
+    const gatewayTriggers = this.filterGatewayTriggers(gatewayPatch.triggers ?? [], legacyTriggers)
+    const gatewayRisk = gatewayPatch.risk ?? []
+    const gatewayActions = gatewayTriggers.length > 0 || gatewayRisk.length > 0
+      ? (gatewayPatch.actions ?? [])
+      : []
     const triggers = this.atomizeTriggers(this.withRecognizedTriggerCombinationContracts(this.groupEntryConfirmationTriggers(this.inheritIndicatorBoundaryConfirmationModes(
       this.removeStaticIndicatorTriggersCoveredBySequences(
         this.removeLogicalAnyOfExitChildren(this.harmonizeBollingerTriggers(this.mergeSeedTriggers(
-          shouldMergeGatewayExecutables ? (gatewayPatch.triggers ?? []) : [],
-          this.mergeSeedTriggers(eventFramePatch.triggers ?? [], this.extractTriggers(text, aliasContext)),
+          gatewayTriggers,
+          this.mergeSeedTriggers(eventFrameTriggers, legacyTriggers),
         ))),
       ),
     ))))
     const actions = this.atomizeActions(this.mergeSeedActions(
-      shouldMergeGatewayExecutables ? (gatewayPatch.actions ?? []) : [],
+      gatewayActions,
       this.mergeSeedActions(
         this.mergeSeedActions(
           eventFramePatch.actions ?? [],
@@ -109,7 +115,7 @@ export class SemanticSeedExtractorService {
       ),
     ))
     const risk = this.atomizeRisk(this.mergeSeedRisk(
-      shouldMergeGatewayExecutables ? (gatewayPatch.risk ?? []) : [],
+      gatewayRisk,
       this.extractRisk(text),
     ))
     const position = this.atomizePosition(this.withPositionLifecycleConstraints(
@@ -140,12 +146,37 @@ export class SemanticSeedExtractorService {
     return patch
   }
 
-  private shouldMergeGatewayExecutables(gatewayPatch: CodegenSemanticPatch): boolean {
-    return gatewayPatch.triggers?.some(trigger => (
-      trigger.key === 'condition.expression'
-      && trigger.phase === 'gate'
-      && typeof trigger.params?.displayGroupId === 'string'
-    )) ?? false
+  private filterGatewayTriggers(
+    gatewayTriggers: readonly SeedTrigger[],
+    legacyTriggers: readonly SeedTrigger[],
+  ): SeedTrigger[] {
+    return gatewayTriggers.filter((trigger) => {
+      if (trigger.key !== 'condition.expression' || trigger.phase !== 'gate') {
+        return true
+      }
+
+      return !this.hasLegacyMovingAverageStackForGatewayGate(trigger, legacyTriggers)
+    })
+  }
+
+  private hasLegacyMovingAverageStackForGatewayGate(
+    gatewayTrigger: SeedTrigger,
+    legacyTriggers: readonly SeedTrigger[],
+  ): boolean {
+    const sideScope = gatewayTrigger.sideScope ?? 'long'
+    const stackPeriods = legacyTriggers
+      .filter(trigger => (
+        trigger.key === 'indicator.above'
+        && trigger.phase === 'entry'
+        && (trigger.sideScope ?? 'long') === sideScope
+        && typeof trigger.params?.indicator === 'string'
+        && (trigger.params.indicator === 'ema' || trigger.params.indicator === 'ma')
+        && typeof trigger.params['reference.period'] === 'number'
+        && Number.isFinite(trigger.params['reference.period'])
+      ))
+      .map(trigger => trigger.params?.['reference.period'])
+
+    return new Set(stackPeriods).size >= 2
   }
 
   private mergeContextSlots(
@@ -206,7 +237,11 @@ export class SemanticSeedExtractorService {
 
     for (const trigger of [...primaryTriggers, ...secondaryTriggers]) {
       if (this.isGenericBoundaryFallbackCoveredByMergedTrigger(trigger, merged)) continue
-      if (this.isStaticIndicatorTriggerCoveredByMergedGate(trigger, merged)) continue
+      const concreteBoundaryIndex = this.findConcreteBoundaryEquivalentIndex(trigger, merged)
+      if (concreteBoundaryIndex !== null) {
+        merged[concreteBoundaryIndex] = trigger
+        continue
+      }
 
       const signature = this.buildTriggerMergeSignature(trigger)
       if (seen.has(signature)) continue
@@ -259,62 +294,47 @@ export class SemanticSeedExtractorService {
     ))
   }
 
-  private isStaticIndicatorTriggerCoveredByMergedGate(
+  private findConcreteBoundaryEquivalentIndex(
     trigger: SeedTrigger,
     merged: readonly SeedTrigger[],
-  ): boolean {
-    if (
-      trigger.key !== 'indicator.above'
-      && trigger.key !== 'indicator.below'
-    ) {
-      return false
-    }
+  ): number | null {
+    const boundary = this.readConcreteBoundaryMergeParts(trigger)
+    if (!boundary) return null
 
-    const indicator = typeof trigger.params?.indicator === 'string'
-      ? trigger.params.indicator.toLowerCase()
-      : null
-    const period = typeof trigger.params?.['reference.period'] === 'number' && Number.isFinite(trigger.params['reference.period'])
-      ? trigger.params['reference.period']
-      : null
-    if (!indicator || period === null) {
-      return false
-    }
+    const index = merged.findIndex((candidate) => {
+      const candidateBoundary = this.readConcreteBoundaryMergeParts(candidate)
+      return candidateBoundary !== null
+        && candidateBoundary.phase === boundary.phase
+        && candidateBoundary.sideScope === boundary.sideScope
+        && candidateBoundary.boundaryRole === boundary.boundaryRole
+        && candidateBoundary.indicatorName === boundary.indicatorName
+    })
 
-    return merged.some(candidate => (
-      candidate.key === 'condition.expression'
-      && candidate.phase === 'gate'
-      && candidate.sideScope === trigger.sideScope
-      && typeof candidate.params?.displayGroupId === 'string'
-      && this.expressionCoversIndicatorCompare(candidate.params.expression, indicator, period)
-    ))
+    return index >= 0 ? index : null
   }
 
-  private expressionCoversIndicatorCompare(
-    expression: unknown,
-    indicator: string,
-    period: number,
-  ): boolean {
-    if (!this.isPlainObject(expression)) {
-      return false
+  private readConcreteBoundaryMergeParts(trigger: SeedTrigger): {
+    phase: SeedTrigger['phase']
+    sideScope: SeedTrigger['sideScope'] | null
+    boundaryRole: string
+    indicatorName: string
+  } | null {
+    if (
+      trigger.key !== 'price.detect.indicator_boundary'
+      || typeof trigger.params?.boundaryRole !== 'string'
+      || !this.isPlainObject(trigger.params.indicator)
+      || typeof trigger.params.indicator.name !== 'string'
+      || trigger.params.indicator.name === 'generic_boundary'
+    ) {
+      return null
     }
 
-    if (expression.kind === 'AND' && Array.isArray(expression.children)) {
-      return expression.children.some(child => this.expressionCoversIndicatorCompare(child, indicator, period))
+    return {
+      phase: trigger.phase,
+      sideScope: trigger.sideScope ?? null,
+      boundaryRole: trigger.params.boundaryRole,
+      indicatorName: trigger.params.indicator.name,
     }
-
-    if (expression.kind !== 'predicate' || !this.isPlainObject(expression.right)) {
-      return false
-    }
-
-    const rightName = typeof expression.right.name === 'string'
-      ? expression.right.name.toLowerCase()
-      : null
-    const normalizedIndicator = indicator === 'ma' ? 'sma' : indicator
-    if (rightName !== normalizedIndicator || !this.isPlainObject(expression.right.params)) {
-      return false
-    }
-
-    return expression.right.params.period === period
   }
 
   private buildLooseIndicatorCrossMergeSignature(trigger: SeedTrigger): string | null {
@@ -413,6 +433,12 @@ export class SemanticSeedExtractorService {
     const seen = new Set<string>()
 
     for (const risk of [...primaryRisk, ...secondaryRisk]) {
+      const equivalentIndex = this.findEquivalentRiskIndex(risk, merged)
+      if (equivalentIndex !== null) {
+        merged[equivalentIndex] = risk
+        continue
+      }
+
       const signature = JSON.stringify({
         key: risk.key,
         params: this.stableValue(risk.params ?? {}),
@@ -423,6 +449,19 @@ export class SemanticSeedExtractorService {
     }
 
     return merged
+  }
+
+  private findEquivalentRiskIndex(risk: SeedRisk, merged: readonly SeedRisk[]): number | null {
+    if (typeof risk.params.valuePct !== 'number') {
+      return null
+    }
+
+    const index = merged.findIndex(candidate => (
+      candidate.key === risk.key
+      && candidate.params.valuePct === risk.params.valuePct
+    ))
+
+    return index >= 0 ? index : null
   }
 
   private stableValue(value: unknown): unknown {
