@@ -25,6 +25,7 @@ import { CompiledScriptExecutionEnvelopeService } from './services/compiled-scri
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
 import { ConversationSemanticEditService } from './services/conversation-semantic-edit.service'
 import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
+import { NaturalLanguageGatewayService } from './services/natural-language-gateway.service'
 import { PositionSizingContractService } from './services/position-sizing-contract.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
@@ -119,6 +120,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticOpenSlotAnswerResolverService,
     SemanticPresentationRegistryService,
     SemanticSupportClassifierService,
+    NaturalLanguageGatewayService,
     UnsupportedFallbackService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
