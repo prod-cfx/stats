@@ -79,6 +79,7 @@ export class StrategyConsistencyService {
     checks.push(this.checkActions(specProfile, scriptProfile))
     checks.push(this.checkSizing(specProfile, scriptProfile))
     checks.push(this.checkMarketMetadata(input.canonicalSpec, parsedProjection))
+    checks.push(...this.checkTimeframeConsistency(input.canonicalSpec))
     const compiledIr = this.tryCompileCanonicalIr(input.canonicalSpec)
     if (compiledIr) {
       checks.push(this.checkAstProjection(compiledIr, parsedProjection))
@@ -1170,6 +1171,94 @@ export class StrategyConsistencyService {
       actual,
       message: '脚本执行市场元数据与 canonical spec 一致。',
     }
+  }
+
+  private checkTimeframeConsistency(spec: CanonicalStrategySpec): StrategyConsistencyCheck[] {
+    if (spec.version !== 2) {
+      return [{
+        key: 'data_requirements.timeframe_consistency',
+        level: 'warning',
+        status: 'unprovable',
+        expected: null,
+        actual: null,
+        message: 'canonical spec v1 不强制 requiredTimeframes，跳过 timeframe 一致性校验。',
+      }]
+    }
+
+    const declared = Array.from(new Set(spec.dataRequirements.requiredTimeframes))
+    const referenced = this.collectReferencedTimeframes(spec.rules)
+    const declaredSet = new Set(declared)
+    const referencedSet = new Set(referenced)
+
+    const missing = referenced.filter(tf => !declaredSet.has(tf))
+    const unused = declared.filter(tf => !referencedSet.has(tf))
+
+    const checks: StrategyConsistencyCheck[] = []
+
+    if (missing.length > 0) {
+      checks.push({
+        key: 'data_requirements.timeframe_consistency',
+        level: 'critical',
+        status: 'failed',
+        expected: { requiredTimeframes: declared },
+        actual: { referencedTimeframes: referenced, missing },
+        message: `condition / IR operand 引用了未声明的 timeframe：${missing.join(', ')}`,
+      })
+    }
+
+    if (unused.length > 0) {
+      checks.push({
+        key: 'data_requirements.timeframe_consistency',
+        level: 'warning',
+        status: 'failed',
+        expected: { referencedTimeframes: referenced },
+        actual: { requiredTimeframes: declared, unused },
+        message: `requiredTimeframes 中存在未被引用的 timeframe：${unused.join(', ')}`,
+      })
+    }
+
+    if (checks.length === 0) {
+      checks.push({
+        key: 'data_requirements.timeframe_consistency',
+        level: 'critical',
+        status: 'passed',
+        expected: { requiredTimeframes: declared },
+        actual: { referencedTimeframes: referenced },
+        message: 'condition / IR operand 引用的 timeframe 与 dataRequirements 完全一致。',
+      })
+    }
+
+    return checks
+  }
+
+  private collectReferencedTimeframes(rules: CanonicalRuleV2[]): string[] {
+    const seen = new Set<string>()
+    const visitNode = (node: CanonicalRuleV2['condition']): void => {
+      if (node.kind === 'atom') {
+        const tf = node.params?.timeframe
+        if (typeof tf === 'string' && tf.trim().length > 0) {
+          seen.add(tf)
+        }
+        return
+      }
+      if (node.kind === 'expression') {
+        for (const operand of [node.left, node.right]) {
+          if (operand.kind === 'series' && typeof operand.timeframe === 'string' && operand.timeframe.trim().length > 0) {
+            seen.add(operand.timeframe)
+          }
+        }
+        return
+      }
+      // group: AND / OR / NOT
+      for (const child of node.children) {
+        visitNode(child)
+      }
+    }
+
+    for (const rule of rules) {
+      visitNode(rule.condition)
+    }
+    return Array.from(seen)
   }
 
   private resolveExpectedPositionMode(
