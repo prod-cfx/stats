@@ -260,6 +260,12 @@ function evaluatePositionLifecycle(
         reason: `compiled.${program.id}.reverse.no_position`,
       }
     }
+    if (!doesPositionQtyMatchSide(currentQty, reverseMeta.fromSide)) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.reverse.side_mismatch`,
+      }
+    }
 
     return {
       action: reverseMeta.fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
@@ -318,12 +324,33 @@ function readSemanticRuntimeStateNumber(
   ctx: StrategyExecutionContextV1,
   stateKey: string,
 ): SemanticRuntimeStateNumber {
-  const value = ctx.semanticRuntimeState?.[stateKey]?.value
+  const root = ctx.semanticRuntimeState
+  if (!root || typeof root !== 'object' || !Object.prototype.hasOwnProperty.call(root, stateKey)) {
+    return { present: false, value: 0 }
+  }
+
+  const slot = root[stateKey]
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+    return { present: false, value: 0 }
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(slot, 'value')) {
+    return { present: true, value: 0 }
+  }
+
+  const value = slot.value
   if (typeof value === 'number' && Number.isFinite(value)) {
     return { present: true, value }
   }
 
   return { present: false, value: 0 }
+}
+
+function doesPositionQtyMatchSide(
+  qty: number,
+  side: ReversePositionMeta['fromSide'],
+): boolean {
+  return side === 'long' ? qty > 0 : qty < 0
 }
 
 function buildFirstApplicableDecision(
