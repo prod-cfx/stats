@@ -41,7 +41,7 @@ describe('semantic gateway golden corpus', () => {
     const normalized = readiness.normalize(classified.state)
     const displayText = buildDisplayText(stateProjection, normalized.state)
     const openSlots = collectOpenSlots(normalized.state)
-    const canonicalSpec = canonicalBuilder.build({ semanticState: normalized.state })
+    const canonicalSpec = canonicalBuilder.buildFromSemanticState(normalized.state)
 
     expect(classified.state).toBeDefined()
     expect(normalized.state).toBeDefined()
@@ -254,7 +254,7 @@ function emaClosePredicate(op: 'GT' | 'LT', period: number): object {
   })
 }
 
-function expectCanonicalP0Market(canonicalSpec: ReturnType<CanonicalSpecBuilderService['build']>): void {
+function expectCanonicalP0Market(canonicalSpec: ReturnType<CanonicalSpecBuilderService['buildFromSemanticState']>): void {
   expect(canonicalSpec.market).toEqual(expect.objectContaining({
     exchange: 'binance',
     symbol: 'BTCUSDT',
