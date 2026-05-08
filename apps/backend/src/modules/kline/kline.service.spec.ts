@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing'
 import { RedisService } from '../../common/services/redis.service'
-import { PrismaService } from '../../prisma/prisma.service'
 import { KlineService } from './kline.service'
+import { KlineRepository } from './repositories/kline.repository'
 
 describe('klineService', () => {
   let service: KlineService
@@ -15,14 +15,10 @@ describe('klineService', () => {
     getClient: jest.fn(() => mockRedisClient),
   }
 
-  const mockPrismaClient = {
-    futuresPriceHistory: {
-      findMany: jest.fn(),
-    },
-  }
-
-  const mockPrismaService = {
-    getClient: jest.fn(() => mockPrismaClient),
+  const mockKlineRepository = {
+    findMany: jest.fn(),
+    groupByTimestamp: jest.fn(),
+    queryRawOpenClose: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -30,8 +26,8 @@ describe('klineService', () => {
       providers: [
         KlineService,
         {
-          provide: PrismaService,
-          useValue: mockPrismaService,
+          provide: KlineRepository,
+          useValue: mockKlineRepository,
         },
         {
           provide: RedisService,
@@ -58,7 +54,7 @@ describe('klineService', () => {
   ])('accepts supported interval %s', async (interval, prismaInterval) => {
     mockRedisClient.get.mockResolvedValue(null)
     mockRedisClient.setex.mockResolvedValue('OK')
-    mockPrismaClient.futuresPriceHistory.findMany.mockResolvedValue([])
+    mockKlineRepository.findMany.mockResolvedValue([])
 
     await service.getKlineBars({
       symbol: 'BTCUSDT',
@@ -68,7 +64,7 @@ describe('klineService', () => {
       exchange: 'BINANCE',
     })
 
-    expect(mockPrismaClient.futuresPriceHistory.findMany).toHaveBeenCalledWith({
+    expect(mockKlineRepository.findMany).toHaveBeenCalledWith({
       where: {
         symbol: 'BTCUSDT',
         interval: prismaInterval,
@@ -78,8 +74,8 @@ describe('klineService', () => {
         },
         exchangeCode: 'BINANCE',
       },
-      orderBy: { timestamp: 'asc' },
-      take: 10001,
+      orderBy: { timestamp: 'desc' },
+      take: 50,
     })
   })
 })

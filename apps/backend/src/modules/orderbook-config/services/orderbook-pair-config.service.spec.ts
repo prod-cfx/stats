@@ -3,6 +3,7 @@ import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { RedisService } from '@/common/services/redis.service'
 import { OrderbookPairConfigRepository } from '../repositories/orderbook-pair-config.repository'
 import { OrderbookPairConfigService } from './orderbook-pair-config.service'
 
@@ -44,6 +45,10 @@ describe('orderbookPairConfigService', () => {
             delete: jest.fn(),
             findEnabledConfigs: jest.fn(),
           },
+        },
+        {
+          provide: RedisService,
+          useValue: { getClient: jest.fn(() => ({})) },
         },
       ],
     }).compile()
