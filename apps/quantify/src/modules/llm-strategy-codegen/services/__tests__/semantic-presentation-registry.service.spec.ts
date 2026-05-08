@@ -59,6 +59,15 @@ describe('SemanticPresentationRegistryService', () => {
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
   })
 
+  it('rejects display output that contains compound internal slot paths', () => {
+    expect(() => presentation.renderDisplay('condition.expression', {
+      label: 'risk.stop_loss_pct.valuePct',
+    })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+    expect(() => presentation.renderDisplay('condition.expression', {
+      label: 'position.fixed_pct.value',
+    })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+  })
+
   it('renders clarification text without leaking raw slot keys', () => {
     const text = presentation.renderClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
 

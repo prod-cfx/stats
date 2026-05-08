@@ -182,7 +182,7 @@ function buildInternalIdentifierPattern(): RegExp {
     .sort((left, right) => right.length - left.length)
     .map(escapeRegExp)
 
-  return new RegExp(`(^|[^A-Za-z0-9_.])(?:${identifiers.join('|')})(?=$|[^A-Za-z0-9_.])`, 'u')
+  return new RegExp(`(^|[^A-Za-z0-9_.])(?:${identifiers.join('|')})(?=$|[^A-Za-z0-9_])`, 'u')
 }
 
 function escapeRegExp(value: string): string {
