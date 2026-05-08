@@ -1025,6 +1025,196 @@ describe('backtestRunnerService', () => {
 
     expect((riskEvaluator.evaluate as jest.Mock).mock.calls.length).toBe(3)
   })
+
+  describe('htf alignment guard (#1016)', () => {
+    it('evaluates entry when all required HTFs are aligned', async () => {
+      const runner = createRunner()
+      const tsSeen: number[] = []
+
+      await runner.run({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: ['1h'],
+        initialCash: 1000,
+        leverage: 1,
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: 's-htf-aligned',
+          params: {},
+          dataRequirements: { requiredTimeframes: ['1h'] },
+          fn: (ctx) => {
+            tsSeen.push(ctx.ts)
+            return { type: 'NOOP' }
+          },
+        },
+        dataRange: { fromTs: 1, toTs: 2 },
+        bars: [
+          // 1h state bar at ts=1 → upsert before base bar evaluation
+          createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 2, close: 102 }),
+        ],
+      })
+
+      // 第一根 base bar (ts=1) 1h snapshot 已对齐；第二根 base bar (ts=2) 1h snapshot 也对齐
+      expect(tsSeen).toEqual([1, 2])
+    })
+
+    it('skips entry strategy.fn when one required HTF has no snapshot yet', async () => {
+      const runner = createRunner()
+      const tsSeen: number[] = []
+
+      const report = await runner.run({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: ['1h'],
+        initialCash: 1000,
+        leverage: 1,
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: 's-htf-missing',
+          params: {},
+          dataRequirements: { requiredTimeframes: ['1h'] },
+          fn: (ctx) => {
+            tsSeen.push(ctx.ts)
+            return { type: 'OPEN_LONG', qty: 1 }
+          },
+        },
+        dataRange: { fromTs: 1, toTs: 2 },
+        bars: [
+          // 没有 1h state bar → 进入 ts=1 时 1h snapshot 缺失
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+          // ts=2 之前 1h snapshot 仍未对齐，依然跳过
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        ],
+      })
+
+      expect(tsSeen).toEqual([])
+      expect(report.summary.totalTrades).toBe(0)
+      expect(report.openPositions ?? []).toHaveLength(0)
+    })
+
+    it('skips entry when one of multiple required HTFs is unaligned', async () => {
+      const runner = createRunner()
+      const tsSeen: number[] = []
+
+      await runner.run({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: ['1h', '4h'],
+        initialCash: 1000,
+        leverage: 1,
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: 's-htf-partial',
+          params: {},
+          dataRequirements: { requiredTimeframes: ['1h', '4h'] },
+          fn: (ctx) => {
+            tsSeen.push(ctx.ts)
+            return { type: 'OPEN_LONG', qty: 1 }
+          },
+        },
+        dataRange: { fromTs: 1, toTs: 2 },
+        bars: [
+          // 仅有 1h snapshot，4h 始终缺失 → 跳过 entry
+          createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        ],
+      })
+
+      expect(tsSeen).toEqual([])
+    })
+
+    it('does not engage the guard when no HTF requirements declared (single-tf strategy)', async () => {
+      const runner = createRunner()
+      const tsSeen: number[] = []
+
+      // 不声明 dataRequirements.requiredTimeframes → 守卫不启用，沿用旧行为
+      await runner.run({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: [],
+        initialCash: 1000,
+        leverage: 1,
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: 's-htf-empty',
+          params: {},
+          fn: (ctx) => {
+            tsSeen.push(ctx.ts)
+            return { type: 'NOOP' }
+          },
+        },
+        dataRange: { fromTs: 1, toTs: 2 },
+        bars: [
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        ],
+      })
+
+      expect(tsSeen).toEqual([1, 2])
+    })
+
+    it('keeps exit and risk flow active for held positions even when HTF unaligned', async () => {
+      const evaluateSpy = jest.fn().mockReturnValue(undefined)
+      const riskEvaluator = {
+        evaluate: evaluateSpy,
+        reset: jest.fn(),
+      } as unknown as RiskEvaluatorService
+      const runnerWithRisk = new BacktestRunnerService(
+        new TheoreticalExecutionModel(),
+        new PortfolioLedgerServiceFactory(),
+        new BacktestReporterService(),
+        new StateEngineService(),
+        riskEvaluator,
+      )
+
+      const tsSeen: number[] = []
+
+      const report = await runnerWithRisk.run({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: ['1h'],
+        initialCash: 1000,
+        leverage: 1,
+        // BAR_CLOSE 立即成交，方便观察持仓后 exit 流程
+        execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+        strategy: {
+          id: 's-htf-exit-flow',
+          params: {},
+          dataRequirements: { requiredTimeframes: ['1h'] },
+          executionPolicy: {
+            signalTiming: 'BAR_CLOSE',
+            fillTiming: 'BAR_CLOSE',
+            noNextBarHandling: 'KEEP_PENDING',
+          },
+          // ts=1 1h 已对齐，开仓；ts=2 持仓在身允许进入 strategy.fn 处理 exit
+          fn: (ctx) => {
+            tsSeen.push(ctx.ts)
+            if (ctx.position && ctx.position.qty !== 0) {
+              return { type: 'CLOSE' }
+            }
+            return { type: 'OPEN_LONG', qty: 1 }
+          },
+        },
+        dataRange: { fromTs: 1, toTs: 3 },
+        bars: [
+          createBar({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 1, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 100, close: 100 }),
+          createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 100, close: 100 }),
+        ],
+      })
+
+      // strategy.fn 应每根 base bar 都被调用（ts=1 entry 已对齐，ts>=2 持仓允许 exit 直通）
+      expect(tsSeen).toEqual([1, 2, 3])
+      // risk evaluator 每根 base bar 都被调用，与 entry guard 无关
+      expect(evaluateSpy.mock.calls.length).toBe(3)
+      expect(report.summary.totalTrades).toBe(1)
+    })
+  })
 })
 
 function createCompiledCombinationScriptFixture(): {
