@@ -3853,6 +3853,28 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('injects timeframeOverride:true on indicator.above and indicator.below triggers', () => {
+    // 15m 执行 TF + 1h HTF EMA 过滤器 — 典型多时间框架场景
+    const patch = service.extract('BTCUSDT 15m，价格在 1h EMA200 上方时才做多；EMA7 上穿 EMA21 开多；单笔 10%。')
+
+    const aboveTriggers = patch.triggers?.filter(t => t.key === 'indicator.above') ?? []
+    expect(aboveTriggers.length).toBeGreaterThan(0)
+    for (const trigger of aboveTriggers) {
+      expect(trigger.params).toEqual(expect.objectContaining({ timeframeOverride: true }))
+    }
+  })
+
+  it('injects timeframeOverride:true on indicator.below triggers from pushMovingAverageTrigger', () => {
+    // 跌破 MA 出场，同样应携带 timeframeOverride
+    const patch = service.extract('BTCUSDT 15m，价格跌破 1h MA50 平多；单笔 10%。')
+
+    const belowTriggers = patch.triggers?.filter(t => t.key === 'indicator.below') ?? []
+    expect(belowTriggers.length).toBeGreaterThan(0)
+    for (const trigger of belowTriggers) {
+      expect(trigger.params).toEqual(expect.objectContaining({ timeframeOverride: true }))
+    }
+  })
+
   describe('chinese numeral and phrase timeframe recognition (#1015)', () => {
     const baseSuffix = '，收盘价高于开盘价开多，收盘价低于开盘价平多，固定使用 10 USDT，止损 5%。'
 

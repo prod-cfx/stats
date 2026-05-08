@@ -2340,6 +2340,7 @@ export class SemanticSeedExtractorService {
               referenceRole: period >= 20 ? 'long_term' : 'short_term',
               'reference.period': period,
               reference: { indicator, period },
+              timeframeOverride: true,
             }
           : {
               expression: {
@@ -2420,7 +2421,7 @@ export class SemanticSeedExtractorService {
                 key,
                 phase: intent.phase,
                 sideScope: intent.sideScope,
-                params: { ...params, timeframe },
+                params: { ...params, timeframe, timeframeOverride: true },
                 evidence: { text: clause, source: 'user_explicit' },
               })
             }
@@ -2429,7 +2430,7 @@ export class SemanticSeedExtractorService {
               key,
               phase: intent.phase,
               sideScope: intent.sideScope,
-              params,
+              params: { ...params, timeframeOverride: true },
               evidence: { text: clause, source: 'user_explicit' },
             })
           }
