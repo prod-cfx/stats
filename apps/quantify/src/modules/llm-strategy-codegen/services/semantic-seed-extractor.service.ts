@@ -1375,23 +1375,30 @@ export class SemanticSeedExtractorService {
     const texts: string[] = []
     for (const segment of this.splitPositionLifecycleSegments(text)) {
       const clauses = this.splitPositionLifecycleClauses(segment)
-      const startIndex = clauses.findIndex(clause => this.isDcaLifecycleClause(clause))
-      if (startIndex < 0) continue
+      for (let index = 0; index < clauses.length; index += 1) {
+        if (!this.isDcaLifecycleStartClause(clauses[index])) continue
 
-      const dcaClauses: string[] = []
-      for (const clause of clauses.slice(startIndex)) {
+        const dcaClauses: string[] = []
+        for (const clause of clauses.slice(index)) {
+          if (
+            dcaClauses.length > 0
+            && /(?:加仓|减仓|反手|scale\s*in|scale\s*out|reverse\s+position|flip\s+position)/iu.test(clause)
+            && !this.isDcaLifecycleStartClause(clause)
+          ) {
+            break
+          }
+          dcaClauses.push(clause)
+        }
+
+        const dcaText = dcaClauses.join('，')
         if (
-          dcaClauses.length > 0
-          && /(?:加仓|减仓|反手|scale\s*in|scale\s*out|reverse\s+position|flip\s+position)/iu.test(clause)
-          && !this.isDcaLifecycleClause(clause)
+          dcaText
+          && /(?:补仓|DCA|dca|定投)/u.test(dcaText)
+          && !this.hasNegatedUnsupportedPositionContext(dcaText)
         ) {
+          texts.push(dcaText)
           break
         }
-        dcaClauses.push(clause)
-      }
-
-      if (dcaClauses.length > 0) {
-        texts.push(dcaClauses.join('，'))
       }
     }
 
@@ -1407,7 +1414,7 @@ export class SemanticSeedExtractorService {
 
   private splitPositionLifecycleClauses(text: string): string[] {
     return text
-      .split(/[，,.]/u)
+      .split(/[，,.;；。]/u)
       .map(clause => clause.trim())
       .filter(Boolean)
   }
@@ -1419,6 +1426,14 @@ export class SemanticSeedExtractorService {
 
     return /(?:DCA|dca|定投)/u.test(clause)
       || (/(?:每跌|每下跌)/u.test(clause) && /补仓/u.test(clause))
+  }
+
+  private isDcaLifecycleStartClause(clause: string): boolean {
+    if (this.hasNegatedUnsupportedPositionContext(clause)) {
+      return false
+    }
+
+    return /(?:每跌|每下跌|DCA|dca|定投)/u.test(clause)
   }
 
   private withInheritedLifecycleContextSlots(
