@@ -27,6 +27,9 @@ function collectCoverageKeys(
   if (state.position) {
     keys.add(state.position.mode)
     keys.add(toPositionAtomKey(state.position.mode))
+    for (const constraint of state.position.constraints ?? []) {
+      keys.add(constraint.key)
+    }
   }
   for (const [field, slot] of Object.entries(state.contextSlots)) {
     if (slot?.status === 'locked') {
