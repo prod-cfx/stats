@@ -3538,7 +3538,7 @@ export class SemanticSeedExtractorService {
       sideScope: 'long',
       params: {
         direction: 'down',
-        valuePct,
+        valuePct: -Math.abs(valuePct),
         basis: 'prev_close',
       },
     })

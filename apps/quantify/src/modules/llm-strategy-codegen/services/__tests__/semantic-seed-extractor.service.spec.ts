@@ -429,7 +429,7 @@ describe('SemanticSeedExtractorService', () => {
         key: 'price.percent_change',
         params: expect.objectContaining({
           direction: 'down',
-          valuePct: 5,
+          valuePct: -5,
         }),
       }),
     ]))
