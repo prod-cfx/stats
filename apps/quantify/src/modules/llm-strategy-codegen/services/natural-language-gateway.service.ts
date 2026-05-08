@@ -158,7 +158,15 @@ export class NaturalLanguageGatewayService {
     if (blockIndex < 0) return false
 
     const localText = this.takeUntilNextIndicator(clause.slice(blockIndex + emaBlock.evidenceText.length))
-    return localText.includes(directionText) && actionTexts.some(actionText => localText.includes(actionText))
+    if (!localText.includes(directionText)) return false
+
+    return actionTexts.some((actionText) => {
+      const localActionIndex = localText.indexOf(actionText)
+      if (localActionIndex < 0) return false
+
+      const actionIndex = blockIndex + emaBlock.evidenceText.length + localActionIndex
+      return this.isAffirmativeMatch(clause, actionIndex)
+    })
   }
 
   private takeUntilNextIndicator(text: string): string {
@@ -263,8 +271,8 @@ export class NaturalLanguageGatewayService {
   }
 
   private isAffirmativeMatch(clause: string, matchIndex: number): boolean {
-    const prefix = clause.slice(Math.max(0, matchIndex - 4), matchIndex)
-    return !/(不要|禁止|不).{0,3}$/u.test(prefix)
+    const prefix = clause.slice(0, matchIndex)
+    return !/(不要|禁止|不)/u.test(prefix)
   }
 
   private parseRisk(text: string): RiskFrameDraft[] {

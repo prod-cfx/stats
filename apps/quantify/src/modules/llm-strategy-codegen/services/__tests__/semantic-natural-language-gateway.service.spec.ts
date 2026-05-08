@@ -109,6 +109,23 @@ describe('NaturalLanguageGatewayService', () => {
   it('does not emit risk frames for clearly invalid stop-loss percentages', () => {
     expect(riskFrames(service.parse('亏损百分500止损'))).toHaveLength(0)
   })
+
+  it('does not create EMA gates for negated local gate actions', () => {
+    const frames = service.parse('EMA20 EMA60 上方不要开多')
+
+    expect(indicatorCompareFrames(frames)).toHaveLength(0)
+    expect(combinationFrames(frames)).toHaveLength(0)
+  })
+
+  it.each(['不要在BOLL下轨开多', '禁止当价格碰到BOLL上轨开空'])(
+    'does not create boundary or action frames when clause negates %s',
+    input => {
+      const frames = service.parse(input)
+
+      expect(boundaryTouchFrames(frames)).toHaveLength(0)
+      expect(actionFrames(frames)).toHaveLength(0)
+    },
+  )
 })
 
 function contextFrames(
