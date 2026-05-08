@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto'
-
 import type { SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+
 import type {
   NormalizedTriggerAtom,
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
+import { createHash } from 'node:crypto'
 
 type TriggerCombinationJoin = 'AND' | 'OR'
 
@@ -136,7 +136,30 @@ export function buildTriggerCombinationContract(
 export function normalizeTriggerCombinationContracts(
   triggers: SemanticTriggerState[],
 ): SemanticTriggerState[] {
-  return triggers.map(trigger => normalizeTriggerCombinationContract(trigger))
+  return triggers.map(trigger => normalizeTriggerCombinationContract(normalizePreviousExtremaMemoryKey(trigger)))
+}
+
+// Phase 3 MVP — price.previous_extrema 缺 memoryKey 时仿 risk.partial_take_profit 模式以
+// hash 自动补齐：使 contract substrate 的 state.write 始终成立、避免上层 readiness 因为
+// "memoryKey 必填"在用户不显式给名时把 atom 卡在 supported_requires_slot；hash 输入只引用
+// 与"哪个 remembered level"语义直接相关的 kind/lookback/sourceText，确保等价 trigger 复用同一
+// memoryKey（cross-atom remembered level 复用前置）。仅在 trigger.key === 'price.previous_extrema'
+// 且 memoryKey 缺失时介入，避免污染其他 trigger 流程。
+function normalizePreviousExtremaMemoryKey(trigger: SemanticTriggerState): SemanticTriggerState {
+  if (trigger.key !== 'price.previous_extrema') return trigger
+  const params = trigger.params ?? {}
+  if (typeof params.memoryKey === 'string' && params.memoryKey.trim().length > 0) return trigger
+  const kind = typeof params.kind === 'string' ? params.kind : ''
+  const lookback = typeof params.lookback === 'number' ? params.lookback : ''
+  const sourceText = typeof params.sourceText === 'string' ? params.sourceText : ''
+  const hash = createHash('sha256')
+    .update(`${kind}|${lookback}|${sourceText}`)
+    .digest('hex')
+    .slice(0, 16)
+  return {
+    ...trigger,
+    params: { ...params, memoryKey: `previous_extrema_${hash}` },
+  }
 }
 
 export function normalizeSemanticStateCombinationContracts(state: SemanticState): SemanticState {
