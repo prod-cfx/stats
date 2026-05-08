@@ -4,6 +4,25 @@ export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 
 export type HashString = `sha256:${string}`
 
+export interface PositionLifecycleActionMetadata {
+  reversePosition?: {
+    fromSide: 'long' | 'short'
+    toSide: 'long' | 'short'
+    sameBarPolicy: 'allow' | 'next_bar_only'
+    sizingSource: 'current_position' | 'fixed' | 'position_sizing'
+  }
+  addPosition?: {
+    maxLayers?: number
+    maxExposurePct?: number
+    stateKey: string
+  }
+  dcaSchedule?: {
+    maxCount: number
+    capitalCap: number
+    stateKey: string
+  }
+}
+
 export interface CanonicalStrategyIrV1 {
   irVersion: 'csi.v1'
   source: {
@@ -157,7 +176,7 @@ export interface RuleBlock {
   actions: ActionDef[]
   metadata?: {
     partialTakeProfit?: PartialTakeProfitProgramMetadata
-  }
+  } & PositionLifecycleActionMetadata
 }
 
 export interface QuantityDef {
@@ -171,6 +190,7 @@ export interface ActionDef {
     | 'OPEN_LONG' | 'CLOSE_LONG'
     | 'OPEN_SHORT' | 'CLOSE_SHORT'
     | 'REDUCE_LONG' | 'REDUCE_SHORT'
+    | 'ADD_LONG' | 'ADD_SHORT'
   quantity: QuantityDef
 }
 

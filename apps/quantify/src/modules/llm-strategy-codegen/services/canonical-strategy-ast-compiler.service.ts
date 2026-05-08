@@ -135,6 +135,7 @@ export class CanonicalStrategyAstCompilerService {
       priority: ruleBlock.priority,
       cooldownBars: ruleBlock.cooldownBars,
       actions: ruleBlock.actions,
+      ...(ruleBlock.metadata ? { metadata: ruleBlock.metadata } : {}),
     }))
   }
 

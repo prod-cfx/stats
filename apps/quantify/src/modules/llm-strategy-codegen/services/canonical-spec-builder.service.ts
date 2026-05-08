@@ -1,10 +1,13 @@
 import type { CanonicalConditionNode, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
 import type {
+  SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
   SemanticCapabilityShape,
   SemanticExpression,
   SemanticExpressionOperand,
+  SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
   SemanticSlotState,
@@ -49,6 +52,7 @@ interface StrategyLogicSnapshotInput {
   entryRuleDrafts?: unknown
   exitRuleDrafts?: unknown
   market?: unknown
+  semanticState?: unknown
 }
 
 interface NormalizedIntentCompileContext {
@@ -75,6 +79,10 @@ export class CanonicalSpecBuilderService {
   ) {}
 
   build(checklist: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
+    if (this.isSemanticState(checklist.semanticState)) {
+      return this.buildFromSemanticState(checklist.semanticState, checklist.market)
+    }
+
     const normalizedLogicSnapshot = checklist as StrategyLogicSnapshotInput & Parameters<typeof buildStrategyRuleDrafts>[0]
     const ruleDrafts = buildStrategyRuleDrafts(normalizedLogicSnapshot)
     const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
@@ -499,10 +507,22 @@ export class CanonicalSpecBuilderService {
     }
   }
 
-  buildFromSemanticState(state: SemanticState): CanonicalStrategySpecV2 {
+  private isSemanticState(value: unknown): value is SemanticState {
+    return Boolean(
+      value
+      && typeof value === 'object'
+      && !Array.isArray(value)
+      && (value as { version?: unknown }).version === 1
+      && Array.isArray((value as { triggers?: unknown }).triggers)
+      && Array.isArray((value as { actions?: unknown }).actions)
+      && Array.isArray((value as { risk?: unknown }).risk),
+    )
+  }
+
+  buildFromSemanticState(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
     const normalizedState = normalizeSemanticStateCombinationContracts(state)
-    const market = this.resolveSemanticStateMarket(normalizedState)
-    const sizing = this.resolveSizingFromSemanticState(normalizedState.position)
+    const market = this.resolveSemanticStateMarket(normalizedState, fallbackMarket)
+    const sizing = this.resolveSizingFromSemanticState(normalizedState.position) ?? { mode: 'RATIO' as const, value: 0.1 }
 
     const orderPrograms = this.buildContractOrderPrograms(normalizedState)
     const rules = this.filterOrderProgramShadowRules(
@@ -921,16 +941,35 @@ export class CanonicalSpecBuilderService {
       }, {}))
   }
 
-  private resolveSemanticStateMarket(state: SemanticState): CanonicalStrategySpecV2['market'] {
+  private resolveSemanticStateMarket(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2['market'] {
     const exchange = this.readLockedContextSlotString(state.contextSlots.exchange)?.toLowerCase() ?? null
     const marketType = this.readLockedContextSlotString(state.contextSlots.marketType)?.toLowerCase() ?? null
+    const fallback = fallbackMarket && typeof fallbackMarket === 'object' && !Array.isArray(fallbackMarket)
+      ? fallbackMarket as Record<string, unknown>
+      : {}
+    const fallbackExchange = typeof fallback.exchange === 'string' ? fallback.exchange.toLowerCase() : null
+    const fallbackMarketType = typeof fallback.marketType === 'string' ? fallback.marketType.toLowerCase() : null
+    const fallbackSymbol = typeof fallback.symbol === 'string' && fallback.symbol.trim().length > 0
+      ? fallback.symbol.trim()
+      : null
+    const fallbackTimeframe = typeof fallback.timeframe === 'string' && fallback.timeframe.trim().length > 0
+      ? fallback.timeframe.trim()
+      : null
 
     return {
-      exchange: exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid' ? exchange : null,
-      symbol: this.readLockedContextSlotString(state.contextSlots.symbol),
-      marketType: marketType === 'spot' || marketType === 'perp' ? marketType : null,
-      defaultTimeframe: this.readLockedContextSlotString(state.contextSlots.timeframe),
+      exchange: this.toCanonicalExchange(exchange) ?? this.toCanonicalExchange(fallbackExchange),
+      symbol: this.readLockedContextSlotString(state.contextSlots.symbol) ?? fallbackSymbol,
+      marketType: this.toCanonicalMarketType(marketType) ?? this.toCanonicalMarketType(fallbackMarketType),
+      defaultTimeframe: this.readLockedContextSlotString(state.contextSlots.timeframe) ?? fallbackTimeframe,
     }
+  }
+
+  private toCanonicalExchange(value: string | null): CanonicalStrategySpecV2['market']['exchange'] {
+    return value === 'binance' || value === 'okx' || value === 'hyperliquid' ? value : null
+  }
+
+  private toCanonicalMarketType(value: string | null): CanonicalStrategySpecV2['market']['marketType'] {
+    return value === 'spot' || value === 'perp' ? value : null
   }
 
   private withRequiredMarketTimeframes(
@@ -1060,10 +1099,13 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      if (!this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
+      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(group, state.actions)
+      if (!lifecycleAction && !this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
         continue
       }
-      const actions = this.buildActionsForSemanticActionKey(group.actionKey, sizing)
+      const actions = lifecycleAction
+        ? this.buildActionsForSemanticLifecycleAction(lifecycleAction, sizing)
+        : this.buildActionsForSemanticActionKey(group.actionKey, sizing)
       if (actions.length === 0) {
         continue
       }
@@ -1071,6 +1113,21 @@ export class CanonicalSpecBuilderService {
       const ruleCondition = group.phase === 'entry'
         ? this.attachSemanticGateConditions(condition, gateConditions)
         : condition
+      if (lifecycleAction) {
+        counters[group.phase] += 1
+        const metadata = this.buildPositionLifecycleMetadata(lifecycleAction, state.position)
+        rules.push({
+          id: `semantic-${group.phase}-${counters[group.phase]}`,
+          phase: group.phase,
+          sideScope: this.resolveLifecycleActionSideScope(lifecycleAction, group.sideScope),
+          priority: this.resolveSemanticRulePriority(group.phase, counters[group.phase]),
+          condition: ruleCondition,
+          actions,
+          ...(metadata ? { metadata } : {}),
+        })
+        continue
+      }
+
       for (const ruleVariant of this.buildSemanticTriggerGroupActionVariants(group, actions, actionKeys, sizing)) {
         counters[group.phase] += 1
         rules.push({
@@ -1084,7 +1141,7 @@ export class CanonicalSpecBuilderService {
       }
     }
 
-    rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position))
+    rules.push(...this.buildRiskRulesFromSemanticState(state.risk, state.position, state.actions))
 
     return rules
   }
@@ -1250,6 +1307,188 @@ export class CanonicalSpecBuilderService {
       default:
         return []
     }
+  }
+
+  private resolveLifecycleActionForTriggerGroup(
+    group: SemanticTriggerCombinationGroup,
+    actions: SemanticActionState[],
+  ): SemanticActionState | null {
+    const lockedActions = actions.filter(action => action.status === 'locked')
+    if (group.phase === 'entry') {
+      return lockedActions.find(action => action.key === 'action.add_position') ?? null
+    }
+
+    if (group.phase === 'exit') {
+      return lockedActions.find(action => action.key === 'action.reverse_position') ?? null
+    }
+
+    return null
+  }
+
+  private buildActionsForSemanticLifecycleAction(
+    action: SemanticActionState,
+    defaultSizing: CanonicalStrategySpecV2['sizing'],
+  ): CanonicalRuleV2['actions'] {
+    if (action.key === 'action.reduce_position') {
+      const sideScope = this.readActionSideScope(action.params) ?? 'long'
+      const type = sideScope === 'short' ? 'REDUCE_SHORT' : 'REDUCE_LONG'
+      return [{
+        type,
+        sizing: this.resolveReducePositionSizing(action.params),
+        params: { quantityValueScale: 'ratio' },
+      }]
+    }
+
+    if (action.key === 'action.add_position') {
+      const sideScope = this.readActionSideScope(action.params) ?? 'long'
+      return [{
+        type: sideScope === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
+        sizing: this.resolveSemanticActionSizing(action.params?.sizing) ?? defaultSizing ?? undefined,
+        params: { quantityValueScale: 'ratio' },
+      }]
+    }
+
+    if (action.key === 'action.reverse_position') {
+      const fromSide = this.readSideParam(action.params?.fromSide) ?? 'long'
+      const toSide = this.readSideParam(action.params?.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
+      return [
+        { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT' },
+        {
+          type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
+          sizing: this.resolveSemanticActionSizing(action.params?.sizing) ?? defaultSizing ?? undefined,
+        },
+      ]
+    }
+
+    return []
+  }
+
+  private resolveReducePositionSizing(params: SemanticActionState['params']): NonNullable<CanonicalRuleV2['actions'][number]['sizing']> {
+    const basis = typeof params?.reduceBasis === 'string' ? params.reduceBasis : 'ratio'
+    const value = typeof params?.reduceValue === 'number' && Number.isFinite(params.reduceValue)
+      ? params.reduceValue
+      : 0.5
+
+    if (basis === 'quote') {
+      return { mode: 'QUOTE', value }
+    }
+    if (basis === 'qty') {
+      return { mode: 'QTY', value }
+    }
+    return { mode: 'RATIO', value }
+  }
+
+  private resolveSemanticActionSizing(value: unknown): CanonicalStrategySpecV2['sizing'] {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    const sizing = value as { kind?: unknown, value?: unknown, asset?: unknown }
+    if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) {
+      return null
+    }
+    if (sizing.kind === 'quote') {
+      return {
+        mode: 'QUOTE',
+        value: sizing.value,
+        ...(typeof sizing.asset === 'string' ? { asset: sizing.asset } : {}),
+      }
+    }
+    if (sizing.kind === 'base') {
+      return {
+        mode: 'QTY',
+        value: sizing.value,
+        ...(typeof sizing.asset === 'string' ? { asset: sizing.asset } : {}),
+      }
+    }
+    return { mode: 'RATIO', value: sizing.value }
+  }
+
+  private buildPositionLifecycleMetadata(
+    action: SemanticActionState,
+    position: SemanticPositionState | null,
+  ): CanonicalRuleV2['metadata'] | undefined {
+    const metadata: PositionLifecycleActionMetadata = {}
+
+    if (action.key === 'action.add_position') {
+      const pyramidingLimit = this.findPositionConstraint(position, 'position.pyramiding_limit')
+      const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
+      metadata.addPosition = {
+        stateKey: 'pyramiding_layer_count',
+        ...this.optionalNumberField('maxLayers', pyramidingLimit?.params.maxLayers),
+        ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
+      }
+    }
+
+    if (action.key === 'action.reverse_position') {
+      const fromSide = this.readSideParam(action.params?.fromSide) ?? 'long'
+      const toSide = this.readSideParam(action.params?.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
+      metadata.reversePosition = {
+        fromSide,
+        toSide,
+        sameBarPolicy: this.readSameBarPolicy(action.params?.sameBarPolicy),
+        sizingSource: this.readReverseSizingSource(action.params?.sizingSource),
+      }
+    }
+
+    const dcaSchedule = this.findPositionConstraint(position, 'position.dca_schedule')
+    if (dcaSchedule) {
+      const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
+      const capitalCap = this.readFiniteNumber(dcaSchedule.params.capitalCap)
+      if (maxCount !== null && capitalCap !== null) {
+        metadata.dcaSchedule = {
+          maxCount,
+          capitalCap,
+          stateKey: 'dca_schedule_count',
+        }
+      }
+    }
+
+    return Object.keys(metadata).length > 0 ? metadata : undefined
+  }
+
+  private resolveLifecycleActionSideScope(
+    action: SemanticActionState,
+    fallback: CanonicalRuleSideScope,
+  ): CanonicalRuleSideScope {
+    if (action.key === 'action.reverse_position') {
+      return this.readSideParam(action.params?.fromSide) ?? fallback
+    }
+    return this.readActionSideScope(action.params) ?? fallback
+  }
+
+  private findPositionConstraint(
+    position: SemanticPositionState | null,
+    key: SemanticPositionConstraintState['key'],
+  ): SemanticPositionConstraintState | null {
+    return position?.constraints?.find(constraint => constraint.status === 'locked' && constraint.key === key) ?? null
+  }
+
+  private optionalNumberField<K extends string>(key: K, value: unknown): Record<K, number> | {} {
+    const numberValue = this.readFiniteNumber(value)
+    return numberValue === null ? {} : { [key]: numberValue } as Record<K, number>
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readActionSideScope(params: SemanticActionState['params']): 'long' | 'short' | 'both' | null {
+    const sideScope = typeof params?.sideScope === 'string' ? params.sideScope : null
+    return sideScope === 'long' || sideScope === 'short' || sideScope === 'both' ? sideScope : null
+  }
+
+  private readSideParam(value: unknown): 'long' | 'short' | null {
+    return value === 'long' || value === 'short' ? value : null
+  }
+
+  private readSameBarPolicy(value: unknown): NonNullable<PositionLifecycleActionMetadata['reversePosition']>['sameBarPolicy'] {
+    return value === 'allow' ? 'allow' : 'next_bar_only'
+  }
+
+  private readReverseSizingSource(value: unknown): NonNullable<PositionLifecycleActionMetadata['reversePosition']>['sizingSource'] {
+    if (value === 'current_position') return 'current_position'
+    if (value === 'fixed') return 'fixed'
+    return 'position_sizing'
   }
 
   private groupSemanticMultiTimeframeTriggers(
@@ -1592,9 +1831,11 @@ export class CanonicalSpecBuilderService {
   private buildRiskRulesFromSemanticState(
     risks: SemanticRiskState[],
     position: SemanticPositionState | null,
+    actions: SemanticActionState[] = [],
   ): CanonicalRuleV2[] {
     const normalizedRisks = normalizeRiskSemantics(risks)
     const sideScope = this.resolveSemanticRiskSideScope(position)
+    const reduceAction = actions.find(action => action.status === 'locked' && action.key === 'action.reduce_position') ?? null
     const rules: CanonicalRuleV2[] = []
     let priority = 120
 
@@ -1669,7 +1910,9 @@ export class CanonicalSpecBuilderService {
         riskKey: risk.key,
         valuePct,
         basis: risk.params.basis,
-        actions: [{ type: 'FORCE_EXIT' }],
+        actions: risk.key === 'risk.take_profit_pct' && reduceAction
+          ? this.buildActionsForSemanticLifecycleAction(reduceAction, null)
+          : [{ type: 'FORCE_EXIT' }],
       })
       if (riskRule) {
         rules.push(riskRule)
