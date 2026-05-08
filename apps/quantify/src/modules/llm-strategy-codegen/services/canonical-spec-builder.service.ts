@@ -68,6 +68,10 @@ type CapabilityCandidateResolution = {
   status: 'conflict'
 }
 type SemanticTriggerCombinationGroup = ReturnType<SemanticTriggerCombinationContractService['resolveExecutableGroups']>[number]
+interface ScopedSemanticGateCondition {
+  sideScope: CanonicalRuleSideScope
+  condition: CanonicalConditionNode
+}
 
 @Injectable()
 export class CanonicalSpecBuilderService {
@@ -1032,11 +1036,20 @@ export class CanonicalSpecBuilderService {
     const defaultTimeframe = this.readLockedContextSlotString(state.contextSlots.timeframe)
     const gateConditions = state.triggers
       .filter(trigger => trigger.status === 'locked' && trigger.phase === 'gate')
-      .map(trigger => trigger.key === 'condition.expression'
-        ? this.buildConditionFromSemanticExpressionTrigger(trigger)
-        : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe))
-      .filter((condition): condition is CanonicalConditionNode => condition !== null)
-      .filter(condition => !this.isNoPositionGateCondition(condition) && !this.isCompiledGateAtom(condition))
+      .map((trigger): ScopedSemanticGateCondition | null => {
+        const condition = trigger.key === 'condition.expression'
+          ? this.buildConditionFromSemanticExpressionTrigger(trigger)
+          : this.buildConditionFromSemanticTriggerContract(trigger, defaultTimeframe)
+        if (!condition || this.isNoPositionGateCondition(condition) || this.isCompiledGateAtom(condition)) {
+          return null
+        }
+
+        return {
+          sideScope: trigger.sideScope ?? 'both',
+          condition,
+        }
+      })
+      .filter((gate): gate is ScopedSemanticGateCondition => gate !== null)
 
     for (const triggerGroup of this.groupSemanticMultiTimeframeTriggers(state.triggers)) {
       const trigger = triggerGroup[0]
@@ -1110,18 +1123,18 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const ruleCondition = group.phase === 'entry'
-        ? this.attachSemanticGateConditions(condition, gateConditions)
-        : condition
       if (lifecycleAction) {
         counters[group.phase] += 1
         const metadata = this.buildPositionLifecycleMetadata(lifecycleAction, state.position)
+        const sideScope = this.resolveLifecycleActionSideScope(lifecycleAction, group.sideScope)
         rules.push({
           id: `semantic-${group.phase}-${counters[group.phase]}`,
           phase: group.phase,
-          sideScope: this.resolveLifecycleActionSideScope(lifecycleAction, group.sideScope),
+          sideScope,
           priority: this.resolveSemanticRulePriority(group.phase, counters[group.phase]),
-          condition: ruleCondition,
+          condition: group.phase === 'entry'
+            ? this.attachSemanticGateConditions(condition, gateConditions, sideScope)
+            : condition,
           actions,
           ...(metadata ? { metadata } : {}),
         })
@@ -1135,7 +1148,9 @@ export class CanonicalSpecBuilderService {
           phase: group.phase,
           sideScope: ruleVariant.sideScope,
           priority: this.resolveSemanticRulePriority(group.phase, counters[group.phase]),
-          condition: ruleCondition,
+          condition: group.phase === 'entry'
+            ? this.attachSemanticGateConditions(condition, gateConditions, ruleVariant.sideScope)
+            : condition,
           actions: ruleVariant.actions,
         })
       }
@@ -1642,16 +1657,21 @@ export class CanonicalSpecBuilderService {
 
   private attachSemanticGateConditions(
     condition: CanonicalConditionNode,
-    gateConditions: CanonicalConditionNode[],
+    gateConditions: ScopedSemanticGateCondition[],
+    sideScope: CanonicalRuleSideScope,
   ): CanonicalConditionNode {
-    if (gateConditions.length === 0) {
+    const matchingGateConditions = gateConditions
+      .filter(gate => gate.sideScope === 'both' || gate.sideScope === sideScope)
+      .map(gate => gate.condition)
+
+    if (matchingGateConditions.length === 0) {
       return condition
     }
 
     return {
       kind: 'AND',
-      ...(this.hasGenericPredicateForm([condition, ...gateConditions]) ? { predicateForm: 'generic' as const } : {}),
-      children: [condition, ...gateConditions],
+      ...(this.hasGenericPredicateForm([condition, ...matchingGateConditions]) ? { predicateForm: 'generic' as const } : {}),
+      children: [condition, ...matchingGateConditions],
     }
   }
 
@@ -3412,7 +3432,7 @@ export class CanonicalSpecBuilderService {
     trigger: SemanticTriggerState
     sizing: CanonicalStrategySpecV2['sizing']
     defaultTimeframe: string | null
-    gateConditions?: CanonicalConditionNode[]
+    gateConditions?: ScopedSemanticGateCondition[]
   }): CanonicalRuleV2[] {
     const gridParams = this.resolveGridParamsFromSemanticTrigger(input.trigger, input.defaultTimeframe)
     if (!gridParams) {
@@ -3440,7 +3460,7 @@ export class CanonicalSpecBuilderService {
         sideScope,
         priority: phase === 'entry' ? 170 : 120,
         condition: phase === 'entry'
-          ? this.attachSemanticGateConditions(condition, input.gateConditions ?? [])
+          ? this.attachSemanticGateConditions(condition, input.gateConditions ?? [], sideScope)
           : condition,
         actions: [phase === 'entry'
           ? this.buildOpenAction(actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)

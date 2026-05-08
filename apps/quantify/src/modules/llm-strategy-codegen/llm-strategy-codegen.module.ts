@@ -25,6 +25,7 @@ import { CompiledScriptExecutionEnvelopeService } from './services/compiled-scri
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
 import { ConversationSemanticEditService } from './services/conversation-semantic-edit.service'
 import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
+import { NaturalLanguageGatewayService } from './services/natural-language-gateway.service'
 import { PositionSizingContractService } from './services/position-sizing-contract.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
@@ -36,8 +37,10 @@ import { SemanticContractReadinessService } from './services/semantic-contract-r
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
 import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
+import { SemanticFrameNormalizerService } from './services/semantic-frame-normalizer.service'
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
+import { SemanticPresentationRegistryService } from './services/semantic-presentation-registry.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from './services/semantic-support-classifier.service'
@@ -116,7 +119,10 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticMissingPlaceholderReconcilerService,
     MarketInstrumentSymbolResolverService,
     SemanticOpenSlotAnswerResolverService,
+    SemanticPresentationRegistryService,
     SemanticSupportClassifierService,
+    NaturalLanguageGatewayService,
+    SemanticFrameNormalizerService,
     UnsupportedFallbackService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],

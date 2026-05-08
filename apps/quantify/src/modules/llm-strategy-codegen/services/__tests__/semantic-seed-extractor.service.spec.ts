@@ -239,6 +239,109 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('routes P0 multi-indicator BOLL strategy through contract-first gateway without generic boundary fallback', () => {
+    const patch = service.extract('15min k线 在价格都位于ema20 ema60 ema144 上方时候只开多 都位于下方时候只开空 入场时机是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损百分5止损')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'binance',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+      marketType: 'perp',
+      timeframe: '15m',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'long' }),
+      expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'short' }),
+      expect.objectContaining({ key: 'price.detect.indicator_boundary', sideScope: 'long', params: expect.objectContaining({ boundaryRole: 'lower' }) }),
+      expect.objectContaining({ key: 'price.detect.indicator_boundary', sideScope: 'short', params: expect.objectContaining({ boundaryRole: 'upper' }) }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'open_short' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+    ]))
+    expect(JSON.stringify(patch)).not.toMatch(/generic_boundary|indicator\.above|indicator\.below/u)
+  })
+
+  it('keeps legacy EMA indicator atoms for existing stack flows while P0 gateway gates remain separate', () => {
+    const patch = service.extract('BTC 15分钟价格在 EMA20 EMA60 EMA144 上方做多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 20 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 60 }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
+  })
+
+  it('keeps short legacy EMA indicator atoms without duplicating the covered gateway gate', () => {
+    const patch = service.extract('BTC 15分钟价格在 EMA20 EMA60 EMA144 下方做空。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 20 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 60 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 144 }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
+  })
+
+  it('merges BOLL-only gateway triggers actions and risk without requiring expression gates', () => {
+    const patch = service.extract('BOLL下轨开多，亏损5%止损')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+    ]))
+  })
+
+  it('merges gateway atoms without duplicating legacy stop-loss risk or open actions', () => {
+    const patch = service.extract('15min k线 在价格都位于ema20 ema60 ema144 上方时候只开多 入场时机是boll下轨开多 币安的btcusdt永续合约 风控是按开仓价亏损百分5止损')
+
+    expect(patch.actions?.filter(action => action.key === 'open_long')).toHaveLength(1)
+    expect(patch.risk?.filter(risk => (
+      risk.key === 'risk.stop_loss_pct'
+      && risk.params?.valuePct === 5
+    ))).toHaveLength(1)
+  })
+
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
     const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。')
 
