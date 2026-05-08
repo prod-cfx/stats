@@ -284,6 +284,32 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
   })
 
+  it('keeps short legacy EMA indicator atoms without duplicating the covered gateway gate', () => {
+    const patch = service.extract('BTC 15分钟价格在 EMA20 EMA60 EMA144 下方做空。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 20 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 60 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 144 }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
+  })
+
   it('merges BOLL-only gateway triggers actions and risk without requiring expression gates', () => {
     const patch = service.extract('BOLL下轨开多，亏损5%止损')
 

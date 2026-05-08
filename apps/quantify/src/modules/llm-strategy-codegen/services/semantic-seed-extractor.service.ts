@@ -164,9 +164,10 @@ export class SemanticSeedExtractorService {
     legacyTriggers: readonly SeedTrigger[],
   ): boolean {
     const sideScope = gatewayTrigger.sideScope ?? 'long'
+    const stackKey = sideScope === 'short' ? 'indicator.below' : 'indicator.above'
     const stackPeriods = legacyTriggers
       .filter(trigger => (
-        trigger.key === 'indicator.above'
+        trigger.key === stackKey
         && trigger.phase === 'entry'
         && (trigger.sideScope ?? 'long') === sideScope
         && typeof trigger.params?.indicator === 'string'
