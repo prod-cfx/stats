@@ -565,7 +565,7 @@ export class SemanticPresentationRegistryService {
   private readonly presentations = new Map(PRESENTATIONS.map(metadata => [metadata.key, metadata]))
   private internalIdentifierLeakPattern?: RegExp
 
-  constructor(private readonly atomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService()) {}
+  constructor(private readonly atomRegistry: SemanticAtomRegistryService) {}
 
   get(key: string): SemanticPresentationMetadata {
     const metadata = this.presentations.get(key)

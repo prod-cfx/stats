@@ -3,7 +3,7 @@ import { SemanticPresentationRegistryService } from '../semantic-presentation-re
 
 describe('SemanticPresentationRegistryService', () => {
   const atomRegistry = new SemanticAtomRegistryService()
-  const presentation = new SemanticPresentationRegistryService()
+  const presentation = new SemanticPresentationRegistryService(atomRegistry)
 
   it('has presentation metadata and contract completion fields for every supported atom', () => {
     const supportedAtoms = atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))
