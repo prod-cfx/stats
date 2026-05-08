@@ -324,6 +324,13 @@ function evaluatePositionLifecycle(
 
   const addMeta = program.metadata?.addPosition
   if (addMeta) {
+    if (!hasPositionSnapshot(ctx)) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.position_snapshot_missing`,
+      }
+    }
+
     const currentLayers = readSemanticRuntimeStateNumber(ctx, addMeta.stateKey)
     if (!currentLayers.present) {
       return {
@@ -357,6 +364,13 @@ function evaluatePositionLifecycle(
 
   const dcaMeta = program.metadata?.dcaSchedule
   if (dcaMeta && Number.isFinite(dcaMeta.maxCount)) {
+    if (!hasPositionSnapshot(ctx)) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.position_snapshot_missing`,
+      }
+    }
+
     const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
     if (!currentCount.present) {
       return {
@@ -786,6 +800,10 @@ function resolveReduceDeltaQty(
 function readCurrentQty(ctx: StrategyExecutionContextV1): number {
   const value = ctx.position?.qty
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function hasPositionSnapshot(ctx: StrategyExecutionContextV1): boolean {
+  return Boolean(ctx.position && typeof ctx.position === 'object' && !Array.isArray(ctx.position))
 }
 
 function readCurrentPrice(ctx: StrategyExecutionContextV1): number {
