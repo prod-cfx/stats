@@ -315,6 +315,7 @@ export const positionLifecycleGoldenCases: AtomCoverageGoldenCase[] = [
 ]
 
 export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
+  ...positionLifecycleGoldenCases,
   {
     id: 'golden-corpus-001-supported-ma-cross-long-with-fixed-pct-risk',
     name: 'supported ma cross long with fixed pct risk',

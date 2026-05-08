@@ -21,6 +21,9 @@ describe('atomic contract position lifecycle semantics', () => {
 
   it('extracts reduce_position as an exposure-reducing action', () => {
     const result = classify('盈利 5% 后减仓 30%。')
+    const reducePositionAction = result.normalized.state.actions.find(
+      action => action.key === 'action.reduce_position',
+    )
 
     expect(result.classified.route).toBe('projection_gate')
     expect(result.classified.state.actions).toEqual(expect.arrayContaining([
@@ -33,7 +36,7 @@ describe('atomic contract position lifecycle semantics', () => {
         }),
       }),
     ]))
-    expect(result.normalized.state.actions[0]?.contracts?.[0]).toEqual(expect.objectContaining({
+    expect(reducePositionAction?.contracts?.[0]).toEqual(expect.objectContaining({
       effects: expect.arrayContaining([
         expect.objectContaining({ domain: 'exposure', verb: 'reduce', object: 'position' }),
       ]),
