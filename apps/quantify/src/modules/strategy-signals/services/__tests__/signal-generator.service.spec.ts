@@ -2583,3 +2583,123 @@ function createCompiledAtrRiskScriptFixture(): string {
     },
   })
 }
+
+describe('signalGeneratorService live HTF alignment gate (#1017)', () => {
+  function createBareService() {
+    jest.spyOn(SignalGeneratorService.prototype as any, 'registerCronJob').mockImplementation(() => {})
+    return new SignalGeneratorService(
+      {} as any,
+      { get: jest.fn().mockReturnValue({}) } as any,
+      { addCronJob: jest.fn(), deleteCronJob: jest.fn() } as any,
+      { chat: jest.fn() } as any,
+      { create: jest.fn() } as any,
+      { findByStrategyInstanceId: jest.fn(), reset: jest.fn(), incrementFailure: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      {
+        getLatestBarBySymbolId: jest.fn(),
+        getRecentBarsBySymbolId: jest.fn(),
+      } as any,
+      { isProd: jest.fn().mockReturnValue(false) } as any,
+      { withTransaction: jest.fn() } as any,
+      undefined as any,
+      undefined as any,
+      undefined as any,
+    )
+  }
+
+  // 1m timeframe -> 60_000 ms; 1h -> 3_600_000 ms
+  const ONE_MIN = 60_000
+  const ONE_HOUR = 60 * 60 * 1000
+
+  const legs = [
+    { id: 'primary', symbol: 'BTCUSDT', role: 'primary' as const },
+  ]
+
+  function makeBar(openTs: number) {
+    return { timestamp: openTs, close: 1 }
+  }
+
+  afterEach(() => jest.restoreAllMocks())
+
+  it('aligned=true 当 dataRequirements 中 leg 的 timeframes 为空（仅 base TF）时 gate 不生效', () => {
+    const service = createBareService() as any
+    const dataRequirements = { primary: ['1m'] as const }
+    const multiLegData = {
+      primary: { '1m': { bars: [makeBar(Date.now() - ONE_MIN)] } },
+    }
+    const result = service.evaluateLiveHtfGate(legs, dataRequirements, multiLegData, '1m', Date.now())
+    expect(result).toEqual({ aligned: true, missingTimeframes: [] })
+  })
+
+  it('aligned=true 当所有 HTF 最新 bar closeTime ≤ currentTs', () => {
+    const service = createBareService() as any
+    const now = Date.now()
+    const dataRequirements = { primary: ['1m', '1h'] }
+    const multiLegData = {
+      primary: {
+        '1m': { bars: [makeBar(now - ONE_MIN)] },
+        '1h': { bars: [makeBar(now - ONE_HOUR - 1000)] }, // closeTime = now - 1000
+      },
+    }
+    const result = service.evaluateLiveHtfGate(legs, dataRequirements, multiLegData, '1m', now)
+    expect(result.aligned).toBe(true)
+    expect(result.missingTimeframes).toEqual([])
+  })
+
+  it('aligned=false 当 HTF 完全缺失（multiLegData 无该 timeframe）', () => {
+    const service = createBareService() as any
+    const now = Date.now()
+    const dataRequirements = { primary: ['1m', '1h'] }
+    const multiLegData = {
+      primary: {
+        '1m': { bars: [makeBar(now - ONE_MIN)] },
+        // 1h 完全缺失
+      },
+    }
+    const result = service.evaluateLiveHtfGate(legs, dataRequirements, multiLegData, '1m', now)
+    expect(result.aligned).toBe(false)
+    expect(result.missingTimeframes).toEqual(['primary:1h'])
+  })
+
+  it('aligned=false 当最新 HTF bar closeTime > currentTs（未来 bar）', () => {
+    const service = createBareService() as any
+    const now = Date.now()
+    const dataRequirements = { primary: ['1m', '1h'] }
+    const multiLegData = {
+      primary: {
+        '1m': { bars: [makeBar(now - ONE_MIN)] },
+        '1h': { bars: [makeBar(now - 1000)] }, // closeTime = now + ONE_HOUR - 1000 > now
+      },
+    }
+    const result = service.evaluateLiveHtfGate(legs, dataRequirements, multiLegData, '1m', now)
+    expect(result.aligned).toBe(false)
+    expect(result.missingTimeframes).toEqual(['primary:1h'])
+  })
+
+  it('aligned=false 多 HTF 部分缺失/未对齐时缺失列表全部列出', () => {
+    const service = createBareService() as any
+    const now = Date.now()
+    const multiLegLegs = [
+      { id: 'primary', symbol: 'BTCUSDT', role: 'primary' as const },
+      { id: 'context', symbol: 'ETHUSDT', role: 'context' as const },
+    ]
+    const dataRequirements = {
+      primary: ['1m', '1h'],
+      context: ['1m', '1h'],
+    }
+    const multiLegData = {
+      primary: {
+        '1m': { bars: [makeBar(now - ONE_MIN)] },
+        '1h': { bars: [makeBar(now - ONE_HOUR - 1000)] }, // 已对齐
+      },
+      context: {
+        '1m': { bars: [makeBar(now - ONE_MIN)] },
+        '1h': { bars: [] }, // 空 bars
+      },
+    }
+    const result = service.evaluateLiveHtfGate(multiLegLegs, dataRequirements, multiLegData, '1m', now)
+    expect(result.aligned).toBe(false)
+    expect(result.missingTimeframes).toEqual(['context:1h'])
+  })
+})
