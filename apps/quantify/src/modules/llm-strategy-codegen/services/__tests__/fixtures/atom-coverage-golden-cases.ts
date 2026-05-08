@@ -237,6 +237,83 @@ export const atomicContractExecutionUpgradeGoldenCases: AtomCoverageGoldenCase[]
   },
 ]
 
+export const positionLifecycleGoldenCases: AtomCoverageGoldenCase[] = [
+  {
+    id: 'phase2-001-reduce-position-percent',
+    name: 'reduce position by percent after profit',
+    message: '盈利 5% 后减仓 30%。',
+    tags: ['position_lifecycle', 'risk'],
+    expectedAtoms: [
+      { key: 'risk.take_profit_pct', category: 'risk', minContractSubstrate: true },
+      { key: 'action.reduce_position', category: 'action', minContractSubstrate: true },
+    ],
+    expectedKeys: ['risk.take_profit_pct', 'action.reduce_position'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-002-add-position-with-pyramiding-limit',
+    name: 'add position with pyramiding limit',
+    message: 'BTC 回踩 MA20 不破后加仓，每次加仓 20%，最多加仓 3 次。',
+    tags: ['position_lifecycle', 'mean_reversion'],
+    expectedAtoms: [
+      { key: 'condition.sequence', category: 'trigger', minContractSubstrate: true },
+      { key: 'action.add_position', category: 'action', minContractSubstrate: true },
+      { key: 'position.pyramiding_limit', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: ['condition.sequence', 'action.add_position', 'position.pyramiding_limit'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-003-add-position-missing-constraint',
+    name: 'add position asks for exposure guard',
+    message: 'BTC 回踩 MA20 不破后加仓，每次加仓 20%。',
+    tags: ['position_lifecycle', 'mean_reversion'],
+    expectedAtoms: [
+      { key: 'condition.sequence', category: 'trigger', minContractSubstrate: true },
+      { key: 'action.add_position', category: 'action', minContractSubstrate: true },
+    ],
+    expectedKeys: ['condition.sequence', 'action.add_position', 'open_slot:action.add_position.constraint'],
+    expectedRoute: 'open_slots',
+  },
+  {
+    id: 'phase2-004-reverse-position',
+    name: 'reverse position close then open opposite',
+    message: '跌破 MA50 平多并反手做空，反手仓位沿用原仓位，允许同一根 K 线内反手。',
+    tags: ['position_lifecycle', 'trend'],
+    expectedAtoms: [
+      { key: 'indicator.below', category: 'trigger', minContractSubstrate: true },
+      { key: 'action.reverse_position', category: 'action', minContractSubstrate: true },
+    ],
+    expectedKeys: ['indicator.below', 'action.reverse_position'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-005-dca-fixed-schedule',
+    name: 'fixed DCA schedule with cap and exit',
+    message: '每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，跌破前低停止。',
+    tags: ['position_lifecycle', 'dca', 'risk'],
+    expectedAtoms: [
+      { key: 'price.percent_change', category: 'trigger', minContractSubstrate: true },
+      { key: 'position.dca_schedule', category: 'position', minContractSubstrate: true },
+      { key: 'risk.remembered_level_stop', category: 'risk', minContractSubstrate: true },
+    ],
+    expectedKeys: ['price.percent_change', 'position.dca_schedule', 'risk.remembered_level_stop'],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'phase2-006-dca-missing-exit-rule',
+    name: 'DCA asks for exit rule',
+    message: '每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT。',
+    tags: ['position_lifecycle', 'dca'],
+    expectedAtoms: [
+      { key: 'price.percent_change', category: 'trigger', minContractSubstrate: true },
+      { key: 'position.dca_schedule', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: ['position.dca_schedule', 'open_slot:position.dca_schedule.exit_rule'],
+    expectedRoute: 'open_slots',
+  },
+]
+
 export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     id: 'golden-corpus-001-supported-ma-cross-long-with-fixed-pct-risk',
