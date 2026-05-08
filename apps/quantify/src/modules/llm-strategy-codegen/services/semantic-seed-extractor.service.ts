@@ -4742,16 +4742,21 @@ export class SemanticSeedExtractorService {
   }
 
   private extractFirstTimeframe(text: string): string | null {
-    const compactMatch = text.match(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/iu)
+    const special = this.matchSpecialChinesePhraseTimeframe(text)
+    if (special) return special
+
+    const compactMatch = text.match(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b(?:\s*(?:level|tf|timeframe))?/iu)
     if (compactMatch?.[1] && compactMatch[2]) {
       return `${compactMatch[1]}${this.normalizeTimeframeUnit(compactMatch[2])}`
     }
 
-    for (const chineseMatch of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+    for (const chineseMatch of text.matchAll(/((?:\d{1,2})|[一二三四五六七八九十]+)\s*(分钟|分|小时|时|天|日)(?:线|级别|周期)?/gu)) {
       if (!chineseMatch[1] || !chineseMatch[2]) continue
       if (this.isIndicatorPeriodTimeframeCandidate(text, chineseMatch.index ?? -1, chineseMatch[0].length)) continue
+      const value = this.parseTimeframeNumber(chineseMatch[1])
+      if (value === null) continue
 
-      return `${chineseMatch[1]}${this.normalizeTimeframeUnit(chineseMatch[2])}`
+      return `${value}${this.normalizeTimeframeUnit(chineseMatch[2])}`
     }
     if (/日线|日\s*K|天线/u.test(text)) return '1d'
     return null
@@ -4772,15 +4777,21 @@ export class SemanticSeedExtractorService {
       values.push(value)
     }
 
-    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/giu)) {
+    for (const special of this.matchAllSpecialChinesePhraseTimeframes(text)) {
+      pushCandidate(special.value, special.index, special.length)
+    }
+
+    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b(?:\s*(?:level|tf|timeframe))?/giu)) {
       if (!match[1] || !match[2]) continue
       pushCandidate(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
     }
 
-    for (const match of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+    for (const match of text.matchAll(/((?:\d{1,2})|[一二三四五六七八九十]+)\s*(分钟|分|小时|时|天|日)(?:线|级别|周期)?/gu)) {
       if (!match[1] || !match[2]) continue
       if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
-      pushCandidate(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
+      const value = this.parseTimeframeNumber(match[1])
+      if (value === null) continue
+      pushCandidate(`${value}${this.normalizeTimeframeUnit(match[2])}`, match.index ?? -1, match[0].length)
     }
 
     if (/日线|日\s*K|天线/u.test(text)) {
@@ -4826,15 +4837,21 @@ export class SemanticSeedExtractorService {
       values.push(value)
     }
 
-    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b/giu)) {
+    for (const special of this.matchAllSpecialChinesePhraseTimeframes(text)) {
+      push(special.value)
+    }
+
+    for (const match of text.matchAll(/\b(\d{1,2})\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)\b(?:\s*(?:level|tf|timeframe))?/giu)) {
       if (!match[1] || !match[2]) continue
       push(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`)
     }
 
-    for (const match of text.matchAll(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/gu)) {
+    for (const match of text.matchAll(/((?:\d{1,2})|[一二三四五六七八九十]+)\s*(分钟|分|小时|时|天|日)(?:线|级别|周期)?/gu)) {
       if (!match[1] || !match[2]) continue
       if (this.isIndicatorPeriodTimeframeCandidate(text, match.index ?? -1, match[0].length)) continue
-      push(`${match[1]}${this.normalizeTimeframeUnit(match[2])}`)
+      const value = this.parseTimeframeNumber(match[1])
+      if (value === null) continue
+      push(`${value}${this.normalizeTimeframeUnit(match[2])}`)
     }
     if (/日线|日\s*K|天线/u.test(text)) {
       push('1d')
@@ -4848,6 +4865,84 @@ export class SemanticSeedExtractorService {
     if (normalizedUnit.startsWith('m') || normalizedUnit === '分钟' || normalizedUnit === '分') return 'm'
     if (normalizedUnit.startsWith('h') || normalizedUnit === '小时' || normalizedUnit === '时') return 'h'
     return 'd'
+  }
+
+  private parseChineseNumeral(text: string): number | null {
+    const digitMap: Record<string, number> = {
+      一: 1,
+      二: 2,
+      两: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9,
+    }
+
+    if (text.length === 0) return null
+    if (text === '十') return 10
+    if (text.length === 2 && text.startsWith('十')) {
+      const tail = digitMap[text[1] ?? '']
+      return tail === undefined ? null : 10 + tail
+    }
+    if (text.length === 2 && text.endsWith('十')) {
+      const head = digitMap[text[0] ?? '']
+      return head === undefined ? null : head * 10
+    }
+    if (text.length === 3 && text[1] === '十') {
+      const head = digitMap[text[0] ?? '']
+      const tail = digitMap[text[2] ?? '']
+      if (head === undefined || tail === undefined) return null
+      return head * 10 + tail
+    }
+    if (text.length === 1) {
+      const value = digitMap[text]
+      return value === undefined ? null : value
+    }
+    return null
+  }
+
+  private parseTimeframeNumber(token: string): number | null {
+    if (/^\d+$/.test(token)) {
+      const value = Number.parseInt(token, 10)
+      return Number.isFinite(value) ? value : null
+    }
+    return this.parseChineseNumeral(token)
+  }
+
+  private matchSpecialChinesePhraseTimeframe(text: string): string | null {
+    const first = this.matchAllSpecialChinesePhraseTimeframes(text)[0]
+    return first ? first.value : null
+  }
+
+  private matchAllSpecialChinesePhraseTimeframes(text: string): Array<{ value: string; index: number; length: number }> {
+    // 顺序很重要：长短语优先匹配，避免被截断
+    const phraseMap: Array<{ regex: RegExp; value: string }> = [
+      { regex: /一\s*刻钟/gu, value: '15m' },
+      { regex: /半\s*小时/gu, value: '30m' },
+      { regex: /半\s*天/gu, value: '12h' },
+      { regex: /刻钟/gu, value: '15m' },
+    ]
+
+    const results: Array<{ value: string; index: number; length: number }> = []
+    const consumedRanges: Array<[number, number]> = []
+    const overlapsConsumed = (start: number, end: number) =>
+      consumedRanges.some(([cs, ce]) => start < ce && end > cs)
+
+    for (const { regex, value } of phraseMap) {
+      for (const match of text.matchAll(regex)) {
+        const index = match.index ?? -1
+        if (index < 0) continue
+        const length = match[0].length
+        if (overlapsConsumed(index, index + length)) continue
+        consumedRanges.push([index, index + length])
+        results.push({ value, index, length })
+      }
+    }
+    results.sort((a, b) => a.index - b.index)
+    return results
   }
 
   private isIndicatorPeriodTimeframeCandidate(text: string, matchIndex: number, matchLength: number): boolean {
