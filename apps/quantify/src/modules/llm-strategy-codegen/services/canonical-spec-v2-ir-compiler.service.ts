@@ -1861,7 +1861,8 @@ export class CanonicalSpecV2IrCompilerService {
       rule.phase === 'gate'
       && (rule.condition.key === 'volume.threshold'
         || rule.condition.key === 'volatility.atr_threshold'
-        || rule.condition.key === 'strategy.time_window')
+        || rule.condition.key === 'strategy.time_window'
+        || rule.condition.key === 'strategy.multi_timeframe')
       && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
     ) {
       const predicateRef = this.compilePhase1GateAtom(rule.condition, context, rule.id)
@@ -2069,6 +2070,60 @@ export class CanonicalSpecV2IrCompilerService {
         `${seed}_atr_threshold`,
         predicateKind,
         [atrRef, constRef],
+      )
+    }
+
+    if (atom.key === 'strategy.multi_timeframe') {
+      const htfTimeframe = typeof atom.params?.htfTimeframe === 'string' && atom.params.htfTimeframe.trim().length > 0
+        ? atom.params.htfTimeframe.trim()
+        : null
+      const htfIndicator = typeof atom.params?.htfIndicator === 'string'
+        ? atom.params.htfIndicator.trim().toLowerCase()
+        : null
+      const htfOp = atom.params?.htfOp
+      const htfPeriod = this.readNumber([atom.params?.htfPeriod], Number.NaN)
+      const htfRhs = typeof atom.params?.htfRhs === 'string' ? atom.params.htfRhs.trim().toLowerCase() : null
+
+      if (
+        !htfTimeframe
+        || !htfIndicator
+        || (htfOp !== 'GT' && htfOp !== 'GTE' && htfOp !== 'LT' && htfOp !== 'LTE')
+        || !Number.isFinite(htfPeriod)
+        || htfPeriod <= 0
+      ) {
+        return null
+      }
+
+      let leftRef: string
+      if (htfIndicator === 'ema') {
+        leftRef = this.ensureIndicatorSeries(context, 'EMA', htfPeriod, htfTimeframe)
+      }
+      else if (htfIndicator === 'rsi') {
+        leftRef = this.ensureIndicatorSeries(context, 'RSI', htfPeriod, htfTimeframe)
+      }
+      else if (htfIndicator === 'ma' || htfIndicator === 'sma') {
+        leftRef = this.ensureIndicatorSeries(context, 'SMA', htfPeriod, htfTimeframe)
+      }
+      else {
+        return null
+      }
+
+      let rightRef: string
+      if (htfRhs === 'price') {
+        rightRef = this.ensurePriceSeries(context, 'close', htfTimeframe)
+      }
+      else {
+        const htfValue = this.readNumber([atom.params?.htfValue], Number.NaN)
+        if (!Number.isFinite(htfValue)) return null
+        rightRef = this.ensureConstSeries(context, htfValue)
+      }
+
+      const predicateKind = this.flipGateOperator(htfOp)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_multi_timeframe`,
+        predicateKind,
+        [leftRef, rightRef],
       )
     }
 

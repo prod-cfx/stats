@@ -1,4 +1,5 @@
 import type { SemanticSupportRoute } from '../../semantic-support-classifier.service'
+import { phase3MtfCases } from './phase3-mtf-cases'
 
 export type AtomicCoverageTag =
   | 'trend'
@@ -980,8 +981,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-035-recognized-unsupported-multi-timeframe',
-    name: 'recognized unsupported multi timeframe',
+    id: 'golden-corpus-035-supported-requires-slot-multi-timeframe',
+    name: 'supported requires slot multi timeframe',
     message: 'OKX 合约 BTCUSDT 15m，先看 4h 趋势向上，再用 15m MA20 上穿 MA50 开多，单笔 10%。',
     tags: ['trend', 'position_lifecycle', 'multi_timeframe', 'orchestration'],
     expectedAtoms: [
@@ -997,10 +998,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',
-      'unsupported:strategy.multi_timeframe',
+      'open_slot:strategy.multi_timeframe.htfTimeframe',
+      'open_slot:strategy.multi_timeframe.htfCondition',
     ],
     forbiddenKeys: ['market.trend', 'market.range'],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-036-recognized-unsupported-divergence',
@@ -1713,4 +1715,5 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedRoute: 'unsupported_fallback',
   },
+  ...phase3MtfCases,
 ]

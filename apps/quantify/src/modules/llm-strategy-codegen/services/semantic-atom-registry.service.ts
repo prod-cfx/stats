@@ -102,6 +102,43 @@ const DEFAULT_REPLACEMENT: SemanticAtomReplacementStrategy = {
   patch: DEFAULT_REPLACEMENT_PATCH,
 }
 
+const MULTI_TIMEFRAME_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'strategy.multi_timeframe.htfTimeframe',
+    fieldPath: 'trigger.params.htfTimeframe',
+    priority: 'core',
+    questionHint: '请指明高周期过滤所用的时间周期，例如 4h / 1d。',
+  },
+  {
+    slotKey: 'strategy.multi_timeframe.htfCondition',
+    fieldPath: 'trigger.params.htfCondition',
+    priority: 'behavior',
+    questionHint: '请说明高周期需要满足的条件，例如 4h close 在 MA50 之上 / 4h RSI 低于 30。',
+  },
+]
+
+function multiTimeframeTrigger(): SemanticSupportedAtomDefinition {
+  return {
+    key: 'strategy.multi_timeframe',
+    category: 'trigger',
+    supportStatus: 'supported_requires_slot',
+    requiredParams: ['htfTimeframe', 'htfCondition'],
+    defaultableParams: [],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: [...MULTI_TIMEFRAME_OPEN_SLOTS],
+    contractSubstrate: {
+      runtimeRequirements: [
+        { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+        { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+        { domain: 'runtime', verb: 'feed', object: 'multi_timeframe', shape: { aligned: true } },
+      ],
+      stateRequirements: [],
+      orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+      openSlots: cloneOpenSlotSpecs(MULTI_TIMEFRAME_OPEN_SLOTS),
+    },
+  }
+}
+
 const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
   executableTrigger('condition.expression', []),
@@ -187,7 +224,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
   unsupported('grid.dynamic_grid', 'trigger', '动态网格', 'dynamic_grid_public_beta_unsupported', '动态网格当前公测暂未支持生成和回测。'),
   unsupported('strategy.time_window', 'trigger', '交易时间窗口', 'time_window_public_beta_unsupported', '交易时间窗口当前公测暂未支持生成和回测。'),
-  unsupported('strategy.multi_timeframe', 'trigger', '多周期条件', 'multi_timeframe_public_beta_unsupported', '多周期条件当前公测暂未支持生成和回测。'),
+  multiTimeframeTrigger(),
   unsupported('indicator.divergence', 'trigger', '指标背离', 'divergence_public_beta_unsupported', '指标背离当前公测暂未支持生成和回测。'),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),
   unsupported('action.pause_trading', 'action', '暂停交易', 'pause_trading_public_beta_unsupported', '暂停交易动作当前公测暂未支持生成和回测。'),

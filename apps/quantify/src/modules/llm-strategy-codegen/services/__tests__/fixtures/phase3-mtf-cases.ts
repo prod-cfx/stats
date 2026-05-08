@@ -1,0 +1,103 @@
+import type { AtomCoverageGoldenCase } from './atom-coverage-golden-cases'
+
+export const phase3MtfCases: AtomCoverageGoldenCase[] = [
+  {
+    id: 'phase3-mtf-001-htf-ma-filter-with-ltf-cross-open-slots',
+    name: 'phase3 mtf htf ma filter with ltf cross requires slots',
+    message: 'OKX 合约 BTCUSDT 15m，多周期过滤：先看 4h 收盘在 MA50 上方，再用 15m MA20 上穿 MA50 开多，单笔 10%。',
+    tags: ['trend', 'multi_timeframe', 'orchestration', 'position_lifecycle'],
+    expectedAtoms: [
+      { key: 'strategy.multi_timeframe', category: 'trigger' },
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+      { key: 'open_long', category: 'action', minContractSubstrate: true },
+      { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'strategy.multi_timeframe',
+      'indicator.cross_over',
+      'open_long',
+      'position.fixed_pct',
+      'open_slot:strategy.multi_timeframe.htfTimeframe',
+      'open_slot:strategy.multi_timeframe.htfCondition',
+    ],
+    expectedRoute: 'open_slots',
+    notes: 'Phase 3 MVP：seed extractor 暂未填充 htfTimeframe/htfCondition，路由到 open_slots。',
+  },
+  {
+    id: 'phase3-mtf-002-htf-rsi-filter-with-ltf-reclaim-open-slots',
+    name: 'phase3 mtf htf rsi filter with ltf reclaim requires slots',
+    message: 'OKX 合约 BTCUSDT 15m，多周期过滤：先看 4h RSI 低于 30 才允许做多，价格回踩 MA20 站上后开多，单笔 10%。',
+    tags: ['mean_reversion', 'multi_timeframe', 'orchestration', 'position_lifecycle'],
+    expectedAtoms: [
+      { key: 'strategy.multi_timeframe', category: 'trigger' },
+      { key: 'open_long', category: 'action', minContractSubstrate: true },
+      { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'strategy.multi_timeframe',
+      'open_long',
+      'position.fixed_pct',
+      'open_slot:strategy.multi_timeframe.htfTimeframe',
+      'open_slot:strategy.multi_timeframe.htfCondition',
+    ],
+    expectedRoute: 'open_slots',
+    notes: 'Phase 3 MVP：HTF RSI 阈值类提示同样路由到 open_slots，等待用户答辩补齐参数。',
+  },
+  {
+    id: 'phase3-mtf-003-missing-htf-timeframe-open-slots',
+    name: 'phase3 mtf missing htf timeframe requires slots',
+    message: 'OKX 合约 BTCUSDT 15m，多周期过滤后做多：15m MA20 上穿 MA50 开多，单笔 10%。',
+    tags: ['multi_timeframe', 'orchestration', 'position_lifecycle'],
+    expectedAtoms: [
+      { key: 'strategy.multi_timeframe', category: 'trigger' },
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'strategy.multi_timeframe',
+      'open_slot:strategy.multi_timeframe.htfTimeframe',
+      'open_slot:strategy.multi_timeframe.htfCondition',
+    ],
+    expectedRoute: 'open_slots',
+    notes: 'Phase 3 MVP：未给出具体 HTF 周期，open slots 必须包含 htfTimeframe。',
+  },
+  {
+    id: 'phase3-mtf-004-missing-htf-condition-open-slots',
+    name: 'phase3 mtf missing htf condition requires slots',
+    message: 'OKX 合约 BTCUSDT 15m，多周期过滤：先看 4h 趋势，再用 15m MA20 上穿 MA50 开多，单笔 10%。',
+    tags: ['multi_timeframe', 'orchestration', 'position_lifecycle'],
+    expectedAtoms: [
+      { key: 'strategy.multi_timeframe', category: 'trigger' },
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'strategy.multi_timeframe',
+      'open_slot:strategy.multi_timeframe.htfTimeframe',
+      'open_slot:strategy.multi_timeframe.htfCondition',
+    ],
+    expectedRoute: 'open_slots',
+    notes: 'Phase 3 MVP：未给出 HTF 判定条件，open slots 必须包含 htfCondition。',
+  },
+  {
+    id: 'phase3-mtf-005-single-timeframe-baseline-regression',
+    name: 'phase3 mtf single timeframe baseline regression',
+    message: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，5% 止损，10% 止盈，单笔 10%。',
+    tags: ['trend', 'position_lifecycle'],
+    expectedAtoms: [
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+      { key: 'open_long', category: 'action', minContractSubstrate: true },
+      { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
+      { key: 'risk.stop_loss_pct', category: 'risk', minContractSubstrate: true },
+      { key: 'risk.take_profit_pct', category: 'risk', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'indicator.cross_over',
+      'open_long',
+      'position.fixed_pct',
+      'risk.stop_loss_pct',
+      'risk.take_profit_pct',
+    ],
+    forbiddenKeys: ['strategy.multi_timeframe'],
+    expectedRoute: 'projection_gate',
+    notes: 'Phase 3 MVP baseline：单周期策略不应触发 multi_timeframe 识别。',
+  },
+]
