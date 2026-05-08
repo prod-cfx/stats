@@ -37,6 +37,7 @@ import { SemanticContractReadinessService } from './services/semantic-contract-r
 import { SemanticContractShapeNormalizerService } from './services/semantic-contract-shape-normalizer.service'
 import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
+import { SemanticFrameNormalizerService } from './services/semantic-frame-normalizer.service'
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticPresentationRegistryService } from './services/semantic-presentation-registry.service'
@@ -121,6 +122,7 @@ import { UnsupportedFallbackService } from './services/unsupported-fallback.serv
     SemanticPresentationRegistryService,
     SemanticSupportClassifierService,
     NaturalLanguageGatewayService,
+    SemanticFrameNormalizerService,
     UnsupportedFallbackService,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
