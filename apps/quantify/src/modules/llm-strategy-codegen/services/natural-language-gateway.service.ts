@@ -56,6 +56,13 @@ export class NaturalLanguageGatewayService {
       .filter(clause => clause.length > 0)
   }
 
+  private toActionSegments(text: string): string[] {
+    return text
+      .split(/[；;。，,]/u)
+      .map(segment => segment.trim())
+      .filter(segment => segment.length > 0)
+  }
+
   private parseContext(text: string): ContextFrameDraft[] {
     const frames: ContextFrameDraft[] = []
 
@@ -164,8 +171,8 @@ export class NaturalLanguageGatewayService {
       const localActionIndex = localText.indexOf(actionText)
       if (localActionIndex < 0) return false
 
-      const actionIndex = blockIndex + emaBlock.evidenceText.length + localActionIndex
-      return this.isAffirmativeMatch(clause, actionIndex)
+      const concreteActionMatchIndex = blockIndex + emaBlock.evidenceText.length + localActionIndex
+      return this.isAffirmativeActionAt(clause, concreteActionMatchIndex)
     })
   }
 
@@ -203,11 +210,15 @@ export class NaturalLanguageGatewayService {
 
   private parseBoundaryTouchClause(clause: string): BoundaryTouchFrameDraft[] {
     const frames: BoundaryTouchFrameDraft[] = []
-    const lowerMatch = /(boll|布林带?)\s*下轨\s*(开多|做多|买入)/iu.exec(clause)
-    const upperMatch = /(boll|布林带?)\s*上轨\s*(开空|做空|卖空)/iu.exec(clause)
-    const inheritedUpperMatch = /\s上轨\s*(开空|做空|卖空)/iu.exec(clause)
+    const lowerMatch = /(boll|布林带?)\s*下轨\s*(?:不要|禁止|不)?\s*(开多|做多|买入)/iu.exec(clause)
+    const upperMatch = /(boll|布林带?)\s*上轨\s*(?:不要|禁止|不)?\s*(开空|做空|卖空)/iu.exec(clause)
+    const inheritedUpperMatch = /(?:^|[\s,，])上轨\s*(?:不要|禁止|不)?\s*(开空|做空|卖空)/iu.exec(clause)
+    const canInheritBollinger = Boolean(lowerMatch)
 
-    if (lowerMatch && this.isAffirmativeMatch(clause, lowerMatch.index)) {
+    if (
+      lowerMatch
+      && this.isAffirmativeActionAt(clause, this.concreteActionMatchIndex(lowerMatch, 2))
+    ) {
       frames.push({
         kind: 'boundary_touch',
         indicator: 'bollinger',
@@ -218,7 +229,10 @@ export class NaturalLanguageGatewayService {
       })
     }
 
-    if (upperMatch && this.isAffirmativeMatch(clause, upperMatch.index)) {
+    if (
+      upperMatch
+      && this.isAffirmativeActionAt(clause, this.concreteActionMatchIndex(upperMatch, 2))
+    ) {
       frames.push({
         kind: 'boundary_touch',
         indicator: 'bollinger',
@@ -230,14 +244,18 @@ export class NaturalLanguageGatewayService {
       return frames
     }
 
-    if (frames.length > 0 && inheritedUpperMatch && this.isAffirmativeMatch(clause, inheritedUpperMatch.index)) {
+    if (
+      canInheritBollinger
+      && inheritedUpperMatch
+      && this.isAffirmativeActionAt(clause, this.concreteActionMatchIndex(inheritedUpperMatch, 1))
+    ) {
       frames.push({
         kind: 'boundary_touch',
         indicator: 'bollinger',
         boundaryRole: 'upper',
         sideScope: 'short',
         phase: 'entry',
-        evidenceText: inheritedUpperMatch[0].trim(),
+        evidenceText: inheritedUpperMatch[0].replace(/^[\s,，]+/u, '').trim(),
       })
     }
 
@@ -247,9 +265,9 @@ export class NaturalLanguageGatewayService {
   private parseActions(text: string): ActionFrameDraft[] {
     const frames: ActionFrameDraft[] = []
 
-    for (const clause of this.toClauses(text)) {
-      const openLongMatch = /(开多|做多|买入)/u.exec(clause)
-      if (openLongMatch && this.isAffirmativeMatch(clause, openLongMatch.index)) {
+    for (const segment of this.toActionSegments(text)) {
+      const openLongMatch = /(开多|做多|买入)/u.exec(segment)
+      if (openLongMatch && this.isAffirmativeActionAt(segment, openLongMatch.index)) {
         frames.push({
           kind: 'action',
           actionKey: 'open_long',
@@ -257,8 +275,8 @@ export class NaturalLanguageGatewayService {
         })
       }
 
-      const openShortMatch = /(卖出开空|开空|做空|卖空)/u.exec(clause)
-      if (openShortMatch && this.isAffirmativeMatch(clause, openShortMatch.index)) {
+      const openShortMatch = /(卖出开空|开空|做空|卖空)/u.exec(segment)
+      if (openShortMatch && this.isAffirmativeActionAt(segment, openShortMatch.index)) {
         frames.push({
           kind: 'action',
           actionKey: 'open_short',
@@ -270,8 +288,20 @@ export class NaturalLanguageGatewayService {
     return frames
   }
 
-  private isAffirmativeMatch(clause: string, matchIndex: number): boolean {
-    const prefix = clause.slice(0, matchIndex)
+  private concreteActionMatchIndex(match: RegExpExecArray, actionGroupIndex: number): number {
+    const actionText = match[actionGroupIndex]
+    return match.index + match[0].lastIndexOf(actionText)
+  }
+
+  private isAffirmativeActionAt(text: string, concreteActionMatchIndex: number): boolean {
+    const segmentStart = Math.max(
+      text.lastIndexOf('，', concreteActionMatchIndex - 1),
+      text.lastIndexOf(',', concreteActionMatchIndex - 1),
+      text.lastIndexOf('；', concreteActionMatchIndex - 1),
+      text.lastIndexOf(';', concreteActionMatchIndex - 1),
+      text.lastIndexOf('。', concreteActionMatchIndex - 1),
+    ) + 1
+    const prefix = text.slice(segmentStart, concreteActionMatchIndex)
     return !/(不要|禁止|不)/u.test(prefix)
   }
 

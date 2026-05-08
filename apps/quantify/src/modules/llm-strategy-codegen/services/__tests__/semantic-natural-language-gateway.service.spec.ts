@@ -126,6 +126,28 @@ describe('NaturalLanguageGatewayService', () => {
       expect(actionFrames(frames)).toHaveLength(0)
     },
   )
+
+  it('keeps later compact BOLL short entry after a negated lower-bound long entry', () => {
+    const frames = service.parse('BOLL下轨不要开多，上轨开空')
+
+    expect(boundaryTouchFrames(frames)).toEqual([
+      expect.objectContaining({ boundaryRole: 'upper', sideScope: 'short' }),
+    ])
+    expect(actionFrames(frames)).toEqual([
+      expect.objectContaining({ actionKey: 'open_short' }),
+    ])
+  })
+
+  it('keeps later explicit BOLL short entry after a negated long action segment', () => {
+    const frames = service.parse('不要开多，BOLL上轨开空')
+
+    expect(boundaryTouchFrames(frames)).toEqual([
+      expect.objectContaining({ boundaryRole: 'upper', sideScope: 'short' }),
+    ])
+    expect(actionFrames(frames)).toEqual([
+      expect.objectContaining({ actionKey: 'open_short' }),
+    ])
+  })
 })
 
 function contextFrames(
