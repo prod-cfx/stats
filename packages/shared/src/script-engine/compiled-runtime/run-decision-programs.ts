@@ -30,6 +30,11 @@ interface DcaScheduleMeta {
   stateKey: string
 }
 
+interface SemanticRuntimeStateNumber {
+  present: boolean
+  value: number
+}
+
 interface DecisionProgramNode {
   id: string
   phase: 'entry' | 'exit' | 'rebalance'
@@ -267,9 +272,20 @@ function evaluatePositionLifecycle(
   }
 
   const addMeta = program.metadata?.addPosition
-  if (typeof addMeta?.maxLayers === 'number' && Number.isFinite(addMeta.maxLayers)) {
+  if (addMeta) {
     const currentLayers = readSemanticRuntimeStateNumber(ctx, addMeta.stateKey)
-    if (currentLayers >= addMeta.maxLayers) {
+    if (!currentLayers.present) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.pyramiding_state_missing`,
+      }
+    }
+
+    if (
+      typeof addMeta.maxLayers === 'number'
+      && Number.isFinite(addMeta.maxLayers)
+      && currentLayers.value >= addMeta.maxLayers
+    ) {
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.pyramiding_limit`,
@@ -280,7 +296,14 @@ function evaluatePositionLifecycle(
   const dcaMeta = program.metadata?.dcaSchedule
   if (dcaMeta && Number.isFinite(dcaMeta.maxCount)) {
     const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
-    if (currentCount >= dcaMeta.maxCount) {
+    if (!currentCount.present) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_state_missing`,
+      }
+    }
+
+    if (currentCount.value >= dcaMeta.maxCount) {
       return {
         action: 'NOOP',
         reason: `compiled.${program.id}.dca_max_count`,
@@ -294,9 +317,13 @@ function evaluatePositionLifecycle(
 function readSemanticRuntimeStateNumber(
   ctx: StrategyExecutionContextV1,
   stateKey: string,
-): number {
+): SemanticRuntimeStateNumber {
   const value = ctx.semanticRuntimeState?.[stateKey]?.value
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { present: true, value }
+  }
+
+  return { present: false, value: 0 }
 }
 
 function buildFirstApplicableDecision(
