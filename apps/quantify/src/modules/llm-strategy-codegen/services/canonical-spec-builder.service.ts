@@ -1368,14 +1368,7 @@ export class CanonicalSpecBuilderService {
       return true
     }
 
-    return Boolean(
-      this.findPositionConstraint(position, 'position.pyramiding_limit')
-      && group.members.some(trigger =>
-        trigger.key === 'condition.sequence'
-        || trigger.key === 'risk.take_profit_pct'
-        || trigger.key === 'price.percent_change',
-      ),
-    )
+    return false
   }
 
   private shouldBindDcaScheduleAction(group: SemanticTriggerCombinationGroup): boolean {
@@ -1384,9 +1377,7 @@ export class CanonicalSpecBuilderService {
     }
 
     return group.members.some(trigger =>
-      trigger.key === 'price.percent_change'
-      || trigger.key === 'oscillator.rsi_lte'
-      || this.textContainsPositionLifecycleAction(trigger.evidence?.text, /DCA|定投|补仓/iu),
+      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /DCA|定投|补仓/iu),
     )
   }
 
@@ -1404,8 +1395,7 @@ export class CanonicalSpecBuilderService {
     }
 
     return group.members.some(trigger =>
-      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /减仓|scale\s*out/iu)
-      || trigger.key === 'risk.take_profit_pct',
+      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /减仓|scale\s*out/iu),
     )
   }
 
@@ -1423,9 +1413,7 @@ export class CanonicalSpecBuilderService {
     }
 
     return group.members.some(trigger =>
-      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /反手|reverse\s+position|flip\s+position/iu)
-      || trigger.key === 'indicator.below'
-      || trigger.key === 'indicator.cross_under',
+      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /反手|reverse\s+position|flip\s+position/iu),
     )
   }
 

@@ -2421,6 +2421,7 @@ export class SemanticSeedExtractorService {
                 phase: intent.phase,
                 sideScope: intent.sideScope,
                 params: { ...params, timeframe },
+                evidence: { text: clause, source: 'user_explicit' },
               })
             }
           } else {
@@ -2429,6 +2430,7 @@ export class SemanticSeedExtractorService {
               phase: intent.phase,
               sideScope: intent.sideScope,
               params,
+              evidence: { text: clause, source: 'user_explicit' },
             })
           }
         }
@@ -2702,6 +2704,7 @@ export class SemanticSeedExtractorService {
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
+          evidence: { text: segment, source: 'user_explicit' },
         })
       }
 
@@ -2716,6 +2719,7 @@ export class SemanticSeedExtractorService {
             ...(cross.fastPeriod !== undefined ? { fastPeriod: cross.fastPeriod } : {}),
             ...(cross.slowPeriod !== undefined ? { slowPeriod: cross.slowPeriod } : {}),
           },
+          evidence: { text: segment, source: 'user_explicit' },
         })
       }
     }
@@ -2750,6 +2754,7 @@ export class SemanticSeedExtractorService {
           period,
         },
       },
+      evidence: { text: segment, source: 'user_explicit' },
     })
   }
 
@@ -2773,6 +2778,7 @@ export class SemanticSeedExtractorService {
         sequenceKind: 'rsi_reclaim',
         threshold,
       },
+      evidence: { text: segment, source: 'user_explicit' },
     })
   }
 
@@ -3531,10 +3537,15 @@ export class SemanticSeedExtractorService {
   }
 
   private pushDcaPercentChangeTrigger(text: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    const valuePct = this.extractDcaLifecycleTexts(text)
-      .map(clause => this.extractPercentAfterKeywords(clause, ['每跌', '每下跌']))
-      .find((value): value is number => value !== null && value > 0)
-    if (valuePct === undefined) return
+    const dcaPercentChange = this.extractDcaLifecycleTexts(text)
+      .map(clause => ({
+        clause,
+        valuePct: this.extractPercentAfterKeywords(clause, ['每跌', '每下跌']),
+      }))
+      .find((entry): entry is { clause: string; valuePct: number } =>
+        entry.valuePct !== null && entry.valuePct > 0,
+      )
+    if (!dcaPercentChange) return
 
     this.pushTrigger(triggers, seen, {
       key: 'price.percent_change',
@@ -3542,9 +3553,10 @@ export class SemanticSeedExtractorService {
       sideScope: 'long',
       params: {
         direction: 'down',
-        valuePct: -Math.abs(valuePct),
+        valuePct: -Math.abs(dcaPercentChange.valuePct),
         basis: 'prev_close',
       },
+      evidence: { text: dcaPercentChange.clause, source: 'user_explicit' },
     })
   }
 
