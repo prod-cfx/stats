@@ -60,12 +60,26 @@ describe('Phase 3 multi_timeframe HTF filter', () => {
         supportStatus: 'supported_requires_slot',
         executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
       })
-      expect(atom.requiredParams).toEqual(expect.arrayContaining(['htfTimeframe', 'htfCondition']))
+      // 与 IR compiler compilePhase1GateAtom() 5 解构键对齐，避免 readiness ⇒ IR 不可达的死路。
+      expect(atom.requiredParams).toEqual(expect.arrayContaining([
+        'htfTimeframe',
+        'htfIndicator',
+        'htfPeriod',
+        'htfOp',
+        'htfRhs',
+      ]))
+      // htfValue 仅在 htfRhs === 'value' 时必填，故归入 defaultableParams。
+      expect(atom.defaultableParams).toEqual(expect.arrayContaining(['htfValue']))
       const slotKeys = atom.openSlots.map(slot => slot.slotKey)
       expect(slotKeys).toEqual(expect.arrayContaining([
         'strategy.multi_timeframe.htfTimeframe',
-        'strategy.multi_timeframe.htfCondition',
+        'strategy.multi_timeframe.htfIndicator',
+        'strategy.multi_timeframe.htfPeriod',
+        'strategy.multi_timeframe.htfOp',
+        'strategy.multi_timeframe.htfRhs',
       ]))
+      // htfCondition 自由文本不再是 required slot：由 seed-extractor 解析为 5 键后注入。
+      expect(slotKeys).not.toContain('strategy.multi_timeframe.htfCondition')
       expect(atom.contractSubstrate?.runtimeRequirements).toEqual(expect.arrayContaining([
         expect.objectContaining({
           domain: 'runtime',
@@ -160,9 +174,33 @@ describe('Phase 3 multi_timeframe HTF filter', () => {
       })
 
       // 与既有 phase-1 gate 行为一致：参数不完整时 compilePhase1GateAtom 返回 null，
-      // 既不会落地 EXPRESSION_GUARD，也不会通过 compileCondition 编出未知 atom。
-      // 上游 readiness 必须先把 supported_requires_slot open slots 解决，否则不应进入 IR 编译。
-      // 这里以抛错形式断言 fail-closed：避免悄悄静默吞掉缺参 multi_timeframe 规则。
+      // tryCompileRiskGuard 也返回 null，复用 BLOCK_NEW_ENTRY 通道：
+      // 由 compileCondition default 分支抛 codegen.canonical_spec_v2_condition_unsupported:strategy.multi_timeframe，
+      // 阻止"声称多周期、实际单周期"的静默回退。
+      // 注意：alignment guard / 运行时 HTF 数据对齐由 follow-up 提供。
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_condition_unsupported:strategy\.multi_timeframe/,
+      )
+    })
+
+    it('fails closed when htfRhs is a typo (e.g. "pric") instead of silently using value branch', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = makeMultiTimeframeSpec({
+        kind: 'atom',
+        key: 'strategy.multi_timeframe',
+        semanticScope: 'market',
+        op: 'GT',
+        params: {
+          htfTimeframe: '4h',
+          htfIndicator: 'ma',
+          htfPeriod: 50,
+          htfOp: 'GT',
+          // 显式 typo：旧实现会 fallthrough 进入数值分支与 htfValue=30 比较，
+          // 现在白名单校验直接 return null，沿 BLOCK_NEW_ENTRY fail-closed 通道抛错。
+          htfRhs: 'pric',
+          htfValue: 30,
+        },
+      })
       expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
         /codegen\.canonical_spec_v2_condition_unsupported:strategy\.multi_timeframe/,
       )

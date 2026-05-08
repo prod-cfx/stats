@@ -2074,6 +2074,16 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     if (atom.key === 'strategy.multi_timeframe') {
+      // strategy.multi_timeframe 的 IR EXPRESSION_GUARD 由 5 个解构参数构成：
+      //   htfTimeframe (string)   -> ensureIndicatorSeries / ensurePriceSeries 的 timeframe
+      //   htfIndicator (string)   -> 'ma' | 'sma' | 'ema' | 'rsi'，决定 SMA/EMA/RSI 系列
+      //   htfPeriod    (number>0) -> 指标周期
+      //   htfOp        (compare)  -> 'GT' | 'GTE' | 'LT' | 'LTE'，flipGateOperator 反转后即 guard 触发条件
+      //   htfRhs       (enum)     -> 'price' | 'value'；为 'value' 时 htfValue 必填
+      // 与 semantic-atom-registry.service.ts MULTI_TIMEFRAME_OPEN_SLOTS / requiredParams 严格对齐。
+      // 任一键不合法 -> return null -> tryCompileRiskGuard 返回 null -> compileCondition 走 default
+      //   throw `codegen.canonical_spec_v2_condition_unsupported:strategy.multi_timeframe`，
+      //   保持 fail-closed 而非静默吞掉 BLOCK_NEW_ENTRY guard。
       const htfTimeframe = typeof atom.params?.htfTimeframe === 'string' && atom.params.htfTimeframe.trim().length > 0
         ? atom.params.htfTimeframe.trim()
         : null
@@ -2091,6 +2101,11 @@ export class CanonicalSpecV2IrCompilerService {
         || !Number.isFinite(htfPeriod)
         || htfPeriod <= 0
       ) {
+        return null
+      }
+
+      // htfRhs 显式白名单：避免 typo（如 'pric' / 'rpice'）静默落入数值分支改语义。
+      if (htfRhs !== 'price' && htfRhs !== 'value') {
         return null
       }
 
@@ -2113,6 +2128,7 @@ export class CanonicalSpecV2IrCompilerService {
         rightRef = this.ensurePriceSeries(context, 'close', htfTimeframe)
       }
       else {
+        // htfRhs === 'value'：htfValue 必填。
         const htfValue = this.readNumber([atom.params?.htfValue], Number.NaN)
         if (!Number.isFinite(htfValue)) return null
         rightRef = this.ensureConstSeries(context, htfValue)
