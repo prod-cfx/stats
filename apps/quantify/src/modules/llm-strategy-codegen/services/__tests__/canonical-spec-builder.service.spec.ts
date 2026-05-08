@@ -1378,6 +1378,70 @@ describe('canonicalSpecBuilderService', () => {
     }))
   })
 
+  it('does not attach directional gates to explicit both-side entry rules', () => {
+    const service = new CanonicalSpecBuilderService()
+    const state = createSemanticState({
+      triggers: [
+        {
+          id: 'entry-both-explicit-action',
+          key: 'condition.expression',
+          phase: 'entry',
+          sideScope: 'both',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('GT') },
+          contracts: [{
+            id: 'entry-both-combination',
+            kind: 'trigger',
+            capabilities: [],
+            requires: [],
+            params: {
+              groupId: 'entry-both-combination',
+              sideScope: 'both',
+              actionKey: 'open_long',
+              actionKeySource: 'user_explicit',
+            },
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+        {
+          id: 'long-gate',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('GT') },
+        },
+        {
+          id: 'short-gate',
+          key: 'condition.expression',
+          phase: 'gate',
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { expression: closeOpenPredicate('LT') },
+        },
+      ],
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+    })
+
+    const spec = service.buildFromSemanticState(state)
+    const entryRule = spec.rules.find(rule => rule.phase === 'entry')
+    const conditionText = JSON.stringify(entryRule?.condition)
+
+    expect(entryRule?.sideScope).toBe('both')
+    expect(conditionText).not.toContain('"op":"LT"')
+  })
+
   it('builds SemanticState canonical risk rules from locked stop loss and take profit', () => {
     const service = new CanonicalSpecBuilderService()
     const state = createSemanticState({

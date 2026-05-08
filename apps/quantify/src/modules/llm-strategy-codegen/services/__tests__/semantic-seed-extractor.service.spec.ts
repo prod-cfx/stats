@@ -266,6 +266,109 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('routes P0 multi-indicator BOLL strategy through contract-first gateway without generic boundary fallback', () => {
+    const patch = service.extract('15min k线 在价格都位于ema20 ema60 ema144 上方时候只开多 都位于下方时候只开空 入场时机是boll下轨开多 上轨开空 币安的btcusdt永续合约 风控是亏损百分5止损')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'binance',
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+      marketType: 'perp',
+      timeframe: '15m',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'long' }),
+      expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'short' }),
+      expect.objectContaining({ key: 'price.detect.indicator_boundary', sideScope: 'long', params: expect.objectContaining({ boundaryRole: 'lower' }) }),
+      expect.objectContaining({ key: 'price.detect.indicator_boundary', sideScope: 'short', params: expect.objectContaining({ boundaryRole: 'upper' }) }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'open_short' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+    ]))
+    expect(JSON.stringify(patch)).not.toMatch(/generic_boundary|indicator\.above|indicator\.below/u)
+  })
+
+  it('keeps legacy EMA indicator atoms for existing stack flows while P0 gateway gates remain separate', () => {
+    const patch = service.extract('BTC 15分钟价格在 EMA20 EMA60 EMA144 上方做多。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 20 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 60 }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
+  })
+
+  it('keeps short legacy EMA indicator atoms without duplicating the covered gateway gate', () => {
+    const patch = service.extract('BTC 15分钟价格在 EMA20 EMA60 EMA144 下方做空。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 20 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 60 }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ indicator: 'ema', 'reference.period': 144 }),
+      }),
+    ]))
+    expect(patch.triggers?.filter(trigger => trigger.phase === 'gate')).toEqual([])
+  })
+
+  it('merges BOLL-only gateway triggers actions and risk without requiring expression gates', () => {
+    const patch = service.extract('BOLL下轨开多，亏损5%止损')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.detect.indicator_boundary',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          boundaryRole: 'lower',
+          indicator: expect.objectContaining({ name: 'bollinger' }),
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+    ]))
+  })
+
+  it('merges gateway atoms without duplicating legacy stop-loss risk or open actions', () => {
+    const patch = service.extract('15min k线 在价格都位于ema20 ema60 ema144 上方时候只开多 入场时机是boll下轨开多 币安的btcusdt永续合约 风控是按开仓价亏损百分5止损')
+
+    expect(patch.actions?.filter(action => action.key === 'open_long')).toHaveLength(1)
+    expect(patch.risk?.filter(risk => (
+      risk.key === 'risk.stop_loss_pct'
+      && risk.params?.valuePct === 5
+    ))).toHaveLength(1)
+  })
+
   it('extracts MACD golden-cross buy and death-cross sell as separate events', () => {
     const patch = service.extract('OKX 上用 BTC/USDT，1 小时 K，MACD 金叉买入死叉卖。')
 
@@ -3903,5 +4006,77 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'indicator.cross_under', params: expect.objectContaining({ indicator: 'macd' }) }),
       expect.objectContaining({ key: 'indicator.below' }),
     ]))
+  })
+
+  it('injects timeframeOverride:true on indicator.above and indicator.below triggers', () => {
+    // 15m 执行 TF + 1h HTF EMA 过滤器 — 典型多时间框架场景
+    const patch = service.extract('BTCUSDT 15m，价格在 1h EMA200 上方时才做多；EMA7 上穿 EMA21 开多；单笔 10%。')
+
+    const aboveTriggers = patch.triggers?.filter(t => t.key === 'indicator.above') ?? []
+    expect(aboveTriggers.length).toBeGreaterThan(0)
+    for (const trigger of aboveTriggers) {
+      expect(trigger.params).toEqual(expect.objectContaining({ timeframeOverride: true }))
+    }
+  })
+
+  it('injects timeframeOverride:true on indicator.below triggers from pushMovingAverageTrigger', () => {
+    // 跌破 MA 出场，同样应携带 timeframeOverride
+    const patch = service.extract('BTCUSDT 15m，价格跌破 1h MA50 平多；单笔 10%。')
+
+    const belowTriggers = patch.triggers?.filter(t => t.key === 'indicator.below') ?? []
+    expect(belowTriggers.length).toBeGreaterThan(0)
+    for (const trigger of belowTriggers) {
+      expect(trigger.params).toEqual(expect.objectContaining({ timeframeOverride: true }))
+    }
+  })
+
+  describe('chinese numeral and phrase timeframe recognition (#1015)', () => {
+    const baseSuffix = '，收盘价高于开盘价开多，收盘价低于开盘价平多，固定使用 10 USDT，止损 5%。'
+
+    const expectTimeframe = (message: string, expected: string) => {
+      const patch = service.extract(message)
+      expect(patch.contextSlots?.timeframe).toBe(expected)
+    }
+
+    it('recognizes chinese numeral hours like 四小时 / 十二小时', () => {
+      expectTimeframe(`BTCUSDT 四小时${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 十二小时${baseSuffix}`, '12h')
+      expectTimeframe(`BTCUSDT 一小时${baseSuffix}`, '1h')
+    })
+
+    it('recognizes chinese numeral minutes like 三十分钟', () => {
+      expectTimeframe(`BTCUSDT 三十分钟${baseSuffix}`, '30m')
+      expectTimeframe(`BTCUSDT 十五分钟${baseSuffix}`, '15m')
+    })
+
+    it('recognizes timeframe suffixes 级别 / 周期 / 线', () => {
+      expectTimeframe(`BTCUSDT 4小时级别${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 4小时周期${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 日线${baseSuffix}`, '1d')
+      expectTimeframe(`BTCUSDT 四小时级别${baseSuffix}`, '4h')
+    })
+
+    it('recognizes special phrases 半小时 / 刻钟 / 半天', () => {
+      expectTimeframe(`BTCUSDT 半小时${baseSuffix}`, '30m')
+      expectTimeframe(`BTCUSDT 刻钟${baseSuffix}`, '15m')
+      expectTimeframe(`BTCUSDT 一刻钟${baseSuffix}`, '15m')
+      expectTimeframe(`BTCUSDT 半天${baseSuffix}`, '12h')
+    })
+
+    it('recognizes mixed CJK timeframe with symbol context', () => {
+      const patch = service.extract(`BTCUSDT 四小时级别${baseSuffix}`)
+      expect(patch.contextSlots?.timeframe).toBe('4h')
+      expect(patch.contextSlots?.symbol).toEqual(expect.objectContaining({ value: 'BTCUSDT' }))
+    })
+
+    it('recognizes english timeframe phrases with optional level/tf suffix', () => {
+      expectTimeframe(`BTCUSDT 4h timeframe${baseSuffix}`, '4h')
+      expectTimeframe(`BTCUSDT 15m tf${baseSuffix}`, '15m')
+    })
+
+    it('falls back to numeric arabic forms unchanged (backward compat)', () => {
+      expectTimeframe(`BTCUSDT 1m${baseSuffix}`, '1m')
+      expectTimeframe(`BTCUSDT 4小时${baseSuffix}`, '4h')
+    })
   })
 })

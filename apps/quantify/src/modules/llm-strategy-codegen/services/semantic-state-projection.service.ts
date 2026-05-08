@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
+import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
 
 export interface SemanticConversationView {
@@ -65,8 +67,16 @@ export interface SemanticDisplayLogicGraph {
 
 type SemanticDisplaySideScope = 'long' | 'short' | 'both'
 
+const UNSAFE_DISPLAY_FALLBACK_PLACEHOLDER = '已识别条件，等待展示文案完善'
+const INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN
+  = /(?:^|[^\w.])(?:generic_boundary|[a-z]\w*(?:\.[a-z]\w*)+)(?=$|\W)/u
+
 @Injectable()
 export class SemanticStateProjectionService {
+  constructor(
+    private readonly presentationRegistry: SemanticPresentationRegistryService = createDefaultPresentationRegistry(),
+  ) {}
+
   buildConversationView(state: SemanticState): SemanticConversationView {
     const deterministicTriggers = this.filterDeterministicTriggers(state.triggers)
     const deterministicRisk = this.filterDeterministicRisk(state.risk)
@@ -351,7 +361,7 @@ export class SemanticStateProjectionService {
     }
 
     const summary = this.buildTriggerSummary([trigger], true)
-    return summary
+    return this.sanitizeDisplayFallbackText(summary)
       .replace(/^(入场|出场|条件)：/u, '')
       .replace(/时(?:做多开仓|做空开仓|双向开仓|买入|平多|平空|双向平仓|卖出平仓)$/u, '')
       .trim()
@@ -383,12 +393,18 @@ export class SemanticStateProjectionService {
       return ''
     }
 
-    const boundaryText = this.formatBoundaryRole(boundaryRole)
-    const actionText = this.formatIndicatorBoundaryActionText(trigger.params.confirmationMode)
-    if (indicator.name === 'bollinger') {
-      return `${actionText}布林带${boundaryText}${this.formatDisplayIndicatorParams(indicator)}`
+    return this.presentationRegistry.renderDisplay('price.detect.indicator_boundary', {
+      indicator,
+      boundaryRole,
+      confirmationMode: trigger.params.confirmationMode,
+    })
+  }
+
+  private sanitizeDisplayFallbackText(text: string): string {
+    if (INTERNAL_SEMANTIC_DISPLAY_KEY_PATTERN.test(text)) {
+      return UNSAFE_DISPLAY_FALLBACK_PLACEHOLDER
     }
-    return `${actionText}${indicator.name.toUpperCase()}${boundaryText}${this.formatDisplayIndicatorParams(indicator)}`
+    return text
   }
 
   private formatDisplayRelativeVolumeCondition(trigger: SemanticState['triggers'][number]): string {
@@ -492,16 +508,6 @@ export class SemanticStateProjectionService {
       key,
       params,
     })
-  }
-
-  private formatDisplayIndicatorParams(indicator: { period?: number, stdDev?: number }): string {
-    if (indicator.period !== undefined && indicator.stdDev !== undefined) {
-      return `（${this.formatNumber(indicator.period)}, ${this.formatNumber(indicator.stdDev)}）`
-    }
-    if (indicator.period !== undefined) {
-      return `（${this.formatNumber(indicator.period)}）`
-    }
-    return ''
   }
 
   private formatDisplaySequenceWindow(params: Record<string, unknown>): string {
@@ -1640,8 +1646,8 @@ export class SemanticStateProjectionService {
       .join('；')
   }
 
-  private buildRiskFallbackSummary(risk: SemanticState['risk'][number]): string {
-    return `${risk.key} 已识别，参数待补充`
+  private buildRiskFallbackSummary(_risk: SemanticState['risk'][number]): string {
+    return '已识别风控，参数待补充'
   }
 
   private buildActionSummary(actions: SemanticState['actions']): string {
@@ -2096,4 +2102,8 @@ export class SemanticStateProjectionService {
     if (unit === 'd') return value * 1440
     return value * 10080
   }
+}
+
+function createDefaultPresentationRegistry(): SemanticPresentationRegistryService {
+  return new SemanticPresentationRegistryService(new SemanticAtomRegistryService())
 }

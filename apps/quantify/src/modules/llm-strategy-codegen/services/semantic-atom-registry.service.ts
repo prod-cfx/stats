@@ -1,6 +1,5 @@
-import { Injectable } from '@nestjs/common'
-
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+
 import type {
   SemanticAtomContractSubstrate,
   SemanticAtomDefinition,
@@ -11,6 +10,7 @@ import type {
   SemanticSupportedAtomDefinition,
   SemanticUnknownAtomDefinition,
 } from '../types/semantic-atom-support'
+import { Injectable } from '@nestjs/common'
 
 type UnknownSemanticAtomDefinition = SemanticUnknownAtomDefinition
 
@@ -49,6 +49,22 @@ function maxExposurePctSubstrate(): SemanticAtomContractSubstrate {
     runtimeRequirements: [{ domain: 'runtime', verb: 'provide', object: 'position_snapshot' }],
     stateRequirements: [],
     orderRequirements: [],
+    openSlots: [],
+  }
+}
+
+function timeStopBarsSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+      { domain: 'runtime', verb: 'read', object: 'position.bars_held' },
+    ],
+    stateRequirements: [],
+    orderRequirements: [
+      { domain: 'order', verb: 'support', object: 'market_order' },
+      { domain: 'order', verb: 'submit', object: 'market_close' },
+    ],
     openSlots: [],
   }
 }
@@ -228,6 +244,59 @@ function multiTimeframeTrigger(): SemanticSupportedAtomDefinition {
   }
 }
 
+// Phase 3 MVP — price.previous_extrema 升级为 supported_requires_slot：
+// requiredParams 与 IR compiler `compileConditionAtom` 中 'price.previous_extrema' 分支严格对齐：
+//   - kind: 'prev_high' | 'prev_low' | 'swing_high' | 'swing_low'，决定走 HIGHEST_HIGH 或 LOWEST_LOW
+//   - lookback: 滚动窗口大小（>0 的整数）
+//   - memoryKey: 给后续 cross-atom 复用预留的 contract 占位；缺失时由 semantic-state-normalization 自动以 hash 补齐
+// pivotStrength / confirmationBars 当前 MVP 用 IR 默认值，不强制用户答辩，故归入 defaultableParams。
+const PREVIOUS_EXTREMA_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'price.previous_extrema.kind',
+    fieldPath: 'trigger.params.kind',
+    priority: 'core',
+    questionHint: '请指明前高/前低判定类型：prev_high / prev_low / swing_high / swing_low。',
+  },
+  {
+    slotKey: 'price.previous_extrema.lookback',
+    fieldPath: 'trigger.params.lookback',
+    priority: 'core',
+    questionHint: '请给出滚动窗口长度，例如 20。',
+  },
+  {
+    slotKey: 'price.previous_extrema.memoryKey',
+    fieldPath: 'trigger.params.memoryKey',
+    priority: 'behavior',
+    questionHint: '请提供 memoryKey，用于跨 atom 复用 remembered level（缺失时系统会以 hash 自动补全）。',
+  },
+]
+
+function previousExtremaSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+      { domain: 'runtime', verb: 'provide', object: 'compiled_predicate_runtime' },
+      { domain: 'runtime', verb: 'compute', object: 'rolling_extrema' },
+    ],
+    stateRequirements: [{ domain: 'state', verb: 'write', object: 'memoryKey' }],
+    orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+    openSlots: PREVIOUS_EXTREMA_OPEN_SLOTS.map(slot => ({ ...slot })),
+  }
+}
+
+function previousExtremaTrigger(): SemanticSupportedAtomDefinition {
+  return {
+    key: 'price.previous_extrema',
+    category: 'trigger',
+    supportStatus: 'supported_requires_slot',
+    requiredParams: ['kind', 'lookback', 'memoryKey'],
+    defaultableParams: ['pivotStrength', 'confirmationBars'],
+    executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
+    openSlots: PREVIOUS_EXTREMA_OPEN_SLOTS.map(slot => ({ ...slot })),
+    contractSubstrate: previousExtremaSubstrate(),
+  }
+}
+
 const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
   executableTrigger('condition.expression', []),
@@ -316,6 +385,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableRisk('risk.max_drawdown_pct', ['valuePct']),
   executableRisk('risk.max_single_loss_pct', ['valuePct']),
   executableRisk('risk.cooldown_bars', ['bars']),
+  executableRisk('risk.time_stop_bars', ['maxBars', 'scope', 'effect'], timeStopBarsSubstrate()),
   executablePosition('position.fixed_pct', ['value']),
   executablePosition('position.fixed_notional', ['value', 'asset']),
   executablePosition('position.fixed_quantity', ['value', 'asset']),
@@ -328,7 +398,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
   unsupported('indicator.below', 'trigger', '指标静态低于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态低于条件当前公测暂未支持生成和回测。'),
-  unsupported('price.previous_extrema', 'trigger', '前高/前低突破', 'previous_extrema_public_beta_unsupported', '前高/前低结构识别当前公测暂未支持生成和回测。'),
+  previousExtremaTrigger(),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   unsupported('volume.threshold', 'trigger', '成交量阈值', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
@@ -399,7 +469,11 @@ function executableAction(key: string): SemanticSupportedAtomDefinition {
   }
 }
 
-function executableRisk(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
+function executableRisk(
+  key: string,
+  requiredParams: string[],
+  contractSubstrate: SemanticAtomContractSubstrate = baseExecutableSubstrate(),
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'risk',
@@ -408,7 +482,7 @@ function executableRisk(key: string, requiredParams: string[]): SemanticSupporte
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
-    contractSubstrate: baseExecutableSubstrate(),
+    contractSubstrate,
   }
 }
 

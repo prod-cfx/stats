@@ -123,6 +123,7 @@ model Position {
   leverage              Decimal?       @db.Decimal(18, 8)
   quantity              Decimal        @default(0) @db.Decimal(48, 18)
   avgEntryPrice         Decimal        @default(0) @map("avg_entry_price") @db.Decimal(48, 18)
+  entryTimeframe        String?        @map("entry_timeframe")
   realizedPnl           Decimal        @default(0) @map("realized_pnl") @db.Decimal(48, 18)
   unrealizedPnl         Decimal        @default(0) @map("unrealized_pnl") @db.Decimal(48, 18)
   status                PositionStatus @default(OPEN)

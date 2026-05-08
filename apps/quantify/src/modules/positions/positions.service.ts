@@ -8,7 +8,7 @@ import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/cor
 import type { OrderIntent, TradingExecutionResult } from '@/modules/trading-execution/types/trading-execution.types'
 import type { Position, Trade, PrismaClient } from '@/prisma/prisma.types'
 import { randomUUID } from 'node:crypto'
-import { ErrorCode, LedgerEntryType, PositionSide, PositionStatus, TradeSide } from '@ai/shared'
+import { ErrorCode, LedgerEntryType, MARKET_TIMEFRAMES, PositionSide, PositionStatus, TradeSide, type MarketTimeframe } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
@@ -49,6 +49,7 @@ export class PositionsService {
     const fee = new Decimal(dto.fee ?? '0')
     const leverage = dto.leverage ? new Decimal(dto.leverage) : null
     const executedAt = new Date(dto.executedAt)
+    const entryTimeframe = this.normalizeEntryTimeframe(dto.entryTimeframe)
 
     const trade = await this.txHost.withTransaction(async () => {
       // 1. 校验账户与成交幂等
@@ -77,6 +78,7 @@ export class PositionsService {
             quantity,
             leverage,
             executedAt,
+            entryTimeframe,
             existingPosition: lockedPosition,
           })
         : await this.applyDecrease({
@@ -201,10 +203,11 @@ export class PositionsService {
       quantity: Decimal
       leverage: Decimal | null
       executedAt: Date
+      entryTimeframe: MarketTimeframe | null
       existingPosition: Position | null
     },
   ): Promise<{ position: Position; realizedPnlDelta: Decimal; settlementDelta: Decimal }> {
-    const { dto, normalizedSymbol, price, quantity, leverage, executedAt } = params
+    const { dto, normalizedSymbol, price, quantity, leverage, executedAt, entryTimeframe } = params
     let { existingPosition } = params
 
     // 无仓位则尝试创建，处理并发唯一约束
@@ -226,6 +229,7 @@ export class PositionsService {
           leverage,
           quantity,
           avgEntryPrice: price,
+          entryTimeframe,
           openedAt: executedAt,
           exchangeId,
           marketType,
@@ -418,6 +422,7 @@ export class PositionsService {
       leverage: position.leverage ? position.leverage.toString() : null,
       quantity: (position.quantity as Prisma.Decimal).toString(),
       avgEntryPrice: (position.avgEntryPrice as Prisma.Decimal).toString(),
+      entryTimeframe: position.entryTimeframe ?? null,
       realizedPnl: (position.realizedPnl as Prisma.Decimal).toString(),
       unrealizedPnl: (position.unrealizedPnl as Prisma.Decimal).toString(),
       status: position.status as PositionStatus,
@@ -652,6 +657,19 @@ export class PositionsService {
       return jsonObject
     }
     return String(value)
+  }
+
+  private normalizeEntryTimeframe(value: string | undefined): MarketTimeframe | null {
+    if (value === undefined) return null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    if (!(MARKET_TIMEFRAMES as readonly string[]).includes(trimmed)) {
+      throw new DomainException('position.entry_timeframe_invalid', {
+        code: ErrorCode.MARKET_INVALID_TIMEFRAME,
+        args: { timeframe: value },
+      })
+    }
+    return trimmed as MarketTimeframe
   }
 
   private toTradeResponse(trade: Trade): TradeResponseDto {

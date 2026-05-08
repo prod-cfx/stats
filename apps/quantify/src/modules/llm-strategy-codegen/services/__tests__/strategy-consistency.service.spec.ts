@@ -1,3 +1,4 @@
+import type { CanonicalRuleV2 } from '../../types/canonical-strategy-spec'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
@@ -1743,6 +1744,183 @@ strategy
     expect(compiled.ir.ruleBlocks.some(block =>
       block.actions.some(action => action.kind === 'REDUCE_LONG' && action.quantity.value === 30),
     )).toBe(true)
+  })
+
+  describe('checkTimeframeConsistency (issue #1014)', () => {
+    function buildTimeframeSpec(input: {
+      requiredTimeframes: string[]
+      conditionTimeframes?: string[]
+      operandTimeframes?: string[]
+    }) {
+      const conditions: CanonicalRuleV2[] = (input.conditionTimeframes ?? []).map((tf, idx) => ({
+        id: `entry-cond-${idx}`,
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200 - idx,
+        condition: {
+          kind: 'atom',
+          key: 'execution.on_start',
+          semanticScope: 'portfolio',
+          params: { timeframe: tf },
+        },
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+      }))
+
+      const operandRules: CanonicalRuleV2[] = (input.operandTimeframes ?? []).map((tf, idx) => ({
+        id: `entry-expr-${idx}`,
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 100 - idx,
+        condition: {
+          kind: 'expression',
+          op: 'GT',
+          left: {
+            kind: 'series',
+            source: 'bar',
+            field: 'close',
+            timeframe: tf,
+          },
+          right: { kind: 'constant', value: 0 },
+        },
+        actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+      }))
+
+      const rules: CanonicalRuleV2[] = [...conditions, ...operandRules]
+      // 至少保留一条 entry 规则，避免下游构建空规则
+      if (rules.length === 0) {
+        rules.push({
+          id: 'entry-bootstrap',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'atom',
+            key: 'execution.on_start',
+            semanticScope: 'portfolio',
+          },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+        })
+      }
+
+      return {
+        version: 2 as const,
+        market: {
+          exchange: 'okx' as const,
+          symbol: 'BTCUSDT',
+          marketType: 'perp' as const,
+          timeframe: input.requiredTimeframes[0] ?? '1h',
+          defaultTimeframe: input.requiredTimeframes[0] ?? '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO' as const, value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE' as const,
+          fillTiming: 'NEXT_BAR_OPEN' as const,
+        },
+        dataRequirements: {
+          requiredTimeframes: input.requiredTimeframes,
+        },
+        rules,
+      }
+    }
+
+    function findTimeframeChecks(report: ReturnType<StrategyConsistencyService['evaluate']>) {
+      return report.checks.filter(check => check.key === 'data_requirements.timeframe_consistency')
+    }
+
+    it('passes when all referenced timeframes are subset of requiredTimeframes', () => {
+      const spec = buildTimeframeSpec({
+        requiredTimeframes: ['1h', '4h'],
+        conditionTimeframes: ['1h'],
+        operandTimeframes: ['4h'],
+      })
+
+      const report = consistency.evaluate({
+        canonicalSpec: spec,
+        scriptCode: '',
+      })
+
+      const tfChecks = findTimeframeChecks(report)
+      expect(tfChecks).toHaveLength(1)
+      expect(tfChecks[0]).toMatchObject({
+        level: 'critical',
+        status: 'passed',
+      })
+    })
+
+    it('fails critical when condition references timeframe outside requiredTimeframes', () => {
+      const spec = buildTimeframeSpec({
+        requiredTimeframes: ['1h'],
+        conditionTimeframes: ['4h'],
+      })
+
+      const report = consistency.evaluate({
+        canonicalSpec: spec,
+        scriptCode: '',
+      })
+
+      const tfChecks = findTimeframeChecks(report)
+      const criticalFail = tfChecks.find(check => check.level === 'critical' && check.status === 'failed')
+      expect(criticalFail).toBeDefined()
+      expect(criticalFail?.message).toContain('4h')
+      expect(report.status).toBe('FAILED')
+    })
+
+    it('warns when requiredTimeframes contains entries not referenced anywhere', () => {
+      const spec = buildTimeframeSpec({
+        requiredTimeframes: ['1h', '4h'],
+        conditionTimeframes: ['1h'],
+      })
+
+      const report = consistency.evaluate({
+        canonicalSpec: spec,
+        scriptCode: '',
+      })
+
+      const tfChecks = findTimeframeChecks(report)
+      const warning = tfChecks.find(check => check.level === 'warning' && check.status === 'failed')
+      expect(warning).toBeDefined()
+      expect(warning?.message).toContain('4h')
+      // 仅 warning，不应让整体 FAILED
+      expect(report.summary.warningFailed).toBeGreaterThanOrEqual(1)
+    })
+
+    it('passes when requiredTimeframes is empty and no operand references timeframe', () => {
+      const spec = buildTimeframeSpec({
+        requiredTimeframes: [],
+      })
+
+      const report = consistency.evaluate({
+        canonicalSpec: spec,
+        scriptCode: '',
+      })
+
+      const tfChecks = findTimeframeChecks(report)
+      expect(tfChecks).toHaveLength(1)
+      expect(tfChecks[0]).toMatchObject({
+        level: 'critical',
+        status: 'passed',
+      })
+    })
+
+    it('reports both critical missing and warning unused across condition + operand sources', () => {
+      const spec = buildTimeframeSpec({
+        requiredTimeframes: ['1h', '1d'],
+        conditionTimeframes: ['1h'],
+        operandTimeframes: ['4h'],
+      })
+
+      const report = consistency.evaluate({
+        canonicalSpec: spec,
+        scriptCode: '',
+      })
+
+      const tfChecks = findTimeframeChecks(report)
+      const criticalFail = tfChecks.find(check => check.level === 'critical' && check.status === 'failed')
+      const warning = tfChecks.find(check => check.level === 'warning' && check.status === 'failed')
+      expect(criticalFail?.message).toContain('4h')
+      expect(warning?.message).toContain('1d')
+    })
   })
 })
 

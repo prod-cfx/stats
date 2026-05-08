@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto'
-
 import type { SemanticAtomContract, SemanticRiskState, SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+
 import type {
   NormalizedTriggerAtom,
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
+import { createHash } from 'node:crypto'
 
 type TriggerCombinationJoin = 'AND' | 'OR'
 
@@ -136,7 +136,108 @@ export function buildTriggerCombinationContract(
 export function normalizeTriggerCombinationContracts(
   triggers: SemanticTriggerState[],
 ): SemanticTriggerState[] {
-  return triggers.map(trigger => normalizeTriggerCombinationContract(trigger))
+  return triggers.map(trigger =>
+    normalizeConditionSequenceTrigger(
+      normalizeTriggerCombinationContract(normalizePreviousExtremaMemoryKey(trigger)),
+    ),
+  )
+}
+
+// Phase 3 MVP — price.previous_extrema 缺 memoryKey 时仿 risk.partial_take_profit 模式以
+// hash 自动补齐：使 contract substrate 的 state.write 始终成立、避免上层 readiness 因为
+// "memoryKey 必填"在用户不显式给名时把 atom 卡在 supported_requires_slot；hash 输入只引用
+// 与"哪个 remembered level"语义直接相关的 kind/lookback/sourceText，确保等价 trigger 复用同一
+// memoryKey（cross-atom remembered level 复用前置）。仅在 trigger.key === 'price.previous_extrema'
+// 且 memoryKey 缺失时介入，避免污染其他 trigger 流程。
+function normalizePreviousExtremaMemoryKey(trigger: SemanticTriggerState): SemanticTriggerState {
+  if (trigger.key !== 'price.previous_extrema') return trigger
+  const params = trigger.params ?? {}
+  if (typeof params.memoryKey === 'string' && params.memoryKey.trim().length > 0) return trigger
+  const kind = typeof params.kind === 'string' ? params.kind : ''
+  const lookback = typeof params.lookback === 'number' ? params.lookback : ''
+  const sourceText = typeof params.sourceText === 'string' ? params.sourceText : ''
+  const hash = createHash('sha256')
+    .update(`${kind}|${lookback}|${sourceText}`)
+    .digest('hex')
+    .slice(0, 16)
+  return {
+    ...trigger,
+    params: { ...params, memoryKey: `previous_extrema_${hash}` },
+  }
+}
+
+/**
+ * Normalize `condition.sequence` triggers for cache/hash key stability.
+ *
+ * Behaviors:
+ * - If `params.memoryKey` is not a non-empty string, auto-generate one based
+ *   on a canonical, key-sorted JSON of the relevant params (sequenceKind,
+ *   steps, lookbackWindow, threshold, count, direction, lookbackBars, reference).
+ *   `steps` are treated as ordered (no resort) but each step's keys are sorted
+ *   to make equivalent rewrites collapse to the same hash.
+ * - Equivalent rewrites: omitted optional fields equal explicit `undefined`
+ *   (already excluded). Empty-string `lookbackWindow` is treated as absent.
+ * - User-explicit `memoryKey` always wins.
+ */
+export function normalizeConditionSequenceTrigger(trigger: SemanticTriggerState): SemanticTriggerState {
+  if (trigger.key !== 'condition.sequence') return trigger
+
+  const params = trigger.params as Record<string, unknown>
+  const sequenceKind = readString(params.sequenceKind)
+  if (!sequenceKind) return trigger
+
+  if (typeof params.memoryKey === 'string' && params.memoryKey.trim().length > 0) {
+    return trigger
+  }
+
+  const hashInput: Record<string, unknown> = { sequenceKind }
+  const lookbackWindow = readString(params.lookbackWindow)
+  if (lookbackWindow) hashInput.lookbackWindow = lookbackWindow
+  if (typeof params.threshold === 'number' && Number.isFinite(params.threshold)) {
+    hashInput.threshold = params.threshold
+  }
+  if (typeof params.count === 'number' && Number.isFinite(params.count)) {
+    hashInput.count = params.count
+  }
+  const direction = readString(params.direction)
+  if (direction) hashInput.direction = direction
+  if (typeof params.lookbackBars === 'number' && Number.isFinite(params.lookbackBars)) {
+    hashInput.lookbackBars = params.lookbackBars
+  }
+  if (params.reference && typeof params.reference === 'object') {
+    hashInput.reference = canonicalize(params.reference)
+  }
+  if (Array.isArray(params.steps)) {
+    hashInput.steps = params.steps.map(step => canonicalize(step))
+  }
+
+  const json = JSON.stringify(hashInput)
+  const hash = createHash('sha256').update(json).digest('hex').slice(0, 16)
+
+  return {
+    ...trigger,
+    params: { ...trigger.params, memoryKey: `condseq_${hash}` },
+    openSlots: [...trigger.openSlots],
+    ...(trigger.contracts ? { contracts: [...trigger.contracts] } : {}),
+  }
+}
+
+/**
+ * Canonicalize an arbitrary value for hashing: sort object keys recursively,
+ * preserve array order, drop `undefined` properties.
+ */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item => canonicalize(item))
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => [k, canonicalize(v)] as const)
+    return Object.fromEntries(entries)
+  }
+  return value
 }
 
 export function normalizeSemanticStateCombinationContracts(state: SemanticState): SemanticState {

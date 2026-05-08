@@ -6,7 +6,7 @@ interface RiskPredicateProgramNode {
   id: string
   payload: {
     id?: string
-    kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop'
+    kind?: 'atrMultipleStop' | 'atrMultipleTakeProfit' | 'rememberedLevelStop' | 'timeStopBars'
     params?: Readonly<Record<string, number | string | boolean>>
     actions?: ReadonlyArray<{
       kind?: 'FORCE_EXIT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
@@ -86,9 +86,42 @@ function isRiskPredicateBreached(
       return isAtrMultipleBreached(ctx, predicate, 'takeProfit')
     case 'rememberedLevelStop':
       return isRememberedLevelStopBreached(ctx, predicate)
+    case 'timeStopBars':
+      return isTimeStopBarsBreached(ctx, predicate)
     default:
       return false
   }
+}
+
+function isTimeStopBarsBreached(
+  ctx: StrategyExecutionContextV1,
+  predicate: RiskPredicateProgramNode,
+): boolean {
+  const position = ctx.position as Record<string, unknown> | undefined
+  if (!position) return false
+
+  const qty = readPositionQty(ctx)
+  if (qty === 0) return false
+
+  const scope = typeof predicate.payload.params?.scope === 'string'
+    ? predicate.payload.params.scope
+    : 'both'
+  if (scope === 'long' && qty <= 0) return false
+  if (scope === 'short' && qty >= 0) return false
+
+  const barsHeldRaw = position.barsHeld
+  if (typeof barsHeldRaw !== 'number' || !Number.isFinite(barsHeldRaw)) return false
+
+  const entryTimeframeRaw = position.entryTimeframe
+  if (typeof entryTimeframeRaw === 'string' && entryTimeframeRaw.length > 0) {
+    if (entryTimeframeRaw !== ctx.timeframe) return false
+  }
+
+  const maxBarsRaw = predicate.payload.params?.maxBars
+  const maxBars = typeof maxBarsRaw === 'number' ? maxBarsRaw : Number(maxBarsRaw)
+  if (!Number.isInteger(maxBars) || maxBars <= 0) return false
+
+  return barsHeldRaw >= maxBars
 }
 
 function isAtrMultipleBreached(

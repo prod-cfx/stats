@@ -8,6 +8,7 @@ import type {
   Fill,
   SignalIntent,
   StrategyContext,
+  Timeframe,
 } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { buildMultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
@@ -58,6 +59,7 @@ interface CompiledDecisionRuntimeState {
 
 interface PositionRuntimeState {
   side: 'LONG' | 'SHORT'
+  entryTimeframe: Timeframe
   barsHeld: number
   highestPriceSinceEntry: number
   lowestPriceSinceEntry: number
@@ -83,6 +85,23 @@ interface CompiledOrderProgramRuntimeState {
   levels: readonly number[]
   recycleOnFill: boolean
   orders: CompiledOrderProgramRuntimeOrder[]
+}
+
+function readRequiredTimeframesFromUnknown(source: unknown): string[] | null {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null
+  const record = source as Record<string, unknown>
+  // 直接命中 dataRequirements.requiredTimeframes 或对象本身就是 dataRequirements
+  if (Array.isArray(record.requiredTimeframes)) {
+    return record.requiredTimeframes.filter((tf): tf is string => typeof tf === 'string' && tf.length > 0)
+  }
+  const dataReq = record.dataRequirements
+  if (dataReq && typeof dataReq === 'object' && !Array.isArray(dataReq)) {
+    const nested = (dataReq as Record<string, unknown>).requiredTimeframes
+    if (Array.isArray(nested)) {
+      return nested.filter((tf): tf is string => typeof tf === 'string' && tf.length > 0)
+    }
+  }
+  return null
 }
 
 function buildRuntimeSymbolSet(input: BacktestRunInput): Set<string> {
@@ -159,6 +178,7 @@ export class BacktestRunnerService {
     const orderProgramStatesBySymbol = new Map<string, Map<string, CompiledOrderProgramRuntimeState>>()
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
     const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
+    const requiredHtfTimeframes = this.resolveRequiredHtfTimeframes(input)
 
     for (const bar of baseBars) {
       while (stateCursor < stateBars.length && stateBars[stateCursor].closeTime <= bar.closeTime) {
@@ -224,9 +244,21 @@ export class BacktestRunnerService {
         positionRuntimeState,
         semanticRuntimeState,
       })
-      const intent = await input.strategy.fn({
-        ...strategyContext,
-      })
+      const htfAligned = BacktestRunnerService.isHtfAligned(
+        this.stateEngine,
+        bar.symbol,
+        requiredHtfTimeframes,
+        bar.closeTime,
+      )
+      // Entry-phase HTF alignment guard (#1016):
+      // 当所需 HTF 尚未对齐 (closed snapshot.ts <= baseBar.closeTime)，
+      // 跳过新仓信号产生，但保持已开仓的 exit/adjust 流程与 risk 评估不受影响。
+      const skipStrategyForEntry = !htfAligned && position.qty === 0
+      const intent: SignalIntent = skipStrategyForEntry
+        ? { type: 'NOOP', reason: 'htf_not_aligned' }
+        : await input.strategy.fn({
+          ...strategyContext,
+        })
       this.applyCompiledOrderProgramFills({
         intent,
         input,
@@ -668,6 +700,38 @@ export class BacktestRunnerService {
     return strategy.bindingSource === 'PUBLISHED_SNAPSHOT_STRICT'
   }
 
+  private resolveRequiredHtfTimeframes(input: BacktestRunInput): Timeframe[] {
+    // 仅在 strategy 显式声明 dataRequirements.requiredTimeframes 时启用 HTF 对齐守卫，
+    // 避免破坏未声明 HTF 需求的历史回测行为（Never break userspace）。
+    const fromAst = readRequiredTimeframesFromUnknown(input.strategy.astSnapshot)
+    const fromDataReq = readRequiredTimeframesFromUnknown(input.strategy.dataRequirements)
+    const fromIr = readRequiredTimeframesFromUnknown(input.strategy.irSnapshot)
+    const declared = fromAst ?? fromDataReq ?? fromIr
+    if (!declared || declared.length === 0) return []
+    // base timeframe 不需要走 HTF 对齐守卫（每根 base bar 自身就是当前对齐点）
+    return declared.filter((tf): tf is Timeframe => typeof tf === 'string' && tf !== input.baseTimeframe) as Timeframe[]
+  }
+
+  /**
+   * Issue #1016: 检查所需 HTF 是否在当前 baseBar.closeTime 之前都有 closed snapshot。
+   * - 若任一 required HTF 尚未 upsert 任何 snapshot，视为未对齐
+   * - 若 latest snapshot.ts > baseBar.closeTime（防御性，不应发生）也视为未对齐
+   */
+  static isHtfAligned(
+    stateEngine: StateEngineService,
+    symbol: string,
+    requiredTimeframes: readonly Timeframe[],
+    baseBarCloseTime: number,
+  ): boolean {
+    if (requiredTimeframes.length === 0) return true
+    for (const timeframe of requiredTimeframes) {
+      const snapshot = stateEngine.getLatest(symbol, timeframe)
+      if (!snapshot) return false
+      if (snapshot.ts > baseBarCloseTime) return false
+    }
+    return true
+  }
+
   private resolveExecutionPolicy(
     policy: BacktestExecutionPolicy | undefined,
     strictSnapshotPath: boolean,
@@ -924,6 +988,7 @@ export class BacktestRunnerService {
       position: {
         ...input.position,
         barsHeld: input.positionRuntimeState?.barsHeld,
+        entryTimeframe: input.positionRuntimeState?.entryTimeframe,
         highestPriceSinceEntry: input.positionRuntimeState?.highestPriceSinceEntry,
         lowestPriceSinceEntry: input.positionRuntimeState?.lowestPriceSinceEntry,
       },
@@ -977,12 +1042,14 @@ export class BacktestRunnerService {
     const next = !existing || existing.side !== side
       ? {
           side,
+          entryTimeframe: bar.timeframe,
           barsHeld: 1,
           highestPriceSinceEntry: bar.high,
           lowestPriceSinceEntry: bar.low,
         }
       : {
           side,
+          entryTimeframe: existing.entryTimeframe,
           barsHeld: existing.barsHeld + 1,
           highestPriceSinceEntry: Math.max(existing.highestPriceSinceEntry, bar.high),
           lowestPriceSinceEntry: Math.min(existing.lowestPriceSinceEntry, bar.low),

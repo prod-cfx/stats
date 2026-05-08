@@ -56,6 +56,83 @@ describe('positionsService', () => {
     expect(position?.marketType).toBe('spot')
   })
 
+  it('persists entry timeframe when an opening trade creates a position', async () => {
+    const txHost = {
+      withTransaction: jest.fn(async (callback: () => Promise<any>) => callback()),
+    }
+    const createdPosition = {
+      id: 'position-1',
+      userStrategyAccountId: 'account-1',
+      symbol: 'BTCUSDT',
+      positionSide: PositionSide.LONG,
+      leverage: null,
+      quantity: new Prisma.Decimal(1),
+      avgEntryPrice: new Prisma.Decimal(100),
+      entryTimeframe: '15m',
+      realizedPnl: new Prisma.Decimal(0),
+      unrealizedPnl: new Prisma.Decimal(0),
+      status: 'OPEN',
+      openedAt: new Date('2026-04-01T00:00:00.000Z'),
+      closedAt: null,
+      exchangeId: 'okx',
+      marketType: 'spot',
+      metadata: null,
+      createdAt: new Date('2026-04-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-01T00:00:00.000Z'),
+    }
+    const positionsRepository = {
+      findAccountById: jest.fn().mockResolvedValue({ id: 'account-1' }),
+      findTradeByExternalTradeId: jest.fn().mockResolvedValue(null),
+      lockOpenPosition: jest.fn().mockResolvedValue([]),
+      createPosition: jest.fn().mockResolvedValue(createdPosition),
+      createTrade: jest.fn().mockResolvedValue({
+        id: 'trade-1',
+        userStrategyAccountId: 'account-1',
+        positionId: 'position-1',
+        symbol: 'BTCUSDT',
+        side: TradeSide.BUY,
+        positionSide: PositionSide.LONG,
+        price: new Prisma.Decimal(100),
+        quantity: new Prisma.Decimal(1),
+        fee: new Prisma.Decimal(0),
+        feeCurrency: null,
+        orderId: null,
+        externalTradeId: null,
+        provider: 'okx',
+        executedAt: new Date('2026-04-01T00:00:00.000Z'),
+      }),
+    }
+    const service = createService(txHost, {}, {}, positionsRepository)
+
+    await service.recordTrade({
+      userStrategyAccountId: 'account-1',
+      symbol: 'BTCUSDT',
+      market: 'okx:spot',
+      side: TradeSide.BUY,
+      positionSide: PositionSide.LONG,
+      price: '100',
+      quantity: '1',
+      fee: '0',
+      provider: 'okx',
+      executedAt: '2026-04-01T00:00:00.000Z',
+      entryTimeframe: ' 15m ' as any,
+    })
+
+    expect(positionsRepository.createPosition).toHaveBeenCalledWith(expect.objectContaining({
+      entryTimeframe: '15m',
+    }))
+  })
+
+  it('rejects invalid entry timeframe values before writing a position', () => {
+    const service = createService()
+
+    expect(() => (service as any).normalizeEntryTimeframe(' 2m ')).toThrow(
+      expect.objectContaining({
+        code: ErrorCode.MARKET_INVALID_TIMEFRAME,
+      }),
+    )
+  })
+
   it('credits spot close principal back to the account when recording a sell trade', async () => {
     const accountApplyLedgerDelta = jest.fn().mockResolvedValue(undefined)
     const txHost = {
