@@ -255,7 +255,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
     if (!accounts.length) {
       this.logger.debug(`No subscribed accounts for signal ${signal.id}`)
-      await this.tradingSignalRepository.updateStatus(signal.id, 'FAILED', { reason: 'NO_SUBSCRIBERS' })
+      await this.tradingSignalRepository.updateStatus(
+        signal.id,
+        'FAILED',
+        this.mergeSignalMetadata(signal.metadata, { reason: 'NO_SUBSCRIBERS' }),
+      )
       return
     }
 
@@ -277,9 +281,9 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     else if (executed === 0 && failed > 0) status = 'FAILED'
     else status = 'PARTIAL'
 
-    await this.tradingSignalRepository.updateStatus(signal.id, status, {
+    await this.tradingSignalRepository.updateStatus(signal.id, status, this.mergeSignalMetadata(signal.metadata, {
       executions: { total, executed, failed, skipped },
-    })
+    }))
 
     if (signal.strategyInstanceId) {
       if (status === 'FAILED') {
@@ -1608,5 +1612,15 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     if (typeof value !== 'string') return null
     const trimmed = value.trim()
     return trimmed.length > 0 ? trimmed : null
+  }
+
+  private mergeSignalMetadata(
+    metadata: Prisma.JsonValue | null | undefined,
+    patch: Prisma.JsonObject,
+  ): Prisma.JsonObject {
+    const base = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? metadata as Prisma.JsonObject
+      : {}
+    return { ...base, ...patch }
   }
 }

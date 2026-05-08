@@ -162,6 +162,52 @@ describe('signalExecutorService', () => {
     service.onModuleDestroy()
   })
 
+  it('preserves signal metadata when writing execution summary', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+        maxAccountsPerSignal: 10,
+      },
+    }
+    const metadata = {
+      runtimeProvenance: {
+        timeframe: '15m',
+        marketType: 'perp',
+      },
+    }
+    ;(service as any).tradingSignalRepository.findById.mockResolvedValue({
+      id: 'signal-1',
+      strategyId: 'strategy-1',
+      symbol: { id: 'symbol-1' },
+      metadata,
+    })
+    ;(service as any).executorRepository.findSubscribedAccounts = jest.fn().mockResolvedValue([
+      { id: 'account-1' },
+      { id: 'account-2' },
+    ])
+    jest
+      .spyOn(service as any, 'processAccount')
+      .mockResolvedValueOnce('executed')
+      .mockResolvedValueOnce('failed')
+
+    await service.executeSignalForSubscribedUsers('signal-1', config as any)
+
+    expect((service as any).tradingSignalRepository.updateStatus).toHaveBeenCalledWith(
+      'signal-1',
+      'PARTIAL',
+      {
+        runtimeProvenance: {
+          timeframe: '15m',
+          marketType: 'perp',
+        },
+        executions: { total: 2, executed: 1, failed: 1, skipped: 0 },
+      },
+    )
+  })
+
   it('skips recovery on startup when execution is disabled', async () => {
     const service = createService()
     const config = {
