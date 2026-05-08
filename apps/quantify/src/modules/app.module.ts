@@ -34,7 +34,6 @@ import { LlmStrategiesModule } from './llm-strategies/llm-strategies.module'
 import { LlmStrategyCodegenModule } from './llm-strategy-codegen/llm-strategy-codegen.module'
 import { LlmStrategySubscriptionsModule } from './llm-strategy-subscriptions/llm-strategy-subscriptions.module'
 import { MarketDataModule } from './market-data/market-data.module'
-import { MastraModule } from './mastra/mastra.module'
 import { MessageBusModule } from './message-bus/message-bus.module'
 import { isMessageBusRuntimeEnabled } from './message-bus/message-bus.runtime'
 import { PositionsModule } from './positions/positions.module'
@@ -105,7 +104,6 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
     ...bullImports,
     CacheModule, // 必须在 WinstonModule 之后，因为 RedisService 依赖 WINSTON_MODULE_NEST_PROVIDER
     PrismaModule, // Global 模块，需要在其他模块之前导入
-    MastraModule, // @Global 基础设施：Mastra Agent 工厂（Phase 1 脚手架，无业务消费方）
     ScheduleModule.forRoot(),
     ...infrastructureImports,
     HealthModule,

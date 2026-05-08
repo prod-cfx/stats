@@ -263,7 +263,10 @@ describe('TradingService (E2E, trading module only)', () => {
     const exchangeId: ExchangeId = 'okx'
     const marketType: MarketType = 'perp'
 
-    const order = await tradingService.placeOrder(userId, exchangeId, marketType, makeOrderInput('BTC/USDT:PERP', 'perp'))
+    const order = await tradingService.placeOrder(userId, exchangeId, marketType, {
+      ...makeOrderInput('BTC/USDT:PERP', 'perp'),
+      tdMode: 'cross',
+    })
 
     expect(order.id).toBe('987654')
     expect(order.clientOrderId).toBe('test-okx-order')

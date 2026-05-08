@@ -347,6 +347,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     })
     expect(detail.latestOrders[0]).toEqual({
       executedAt: '2026-03-20T11:01:00.000Z',
+      executionStatus: null,
       side: 'BUY',
       symbol: 'BTCUSDT',
       price: 68000,
@@ -354,6 +355,9 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       fee: 51.737672883,
       feeCurrency: 'DOGE',
       orderId: 'ord-1',
+      source: 'ledger',
+      ledgerApplied: true,
+      reconcileRequired: false,
     })
     expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
       'user-1',
@@ -1848,6 +1852,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
   })
 
   it('refreshes local open positions before computing detail pnl', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-29T05:00:00.000Z'))
     const repo = {
       hasActiveConversationsForStrategy: jest.fn().mockResolvedValue(false),
       findStrategyForUser: jest.fn().mockResolvedValue({
@@ -1948,6 +1953,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       todayPnl: -0.11,
       totalEquity: 31076.68,
     }))
+    jest.useRealTimers()
   })
 
   it('revalues open positions from latest market quotes when stored unrealized pnl is stale', async () => {

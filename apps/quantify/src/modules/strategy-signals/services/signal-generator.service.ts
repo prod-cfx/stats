@@ -1258,6 +1258,10 @@ export class SignalGeneratorService {
     }
 
     const latestBar = normalizedBars[normalizedBars.length - 1]
+    if (!latestBar || latestBar.isFinal === false) {
+      return normalizedBars.slice(0, -1)
+    }
+
     if (!options.timeframe || this.isClosedRuntimeBar(latestBar, options.timeframe)) {
       return normalizedBars
     }
