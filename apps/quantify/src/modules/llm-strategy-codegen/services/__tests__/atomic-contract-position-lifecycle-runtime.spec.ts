@@ -609,7 +609,7 @@ describe('atomic contract position lifecycle compiled runtime', () => {
       reason: 'compiled.dca-long',
     })
     expect(decision.reason).not.toBe('compiled.dca-long.dca_state_missing')
-    expect(ctx.semanticRuntimeState?.dca_fired_count).toEqual({ value: 1 })
+    expect(ctx.semanticRuntimeState?.dca_fired_count).toEqual({ value: 1, spentQuote: 100 })
   })
 
   it('blocks dca when runtime dca state value is corrupt', () => {
@@ -663,6 +663,36 @@ describe('atomic contract position lifecycle compiled runtime', () => {
         accountEquity: 1_000,
         semanticRuntimeState: {
           dca_fired_count: { value: 2 },
+        },
+      } as Ctx,
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.dca-long.dca_capital_cap',
+    })
+  })
+
+  it('blocks dca using actual spent quote instead of count times next order estimate', () => {
+    const decision = runLifecycleProgram(
+      {
+        id: 'dca-long',
+        phase: 'entry',
+        priority: 100,
+        when: 'ready',
+        metadata: {
+          dcaSchedule: { maxCount: 4, capitalCap: 300, stateKey: 'dca_fired_count' },
+        },
+        actions: [
+          { kind: 'ADD_LONG', quantity: { mode: 'fixed_quote', value: 100 } },
+        ],
+      },
+      {
+        position: { side: 'long', qty: 1 },
+        currentPrice: 100,
+        accountEquity: 1_000,
+        semanticRuntimeState: {
+          dca_fired_count: { value: 2, spentQuote: 240 },
         },
       } as Ctx,
     )

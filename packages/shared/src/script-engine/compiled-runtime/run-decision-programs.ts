@@ -290,6 +290,7 @@ function markPositionLifecycleState(
   const dcaMeta = program.metadata?.dcaSchedule
   if (dcaMeta) {
     incrementSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+    incrementDcaSpentQuote(ctx, dcaMeta.stateKey, program)
   }
 }
 
@@ -415,7 +416,7 @@ function evaluatePositionLifecycle(
 
     if (
       Number.isFinite(dcaMeta.capitalCap)
-      && exceedsDcaCapitalCap(program, ctx, currentCount.value, dcaMeta.capitalCap)
+      && exceedsDcaCapitalCap(program, ctx, currentCount.value, dcaMeta.stateKey, dcaMeta.capitalCap)
     ) {
       return {
         action: 'NOOP',
@@ -547,6 +548,7 @@ function exceedsDcaCapitalCap(
   program: DecisionProgramNode,
   ctx: StrategyExecutionContextV1,
   currentCount: number,
+  stateKey: string,
   capitalCap: number,
 ): boolean {
   if (capitalCap < 0) {
@@ -559,6 +561,15 @@ function exceedsDcaCapitalCap(
 
   const nextQuote = quantityToQuoteValue(nextAction.quantity, ctx)
   if (nextQuote === null) {
+    return true
+  }
+
+  const spentQuote = readDcaSpentQuote(ctx, stateKey)
+  if (spentQuote !== null) {
+    return spentQuote + nextQuote > capitalCap
+  }
+
+  if (nextAction.quantity.mode !== 'fixed_quote' && currentCount > 0) {
     return true
   }
 
@@ -701,6 +712,41 @@ function incrementSemanticRuntimeStateNumber(
   }
 
   slot.value = current.value + 1
+}
+
+function readDcaSpentQuote(
+  ctx: StrategyExecutionContextV1,
+  stateKey: string,
+): number | null {
+  const slot = ctx.semanticRuntimeState?.[stateKey]
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+    return null
+  }
+
+  const value = slot.spentQuote
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function incrementDcaSpentQuote(
+  ctx: StrategyExecutionContextV1,
+  stateKey: string,
+  program: DecisionProgramNode,
+): void {
+  if (!ctx.semanticRuntimeState) {
+    return
+  }
+  const slot = ctx.semanticRuntimeState[stateKey]
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+    return
+  }
+
+  const nextAction = findFirstAddAction(program)
+  const quoteValue = nextAction ? quantityToQuoteValue(nextAction.quantity, ctx) : null
+  if (quoteValue === null) {
+    return
+  }
+
+  slot.spentQuote = (readDcaSpentQuote(ctx, stateKey) ?? 0) + quoteValue
 }
 
 function doesPositionQtyMatchSide(
