@@ -261,7 +261,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
     ]))
-    expect(JSON.stringify(patch)).not.toMatch(/generic_boundary/u)
+    expect(JSON.stringify(patch)).not.toMatch(/generic_boundary|indicator\.above|indicator\.below/u)
   })
 
   it('keeps legacy EMA indicator atoms for existing stack flows while P0 gateway gates remain separate', () => {
