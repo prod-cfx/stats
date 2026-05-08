@@ -1,5 +1,6 @@
 import type { SemanticSupportRoute } from '../../semantic-support-classifier.service'
 import { phase3MtfCases } from './phase3-mtf-cases'
+import { phase3PreviousExtremaCases } from './phase3-previous-extrema-cases'
 
 export type AtomicCoverageTag =
   | 'trend'
@@ -1122,8 +1123,12 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-038-recognized-unsupported-previous-high-low-extrema',
-    name: 'recognized unsupported previous high low extrema',
+    // Phase 3 MVP — price.previous_extrema 已升 supported_requires_slot；
+    // seed-extractor 当前给出的 params 仅含 reference/event，缺 kind/lookback，
+    // 因而仍处于 readiness 不足的 projection_gate；待 seed-extractor 跟进后
+    // 即可走 supported 通道。
+    id: 'golden-corpus-038-supported-requires-slot-previous-high-low-extrema',
+    name: 'supported requires slot previous high low extrema',
     message: 'OKX 合约 BTCUSDT 15m，前高突破买入，跌破前低卖出，单笔 10%。',
     tags: ['breakout', 'position_lifecycle'],
     expectedAtoms: [
@@ -1137,9 +1142,11 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_long',
       'close_long',
       'position.fixed_pct',
-      'unsupported:price.previous_extrema',
+      'open_slot:price.previous_extrema.kind',
+      'open_slot:price.previous_extrema.lookback',
+      'open_slot:price.previous_extrema.memoryKey',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-039-recognized-unsupported-pause-trading',
@@ -1804,4 +1811,5 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   ...phase3MtfCases,
+  ...phase3PreviousExtremaCases,
 ]

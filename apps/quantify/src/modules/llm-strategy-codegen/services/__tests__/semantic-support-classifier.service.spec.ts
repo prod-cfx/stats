@@ -1,10 +1,10 @@
-import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import type { SemanticRegisteredAtomDefinition, SemanticUnknownAtomDefinition } from '../../types/semantic-atom-support'
+import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
 
 interface ClassifierInternals {
-  resolveTriggerSupport(trigger: SemanticTriggerState): SemanticRegisteredAtomDefinition | SemanticUnknownAtomDefinition
+  resolveTriggerSupport: (trigger: SemanticTriggerState) => SemanticRegisteredAtomDefinition | SemanticUnknownAtomDefinition
 }
 
 function baseState(overrides: Partial<SemanticState>): SemanticState {
@@ -22,7 +22,7 @@ function baseState(overrides: Partial<SemanticState>): SemanticState {
   }
 }
 
-describe('SemanticSupportClassifierService', () => {
+describe('semanticSupportClassifierService', () => {
   const service = new SemanticSupportClassifierService(new SemanticAtomRegistryService())
 
   it('allows a supported atom combination to proceed to projection', () => {
@@ -198,7 +198,10 @@ describe('SemanticSupportClassifierService', () => {
     ])
   })
 
-  it('routes previous high low extrema atoms to recognized unsupported fallback', () => {
+  it('keeps previous high low extrema atoms out of unsupported fallback after Phase 3 MVP', () => {
+    // Phase 3 MVP — price.previous_extrema 已升级为 supported_requires_slot；
+    // 即便 trigger 未填齐 kind/lookback/memoryKey，也不再落入 unsupported_fallback，
+    // 而是由 projection_gate 通过 openSlots 继续追问，与 supported atom 行为对齐。
     const result = service.classify(baseState({
       triggers: [{
         id: 'previous-extrema',
@@ -212,13 +215,8 @@ describe('SemanticSupportClassifierService', () => {
       actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
     }))
 
-    expect(result.route).toBe('unsupported_fallback')
-    expect(result.unsupportedAtoms).toEqual([
-      expect.objectContaining({
-        key: 'price.previous_extrema',
-        displayName: '前高/前低突破',
-      }),
-    ])
+    expect(result.route).toBe('open_slots')
+    expect(result.unsupportedAtoms).toEqual([])
     expect(result.unknownAtoms).toEqual([])
   })
 
