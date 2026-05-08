@@ -1335,7 +1335,7 @@ export class CanonicalSpecBuilderService {
       return [{
         type,
         sizing: this.resolveReducePositionSizing(action.params),
-        params: { quantityValueScale: 'ratio' },
+        params: { lifecycle: true },
       }]
     }
 
@@ -1344,18 +1344,23 @@ export class CanonicalSpecBuilderService {
       return [{
         type: sideScope === 'short' ? 'ADD_SHORT' : 'ADD_LONG',
         sizing: this.resolveSemanticActionSizing(action.params?.sizing) ?? defaultSizing ?? undefined,
-        params: { quantityValueScale: 'ratio' },
       }]
     }
 
     if (action.key === 'action.reverse_position') {
       const fromSide = this.readSideParam(action.params?.fromSide) ?? 'long'
       const toSide = this.readSideParam(action.params?.toSide) ?? (fromSide === 'long' ? 'short' : 'long')
+      const sizingSource = this.readReverseSizingSource(action.params?.sizingSource)
       return [
         { type: fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT' },
         {
           type: toSide === 'long' ? 'OPEN_LONG' : 'OPEN_SHORT',
-          sizing: this.resolveSemanticActionSizing(action.params?.sizing) ?? defaultSizing ?? undefined,
+          sizing: sizingSource === 'current_position'
+            ? { mode: 'RATIO', value: 100 }
+            : this.resolveSemanticActionSizing(action.params?.sizing) ?? defaultSizing ?? undefined,
+          ...(sizingSource === 'current_position'
+            ? { params: { quantityMode: 'position_pct' } }
+            : {}),
         },
       ]
     }
@@ -1407,7 +1412,7 @@ export class CanonicalSpecBuilderService {
     action: SemanticActionState,
     position: SemanticPositionState | null,
   ): CanonicalRuleV2['metadata'] | undefined {
-    const metadata: PositionLifecycleActionMetadata = {}
+    const metadata: NonNullable<CanonicalRuleV2['metadata']> = {}
 
     if (action.key === 'action.add_position') {
       const pyramidingLimit = this.findPositionConstraint(position, 'position.pyramiding_limit')

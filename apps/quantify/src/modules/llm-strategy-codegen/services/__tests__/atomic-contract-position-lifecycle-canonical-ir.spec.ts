@@ -65,7 +65,7 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
         actions: expect.arrayContaining([
           {
             kind: 'REDUCE_LONG',
-            quantity: { mode: 'position_pct', value: 0.3 },
+            quantity: { mode: 'position_pct', value: 30 },
           },
         ]),
       }),
@@ -84,7 +84,7 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
         actions: expect.arrayContaining([
           {
             kind: 'ADD_LONG',
-            quantity: { mode: 'pct_equity', value: 0.2 },
+            quantity: { mode: 'pct_equity', value: 20 },
           },
         ]),
       }),
@@ -109,7 +109,7 @@ describe('atomic contract position lifecycle canonical IR projection', () => {
         }),
         actions: [
           expect.objectContaining({ kind: 'CLOSE_LONG' }),
-          expect.objectContaining({ kind: 'OPEN_SHORT' }),
+          expect.objectContaining({ kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 100 } }),
         ],
       }),
     ]))

@@ -2182,7 +2182,7 @@ export class CanonicalSpecV2IrCompilerService {
       || Boolean(rule.metadata?.reversePosition || rule.metadata?.addPosition || rule.metadata?.dcaSchedule)
       || rule.actions.some(action =>
         (action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
-        && action.params?.quantityValueScale === 'ratio',
+        && action.params?.lifecycle === true,
       )
   }
 
@@ -2204,9 +2204,7 @@ export class CanonicalSpecV2IrCompilerService {
     if (sizing?.mode === 'RATIO') {
       return {
         mode: 'position_pct',
-        value: action.params?.quantityValueScale === 'ratio'
-          ? sizing.value
-          : sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
       }
     }
 
@@ -2219,6 +2217,13 @@ export class CanonicalSpecV2IrCompilerService {
     fallbackPositionPct: number,
   ): ActionDef['quantity'] {
     const sizing = action.sizing ?? defaultSizing
+    if (action.params?.quantityMode === 'position_pct' && sizing?.mode === 'RATIO') {
+      return {
+        mode: 'position_pct',
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
+      }
+    }
+
     if (!sizing) {
       return {
         mode: 'pct_equity',
@@ -2229,9 +2234,7 @@ export class CanonicalSpecV2IrCompilerService {
     if (sizing.mode === 'RATIO') {
       return {
         mode: 'pct_equity',
-        value: action.params?.quantityValueScale === 'ratio'
-          ? sizing.value
-          : sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
+        value: sizing.value <= 1 ? Number((sizing.value * 100).toFixed(4)) : sizing.value,
       }
     }
 

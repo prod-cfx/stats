@@ -71,6 +71,12 @@ export interface CanonicalStrategySpecNormalizedMetadata {
   intent: StrategyNormalizedIntent
 }
 
+export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
+  [key: string]: unknown
+  normalized?: CanonicalRuleNormalizedMetadata
+  partialTakeProfit?: PartialTakeProfitProgramMetadata
+}
+
 export interface CanonicalRuleV2 {
   id: string
   phase: CanonicalRulePhase
@@ -79,10 +85,7 @@ export interface CanonicalRuleV2 {
   cooldownBars?: number
   condition: CanonicalConditionNode
   actions: CanonicalRuleAction[]
-  metadata?: Record<string, unknown> & {
-    normalized?: CanonicalRuleNormalizedMetadata
-    partialTakeProfit?: PartialTakeProfitProgramMetadata
-  } & PositionLifecycleActionMetadata
+  metadata?: CanonicalRuleMetadata
 }
 
 export interface CanonicalStrategySpecV2 {
