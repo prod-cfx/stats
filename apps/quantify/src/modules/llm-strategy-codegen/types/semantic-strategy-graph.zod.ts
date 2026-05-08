@@ -65,12 +65,19 @@ export const semanticExpressionAccountOperandSchema = z.object({
   field: z.literal('drawdown_pct'),
 })
 
+export const semanticExpressionMemoryOperandSchema = z.object({
+  kind: z.literal('memory'),
+  memoryKey: z.string().min(1),
+  path: z.array(z.string().min(1)).optional(),
+})
+
 export const semanticExpressionOperandSchema = z.discriminatedUnion('kind', [
   semanticExpressionSeriesOperandSchema,
   semanticExpressionIndicatorOperandSchema,
   semanticExpressionPositionOperandSchema,
   semanticExpressionAccountOperandSchema,
   semanticExpressionConstantOperandSchema,
+  semanticExpressionMemoryOperandSchema,
 ])
 
 export const semanticGraphAtomOperandSchema = z.object({
@@ -85,6 +92,7 @@ export const semanticGraphExpressionOperandSchema = z.discriminatedUnion('kind',
   semanticExpressionPositionOperandSchema,
   semanticExpressionAccountOperandSchema,
   semanticExpressionConstantOperandSchema,
+  semanticExpressionMemoryOperandSchema,
   semanticGraphAtomOperandSchema,
 ])
 
