@@ -309,7 +309,7 @@ export const positionLifecycleGoldenCases: AtomCoverageGoldenCase[] = [
       { key: 'price.percent_change', category: 'trigger', minContractSubstrate: true },
       { key: 'position.dca_schedule', category: 'position', minContractSubstrate: true },
     ],
-    expectedKeys: ['position.dca_schedule', 'open_slot:position.dca_schedule.exit_rule'],
+    expectedKeys: ['price.percent_change', 'position.dca_schedule', 'open_slot:position.dca_schedule.exit_rule'],
     expectedRoute: 'open_slots',
   },
 ]
