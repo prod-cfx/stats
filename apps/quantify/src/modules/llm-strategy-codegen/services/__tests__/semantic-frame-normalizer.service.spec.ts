@@ -119,6 +119,28 @@ describe('SemanticFrameNormalizerService', () => {
     })
   })
 
+  it('preserves OR combination frame semantics for indicator compare groups', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20 }),
+      indicatorCompareFrame({ id: 'compare-60', operator: 'GT', sideScope: 'long', period: 60 }),
+      {
+        kind: 'combination',
+        id: 'combination-long',
+        groupId: 'mixed-gate',
+        join: 'OR',
+        sideScope: 'long',
+        evidenceText: '价格位于 EMA20 或 EMA60 上方',
+        confidence: 0.9,
+      },
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const trigger = patch.triggers?.find(item => item.key === 'condition.expression')
+
+    expect(trigger?.params?.expression).toEqual(expect.objectContaining({ kind: 'OR' }))
+    expect(trigger?.params?.label).toBe('价格任一位于 EMA20、EMA60 上方')
+  })
+
   it('joins compare frame evidence when group combination evidence is unavailable', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
       indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20, evidenceText: 'ema20' }),

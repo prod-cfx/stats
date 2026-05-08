@@ -10,6 +10,11 @@ import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
 import { Injectable } from '@nestjs/common'
 
+interface SemanticCombinationMetadata {
+  join: SemanticCombinationFrame['join']
+  evidence: SemanticEvidence
+}
+
 @Injectable()
 export class SemanticFrameNormalizerService {
   normalize(frames: readonly SemanticNaturalLanguageFrame[]): CodegenSemanticPatch {
@@ -18,7 +23,7 @@ export class SemanticFrameNormalizerService {
       groupId: string
       frames: SemanticIndicatorCompareFrame[]
     }>()
-    const combinationEvidenceByKey = new Map<string, SemanticEvidence>()
+    const combinationByKey = new Map<string, SemanticCombinationMetadata>()
     const actionsByKey = new Map<SemanticActionFrame['actionKey'], SemanticActionFrame>()
     const riskByKey = new Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>()
 
@@ -45,13 +50,16 @@ export class SemanticFrameNormalizerService {
           this.setRisk(riskByKey, frame)
           break
         case 'combination':
-          combinationEvidenceByKey.set(this.toCombinationEvidenceKey(frame), this.toEvidence(frame))
+          combinationByKey.set(this.toCombinationEvidenceKey(frame), {
+            join: frame.join,
+            evidence: this.toEvidence(frame),
+          })
           break
       }
     }
 
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
-      this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationEvidenceByKey),
+      this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
     if (gateTriggers.length > 0) {
       patch.triggers = [...gateTriggers, ...(patch.triggers ?? [])]
@@ -109,29 +117,34 @@ export class SemanticFrameNormalizerService {
   private normalizeIndicatorCompareGroup(
     groupId: string,
     frames: readonly SemanticIndicatorCompareFrame[],
-    combinationEvidenceByKey: ReadonlyMap<string, SemanticEvidence>,
+    combinationByKey: ReadonlyMap<string, SemanticCombinationMetadata>,
   ): NonNullable<CodegenSemanticPatch['triggers']>[number] {
     const sortedFrames = [...frames].sort((left, right) => left.period - right.period)
     const firstFrame = sortedFrames[0]
+    const combination = firstFrame ? combinationByKey.get(this.toCombinationEvidenceKey(firstFrame)) : undefined
+    const join = combination?.join ?? 'AND'
 
     return {
       key: 'condition.expression',
       phase: 'gate',
       sideScope: firstFrame?.sideScope,
       params: {
-        expression: this.toAndExpression(sortedFrames),
+        expression: this.toExpression(sortedFrames, join),
         displayGroupId: groupId,
-        label: this.toGroupLabel(sortedFrames),
+        label: this.toGroupLabel(sortedFrames, join),
       },
       evidence: firstFrame
-        ? this.toGroupEvidence(firstFrame, sortedFrames, combinationEvidenceByKey)
+        ? this.toGroupEvidence(firstFrame, sortedFrames, combination)
         : undefined,
     }
   }
 
-  private toAndExpression(frames: readonly SemanticIndicatorCompareFrame[]): SemanticExpression {
+  private toExpression(
+    frames: readonly SemanticIndicatorCompareFrame[],
+    join: SemanticCombinationFrame['join'],
+  ): SemanticExpression {
     return {
-      kind: 'AND',
+      kind: join,
       children: frames.map(frame => ({
         kind: 'predicate',
         op: frame.operator,
@@ -151,20 +164,24 @@ export class SemanticFrameNormalizerService {
     return { kind: 'indicator', name, params: { period: frame.period } }
   }
 
-  private toGroupLabel(frames: readonly SemanticIndicatorCompareFrame[]): string {
+  private toGroupLabel(
+    frames: readonly SemanticIndicatorCompareFrame[],
+    join: SemanticCombinationFrame['join'],
+  ): string {
     const indicatorName = frames[0]?.indicator === 'ma' ? 'MA' : (frames[0]?.indicator ?? 'ema').toUpperCase()
     const periods = frames.map(frame => `${indicatorName}${frame.period}`).join('、')
     const directionText = frames[0]?.operator === 'LT' ? '下方' : '上方'
+    const joinText = join === 'OR' ? '任一' : '同时'
 
-    return `价格同时位于 ${periods} ${directionText}`
+    return `价格${joinText}位于 ${periods} ${directionText}`
   }
 
   private toGroupEvidence(
     firstFrame: SemanticIndicatorCompareFrame,
     frames: readonly SemanticIndicatorCompareFrame[],
-    combinationEvidenceByKey: ReadonlyMap<string, SemanticEvidence>,
+    combination: SemanticCombinationMetadata | undefined,
   ): SemanticEvidence {
-    return combinationEvidenceByKey.get([firstFrame.groupId, firstFrame.sideScope].join(':')) ?? {
+    return combination?.evidence ?? {
       text: frames.map(frame => frame.evidenceText).join(' '),
       source: 'user_explicit',
     }
