@@ -216,7 +216,7 @@ export class SemanticStateReducerService {
         break
       }
 
-      constraint.params[paramKey] = answerText
+      constraint.params[paramKey] = this.parsePositionConstraintParamAnswer(paramKey, answerText, input.messageIndex)
       slot.value = answerText
       slot.status = 'locked'
       slot.evidence = {
@@ -371,6 +371,40 @@ export class SemanticStateReducerService {
 
   private toCamelCaseParamKey(value: string): string {
     return value.replace(/_([a-z0-9])/giu, (_, item: string) => item.toUpperCase())
+  }
+
+  private parsePositionConstraintParamAnswer(
+    paramKey: string,
+    answerText: string,
+    messageIndex?: number,
+  ): unknown {
+    if (paramKey === 'maxCount') {
+      const value = this.parsePositiveIntegerAnswer(answerText)
+      return value ?? answerText
+    }
+
+    if (paramKey === 'capitalCap' || paramKey === 'perOrderSizing') {
+      return this.parsePositionSizingContractAnswer(answerText, messageIndex)?.sizing ?? answerText
+    }
+
+    if (paramKey === 'triggerMode') {
+      if (/价格|跌|涨|price/iu.test(answerText)) return 'price_interval'
+      if (/时间|每隔|周期|time/iu.test(answerText)) return 'time_interval'
+      if (/信号|确认|signal/iu.test(answerText)) return 'signal'
+      return answerText
+    }
+
+    return answerText
+  }
+
+  private parsePositiveIntegerAnswer(answerText: string): number | null {
+    const match = answerText.match(/\d+/u)
+    if (!match) {
+      return null
+    }
+
+    const value = Number(match[0])
+    return Number.isInteger(value) && value > 0 ? value : null
   }
 
   private applyContractRequirementAnswer(

@@ -105,7 +105,32 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
-  it('writes position constraint params from clarification answers without mutating sizing', () => {
+  it.each([
+    {
+      slotKey: 'position.dca_schedule.max_count',
+      fieldPath: 'position.constraints[position.dca_schedule].params.maxCount',
+      answer: '4次',
+      expectedParam: { maxCount: 4 },
+    },
+    {
+      slotKey: 'position.dca_schedule.capital_cap',
+      fieldPath: 'position.constraints[position.dca_schedule].params.capitalCap',
+      answer: '500 USDT',
+      expectedParam: { capitalCap: { kind: 'quote', value: 500, asset: 'USDT' } },
+    },
+    {
+      slotKey: 'position.dca_schedule.trigger_mode',
+      fieldPath: 'position.constraints[position.dca_schedule].params.triggerMode',
+      answer: '价格间隔',
+      expectedParam: { triggerMode: 'price_interval' },
+    },
+    {
+      slotKey: 'position.dca_schedule.exit_rule',
+      fieldPath: 'position.constraints[position.dca_schedule].params.exitRule',
+      answer: '跌破前低停止补仓',
+      expectedParam: { exitRule: '跌破前低停止补仓' },
+    },
+  ])('writes structured position constraint param $slotKey without mutating sizing', ({ slotKey, fieldPath, answer, expectedParam }) => {
     const next = service.applyClarificationAnswer({
       currentState: {
         version: 1,
@@ -128,11 +153,11 @@ describe('SemanticStateReducerService', () => {
             status: 'open',
             source: 'user_explicit',
             openSlots: [{
-              slotKey: 'position.dca_schedule.exit_rule',
-              fieldPath: 'position.constraints[position.dca_schedule].params.exitRule',
+              slotKey,
+              fieldPath,
               status: 'open',
               priority: 'risk',
-              questionHint: '请确认 DCA 停止或退出规则。',
+              questionHint: '请确认 DCA 参数。',
               affectsExecution: true,
             }],
           }],
@@ -141,12 +166,12 @@ describe('SemanticStateReducerService', () => {
         normalizationNotes: [],
         updatedAt: '2026-05-08T10:00:00.000Z',
       },
-      targetSlotKey: 'position.dca_schedule.exit_rule',
+      targetSlotKey: slotKey,
       targetSlotId: buildSemanticSlotId({
-        slotKey: 'position.dca_schedule.exit_rule',
-        fieldPath: 'position.constraints[position.dca_schedule].params.exitRule',
+        slotKey,
+        fieldPath,
       }),
-      answer: '跌破前低停止补仓',
+      answer,
       messageIndex: 8,
     })
 
@@ -159,12 +184,12 @@ describe('SemanticStateReducerService', () => {
       status: 'locked',
       params: expect.objectContaining({
         maxCount: 4,
-        exitRule: '跌破前低停止补仓',
+        ...expectedParam,
       }),
       openSlots: [expect.objectContaining({
-        slotKey: 'position.dca_schedule.exit_rule',
+        slotKey,
         status: 'locked',
-        value: '跌破前低停止补仓',
+        value: answer,
       })],
     }))
   })

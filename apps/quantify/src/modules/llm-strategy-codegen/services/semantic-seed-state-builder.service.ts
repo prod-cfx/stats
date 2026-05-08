@@ -350,11 +350,10 @@ export class SemanticSeedStateBuilderService {
       : 'long_only'
 
     return {
-      mode: 'fixed_ratio',
+      mode: 'constraint_only',
       value: 0,
-      sizing: null,
       positionMode,
-      status: 'locked',
+      status: constraints.length > 0 ? 'locked' : 'open',
       source: this.readSource(update.source),
       openSlots: [],
       ...(constraints.length > 0 ? { constraints } : {}),

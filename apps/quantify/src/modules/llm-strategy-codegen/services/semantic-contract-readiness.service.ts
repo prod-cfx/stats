@@ -387,7 +387,12 @@ function collectActiveContractOwners(state: SemanticState): SemanticContractOwne
     }
   }
 
-  if (state.position && state.position.status !== 'superseded' && state.position.contracts?.length) {
+  if (
+    state.position
+    && state.position.mode !== 'constraint_only'
+    && state.position.status !== 'superseded'
+    && state.position.contracts?.length
+  ) {
     owners.push({
       ownerKind: 'position',
       ownerId: positionOwnerId(),
@@ -914,6 +919,10 @@ function toPositionAtomKey(mode: string): string {
 
   if (isPositionLifecycleConstraintKey(mode)) {
     return `position.main_mode.${mode}`
+  }
+
+  if (mode === 'constraint_only') {
+    return 'position.main_mode.constraint_only'
   }
 
   return mode

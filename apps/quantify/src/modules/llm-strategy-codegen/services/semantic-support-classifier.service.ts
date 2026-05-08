@@ -158,6 +158,14 @@ export class SemanticSupportClassifierService {
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withRegistryOpenSlots(withSupportMetadata(constraint, resolved), resolved)
     })
+
+    if (position.mode === 'constraint_only') {
+      return {
+        ...position,
+        ...(constraints ? { constraints } : {}),
+      }
+    }
+
     const resolved = this.registry.resolve(toPositionAtomKey(position.mode))
     this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
     return {
@@ -391,6 +399,10 @@ function toPositionAtomKey(mode: string): string {
 
   if (isPositionLifecycleConstraintKey(mode)) {
     return `position.main_mode.${mode}`
+  }
+
+  if (mode === 'constraint_only') {
+    return 'position.main_mode.constraint_only'
   }
 
   return mode
