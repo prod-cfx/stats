@@ -62,7 +62,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['固定百分比仓位', '按比例下单'],
     positiveExamples: ['单笔 10% 仓位'],
     negativeExamples: ['position.fixed_pct'],
-    displayRenderer: ({ params }) => `单笔 ${numberParam(params, 'value', 0) * 100}% 仓位`,
+    displayRenderer: ({ params }) => `单笔 ${formatPercentLikeValue(numberParam(params, 'value', 0))}% 仓位`,
   }),
   presentation({
     key: 'position.fixed_notional',
@@ -91,11 +91,16 @@ const SLOT_LABELS: Record<string, string> = {
 @Injectable()
 export class SemanticPresentationRegistryService {
   private readonly presentations = new Map(PRESENTATIONS.map(metadata => [metadata.key, metadata]))
+  private readonly atomRegistry = new SemanticAtomRegistryService()
 
   get(key: string): SemanticPresentationMetadata {
     const metadata = this.presentations.get(key)
     if (!metadata) {
-      throw new Error(`semantic_presentation_not_registered:${key}`)
+      const atom = this.atomRegistry.resolve(key)
+      if (!atom.supportStatus.startsWith('supported_')) {
+        throw new Error(`semantic_presentation_not_registered:${key}`)
+      }
+      return buildSafeFallbackPresentation(key, atom.category)
     }
     return metadata
   }
@@ -167,6 +172,35 @@ function stringParam(params: Record<string, unknown>, key: string, fallback: str
 function numberParam(params: Record<string, unknown>, key: string, fallback: number): number {
   const value = params[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function formatPercentLikeValue(value: number): number {
+  return value > 1 ? value : value * 100
+}
+
+function buildSafeFallbackPresentation(key: string, category: string): SemanticPresentationMetadata {
+  const publicName = fallbackPublicName(category)
+
+  return presentation({
+    key,
+    publicName,
+    aliases: [publicName],
+    positiveExamples: [`${publicName}已识别`],
+    negativeExamples: [key],
+    displayRenderer: () => publicName,
+  })
+}
+
+function fallbackPublicName(category: string): string {
+  const names: Record<string, string> = {
+    trigger: '已识别条件',
+    action: '已识别动作',
+    risk: '已识别风控',
+    position: '已识别仓位',
+    context: '已识别上下文',
+  }
+
+  return names[category] ?? '已识别语义'
 }
 
 function guardPublicText(key: string, output: string): string {

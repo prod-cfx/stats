@@ -293,6 +293,8 @@ function expectCanonicalP0Rules(rules: CanonicalRuleV2[]): void {
   expect(conditionContainsAtom(shortEntryRule.condition, 'bollinger.upper_break')).toBe(true)
   expectCanonicalEmaGate(longEntryRule.condition, 'GT')
   expectCanonicalEmaGate(shortEntryRule.condition, 'LT')
+  expectCanonicalEmaGate(longEntryRule.condition, 'LT', false)
+  expectCanonicalEmaGate(shortEntryRule.condition, 'GT', false)
 }
 
 function findCanonicalEntryRule(
@@ -318,12 +320,20 @@ function conditionContainsAtom(condition: CanonicalConditionNode, key: string): 
   return condition.children.some(child => conditionContainsAtom(child, key))
 }
 
-function expectCanonicalEmaGate(condition: CanonicalConditionNode, op: 'GT' | 'LT'): void {
-  expect(collectCanonicalExpressions(condition)).toEqual(expect.arrayContaining([
+function expectCanonicalEmaGate(condition: CanonicalConditionNode, op: 'GT' | 'LT', expected = true): void {
+  const expressions = collectCanonicalExpressions(condition)
+  const matcher = expect.arrayContaining([
     canonicalEmaCloseExpression(op, 20),
     canonicalEmaCloseExpression(op, 60),
     canonicalEmaCloseExpression(op, 144),
-  ]))
+  ])
+
+  if (expected) {
+    expect(expressions).toEqual(matcher)
+    return
+  }
+
+  expect(expressions).not.toEqual(matcher)
 }
 
 function collectCanonicalExpressions(

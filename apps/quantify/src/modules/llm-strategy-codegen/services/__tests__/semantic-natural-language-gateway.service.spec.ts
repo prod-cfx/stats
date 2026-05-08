@@ -106,6 +106,15 @@ describe('NaturalLanguageGatewayService', () => {
     expect(boundaryTouchFrames(frames)).toHaveLength(0)
   })
 
+  it('inherits explicit BOLL context into an adjacent compact boundary clause', () => {
+    const frames = service.parse('BOLL下轨开多；上轨开空')
+
+    expect(boundaryTouchFrames(frames)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ boundaryRole: 'lower', sideScope: 'long' }),
+      expect.objectContaining({ boundaryRole: 'upper', sideScope: 'short' }),
+    ]))
+  })
+
   it('does not emit risk frames for clearly invalid stop-loss percentages', () => {
     expect(riskFrames(service.parse('亏损百分500止损'))).toHaveLength(0)
   })

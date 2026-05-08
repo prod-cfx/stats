@@ -573,9 +573,8 @@ describe('SemanticStateProjectionService', () => {
       .map(item => item.text)
       .join(' ') ?? ''
 
-    expect(executeText).toContain('风控: risk.atr_multiple_stop 已识别，参数待补充 -> 平仓')
-    expect(executeText).toContain('风控: risk.remembered_level_stop 已识别，参数待补充 -> 平仓')
-    expect(executeText).toContain('风控: risk.custom_unknown 已识别，参数待补充 -> 平仓')
+    expect(executeText).toContain('风控: 已识别风控，参数待补充 -> 平仓')
+    expect(executeText).not.toMatch(/risk\.[a-z_]+/u)
   })
 
   it('keeps unsafe semantic fallback condition visible without leaking internal atom keys', () => {

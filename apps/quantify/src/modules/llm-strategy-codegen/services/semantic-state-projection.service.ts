@@ -1645,8 +1645,8 @@ export class SemanticStateProjectionService {
       .join('；')
   }
 
-  private buildRiskFallbackSummary(risk: SemanticState['risk'][number]): string {
-    return `${risk.key} 已识别，参数待补充`
+  private buildRiskFallbackSummary(_risk: SemanticState['risk'][number]): string {
+    return '已识别风控，参数待补充'
   }
 
   private buildActionSummary(actions: SemanticState['actions']): string {

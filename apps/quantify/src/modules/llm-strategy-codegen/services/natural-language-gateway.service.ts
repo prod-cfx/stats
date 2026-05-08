@@ -200,20 +200,26 @@ export class NaturalLanguageGatewayService {
 
   private parseBoundaryTouches(text: string): BoundaryTouchFrameDraft[] {
     const frames: BoundaryTouchFrameDraft[] = []
+    let canInheritBollinger = false
 
     for (const clause of this.toClauses(text)) {
-      frames.push(...this.parseBoundaryTouchClause(clause))
+      const clauseFrames = this.parseBoundaryTouchClause(clause, canInheritBollinger)
+      frames.push(...clauseFrames)
+      canInheritBollinger = clauseFrames.some(frame =>
+        frame.indicator === 'bollinger'
+        && /^(?:boll|布林带?)/iu.test(frame.evidenceText),
+      )
     }
 
     return frames
   }
 
-  private parseBoundaryTouchClause(clause: string): BoundaryTouchFrameDraft[] {
+  private parseBoundaryTouchClause(clause: string, canInheritBollinger = false): BoundaryTouchFrameDraft[] {
     const frames: BoundaryTouchFrameDraft[] = []
     const lowerMatch = /(boll|布林带?)\s*下轨\s*(?:不要|禁止|不)?\s*(开多|做多|买入)/iu.exec(clause)
     const upperMatch = /(boll|布林带?)\s*上轨\s*(?:不要|禁止|不)?\s*(开空|做空|卖空)/iu.exec(clause)
     const inheritedUpperMatch = /(?:^|[\s,，])上轨\s*(?:不要|禁止|不)?\s*(开空|做空|卖空)/iu.exec(clause)
-    const canInheritBollinger = Boolean(lowerMatch)
+    const canInheritLocalBollinger = canInheritBollinger || Boolean(lowerMatch)
 
     if (
       lowerMatch
@@ -245,7 +251,7 @@ export class NaturalLanguageGatewayService {
     }
 
     if (
-      canInheritBollinger
+      canInheritLocalBollinger
       && inheritedUpperMatch
       && this.isAffirmativeActionAt(clause, this.concreteActionMatchIndex(inheritedUpperMatch, 1))
     ) {

@@ -5,22 +5,21 @@ describe('SemanticPresentationRegistryService', () => {
   const atomRegistry = new SemanticAtomRegistryService()
   const presentation = new SemanticPresentationRegistryService()
 
-  it('has presentation metadata for every supported atom used by the P0 gateway', () => {
-    const requiredKeys = [
-      'condition.expression',
-      'indicator.boundary_touch',
-      'price.detect.indicator_boundary',
-      'risk.stop_loss_pct',
-      'open_long',
-      'open_short',
-      'position.fixed_pct',
-      'position.fixed_notional',
-      'position.fixed_quantity',
-    ]
+  it('has presentation metadata and contract completion fields for every supported atom', () => {
+    const supportedAtoms = atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_'))
 
-    for (const key of requiredKeys) {
-      const atom = atomRegistry.resolve(key)
-      expect(atom.supportStatus).toMatch(/^supported_/u)
+    expect(supportedAtoms.length).toBeGreaterThan(0)
+
+    for (const supportedAtom of supportedAtoms) {
+      const key = supportedAtom.key
+      expect(supportedAtom.supportStatus).toMatch(/^supported_/u)
+      expect(supportedAtom.contractSubstrate).toEqual(expect.objectContaining({
+        runtimeRequirements: expect.any(Array),
+        stateRequirements: expect.any(Array),
+        orderRequirements: expect.any(Array),
+        openSlots: expect.any(Array),
+      }))
+      expect(supportedAtom.executableProjection.length).toBeGreaterThan(0)
       expect(presentation.get(key)).toEqual(expect.objectContaining({
         key,
         publicName: expect.any(String),
@@ -45,6 +44,11 @@ describe('SemanticPresentationRegistryService', () => {
     expect(bollText).toBe('触及 BOLL 下轨（20, 2）')
     expect(emaText).toBe('价格同时位于 EMA20、EMA60、EMA144 上方')
     expect(`${bollText} ${emaText}`).not.toMatch(/generic_boundary|indicator\.above|indicator\.below|price\.detect\.indicator_boundary/u)
+  })
+
+  it('formats fixed percent position values as either ratios or percents', () => {
+    expect(presentation.renderDisplay('position.fixed_pct', { value: 0.1 })).toBe('单笔 10% 仓位')
+    expect(presentation.renderDisplay('position.fixed_pct', { value: 10 })).toBe('单笔 10% 仓位')
   })
 
   it('rejects display output that contains P0 internal identifiers', () => {
