@@ -40,6 +40,14 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
   marketRegime?: string
   trendDirection?: string
   volatilityState?: string
+  position?: {
+    side?: 'long' | 'short' | 'flat'
+    qty?: number
+    avgPrice?: number
+    notional?: number
+  }
+  accountEquity?: number
+  semanticRuntimeState?: Record<string, Record<string, unknown>>
   indicators?: Record<string, number>
   bars?: Bar[]
   execution?: {

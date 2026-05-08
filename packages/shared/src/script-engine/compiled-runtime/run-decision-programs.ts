@@ -11,6 +11,25 @@ interface PartialTakeProfitMeta {
   totalTiers: number
 }
 
+interface AddPositionMeta {
+  maxLayers?: number
+  maxExposurePct?: number
+  stateKey: string
+}
+
+interface ReversePositionMeta {
+  fromSide: 'long' | 'short'
+  toSide: 'long' | 'short'
+  sameBarPolicy: 'allow' | 'next_bar_only'
+  sizingSource: 'current_position' | 'fixed' | 'position_sizing'
+}
+
+interface DcaScheduleMeta {
+  maxCount: number
+  capitalCap: number
+  stateKey: string
+}
+
 interface DecisionProgramNode {
   id: string
   phase: 'entry' | 'exit' | 'rebalance'
@@ -19,9 +38,12 @@ interface DecisionProgramNode {
   cooldownBars?: number
   metadata?: {
     partialTakeProfit?: PartialTakeProfitMeta
+    addPosition?: AddPositionMeta
+    reversePosition?: ReversePositionMeta
+    dcaSchedule?: DcaScheduleMeta
   }
   actions: Array<{
-    kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT'
+    kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
     quantity: {
       mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct'
       value: number
@@ -111,6 +133,15 @@ export function runDecisionPrograms(
       continue
     }
 
+    const lifecycleDecision = evaluatePositionLifecycle(program, ctx)
+    if (lifecycleDecision) {
+      compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
+      if (ptpMeta && lifecycleDecision.action !== 'NOOP') {
+        markPartialTakeProfitTierFired(ctx, ptpMeta)
+      }
+      return Object.freeze(lifecycleDecision)
+    }
+
     const decision = buildFirstApplicableDecision(program, ctx)
     if (!decision) continue
 
@@ -176,7 +207,7 @@ function resetPartialTakeProfitStateOnEntryEdge(
   const currentQty = readCurrentQty(ctx)
   const prevQty = compiledState.previousPositionQty
   if (prevQty === 0 && currentQty !== 0 && memoryKeys.size > 0) {
-    const semanticState = (ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }).semanticRuntimeState
+    const semanticState = ctx.semanticRuntimeState
     if (semanticState && typeof semanticState === 'object' && !Array.isArray(semanticState)) {
       for (const key of memoryKeys) {
         if (Object.prototype.hasOwnProperty.call(semanticState, key)) {
@@ -192,7 +223,7 @@ function isPartialTakeProfitTierFired(
   ctx: StrategyExecutionContextV1,
   meta: PartialTakeProfitMeta,
 ): boolean {
-  const semanticState = (ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }).semanticRuntimeState
+  const semanticState = ctx.semanticRuntimeState
   const slot = semanticState?.[meta.memoryKey]
   if (!slot || typeof slot !== 'object') return false
   return slot[`tier_${meta.tierIndex}_fired`] === true
@@ -202,14 +233,70 @@ function markPartialTakeProfitTierFired(
   ctx: StrategyExecutionContextV1,
   meta: PartialTakeProfitMeta,
 ): void {
-  const root = ctx as { semanticRuntimeState?: Record<string, Record<string, unknown>> }
-  if (!root.semanticRuntimeState || typeof root.semanticRuntimeState !== 'object') {
-    root.semanticRuntimeState = {}
+  if (!ctx.semanticRuntimeState || typeof ctx.semanticRuntimeState !== 'object') {
+    ctx.semanticRuntimeState = {}
   }
-  if (!root.semanticRuntimeState[meta.memoryKey] || typeof root.semanticRuntimeState[meta.memoryKey] !== 'object') {
-    root.semanticRuntimeState[meta.memoryKey] = {}
+  if (!ctx.semanticRuntimeState[meta.memoryKey] || typeof ctx.semanticRuntimeState[meta.memoryKey] !== 'object') {
+    ctx.semanticRuntimeState[meta.memoryKey] = {}
   }
-  root.semanticRuntimeState[meta.memoryKey][`tier_${meta.tierIndex}_fired`] = true
+  ctx.semanticRuntimeState[meta.memoryKey][`tier_${meta.tierIndex}_fired`] = true
+}
+
+function evaluatePositionLifecycle(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+): StrategyDecisionV1 | null {
+  const reverseMeta = program.metadata?.reversePosition
+  if (reverseMeta) {
+    const currentQty = readCurrentQty(ctx)
+    if (currentQty === 0) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.reverse.no_position`,
+      }
+    }
+
+    return {
+      action: reverseMeta.fromSide === 'long' ? 'CLOSE_LONG' : 'CLOSE_SHORT',
+      size: {
+        mode: 'QTY',
+        value: Math.abs(currentQty),
+      },
+      reason: `compiled.${program.id}.reverse.close_first`,
+    }
+  }
+
+  const addMeta = program.metadata?.addPosition
+  if (typeof addMeta?.maxLayers === 'number' && Number.isFinite(addMeta.maxLayers)) {
+    const currentLayers = readSemanticRuntimeStateNumber(ctx, addMeta.stateKey)
+    if (currentLayers >= addMeta.maxLayers) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.pyramiding_limit`,
+      }
+    }
+  }
+
+  const dcaMeta = program.metadata?.dcaSchedule
+  if (dcaMeta && Number.isFinite(dcaMeta.maxCount)) {
+    const currentCount = readSemanticRuntimeStateNumber(ctx, dcaMeta.stateKey)
+    if (currentCount >= dcaMeta.maxCount) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_max_count`,
+      }
+    }
+  }
+
+  return null
+}
+
+function readSemanticRuntimeStateNumber(
+  ctx: StrategyExecutionContextV1,
+  stateKey: string,
+): number {
+  const value = ctx.semanticRuntimeState?.[stateKey]?.value
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
 function buildFirstApplicableDecision(
@@ -274,6 +361,10 @@ function mapAction(
     case 'CLOSE_LONG':
     case 'CLOSE_SHORT':
       return action
+    case 'ADD_LONG':
+      return 'OPEN_LONG'
+    case 'ADD_SHORT':
+      return 'OPEN_SHORT'
     case 'REDUCE_LONG':
       return 'ADJUST_POSITION'
     case 'REDUCE_SHORT':
@@ -320,20 +411,27 @@ function resolveReduceDeltaQty(
   const rawValue = action.quantity.value
   if (!Number.isFinite(rawValue) || rawValue === 0) return 0
 
+  let requestedQty = 0
   switch (action.quantity.mode) {
     case 'position_pct':
-      return direction * Math.abs(context.currentQty) * (Math.abs(rawValue) / 100)
+      requestedQty = Math.abs(context.currentQty) * (Math.abs(rawValue) / 100)
+      break
     case 'fixed_base':
-      return direction * Math.abs(rawValue)
+      requestedQty = Math.abs(rawValue)
+      break
     case 'fixed_quote':
-      return context.currentPrice > 0
-        ? direction * (Math.abs(rawValue) / context.currentPrice)
+      requestedQty = context.currentPrice > 0
+        ? Math.abs(rawValue) / context.currentPrice
         : 0
+      break
     case 'pct_equity':
-      return context.currentPrice > 0
-        ? direction * ((Math.max(0, context.equity) * Math.abs(rawValue)) / 100 / context.currentPrice)
+      requestedQty = context.currentPrice > 0
+        ? (Math.max(0, context.equity) * Math.abs(rawValue)) / 100 / context.currentPrice
         : 0
+      break
   }
+
+  return direction * Math.min(requestedQty, Math.abs(context.currentQty))
 }
 
 function readCurrentQty(ctx: StrategyExecutionContextV1): number {
@@ -356,6 +454,11 @@ function readCurrentPrice(ctx: StrategyExecutionContextV1): number {
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {
+  const accountEquity = ctx.accountEquity
+  if (typeof accountEquity === 'number' && Number.isFinite(accountEquity)) {
+    return accountEquity
+  }
+
   const value = ctx.portfolio?.equity
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
