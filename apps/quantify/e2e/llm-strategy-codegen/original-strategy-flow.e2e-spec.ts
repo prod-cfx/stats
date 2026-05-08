@@ -102,6 +102,19 @@ function collectConditionKeys(condition: unknown): string[] {
   return []
 }
 
+function expectContainsKeyMultiset(actual: string[], expected: readonly string[]): void {
+  const counts = new Map<string, number>()
+  for (const key of actual) {
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  for (const key of expected) {
+    const remaining = counts.get(key) ?? 0
+    expect(remaining).toBeGreaterThan(0)
+    counts.set(key, remaining - 1)
+  }
+}
+
 async function waitForPublicationTerminalSession(
   server: ReturnType<INestApplication['getHttpServer']>,
   sessionId: string,
@@ -419,8 +432,10 @@ describe('llm strategy codegen original strategy flow (E2E)', () => {
       expect(publishedSnapshot).toEqual(expect.objectContaining({
         id: finalPayload.publishedSnapshotId,
       }))
-      expect(publishedSnapshotConditionKeys(publishedSnapshot?.specSnapshot))
-        .toEqual(expect.arrayContaining(expectedPublishedConditionKeys))
+      expectContainsKeyMultiset(
+        publishedSnapshotConditionKeys(publishedSnapshot?.specSnapshot),
+        expectedPublishedConditionKeys,
+      )
     },
   )
 })
