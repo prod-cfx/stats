@@ -65,6 +65,7 @@ interface CompiledDecisionState {
     toSide: ReversePositionMeta['toSide']
     actionKind: 'OPEN_LONG' | 'OPEN_SHORT'
     quantity: DecisionProgramNode['actions'][number]['quantity']
+    createdBarIndex: number
   }>
 }
 
@@ -82,6 +83,7 @@ export function runDecisionPrograms(
   decisionOrder: readonly string[],
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
+  compiledState.barIndex = readCurrentBarIndex(ctx, compiledState.barIndex)
   const declaredPartialTakeProfitKeys = collectPartialTakeProfitMemoryKeys(programs)
   resetPartialTakeProfitStateOnEntryEdge(ctx, compiledState, declaredPartialTakeProfitKeys)
   if (guardState.forceExit) {
@@ -456,6 +458,11 @@ function evaluatePendingReverse(
     return null
   }
 
+  const compiledState = ensureCompiledDecisionState(ctx)
+  if (compiledState.barIndex <= pendingReverse.createdBarIndex) {
+    return null
+  }
+
   clearPendingReverse(ctx, program.id)
   return {
     action: pendingReverse.actionKind,
@@ -507,6 +514,7 @@ function markPendingReverse(
     toSide,
     actionKind: action.kind === 'OPEN_LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
     quantity: action.quantity,
+    createdBarIndex: compiledState.barIndex,
   }
 }
 
@@ -920,6 +928,24 @@ function resolveOpenActionQty(
 function readCurrentQty(ctx: StrategyExecutionContextV1): number {
   const value = ctx.position?.qty
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function readCurrentBarIndex(
+  ctx: StrategyExecutionContextV1,
+  fallback: number,
+): number {
+  const candidates = [
+    ctx.barIndex,
+    ctx.currentBarIndex,
+    ctx.baseTimeframeBar?.index,
+    ctx.bar?.index,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate
+    }
+  }
+  return fallback
 }
 
 function hasSameSidePositionSnapshot(
