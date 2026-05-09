@@ -4344,6 +4344,33 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
+      case 'price.chart_pattern': {
+        // P4-3: 白名单 4 patterns (head_and_shoulders / double_top / double_bottom / triangle)；
+        // 缺失 pattern 或 direction → fail-closed (null)
+        const chPattern = typeof trigger.params.pattern === 'string'
+          ? trigger.params.pattern.trim().toLowerCase()
+          : null
+        if (
+          chPattern !== 'head_and_shoulders'
+          && chPattern !== 'double_top'
+          && chPattern !== 'double_bottom'
+          && chPattern !== 'triangle'
+        ) return null
+        const chDirection = typeof trigger.params.direction === 'string'
+          ? trigger.params.direction.trim().toLowerCase()
+          : null
+        if (chDirection !== 'bullish' && chDirection !== 'bearish') return null
+        return {
+          kind: 'atom',
+          key: 'price.chart_pattern',
+          semanticScope: 'market',
+          op: chDirection === 'bullish' ? 'GTE' : 'LTE',
+          params: {
+            pattern: chPattern,
+            direction: chDirection,
+          },
+        }
+      }
       default:
         return null
     }

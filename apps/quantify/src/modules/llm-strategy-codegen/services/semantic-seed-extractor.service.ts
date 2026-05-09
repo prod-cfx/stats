@@ -4279,7 +4279,88 @@ export class SemanticSeedExtractorService {
         }
       }
 
-      if (/(?:头肩|双底|双顶|三角形|楔形|旗形|形态|pattern)/iu.test(clause) && !/(?:截图|screenshot|image)/iu.test(clause)) {
+      // P4-3: price.chart_pattern — 白名单 4 patterns：
+      //   head_and_shoulders / double_top / double_bottom / triangle
+      // 主观文本 → 不产生 trigger；缺 pattern 或 direction → open_slot
+      let chartPatternMatched = false
+      const chartPatternHit = /(?:头肩|双底|双顶|三角形|head\s+and\s+shoulders|h&s|double\s+top|double\s+bottom|triangle)/iu.test(clause)
+      if (chartPatternHit) {
+        // A-M2 防御：主观词必须锚定在 pattern 名词之前才视为主观
+        const isSubjective = /(?:像|疑似|看起来\s*像|类似)\s*(?:头肩|双底|双顶|三角形|head\s+and\s+shoulders|double\s+top|double\s+bottom|triangle)|(?:feels?\s+like|looks?\s+like|kind\s+of|maybe)\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:head\s+and\s+shoulders|double\s+top|double\s+bottom|triangle)/iu.test(clause)
+        if (!isSubjective) {
+          // 严格枚举：pattern 必须精确匹配白名单
+          const chartPatternRaw = /(?:头肩|head\s+and\s+shoulders|h&s)/iu.test(clause)
+            ? 'head_and_shoulders'
+            : /(?:双顶|double\s+top)/iu.test(clause)
+              ? 'double_top'
+              : /(?:双底|double\s+bottom)/iu.test(clause)
+                ? 'double_bottom'
+                : /(?:三角形|triangle)/iu.test(clause)
+                  ? 'triangle'
+                  : null
+
+          // A-M2 防御：direction 词必须与 pattern 同位，避免远距污染
+          const chartPatternTerm = '(?:头肩|双顶|双底|三角形|head\\s+and\\s+shoulders|h&s|double\\s+top|double\\s+bottom|triangle)'
+          const bullishChartPattern = new RegExp(`(?:bullish\\s+${chartPatternTerm}|${chartPatternTerm}\\s+bullish|看涨\\s*${chartPatternTerm}|${chartPatternTerm}\\s*看涨|inverse\\s+head\\s+and\\s+shoulders|头肩底)`, 'iu')
+          const bearishChartPattern = new RegExp(`(?:bearish\\s+${chartPatternTerm}|${chartPatternTerm}\\s+bearish|看跌\\s*${chartPatternTerm}|${chartPatternTerm}\\s*看跌|头肩顶)`, 'iu')
+          // 内置方向：double_top 恒看跌；double_bottom 恒看涨
+          const direction = chartPatternRaw === 'double_top'
+            ? 'bearish'
+            : chartPatternRaw === 'double_bottom'
+              ? 'bullish'
+              : bullishChartPattern.test(clause)
+                ? 'bullish'
+                : bearishChartPattern.test(clause)
+                  ? 'bearish'
+                  : null
+
+          const openSlots: SeedTrigger['openSlots'] = []
+          if (!chartPatternRaw) {
+            openSlots.push({
+              slotKey: 'price.chart_pattern.pattern',
+              fieldPath: 'trigger.params.pattern',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请选择图形形态：head_and_shoulders（头肩）、double_top（双顶）、double_bottom（双底）或 triangle（三角形）。',
+              affectsExecution: true,
+            })
+          }
+          if (!direction) {
+            openSlots.push({
+              slotKey: 'price.chart_pattern.direction',
+              fieldPath: 'trigger.params.direction',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请指明形态突破方向：bullish（看涨）或 bearish（看跌）。',
+              affectsExecution: true,
+            })
+          }
+
+          if (chartPatternRaw) {
+            chartPatternMatched = true
+          }
+
+          this.pushTrigger(triggers, seen, {
+            key: 'price.chart_pattern',
+            phase: segment === 'exit' ? 'exit' : 'entry',
+            sideScope: direction === 'bearish' ? 'short' : 'long',
+            params: {
+              ...(chartPatternRaw ? { pattern: chartPatternRaw } : {}),
+              ...(direction ? { direction } : {}),
+              sourceText: clause,
+            },
+            status: openSlots.length > 0 ? 'open' : 'locked',
+            source: 'user_explicit',
+            openSlots,
+          })
+        }
+      }
+
+      if (
+        !chartPatternMatched
+        && /(?:头肩|双底|双顶|三角形|楔形|旗形|形态|pattern)/iu.test(clause)
+        && !/(?:截图|screenshot|image)/iu.test(clause)
+      ) {
         this.pushTrigger(triggers, seen, {
           key: 'price.pattern',
           ...this.resolveUnsupportedTriggerIntent(clause, segment),

@@ -1114,7 +1114,9 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   {
     id: 'golden-corpus-037-recognized-unsupported-chart-pattern',
     name: 'recognized unsupported chart pattern',
-    message: 'OKX 合约 BTCUSDT 15m，出现头肩底形态后开多，单笔 10%。',
+    // P4-3 后头肩/双顶/双底/三角形已纳入 price.chart_pattern 白名单；剩余形态（楔形/旗形等）
+    // 仍走 price.pattern unsupported fallback。
+    message: 'OKX 合约 BTCUSDT 15m，出现楔形形态后开多，单笔 10%。',
     tags: ['position_lifecycle'],
     expectedAtoms: [
       { key: 'price.pattern', category: 'trigger' },
