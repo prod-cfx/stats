@@ -4387,7 +4387,13 @@ export class SemanticSeedExtractorService {
             : /(?:bearish\s+(?:liquidity\s+sweep|liquidity\s+grab|stop\s+hunt|sweep)|看跌\s*(?:流动性\s*扫荡|sweep))/iu.test(clause)
               ? 'bearish'
               : null
-          const lsDirection = directionExplicit ?? directionFromRef
+          // critic round 1 A2 修复：检测 explicit direction 与 ref-derived direction 冲突
+          // （e.g. "bearish sweep at prev low" — SMC 语义不可能：扫前低必为 bullish reversal）
+          // 冲突时丢弃 direction，强制用户在 clarification 中澄清；不让 explicit 静默覆盖。
+          const directionConflict = directionExplicit !== null
+            && directionFromRef !== null
+            && directionExplicit !== directionFromRef
+          const lsDirection = directionConflict ? null : (directionExplicit ?? directionFromRef)
 
           // reclaimBars 提取：支持 "reclaim 3" / "reclaim within 3" / "收回 3" / "3 根内" / "3 bars"
           const reclaimMatch = clause.match(/(?:reclaim(?:\s*bars?)?|收回|reclaim\s+within)\s*(\d+)/iu)
@@ -4401,7 +4407,9 @@ export class SemanticSeedExtractorService {
               fieldPath: 'trigger.params.direction',
               status: 'open',
               priority: 'core',
-              questionHint: '请指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。',
+              questionHint: directionConflict
+                ? '检测到方向冲突：请重新指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。'
+                : '请指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。',
               affectsExecution: true,
             })
           }
@@ -4416,10 +4424,12 @@ export class SemanticSeedExtractorService {
             })
           }
 
+          // critic round 1 A1 修复：sideScope 在缺方向时回退 undefined，避免静默归类为 long
+          const lsSideScope = lsDirection === 'bearish' ? 'short' : lsDirection === 'bullish' ? 'long' : undefined
           this.pushTrigger(triggers, seen, {
             key: 'liquidity.sweep',
             phase: segment === 'exit' ? 'exit' : 'entry',
-            sideScope: lsDirection === 'bearish' ? 'short' : 'long',
+            ...(lsSideScope ? { sideScope: lsSideScope } : {}),
             params: {
               ...(lsDirection ? { direction: lsDirection } : {}),
               ...(lsReference ? { reference: lsReference } : {}),

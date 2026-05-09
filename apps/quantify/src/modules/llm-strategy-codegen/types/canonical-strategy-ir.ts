@@ -303,3 +303,7 @@ export interface RiskGuard {
   predicateRef?: string
   onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
 }
+
+// P4-4 critic round 1 A3 修复：reclaimBars 默认值集中定义，避免 builder 与 IR compiler
+// 各自维护副本造成 silent-rename divergence。
+export const LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS = 3

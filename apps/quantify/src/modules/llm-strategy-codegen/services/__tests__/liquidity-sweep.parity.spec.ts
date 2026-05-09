@@ -175,6 +175,28 @@ describe('liquidity.sweep atom 七层 parity', () => {
         expect.objectContaining({ slotKey: 'liquidity.sweep.reference' }),
       ]))
     })
+
+    // critic round 1 A1 回归：缺方向时 sideScope 必须为 undefined，不得静默归类为 long
+    it('A1 sideScope undefined when direction is missing (假突破)', () => {
+      const patch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，假突破后入场，5% 止损。')
+      const trigger = patch.triggers?.find(t => t.key === 'liquidity.sweep')
+      expect(trigger).toBeDefined()
+      expect(trigger?.params?.direction).toBeUndefined()
+      expect(trigger?.sideScope).toBeUndefined()
+    })
+
+    // critic round 1 A2 回归：explicit direction 与 ref-derived direction 冲突 → 丢弃 direction，
+    // open_slot.direction 提示冲突；不让 explicit 静默覆盖 ref-derived
+    it('A2 direction conflict (bearish + prev low) → drop direction, open_slot with conflict hint', () => {
+      const patch = seedExtractor.extract('OKX BTCUSDT 15m, bearish liquidity sweep at prev low, reclaim within 3 bars, open short, 5% stop loss.')
+      const trigger = patch.triggers?.find(t => t.key === 'liquidity.sweep')
+      expect(trigger).toBeDefined()
+      expect(trigger?.params?.direction).toBeUndefined()
+      expect(trigger?.params?.reference).toBe('prev_low')
+      expect(trigger?.status).toBe('open')
+      const directionSlot = trigger?.openSlots?.find(s => s.slotKey === 'liquidity.sweep.direction')
+      expect(directionSlot?.questionHint).toContain('冲突')
+    })
   })
 
   // ─── Layer 3: semantic state ─────────────────────────────────────────────────
@@ -248,6 +270,32 @@ describe('liquidity.sweep atom 七层 parity', () => {
       const atom = findSweepAtom(rule!.condition)
       const params = atom?.['params'] as Record<string, unknown> | undefined
       expect(params?.reclaimBars).toBe(3)
+    })
+
+    // critic round 1 A2 回归：builder 拒绝 4 个 SMC 语义不可能的 direction × reference 组合
+    it.each([
+      { direction: 'bullish', reference: 'prev_high' },
+      { direction: 'bullish', reference: 'session_high' },
+      { direction: 'bearish', reference: 'prev_low' },
+      { direction: 'bearish', reference: 'session_low' },
+    ])('A2 builder rejects impossible combo $direction × $reference', ({ direction, reference }) => {
+      const seed = seedStateBuilder.build({
+        triggers: [{
+          id: 'entry-sweep',
+          key: 'liquidity.sweep',
+          phase: 'entry',
+          sideScope: direction === 'bearish' ? 'short' : 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          params: { direction, reference, reclaimBars: 3 },
+        }],
+        actions: [{ id: 'open', key: direction === 'bearish' ? 'open_short' : 'open_long', status: 'locked', source: 'user_explicit' }],
+      })
+      expect(seed).not.toBeNull()
+      const spec = canonicalBuilder.buildFromSemanticState(seed!)
+      const allConditionKeys = spec.rules.flatMap(r => collectConditionKeys(r.condition))
+      expect(allConditionKeys).not.toContain('liquidity.sweep')
     })
   })
 

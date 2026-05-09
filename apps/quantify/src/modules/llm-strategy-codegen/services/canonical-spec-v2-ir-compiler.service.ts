@@ -12,6 +12,7 @@ import type {
   SeriesDef,
   LevelSetDef,
 } from '../types/canonical-strategy-ir'
+import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
   CanonicalConditionGroup,
@@ -1675,11 +1676,17 @@ export class CanonicalSpecV2IrCompilerService {
         ) {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:reference`)
         }
+        // critic round 1 A2 修复：IR 层拒绝 SMC 语义不可能的 direction × reference 组合
+        const lsImpossibleCombo = (lsDirection === 'bullish' && (lsReference === 'prev_high' || lsReference === 'session_high'))
+          || (lsDirection === 'bearish' && (lsReference === 'prev_low' || lsReference === 'session_low'))
+        if (lsImpossibleCombo) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction_reference_conflict`)
+        }
         const lsReclaimBars = typeof atom.params?.reclaimBars === 'number'
           && Number.isInteger(atom.params.reclaimBars)
           && atom.params.reclaimBars > 0
           ? atom.params.reclaimBars
-          : 3
+          : LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS
         const lsSeriesId = `liquidity_sweep_${lsDirection}_${lsReference}_${lsReclaimBars}_${context.timeframe}`
         if (!context.seriesMap.has(lsSeriesId)) {
           context.seriesMap.set(lsSeriesId, {
