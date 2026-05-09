@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import {
+  type AccountAiQuantStrategyDetail,
   deployAccountAiQuantStrategy,
   fetchAccountAiQuantDeployResult,
   fetchUserExchangeAccountStatuses,
@@ -63,7 +64,7 @@ export async function confirmAiQuantDeploy(args: {
   t: Translate
   updateActiveConversation: (updater: (curr: ConversationState) => ConversationState) => void
   push: (href: string) => void
-}): Promise<void> {
+}): Promise<AccountAiQuantStrategyDetail | null> {
   const {
     activeConversation,
     apiConfigHref,
@@ -84,7 +85,7 @@ export async function confirmAiQuantDeploy(args: {
   } = args
 
   if (!activeConversation.backtestResult) {
-    return
+    return null
   }
 
   const strategyName =
@@ -113,7 +114,7 @@ export async function confirmAiQuantDeploy(args: {
         ],
         updatedAt: Date.now(),
       }))
-      return
+      return null
     }
 
     if (activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForDeploy) {
@@ -131,7 +132,7 @@ export async function confirmAiQuantDeploy(args: {
         ],
         updatedAt: Date.now(),
       }))
-      return
+      return null
     }
 
     if (!selectedDeployMarketType) {
@@ -149,7 +150,7 @@ export async function confirmAiQuantDeploy(args: {
         ],
         updatedAt: Date.now(),
       }))
-      return
+      return null
     }
 
     const latestExchangeAccounts = mapExchangeStatusesToDeployAccounts(
@@ -168,12 +169,13 @@ export async function confirmAiQuantDeploy(args: {
       setSelectedDeployAccountId(account?.accountId ?? '')
       if (!account) {
         push(apiConfigHref)
-        return
+        return null
       }
     }
 
+    let deployedDetail: AccountAiQuantStrategyDetail | null = null
     try {
-      await deployAccountAiQuantStrategy({
+      deployedDetail = await deployAccountAiQuantStrategy({
         userId: sessionUserId,
         name: strategyName,
         deployRequestId: requestId,
@@ -194,6 +196,7 @@ export async function confirmAiQuantDeploy(args: {
       if (!reconciled) {
         throw error
       }
+      deployedDetail = reconciled
     }
     setDeployOpen(false)
     setDeployRequestId(null)
@@ -203,6 +206,7 @@ export async function confirmAiQuantDeploy(args: {
         account: account.accountName,
       }),
     })
+    return deployedDetail
   } catch (error) {
     const deployErrorMessage = extractCodegenErrorMessage(
       error,

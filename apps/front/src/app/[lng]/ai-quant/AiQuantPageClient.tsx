@@ -1833,7 +1833,7 @@ export function AiQuantPageClient({
             return
           }
           if (!activeConversation.backtestResult || !session?.userId) return
-          await confirmAiQuantDeploy({
+          const deployedDetail = await confirmAiQuantDeploy({
             activeConversation,
             apiConfigHref,
             deployRequestId,
@@ -1851,6 +1851,16 @@ export function AiQuantPageClient({
             updateActiveConversation,
             push: router.push,
           })
+          if (!deployedDetail) {
+            return
+          }
+          setDeploymentDetail(deployedDetail)
+          setDeploymentDetailStatus('ready')
+          updateActiveConversation(curr => ({
+            ...curr,
+            publishedStrategyInstanceId: deployedDetail.id,
+            updatedAt: Date.now(),
+          }))
         }}
         lng={lng}
       />

@@ -546,6 +546,50 @@ describe('AiQuantPageClient deploy guard', () => {
     )
   })
 
+  it('marks the deployed strategy as running immediately after successful deploy', async () => {
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+    mockDeployAccountAiQuantStrategy.mockResolvedValue(
+      buildStrategyDetail({ status: 'running', positionCount: 1 }),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('running')
+    expect(deployButton?.textContent).toBe('已部署运行')
+    expect(deployButton?.disabled).toBe(true)
+    expect(container.querySelector('[data-testid="view-running-strategy"]')).not.toBeNull()
+  })
+
   it('keeps atomic display graph separate from deploy guard payload truth', async () => {
     seedDeployableConversation(Date.now(), {
       displayLogicGraph: {
