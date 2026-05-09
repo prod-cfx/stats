@@ -18,6 +18,62 @@ export interface SemanticOrchestrationValidationResult {
 
 const GATE_REGIME_KEY = 'gate.regime'
 const PORTFOLIO_DRAWDOWN_BLOCK_KEY = 'portfolioRisk.drawdown_block'
+const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
+
+const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
+  id: 'program.fixed_grid_gated',
+  kind: 'program',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'manage',
+      object: 'limit_ladder',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'provide',
+      object: 'limit_order',
+    },
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'account_equity',
+    },
+  ],
+  stateRequirements: [
+    {
+      domain: 'state',
+      verb: 'read_write',
+      object: 'program_lifecycle',
+    },
+  ],
+  orderRequirements: [
+    {
+      domain: 'order',
+      verb: 'support',
+      object: 'limit_order',
+    },
+    {
+      domain: 'order',
+      verb: 'cancel',
+      object: 'limit_order',
+    },
+  ],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'guard',
+      verb: 'manage',
+      object: 'limit_ladder',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
 
 const PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT: SemanticOrchestrationContract = {
   id: 'portfolioRisk.drawdown_block',
@@ -91,6 +147,7 @@ export class SemanticOrchestrationRegistryService {
   private readonly contracts: ReadonlyMap<string, SemanticOrchestrationContract> = new Map([
     [GATE_REGIME_KEY, GATE_REGIME_CONTRACT],
     [PORTFOLIO_DRAWDOWN_BLOCK_KEY, PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT],
+    [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -99,6 +156,9 @@ export class SemanticOrchestrationRegistryService {
 
   validate(node: SemanticOrchestrationNode): SemanticOrchestrationValidationResult {
     const missingSlots: SemanticSlotState[] = []
+    if (node.kind === 'program') {
+      return this.validateProgramNode(node)
+    }
     if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_DRAWDOWN_BLOCK_KEY) {
       const thresholdPct = node.thresholdPct
       const thresholdInvalid =
@@ -131,6 +191,100 @@ export class SemanticOrchestrationRegistryService {
         affectsExecution: true,
       })
     }
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  private validateProgramNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.program.fixed_grid_gated[${node.id}]`
+    const pushSlot = (field: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.program.fixed_grid_gated.${field}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    if (node.key !== PROGRAM_FIXED_GRID_GATED_KEY) {
+      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated）')
+      return { ok: false, missingSlots }
+    }
+
+    if (node.programKind !== 'fixed_grid_gated') {
+      pushSlot('program_kind', '请确认 programKind 为 fixed_grid_gated')
+    }
+
+    const onDeactivate = node.onDeactivate
+    if (onDeactivate !== 'cancel' && onDeactivate !== 'keep' && onDeactivate !== 'close') {
+      pushSlot('on_deactivate', '请确认停用时行为（cancel/keep/close）')
+    }
+
+    if (node.rebuildPolicy !== 'static') {
+      pushSlot('rebuild_policy', '请确认重建策略（仅支持 static）')
+    }
+
+    const grid = node.gridParams
+    const isPositiveFinite = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && v > 0
+
+    if (!grid || !isPositiveFinite(grid.anchorPrice)) {
+      pushSlot('grid_params.anchor_price', '请确认网格锚定价格（>0 有限数）')
+    }
+
+    if (
+      !grid
+      || typeof grid.levelCount !== 'number'
+      || !Number.isFinite(grid.levelCount)
+      || !Number.isInteger(grid.levelCount)
+      || grid.levelCount < 2
+      || grid.levelCount > 100
+    ) {
+      pushSlot('grid_params.level_count', '请确认网格档位数量（2..100 整数）')
+    }
+
+    if (
+      !grid
+      || typeof grid.stepPct !== 'number'
+      || !Number.isFinite(grid.stepPct)
+      || grid.stepPct <= 0
+      || grid.stepPct > 100
+    ) {
+      pushSlot('grid_params.step_pct', '请确认网格步长百分比（0..100）')
+    }
+
+    if (grid && grid.lowerBound !== undefined) {
+      if (!isPositiveFinite(grid.lowerBound)) {
+        pushSlot('grid_params.lower_bound', '请确认网格下界（>0 有限数）')
+      } else if (grid.upperBound !== undefined && isPositiveFinite(grid.upperBound) && grid.lowerBound >= grid.upperBound) {
+        pushSlot('grid_params.lower_bound', '请确认网格下界必须小于上界')
+      }
+    }
+
+    if (grid && grid.upperBound !== undefined && !isPositiveFinite(grid.upperBound)) {
+      pushSlot('grid_params.upper_bound', '请确认网格上界（>0 有限数）')
+    }
+
+    const sizing = node.sizing
+    if (
+      !sizing
+      || (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct')
+    ) {
+      pushSlot('sizing.mode', '请确认仓位模式（fixed_quote/fixed_base/fixed_pct）')
+    }
+
+    if (!sizing || !isPositiveFinite(sizing.value)) {
+      pushSlot('sizing.value', '请确认仓位数值（>0 有限数）')
+    }
+
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
+      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
+    }
+
     return { ok: missingSlots.length === 0, missingSlots }
   }
 

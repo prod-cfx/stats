@@ -748,6 +748,11 @@ export class SignalGeneratorService {
               orchestrationGateState,
               portfolioRiskState,
             )
+            // Phase 5 S4 T13 — 注入 orchestrationPrograms 第 7 参数。
+            // live closeProgramIds 真实合成 close decision 留 follow-up issue
+            // （与 S7 live drawdown 同范式）：当前 live 端的 close 由现有
+            // working-order 协议处理，本 wiring 仅让 orderState 能携带 closeProgramIds
+            // 让 follow-up 消费。
             const orderState = runOrderPrograms(
               ctx,
               orderPrograms,
@@ -755,6 +760,7 @@ export class SignalGeneratorService {
               guardState,
               projection.topology.orderProgramOrder,
               executionModel,
+              ((projection as { orchestrationPrograms?: unknown }).orchestrationPrograms ?? []) as Parameters<typeof runOrderPrograms>[6],
             )
 
             return buildCompiledManifest(

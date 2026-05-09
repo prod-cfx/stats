@@ -1,4 +1,5 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
+import type { CompiledOrchestrationProgram } from './compiled-orchestration-program'
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 
@@ -17,16 +18,67 @@ export interface CompiledOrderState {
   }>
   activeProgramIds: readonly string[]
   cancelledProgramIds: readonly string[]
+  closeProgramIds: readonly string[]
 }
 
 export function runOrderPrograms(
   _ctx: StrategyExecutionContextV1,
   programs: readonly OrderProgramNode[],
-  _exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
   guardState: Readonly<CompiledGuardState>,
   orderProgramOrder: readonly string[],
   _executionModel?: Record<string, unknown>,
+  orchestrationPrograms?: readonly CompiledOrchestrationProgram[],
 ): Readonly<CompiledOrderState> {
+  // ---------- Orchestration program lifecycle (Phase 5 S4 T11) ----------
+  const orchWorkingOrders: Array<{
+    id: string
+    sourceRef: string
+    payload?: Record<string, unknown>
+    levels?: readonly number[]
+  }> = []
+  const orchActiveIds: string[] = []
+  const orchCancelledIds: string[] = []
+  const orchCloseIds: string[] = []
+
+  if (orchestrationPrograms && orchestrationPrograms.length > 0) {
+    for (const program of orchestrationPrograms) {
+      if (guardState.cancelOrderPrograms) {
+        orchCancelledIds.push(program.id)
+        continue
+      }
+
+      // fail-closed: invalid activeWhenExprId / sizing / gridParams → cancel
+      if (!isValidOrchestrationProgram(program)) {
+        orchCancelledIds.push(program.id)
+        continue
+      }
+
+      const exprValue = exprValues[program.activeWhenExprId]
+      const isActive = exprValue === true
+
+      if (isActive) {
+        orchActiveIds.push(program.id)
+        orchWorkingOrders.push(buildOrchestrationWorkingOrder(program))
+        continue
+      }
+
+      // inactive: dispatch by onDeactivate
+      switch (program.onDeactivate) {
+        case 'cancel':
+          orchCancelledIds.push(program.id)
+          break
+        case 'keep':
+          orchWorkingOrders.push(buildOrchestrationWorkingOrder(program))
+          break
+        case 'close':
+          orchCloseIds.push(program.id)
+          break
+      }
+    }
+  }
+
+  // ---------- Legacy program loop (unchanged) ----------
   const programIndex = new Map(programs.map(program => [program.id, program]))
 
   const orderedPrograms = orderProgramOrder
@@ -34,20 +86,78 @@ export function runOrderPrograms(
     .filter((program): program is OrderProgramNode => program !== undefined)
   const activePrograms = guardState.cancelOrderPrograms
     ? []
-    : orderedPrograms.filter(program => isOrderProgramActive(program, _exprValues))
+    : orderedPrograms.filter(program => isOrderProgramActive(program, exprValues))
   const inactiveProgramIds = guardState.cancelOrderPrograms
     ? []
     : orderedPrograms
-      .filter(program => !isOrderProgramActive(program, _exprValues))
+      .filter(program => !isOrderProgramActive(program, exprValues))
       .map(program => program.id)
 
+  const legacyWorkingOrders = activePrograms.map(program => buildWorkingOrder(program, exprValues))
+  const legacyActiveIds = activePrograms.map(program => program.id)
+  const legacyCancelledIds = guardState.cancelOrderPrograms ? [...orderProgramOrder] : inactiveProgramIds
+
   return Object.freeze({
-    workingOrders: Object.freeze(activePrograms.map(program => buildWorkingOrder(program, _exprValues))),
-    activeProgramIds: Object.freeze(activePrograms.map(program => program.id)),
-    cancelledProgramIds: Object.freeze(
-      guardState.cancelOrderPrograms ? [...orderProgramOrder] : inactiveProgramIds,
-    ),
+    workingOrders: Object.freeze([...orchWorkingOrders, ...legacyWorkingOrders]),
+    activeProgramIds: Object.freeze([...orchActiveIds, ...legacyActiveIds]),
+    cancelledProgramIds: Object.freeze([...orchCancelledIds, ...legacyCancelledIds]),
+    closeProgramIds: Object.freeze([...orchCloseIds]),
   })
+}
+
+function isValidOrchestrationProgram(program: CompiledOrchestrationProgram): boolean {
+  if (typeof program.activeWhenExprId !== 'string' || program.activeWhenExprId.length === 0) return false
+  const { gridParams, sizing } = program
+  if (!gridParams) return false
+  if (!Number.isFinite(gridParams.anchorPrice) || gridParams.anchorPrice <= 0) return false
+  if (!Number.isFinite(gridParams.stepPct) || gridParams.stepPct <= 0) return false
+  if (!Number.isInteger(gridParams.levelCount) || gridParams.levelCount < 2) return false
+  if (!sizing || !Number.isFinite(sizing.value) || sizing.value <= 0) return false
+  return true
+}
+
+/**
+ * Build orchestration program working order.
+ *
+ * Levels formula (MVP, fixed_grid_gated):
+ *   levels[i] = anchorPrice * (1 - stepPct/100)^(i+1)   for i = 0..levelCount-1
+ * 即"等比向下挂买单"，与 anchorPrice=50000/stepPct=5/levelCount=3 →
+ *   [47500, 45125, 42868.75] 一致。
+ *
+ * 若设置 lowerBound：levels 不下穿（< lowerBound 的 level 被裁剪掉）。
+ * 若设置 upperBound：levels 不上穿（> upperBound 的 level 被裁剪掉）。
+ * 数值四舍五入到 2 位小数（与 fixture 对齐）。
+ */
+function buildOrchestrationWorkingOrder(program: CompiledOrchestrationProgram): {
+  id: string
+  sourceRef: string
+  payload?: Record<string, unknown>
+  levels?: readonly number[]
+} {
+  const { gridParams, sizing, activeWhenExprId } = program
+  const decay = 1 - gridParams.stepPct / 100
+  const rawLevels: number[] = []
+  for (let i = 0; i < gridParams.levelCount; i++) {
+    const level = round2(gridParams.anchorPrice * decay ** (i + 1))
+    if (gridParams.lowerBound !== undefined && level < gridParams.lowerBound) continue
+    if (gridParams.upperBound !== undefined && level > gridParams.upperBound) continue
+    rawLevels.push(level)
+  }
+
+  return {
+    id: program.id,
+    sourceRef: 'orchestration:program.fixed_grid_gated',
+    payload: {
+      activeWhen: activeWhenExprId,
+      gridParams: { ...gridParams },
+      sizing: { ...sizing },
+    },
+    levels: Object.freeze(rawLevels),
+  }
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 function isOrderProgramActive(

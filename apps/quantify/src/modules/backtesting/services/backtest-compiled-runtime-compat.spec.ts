@@ -1,8 +1,11 @@
+import type { StrategyDecisionV1 } from '@ai/shared'
+import type { CompiledOrchestrationProgram } from '@ai/shared/script-engine/compiled-runtime/compiled-orchestration-program'
 import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/evaluate-expr-pool'
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
 import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
+import { runOrderPrograms } from '@ai/shared/script-engine/compiled-runtime/run-order-programs'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 
@@ -1261,6 +1264,235 @@ describe('backtestCompiledRuntimeCompat', () => {
         action: 'NOOP',
         reason: 'compiled.orchestration.portfolio_risk.block_entry_long',
       })
+    })
+  })
+
+  describe('orchestration program lifecycle integration (backtest T12)', () => {
+    const guardState = Object.freeze({
+      blockNewEntry: false,
+      forceExit: false,
+      strategyHalt: false,
+      cancelOrderPrograms: false,
+      triggered: Object.freeze([] as string[]),
+    })
+
+    function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+      return {
+        id: 'orch_grid_1',
+        programKind: 'fixed_grid_gated',
+        activeWhenExprId: 'gate_regime',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'static',
+        gridParams: { anchorPrice: 50000, levelCount: 3, stepPct: 5 },
+        sizing: { mode: 'fixed_quote', value: 100 },
+        ...overrides,
+      }
+    }
+
+    function synthesizeCloseDecision(
+      qty: number,
+      closeProgramIds: readonly string[],
+    ): StrategyDecisionV1 {
+      if (qty > 0) {
+        return {
+          action: 'CLOSE_LONG',
+          reason: 'compiled.orchestration.program.close_position',
+          meta: { closeProgramIds: [...closeProgramIds] },
+        }
+      }
+      if (qty < 0) {
+        return {
+          action: 'CLOSE_SHORT',
+          reason: 'compiled.orchestration.program.close_position',
+          meta: { closeProgramIds: [...closeProgramIds] },
+        }
+      }
+      return {
+        action: 'NOOP',
+        reason: 'compiled.orchestration.program.no_position_to_close',
+      }
+    }
+
+    function mergeAdapterDecision(
+      decision: StrategyDecisionV1,
+      orderState: { closeProgramIds: readonly string[] },
+      qty: number,
+    ): StrategyDecisionV1 {
+      if (
+        orderState.closeProgramIds.length > 0
+        && decision.action === 'NOOP'
+        && qty !== 0
+      ) {
+        return synthesizeCloseDecision(qty, orderState.closeProgramIds)
+      }
+      return decision
+    }
+
+    it('Test 1: orchestrationPrograms active=true → workingOrders 含该 program; decision 不动', () => {
+      const program = makeProgram({ onDeactivate: 'close' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: true },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.activeProgramIds).toEqual([program.id])
+      expect(orderState.workingOrders).toHaveLength(1)
+      expect(orderState.closeProgramIds).toEqual([])
+
+      const decision: StrategyDecisionV1 = { action: 'NOOP', reason: 'compiled.noop' }
+      const merged = mergeAdapterDecision(decision, orderState, 1)
+      expect(merged).toEqual(decision)
+    })
+
+    it('Test 2: active=false + onDeactivate=cancel → cancelledProgramIds 含 program; closeProgramIds 空; decision 不动', () => {
+      const program = makeProgram({ onDeactivate: 'cancel' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.cancelledProgramIds).toEqual([program.id])
+      expect(orderState.closeProgramIds).toEqual([])
+      expect(orderState.workingOrders).toEqual([])
+
+      const decision: StrategyDecisionV1 = { action: 'NOOP', reason: 'compiled.noop' }
+      const merged = mergeAdapterDecision(decision, orderState, 0)
+      expect(merged).toEqual(decision)
+    })
+
+    it('Test 3: active=false + onDeactivate=keep → workingOrders 含 program (保单); decision 不动', () => {
+      const program = makeProgram({ onDeactivate: 'keep' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.workingOrders).toHaveLength(1)
+      expect(orderState.workingOrders[0].id).toBe(program.id)
+      expect(orderState.closeProgramIds).toEqual([])
+
+      const decision: StrategyDecisionV1 = { action: 'NOOP', reason: 'compiled.noop' }
+      const merged = mergeAdapterDecision(decision, orderState, 1)
+      expect(merged).toEqual(decision)
+    })
+
+    it('Test 4: onDeactivate=close + decision=NOOP + ctx 持仓 long → CLOSE_LONG with reason close_position; meta.closeProgramIds 含 id', () => {
+      const program = makeProgram({ onDeactivate: 'close' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.closeProgramIds).toEqual([program.id])
+
+      const decision: StrategyDecisionV1 = { action: 'NOOP', reason: 'compiled.noop' }
+      const merged = mergeAdapterDecision(decision, orderState, 2)
+      expect(merged).toEqual({
+        action: 'CLOSE_LONG',
+        reason: 'compiled.orchestration.program.close_position',
+        meta: { closeProgramIds: [program.id] },
+      })
+    })
+
+    it('Test 5: onDeactivate=close + decision=NOOP + ctx 持仓 short → CLOSE_SHORT', () => {
+      const program = makeProgram({ onDeactivate: 'close' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.closeProgramIds).toEqual([program.id])
+
+      const decision: StrategyDecisionV1 = { action: 'NOOP', reason: 'compiled.noop' }
+      const merged = mergeAdapterDecision(decision, orderState, -2)
+      expect(merged).toEqual({
+        action: 'CLOSE_SHORT',
+        reason: 'compiled.orchestration.program.close_position',
+        meta: { closeProgramIds: [program.id] },
+      })
+    })
+
+    it('Test 6: onDeactivate=close + decision=NOOP + ctx 持仓=0 → NOOP no_position_to_close (skip 合成)', () => {
+      const program = makeProgram({ onDeactivate: 'close' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.closeProgramIds).toEqual([program.id])
+
+      const decision: StrategyDecisionV1 = { action: 'NOOP', reason: 'compiled.noop' }
+      const merged = mergeAdapterDecision(decision, orderState, 0)
+      // qty=0：merge skip 合成；decision 保持原 NOOP（不携带 closeProgramIds）
+      expect(merged).toEqual(decision)
+    })
+
+    it('Test 7 (W5): onDeactivate=close + decision=OPEN_LONG → decision 仍 OPEN_LONG，绝不被改写', () => {
+      const program = makeProgram({ onDeactivate: 'close' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.closeProgramIds).toEqual([program.id])
+
+      const decision: StrategyDecisionV1 = {
+        action: 'OPEN_LONG',
+        size: { mode: 'RATIO', value: 0.1 },
+        reason: 'compiled.decision_entry',
+      }
+      const merged = mergeAdapterDecision(decision, orderState, 0)
+      expect(merged).toEqual(decision)
+    })
+
+    it('Test 8 (W5): onDeactivate=close + decision=CLOSE_LONG (已 close) → decision 仍 CLOSE_LONG，不重复合成', () => {
+      const program = makeProgram({ onDeactivate: 'close' })
+      const orderState = runOrderPrograms(
+        {} as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.closeProgramIds).toEqual([program.id])
+
+      const decision: StrategyDecisionV1 = {
+        action: 'CLOSE_LONG',
+        size: { mode: 'QTY', value: 2 },
+        reason: 'compiled.decision_exit',
+      }
+      const merged = mergeAdapterDecision(decision, orderState, 2)
+      expect(merged).toEqual(decision)
     })
   })
 })

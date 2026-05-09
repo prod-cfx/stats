@@ -7,6 +7,11 @@ import type {
   SemanticOrchestrationGateTarget,
   SemanticOrchestrationPortfolioRiskMode,
   SemanticOrchestrationPortfolioRiskScope,
+  SemanticOrchestrationProgramGridParams,
+  SemanticOrchestrationProgramKind,
+  SemanticOrchestrationProgramOnDeactivate,
+  SemanticOrchestrationProgramRebuildPolicy,
+  SemanticOrchestrationProgramSizing,
   SemanticPositionConstraintKey,
   SemanticPositionSizingContract,
   SemanticSlotState,
@@ -67,6 +72,7 @@ export interface CodegenSemanticPatch {
 export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationGateNodePatch
   | CodegenSemanticOrchestrationPortfolioRiskNodePatch
+  | CodegenSemanticOrchestrationProgramNodePatch
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'gate'
@@ -84,4 +90,16 @@ export interface CodegenSemanticOrchestrationPortfolioRiskNodePatch extends Code
   scope: SemanticOrchestrationPortfolioRiskScope
   mode: SemanticOrchestrationPortfolioRiskMode
   thresholdPct: number
+}
+
+export interface CodegenSemanticOrchestrationProgramNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'program'
+  key: 'program.fixed_grid_gated'
+  params: Record<string, unknown>
+  programKind: SemanticOrchestrationProgramKind
+  activeWhenRef: string
+  onDeactivate: SemanticOrchestrationProgramOnDeactivate
+  rebuildPolicy: SemanticOrchestrationProgramRebuildPolicy
+  gridParams: SemanticOrchestrationProgramGridParams
+  sizing: SemanticOrchestrationProgramSizing
 }

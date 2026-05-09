@@ -1,4 +1,4 @@
-import type { StrategyAdapterV1 } from '@ai/shared'
+import type { StrategyAdapterV1, StrategyDecisionV1 } from '@ai/shared'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { createScriptEngine } from '@ai/shared/node'
@@ -91,6 +91,9 @@ export class BacktestStrategyAdapterService {
       const portfolioRisks = (projection as {
         orchestrationPortfolioRisks?: Parameters<typeof evaluateOrchestrationPortfolioRisks>[0]
       }).orchestrationPortfolioRisks ?? []
+      const orchestrationPrograms = ((projection as {
+        orchestrationPrograms?: Parameters<typeof runOrderPrograms>[6]
+      }).orchestrationPrograms ?? []) as Parameters<typeof runOrderPrograms>[6]
 
       // peakEquity 在 build() 闭包内逐 bar 维护，与 account-strategy-view.service.ts:1970 同公式
       let peakEquity: number | undefined
@@ -136,7 +139,7 @@ export class BacktestStrategyAdapterService {
             portfolioRisks,
             { drawdownPct: (ctx as { accountDrawdownPct?: number }).accountDrawdownPct },
           )
-          const decision = runDecisionPrograms(
+          let decision = runDecisionPrograms(
             ctx,
             decisionPrograms,
             exprValues,
@@ -152,7 +155,21 @@ export class BacktestStrategyAdapterService {
             guardState,
             projection.topology.orderProgramOrder,
             executionModel,
+            orchestrationPrograms,
           )
+
+          // T12 M2: 仅当 decision=NOOP + orchestration program 进入 close 阶段 + 当前持仓非 0
+          // 时合成 CLOSE_*；OPEN_*/CLOSE_*/REDUCE_* 一律不动（W5 不变量保护）。
+          // closeProgramIds 不污染 manifest（仅 decision.meta 携带）。
+          if (
+            orderState.closeProgramIds.length > 0
+            && decision.action === 'NOOP'
+          ) {
+            const currentPositionQty = readContextPositionQty(ctx)
+            if (currentPositionQty !== 0) {
+              decision = synthesizeCloseDecision(currentPositionQty, orderState.closeProgramIds)
+            }
+          }
 
           return buildCompiledManifest(
             decision,
@@ -211,6 +228,37 @@ export class BacktestStrategyAdapterService {
     }
 
     return result.value
+  }
+}
+
+function readContextPositionQty(ctx: unknown): number {
+  if (!ctx || typeof ctx !== 'object') return 0
+  const c = ctx as { position?: { qty?: unknown } }
+  const qty = c.position?.qty
+  return typeof qty === 'number' && Number.isFinite(qty) ? qty : 0
+}
+
+function synthesizeCloseDecision(
+  qty: number,
+  closeProgramIds: readonly string[],
+): StrategyDecisionV1 {
+  if (qty > 0) {
+    return {
+      action: 'CLOSE_LONG',
+      reason: 'compiled.orchestration.program.close_position',
+      meta: { closeProgramIds: [...closeProgramIds] },
+    }
+  }
+  if (qty < 0) {
+    return {
+      action: 'CLOSE_SHORT',
+      reason: 'compiled.orchestration.program.close_position',
+      meta: { closeProgramIds: [...closeProgramIds] },
+    }
+  }
+  return {
+    action: 'NOOP',
+    reason: 'compiled.orchestration.program.no_position_to_close',
   }
 }
 

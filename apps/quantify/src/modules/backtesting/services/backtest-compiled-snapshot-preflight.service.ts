@@ -90,6 +90,7 @@ export class BacktestCompiledSnapshotPreflightService {
       riskPredicates: this.projectOptionalByOrder(astSnapshot.riskPredicates, astSnapshot.topology.riskPredicateOrder),
       decisionPrograms: this.projectByOrder(astSnapshot.decisionPrograms, astSnapshot.topology.decisionOrder),
       orderPrograms: this.projectByOrder(astSnapshot.orderPrograms, astSnapshot.topology.orderProgramOrder),
+      ...(astSnapshot.orchestrationPrograms ? { orchestrationPrograms: astSnapshot.orchestrationPrograms } : {}),
       topology: astSnapshot.topology,
     }
 

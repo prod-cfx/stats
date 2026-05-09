@@ -3,6 +3,7 @@ import type {
   CanonicalStrategyIrV1,
   IrOrchestrationGate,
   IrOrchestrationPortfolioRisk,
+  IrOrchestrationProgram,
   OrderProgram,
   PredicateDef,
   RiskGuard,
@@ -18,6 +19,7 @@ import type {
   CanonicalExpressionCondition,
   CanonicalOrchestrationGate,
   CanonicalOrchestrationPortfolioRisk,
+  CanonicalOrchestrationProgram,
   CanonicalOrderProgramIntent,
   CanonicalRuleAction,
   CanonicalRuleSideScope,
@@ -193,6 +195,7 @@ export class CanonicalSpecV2IrCompilerService {
 
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
     const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
+    const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
     const positionMode = hasOrderPrograms
@@ -239,6 +242,7 @@ export class CanonicalSpecV2IrCompilerService {
       orderPrograms,
       orchestrationGates,
       orchestrationPortfolioRisks,
+      orchestrationPrograms,
       riskPolicy: {
         guards,
         riskPredicates,
@@ -855,6 +859,34 @@ export class CanonicalSpecV2IrCompilerService {
       thresholdPct: risk.thresholdPct,
       effectWhenTriggered: risk.effectWhenTriggered,
     }))
+  }
+
+  private compileOrchestrationPrograms(
+    spec: CanonicalStrategySpecV2,
+    irGates: readonly IrOrchestrationGate[],
+  ): IrOrchestrationProgram[] {
+    const programs = spec.orchestration?.programs ?? []
+    if (programs.length === 0) {
+      return []
+    }
+    const gateRefToExprId = new Map(irGates.map(gate => [gate.id, gate.exprId]))
+    const result: IrOrchestrationProgram[] = []
+    for (const program of programs as readonly CanonicalOrchestrationProgram[]) {
+      const exprId = gateRefToExprId.get(program.activeWhenRef)
+      if (exprId === undefined) {
+        continue
+      }
+      result.push({
+        id: program.id,
+        programKind: program.programKind,
+        activeWhenExprId: exprId,
+        onDeactivate: program.onDeactivate,
+        rebuildPolicy: program.rebuildPolicy,
+        gridParams: { ...program.gridParams },
+        sizing: { ...program.sizing },
+      })
+    }
+    return result
   }
 
   private compileExpressionCondition(

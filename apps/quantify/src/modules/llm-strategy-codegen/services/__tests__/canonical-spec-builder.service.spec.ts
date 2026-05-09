@@ -4278,4 +4278,243 @@ describe('canonicalSpecBuilderService', () => {
       expect(spec.orchestration!.portfolioRisks![0].thresholdPct).toBe(10)
     })
   })
+
+  describe('orchestration programs emission', () => {
+    const validGridParams = {
+      anchorPrice: 30000,
+      levelCount: 10,
+      stepPct: 0.5,
+      lowerBound: 25000,
+      upperBound: 35000,
+    }
+    const validSizing = { mode: 'fixed_quote' as const, value: 100 }
+
+    it('emits orchestration.programs from a supported locked program node', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'program-fixed-grid-1',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams },
+              sizing: { ...validSizing },
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration?.programs).toBeDefined()
+      expect(spec.orchestration!.programs!).toHaveLength(1)
+      const [program] = spec.orchestration!.programs!
+      expect(program.id).toBe('program-fixed-grid-1')
+      expect(program.programKind).toBe('fixed_grid_gated')
+      expect(program.activeWhenRef).toBe('gate-regime-long-1')
+      expect(program.onDeactivate).toBe('cancel')
+      expect(program.rebuildPolicy).toBe('static')
+      expect(program.gridParams).toEqual(validGridParams)
+      expect(program.sizing).toEqual(validSizing)
+    })
+
+    it('omits orchestration field when state has no orchestration nodes', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({})
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('skips program nodes with status open', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'program-open',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams },
+              sizing: { ...validSizing },
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('skips program nodes with invalid gridParams', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'program-bad-anchor',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams, anchorPrice: 0 },
+              sizing: { ...validSizing },
+            },
+            {
+              id: 'program-bad-levelcount',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams, levelCount: 1 },
+              sizing: { ...validSizing },
+            },
+            {
+              id: 'program-bad-step',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams, stepPct: 0 },
+              sizing: { ...validSizing },
+            },
+            {
+              id: 'program-bad-bounds',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams, lowerBound: 40000, upperBound: 35000 },
+              sizing: { ...validSizing },
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('emits gates + portfolioRisks + programs together when all three coexist', () => {
+      const service = new CanonicalSpecBuilderService()
+      const supportedActiveWhen: SemanticExpression = {
+        kind: 'predicate',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+        right: { kind: 'indicator', name: 'ema', params: { length: 50 } },
+      }
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'gate-regime-long-3',
+              kind: 'gate',
+              key: 'gate.regime',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              target: { phase: 'entry', sideScope: 'long' },
+              activeWhen: supportedActiveWhen,
+              effectWhenFalse: 'block_new_entries',
+            },
+            {
+              id: 'portfolio-risk-drawdown-3',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'enforce',
+              thresholdPct: 20,
+            },
+            {
+              id: 'program-fixed-grid-3',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'gate-regime-long-3',
+              onDeactivate: 'close',
+              rebuildPolicy: 'static',
+              gridParams: { ...validGridParams },
+              sizing: { ...validSizing },
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration?.gates).toBeDefined()
+      expect(spec.orchestration!.gates!).toHaveLength(1)
+      expect(spec.orchestration?.portfolioRisks).toBeDefined()
+      expect(spec.orchestration!.portfolioRisks!).toHaveLength(1)
+      expect(spec.orchestration?.programs).toBeDefined()
+      expect(spec.orchestration!.programs!).toHaveLength(1)
+      expect(spec.orchestration!.programs![0].id).toBe('program-fixed-grid-3')
+      expect(spec.orchestration!.programs![0].onDeactivate).toBe('close')
+    })
+  })
 })

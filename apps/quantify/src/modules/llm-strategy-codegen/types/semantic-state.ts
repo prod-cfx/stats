@@ -286,6 +286,27 @@ export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
 export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
 
+export type SemanticOrchestrationProgramKind = 'fixed_grid_gated'
+
+export type SemanticOrchestrationProgramOnDeactivate = 'cancel' | 'keep' | 'close'
+
+export type SemanticOrchestrationProgramRebuildPolicy = 'static'
+
+export type SemanticOrchestrationProgramSizingMode = 'fixed_quote' | 'fixed_base' | 'fixed_pct'
+
+export interface SemanticOrchestrationProgramSizing {
+  mode: SemanticOrchestrationProgramSizingMode
+  value: number
+}
+
+export interface SemanticOrchestrationProgramGridParams {
+  anchorPrice: number
+  levelCount: number
+  stepPct: number
+  lowerBound?: number
+  upperBound?: number
+}
+
 export interface SemanticOrchestrationContract {
   id: string
   kind: SemanticOrchestrationContractKind
@@ -316,6 +337,13 @@ export interface SemanticOrchestrationNode {
   target?: SemanticOrchestrationGateTarget
   activeWhen?: SemanticExpression
   effectWhenFalse?: SemanticOrchestrationGateEffect
+  // program 节点专属（其它 kind 不读）— Phase 5 S4 (#984)
+  programKind?: SemanticOrchestrationProgramKind
+  activeWhenRef?: string  // 引用同 state.orchestration.nodes 中 supported gate 节点 id
+  onDeactivate?: SemanticOrchestrationProgramOnDeactivate
+  rebuildPolicy?: SemanticOrchestrationProgramRebuildPolicy
+  gridParams?: SemanticOrchestrationProgramGridParams
+  sizing?: SemanticOrchestrationProgramSizing
   // portfolioRisk 节点专属（其它 kind 不读）
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number

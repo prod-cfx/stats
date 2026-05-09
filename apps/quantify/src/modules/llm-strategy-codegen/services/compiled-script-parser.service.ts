@@ -38,6 +38,7 @@ export class CompiledScriptParserService {
     values.set('RISK_PREDICATES', this.readOptionalConst(lines, 'RISK_PREDICATES'))
     values.set('DECISION_PROGRAMS', this.readRequiredConst(lines, 'DECISION_PROGRAMS'))
     values.set('ORDER_PROGRAMS', this.readRequiredConst(lines, 'ORDER_PROGRAMS'))
+    values.set('ORCHESTRATION_PROGRAMS', this.readOptionalConst(lines, 'ORCHESTRATION_PROGRAMS'))
     values.set('TOPOLOGY', this.readRequiredConst(lines, 'TOPOLOGY'))
 
     const spacer = lines.shift()
@@ -59,6 +60,7 @@ export class CompiledScriptParserService {
       ...this.optionalProjectionField('riskPredicates', values.get('RISK_PREDICATES')),
       decisionPrograms: values.get('DECISION_PROGRAMS') as CompiledScriptProjection['decisionPrograms'],
       orderPrograms: values.get('ORDER_PROGRAMS') as CompiledScriptProjection['orderPrograms'],
+      ...this.optionalProjectionField('orchestrationPrograms', values.get('ORCHESTRATION_PROGRAMS')),
       topology: values.get('TOPOLOGY') as CompiledScriptProjection['topology'],
     }
 
@@ -90,7 +92,7 @@ export class CompiledScriptParserService {
     return projection
   }
 
-  private optionalProjectionField<K extends 'runtimeRequirements' | 'riskPredicates'>(
+  private optionalProjectionField<K extends 'runtimeRequirements' | 'riskPredicates' | 'orchestrationPrograms'>(
     key: K,
     value: unknown,
   ): Pick<CompiledScriptProjection, K> | Record<string, never> {

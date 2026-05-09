@@ -4039,4 +4039,179 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(result.ir.orchestrationPortfolioRisks?.[0].mode).toBe('enforce')
     expect(result.ir.orchestrationPortfolioRisks?.[0].thresholdPct).toBe(15)
   })
+
+  it('compiles a program with valid activeWhenRef into IR.orchestrationPrograms with resolved activeWhenExprId', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-regime-prog',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      programs: [
+        {
+          id: 'program-grid-1',
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: 'gate-regime-prog',
+          onDeactivate: 'cancel',
+          rebuildPolicy: 'static',
+          gridParams: {
+            anchorPrice: 30000,
+            levelCount: 10,
+            stepPct: 0.5,
+          },
+          sizing: { mode: 'fixed_quote', value: 100 },
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const programs = result.ir.orchestrationPrograms ?? []
+    expect(programs).toHaveLength(1)
+    const gate = (result.ir.orchestrationGates ?? [])[0]
+    expect(programs[0].activeWhenExprId).toBe(gate.exprId)
+    expect(programs[0].id).toBe('program-grid-1')
+    expect(programs[0].programKind).toBe('fixed_grid_gated')
+    expect(programs[0].onDeactivate).toBe('cancel')
+    expect(programs[0].rebuildPolicy).toBe('static')
+    expect(programs[0].gridParams).toEqual({ anchorPrice: 30000, levelCount: 10, stepPct: 0.5 })
+    expect(programs[0].sizing).toEqual({ mode: 'fixed_quote', value: 100 })
+  })
+
+  it('drops orphan program when activeWhenRef points to non-existent gate', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      programs: [
+        {
+          id: 'program-orphan',
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: 'gate-does-not-exist',
+          onDeactivate: 'cancel',
+          rebuildPolicy: 'static',
+          gridParams: { anchorPrice: 30000, levelCount: 10, stepPct: 0.5 },
+          sizing: { mode: 'fixed_quote', value: 100 },
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationPrograms).toEqual([])
+  })
+
+  it('emits empty orchestrationPrograms when spec has no orchestration.programs', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationPrograms).toEqual([])
+  })
+
+  it('emits both orchestrationGates and orchestrationPrograms with correctly resolved activeWhenExprId', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-a',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+        {
+          id: 'gate-b',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 200 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      programs: [
+        {
+          id: 'program-b',
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: 'gate-b',
+          onDeactivate: 'keep',
+          rebuildPolicy: 'static',
+          gridParams: { anchorPrice: 30000, levelCount: 8, stepPct: 1 },
+          sizing: { mode: 'fixed_base', value: 0.01 },
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationGates).toHaveLength(2)
+    const programs = result.ir.orchestrationPrograms ?? []
+    expect(programs).toHaveLength(1)
+    const gateB = (result.ir.orchestrationGates ?? []).find(g => g.id === 'gate-b')!
+    expect(programs[0].activeWhenExprId).toBe(gateB.exprId)
+  })
+
+  it('emits gates, portfolioRisks and programs concurrently', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-coexist',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      portfolioRisks: [
+        {
+          id: 'portfolio-drawdown-coexist',
+          scope: 'portfolio',
+          mode: 'observe',
+          thresholdPct: 12,
+          effectWhenTriggered: 'block_new_entries',
+        },
+      ],
+      programs: [
+        {
+          id: 'program-coexist',
+          programKind: 'fixed_grid_gated',
+          activeWhenRef: 'gate-coexist',
+          onDeactivate: 'close',
+          rebuildPolicy: 'static',
+          gridParams: { anchorPrice: 30000, levelCount: 6, stepPct: 0.75, lowerBound: 28000, upperBound: 32000 },
+          sizing: { mode: 'fixed_pct', value: 5 },
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationGates).toHaveLength(1)
+    expect(result.ir.orchestrationPortfolioRisks).toHaveLength(1)
+    expect(result.ir.orchestrationPrograms).toHaveLength(1)
+    const gate = (result.ir.orchestrationGates ?? [])[0]
+    const program = (result.ir.orchestrationPrograms ?? [])[0]
+    expect(program.activeWhenExprId).toBe(gate.exprId)
+    expect(program.gridParams.lowerBound).toBe(28000)
+    expect(program.gridParams.upperBound).toBe(32000)
+    expect(program.sizing).toEqual({ mode: 'fixed_pct', value: 5 })
+  })
 })

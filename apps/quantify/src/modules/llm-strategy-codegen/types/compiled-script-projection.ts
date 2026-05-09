@@ -1,5 +1,5 @@
 import type { StrategyAstV1 } from './canonical-strategy-ast'
-import type { HashString } from './canonical-strategy-ir'
+import type { HashString, IrOrchestrationProgram } from './canonical-strategy-ir'
 
 export interface CompiledScriptExecutionEnvelope {
   positionMode: 'long_only' | 'short_only' | 'long_short'
@@ -30,5 +30,6 @@ export interface CompiledScriptProjection {
   riskPredicates?: StrategyAstV1['riskPredicates']
   decisionPrograms: StrategyAstV1['decisionPrograms']
   orderPrograms: StrategyAstV1['orderPrograms']
+  orchestrationPrograms?: IrOrchestrationProgram[]
   topology: StrategyAstV1['topology']
 }

@@ -270,6 +270,21 @@ export class SemanticSeedStateBuilderService {
       ? (update.support as unknown as SemanticOrchestrationNode['support'])
       : undefined
 
+    const programKind = update.programKind === 'fixed_grid_gated' ? 'fixed_grid_gated' : undefined
+    const activeWhenRef = this.readTrimmedString(update.activeWhenRef) ?? undefined
+    const onDeactivate = update.onDeactivate === 'cancel'
+      || update.onDeactivate === 'keep'
+      || update.onDeactivate === 'close'
+      ? update.onDeactivate
+      : undefined
+    const rebuildPolicy = update.rebuildPolicy === 'static' ? update.rebuildPolicy : undefined
+    const gridParams = this.isRecord(update.gridParams)
+      ? this.normalizeGridParams(update.gridParams)
+      : undefined
+    const sizing = this.isRecord(update.sizing)
+      ? this.normalizeProgramSizing(update.sizing)
+      : undefined
+
     return {
       id: this.readTrimmedString(update.id) ?? `orchestration-${kind}-${index + 1}`,
       kind,
@@ -287,7 +302,53 @@ export class SemanticSeedStateBuilderService {
       ...(scope ? { scope } : {}),
       ...(thresholdPct !== undefined ? { thresholdPct } : {}),
       ...(support ? { support } : {}),
+      ...(programKind ? { programKind } : {}),
+      ...(activeWhenRef ? { activeWhenRef } : {}),
+      ...(onDeactivate ? { onDeactivate } : {}),
+      ...(rebuildPolicy ? { rebuildPolicy } : {}),
+      ...(gridParams ? { gridParams } : {}),
+      ...(sizing ? { sizing } : {}),
     }
+  }
+
+  private normalizeGridParams(value: SemanticPatchRecord): SemanticOrchestrationNode['gridParams'] | undefined {
+    const anchorPrice = value.anchorPrice
+    const levelCount = value.levelCount
+    const stepPct = value.stepPct
+    if (!this.hasPositiveFiniteNumber(anchorPrice)) return undefined
+    if (
+      typeof levelCount !== 'number'
+      || !Number.isFinite(levelCount)
+      || !Number.isInteger(levelCount)
+      || levelCount <= 0
+    ) {
+      return undefined
+    }
+    if (!this.hasPositiveFiniteNumber(stepPct)) return undefined
+
+    const result: { anchorPrice: number, levelCount: number, stepPct: number, lowerBound?: number, upperBound?: number } = {
+      anchorPrice,
+      levelCount,
+      stepPct,
+    }
+    if (value.lowerBound !== undefined) {
+      if (!this.hasPositiveFiniteNumber(value.lowerBound)) return undefined
+      result.lowerBound = value.lowerBound
+    }
+    if (value.upperBound !== undefined) {
+      if (!this.hasPositiveFiniteNumber(value.upperBound)) return undefined
+      result.upperBound = value.upperBound
+    }
+    return result
+  }
+
+  private normalizeProgramSizing(value: SemanticPatchRecord): SemanticOrchestrationNode['sizing'] | undefined {
+    const mode = value.mode
+    if (mode !== 'fixed_quote' && mode !== 'fixed_base' && mode !== 'fixed_pct') {
+      return undefined
+    }
+    if (!this.hasPositiveFiniteNumber(value.value)) return undefined
+    return { mode, value: value.value }
   }
 
   private toTriggerState(update: unknown, index: number): SemanticTriggerState | null {

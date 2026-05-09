@@ -341,8 +341,9 @@ function normalizePhase0Orchestration(
 
   let changed = false
   let hasBlockingSlots = false
+  const siblingNodes = orchestration.nodes
   const nodes = orchestration.nodes.map((node) => {
-    const nextNode = applyOrchestrationReadinessForNode(node, registry, strategyVersion)
+    const nextNode = applyOrchestrationReadinessForNode(node, registry, strategyVersion, siblingNodes)
     changed ||= nextNode !== node
     hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
     return nextNode
@@ -358,20 +359,148 @@ function applyOrchestrationReadinessForNode(
   node: SemanticOrchestrationNode,
   registry: SemanticOrchestrationRegistryService,
   strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
 ): SemanticOrchestrationNode {
   if (node.status !== 'locked') {
     return node
   }
 
-  if (isSupportedRegimeGate(node, strategyVersion, registry)) {
+  if (isSupportedRegimeGate(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry)
   }
 
-  if (isSupportedPortfolioDrawdownBlock(node, strategyVersion, registry)) {
+  if (isSupportedPortfolioDrawdownBlock(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
+  if (isSupportedFixedGridGated(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry)
   }
 
   return addPhase0OrchestrationBlocker(node)
+}
+
+function isProgramNode(
+  node: SemanticOrchestrationNode,
+): node is SemanticOrchestrationNode & { kind: 'program' } {
+  return node.kind === 'program'
+}
+
+/**
+ * 判断 program.fixed_grid_gated node 是否可走 registry 驱动的 readiness 路径。
+ *
+ * 14 重 fail-closed 检查：
+ * 1) kind === 'program'
+ * 2) key === 'program.fixed_grid_gated'
+ * 3) programKind === 'fixed_grid_gated'
+ * 4) onDeactivate ∈ {'cancel','keep','close'}
+ * 5) rebuildPolicy === 'static'
+ * 6) gridParams.anchorPrice 是有限正数
+ * 7) gridParams.levelCount 是 2..100 整数
+ * 8) gridParams.stepPct ∈ (0, 100]
+ * 9) gridParams.lowerBound（若提供）必须 < upperBound 且都是正有限数
+ * 10) sizing.mode ∈ {'fixed_quote','fixed_base','fixed_pct'}
+ * 11) sizing.value 是有限正数
+ * 12) registry 已注册该 contract
+ * 13) cross-node：activeWhenRef 必须引用 status:'locked' 且 readiness supported 的 gate.regime 节点
+ * 14) version-gate：strategyVersion 必须存在且 atom 对该策略可执行
+ */
+function isSupportedFixedGridGated(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (!isProgramNode(node)) {
+    return false
+  }
+  if (node.key !== 'program.fixed_grid_gated') {
+    return false
+  }
+  if (node.programKind !== 'fixed_grid_gated') {
+    return false
+  }
+  if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') {
+    return false
+  }
+  if (node.rebuildPolicy !== 'static') {
+    return false
+  }
+
+  const grid = node.gridParams
+  if (!grid) {
+    return false
+  }
+  if (typeof grid.anchorPrice !== 'number' || !Number.isFinite(grid.anchorPrice) || grid.anchorPrice <= 0) {
+    return false
+  }
+  if (
+    typeof grid.levelCount !== 'number'
+    || !Number.isFinite(grid.levelCount)
+    || !Number.isInteger(grid.levelCount)
+    || grid.levelCount < 2
+    || grid.levelCount > 100
+  ) {
+    return false
+  }
+  if (typeof grid.stepPct !== 'number' || !Number.isFinite(grid.stepPct) || grid.stepPct <= 0 || grid.stepPct > 100) {
+    return false
+  }
+  if (grid.lowerBound !== undefined) {
+    if (typeof grid.lowerBound !== 'number' || !Number.isFinite(grid.lowerBound) || grid.lowerBound <= 0) {
+      return false
+    }
+    if (grid.upperBound !== undefined) {
+      if (typeof grid.upperBound !== 'number' || !Number.isFinite(grid.upperBound) || grid.upperBound <= 0) {
+        return false
+      }
+      if (grid.lowerBound >= grid.upperBound) {
+        return false
+      }
+    }
+  }
+  if (grid.upperBound !== undefined && (typeof grid.upperBound !== 'number' || !Number.isFinite(grid.upperBound) || grid.upperBound <= 0)) {
+    return false
+  }
+
+  const sizing = node.sizing
+  if (!sizing) {
+    return false
+  }
+  if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') {
+    return false
+  }
+  if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) {
+    return false
+  }
+
+  const contract = registry.getContractByKey('program.fixed_grid_gated')
+  if (!contract) {
+    return false
+  }
+
+  if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
+    return false
+  }
+  const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
+  if (!referenced) {
+    return false
+  }
+  if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
+    return false
+  }
+  if (referenced.status !== 'locked') {
+    return false
+  }
+  if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) {
+    return false
+  }
+
+  if (!strategyVersion) {
+    return false
+  }
+
+  return registry.isExecutableForStrategy(contract, strategyVersion)
 }
 
 /**
@@ -389,8 +518,10 @@ function applyOrchestrationReadinessForNode(
  */
 function isSupportedPortfolioDrawdownBlock(
   node: SemanticOrchestrationNode,
-  strategyVersion: StrategyVersionInfo | undefined,
   registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (node.kind !== 'portfolioRisk') {
     return false
@@ -443,8 +574,10 @@ function isSupportedPortfolioDrawdownBlock(
  */
 function isSupportedRegimeGate(
   node: SemanticOrchestrationNode,
-  strategyVersion: StrategyVersionInfo | undefined,
   registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  siblingNodes: readonly SemanticOrchestrationNode[],
 ): boolean {
   if (node.kind !== 'gate') {
     return false

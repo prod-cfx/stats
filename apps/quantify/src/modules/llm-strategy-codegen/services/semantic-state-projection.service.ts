@@ -61,12 +61,18 @@ export interface SemanticDisplayPortfolioRiskItem extends SemanticDisplayGraphBa
   publicName: string
 }
 
+export interface SemanticDisplayProgramItem extends SemanticDisplayGraphBaseItem {
+  kind: 'program'
+  publicName: string
+}
+
 export type SemanticDisplayLogicGraphItem =
   | SemanticDisplayConditionItem
   | SemanticDisplayActionItem
   | SemanticDisplayExecuteItem
   | SemanticDisplayGateItem
   | SemanticDisplayPortfolioRiskItem
+  | SemanticDisplayProgramItem
 
 export interface SemanticDisplayLogicGraphBlock {
   type: SemanticDisplayBlockType
@@ -210,6 +216,29 @@ export class SemanticStateProjectionService {
         items.push({
           kind: 'portfolioRisk',
           id: `orchestration-portfolio-risk-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
+        continue
+      }
+      if (node.kind === 'program' && node.key === 'program.fixed_grid_gated') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('program.fixed_grid_gated')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'program',
+          id: `orchestration-program-${node.id}`,
           publicName: entry.publicName,
           text,
         })

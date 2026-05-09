@@ -179,6 +179,54 @@ describe('SemanticPresentationRegistryService', () => {
     })
   })
 
+  describe('program.fixed_grid_gated entry', () => {
+    it('exposes public metadata for program.fixed_grid_gated', () => {
+      const entry = presentation.getEntry('program.fixed_grid_gated')
+      expect(entry.publicName).toBe('门控固定网格')
+      expect(entry.aliases).toEqual(expect.arrayContaining(['门控网格']))
+    })
+
+    it('renders display string with cancel onDeactivate without leaking internal keys', () => {
+      const entry = presentation.getEntry('program.fixed_grid_gated')
+      const text = entry.displayRenderer({
+        params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'cancel' },
+      })
+      expect(text).toContain('50000')
+      expect(text).toContain('60000')
+      expect(text).toContain('10')
+      expect(text).toContain('5%')
+      expect(text).toContain('撤单')
+      expect(text).not.toContain('program.fixed_grid_gated')
+      expect(text).not.toContain('orchestration')
+      expect(text).not.toContain('fixed_grid_gated')
+      expect(text).not.toMatch(/\bcancel\b|\bkeep\b|\bclose\b/u)
+    })
+
+    it('renders display string with close onDeactivate as 平仓', () => {
+      const entry = presentation.getEntry('program.fixed_grid_gated')
+      const text = entry.displayRenderer({
+        params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'close' },
+      })
+      expect(text).toContain('平仓')
+    })
+
+    it('renders display string with keep onDeactivate as 保留挂单', () => {
+      const entry = presentation.getEntry('program.fixed_grid_gated')
+      const text = entry.displayRenderer({
+        params: { lowerBound: 50000, upperBound: 60000, levelCount: 10, stepPct: 5, onDeactivate: 'keep' },
+      })
+      expect(text).toContain('保留挂单')
+    })
+
+    it('renders clarification text for gridParams containing 区间, 档数, 步长', () => {
+      const entry = presentation.getEntry('program.fixed_grid_gated')
+      const text = entry.clarificationRenderer('orchestration.program.fixed_grid_gated.gridParams', {})
+      expect(text).toContain('区间')
+      expect(text).toContain('档数')
+      expect(text).toContain('步长')
+    })
+  })
+
   it('renders clarification text without leaking raw slot keys', () => {
     const text = presentation.renderClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
 

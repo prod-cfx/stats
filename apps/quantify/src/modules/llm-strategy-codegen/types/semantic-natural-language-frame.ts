@@ -7,6 +7,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticCombinationFrame
   | SemanticRegimeGateFrame
   | SemanticPortfolioDrawdownFrame
+  | SemanticFixedGridGatedFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -67,4 +68,16 @@ export interface SemanticPortfolioDrawdownFrame extends SemanticFrameBase {
   kind: 'portfolio_drawdown'
   thresholdPct: number
   mode: 'observe' | 'enforce'
+}
+
+export interface SemanticFixedGridGatedFrame extends SemanticFrameBase {
+  kind: 'fixed_grid_gated'
+  anchorPrice: number
+  levelCount: number
+  stepPct: number
+  lowerBound?: number
+  upperBound?: number
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  sizing: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
 }

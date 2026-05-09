@@ -45,6 +45,7 @@ export class CanonicalStrategyAstCompilerService {
       ...(riskPredicates.length > 0 ? { riskPredicates } : {}),
       decisionPrograms,
       orderPrograms,
+      ...((ir.orchestrationPrograms ?? []).length > 0 ? { orchestrationPrograms: ir.orchestrationPrograms } : {}),
       topology,
     }
   }

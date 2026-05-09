@@ -4176,4 +4176,69 @@ describe('SemanticSeedExtractorService', () => {
       )
     })
   })
+
+  describe('orchestration program fixed_grid_gated end-to-end propagation', () => {
+    const PROGRAM_TEXT = 'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用，失活时撤单'
+
+    it('propagates fixed_grid_gated frame through extractor and state-builder into state.orchestration', () => {
+      const patch = service.extract(PROGRAM_TEXT)
+
+      expect(patch.orchestration?.nodes).toHaveLength(1)
+      const nodePatch = patch.orchestration!.nodes![0]
+      expect(nodePatch).toEqual(expect.objectContaining({
+        kind: 'program',
+        key: 'program.fixed_grid_gated',
+        programKind: 'fixed_grid_gated',
+        rebuildPolicy: 'static',
+        onDeactivate: 'cancel',
+        activeWhenRef: 'orchestration-gate-regime-1',
+      }))
+
+      const state = stateBuilder.build(patch)
+
+      expect(state).not.toBeNull()
+      expect(state!.orchestration).toBeDefined()
+      expect(state!.orchestration!.nodes).toHaveLength(1)
+      const node = state!.orchestration!.nodes[0]
+      expect(node.kind).toBe('program')
+      expect(node.key).toBe('program.fixed_grid_gated')
+      expect(node.programKind).toBe('fixed_grid_gated')
+      expect(node.activeWhenRef).toBe('orchestration-gate-regime-1')
+      expect(node.onDeactivate).toBe('cancel')
+      expect(node.rebuildPolicy).toBe('static')
+      expect(node.gridParams).toEqual(expect.objectContaining({
+        anchorPrice: 55000,
+        levelCount: 10,
+        stepPct: 5,
+        lowerBound: 50000,
+        upperBound: 60000,
+      }))
+      expect(node.sizing).toEqual(expect.objectContaining({
+        mode: expect.stringMatching(/^fixed_(quote|base|pct)$/u),
+      }))
+      expect(typeof node.sizing!.value).toBe('number')
+      expect(node.sizing!.value).toBeGreaterThan(0)
+      expect(state!.orchestration!.contracts).toEqual([])
+    })
+
+    it('is idempotent across repeated extraction of the same fixed_grid_gated input', () => {
+      const firstState = stateBuilder.build(service.extract(PROGRAM_TEXT))
+      const secondState = stateBuilder.build(service.extract(PROGRAM_TEXT))
+
+      expect(firstState?.orchestration?.nodes).toHaveLength(1)
+      expect(secondState?.orchestration?.nodes).toHaveLength(1)
+      expect(secondState?.orchestration?.nodes[0]).toEqual(
+        expect.objectContaining({
+          kind: firstState!.orchestration!.nodes[0].kind,
+          key: firstState!.orchestration!.nodes[0].key,
+          programKind: firstState!.orchestration!.nodes[0].programKind,
+          activeWhenRef: firstState!.orchestration!.nodes[0].activeWhenRef,
+          onDeactivate: firstState!.orchestration!.nodes[0].onDeactivate,
+          rebuildPolicy: firstState!.orchestration!.nodes[0].rebuildPolicy,
+          gridParams: firstState!.orchestration!.nodes[0].gridParams,
+          sizing: firstState!.orchestration!.nodes[0].sizing,
+        }),
+      )
+    })
+  })
 })

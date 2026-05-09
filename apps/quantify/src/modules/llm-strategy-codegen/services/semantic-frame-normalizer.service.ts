@@ -2,6 +2,7 @@ import type {
   SemanticActionFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
+  SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
   SemanticPortfolioDrawdownFrame,
@@ -11,6 +12,7 @@ import type {
 import type {
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
+  CodegenSemanticOrchestrationProgramNodePatch,
   CodegenSemanticPatch,
 } from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
@@ -36,6 +38,8 @@ export class SemanticFrameNormalizerService {
     const regimeGateFrames: SemanticRegimeGateFrame[] = []
     const portfolioDrawdownByKey = new Map<string, CodegenSemanticOrchestrationPortfolioRiskNodePatch>()
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
+    const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationProgramNodePatch>()
+    const fixedGridGatedFrames: SemanticFixedGridGatedFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -71,6 +75,9 @@ export class SemanticFrameNormalizerService {
         case 'portfolio_drawdown':
           portfolioDrawdownFrames.push(frame)
           break
+        case 'fixed_grid_gated':
+          fixedGridGatedFrames.push(frame)
+          break
       }
     }
 
@@ -89,6 +96,15 @@ export class SemanticFrameNormalizerService {
 
       if (!portfolioDrawdownByKey.has(dedupeKey)) {
         portfolioDrawdownByKey.set(dedupeKey, node)
+      }
+    })
+
+    fixedGridGatedFrames.forEach((frame, index) => {
+      const node = this.normalizeFixedGridGated(frame, index)
+      const dedupeKey = JSON.stringify([node.key, node.activeWhenRef, node.gridParams, node.onDeactivate])
+
+      if (!fixedGridGatedByKey.has(dedupeKey)) {
+        fixedGridGatedByKey.set(dedupeKey, node)
       }
     })
 
@@ -115,6 +131,7 @@ export class SemanticFrameNormalizerService {
     const orchestrationNodes = [
       ...Array.from(regimeGateByKey.values()),
       ...Array.from(portfolioDrawdownByKey.values()),
+      ...Array.from(fixedGridGatedByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
@@ -164,6 +181,46 @@ export class SemanticFrameNormalizerService {
       scope: 'portfolio',
       mode: frame.mode,
       thresholdPct: frame.thresholdPct,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  private normalizeFixedGridGated(
+    frame: SemanticFixedGridGatedFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationProgramNodePatch {
+    const gridParams: CodegenSemanticOrchestrationProgramNodePatch['gridParams'] = {
+      anchorPrice: frame.anchorPrice,
+      levelCount: frame.levelCount,
+      stepPct: frame.stepPct,
+    }
+
+    if (frame.lowerBound !== undefined) {
+      gridParams.lowerBound = frame.lowerBound
+    }
+    if (frame.upperBound !== undefined) {
+      gridParams.upperBound = frame.upperBound
+    }
+
+    return {
+      id: `orchestration-program-fixed-grid-gated-${index + 1}`,
+      kind: 'program',
+      key: 'program.fixed_grid_gated',
+      params: {
+        anchorPrice: frame.anchorPrice,
+        levelCount: frame.levelCount,
+        stepPct: frame.stepPct,
+        lowerBound: frame.lowerBound,
+        upperBound: frame.upperBound,
+        onDeactivate: frame.onDeactivate,
+        sizing: frame.sizing,
+      },
+      programKind: 'fixed_grid_gated',
+      activeWhenRef: frame.activeWhenRef,
+      onDeactivate: frame.onDeactivate,
+      rebuildPolicy: 'static',
+      gridParams,
+      sizing: frame.sizing,
       evidence: this.toEvidence(frame),
     }
   }

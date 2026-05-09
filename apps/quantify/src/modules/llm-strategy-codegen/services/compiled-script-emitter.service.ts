@@ -51,6 +51,7 @@ export const FIXED_STRATEGY_WRAPPER = [
   '      guardState,',
   '      TOPOLOGY.orderProgramOrder,',
   '      EXECUTION_MODEL,',
+  '      ORCHESTRATION_PROGRAMS,',
   '    )',
   '',
   '    return buildCompiledManifest(',
@@ -93,6 +94,7 @@ export class CompiledScriptEmitterService {
       this.emitConst('RISK_PREDICATES', projection.riskPredicates ?? null),
       this.emitConst('DECISION_PROGRAMS', projection.decisionPrograms),
       this.emitConst('ORDER_PROGRAMS', projection.orderPrograms),
+      this.emitConst('ORCHESTRATION_PROGRAMS', projection.orchestrationPrograms ?? []),
       this.emitConst('TOPOLOGY', projection.topology),
       '',
       FIXED_STRATEGY_WRAPPER,
@@ -121,6 +123,7 @@ export class CompiledScriptEmitterService {
       ...(riskPredicates ? { riskPredicates } : {}),
       decisionPrograms,
       orderPrograms,
+      ...(input.ast.orchestrationPrograms ? { orchestrationPrograms: input.ast.orchestrationPrograms } : {}),
       topology: input.ast.topology,
     }
   }
@@ -139,6 +142,7 @@ export class CompiledScriptEmitterService {
       riskPredicates: this.projectOptionalByOrder(ast.riskPredicates, ast.topology.riskPredicateOrder),
       decisionPrograms: this.projectByOrder(ast.decisionPrograms, ast.topology.decisionOrder),
       orderPrograms: this.projectByOrder(ast.orderPrograms, ast.topology.orderProgramOrder),
+      ...(ast.orchestrationPrograms ? { orchestrationPrograms: ast.orchestrationPrograms } : {}),
       topology: ast.topology,
     }
     const structuralProjection = {

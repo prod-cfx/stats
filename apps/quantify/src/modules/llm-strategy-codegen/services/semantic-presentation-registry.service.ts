@@ -393,6 +393,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     clarificationRenderer: (slotKey) => renderPortfolioDrawdownClarification(slotKey),
   }),
   presentation({
+    key: 'program.fixed_grid_gated',
+    publicName: '门控固定网格',
+    aliases: ['门控网格', '区间网格', 'gated grid', 'fixed grid program'],
+    positiveExamples: [
+      'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用',
+      '锚定 50000 挂 10 档 5% 步长，失活时撤单',
+      '区间网格趋势上涨启用，失活时平仓',
+    ],
+    negativeExamples: ['感觉网格策略', '挂网格', '随便挂'],
+    goldenUtterances: [
+      'BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用',
+      '锚定 50000 挂 10 档 5% 步长，失活时撤单',
+      '区间网格趋势上涨启用，失活时平仓',
+    ],
+    displayRenderer: ({ params }) => renderFixedGridGated(params),
+    clarificationRenderer: (slotKey) => renderFixedGridGatedClarification(slotKey),
+  }),
+  presentation({
     key: 'market.regime',
     publicName: '市场状态',
     aliases: ['行情结构', '市场环境'],
@@ -1053,6 +1071,41 @@ function renderPortfolioDrawdownClarification(slotKey: string): string {
     return '请确认账户回撤百分比阈值（0..100）'
   }
   return '请补全账户回撤护栏参数'
+}
+
+function renderFixedGridGated(params: Record<string, unknown>): string {
+  const inner = objectParam(params, 'params')
+  const source = Object.keys(inner).length > 0 ? inner : params
+  const lower = numberParam(source, 'lowerBound', 0)
+  const upper = numberParam(source, 'upperBound', 0)
+  const anchor = numberParam(source, 'anchorPrice', 0)
+  const levels = numberParam(source, 'levelCount', 0)
+  const step = numberParam(source, 'stepPct', 0)
+  const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
+  const deactivateLabel: Record<string, string> = {
+    cancel: '撤单',
+    keep: '保留挂单',
+    close: '平仓',
+  }
+  const rangeLabel = lower > 0 && upper > 0
+    ? `在 ${lower}-${upper} 区间`
+    : anchor > 0
+      ? `锚定 ${anchor}`
+      : '在指定区间'
+  return `${rangeLabel}挂 ${levels} 档网格（步长 ${step}%），失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
+}
+
+function renderFixedGridGatedClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.program.fixed_grid_gated.gridParams') {
+    return '请确认网格区间、档数、步长'
+  }
+  if (slotKey === 'orchestration.program.fixed_grid_gated.activeWhenRef') {
+    return '请确认网格的启用/失活条件（引用哪个趋势/状态过滤）'
+  }
+  if (slotKey === 'orchestration.program.fixed_grid_gated.sizing') {
+    return '请确认每档下单数量'
+  }
+  return '请补全网格策略参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

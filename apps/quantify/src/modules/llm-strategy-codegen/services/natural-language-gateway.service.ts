@@ -3,6 +3,7 @@ import type {
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticContextFrame,
+  SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
   SemanticPortfolioDrawdownFrame,
@@ -20,6 +21,7 @@ type FrameDraft =
   | CombinationFrameDraft
   | RegimeGateFrameDraft
   | PortfolioDrawdownFrameDraft
+  | FixedGridGatedFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -29,6 +31,7 @@ type RiskFrameDraft = Omit<SemanticRiskFrame, 'id' | 'confidence'>
 type CombinationFrameDraft = Omit<SemanticCombinationFrame, 'id' | 'confidence'>
 type RegimeGateFrameDraft = Omit<SemanticRegimeGateFrame, 'id' | 'confidence'>
 type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | 'confidence'>
+type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -44,6 +47,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseRisk(text),
       ...this.parseRegimeGate(text),
       ...this.parsePortfolioDrawdown(text),
+      ...this.parseFixedGridGated(text),
     ]
 
     return drafts.map((draft, index) => ({
@@ -407,5 +411,84 @@ export class NaturalLanguageGatewayService {
     }
 
     return frames
+  }
+
+  private parseFixedGridGated(text: string): FixedGridGatedFrameDraft[] {
+    const onDeactivate = this.detectOnDeactivate(text)
+    if (!onDeactivate) return []
+
+    if (!this.hasGateReference(text)) return []
+
+    const sizing = this.detectGridSizing(text)
+
+    // Pattern 1: range form e.g. "BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长"
+    const rangeMatch = /(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*区间[^0-9]*?(\d+)\s*档[^0-9]*?(\d+(?:\.\d+)?)\s*%\s*步长/u.exec(text)
+    if (rangeMatch) {
+      const lowerBound = Number(rangeMatch[1])
+      const upperBound = Number(rangeMatch[2])
+      const levelCount = Number(rangeMatch[3])
+      const stepPct = Number(rangeMatch[4])
+      if (lowerBound > 0 && upperBound > lowerBound && levelCount > 0 && stepPct > 0) {
+        return [
+          {
+            kind: 'fixed_grid_gated',
+            anchorPrice: (lowerBound + upperBound) / 2,
+            levelCount,
+            stepPct,
+            lowerBound,
+            upperBound,
+            activeWhenRef: 'orchestration-gate-regime-1',
+            onDeactivate,
+            sizing,
+            evidenceText: rangeMatch[0].trim(),
+          },
+        ]
+      }
+    }
+
+    // Pattern 2: anchor form e.g. "锚定 50000 挂 10 档网格 5% 步长"
+    const anchorMatch = /锚定\s*(?:价格\s*)?(\d+(?:\.\d+)?)[^0-9]*?(\d+)\s*档[^0-9]*?(\d+(?:\.\d+)?)\s*%\s*步长/u.exec(text)
+    if (anchorMatch) {
+      const anchorPrice = Number(anchorMatch[1])
+      const levelCount = Number(anchorMatch[2])
+      const stepPct = Number(anchorMatch[3])
+      if (anchorPrice > 0 && levelCount > 0 && stepPct > 0) {
+        return [
+          {
+            kind: 'fixed_grid_gated',
+            anchorPrice,
+            levelCount,
+            stepPct,
+            activeWhenRef: 'orchestration-gate-regime-1',
+            onDeactivate,
+            sizing,
+            evidenceText: anchorMatch[0].trim(),
+          },
+        ]
+      }
+    }
+
+    return []
+  }
+
+  private detectOnDeactivate(text: string): SemanticFixedGridGatedFrame['onDeactivate'] | null {
+    if (/(?:停用|失活|不再启用|关闭)\s*时?\s*撤单/u.test(text)) return 'cancel'
+    if (/(?:停用|失活|不再启用|关闭)\s*时?\s*平仓/u.test(text)) return 'close'
+    if (/(?:停用|失活|不再启用|关闭)\s*时?\s*保留/u.test(text)) return 'keep'
+    return null
+  }
+
+  private hasGateReference(text: string): boolean {
+    return /(?:趋势|行情|上涨|下跌|震荡|启用|禁用|失活|gate|regime)/iu.test(text)
+  }
+
+  private detectGridSizing(text: string): SemanticFixedGridGatedFrame['sizing'] {
+    const quoteMatch = /每档\s*(\d+(?:\.\d+)?)\s*usdt/iu.exec(text)
+    if (quoteMatch) return { mode: 'fixed_quote', value: Number(quoteMatch[1]) }
+    const baseMatch = /每档\s*(\d+(?:\.\d+)?)\s*张/u.exec(text)
+    if (baseMatch) return { mode: 'fixed_base', value: Number(baseMatch[1]) }
+    const pctMatch = /每档\s*(\d+(?:\.\d+)?)\s*%/u.exec(text)
+    if (pctMatch) return { mode: 'fixed_pct', value: Number(pctMatch[1]) }
+    return { mode: 'fixed_pct', value: 5 }
   }
 }

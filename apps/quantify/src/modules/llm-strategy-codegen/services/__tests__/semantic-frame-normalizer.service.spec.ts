@@ -252,6 +252,77 @@ describe('SemanticFrameNormalizerService', () => {
     expect(nodes.map(node => node.kind)).toEqual(expect.arrayContaining(['gate', 'portfolioRisk']))
   })
 
+  it('normalizes a single fixed_grid_gated frame into a program orchestration node', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      fixedGridGatedFrame({ id: 'fgg-1' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes ?? []
+
+    expect(nodes).toHaveLength(1)
+    const node = nodes[0]
+    expect(node).toEqual(expect.objectContaining({
+      kind: 'program',
+      key: 'program.fixed_grid_gated',
+    }))
+    if (node?.kind !== 'program') {
+      throw new Error('expected program node')
+    }
+    expect(node.programKind).toBe('fixed_grid_gated')
+    expect(node.rebuildPolicy).toBe('static')
+    expect(node.activeWhenRef).toBe('gate.regime#1')
+    expect(node.onDeactivate).toBe('cancel')
+    expect(node.gridParams).toEqual({
+      anchorPrice: 100,
+      levelCount: 5,
+      stepPct: 1,
+      lowerBound: 80,
+      upperBound: 120,
+    })
+    expect(node.sizing).toEqual({ mode: 'fixed_quote', value: 50 })
+  })
+
+  it('produces distinct program nodes for distinct fixed_grid_gated frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      fixedGridGatedFrame({ id: 'fgg-1', stepPct: 1 }),
+      fixedGridGatedFrame({ id: 'fgg-2', stepPct: 2 }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const programNodes = patch.orchestration?.nodes?.filter(node => node.kind === 'program') ?? []
+
+    expect(programNodes).toHaveLength(2)
+  })
+
+  it('deduplicates structurally identical fixed_grid_gated frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      fixedGridGatedFrame({ id: 'fgg-1' }),
+      fixedGridGatedFrame({ id: 'fgg-2' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const programNodes = patch.orchestration?.nodes?.filter(node => node.kind === 'program') ?? []
+
+    expect(programNodes).toHaveLength(1)
+  })
+
+  it('merges regime_gate, portfolio_drawdown and fixed_grid_gated into a single orchestration.nodes array', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
+      fixedGridGatedFrame({ id: 'fgg-1' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes ?? []
+
+    expect(nodes).toHaveLength(3)
+    expect(nodes.map(node => node.kind)).toEqual(
+      expect.arrayContaining(['gate', 'portfolioRisk', 'program']),
+    )
+  })
+
   it('omits orchestration when no regime_gate frames are present', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
       indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20 }),
@@ -349,6 +420,34 @@ function portfolioDrawdownFrame(input: {
     id: input.id,
     thresholdPct: input.thresholdPct,
     mode: input.mode,
+  }
+}
+
+function fixedGridGatedFrame(input: {
+  id: string
+  anchorPrice?: number
+  levelCount?: number
+  stepPct?: number
+  lowerBound?: number
+  upperBound?: number
+  activeWhenRef?: string
+  onDeactivate?: 'cancel' | 'keep' | 'close'
+  sizing?: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct', value: number }
+  evidenceText?: string
+}): SemanticNaturalLanguageFrame {
+  return {
+    kind: 'fixed_grid_gated',
+    id: input.id,
+    confidence: 0.9,
+    evidenceText: input.evidenceText ?? '区间 80-120 内挂 5 档固定网格',
+    anchorPrice: input.anchorPrice ?? 100,
+    levelCount: input.levelCount ?? 5,
+    stepPct: input.stepPct ?? 1,
+    lowerBound: input.lowerBound ?? 80,
+    upperBound: input.upperBound ?? 120,
+    activeWhenRef: input.activeWhenRef ?? 'gate.regime#1',
+    onDeactivate: input.onDeactivate ?? 'cancel',
+    sizing: input.sizing ?? { mode: 'fixed_quote', value: 50 },
   }
 }
 

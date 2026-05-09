@@ -103,6 +103,29 @@ export interface CanonicalOrchestrationPortfolioRisk {
   effectWhenTriggered: 'block_new_entries'
 }
 
+export interface CanonicalOrchestrationProgramGridParams {
+  anchorPrice: number
+  levelCount: number
+  stepPct: number
+  lowerBound?: number
+  upperBound?: number
+}
+
+export interface CanonicalOrchestrationProgramSizing {
+  mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'
+  value: number
+}
+
+export interface CanonicalOrchestrationProgram {
+  id: string
+  programKind: 'fixed_grid_gated'
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'static'
+  gridParams: CanonicalOrchestrationProgramGridParams
+  sizing: CanonicalOrchestrationProgramSizing
+}
+
 export interface CanonicalStrategySpecV2 {
   version: 2
   market: {
@@ -133,6 +156,7 @@ export interface CanonicalStrategySpecV2 {
   orchestration?: {
     gates?: CanonicalOrchestrationGate[]
     portfolioRisks?: CanonicalOrchestrationPortfolioRisk[]
+    programs?: CanonicalOrchestrationProgram[]
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata

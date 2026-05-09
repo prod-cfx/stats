@@ -72,6 +72,7 @@ export interface CanonicalStrategyIrV1 {
   orderPrograms: OrderProgram[]
   orchestrationGates?: IrOrchestrationGate[]
   orchestrationPortfolioRisks?: IrOrchestrationPortfolioRisk[]
+  orchestrationPrograms?: IrOrchestrationProgram[]
   riskPolicy: {
     guards: RiskGuard[]
     riskPredicates?: RiskPredicateDef[]
@@ -257,6 +258,29 @@ export interface IrOrchestrationPortfolioRisk {
   mode: 'observe' | 'enforce'
   thresholdPct: number
   effectWhenTriggered: 'block_new_entries'
+}
+
+export interface IrOrchestrationProgramGridParams {
+  anchorPrice: number
+  levelCount: number
+  stepPct: number
+  lowerBound?: number
+  upperBound?: number
+}
+
+export interface IrOrchestrationProgramSizing {
+  mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'
+  value: number
+}
+
+export interface IrOrchestrationProgram {
+  id: string
+  programKind: 'fixed_grid_gated'
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'static'
+  gridParams: IrOrchestrationProgramGridParams
+  sizing: IrOrchestrationProgramSizing
 }
 
 export interface RiskGuard {

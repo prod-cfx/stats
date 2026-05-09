@@ -3252,5 +3252,159 @@ describe('SemanticStateProjectionService', () => {
       expect(kinds).toContain('gate')
       expect(kinds).toContain('portfolioRisk')
     })
+
+    it('renders supported locked program.fixed_grid_gated via presentation registry', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-program-fixed-grid-gated-1',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              params: {
+                anchorPrice: 55000,
+                lowerBound: 50000,
+                upperBound: 60000,
+                levelCount: 10,
+                stepPct: 5,
+                onDeactivate: 'cancel',
+              },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'orchestration-gate-regime-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+            },
+          ],
+        },
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(1)
+      const items = orchestrationBlocks[0]!.items
+      expect(items).toHaveLength(1)
+      const item = items[0]! as { kind: string, publicName: string, text: string }
+      expect(item.kind).toBe('program')
+      expect(item.publicName).toBe('门控固定网格')
+      expect(item.text).toContain('50000')
+      expect(item.text).toContain('60000')
+      expect(item.text).toContain('10')
+      expect(item.text).toContain('5%')
+      expect(item.text).toContain('撤单')
+
+      const flat = graph.blocks
+        .flatMap(block => block.items.map(i => (i as { text: string }).text))
+        .join(' ')
+      expect(flat).not.toContain('program.fixed_grid_gated')
+      expect(flat).not.toContain('orchestration.')
+      expect(flat).not.toContain('fixed_grid_gated')
+      expect(flat).not.toContain('gate.regime')
+      expect(flat).not.toContain('orchestration-gate-regime-1')
+      expect(flat).not.toMatch(/\bcancel\b/)
+      expect(flat).not.toMatch(/\bkeep\b/)
+      expect(flat).not.toMatch(/\bclose\b/)
+    })
+
+    it('does not render program block when state has no orchestration nodes (W2 deploy-truth invariant)', () => {
+      const state = buildEmptyState({
+        normalizationNotes: ['BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用'],
+      })
+      const graph = service.buildDisplayLogicGraph(state)
+      expect(graph.blocks.filter(block => block.type === 'ORCHESTRATION')).toHaveLength(0)
+    })
+
+    it('does not render program.fixed_grid_gated when status is open', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-program-fixed-grid-gated-open',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              params: {
+                lowerBound: 50000,
+                upperBound: 60000,
+                levelCount: 10,
+                stepPct: 5,
+                onDeactivate: 'cancel',
+              },
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              programKind: 'fixed_grid_gated',
+            },
+          ],
+        },
+      })
+      const graph = service.buildDisplayLogicGraph(state)
+      expect(graph.blocks.filter(block => block.type === 'ORCHESTRATION')).toHaveLength(0)
+    })
+
+    it('renders gate.regime + portfolioRisk + program coexisting in same orchestration block when all locked', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-gate-regime-1',
+              kind: 'gate',
+              key: 'gate.regime',
+              params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+            {
+              id: 'orchestration-portfolio-drawdown-1',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              params: { mode: 'enforce', thresholdPct: 10 },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+            {
+              id: 'orchestration-program-fixed-grid-gated-1',
+              kind: 'program',
+              key: 'program.fixed_grid_gated',
+              params: {
+                lowerBound: 50000,
+                upperBound: 60000,
+                levelCount: 10,
+                stepPct: 5,
+                onDeactivate: 'cancel',
+              },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              programKind: 'fixed_grid_gated',
+              activeWhenRef: 'orchestration-gate-regime-1',
+              onDeactivate: 'cancel',
+              rebuildPolicy: 'static',
+            },
+          ],
+        },
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(1)
+      const items = orchestrationBlocks[0]!.items
+      expect(items).toHaveLength(3)
+      const kinds = items.map(i => i.kind)
+      expect(kinds).toContain('gate')
+      expect(kinds).toContain('portfolioRisk')
+      expect(kinds).toContain('program')
+    })
   })
 })

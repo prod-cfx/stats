@@ -107,6 +107,7 @@ describe('atom coverage golden corpus', () => {
     const SUPPORTED_EXECUTABLE_ORCHESTRATION_KEYS = new Set([
       'gate.regime',
       'portfolioRisk.drawdown_block',
+      'program.fixed_grid_gated',
     ])
     const orchestrationCases = atomCoverageGoldenCases.filter(goldenCase =>
       goldenCase.tags.includes('orchestration'),

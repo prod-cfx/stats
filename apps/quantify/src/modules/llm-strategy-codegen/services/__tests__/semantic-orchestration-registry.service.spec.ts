@@ -146,4 +146,282 @@ describe('SemanticOrchestrationRegistryService', () => {
       expect(service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: null })).toBe(false)
     })
   })
+
+  describe('program.fixed_grid_gated', () => {
+    function buildProgramNode(
+      overrides: Partial<SemanticOrchestrationNode> = {},
+    ): SemanticOrchestrationNode {
+      return {
+        id: 'pgm-1',
+        kind: 'program',
+        key: 'program.fixed_grid_gated',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+        programKind: 'fixed_grid_gated',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'static',
+        gridParams: {
+          anchorPrice: 100,
+          levelCount: 5,
+          stepPct: 1,
+        },
+        sizing: { mode: 'fixed_quote', value: 100 },
+        activeWhenRef: 'gate-regime-1',
+        ...overrides,
+      }
+    }
+
+    it('getContractByKey returns contract pinned to CURRENT_SEMANTIC_VERSION with guard/manage/limit_ladder effect', () => {
+      const contract = service.getContractByKey('program.fixed_grid_gated')
+      expect(contract).not.toBeNull()
+      expect(contract?.id).toBe('program.fixed_grid_gated')
+      expect(contract?.kind).toBe('program')
+      expect(contract?.executableSinceVersion).toBe(CURRENT_SEMANTIC_VERSION)
+      expect(contract?.target).toBeUndefined()
+      expect(contract?.effects).toEqual([
+        { domain: 'guard', verb: 'manage', object: 'limit_ladder' },
+      ])
+      expect(contract?.capabilities).toEqual([
+        { domain: 'orchestration', verb: 'manage', object: 'limit_ladder', shape: {} },
+      ])
+      expect(contract?.runtimeRequirements).toEqual(
+        expect.arrayContaining([
+          { domain: 'runtime', verb: 'provide', object: 'limit_order' },
+          { domain: 'runtime', verb: 'read', object: 'account_equity' },
+        ]),
+      )
+      expect(contract?.orderRequirements).toEqual(
+        expect.arrayContaining([
+          { domain: 'order', verb: 'support', object: 'limit_order' },
+          { domain: 'order', verb: 'cancel', object: 'limit_order' },
+        ]),
+      )
+      expect(contract?.stateRequirements).toEqual([
+        { domain: 'state', verb: 'read_write', object: 'program_lifecycle' },
+      ])
+    })
+
+    it('validate returns ok for a fully-specified program node', () => {
+      expect(service.validate(buildProgramNode())).toEqual({ ok: true, missingSlots: [] })
+    })
+
+    it('validate flags unknown program key', () => {
+      const node = buildProgramNode({ key: 'program.unknown' })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots[0]!.slotKey).toBe('orchestration.program.fixed_grid_gated.program_kind')
+    })
+
+    it('validate flags missing programKind', () => {
+      const node = buildProgramNode({ programKind: undefined })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.program_kind',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags illegal onDeactivate', () => {
+      const node = buildProgramNode({
+        onDeactivate: 'pause' as unknown as SemanticOrchestrationNode['onDeactivate'],
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.on_deactivate',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags non-static rebuildPolicy', () => {
+      const node = buildProgramNode({
+        rebuildPolicy: 'dynamic' as unknown as SemanticOrchestrationNode['rebuildPolicy'],
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.rebuild_policy',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags anchorPrice<=0', () => {
+      const node = buildProgramNode({
+        gridParams: { anchorPrice: 0, levelCount: 5, stepPct: 1 },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.anchor_price',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags non-numeric anchorPrice', () => {
+      const node = buildProgramNode({
+        gridParams: {
+          anchorPrice: 'foo' as unknown as number,
+          levelCount: 5,
+          stepPct: 1,
+        },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.anchor_price',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags levelCount=1', () => {
+      const node = buildProgramNode({
+        gridParams: { anchorPrice: 100, levelCount: 1, stepPct: 1 },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.level_count',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags levelCount=101', () => {
+      const node = buildProgramNode({
+        gridParams: { anchorPrice: 100, levelCount: 101, stepPct: 1 },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.level_count',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags non-integer levelCount', () => {
+      const node = buildProgramNode({
+        gridParams: { anchorPrice: 100, levelCount: 5.5, stepPct: 1 },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.level_count',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags stepPct=0', () => {
+      const node = buildProgramNode({
+        gridParams: { anchorPrice: 100, levelCount: 5, stepPct: 0 },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.step_pct',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags stepPct=101', () => {
+      const node = buildProgramNode({
+        gridParams: { anchorPrice: 100, levelCount: 5, stepPct: 101 },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.step_pct',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags lowerBound >= upperBound (inverted bounds)', () => {
+      const node = buildProgramNode({
+        gridParams: {
+          anchorPrice: 100,
+          levelCount: 5,
+          stepPct: 1,
+          lowerBound: 200,
+          upperBound: 150,
+        },
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.grid_params.lower_bound',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags illegal sizing.mode', () => {
+      const node = buildProgramNode({
+        sizing: { mode: 'unknown', value: 100 } as unknown as SemanticOrchestrationNode['sizing'],
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.sizing.mode',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags sizing.value<=0', () => {
+      const node = buildProgramNode({ sizing: { mode: 'fixed_quote', value: 0 } })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.sizing.value',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags missing activeWhenRef', () => {
+      const node = buildProgramNode({ activeWhenRef: undefined })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.active_when_ref',
+        ),
+      ).toBe(true)
+    })
+
+    it('validate flags empty-string activeWhenRef', () => {
+      const node = buildProgramNode({ activeWhenRef: '   ' })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(
+        result.missingSlots.some(
+          (s) => s.slotKey === 'orchestration.program.fixed_grid_gated.active_when_ref',
+        ),
+      ).toBe(true)
+    })
+
+    it('isExecutableForStrategy returns false without semantic version (fail-closed)', () => {
+      const contract = service.getContractByKey('program.fixed_grid_gated')!
+      expect(service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: null })).toBe(false)
+    })
+
+    it('isExecutableForStrategy returns true at CURRENT_SEMANTIC_VERSION', () => {
+      const contract = service.getContractByKey('program.fixed_grid_gated')!
+      expect(
+        service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION }),
+      ).toBe(true)
+    })
+  })
 })

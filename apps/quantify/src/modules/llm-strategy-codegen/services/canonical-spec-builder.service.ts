@@ -1,4 +1,4 @@
-import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrchestrationProgram, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
 import type {
   SemanticActionState,
@@ -539,7 +539,10 @@ export class CanonicalSpecBuilderService {
     const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const orchestrationGates = this.buildOrchestrationGates(normalizedState)
     const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
-    const hasOrchestration = orchestrationGates.length > 0 || orchestrationPortfolioRisks.length > 0
+    const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
+    const hasOrchestration = orchestrationGates.length > 0
+      || orchestrationPortfolioRisks.length > 0
+      || orchestrationPrograms.length > 0
 
     return {
       version: 2,
@@ -564,6 +567,7 @@ export class CanonicalSpecBuilderService {
             orchestration: {
               ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
               ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
+              ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
             },
           }
         : {}),
@@ -636,6 +640,92 @@ export class CanonicalSpecBuilderService {
     }
 
     return gates
+  }
+
+  private buildOrchestrationPrograms(state: SemanticState): CanonicalOrchestrationProgram[] {
+    const nodes = state.orchestration?.nodes
+    if (!nodes || nodes.length === 0) {
+      return []
+    }
+
+    const programs: CanonicalOrchestrationProgram[] = []
+    for (const node of nodes) {
+      if (node.kind !== 'program' || node.status !== 'locked' || node.key !== 'program.fixed_grid_gated') {
+        continue
+      }
+      if (node.programKind !== 'fixed_grid_gated') {
+        continue
+      }
+      if (node.rebuildPolicy !== 'static') {
+        continue
+      }
+      if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') {
+        continue
+      }
+      if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) {
+        continue
+      }
+
+      const grid = node.gridParams
+      if (!grid) {
+        continue
+      }
+      const { anchorPrice, levelCount, stepPct, lowerBound, upperBound } = grid
+      if (typeof anchorPrice !== 'number' || !Number.isFinite(anchorPrice) || anchorPrice <= 0) {
+        continue
+      }
+      if (typeof levelCount !== 'number' || !Number.isInteger(levelCount) || levelCount < 2) {
+        continue
+      }
+      if (typeof stepPct !== 'number' || !Number.isFinite(stepPct) || stepPct <= 0) {
+        continue
+      }
+      if (lowerBound !== undefined) {
+        if (typeof lowerBound !== 'number' || !Number.isFinite(lowerBound) || lowerBound <= 0) {
+          continue
+        }
+        if (upperBound !== undefined && !(lowerBound < upperBound)) {
+          continue
+        }
+      }
+      if (upperBound !== undefined) {
+        if (typeof upperBound !== 'number' || !Number.isFinite(upperBound) || upperBound <= 0) {
+          continue
+        }
+      }
+
+      const sizing = node.sizing
+      if (!sizing) {
+        continue
+      }
+      if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') {
+        continue
+      }
+      if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) {
+        continue
+      }
+
+      programs.push({
+        id: node.id,
+        programKind: 'fixed_grid_gated',
+        activeWhenRef: node.activeWhenRef,
+        onDeactivate: node.onDeactivate,
+        rebuildPolicy: 'static',
+        gridParams: {
+          anchorPrice,
+          levelCount,
+          stepPct,
+          ...(lowerBound !== undefined ? { lowerBound } : {}),
+          ...(upperBound !== undefined ? { upperBound } : {}),
+        },
+        sizing: {
+          mode: sizing.mode,
+          value: sizing.value,
+        },
+      })
+    }
+
+    return programs
   }
 
   private filterOrderProgramShadowRules(

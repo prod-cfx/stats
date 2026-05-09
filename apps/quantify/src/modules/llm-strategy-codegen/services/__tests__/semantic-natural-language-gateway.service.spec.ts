@@ -2,6 +2,7 @@ import type {
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticContextFrame,
+  SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
@@ -248,6 +249,50 @@ describe('NaturalLanguageGatewayService', () => {
     expect(portfolioDrawdownFrames(service.parse('回撤 150% 停止开仓'))).toHaveLength(0)
   })
 
+  it('parses fixed_grid_gated frame from explicit range form with cancel-on-deactivate', () => {
+    const frames = fixedGridGatedFrames(
+      service.parse('BTCUSDT 50000-60000 区间挂 10 档网格，5% 步长，趋势上涨时启用，停用时撤单'),
+    )
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'fixed_grid_gated',
+        lowerBound: 50000,
+        upperBound: 60000,
+        levelCount: 10,
+        stepPct: 5,
+        onDeactivate: 'cancel',
+        activeWhenRef: 'orchestration-gate-regime-1',
+        sizing: { mode: 'fixed_pct', value: 5 },
+      }),
+    ])
+  })
+
+  it('parses fixed_grid_gated frame from anchor form with close-on-deactivate', () => {
+    const frames = fixedGridGatedFrames(
+      service.parse('锚定 50000 挂 10 档网格 5% 步长 上涨时启用 失活时平仓'),
+    )
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'fixed_grid_gated',
+        anchorPrice: 50000,
+        levelCount: 10,
+        stepPct: 5,
+        onDeactivate: 'close',
+        activeWhenRef: 'orchestration-gate-regime-1',
+      }),
+    ])
+  })
+
+  it('does not emit fixed_grid_gated frame for vague text "感觉网格策略"', () => {
+    expect(fixedGridGatedFrames(service.parse('感觉网格策略'))).toHaveLength(0)
+  })
+
+  it('does not emit fixed_grid_gated frame for "挂网格" without explicit parameters', () => {
+    expect(fixedGridGatedFrames(service.parse('挂网格'))).toHaveLength(0)
+  })
+
   it('keeps later explicit BOLL short entry after a negated long action segment', () => {
     const frames = service.parse('不要开多，BOLL上轨开空')
 
@@ -302,4 +347,10 @@ function portfolioDrawdownFrames(
   frames: ReturnType<NaturalLanguageGatewayService['parse']>,
 ): SemanticPortfolioDrawdownFrame[] {
   return frames.filter(frame => frame.kind === 'portfolio_drawdown')
+}
+
+function fixedGridGatedFrames(
+  frames: ReturnType<NaturalLanguageGatewayService['parse']>,
+): SemanticFixedGridGatedFrame[] {
+  return frames.filter(frame => frame.kind === 'fixed_grid_gated')
 }

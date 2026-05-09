@@ -19,6 +19,8 @@ export type AtomicCoverageTag =
   | 'risk'
   | 'orchestration'
   | 'drawdown'
+  | 'program'
+  | 'fixed_grid'
   | 'phase5'
 
 export interface AtomCoverageExpectedAtom {
@@ -1846,6 +1848,28 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedKeys: [
       'portfolioRisk.drawdown_block',
+      'indicator.cross_over',
+      'open_long',
+      'position.fixed_pct',
+    ],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'golden-corpus-074-orchestration-program-fixed-grid-gated-supported-executable',
+    name: 'orchestration program fixed grid gated supported executable',
+    message:
+      'OKX 合约 BTCUSDT 15m，价格高于 EMA50 才允许做多，启用 50000-60000 区间挂 10 档网格 5% 步长，gate 失活时撤单，MA20 上穿 MA50 开多，单笔 10%。',
+    tags: ['orchestration', 'program', 'fixed_grid', 'phase5'],
+    expectedAtoms: [
+      { key: 'program.fixed_grid_gated', category: 'orchestration' },
+      { key: 'gate.regime', category: 'orchestration' },
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+      { key: 'open_long', category: 'action', minContractSubstrate: true },
+      { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'program.fixed_grid_gated',
+      'gate.regime',
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',
