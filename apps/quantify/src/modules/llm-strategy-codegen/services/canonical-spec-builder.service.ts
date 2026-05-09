@@ -4461,6 +4461,39 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
+      case 'liquidity.sweep': {
+        // P4-4: 白名单方向 (bullish/bearish) + 4 reference (prev_low / prev_high / session_low / session_high)。
+        // 缺失 direction 或 reference → fail-closed (null)；reclaimBars 默认 3。
+        const lsDirection = typeof trigger.params.direction === 'string'
+          ? trigger.params.direction.trim().toLowerCase()
+          : null
+        if (lsDirection !== 'bullish' && lsDirection !== 'bearish') return null
+        const lsReference = typeof trigger.params.reference === 'string'
+          ? trigger.params.reference.trim().toLowerCase()
+          : null
+        if (
+          lsReference !== 'prev_low'
+          && lsReference !== 'prev_high'
+          && lsReference !== 'session_low'
+          && lsReference !== 'session_high'
+        ) return null
+        const lsReclaimBars = typeof trigger.params.reclaimBars === 'number'
+          && Number.isInteger(trigger.params.reclaimBars)
+          && trigger.params.reclaimBars > 0
+          ? trigger.params.reclaimBars
+          : 3
+        return {
+          kind: 'atom',
+          key: 'liquidity.sweep',
+          semanticScope: 'market',
+          op: lsDirection === 'bullish' ? 'GTE' : 'LTE',
+          params: {
+            direction: lsDirection,
+            reference: lsReference,
+            reclaimBars: lsReclaimBars,
+          },
+        }
+      }
       default:
         return null
     }

@@ -4357,6 +4357,82 @@ export class SemanticSeedExtractorService {
         }
       }
 
+      // P4-4: liquidity.sweep — 流动性扫荡 + reclaim 确认
+      // 主观文本（"看起来像扫荡"/"疑似 sweep"）→ 不产生 trigger
+      // 缺 direction 或 reference → open_slot；reclaimBars 默认 3
+      if (/(?:流动性\s*扫荡|流动性\s*猎杀|扫止损|扫单|假突破|扫\s*前低|扫\s*前高|扫\s*日内\s*[低高]|liquidity\s+sweep|liquidity\s+grab|stop\s+hunt|sweep\s+(?:and|then)\s+reclaim|sweep\s+the\s+(?:low|high))/iu.test(clause)) {
+        // A-M2 防御：主观词必须锚定在 sweep 名词之前才视为主观
+        const isSubjective = /(?:像|疑似|看起来\s*像|类似)\s*(?:流动性\s*扫荡|sweep|liquidity\s+grab|stop\s+hunt)|(?:feels?\s+like|looks?\s+like|kind\s+of|maybe)\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:liquidity\s+sweep|liquidity\s+grab|stop\s+hunt|sweep)/iu.test(clause)
+        if (!isSubjective) {
+          // 严格枚举：reference 必须精确匹配白名单
+          const lsReference = /(?:前低|prev(?:ious)?\s+low|previous\s+swing\s+low|sweep\s+the\s+low)/iu.test(clause)
+            ? 'prev_low'
+            : /(?:前高|prev(?:ious)?\s+high|previous\s+swing\s+high|sweep\s+the\s+high)/iu.test(clause)
+              ? 'prev_high'
+              : /(?:日内\s*低|今日\s*低|session\s+low)/iu.test(clause)
+                ? 'session_low'
+                : /(?:日内\s*高|今日\s*高|session\s+high)/iu.test(clause)
+                  ? 'session_high'
+                  : null
+
+          // direction 推断：扫前低/日内低 → bullish reversal；扫前高/日内高 → bearish reversal
+          // 同时支持显式方向词（与 reference 同位）
+          const directionFromRef = lsReference === 'prev_low' || lsReference === 'session_low'
+            ? 'bullish'
+            : lsReference === 'prev_high' || lsReference === 'session_high'
+              ? 'bearish'
+              : null
+          const directionExplicit = /(?:bullish\s+(?:liquidity\s+sweep|liquidity\s+grab|stop\s+hunt|sweep)|看涨\s*(?:流动性\s*扫荡|sweep))/iu.test(clause)
+            ? 'bullish'
+            : /(?:bearish\s+(?:liquidity\s+sweep|liquidity\s+grab|stop\s+hunt|sweep)|看跌\s*(?:流动性\s*扫荡|sweep))/iu.test(clause)
+              ? 'bearish'
+              : null
+          const lsDirection = directionExplicit ?? directionFromRef
+
+          // reclaimBars 提取：支持 "reclaim 3" / "reclaim within 3" / "收回 3" / "3 根内" / "3 bars"
+          const reclaimMatch = clause.match(/(?:reclaim(?:\s*bars?)?|收回|reclaim\s+within)\s*(\d+)/iu)
+            ?? clause.match(/(\d+)\s*(?:根\s*内|bars?\s*(?:reclaim|内)?)/iu)
+          const reclaimBars = reclaimMatch ? Number.parseInt(reclaimMatch[1], 10) : null
+
+          const lsOpenSlots: SeedTrigger['openSlots'] = []
+          if (!lsDirection) {
+            lsOpenSlots.push({
+              slotKey: 'liquidity.sweep.direction',
+              fieldPath: 'trigger.params.direction',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。',
+              affectsExecution: true,
+            })
+          }
+          if (!lsReference) {
+            lsOpenSlots.push({
+              slotKey: 'liquidity.sweep.reference',
+              fieldPath: 'trigger.params.reference',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请选择被扫荡的关键位：prev_low（前低）、prev_high（前高）、session_low（日内低）或 session_high（日内高）。',
+              affectsExecution: true,
+            })
+          }
+
+          this.pushTrigger(triggers, seen, {
+            key: 'liquidity.sweep',
+            phase: segment === 'exit' ? 'exit' : 'entry',
+            sideScope: lsDirection === 'bearish' ? 'short' : 'long',
+            params: {
+              ...(lsDirection ? { direction: lsDirection } : {}),
+              ...(lsReference ? { reference: lsReference } : {}),
+              ...(reclaimBars !== null && reclaimBars > 0 ? { reclaimBars } : {}),
+              sourceText: clause,
+            },
+            status: lsOpenSlots.length > 0 ? 'open' : 'locked',
+            source: 'user_explicit',
+            openSlots: lsOpenSlots,
+          })
+        }
+      }
+
       if (
         !chartPatternMatched
         && /(?:头肩|双底|双顶|三角形|楔形|旗形|形态|pattern)/iu.test(clause)

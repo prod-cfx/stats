@@ -1199,6 +1199,7 @@ describe('semantic-only strategy regression verification', () => {
       'indicator.divergence',
       'price.candle_pattern',
       'price.chart_pattern',
+      'liquidity.sweep',
     ])
     expect(NORMALIZED_TRIGGER_ATOM_KEYS).not.toEqual(expect.arrayContaining([
       'bar.close_gt_open',

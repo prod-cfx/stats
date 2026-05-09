@@ -1649,6 +1649,60 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'liquidity.sweep': {
+        // P4-4: 白名单方向 (bullish/bearish) + 4 reference (prev_low/prev_high/session_low/session_high)。
+        // IR 通过 LIQUIDITY_SWEEP 系列 + EQ predicate 封装流动性扫荡信号。
+        // fail-closed：direction / reference 非白名单值直接抛错；reclaimBars 默认 3。
+        //
+        // ⚠️ runtime gap 公开标记（同 P4-1 / P4-2 / P4-3 模式）：当前 strategy-runtime / backtesting /
+        // compiled-runtime 全仓 0 个 LIQUIDITY_SWEEP 系列 evaluator 实现，liquiditySweepDetector
+        // helper 同样 0 实现。该 atom codegen 路径已闭环，但 runtime 信号永远 fail-closed 直到
+        // follow-up issue #1062 落地。
+        const lsDirection = typeof atom.params?.direction === 'string'
+          ? atom.params.direction.trim().toLowerCase()
+          : null
+        if (lsDirection !== 'bullish' && lsDirection !== 'bearish') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction`)
+        }
+        const lsReference = typeof atom.params?.reference === 'string'
+          ? atom.params.reference.trim().toLowerCase()
+          : null
+        if (
+          lsReference !== 'prev_low'
+          && lsReference !== 'prev_high'
+          && lsReference !== 'session_low'
+          && lsReference !== 'session_high'
+        ) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:reference`)
+        }
+        const lsReclaimBars = typeof atom.params?.reclaimBars === 'number'
+          && Number.isInteger(atom.params.reclaimBars)
+          && atom.params.reclaimBars > 0
+          ? atom.params.reclaimBars
+          : 3
+        const lsSeriesId = `liquidity_sweep_${lsDirection}_${lsReference}_${lsReclaimBars}_${context.timeframe}`
+        if (!context.seriesMap.has(lsSeriesId)) {
+          context.seriesMap.set(lsSeriesId, {
+            id: lsSeriesId,
+            kind: 'LIQUIDITY_SWEEP',
+            timeframe: context.timeframe,
+            params: {
+              direction: lsDirection,
+              reference: lsReference,
+              reclaimBars: lsReclaimBars,
+            },
+          })
+        }
+        context.runtimeRequirements.helpers.add('liquiditySweepDetector')
+        const constOneRef = this.ensureConstSeries(context, 1)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_liquidity_sweep_${lsDirection}_${lsReference}_${lsReclaimBars}`,
+          'EQ',
+          [lsSeriesId, constOneRef],
+        )
+      }
+
       default:
         throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
     }

@@ -121,6 +121,7 @@ export interface SeriesDef {
     | 'INDICATOR_DIVERGENCE'
     | 'CANDLE_PATTERN'
     | 'CHART_PATTERN'
+    | 'LIQUIDITY_SWEEP'
   timeframe?: string
   field?: 'open' | 'high' | 'low' | 'close'
   offsetBars?: number

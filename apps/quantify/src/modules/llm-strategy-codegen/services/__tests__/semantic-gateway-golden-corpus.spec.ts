@@ -489,6 +489,64 @@ describe('semantic gateway golden corpus', () => {
     expect(fallbackTrigger).toBeDefined()
   })
 
+  // liquidity.sweep utterance corpus — ≥4 cases: 4 reference 各 1 + 主观负向 + 缺 reference open_slot
+  it('liquidity.sweep zh prev_low bullish: 扫前低后反弹做多 → supported_executable, locked, reference=prev_low', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，扫前低后 3 根内反弹做多，5% 止损,单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'liquidity.sweep')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ direction: 'bullish', reference: 'prev_low', reclaimBars: 3 })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.unsupportedAtoms.map(a => a.key)).not.toContain('liquidity.sweep')
+  })
+
+  it('liquidity.sweep en prev_high bearish: bearish liquidity sweep at prev high → reference=prev_high', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, bearish liquidity sweep at prev high, reclaim within 3 bars, open short, 5% stop loss, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'liquidity.sweep')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ direction: 'bearish', reference: 'prev_high' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('liquidity.sweep zh session_low bullish: 日内低流动性扫荡 → reference=session_low, direction=bullish (intrinsic)', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，session low 流动性扫荡 reclaim 5 根后做多，5% 止损。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'liquidity.sweep')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ direction: 'bullish', reference: 'session_low' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('liquidity.sweep en session_high bearish: bearish stop hunt at session high → reference=session_high', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, bearish stop hunt at session high, reclaim within 3 bars, open short, 5% stop loss.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'liquidity.sweep')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ direction: 'bearish', reference: 'session_high' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('liquidity.sweep negative subjective: "看起来像扫荡" → 不产生 liquidity.sweep trigger', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，K 线看起来像流动性扫荡，但不确定，MA20 开多，5% 止损。')
+    const trigger = seedPatch.triggers?.find(t => t.key === 'liquidity.sweep')
+    expect(trigger).toBeUndefined()
+  })
+
+  it('liquidity.sweep missing reference: 假突破后入场 → open_slot for reference', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，假突破后入场，5% 止损。')
+    const trigger = seedPatch.triggers?.find(t => t.key === 'liquidity.sweep')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params?.reference).toBeUndefined()
+    expect(trigger?.openSlots?.map(s => s.slotKey)).toContain('liquidity.sweep.reference')
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)
