@@ -227,6 +227,55 @@ describe('SemanticSeedStateBuilderService', () => {
     ]))
   })
 
+  it('normalizes mixed existing planner EMA stack contracts into one computed group', () => {
+    const legacyCombinationContract = {
+      id: 'legacy-entry-ema-20-group',
+      kind: 'trigger',
+      capabilities: [{
+        domain: 'market',
+        verb: 'combine',
+        object: 'predicate_group',
+        shape: { groupId: 'legacy-entry-ema-20-only' },
+      }],
+      requires: [],
+      params: {
+        groupId: 'legacy-entry-ema-20-only',
+        join: 'AND',
+        actionKey: 'open_long',
+        actionBinding: 'single_action',
+      },
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
+    }
+    const state = service.build({
+      triggers: [20, 60, 144].map(period => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ema',
+          reference: { indicator: 'ema', period },
+          'reference.period': period,
+          timeframe: '15m',
+        },
+        ...(period === 20 ? { contracts: [legacyCombinationContract] } : {}),
+      })),
+      actions: [{ key: 'open_long' }],
+    })
+
+    const groupIds = state?.triggers.map(trigger =>
+      trigger.contracts?.find(contract => typeof contract.params.groupId === 'string')?.params.groupId,
+    )
+
+    expect(groupIds).toEqual([
+      'entry-long-ema-above-stack-15m-20-60-144',
+      'entry-long-ema-above-stack-15m-20-60-144',
+      'entry-long-ema-above-stack-15m-20-60-144',
+    ])
+  })
+
   it('synthesizes supported grid contracts when planner explicitly sends null contracts', () => {
     const state = service.build({
       triggers: [{

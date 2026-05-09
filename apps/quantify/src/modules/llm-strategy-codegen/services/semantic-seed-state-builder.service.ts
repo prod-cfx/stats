@@ -170,14 +170,14 @@ export class SemanticSeedStateBuilderService {
 
     return triggers.map((trigger, index) => {
       const group = groups.get(index)
-      if (!group || this.hasCombinationContract(trigger)) {
+      if (!group) {
         return trigger
       }
 
       return {
         ...trigger,
         contracts: [
-          ...(trigger.contracts ?? []),
+          ...(trigger.contracts ?? []).filter(contract => !this.isCombinationContract(contract)),
           buildTriggerCombinationContract({
             groupId: group.groupId,
             join: 'AND',
@@ -212,12 +212,12 @@ export class SemanticSeedStateBuilderService {
     return null
   }
 
-  private hasCombinationContract(trigger: SemanticTriggerState): boolean {
-    return Boolean(trigger.contracts?.some(contract =>
+  private isCombinationContract(contract: SemanticAtomContract): boolean {
+    return Boolean(
       contract.kind === 'trigger'
       && typeof contract.params.groupId === 'string'
       && contract.params.groupId.trim().length > 0,
-    ))
+    )
   }
 
   private toTriggerState(update: unknown, index: number): SemanticTriggerState | null {
