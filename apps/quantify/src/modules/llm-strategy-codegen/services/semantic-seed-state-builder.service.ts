@@ -1477,6 +1477,10 @@ export class SemanticSeedStateBuilderService {
             capitalCap: this.readCapitalCapShape(params.capitalCap),
             perOrderSizing: this.readUnknownShape(params.perOrderSizing) ?? params.perOrderSizing,
             triggerMode: params.triggerMode,
+            priceIntervalPct: this.readFiniteNumber(params.priceIntervalPct),
+            priceIntervalQuote: this.readFiniteNumber(params.priceIntervalQuote),
+            timeIntervalBars: this.readFiniteNumber(params.timeIntervalBars),
+            timeIntervalMs: this.readFiniteNumber(params.timeIntervalMs),
           }),
         },
         ...(exitRuleShape

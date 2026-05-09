@@ -14,7 +14,9 @@
  * 负向用例: "像背离"/"疑似背离"/"看起来像背离" → 不产生 indicator.divergence trigger
  */
 
+import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
@@ -30,12 +32,35 @@ const classifier = new SemanticSupportClassifierService(registry)
 const readiness = new SemanticContractReadinessService()
 const canonicalBuilder = new CanonicalSpecBuilderService()
 const irCompiler = new CanonicalSpecV2IrCompilerService()
+const astCompiler = new CanonicalStrategyAstCompilerService()
 const presentationRegistry = new SemanticPresentationRegistryService(registry)
 
 // 满参 RSI 顶背离（bearish）utterance
 const RSI_BEARISH_UTTERANCE = 'OKX 合约 BTCUSDT 15m，RSI 顶背离后开空，5% 止损。'
 // 满参 MACD 底背离（bullish）utterance
 const MACD_BULLISH_UTTERANCE = 'OKX 合约 BTCUSDT 15m，MACD 底背离后开多，MA20 上穿 MA50 确认，5% 止损。'
+
+function linear(start: number, end: number, count: number): number[] {
+  return Array.from({ length: count }, (_item, index) => start + ((end - start) * index) / (count - 1))
+}
+
+function buildRsiBearishDivergenceBars() {
+  const closes = [
+    ...linear(80, 108, 15),
+    ...linear(104, 90, 6),
+    ...linear(94, 112, 5),
+    109,
+    107,
+  ]
+  return closes.map((close, index) => ({
+    open: close,
+    high: close + 0.2,
+    low: close - 0.2,
+    close,
+    volume: 1,
+    timestamp: index + 1,
+  }))
+}
 
 // ─── Layer 1: atom registry ───────────────────────────────────────────────────
 
@@ -360,6 +385,38 @@ describe('indicator.divergence parity spec', () => {
       })
       expect(ir.runtimeRequirements.helpers).toContain('macd')
       expect(ir.runtimeRequirements.helpers).toContain('priceHighsLows')
+    })
+
+    it('codegen → IR → compiled runtime consumes INDICATOR_DIVERGENCE instead of fail-closed', () => {
+      const patch = extractor.extract(RSI_BEARISH_UTTERANCE)
+      const state = seedStateBuilder.build(patch)
+      expect(state).not.toBeNull()
+      const classified = classifier.classify(state!)
+      const normalized = readiness.normalize(classified.state)
+      const spec = canonicalBuilder.buildFromSemanticState(normalized.state)
+      const { ir } = irCompiler.compile({
+        canonicalSpec: spec,
+        fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
+      })
+      const ast = astCompiler.compile(ir)
+      const values = evaluateExprPool(
+        { bars: buildRsiBearishDivergenceBars() },
+        ast.exprPool as Parameters<typeof evaluateExprPool>[1],
+        ast.topology.exprOrder,
+      )
+      const divergenceSeriesExpr = ast.exprPool.find(expr =>
+        expr.nodeType === 'series' && expr.payload.kind === 'INDICATOR_DIVERGENCE',
+      )
+      const divergencePredicateExpr = ast.exprPool.find(expr =>
+        expr.nodeType === 'predicate'
+        && typeof expr.sourceRef === 'string'
+        && expr.sourceRef.includes('indicator_divergence_rsi_bearish'),
+      )
+
+      expect(divergenceSeriesExpr).toBeDefined()
+      expect(divergencePredicateExpr).toBeDefined()
+      expect(values[divergenceSeriesExpr!.id]).toBe(1)
+      expect(values[divergencePredicateExpr!.id]).toBe(true)
     })
   })
 

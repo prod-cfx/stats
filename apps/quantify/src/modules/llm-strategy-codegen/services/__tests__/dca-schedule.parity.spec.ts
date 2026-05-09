@@ -82,6 +82,7 @@ describe('position.dca_schedule parity spec', () => {
       const constraint = patch.position?.constraints?.find(c => c.key === 'position.dca_schedule')
       expect(constraint).toBeDefined()
       expect(constraint?.params?.triggerMode).toBe('price_interval')
+      expect(constraint?.params?.priceIntervalPct).toBe(2)
       expect(constraint?.params?.maxCount).toBe(3)
     })
 
@@ -230,6 +231,7 @@ describe('position.dca_schedule parity spec', () => {
       expect(dcaRule).toBeDefined()
       // critic round 1 A-C1：必须断言 triggerMode 取值集合而非仅 toBeDefined（防 silent-rename）
       expect(['price_interval', 'time_interval', 'signal']).toContain(dcaRule?.metadata?.dcaSchedule?.triggerMode)
+      expect(dcaRule?.metadata?.dcaSchedule?.priceIntervalPct).toBe(5)
     })
 
     it('critic A-C1 regression: time_interval triggerMode 通过 utterance "每天" 真识别', () => {
@@ -245,6 +247,7 @@ describe('position.dca_schedule parity spec', () => {
       })
       const dcaRule = ir.ruleBlocks.find(r => r.metadata?.dcaSchedule)
       expect(dcaRule?.metadata?.dcaSchedule?.triggerMode).toBe('time_interval')
+      expect(dcaRule?.metadata?.dcaSchedule?.timeIntervalMs).toBe(24 * 60 * 60 * 1000)
     })
 
     it('critic A-C2 regression: exitRule 缺失时 IR 透传 cap_only 哨兵（避免无限 DCA）', () => {

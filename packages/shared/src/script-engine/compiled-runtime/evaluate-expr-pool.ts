@@ -1,7 +1,8 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
 import { candlePatternDetector } from '../helpers/candle-pattern-detector'
-import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-indicators'
+import { atr, bollingerBands, ema, macd, priceHighsLows, rsi, sma } from '../helpers/technical-indicators'
+import { liquiditySweepDetector } from './liquidity-sweep-detector'
 
 export type CompiledRuntimeValue =
   | number
@@ -27,6 +28,7 @@ interface CompiledExprNode {
     params?: Record<string, number | string | boolean>
     memoryKey?: string
     path?: string[]
+    timezone?: string
   }
 }
 
@@ -94,6 +96,7 @@ function evaluateSeries(
     case 'MACD_SIGNAL':
     case 'HIGHEST_HIGH':
     case 'LOWEST_LOW':
+    case 'LIQUIDITY_SWEEP':
     case 'VOLUME':
     case 'SMA_VOLUME':
     case 'POSITION_BARS_HELD':
@@ -104,6 +107,7 @@ function evaluateSeries(
     case 'LOWER_BAND':
     case 'BOLLINGER_BARS_OUTSIDE':
     case 'CANDLE_PATTERN':
+    case 'INDICATOR_DIVERGENCE':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
     case 'MARKET_REGIME':
       return readStringContextValue(ctx.marketRegime)
@@ -439,6 +443,24 @@ function resolveSeriesValueAt(
         if (window.length === 0) return null
         return Math.min(...window.map(bar => bar.low))
       }
+      case 'LIQUIDITY_SWEEP': {
+        const direction = readStringParam(node.payload.params, 'direction')
+        const reference = readStringParam(node.payload.params, 'reference')
+        const reclaimBars = readNumericParam(node.payload.params, 'reclaimBars') ?? undefined
+        const timezone = readStringParam(node.payload.params, 'timezone') ?? readStringValue(node.payload.timezone) ?? 'UTC'
+        const endIndex = bars.length - offset
+        if (endIndex <= 0) return null
+        const sweepBars = offset === 0 ? bars : bars.slice(0, endIndex)
+        return liquiditySweepDetector({
+          bars: sweepBars,
+          direction,
+          reference,
+          reclaimBars,
+          timezone,
+        })
+          ? 1
+          : 0
+      }
       case 'VOLUME':
         return readVolumeAtOffset(bars, offset + (node.payload.offsetBars ?? 0))
       case 'SMA_VOLUME': {
@@ -535,6 +557,8 @@ function resolveSeriesValueAt(
       }
       case 'CANDLE_PATTERN':
         return evaluateCandlePatternSeries(node, bars, offset + (node.payload.offsetBars ?? 0))
+      case 'INDICATOR_DIVERGENCE':
+        return evaluateIndicatorDivergence(node, bars)
       default: {
         const firstDep = node.deps?.[0]
         return typeof firstDep === 'string'
@@ -814,6 +838,58 @@ function isWithinLevelSet(
   return currentPrice >= lower && currentPrice <= upper
 }
 
+function evaluateIndicatorDivergence(
+  node: CompiledExprNode,
+  bars: readonly Bar[],
+): number | null {
+  const indicator = readStringParam(node.payload.params, 'indicator')
+  const direction = readStringParam(node.payload.params, 'direction')
+  if ((indicator !== 'rsi' && indicator !== 'macd') || (direction !== 'bullish' && direction !== 'bearish')) {
+    return null
+  }
+
+  const pivotWindow = Math.max(1, Math.floor(readNumericParam(node.payload.params, 'pivotWindow') ?? 14))
+  const confirmationBars = Math.max(0, Math.floor(readNumericParam(node.payload.params, 'confirmationBars') ?? 3))
+  if (bars.length < pivotWindow + 2) return 0
+
+  const indicatorValues = buildDivergenceIndicatorSeries(bars, indicator)
+  const pivots = priceHighsLows([...bars], pivotWindow, confirmationBars)
+  const candidates = direction === 'bearish' ? pivots.highs : pivots.lows
+  const confirmed = candidates.filter((pivot) => {
+    const value = indicatorValues[pivot.index]
+    return typeof value === 'number' && Number.isFinite(value)
+  })
+  if (confirmed.length < 2) return 0
+
+  const current = confirmed[confirmed.length - 1]!
+  const previous = confirmed[confirmed.length - 2]!
+  if (bars.length - 1 - current.index > confirmationBars) return 0
+
+  const currentIndicator = indicatorValues[current.index]
+  const previousIndicator = indicatorValues[previous.index]
+  if (typeof currentIndicator !== 'number' || typeof previousIndicator !== 'number') return 0
+
+  const diverged = direction === 'bearish'
+    ? current.value > previous.value && currentIndicator <= previousIndicator
+    : current.value < previous.value && currentIndicator >= previousIndicator
+
+  return diverged ? 1 : 0
+}
+
+function buildDivergenceIndicatorSeries(
+  bars: readonly Bar[],
+  indicator: 'rsi' | 'macd',
+): Array<number | null> {
+  const closes = bars.map(bar => bar.close)
+  return closes.map((_close, index) => {
+    const history = closes.slice(0, index + 1)
+    if (indicator === 'rsi') {
+      return rsi(history, 14)
+    }
+    return macd(history)?.macd ?? null
+  })
+}
+
 function collectSeriesHistory(
   nodeId: string | undefined,
   offset: number,
@@ -978,6 +1054,10 @@ function readStringParam(
 ): string | null {
   const raw = params?.[key]
   return typeof raw === 'string' && raw.length > 0 ? raw : null
+}
+
+function readStringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 function resolveSeriesInputNodeId(

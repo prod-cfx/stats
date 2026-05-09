@@ -1529,6 +1529,8 @@ export class SemanticSeedExtractorService {
           : /(?:每跌|每下跌|price\s+drops?|drops?\s+\d+(?:\.\d+)?\s*%)/iu.test(clause)
             ? 'price_interval'
             : undefined
+      const priceIntervalPct = triggerMode === 'price_interval' ? this.extractDcaPriceIntervalPct(clause) : null
+      const timeIntervalMs = triggerMode === 'time_interval' ? this.extractDcaTimeIntervalMs(clause) : null
       constraints.push({
         key: 'position.dca_schedule',
         params: {
@@ -1536,6 +1538,8 @@ export class SemanticSeedExtractorService {
           ...(perOrderSizing ? { perOrderSizing } : {}),
           ...(capitalCap ? { capitalCap } : {}),
           ...(triggerMode ? { triggerMode } : {}),
+          ...(priceIntervalPct !== null ? { priceIntervalPct } : {}),
+          ...(timeIntervalMs !== null ? { timeIntervalMs } : {}),
           ...(exitRule ? { exitRule } : {}),
         },
       })
@@ -1765,6 +1769,24 @@ export class SemanticSeedExtractorService {
 
     const asset = this.normalizeQuoteAsset(match[2])
     return { kind: 'quote', value, asset }
+  }
+
+  private extractDcaPriceIntervalPct(text: string): number | null {
+    const match = text.match(/(?:每\s*(?:跌|下跌)|price\s+drops?)\s*(\d+(?:\.\d+)?)\s*%/iu)
+    if (!match?.[1]) return null
+
+    const value = Number(match[1])
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  private extractDcaTimeIntervalMs(text: string): number | null {
+    const match = text.match(/每\s*(小时|天|日|周|月)|every\s+(hour|day|week|month)/iu)
+    const unit = (match?.[1] ?? match?.[2] ?? '').toLowerCase()
+    if (unit === '小时' || unit === 'hour') return 60 * 60 * 1000
+    if (unit === '天' || unit === '日' || unit === 'day') return 24 * 60 * 60 * 1000
+    if (unit === '周' || unit === 'week') return 7 * 24 * 60 * 60 * 1000
+    if (unit === '月' || unit === 'month') return 30 * 24 * 60 * 60 * 1000
+    return null
   }
 
   private normalizeQuoteAsset(asset: string): QuoteAsset {

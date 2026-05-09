@@ -15,6 +15,63 @@ export interface Bar {
   timestamp: number
 }
 
+export interface PricePivotPoint {
+  index: number
+  value: number
+}
+
+export interface PriceHighsLowsResult {
+  highs: PricePivotPoint[]
+  lows: PricePivotPoint[]
+}
+
+/**
+ * 检测价格 pivot high/low。
+ *
+ * pivotWindow 控制左侧历史窗口，confirmationBars 控制右侧确认窗口。
+ * 当右侧可用 K 线少于 confirmationBars 时，按当前已知 K 线做实时确认，
+ * 因此 backtest/runtime 不需要读取未来数据。
+ */
+export function priceHighsLows(
+  bars: Bar[],
+  pivotWindow: number,
+  confirmationBars = 0,
+): PriceHighsLowsResult {
+  const leftWindow = Math.max(1, Math.floor(pivotWindow))
+  const rightWindow = Math.max(0, Math.floor(confirmationBars))
+  const result: PriceHighsLowsResult = { highs: [], lows: [] }
+
+  if (!Array.isArray(bars) || bars.length < leftWindow + 1) {
+    return result
+  }
+
+  for (let index = leftWindow; index < bars.length; index += 1) {
+    const bar = bars[index]
+    if (!bar) continue
+
+    const left = bars.slice(index - leftWindow, index)
+    const right = bars.slice(index + 1, Math.min(bars.length, index + rightWindow + 1))
+
+    if (Number.isFinite(bar.high)) {
+      const higherOnLeft = left.some(item => item.high >= bar.high)
+      const higherOnRight = right.some(item => item.high > bar.high)
+      if (!higherOnLeft && !higherOnRight) {
+        result.highs.push({ index, value: bar.high })
+      }
+    }
+
+    if (Number.isFinite(bar.low)) {
+      const lowerOnLeft = left.some(item => item.low <= bar.low)
+      const lowerOnRight = right.some(item => item.low < bar.low)
+      if (!lowerOnLeft && !lowerOnRight) {
+        result.lows.push({ index, value: bar.low })
+      }
+    }
+  }
+
+  return result
+}
+
 /**
  * 简单移动平均线 (SMA)
  */

@@ -1,5 +1,6 @@
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
+import { getDisplayToken, listDisplayTokens } from '../../nl-gateway/display-registry'
 
 describe('SemanticPresentationRegistryService', () => {
   const atomRegistry = new SemanticAtomRegistryService()
@@ -40,6 +41,35 @@ describe('SemanticPresentationRegistryService', () => {
     }
     catch (err) {
       expect((err as { args?: { token?: string } }).args?.token).toBe('market.trend')
+    }
+  })
+
+  it('provides display tokens across atom, param, enum, and slot categories', () => {
+    expect(listDisplayTokens().length).toBeGreaterThanOrEqual(80)
+    expect(listDisplayTokens('atom').length).toBeGreaterThan(0)
+    expect(listDisplayTokens('param').length).toBeGreaterThan(0)
+    expect(listDisplayTokens('enum').length).toBeGreaterThan(0)
+    expect(listDisplayTokens('slot').length).toBeGreaterThan(0)
+
+    for (const atomKey of [
+      'volume.threshold',
+      'volatility.atr_threshold',
+      'strategy.time_window',
+      'position.has_position',
+      'position.no_position',
+      'price.previous_extrema',
+      'strategy.multi_timeframe',
+      'risk.time_stop_bars',
+      'indicator.divergence',
+      'price.candle_pattern',
+      'price.chart_pattern',
+      'liquidity.sweep',
+      'external.signal',
+    ]) {
+      expect(getDisplayToken(`atom.${atomKey}.name`)).toEqual(expect.objectContaining({
+        kind: 'atom',
+        zh: expect.any(String),
+      }))
     }
   })
 

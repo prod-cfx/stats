@@ -3848,11 +3848,13 @@ describe('canonicalSpecBuilderService', () => {
         memoryKey: 'partial_tp_abc12345',
         tierIndex: 0,
         totalTiers: 2,
+        cumulativeReduceRatio: 0.5,
       })
       expect(ptpRules[1].metadata?.partialTakeProfit).toEqual({
         memoryKey: 'partial_tp_abc12345',
         tierIndex: 1,
         totalTiers: 2,
+        cumulativeReduceRatio: 1,
       })
     })
 
@@ -3880,6 +3882,9 @@ describe('canonicalSpecBuilderService', () => {
       expect(ptpRules[0].actions[0].sizing?.value).toBeCloseTo(0.3, 4)
       expect(ptpRules[1].actions[0].sizing?.value).toBeCloseTo(0.7142857, 4)
       expect(ptpRules[2].actions[0].sizing?.value).toBeCloseTo(1.0, 4)
+      expect(ptpRules[0].metadata?.partialTakeProfit?.cumulativeReduceRatio).toBeCloseTo(0.3, 4)
+      expect(ptpRules[1].metadata?.partialTakeProfit?.cumulativeReduceRatio).toBeCloseTo(0.8, 4)
+      expect(ptpRules[2].metadata?.partialTakeProfit?.cumulativeReduceRatio).toBeCloseTo(1.0, 4)
     })
 
     it('keeps every tier non-zero for floating-point ratios summing to 1.0', () => {

@@ -293,6 +293,140 @@ describe('evaluateExprPool', () => {
     expect(values.any_true).toBe(true)
   })
 
+  describe('INDICATOR_DIVERGENCE series', () => {
+    function linear(start: number, end: number, count: number): number[] {
+      return Array.from({ length: count }, (_item, index) => start + ((end - start) * index) / (count - 1))
+    }
+
+    function buildBars(closes: number[]) {
+      return closes.map((close, index) => ({
+        open: close,
+        high: close + 0.2,
+        low: close - 0.2,
+        close,
+        volume: 1,
+        timestamp: index + 1,
+      }))
+    }
+
+    function buildDivergenceExprPool(indicator: 'rsi' | 'macd', direction: 'bullish' | 'bearish') {
+      return [
+        {
+          id: 'indicator_divergence',
+          nodeType: 'series' as const,
+          sourceRef: 'indicator_divergence',
+          payload: {
+            kind: 'INDICATOR_DIVERGENCE',
+            params: {
+              indicator,
+              direction,
+              pivotWindow: indicator === 'rsi' ? 2 : 3,
+              confirmationBars: 2,
+            },
+          },
+        },
+        {
+          id: 'const_one',
+          nodeType: 'series' as const,
+          sourceRef: 'const_one',
+          payload: { kind: 'CONST', value: 1 },
+        },
+        {
+          id: 'divergence_predicate',
+          nodeType: 'predicate' as const,
+          sourceRef: 'divergence_predicate',
+          deps: ['indicator_divergence', 'const_one'],
+          payload: { kind: 'EQ' },
+        },
+      ]
+    }
+
+    it.each([
+      {
+        name: 'RSI bearish',
+        indicator: 'rsi' as const,
+        direction: 'bearish' as const,
+        closes: [
+          ...linear(80, 108, 15),
+          ...linear(104, 90, 6),
+          ...linear(94, 112, 5),
+          109,
+          107,
+        ],
+      },
+      {
+        name: 'RSI bullish',
+        indicator: 'rsi' as const,
+        direction: 'bullish' as const,
+        closes: [
+          ...linear(120, 92, 15),
+          ...linear(96, 110, 6),
+          ...linear(106, 88, 5),
+          91,
+          93,
+        ],
+      },
+      {
+        name: 'MACD bearish',
+        indicator: 'macd' as const,
+        direction: 'bearish' as const,
+        closes: [
+          ...linear(80, 119, 40),
+          ...linear(115, 95, 15),
+          ...linear(99, 123, 15),
+          120,
+          118,
+        ],
+      },
+      {
+        name: 'MACD bullish',
+        indicator: 'macd' as const,
+        direction: 'bullish' as const,
+        closes: [
+          ...linear(130, 91, 40),
+          ...linear(95, 115, 15),
+          ...linear(111, 87, 15),
+          90,
+          92,
+        ],
+      },
+    ])('evaluates $name divergence as numeric signal consumed by EQ predicate', ({ indicator, direction, closes }) => {
+      const values = evaluateExprPool(
+        { bars: buildBars(closes) },
+        buildDivergenceExprPool(indicator, direction),
+        ['indicator_divergence', 'const_one', 'divergence_predicate'],
+      )
+
+      expect(values.indicator_divergence).toBe(1)
+      expect(values.divergence_predicate).toBe(true)
+    })
+
+    it('returns 1 on the confirmationBars boundary and 0 after the window expires', () => {
+      const closes = [
+        ...linear(80, 108, 15),
+        ...linear(104, 90, 6),
+        ...linear(94, 112, 5),
+        109,
+        107,
+      ]
+      const exprPool = buildDivergenceExprPool('rsi', 'bearish')
+
+      const boundary = evaluateExprPool(
+        { bars: buildBars(closes) },
+        exprPool,
+        ['indicator_divergence'],
+      )
+      const expired = evaluateExprPool(
+        { bars: buildBars([...closes, 106]) },
+        exprPool,
+        ['indicator_divergence'],
+      )
+
+      expect(boundary.indicator_divergence).toBe(1)
+      expect(expired.indicator_divergence).toBe(0)
+    })
+  })
+
   it('fails sequence predicates closed when runtime state is empty and no deps exist', () => {
     const exprPool: Array<{
       id: string
@@ -572,6 +706,46 @@ describe('evaluateExprPool', () => {
 
     expect(values.highest_high_3_1h).toBe(104)
     expect(values.breakout).toBe(true)
+  })
+
+  it('evaluates LIQUIDITY_SWEEP series as a consumable EQ predicate signal', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 },
+          { open: 100, high: 100.5, low: 98.5, close: 99.5, volume: 1, timestamp: 2 },
+        ],
+      },
+      [
+        {
+          id: 'liquidity_sweep',
+          nodeType: 'series',
+          sourceRef: 'liquidity_sweep',
+          payload: {
+            kind: 'LIQUIDITY_SWEEP',
+            timeframe: '15m',
+            params: { direction: 'bullish', reference: 'prev_low', reclaimBars: 3 },
+          },
+        },
+        {
+          id: 'const_one',
+          nodeType: 'series',
+          sourceRef: 'const_one',
+          payload: { kind: 'CONST', value: 1 },
+        },
+        {
+          id: 'sweep_confirmed',
+          nodeType: 'predicate',
+          sourceRef: 'sweep_confirmed',
+          deps: ['liquidity_sweep', 'const_one'],
+          payload: { kind: 'EQ' },
+        },
+      ],
+      ['liquidity_sweep', 'const_one', 'sweep_confirmed'],
+    )
+
+    expect(values.liquidity_sweep).toBe(1)
+    expect(values.sweep_confirmed).toBe(true)
   })
 
   describe('MEMORY operand', () => {
