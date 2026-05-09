@@ -41,6 +41,7 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'indicator.divergence',
   'price.candle_pattern',
   'price.chart_pattern',
+  'liquidity.sweep',
 ] as const
 
 export type NormalizedTriggerAtomKey = (typeof NORMALIZED_TRIGGER_ATOM_KEYS)[number]

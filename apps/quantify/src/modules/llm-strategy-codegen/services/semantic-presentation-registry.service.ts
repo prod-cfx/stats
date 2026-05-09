@@ -906,6 +906,58 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     },
   }),
   presentation({
+    key: 'liquidity.sweep',
+    publicName: '流动性扫荡',
+    aliases: [
+      '流动性扫荡',
+      '流动性猎杀',
+      '扫止损',
+      '扫单',
+      '假突破',
+      'liquidity sweep',
+      'liquidity grab',
+      'stop hunt',
+      'sweep and reclaim',
+    ],
+    positiveExamples: [
+      '扫前低后反弹做多',
+      '扫前高后回落做空',
+      'sweep prev low then reclaim within 3 bars',
+      'liquidity grab at session high, open short',
+    ],
+    negativeExamples: ['看起来像扫荡', '疑似 sweep', 'looks like a stop hunt'],
+    goldenUtterances: [
+      'OKX BTCUSDT 15m，扫前低后 3 根内反弹做多，5% 止损。',
+      'OKX BTCUSDT 15m，bullish liquidity sweep at prev low, reclaim within 3 bars, open long.',
+      'OKX BTCUSDT 15m，扫前高（流动性猎杀）后回落做空，5% 止损。',
+      'OKX BTCUSDT 15m，bearish stop hunt at session high, open short, 5% stop loss.',
+    ],
+    displayRenderer: ({ params }) => {
+      const direction = stringParam(params, 'direction', '')
+      const reference = stringParam(params, 'reference', '')
+      const dirLabel = direction === 'bullish' ? '看涨' : direction === 'bearish' ? '看跌' : ''
+      const refLabel =
+        reference === 'prev_low'
+          ? '前低'
+          : reference === 'prev_high'
+            ? '前高'
+            : reference === 'session_low'
+              ? '日内低'
+              : reference === 'session_high'
+                ? '日内高'
+                : reference
+      const reclaimBars = params && typeof params['reclaimBars'] === 'number' ? (params['reclaimBars'] as number) : undefined
+      const reclaimLabel = reclaimBars !== undefined ? `（${reclaimBars} 根内 reclaim）` : ''
+      return `${dirLabel}流动性扫荡 ${refLabel}${reclaimLabel}`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'liquidity.sweep.direction') return '请指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。'
+      if (slotKey === 'liquidity.sweep.reference') return '请选择被扫荡的关键位：prev_low（前低）、prev_high（前高）、session_low（日内低）或 session_high（日内高）。'
+      if (slotKey === 'liquidity.sweep.reclaimBars') return '请指明 reclaim 的最大确认根数（reclaimBars），例如 3。'
+      return '请补充流动性扫荡条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.divergence',
     publicName: '指标背离',
     aliases: [

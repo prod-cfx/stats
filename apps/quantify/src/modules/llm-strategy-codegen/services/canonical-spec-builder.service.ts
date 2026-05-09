@@ -1,5 +1,6 @@
 import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrchestrationProgram, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
+import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
   SemanticActionState,
   SemanticAtomContract,
@@ -4458,6 +4459,47 @@ export class CanonicalSpecBuilderService {
           params: {
             pattern: chPattern,
             direction: chDirection,
+          },
+        }
+      }
+      case 'liquidity.sweep': {
+        // P4-4: 白名单方向 (bullish/bearish) + 4 reference (prev_low / prev_high / session_low / session_high)。
+        // 缺失 direction 或 reference → fail-closed (null)；reclaimBars 默认值集中定义于
+        // canonical-strategy-ir.ts (critic round 1 A3)。
+        const lsDirection = typeof trigger.params.direction === 'string'
+          ? trigger.params.direction.trim().toLowerCase()
+          : null
+        if (lsDirection !== 'bullish' && lsDirection !== 'bearish') return null
+        const lsReference = typeof trigger.params.reference === 'string'
+          ? trigger.params.reference.trim().toLowerCase()
+          : null
+        if (
+          lsReference !== 'prev_low'
+          && lsReference !== 'prev_high'
+          && lsReference !== 'session_low'
+          && lsReference !== 'session_high'
+        ) return null
+        // critic round 1 A2 修复：拒绝 SMC 语义不可能的 4 个矛盾组合（防御 in depth，
+        // extractor 已在源头丢弃，但其他上游可能直接构造）：
+        //   bullish + prev_high / session_high — 扫顶必为 bearish reversal
+        //   bearish + prev_low / session_low   — 扫底必为 bullish reversal
+        const isImpossibleCombo = (lsDirection === 'bullish' && (lsReference === 'prev_high' || lsReference === 'session_high'))
+          || (lsDirection === 'bearish' && (lsReference === 'prev_low' || lsReference === 'session_low'))
+        if (isImpossibleCombo) return null
+        const lsReclaimBars = typeof trigger.params.reclaimBars === 'number'
+          && Number.isInteger(trigger.params.reclaimBars)
+          && trigger.params.reclaimBars > 0
+          ? trigger.params.reclaimBars
+          : LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS
+        return {
+          kind: 'atom',
+          key: 'liquidity.sweep',
+          semanticScope: 'market',
+          op: lsDirection === 'bullish' ? 'GTE' : 'LTE',
+          params: {
+            direction: lsDirection,
+            reference: lsReference,
+            reclaimBars: lsReclaimBars,
           },
         }
       }
