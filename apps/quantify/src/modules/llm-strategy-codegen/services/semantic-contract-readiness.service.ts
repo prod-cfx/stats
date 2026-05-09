@@ -377,6 +377,10 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  if (isSupportedDynamicGrid(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
   return addPhase0OrchestrationBlocker(node)
 }
 
@@ -475,6 +479,145 @@ function isSupportedFixedGridGated(
   }
 
   const contract = registry.getContractByKey('program.fixed_grid_gated')
+  if (!contract) {
+    return false
+  }
+
+  if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
+    return false
+  }
+  const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
+  if (!referenced) {
+    return false
+  }
+  if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') {
+    return false
+  }
+  if (referenced.status !== 'locked') {
+    return false
+  }
+  if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) {
+    return false
+  }
+
+  if (!strategyVersion) {
+    return false
+  }
+
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * 判断 program.dynamic_grid node 是否可走 registry 驱动的 readiness 路径。
+ *
+ * 15 重 fail-closed 检查（Phase 5 S5，#984，critic v3 锁定）：
+ * 1) kind === 'program'
+ * 2) key === 'program.dynamic_grid'
+ * 3) programKind === 'dynamic_grid'
+ * 4) onDeactivate ∈ {'cancel','keep','close'}
+ * 5) rebuildPolicy === 'anchor_on_state_change'
+ * 6) anchorLookbackBars 整数 ∈ [10, 1000]
+ * 7) anchorSide ∈ {'high','low','mid'}
+ * 8) dynamicGridStep.mode ∈ {'pct','absolute'}，dynamicGridStep.value 是有限正数
+ * 9) levelCount 整数 ∈ [2, 100]
+ * 10) anchorDriftPct ∈ (0, 100] 有限数
+ * 11) rebuildMinIntervalSec 整数 ≥ 60（硬下限拒绝刷单）
+ * 12) sizing.mode ∈ {'fixed_quote','fixed_base','fixed_pct'}
+ * 13) sizing.value 是有限正数
+ * 14) cross-node：activeWhenRef 必须引用 status:'locked' 且 readiness supported 的 gate.regime 节点
+ * 15) version-gate：strategyVersion 必须存在且 atom 对该策略可执行
+ */
+function isSupportedDynamicGrid(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (!isProgramNode(node)) {
+    return false
+  }
+  if (node.key !== 'program.dynamic_grid') {
+    return false
+  }
+  if (node.programKind !== 'dynamic_grid') {
+    return false
+  }
+  if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') {
+    return false
+  }
+  if (node.rebuildPolicy !== 'anchor_on_state_change') {
+    return false
+  }
+
+  const lookback = node.anchorLookbackBars
+  if (
+    typeof lookback !== 'number'
+    || !Number.isFinite(lookback)
+    || !Number.isInteger(lookback)
+    || lookback < 10
+    || lookback > 1000
+  ) {
+    return false
+  }
+
+  if (node.anchorSide !== 'high' && node.anchorSide !== 'low' && node.anchorSide !== 'mid') {
+    return false
+  }
+
+  const step = node.dynamicGridStep
+  if (!step) {
+    return false
+  }
+  if (step.mode !== 'pct' && step.mode !== 'absolute') {
+    return false
+  }
+  if (typeof step.value !== 'number' || !Number.isFinite(step.value) || step.value <= 0) {
+    return false
+  }
+
+  const levelCount = node.levelCount
+  if (
+    typeof levelCount !== 'number'
+    || !Number.isFinite(levelCount)
+    || !Number.isInteger(levelCount)
+    || levelCount < 2
+    || levelCount > 100
+  ) {
+    return false
+  }
+
+  const driftPct = node.anchorDriftPct
+  if (
+    typeof driftPct !== 'number'
+    || !Number.isFinite(driftPct)
+    || driftPct <= 0
+    || driftPct > 100
+  ) {
+    return false
+  }
+
+  const minInterval = node.rebuildMinIntervalSec
+  if (
+    typeof minInterval !== 'number'
+    || !Number.isFinite(minInterval)
+    || !Number.isInteger(minInterval)
+    || minInterval < 60
+  ) {
+    return false
+  }
+
+  const sizing = node.sizing
+  if (!sizing) {
+    return false
+  }
+  if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') {
+    return false
+  }
+  if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) {
+    return false
+  }
+
+  const contract = registry.getContractByKey('program.dynamic_grid')
   if (!contract) {
     return false
   }
