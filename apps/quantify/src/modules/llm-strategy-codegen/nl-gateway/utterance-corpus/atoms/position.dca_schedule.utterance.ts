@@ -1,0 +1,82 @@
+import type { UtteranceCorpusCase } from '../utterance-corpus.types'
+
+export const positionDcaScheduleUtterances = [
+  {
+    id: 'position-dca-schedule-zh-locked-price-interval',
+    atomKey: 'position.dca_schedule',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: '每跌 5% 补仓一次，每次 100 USDT，最多 3 次，总投入不超过 500 USDT，跌破前低停止。',
+    expected: {
+      owner: 'positionConstraint',
+      key: 'position.dca_schedule',
+      status: 'locked',
+      params: { maxCount: 3, triggerMode: 'price_interval' },
+      openSlotKeys: [],
+    },
+  },
+  {
+    id: 'position-dca-schedule-zh-locked-capital-cap',
+    atomKey: 'position.dca_schedule',
+    locale: 'zh',
+    coverage: 'open-slot',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，定投补仓，总投入不超过 500 USDT，最多 4 次，每次 100 USDT，跌破前低停止补仓。',
+    expected: {
+      owner: 'positionConstraint',
+      key: 'position.dca_schedule',
+      status: 'open',
+      params: { maxCount: 4 },
+      openSlotKeys: ['position.dca_schedule.trigger_mode'],
+    },
+  },
+  {
+    id: 'position-dca-schedule-en-locked-price-drop',
+    atomKey: 'position.dca_schedule',
+    locale: 'en',
+    coverage: 'locked',
+    utterance: 'DCA every time price drops 2%, each order 100 USDT, max 3 times, total capital 500 USDT, stop if previous low breaks.',
+    expected: {
+      owner: 'positionConstraint',
+      key: 'position.dca_schedule',
+      status: 'open',
+      params: { triggerMode: 'price_interval' },
+      openSlotKeys: [
+        'position.dca_schedule.max_count',
+        'position.dca_schedule.capital_cap',
+        'position.dca_schedule.per_order_sizing',
+      ],
+    },
+  },
+  {
+    id: 'position-dca-schedule-zh-open-slot-missing-sizing',
+    atomKey: 'position.dca_schedule',
+    locale: 'zh',
+    coverage: 'open-slot',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，定投补仓最多 3 次。',
+    expected: {
+      owner: 'positionConstraint',
+      key: 'position.dca_schedule',
+      status: 'open',
+      params: { maxCount: 3 },
+      openSlotKeys: [
+        'position.dca_schedule.capital_cap',
+        'position.dca_schedule.per_order_sizing',
+        'position.dca_schedule.trigger_mode',
+      ],
+    },
+  },
+  {
+    id: 'position-dca-schedule-zh-locked-time-interval',
+    atomKey: 'position.dca_schedule',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，每天定投补仓 100 USDT，最多 30 次，总投入 3000 USDT，跌破前低停止补仓。',
+    expected: {
+      owner: 'positionConstraint',
+      key: 'position.dca_schedule',
+      status: 'locked',
+      params: { maxCount: 30, triggerMode: 'time_interval' },
+      openSlotKeys: [],
+    },
+  },
+] satisfies readonly UtteranceCorpusCase[]

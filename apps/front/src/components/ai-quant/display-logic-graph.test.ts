@@ -73,6 +73,30 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[2].items.map(item => item.text).join(' ')).toContain('永续')
   })
 
+  it('renders public rule condition text without canonical condition keys', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-public-text',
+            phase: 'entry',
+            condition: { text: '收盘价高于开盘价' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '1m',
+        positionPct: 10,
+      },
+    })
+
+    expect(graph.blocks[0].items[0].text).toBe('收盘价高于开盘价')
+    expect(graph.blocks[0].items.map(item => item.text)).toContain('开多')
+  })
+
   it('renders canonical v2 conjunctive atomic EMA stack fallback as one entry block', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

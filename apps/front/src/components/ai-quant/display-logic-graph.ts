@@ -37,6 +37,7 @@ export interface DisplayLogicGraph {
 interface DisplayLogicGraphCondition {
   kind?: string
   key?: string
+  text?: string
   op?: string
   value?: unknown
   params?: Record<string, unknown>
@@ -450,6 +451,7 @@ function formatGridCondition(condition: DisplayLogicGraphCondition): string {
 
 function formatConditionText(condition: DisplayLogicGraphCondition | undefined): string {
   if (!condition) return '条件待补充'
+  if (typeof condition.text === 'string' && condition.text.trim()) return condition.text.trim()
   if (condition.kind === 'AND' || condition.kind === 'OR') {
     const joiner = condition.kind === 'AND' ? '，且' : ' 或 '
     const children = Array.isArray(condition.children) ? condition.children : []

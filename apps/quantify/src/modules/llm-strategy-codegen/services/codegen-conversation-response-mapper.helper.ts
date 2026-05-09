@@ -1,4 +1,5 @@
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
+import { InternalKeyLeakGuardService } from '../nl-gateway/internal-key-leak-guard'
 
 export interface PublishedSnapshotProjection {
   publishedSnapshotStrategyConfig: Record<string, unknown> | null
@@ -9,6 +10,8 @@ export interface PublishedSnapshotProjection {
 }
 
 export class CodegenConversationResponseMapperHelper {
+  private readonly internalKeyLeakGuard = new InternalKeyLeakGuardService()
+
   finalizeSessionResponse(
     response: Omit<CodegenSessionResponseDto, 'clarificationGate'> & {
       clarificationGate?: CodegenSessionResponseDto['clarificationGate']
@@ -19,10 +22,12 @@ export class CodegenConversationResponseMapperHelper {
   ): CodegenSessionResponseDto {
     const clarificationGate = response.clarificationGate ?? buildClarificationGate(response.clarificationState)
     const publicationGate = response.publicationGate ?? this.readPublicationGate(response.consistencyReport)
-
     if (!clarificationGate.blocked) {
       return {
         ...response,
+        specDesc: this.buildPublicSpecDesc(response.specDesc),
+        semanticGraph: null,
+        unsupportedFallback: this.buildPublicUnsupportedFallback(response.unsupportedFallback),
         clarificationGate,
         publicationGate,
       }
@@ -35,6 +40,7 @@ export class CodegenConversationResponseMapperHelper {
       specDesc: null,
       canonicalDigest: null,
       semanticGraph: null,
+      unsupportedFallback: this.buildPublicUnsupportedFallback(response.unsupportedFallback),
     }
   }
 
@@ -259,6 +265,59 @@ export class CodegenConversationResponseMapperHelper {
     return null
   }
 
+  private buildPublicSpecDesc(
+    value: CodegenSessionResponseDto['specDesc'],
+  ): CodegenSessionResponseDto['specDesc'] {
+    if (value === null || value === undefined) {
+      return value
+    }
+
+    const record = this.readRecord(value)
+    if (!record) {
+      return null
+    }
+
+    const publicSpecDesc = omitInternalSpecDescFields(record)
+    this.internalKeyLeakGuard.assertNoLeaks(publicSpecDesc, {
+      surface: 'codegen.session.specDesc',
+      scanPaths: true,
+    })
+    return publicSpecDesc
+  }
+
+  private buildPublicUnsupportedFallback(
+    value: CodegenSessionResponseDto['unsupportedFallback'],
+  ): CodegenSessionResponseDto['unsupportedFallback'] {
+    if (value === null || value === undefined) {
+      return null
+    }
+
+    const record = this.readRecord(value)
+    if (!record) {
+      return null
+    }
+
+    const unsupportedAtoms = Array.isArray(record.unsupportedAtoms)
+      ? record.unsupportedAtoms.map(toPublicUnsupportedAtom).filter(isRecord)
+      : []
+    const recommendedStrategy = toPublicRecommendedStrategy(record.recommendedStrategy)
+    const publicFallback: Record<string, unknown> = {}
+    copyStringField(record, publicFallback, 'status')
+    copyStringField(record, publicFallback, 'prompt')
+    if (unsupportedAtoms.length > 0) {
+      publicFallback.unsupportedAtoms = unsupportedAtoms
+    }
+    if (recommendedStrategy) {
+      publicFallback.recommendedStrategy = recommendedStrategy
+    }
+
+    this.internalKeyLeakGuard.assertNoLeaks(publicFallback, {
+      surface: 'codegen.session.unsupportedFallback',
+      scanPaths: true,
+    })
+    return publicFallback
+  }
+
   private readRecord(value: unknown): Record<string, unknown> | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return null
@@ -266,4 +325,219 @@ export class CodegenConversationResponseMapperHelper {
 
     return value as Record<string, unknown>
   }
+}
+
+function omitInternalSpecDescFields(specDesc: Record<string, unknown>): Record<string, unknown> {
+  const {
+    rules,
+    canonicalSpec,
+    riskRules: _riskRules,
+    normalizedIntent: _normalizedIntent,
+    stateHints: _stateHints,
+    canonicalSnapshot: _canonicalSnapshot,
+    specSnapshot: _specSnapshot,
+    semanticState: _semanticState,
+    ...publicSpecDesc
+  } = specDesc
+  const conditionTextByRuleId = readDisplayConditionTextByRuleId(publicSpecDesc.displayLogicGraph)
+  const publicRiskRules = Array.isArray(rules) ? toPublicRiskRules(rules) : null
+
+  return {
+    ...publicSpecDesc,
+    ...(Array.isArray(rules)
+      ? { rules: rules.map(rule => toPublicRule(rule, conditionTextByRuleId)).filter(isRecord) }
+      : {}),
+    ...(publicRiskRules && Object.keys(publicRiskRules).length > 0 ? { riskRules: publicRiskRules } : {}),
+    ...(isRecord(canonicalSpec) ? { canonicalSpec: toPublicCanonicalSpec(canonicalSpec) } : {}),
+  }
+}
+
+function toPublicRule(
+  rule: unknown,
+  conditionTextByRuleId: ReadonlyMap<string, string>,
+): Record<string, unknown> | null {
+  if (!isRecord(rule)) {
+    return null
+  }
+
+  const publicRule: Record<string, unknown> = {}
+  copyStringField(rule, publicRule, 'id')
+  copyStringField(rule, publicRule, 'phase')
+  copyStringField(rule, publicRule, 'join')
+
+  if (Array.isArray(rule.actions)) {
+    publicRule.actions = rule.actions.map(toPublicAction).filter(isRecord)
+  }
+  const conditionText = readRuleConditionText(rule, conditionTextByRuleId)
+  if (conditionText) {
+    publicRule.condition = { text: conditionText }
+  }
+
+  return publicRule
+}
+
+function readRuleConditionText(
+  rule: Record<string, unknown>,
+  conditionTextByRuleId: ReadonlyMap<string, string>,
+): string | null {
+  const id = typeof rule.id === 'string' ? rule.id.trim() : ''
+  const displayText = id ? conditionTextByRuleId.get(id) : null
+  if (displayText) {
+    return displayText
+  }
+
+  const riskCondition = toPublicRiskCondition(rule)
+  return riskCondition?.text ?? null
+}
+
+function toPublicAction(action: unknown): Record<string, unknown> | null {
+  if (!isRecord(action)) {
+    return null
+  }
+
+  const publicAction: Record<string, unknown> = {}
+  copyStringField(action, publicAction, 'type')
+  if (isRecord(action.sizing)) {
+    publicAction.sizing = action.sizing
+  }
+
+  return publicAction
+}
+
+function toPublicCanonicalSpec(canonicalSpec: Record<string, unknown>): Record<string, unknown> {
+  const publicCanonicalSpec: Record<string, unknown> = {}
+  if (isRecord(canonicalSpec.market)) {
+    publicCanonicalSpec.market = canonicalSpec.market
+  }
+  if (isRecord(canonicalSpec.sizing)) {
+    publicCanonicalSpec.sizing = canonicalSpec.sizing
+  }
+
+  return publicCanonicalSpec
+}
+
+function readDisplayConditionTextByRuleId(displayLogicGraph: unknown): ReadonlyMap<string, string> {
+  const graph = isRecord(displayLogicGraph) ? displayLogicGraph : null
+  const blocks = Array.isArray(graph?.blocks) ? graph.blocks : []
+  const conditionTextByRuleId = new Map<string, string>()
+  for (const block of blocks) {
+    const record = isRecord(block) ? block : null
+    const items = Array.isArray(record?.items) ? record.items : []
+    for (const item of items) {
+      const itemRecord = isRecord(item) ? item : null
+      if (itemRecord?.kind !== 'condition' || typeof itemRecord.id !== 'string' || typeof itemRecord.text !== 'string') {
+        continue
+      }
+      const id = itemRecord.id.trim()
+      const text = itemRecord.text.trim()
+      const prefix = 'condition-'
+      if (!id.startsWith(prefix) || text.length === 0) {
+        continue
+      }
+      const ruleId = id.slice(prefix.length)
+      if (ruleId && !conditionTextByRuleId.has(ruleId)) {
+        conditionTextByRuleId.set(ruleId, text)
+      }
+    }
+  }
+  return conditionTextByRuleId
+}
+
+function toPublicRiskRules(rules: unknown[]): Record<string, unknown> {
+  const publicRiskRules: Record<string, unknown> = {}
+  for (const rule of rules) {
+    const riskCondition = toPublicRiskCondition(rule)
+    if (!riskCondition) {
+      continue
+    }
+    if (riskCondition.type === 'stop_loss') {
+      publicRiskRules.stopLossPct = riskCondition.valuePct
+    }
+    if (riskCondition.type === 'take_profit') {
+      publicRiskRules.takeProfitPct = riskCondition.valuePct
+    }
+  }
+  return publicRiskRules
+}
+
+function toPublicRiskCondition(rule: unknown): { text: string, type: string, valuePct: number } | null {
+  if (!isRecord(rule) || rule.phase !== 'risk') {
+    return null
+  }
+  const condition = isRecord(rule.condition) ? rule.condition : null
+  if (!condition || typeof condition.key !== 'string') {
+    return null
+  }
+
+  const valuePct = normalizePercent(condition.value)
+  if (valuePct === null) {
+    return null
+  }
+
+  switch (condition.key) {
+    case 'position_loss_pct':
+      return {
+        text: `亏损达到 ${formatPercent(valuePct)}%`,
+        type: 'stop_loss',
+        valuePct,
+      }
+    case 'position_profit_pct':
+      return {
+        text: `盈利达到 ${formatPercent(valuePct)}%`,
+        type: 'take_profit',
+        valuePct,
+      }
+    default:
+      return null
+  }
+}
+
+function normalizePercent(value: unknown): number | null {
+  const numeric = typeof value === 'number'
+    ? value
+    : (typeof value === 'string' && value.trim() ? Number(value) : NaN)
+  if (!Number.isFinite(numeric)) {
+    return null
+  }
+  return numeric <= 1 ? numeric * 100 : numeric
+}
+
+function formatPercent(value: number): string {
+  return Number(value.toFixed(4)).toString()
+}
+
+function toPublicUnsupportedAtom(atom: unknown): Record<string, unknown> | null {
+  if (!isRecord(atom)) {
+    return null
+  }
+
+  const publicAtom: Record<string, unknown> = {}
+  copyStringField(atom, publicAtom, 'displayName')
+  copyStringField(atom, publicAtom, 'publicReason')
+  return Object.keys(publicAtom).length > 0 ? publicAtom : null
+}
+
+function toPublicRecommendedStrategy(strategy: unknown): Record<string, unknown> | null {
+  if (!isRecord(strategy)) {
+    return null
+  }
+
+  const publicStrategy: Record<string, unknown> = {}
+  copyStringField(strategy, publicStrategy, 'strategyKey')
+  copyStringField(strategy, publicStrategy, 'description')
+  return Object.keys(publicStrategy).length > 0 ? publicStrategy : null
+}
+
+function copyStringField(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  field: string,
+): void {
+  if (typeof source[field] === 'string') {
+    target[field] = source[field]
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }

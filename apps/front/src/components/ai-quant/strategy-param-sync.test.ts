@@ -117,6 +117,73 @@ describe('strategy-param-sync', () => {
     })
   })
 
+  it('uses public rule condition text without requiring canonical condition keys', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        rules: [
+          {
+            phase: 'entry',
+            condition: { text: '3m 内下跌 1% 买入' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.2 } }],
+          },
+          {
+            phase: 'exit',
+            condition: { text: '5m 内上涨 2% 卖出' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+        market: { symbols: ['BTCUSDT'], timeframes: ['3m'] },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '3m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(result.paramValues.buyWindowMin).toBe(3)
+    expect(result.paramValues.buyDropPct).toBe(1)
+    expect(result.paramValues.sellWindowMin).toBe(5)
+    expect(result.paramValues.sellRisePct).toBe(2)
+    expect(result.paramValues.positionPct).toBe(20)
+  })
+
+  it('syncs public risk params from sanitized rule conditions', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        rules: [
+          {
+            phase: 'risk',
+            condition: { text: '亏损达到 5%', type: 'stop_loss', valuePct: 5 },
+          },
+          {
+            phase: 'risk',
+            condition: { text: '盈利达到 12%', type: 'take_profit', valuePct: 12 },
+          },
+        ],
+        market: { symbols: ['BTCUSDT'], timeframes: ['15m'] },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      currentValues: {},
+      capabilities: null,
+    })
+
+    expect(result.paramValues.stopLossPct).toBe(5)
+    expect(result.paramValues.takeProfitPct).toBe(12)
+    expect(result.executionTags).toEqual(expect.arrayContaining([
+      'stopLossPct: 5',
+      'takeProfitPct: 12',
+    ]))
+  })
+
   it('normalizes legacy fixed sizing modes before syncing params', () => {
     const quoteResult = syncStrategyParamsFromCodegen({
       spec: {

@@ -10,9 +10,12 @@ import {
   renderEnumDisplayToken,
   renderOptionalDisplayToken,
 } from '../nl-gateway/display-registry'
+import {
+  buildInternalIdentifierKeys,
+  buildInternalIdentifierPattern,
+} from '../nl-gateway/internal-key-leak-guard/internal-key-identifiers'
+import { getGoldenUtterancesForAtom } from '../nl-gateway/utterance-corpus'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
-
-const EXTRA_INTERNAL_IDENTIFIERS = ['generic_boundary']
 
 const PRESENTATIONS: SemanticPresentationMetadata[] = [
   presentation({
@@ -145,11 +148,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['成交量过滤', '成交量条件', '量能阈值'],
     positiveExamples: ['成交量大于 1000 时允许入场', '成交额超过 500 万时开多'],
     negativeExamples: ['只用均量倍数过滤'],
-    goldenUtterances: [
-      '成交量大于 1000 时允许开多',
-      '成交额超过指定阈值时过滤入场',
-      '当前成交量低于阈值时禁止开仓',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('volume.threshold'),
     displayRenderer: ({ params }) => {
       const metric = stringParam(params, 'metric', 'base_volume')
       const op = stringParam(params, 'operator', 'GT')
@@ -173,11 +172,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['ATR 过滤', 'ATR 条件', 'ATR 大于阈值', '平均真实波幅阈值'],
     positiveExamples: ['ATR14 大于 50 才允许入场', 'ATR 小于 100 时禁止开仓'],
     negativeExamples: ['只用固定止损'],
-    goldenUtterances: [
-      'ATR14 大于 50 时允许开多',
-      'block entries when ATR less than 100',
-      'ATR 过滤入场',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('volatility.atr_threshold'),
     displayRenderer: ({ params }) => {
       const op = stringParam(params, 'operator', 'GT')
       const period = numberParam(params, 'period', 0)
@@ -203,11 +198,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['时间段过滤', '交易时段', '开仓时间', '允许开仓时间'],
     positiveExamples: ['北京时间 9:30-11:30 内允许开仓', 'allow entries between 09:30-11:30 UTC'],
     negativeExamples: ['不限制开仓时间'],
-    goldenUtterances: [
-      '北京时间 9:30 到 11:30 内允许开仓',
-      'allow entries between 09:30-11:30 UTC',
-      '只在上午 9:30 到 11:30 开仓',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('strategy.time_window'),
     displayRenderer: ({ params }) => {
       const timezone = stringParam(params, 'timezone', 'UTC')
       const windowsRaw = typeof params?.windows === 'string' ? params.windows : null
@@ -237,11 +228,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['已有仓位不再开仓', '持仓中禁止开仓', '仓位存在时阻止入场', '有仓位'],
     positiveExamples: ['已有多头仓位时不再开多', '当持仓中禁止同向重复开仓'],
     negativeExamples: ['无仓位时开仓', '加仓'],
-    goldenUtterances: [
-      '已有多头仓位时不再开多',
-      '持仓中禁止开仓',
-      'block entries when in position',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('position.has_position'),
     displayRenderer: ({ params }) => {
       const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
       return renderDisplayToken('atom.position.has_position.display', {
@@ -259,11 +246,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['无仓位才开仓', '空仓时才开仓', '没有持仓时允许入场', '未开仓'],
     positiveExamples: ['无多头仓位才开多', '当前无仓时才允许入场'],
     negativeExamples: ['已有仓位时开仓', '加仓'],
-    goldenUtterances: [
-      '无多头仓位才开多',
-      '未开仓时才允许入场',
-      'enter only when flat',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('position.no_position'),
     displayRenderer: ({ params }) => {
       const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
       return renderDisplayToken('atom.position.no_position.display', {
@@ -564,12 +547,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['追加仓位', '顺势加码', '金字塔加仓', 'scale in', 'pyramid'],
     positiveExamples: ['突破后再加一笔仓位', '信号再次出现时加仓 50%', '盈利 5% 后加仓 30%'],
     negativeExamples: ['只开第一笔仓位'],
-    goldenUtterances: [
-      '信号再次出现时加仓 50%',
-      '盈利 5% 后加仓 30%',
-      'scale in 30% when profit 5%',
-      '加仓',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('action.add_position'),
   }),
   presentation({
     key: 'action.reverse_position',
@@ -577,12 +555,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['反向开仓', '平仓后反向', '反转持仓', '翻仓'],
     positiveExamples: ['多单止损后反手开空', '信号反转时由多翻空，使用当前仓位', '由空翻多，下根 K 线执行'],
     negativeExamples: ['只平仓不反向'],
-    goldenUtterances: [
-      '信号反转时由多翻空，使用当前仓位',
-      '由空翻多，下根 K 线执行',
-      'reverse position long to short, same bar',
-      '反手',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('action.reverse_position'),
   }),
   presentation({
     key: 'action.grid_ladder',
@@ -780,7 +753,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['分档止盈', '多档止盈', '部分止盈', '阶梯止盈'],
     positiveExamples: ['盈利 5% 减仓 30%, 10% 再减 30%, 15% 全部平仓'],
     negativeExamples: ['盈利 10% 全部止盈'],
-    goldenUtterances: ['盈利 5% 先减仓 30%，再涨到 10% 再减 30%，最终 15% 全部平仓'],
+    goldenUtterances: getGoldenUtterancesForAtom('risk.partial_take_profit'),
     displayRenderer: ({ params }) => {
       const tiers = params.tiers
       if (!Array.isArray(tiers) || tiers.length === 0) {
@@ -800,12 +773,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     aliases: ['定投补仓', '分批补仓计划', 'DCA', '网格补仓', '定期补仓'],
     positiveExamples: ['每跌 2% 补仓一次，最多 3 次', '定投补仓，总资金上限 1000 USDT'],
     negativeExamples: ['只开一次固定仓位', '单次加仓'],
-    goldenUtterances: [
-      '价格每回撤 2% 补仓一次并限制总次数',
-      '定投计划：每跌 3% 补仓 100 USDT，最多补 4 次',
-      'DCA every time price drops 2%, max 3 times',
-      '价格每下跌 5% 自动补仓，跌破前低停止',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('position.dca_schedule'),
     displayRenderer: ({ params }) => {
       const maxCount = typeof params?.maxCount === 'number' ? `最多 ${params.maxCount} 次` : ''
       const triggerMode = typeof params?.triggerMode === 'string' ? renderDcaTriggerMode(params.triggerMode) : ''
@@ -869,13 +837,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       '连续 3 根阳线后加多',
     ],
     negativeExamples: ['像吞没', '疑似锤子', '看起来像十字星'],
-    goldenUtterances: [
-      'OKX BTCUSDT 15m，出现看涨吞没形态后开多，5% 止损。',
-      'OKX BTCUSDT 15m，bearish engulfing candle pattern，开空，5% 止损。',
-      'OKX BTCUSDT 15m，锤子线（bullish hammer）确认后做多，单笔 10%。',
-      '出现看跌十字星形态后开空',
-      '连续 3 根阳线后做多入场',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('price.candle_pattern'),
     displayRenderer: ({ params }) => {
       const pattern = stringParam(params, 'pattern', 'engulfing')
       const direction = stringParam(params, 'direction', '')
@@ -918,12 +880,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       '三角形向上突破后开多',
     ],
     negativeExamples: ['看起来像头肩', '疑似双顶', 'looks like a triangle'],
-    goldenUtterances: [
-      'OKX BTCUSDT 1h，出现头肩底形态后开多，5% 止损。',
-      'OKX BTCUSDT 1h，bearish double top breakdown，开空，5% 止损。',
-      'OKX BTCUSDT 1h，double bottom 形态确认后做多，单笔 10%。',
-      'OKX BTCUSDT 1h，bullish triangle breakout 后开多，5% 止损。',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('price.chart_pattern'),
     displayRenderer: ({ params }) => {
       const pattern = stringParam(params, 'pattern', 'head_and_shoulders')
       const direction = stringParam(params, 'direction', '')
@@ -959,12 +916,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       'liquidity grab at session high, open short',
     ],
     negativeExamples: ['看起来像扫荡', '疑似 sweep', 'looks like a stop hunt'],
-    goldenUtterances: [
-      'OKX BTCUSDT 15m，扫前低后 3 根内反弹做多，5% 止损。',
-      'OKX BTCUSDT 15m，bullish liquidity sweep at prev low, reclaim within 3 bars, open long.',
-      'OKX BTCUSDT 15m，扫前高（流动性猎杀）后回落做空，5% 止损。',
-      'OKX BTCUSDT 15m，bearish stop hunt at session high, open short, 5% stop loss.',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('liquidity.sweep'),
     displayRenderer: ({ params }) => {
       const direction = stringParam(params, 'direction', '')
       const reference = stringParam(params, 'reference', '')
@@ -1001,12 +953,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       'RSI 底背离 + 确认 3 根 K 线',
     ],
     negativeExamples: ['像背离', '疑似背离', '看起来像背离'],
-    goldenUtterances: [
-      'RSI 顶背离时开空',
-      'MACD 底背离出现后做多',
-      'RSI bullish divergence entry',
-      'RSI 背离信号但缺少指标方向',
-    ],
+    goldenUtterances: getGoldenUtterancesForAtom('indicator.divergence'),
     displayRenderer: ({ params }) => {
       const indicator = stringParam(params, 'indicator', 'RSI').toUpperCase()
       const direction = stringParam(params, 'direction', '')
@@ -1134,7 +1081,7 @@ export class SemanticPresentationRegistryService {
   }
 
   private getInternalIdentifierLeakPattern(): RegExp {
-    this.internalIdentifierLeakPattern ??= buildInternalIdentifierPattern(this.atomRegistry)
+    this.internalIdentifierLeakPattern ??= buildSemanticPresentationInternalIdentifierPattern(this.atomRegistry)
     return this.internalIdentifierLeakPattern
   }
 }
@@ -1336,15 +1283,6 @@ function formatPercentLikeValue(value: number): number {
   return value > 1 ? value : value * 100
 }
 
-function buildInternalIdentifierPattern(atomRegistry: SemanticAtomRegistryService): RegExp {
-  const registeredAtomKeys = atomRegistry.list().map(atom => atom.key)
-  const identifiers = [...new Set([...registeredAtomKeys, ...EXTRA_INTERNAL_IDENTIFIERS])]
-    .sort((left, right) => right.length - left.length)
-    .map(escapeRegExp)
-
-  return new RegExp(`(^|[^A-Za-z0-9_.])(?:${identifiers.join('|')})(?=$|[^A-Za-z0-9_])`, 'u')
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+function buildSemanticPresentationInternalIdentifierPattern(atomRegistry: SemanticAtomRegistryService): RegExp {
+  return buildInternalIdentifierPattern(buildInternalIdentifierKeys(atomRegistry))
 }

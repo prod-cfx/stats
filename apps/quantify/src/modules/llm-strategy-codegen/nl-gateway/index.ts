@@ -1,5 +1,12 @@
 export { NlGatewayModule } from './nl-gateway.module'
 export {
+  InternalKeyLeakGuardService,
+} from './internal-key-leak-guard'
+export type {
+  InternalKeyLeakGuardFinding,
+  InternalKeyLeakGuardScanOptions,
+} from './internal-key-leak-guard'
+export {
   CURRENT_SEMANTIC_VERSION,
   compareSemanticVersion,
   isAtomExecutableForStrategy,
@@ -18,3 +25,17 @@ export type {
   DisplayTokenKind,
   DisplayTokenTemplateValues,
 } from './display-registry'
+export {
+  getGoldenUtterancesForAtom,
+  getUtteranceCorpusForAtom,
+  SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
+  utteranceCorpus,
+} from './utterance-corpus'
+export type {
+  SupportedExecutableUtteranceAtom,
+  UtteranceCorpusCase,
+  UtteranceCorpusCoverage,
+  UtteranceCorpusExpected,
+  UtteranceCorpusLocale,
+  UtteranceCorpusOwner,
+} from './utterance-corpus'

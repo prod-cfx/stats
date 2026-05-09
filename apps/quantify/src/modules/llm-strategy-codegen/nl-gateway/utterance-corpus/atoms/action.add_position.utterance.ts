@@ -1,0 +1,87 @@
+import type { UtteranceCorpusCase } from '../utterance-corpus.types'
+
+export const actionAddPositionUtterances = [
+  {
+    id: 'action-add-position-zh-locked-signal-confirm',
+    atomKey: 'action.add_position',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，回踩 MA20 不破后加仓 20%，最多加仓 3 次，单笔 10%。',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      params: { addMode: 'signal_confirm', addRatio: 0.2 },
+      openSlotKeys: [],
+    },
+  },
+  {
+    id: 'action-add-position-zh-locked-profit-pct',
+    atomKey: 'action.add_position',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，盈利后加仓 30%，最多加仓 2 次，单笔 10%。',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      params: { addMode: 'profit_pct', addRatio: 0.3 },
+      openSlotKeys: [],
+    },
+  },
+  {
+    id: 'action-add-position-en-locked-profit-pct',
+    atomKey: 'action.add_position',
+    locale: 'en',
+    coverage: 'open-slot',
+    utterance: 'OKX BTCUSDT 15m, MA20 cross above MA50 open long, scale in 30% when profit 5%, max 2 times, position 10%.',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      params: { addMode: 'profit_pct' },
+      openSlotKeys: ['action.add_position.constraint'],
+    },
+  },
+  {
+    id: 'action-add-position-zh-open-slot-missing-add-mode',
+    atomKey: 'action.add_position',
+    locale: 'zh',
+    coverage: 'open-slot',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，加仓，单笔 10%。',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      openSlotKeys: ['action.add_position.constraint'],
+    },
+  },
+  {
+    id: 'action-add-position-zh-locked-drawdown-pct',
+    atomKey: 'action.add_position',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，回撤 5% 补仓 30%，最多 3 次，单笔 10%。',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      params: { addMode: 'drawdown_pct', addRatio: 0.3 },
+      openSlotKeys: [],
+    },
+  },
+  {
+    id: 'action-add-position-en-locked-drawdown-pct',
+    atomKey: 'action.add_position',
+    locale: 'en',
+    coverage: 'open-slot',
+    utterance: 'OKX BTCUSDT 15m, MA20 cross above MA50 open long, pullback 5% scale in 30%, max 3 times.',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      params: { addMode: 'drawdown_pct' },
+      openSlotKeys: ['action.add_position.constraint'],
+    },
+  },
+] satisfies readonly UtteranceCorpusCase[]

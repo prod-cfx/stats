@@ -22,7 +22,10 @@ export interface StrategyParamSyncResult {
 
 interface CanonicalRuleCondition {
   key?: string
+  text?: string
+  type?: string
   value?: unknown
+  valuePct?: unknown
 }
 
 interface CanonicalRuleAction {
@@ -44,6 +47,9 @@ function deriveEntryRulesFromCanonicalRules(rules: CanonicalRule[]): string[] {
   return rules
     .filter(rule => rule.phase === 'entry')
     .flatMap((rule) => {
+      if (typeof rule.condition?.text === 'string' && rule.condition.text.trim()) {
+        return [rule.condition.text.trim()]
+      }
       switch (rule.condition?.key) {
         case 'bollinger.upper_break':
           return ['突破布林带上轨']
@@ -58,7 +64,12 @@ function deriveEntryRulesFromCanonicalRules(rules: CanonicalRule[]): string[] {
 function deriveExitRulesFromCanonicalRules(rules: CanonicalRule[]): string[] {
   return rules
     .filter(rule => rule.phase === 'exit')
-    .flatMap(rule => rule.condition?.key === 'bollinger.middle_revert' ? ['价格回到布林带中轨（MA20）平仓'] : [])
+    .flatMap((rule) => {
+      if (typeof rule.condition?.text === 'string' && rule.condition.text.trim()) {
+        return [rule.condition.text.trim()]
+      }
+      return rule.condition?.key === 'bollinger.middle_revert' ? ['价格回到布林带中轨（MA20）平仓'] : []
+    })
 }
 
 const STRATEGY_PARAM_KEYS = new Set([
@@ -77,6 +88,7 @@ const STRATEGY_PARAM_KEYS = new Set([
   'entryPrice',
   'exitPrice',
   'stopLossPct',
+  'takeProfitPct',
   'maxDrawdownPct',
   'gridLower',
   'gridUpper',
@@ -286,6 +298,14 @@ export function syncStrategyParamsFromCodegen(args: {
 
     for (const rule of topLevelRules) {
       if (rule.phase !== 'risk') continue
+      const publicRiskType = parseString(rule.condition?.type)
+      const publicRiskPct = parseNumber(rule.condition?.valuePct)
+      if (publicRiskType === 'stop_loss' && publicRiskPct !== null) {
+        next.stopLossPct = publicRiskPct
+      }
+      if (publicRiskType === 'take_profit' && publicRiskPct !== null) {
+        next.takeProfitPct = publicRiskPct
+      }
       if (rule.condition?.key === 'position_loss_pct') {
         const stopLossPct = parseNumber(rule.condition.value)
         if (stopLossPct !== null) {
@@ -441,6 +461,7 @@ export function syncStrategyParamsFromCodegen(args: {
   setNumberField(properties, required, values, 'entryPrice', 'Entry Price', entryPrice, { minimum: 0 })
   setNumberField(properties, required, values, 'exitPrice', 'Exit Price', exitPrice, { minimum: 0 })
   setNumberField(properties, required, values, 'stopLossPct', 'Stop Loss %', parseNumber(riskRules.stopLossPct), { minimum: 0 })
+  setNumberField(properties, required, values, 'takeProfitPct', 'Take Profit %', parseNumber(riskRules.takeProfitPct), { minimum: 0 })
   setNumberField(properties, required, values, 'maxDrawdownPct', 'Max Drawdown %', parseNumber(riskRules.maxDrawdownPct), { minimum: 0, maximum: 100 })
   setNumberField(properties, required, values, 'gridLower', 'Grid Lower', gridLower, { minimum: 0 })
   setNumberField(properties, required, values, 'gridUpper', 'Grid Upper', gridUpper, { minimum: 0 })

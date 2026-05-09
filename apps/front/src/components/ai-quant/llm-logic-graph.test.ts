@@ -148,6 +148,31 @@ describe('buildLogicGraphFromCodegenSpec', () => {
     expect(graph.actions.map(item => item.action)).toEqual(expect.arrayContaining(['SELL', 'BUY', 'CLOSE']))
   })
 
+  it('builds graph from public rule condition text without canonical keys', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        rules: [
+          {
+            phase: 'entry',
+            condition: { text: '收盘价高于开盘价' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+        market: { symbols: ['BTCUSDT'], timeframes: ['1m'] },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1m',
+        positionPct: 10,
+      },
+      12,
+    )
+
+    expect(graph.trigger.map(item => item.operator)).toContain('收盘价高于开盘价')
+    expect(graph.actions.map(item => item.action)).toContain('BUY')
+  })
+
   it('uses fixed quote sizing for action amount instead of fallback percent', () => {
     const graph = buildLogicGraphFromCodegenSpec(
       {

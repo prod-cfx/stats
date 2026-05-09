@@ -14,6 +14,7 @@ interface CodegenSpecMarket {
 interface CodegenSpecRuleCondition {
   key?: string
   kind?: string
+  text?: string
   op?: string
   value?: unknown
   params?: Record<string, unknown>
@@ -130,6 +131,9 @@ function readConditionTimeframe(condition: CodegenSpecRuleCondition | undefined)
 
 function describeRuleCondition(condition: CodegenSpecRuleCondition | undefined): string | null {
   if (!condition) return null
+  if (typeof condition.text === 'string' && condition.text.trim()) {
+    return condition.text.trim()
+  }
   const key = condition.key
   switch (key) {
     case 'price.change_pct': {

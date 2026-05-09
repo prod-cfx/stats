@@ -1,4 +1,7 @@
-import { SemanticClarificationQuestionRendererService } from '../semantic-clarification-question-renderer.service'
+import {
+  listClarificationSlotI18nTokens,
+  SemanticClarificationQuestionRendererService,
+} from '../semantic-clarification-question-renderer.service'
 
 describe('SemanticClarificationQuestionRendererService', () => {
   const service = new SemanticClarificationQuestionRendererService()
@@ -29,6 +32,13 @@ describe('SemanticClarificationQuestionRendererService', () => {
       slotKey: 'custom.semantic.slot',
       fallback: '请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。',
     })).toBe('请确认单笔仓位大小（例如 10% / 10 USDT / 0.001 BTC）。')
+  })
+
+  it('keeps legacy render fallback behavior even when fallback contains raw keys', () => {
+    expect(service.render({
+      slotKey: 'unknown.semantic.slot',
+      fallback: '请补充 unknown.semantic.slot。',
+    })).toBe('请补充 unknown.semantic.slot。')
   })
 
   it('renders position sizing from public wording instead of leaking fallback internals', () => {
@@ -76,4 +86,81 @@ describe('SemanticClarificationQuestionRendererService', () => {
       fallback: 'fallback should not leak',
     })).toBe(expected)
   })
+
+  it('renders structured Chinese copy without exposing raw slot keys in public text', () => {
+    const question = service.renderStructured({
+      slotKey: 'position.sizing',
+      fallback: '请补充 position.sizing。',
+    }, 'zh')
+
+    expect(question).toEqual({
+      title: '需要补充信息',
+      question: '请确认单笔仓位大小，例如 10% / 10 USDT / 0.001 BTC。',
+      slotLabel: '单笔仓位大小',
+      examples: ['10%', '10 USDT', '0.001 BTC'],
+    })
+    expect(publicText(question)).not.toContain('position.sizing')
+  })
+
+  it('renders structured English copy from the i18n table', () => {
+    const question = service.renderStructured({
+      slotKey: 'trigger.volume.relative_average.multiplier',
+      fallback: '请补充 trigger.volume.relative_average.multiplier。',
+    }, 'en')
+
+    expect(question.title).toBe('Clarification required')
+    expect(question.question).toBe('Please confirm the volume multiplier, for example 1.5 times above the average volume.')
+    expect(question.slotLabel).toBe('relative-volume multiplier')
+    expect(question.examples).toEqual(['1.5 times above average volume'])
+    expect(publicText(question)).not.toContain('trigger.volume.relative_average.multiplier')
+  })
+
+  it('uses display-registry slot tokens for structured slot labels', () => {
+    expect(service.renderStructured({
+      slotKey: 'volume.threshold.value',
+      fallback: '请补充 volume.threshold.value。',
+    }, 'zh')).toEqual({
+      title: '需要补充信息',
+      question: '请补充成交量阈值。',
+      slotLabel: '成交量阈值',
+      examples: [],
+    })
+
+    expect(service.renderStructured({
+      slotKey: 'volume.threshold.value',
+      fallback: 'Please provide volume.threshold.value.',
+    }, 'en')).toEqual({
+      title: 'Clarification required',
+      question: 'Please provide the volume threshold.',
+      slotLabel: 'volume threshold',
+      examples: [],
+    })
+  })
+
+  it('has zh/en labels for every display-registry slot token', () => {
+    const tokens = listClarificationSlotI18nTokens()
+
+    expect(tokens.length).toBeGreaterThan(0)
+    for (const token of tokens) {
+      expect(token.slotKey).not.toMatch(/^slot\./u)
+      expect(token.zh).toEqual(expect.any(String))
+      expect(token.zh.trim()).not.toBe('')
+      expect(token.en).toEqual(expect.any(String))
+      expect(token.en.trim()).not.toBe('')
+    }
+  })
 })
+
+function publicText(question: {
+  title: string
+  question: string
+  slotLabel: string
+  examples: string[]
+}): string {
+  return [
+    question.title,
+    question.question,
+    question.slotLabel,
+    ...question.examples,
+  ].join('\n')
+}

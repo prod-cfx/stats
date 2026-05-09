@@ -145,7 +145,7 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '当前待确认 canonical spec digest', nullable: true })
   canonicalDigest?: string | null
 
-  @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true, nullable: true })
+  @ApiPropertyOptional({ description: '内部语义图（public session response 中清空；确认与编译真源仅服务端使用）', type: 'object', additionalProperties: true, nullable: true })
   semanticGraph?: Record<string, unknown> | null
 
   @ApiPropertyOptional({ description: '不支持语义的推荐替代策略状态', type: 'object', additionalProperties: true, nullable: true })
