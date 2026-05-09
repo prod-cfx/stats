@@ -105,7 +105,11 @@ describe('volume.threshold atom 七层 parity', () => {
     expect(state).not.toBeNull()
     const spec = canonicalBuilder.buildFromSemanticState(state!)
     expect(spec).toEqual(expect.objectContaining({ version: 2 }))
-    const gateRule = spec.rules.find(r => r.phase === 'gate' && r.condition?.key === 'volume.threshold')
+    const gateRule = spec.rules.find(r =>
+      r.phase === 'gate'
+      && r.condition?.kind === 'atom'
+      && r.condition.key === 'volume.threshold',
+    )
     expect(gateRule).toBeDefined()
     expect(gateRule?.condition).toEqual(expect.objectContaining({
       kind: 'atom',
