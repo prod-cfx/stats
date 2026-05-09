@@ -4309,9 +4309,10 @@ export class CanonicalSpecBuilderService {
           ? trigger.params.direction.trim().toLowerCase()
           : null
         if (cpDirection !== 'bullish' && cpDirection !== 'bearish') return null
-        const cpMinBars = typeof trigger.params.minBars === 'number' && Number.isFinite(trigger.params.minBars)
+        const cpMinBars = typeof trigger.params.minBars === 'number' && Number.isInteger(trigger.params.minBars) && trigger.params.minBars > 0
           ? trigger.params.minBars
           : undefined
+        if (cpPattern === 'consecutive_body' && cpMinBars === undefined) return null
         return {
           kind: 'atom',
           key: 'price.candle_pattern',

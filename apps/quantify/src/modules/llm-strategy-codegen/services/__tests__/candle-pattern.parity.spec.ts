@@ -19,6 +19,7 @@ import { SemanticPresentationRegistryService } from '../semantic-presentation-re
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 
 const atomRegistry = new SemanticAtomRegistryService()
 const seedExtractor = new SemanticSeedExtractorService()
@@ -34,6 +35,43 @@ const ENGULFING_BULLISH_UTTERANCE = 'OKX 合约 BTCUSDT 15m，出现看涨吞没
 const HAMMER_BEARISH_UTTERANCE = 'OKX 合约 BTCUSDT 15m，bearish hammer 形态确认后开空，5% 止损，单笔 10%。'
 const DOJI_BULLISH_UTTERANCE = 'OKX 合约 BTCUSDT 15m，bullish doji 形态出现时开多，5% 止损，单笔 10%。'
 const CONSECUTIVE_BODY_BULLISH_UTTERANCE = 'OKX 合约 BTCUSDT 15m，bullish consecutive body 连续 3 根后做多，5% 止损，单笔 10%。'
+
+function buildCanonicalSpecFromUtterance(utterance: string) {
+  const patch = seedExtractor.extract(utterance)
+  const state = seedStateBuilder.build(patch)
+  expect(state).not.toBeNull()
+  const classified = supportClassifier.classify(state!)
+  const normalized = readiness.normalize(classified.state)
+  return canonicalBuilder.buildFromSemanticState(normalized.state)
+}
+
+function collectConditionKeys(node: unknown): string[] {
+  if (!node || typeof node !== 'object') return []
+  const n = node as Record<string, unknown>
+  const ownKeys = typeof n['key'] === 'string' ? [n['key']] : []
+  const nestedConditions = Array.isArray(n['conditions'])
+    ? (n['conditions'] as unknown[]).flatMap(c => collectConditionKeys(c))
+    : []
+  const nestedChildren = Array.isArray(n['children'])
+    ? (n['children'] as unknown[]).flatMap(c => collectConditionKeys(c))
+    : []
+  return [...ownKeys, ...nestedConditions, ...nestedChildren]
+}
+
+function findCandleAtom(node: unknown): Record<string, unknown> | null {
+  if (!node || typeof node !== 'object') return null
+  const n = node as Record<string, unknown>
+  if (n['key'] === 'price.candle_pattern') return n
+  const nested = [
+    ...(Array.isArray(n['conditions']) ? n['conditions'] as unknown[] : []),
+    ...(Array.isArray(n['children']) ? n['children'] as unknown[] : []),
+  ]
+  for (const child of nested) {
+    const found = findCandleAtom(child)
+    if (found) return found
+  }
+  return null
+}
 
 describe('price.candle_pattern atom 七层 parity', () => {
   // ─── Layer 1: atom registry ──────────────────────────────────────────────────
@@ -122,6 +160,31 @@ describe('price.candle_pattern atom 七层 parity', () => {
       expect(trigger).toBeUndefined()
     })
 
+    it('negative: English subjective phrases → 不产生 price.candle_pattern trigger', () => {
+      const utterances = [
+        'OKX BTCUSDT 15m, looks like a bullish engulfing, open long only after MA20 confirmation.',
+        'OKX BTCUSDT 15m, kind of hammer pattern, wait for confirmation.',
+        'OKX BTCUSDT 15m, maybe consecutive body, open long later.',
+      ]
+      for (const utterance of utterances) {
+        const patch = seedExtractor.extract(utterance)
+        const trigger = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+        expect(trigger).toBeUndefined()
+      }
+    })
+
+    it('direction words away from pattern do not lock candle_pattern.direction', () => {
+      const patch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，hammer 形态确认且市场整体看跌，5% 止损。')
+      const trigger = patch.triggers?.find(t => t.key === 'price.candle_pattern')
+      expect(trigger).toBeDefined()
+      expect(trigger?.params?.pattern).toBe('hammer')
+      expect(trigger?.params?.direction).toBeUndefined()
+      expect(trigger?.status).toBe('open')
+      expect(trigger?.openSlots).toEqual(expect.arrayContaining([
+        expect.objectContaining({ slotKey: 'price.candle_pattern.direction' }),
+      ]))
+    })
+
     it('negative: 非白名单形态（三只乌鸦）→ 不产生 price.candle_pattern trigger，走 price.pattern open_slot', () => {
       // 三只乌鸦是图形形态，不在 candle_pattern 白名单；seed extractor 应把含有 "形态/pattern" 的文本
       // 路由到 price.pattern unsupported，而不是产生 price.candle_pattern trigger
@@ -187,65 +250,13 @@ describe('price.candle_pattern atom 七层 parity', () => {
 
   describe('Layer 5 — canonical spec builder', () => {
     it('engulfing bullish: produces rule with atom key price.candle_pattern', () => {
-      const state = seedStateBuilder.build({
-        triggers: [{
-          id: 'entry-candle-engulfing',
-          key: 'price.candle_pattern',
-          phase: 'entry',
-          sideScope: 'long',
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-          params: { pattern: 'engulfing', direction: 'bullish' },
-        }],
-        actions: [
-          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-        ],
-      })
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
-      function collectKeys(node: unknown): string[] {
-        if (!node || typeof node !== 'object') return []
-        const n = node as Record<string, unknown>
-        if (typeof n['key'] === 'string') return [n['key']]
-        if (Array.isArray(n['children'])) return (n['children'] as unknown[]).flatMap(c => collectKeys(c))
-        return []
-      }
-      const allConditionKeys = spec.rules.flatMap(r => collectKeys(r.condition))
+      const spec = buildCanonicalSpecFromUtterance(ENGULFING_BULLISH_UTTERANCE)
+      const allConditionKeys = spec.rules.flatMap(r => collectConditionKeys(r.condition))
       expect(allConditionKeys).toContain('price.candle_pattern')
     })
 
     it('engulfing bullish: condition params carry pattern=engulfing, direction=bullish', () => {
-      const state = seedStateBuilder.build({
-        triggers: [{
-          id: 'entry-candle-engulfing',
-          key: 'price.candle_pattern',
-          phase: 'entry',
-          sideScope: 'long',
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-          params: { pattern: 'engulfing', direction: 'bullish' },
-        }],
-        actions: [
-          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
-        ],
-      })
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
-      function findCandleAtom(node: unknown): Record<string, unknown> | null {
-        if (!node || typeof node !== 'object') return null
-        const n = node as Record<string, unknown>
-        if (n['key'] === 'price.candle_pattern') return n
-        if (Array.isArray(n['children'])) {
-          for (const c of n['children'] as unknown[]) {
-            const found = findCandleAtom(c)
-            if (found) return found
-          }
-        }
-        return null
-      }
+      const spec = buildCanonicalSpecFromUtterance(ENGULFING_BULLISH_UTTERANCE)
       const rule = spec.rules.find(r => findCandleAtom(r.condition))
       expect(rule).toBeDefined()
       const atom = findCandleAtom(rule!.condition)
@@ -255,6 +266,15 @@ describe('price.candle_pattern atom 七层 parity', () => {
     })
 
     it('consecutive_body bullish: condition carries minBars=3', () => {
+      const spec = buildCanonicalSpecFromUtterance(CONSECUTIVE_BODY_BULLISH_UTTERANCE)
+      const rule = spec.rules.find(r => findCandleAtom(r.condition))
+      expect(rule).toBeDefined()
+      const atom = findCandleAtom(rule!.condition)
+      const params = atom?.['params'] as Record<string, unknown> | undefined
+      expect(params?.minBars).toBe(3)
+    })
+
+    it('consecutive_body missing minBars: fail-closed and produces no candle_pattern condition', () => {
       const state = seedStateBuilder.build({
         triggers: [{
           id: 'entry-candle-consec',
@@ -264,65 +284,24 @@ describe('price.candle_pattern atom 七层 parity', () => {
           status: 'locked',
           source: 'user_explicit',
           openSlots: [],
-          params: { pattern: 'consecutive_body', direction: 'bullish', minBars: 3 },
+          params: { pattern: 'consecutive_body', direction: 'bullish' },
         }],
         actions: [
           { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
         ],
       })
       expect(state).not.toBeNull()
       const spec = canonicalBuilder.buildFromSemanticState(state!)
-      function findCandleAtom(node: unknown): Record<string, unknown> | null {
-        if (!node || typeof node !== 'object') return null
-        const n = node as Record<string, unknown>
-        if (n['key'] === 'price.candle_pattern') return n
-        if (Array.isArray(n['children'])) {
-          for (const c of n['children'] as unknown[]) {
-            const found = findCandleAtom(c)
-            if (found) return found
-          }
-        }
-        return null
-      }
-      const rule = spec.rules.find(r => findCandleAtom(r.condition))
-      expect(rule).toBeDefined()
-      const atom = findCandleAtom(rule!.condition)
-      const params = atom?.['params'] as Record<string, unknown> | undefined
-      expect(params?.minBars).toBe(3)
+      const allConditionKeys = spec.rules.flatMap(r => collectConditionKeys(r.condition))
+      expect(allConditionKeys).not.toContain('price.candle_pattern')
     })
   })
 
   // ─── Layer 6: IR compiler ────────────────────────────────────────────────────
 
   describe('Layer 6 — IR compiler', () => {
-    function buildStateWithCandle(pattern: string, direction: string, minBars?: number) {
-      return seedStateBuilder.build({
-        triggers: [{
-          id: `entry-candle-${pattern}`,
-          key: 'price.candle_pattern',
-          phase: 'entry',
-          sideScope: direction === 'bullish' ? 'long' : 'short',
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-          params: {
-            pattern,
-            direction,
-            ...(minBars !== undefined ? { minBars } : {}),
-          },
-        }],
-        actions: [
-          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
-        ],
-      })
-    }
-
     it('engulfing bullish: IR series contain CANDLE_PATTERN kind', () => {
-      const state = buildStateWithCandle('engulfing', 'bullish')
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
+      const spec = buildCanonicalSpecFromUtterance(ENGULFING_BULLISH_UTTERANCE)
       const { ir } = irCompiler.compile({
         canonicalSpec: spec,
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
@@ -332,9 +311,7 @@ describe('price.candle_pattern atom 七层 parity', () => {
     })
 
     it('engulfing bullish: CANDLE_PATTERN series params carry pattern=engulfing, direction=bullish', () => {
-      const state = buildStateWithCandle('engulfing', 'bullish')
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
+      const spec = buildCanonicalSpecFromUtterance(ENGULFING_BULLISH_UTTERANCE)
       const { ir } = irCompiler.compile({
         canonicalSpec: spec,
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
@@ -346,9 +323,7 @@ describe('price.candle_pattern atom 七层 parity', () => {
     })
 
     it('consecutive_body bullish minBars=3: CANDLE_PATTERN series carries minBars=3', () => {
-      const state = buildStateWithCandle('consecutive_body', 'bullish', 3)
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
+      const spec = buildCanonicalSpecFromUtterance(CONSECUTIVE_BODY_BULLISH_UTTERANCE)
       const { ir } = irCompiler.compile({
         canonicalSpec: spec,
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
@@ -359,9 +334,7 @@ describe('price.candle_pattern atom 七层 parity', () => {
     })
 
     it('CANDLE_PATTERN predicate uses EQ operator', () => {
-      const state = buildStateWithCandle('hammer', 'bearish')
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
+      const spec = buildCanonicalSpecFromUtterance(HAMMER_BEARISH_UTTERANCE)
       const { ir } = irCompiler.compile({
         canonicalSpec: spec,
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
@@ -370,18 +343,46 @@ describe('price.candle_pattern atom 七层 parity', () => {
         (p: { id: string; op?: string }) => p.id.includes('candle_pattern'),
       )
       expect(predicate).toBeDefined()
-      expect((predicate as { op?: string })?.op).toBe('EQ')
+      expect((predicate as { kind?: string })?.kind).toBe('EQ')
     })
 
     it('runtimeRequirements.helpers includes candlePatternDetector', () => {
-      const state = buildStateWithCandle('doji', 'bullish')
-      expect(state).not.toBeNull()
-      const spec = canonicalBuilder.buildFromSemanticState(state!)
+      const spec = buildCanonicalSpecFromUtterance(DOJI_BULLISH_UTTERANCE)
       const { ir } = irCompiler.compile({
         canonicalSpec: spec,
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
       })
       expect(ir.runtimeRequirements.helpers).toContain('candlePatternDetector')
+    })
+
+    it('consecutive_body missing minBars: IR compiler fails closed instead of defaulting', () => {
+      const spec: CanonicalStrategySpecV2 = {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', defaultTimeframe: '15m' },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 10 },
+        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        dataRequirements: { requiredTimeframes: ['15m'] },
+        rules: [{
+          id: 'entry-candle-consec',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 1,
+          condition: {
+            kind: 'atom',
+            key: 'price.candle_pattern',
+            semanticScope: 'market',
+            op: 'GTE',
+            params: { pattern: 'consecutive_body', direction: 'bullish' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        }],
+        metadata: {},
+      }
+      expect(() => irCompiler.compile({
+        canonicalSpec: spec,
+        fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
+      })).toThrow('codegen.canonical_spec_v2_condition_unsupported:price.candle_pattern:minBars')
     })
   })
 

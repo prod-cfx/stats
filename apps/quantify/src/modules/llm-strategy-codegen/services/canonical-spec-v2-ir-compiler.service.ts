@@ -1533,8 +1533,14 @@ export class CanonicalSpecV2IrCompilerService {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction`)
         }
         const cpMinBars = cpPattern === 'consecutive_body'
-          ? this.readNumber([atom.params?.minBars], 3)
+          && typeof atom.params?.minBars === 'number'
+          && Number.isInteger(atom.params.minBars)
+          && atom.params.minBars > 0
+          ? atom.params.minBars
           : undefined
+        if (cpPattern === 'consecutive_body' && cpMinBars === undefined) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:minBars`)
+        }
         const cpSeriesId = cpMinBars !== undefined
           ? `candle_pattern_${cpPattern}_${cpDirection}_${cpMinBars}_${context.timeframe}`
           : `candle_pattern_${cpPattern}_${cpDirection}_${context.timeframe}`
@@ -1554,7 +1560,9 @@ export class CanonicalSpecV2IrCompilerService {
         const constOneRef = this.ensureConstSeries(context, 1)
         return this.upsertPredicate(
           context.predicateMap,
-          `${seed}_candle_pattern_${cpPattern}_${cpDirection}`,
+          cpMinBars !== undefined
+            ? `${seed}_candle_pattern_${cpPattern}_${cpDirection}_${cpMinBars}`
+            : `${seed}_candle_pattern_${cpPattern}_${cpDirection}`,
           'EQ',
           [cpSeriesId, constOneRef],
         )

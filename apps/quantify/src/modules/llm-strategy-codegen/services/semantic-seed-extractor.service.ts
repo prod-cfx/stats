@@ -4198,7 +4198,7 @@ export class SemanticSeedExtractorService {
       // 缺 pattern 或 direction → open_slot；consecutive_body 缺 minBars → open_slot
       if (/(?:吞没|engulfing|锤子|hammer|十字星|doji|连续实体|consecutive[\s_]body)/iu.test(clause)) {
         // A-M2 防御：主观词必须锚定在 pattern 名词之前才视为主观
-        const isSubjective = /(?:像|疑似|看起来\s*像)\s*(?:吞没|锤子|十字星|连续实体|engulfing|hammer|doji)|feels?\s+like\s+(?:engulfing|hammer|doji)|maybe\s+(?:engulfing|hammer|doji)/iu.test(clause)
+        const isSubjective = /(?:像|疑似|看起来\s*像)\s*(?:吞没|锤子|十字星|连续实体|engulfing|hammer|doji|consecutive[\s_]body)|(?:feels?|looks?)\s+like\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)|kind\s+of\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)|maybe\s+(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)/iu.test(clause)
         if (!isSubjective) {
           // 严格枚举：pattern 必须精确匹配白名单
           const patternRaw = /(?:吞没|engulfing)/iu.test(clause)
@@ -4212,9 +4212,12 @@ export class SemanticSeedExtractorService {
                   : null
 
           // A-M2 防御：direction 词必须与 pattern 同位，避免 "bullish market" 误锁
-          const direction = /(?:bullish\s+(?:engulfing|hammer|doji|consecutive)|做多|看多|多头|看涨)/iu.test(clause)
+          const candlePatternTerm = '(?:吞没|锤子|十字星|连续实体|engulfing|hammer|doji|consecutive[\\s_]body)'
+          const bullishCandlePattern = new RegExp(`(?:bullish\\s+${candlePatternTerm}|${candlePatternTerm}\\s+bullish|看涨\\s*${candlePatternTerm}|${candlePatternTerm}\\s*看涨)`, 'iu')
+          const bearishCandlePattern = new RegExp(`(?:bearish\\s+${candlePatternTerm}|${candlePatternTerm}\\s+bearish|看跌\\s*${candlePatternTerm}|${candlePatternTerm}\\s*看跌)`, 'iu')
+          const direction = bullishCandlePattern.test(clause)
             ? 'bullish'
-            : /(?:bearish\s+(?:engulfing|hammer|doji|consecutive)|做空|看空|空头|看跌)/iu.test(clause)
+            : bearishCandlePattern.test(clause)
               ? 'bearish'
               : null
 
