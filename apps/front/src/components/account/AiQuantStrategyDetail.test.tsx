@@ -331,7 +331,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(statusSection?.querySelector('p')?.className).not.toContain('cyan')
   })
 
-  it('shows compatibility warning, leverage drift, and leverage-only update controls from truthful execution data', async () => {
+  it('shows compatibility warning and leverage drift from truthful execution data without edit controls', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
@@ -394,7 +394,6 @@ describe('AiQuantStrategyDetail', () => {
           },
           canEditDeploymentLeverage: true,
         }}
-        onUpdateLeverage={() => {}}
       />,
       )
     })
@@ -407,10 +406,13 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('1x - 5x')
     expect(container.textContent).toContain('leverage drift')
     expect(container.textContent).not.toContain('运行回测')
-    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
+    expect(container.textContent).not.toContain('部署杠杆')
+    expect(container.textContent).not.toContain('选择杠杆')
+    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(false)
+    expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
   })
 
-  it('ignores invalid deployment leverage ranges instead of rendering unbounded options', async () => {
+  it('renders deployment leverage ranges as read-only data without controls', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
@@ -435,15 +437,15 @@ describe('AiQuantStrategyDetail', () => {
             marketType: 'perp',
             canEditDeploymentLeverage: true,
           })}
-          onUpdateLeverage={() => {}}
         />,
       )
     })
 
-    const leverageSelect = container.querySelector('select[name="deployment-leverage"]')
-    expect(leverageSelect).toBeTruthy()
-    expect(leverageSelect?.querySelectorAll('option')).toHaveLength(1)
     expect(container.textContent).toContain('200x - 1x')
+    expect(container.textContent).not.toContain('部署杠杆')
+    expect(container.textContent).not.toContain('选择杠杆')
+    expect(container.textContent).not.toContain('更新杠杆')
+    expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
   })
 
   it('hides deployment leverage semantics for spot strategies', async () => {
@@ -811,6 +813,7 @@ describe('AiQuantStrategyDetail', () => {
         <AiQuantStrategyDetail
           lng="zh"
           strategy={buildStrategy({
+            hasActiveConversation: true,
             positionOverview: {
               openPositionsCount: 2,
               closedPositionsCount: 0,
@@ -828,6 +831,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(liquidateButton).toBeDefined()
     expect(stopButton?.disabled).toBe(false)
     expect(liquidateButton?.disabled).toBe(false)
+    expect(findButton('返回对话')).toBeUndefined()
 
     await act(async () => {
       liquidateButton?.click()
@@ -862,6 +866,48 @@ describe('AiQuantStrategyDetail', () => {
 
     expect(container.textContent).toContain('策略已平仓并停止。')
     expect(container.textContent).toContain('已停止')
+  })
+
+  it('renders running controls as an integrated horizontal action group', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            hasActiveConversation: true,
+            positionOverview: {
+              openPositionsCount: 2,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 12,
+            },
+          })}
+        />,
+      )
+    })
+
+    const panel = container.querySelector('[data-testid="strategy-runtime-control-panel"]')
+    const actions = container.querySelector('[data-testid="strategy-runtime-control-actions"]')
+    const returnLink = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
+    const stopButton = findButton('停止策略')
+    const liquidateButton = findButton('平仓并停止')
+
+    expect(panel).toBeTruthy()
+    expect(panel?.className).toContain('gap-4')
+    expect(actions).toBeTruthy()
+    expect(actions?.className).toContain('border-t')
+    expect(actions?.className).toContain('sm:flex-row')
+    expect(actions?.className).toContain('sm:justify-between')
+    expect(returnLink?.className).toContain('h-9')
+    expect(returnLink?.className).toContain('min-w-max')
+    expect(returnLink?.className).toContain('whitespace-nowrap')
+    expect(stopButton?.className).toContain('h-9')
+    expect(stopButton?.className).toContain('min-w-max')
+    expect(stopButton?.className).not.toContain('rose')
+    expect(liquidateButton?.className).toContain('h-9')
+    expect(liquidateButton?.className).toContain('min-w-max')
+    expect(liquidateButton?.className).toContain('rose')
+    expect(liquidateButton?.querySelector('svg')).toBeTruthy()
   })
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
