@@ -1648,11 +1648,7 @@ export class CanonicalSpecV2IrCompilerService {
         // P4-4: 白名单方向 (bullish/bearish) + 4 reference (prev_low/prev_high/session_low/session_high)。
         // IR 通过 LIQUIDITY_SWEEP 系列 + EQ predicate 封装流动性扫荡信号。
         // fail-closed：direction / reference 非白名单值直接抛错；reclaimBars 默认 3。
-        //
-        // ⚠️ runtime gap 公开标记（同 P4-1 / P4-2 / P4-3 模式）：当前 strategy-runtime / backtesting /
-        // compiled-runtime 全仓 0 个 LIQUIDITY_SWEEP 系列 evaluator 实现，liquiditySweepDetector
-        // helper 同样 0 实现。该 atom codegen 路径已闭环，但 runtime 信号永远 fail-closed 直到
-        // follow-up issue #1062 落地。
+        // compiled-runtime 消费同名 series，通过 liquiditySweepDetector 输出 1/0 供 EQ predicate 使用。
         const lsDirection = typeof atom.params?.direction === 'string'
           ? atom.params.direction.trim().toLowerCase()
           : null
