@@ -5,6 +5,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticActionFrame
   | SemanticRiskFrame
   | SemanticCombinationFrame
+  | SemanticRegimeGateFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -51,4 +52,12 @@ export interface SemanticCombinationFrame extends SemanticFrameBase {
   groupId: string
   join: 'AND' | 'OR'
   sideScope: 'long' | 'short'
+}
+
+export interface SemanticRegimeGateFrame extends SemanticFrameBase {
+  kind: 'regime_gate'
+  sideScope: 'long' | 'short' | 'both'
+  indicator: 'ema' | 'sma' | 'ma'
+  period: number
+  operator: 'GT' | 'LT'
 }

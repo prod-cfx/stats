@@ -142,6 +142,10 @@ export class SemanticSeedExtractorService {
     if (position) {
       patch.position = position
     }
+    const orchestrationNodes = gatewayPatch.orchestration?.nodes ?? []
+    if (orchestrationNodes.length > 0) {
+      patch.orchestration = { nodes: [...orchestrationNodes] }
+    }
 
     return patch
   }

@@ -1,5 +1,6 @@
 import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/evaluate-expr-pool'
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
+import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
@@ -915,6 +916,230 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(decision).toEqual({
       action: 'NOOP',
       reason: 'compiled.noop',
+    })
+  })
+
+  it('opens long when regime orchestration gate is true (close > EMA50)', () => {
+    const bars = Array.from({ length: 60 }, (_unused, index) => {
+      const close = 100 + index
+      return { time: index + 1, open: close - 1, high: close + 1, low: close - 2, close }
+    })
+    const ctx = {
+      bars,
+      currentPrice: bars[bars.length - 1].close,
+      baseTimeframeBar: { close: bars[bars.length - 1].close },
+      position: { qty: 0 },
+      portfolio: { equity: 10000 },
+    } as any
+
+    const regimeValues = evaluateExprPool(
+      ctx,
+      [
+        {
+          id: 'close_now',
+          nodeType: 'series',
+          sourceRef: 'close_1h',
+          payload: { kind: 'PRICE', field: 'close', timeframe: '1h' },
+        },
+        {
+          id: 'ema_50',
+          nodeType: 'series',
+          sourceRef: 'ema_50_1h',
+          deps: ['close_now'],
+          payload: { kind: 'EMA', inputs: ['close_1h'], params: { period: 50 } },
+        },
+        {
+          id: 'gate_entry_regime',
+          nodeType: 'predicate',
+          deps: ['close_now', 'ema_50'],
+          payload: { kind: 'GT' },
+        },
+      ] as any,
+      ['close_now', 'ema_50', 'gate_entry_regime'],
+    )
+
+    expect(regimeValues.gate_entry_regime).toBe(true)
+
+    const exprValues = { ...regimeValues, entry_hit: true }
+
+    const gateState = evaluateOrchestrationGates(
+      [
+        {
+          id: 'gate_entry_regime',
+          exprId: 'gate_entry_regime',
+          target: { phase: 'entry', sideScope: 'both' },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      exprValues,
+    )
+    expect(gateState).toEqual({ blockEntryLong: false, blockEntryShort: false })
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [
+        {
+          id: 'decision_entry',
+          phase: 'entry',
+          priority: 100,
+          when: 'entry_hit',
+          actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 10 } }],
+        },
+      ] as any,
+      exprValues,
+      {
+        blockNewEntry: false,
+        forceExit: false,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['decision_entry'],
+      gateState,
+    )
+
+    expect(decision).toEqual({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.decision_entry',
+    })
+  })
+
+  it('blocks long entry with NOOP when regime orchestration gate is false (close <= EMA50)', () => {
+    const bars = Array.from({ length: 60 }, (_unused, index) => {
+      const close = 200 - index
+      return { time: index + 1, open: close - 1, high: close + 1, low: close - 2, close }
+    })
+    const ctx = {
+      bars,
+      currentPrice: bars[bars.length - 1].close,
+      baseTimeframeBar: { close: bars[bars.length - 1].close },
+      position: { qty: 0 },
+      portfolio: { equity: 10000 },
+    } as any
+
+    const regimeValues = evaluateExprPool(
+      ctx,
+      [
+        {
+          id: 'close_now',
+          nodeType: 'series',
+          sourceRef: 'close_1h',
+          payload: { kind: 'PRICE', field: 'close', timeframe: '1h' },
+        },
+        {
+          id: 'ema_50',
+          nodeType: 'series',
+          sourceRef: 'ema_50_1h',
+          deps: ['close_now'],
+          payload: { kind: 'EMA', inputs: ['close_1h'], params: { period: 50 } },
+        },
+        {
+          id: 'gate_entry_regime',
+          nodeType: 'predicate',
+          deps: ['close_now', 'ema_50'],
+          payload: { kind: 'GT' },
+        },
+      ] as any,
+      ['close_now', 'ema_50', 'gate_entry_regime'],
+    )
+
+    expect(regimeValues.gate_entry_regime).toBe(false)
+
+    const exprValues = { ...regimeValues, entry_hit: true }
+
+    const gateState = evaluateOrchestrationGates(
+      [
+        {
+          id: 'gate_entry_regime',
+          exprId: 'gate_entry_regime',
+          target: { phase: 'entry', sideScope: 'long' },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      exprValues,
+    )
+    expect(gateState).toEqual({ blockEntryLong: true, blockEntryShort: false })
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [
+        {
+          id: 'decision_entry',
+          phase: 'entry',
+          priority: 100,
+          when: 'entry_hit',
+          actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 10 } }],
+        },
+      ] as any,
+      exprValues,
+      {
+        blockNewEntry: false,
+        forceExit: false,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['decision_entry'],
+      gateState,
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.orchestration.gate.block_entry_long',
+    })
+  })
+
+  it('still emits CLOSE_SHORT when entry orchestration gate is false but program closes existing short position', () => {
+    const ctx = {
+      currentPrice: 100,
+      baseTimeframeBar: { close: 100 },
+      position: { qty: -2 },
+      portfolio: { equity: 10000 },
+    } as any
+
+    const exprValues = { exit_short_hit: true, gate_entry_regime: false }
+
+    const gateState = evaluateOrchestrationGates(
+      [
+        {
+          id: 'gate_entry_regime',
+          exprId: 'gate_entry_regime',
+          target: { phase: 'entry', sideScope: 'both' },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      exprValues,
+    )
+    expect(gateState).toEqual({ blockEntryLong: true, blockEntryShort: true })
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [
+        {
+          id: 'decision_exit_short',
+          phase: 'exit',
+          priority: 100,
+          when: 'exit_short_hit',
+          actions: [{ kind: 'CLOSE_SHORT', quantity: { mode: 'position_pct', value: 100 } }],
+        },
+      ] as any,
+      exprValues,
+      {
+        blockNewEntry: false,
+        forceExit: false,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['decision_exit_short'],
+      gateState,
+    )
+
+    expect(decision).toEqual({
+      action: 'CLOSE_SHORT',
+      size: { mode: 'RATIO', value: 1 },
+      reason: 'compiled.decision_exit_short',
     })
   })
 })

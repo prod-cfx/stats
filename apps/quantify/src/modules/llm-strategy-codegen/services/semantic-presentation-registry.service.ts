@@ -357,6 +357,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: ['趋势向上时只开多不做空'],
   }),
   presentation({
+    key: 'gate.regime',
+    publicName: '趋势/状态过滤',
+    aliases: ['趋势过滤', '状态过滤', 'regime gate', 'trend gate'],
+    positiveExamples: [
+      '上涨趋势才允许做多',
+      '价格高于 EMA50 才做多',
+      '价格低于 EMA60 才做空',
+    ],
+    negativeExamples: ['形态像头肩顶', '感觉走势不太对'],
+    goldenUtterances: [
+      '上涨趋势才允许做多',
+      '价格高于 EMA50 才做多',
+      '价格低于 EMA60 才做空',
+    ],
+    displayRenderer: ({ params }) => renderRegimeGate(params),
+    clarificationRenderer: (slotKey) => renderRegimeGateClarification(slotKey),
+  }),
+  presentation({
     key: 'market.regime',
     publicName: '市场状态',
     aliases: ['行情结构', '市场环境'],
@@ -692,6 +710,38 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     negativeExamples: ['只开一次固定仓位'],
     goldenUtterances: ['价格每回撤 2% 补仓一次并限制总次数'],
   }),
+  presentation({
+    key: 'risk.time_stop_bars',
+    publicName: '时间止损（K 线数）',
+    aliases: ['超时离场', '持仓 K 线上限', 'time stop'],
+    positiveExamples: ['持仓 20 根 K 线未盈利则离场', '超过 30 根 K 线强制平仓'],
+    negativeExamples: ['按价格固定止损'],
+    goldenUtterances: ['持仓 20 根 K 线仍未达成目标则离场', '超过 30 根 K 线强制平仓'],
+  }),
+  presentation({
+    key: 'price.previous_extrema',
+    publicName: '前高/前低（极值参考）',
+    aliases: ['前高', '前低', 'previous high', 'previous low'],
+    positiveExamples: ['前高之上突破做多', '跌破前低出场'],
+    negativeExamples: ['形态像头肩顶'],
+    goldenUtterances: ['突破前高后开多', '跌破前低后离场'],
+  }),
+  presentation({
+    key: 'risk.partial_take_profit',
+    publicName: '分批止盈',
+    aliases: ['分批止盈', '阶梯止盈', 'partial take profit'],
+    positiveExamples: ['盈利 5% 减仓 50%', '止盈分两档'],
+    negativeExamples: ['看心情减仓'],
+    goldenUtterances: ['盈利达到 5% 时分批止盈', '止盈分两档逐步减仓'],
+  }),
+  presentation({
+    key: 'strategy.multi_timeframe',
+    publicName: '多周期过滤',
+    aliases: ['多周期', 'multi timeframe', 'HTF 过滤'],
+    positiveExamples: ['1h 上涨才允许 5min 做多', '4h 区间内 15min 网格'],
+    negativeExamples: ['看感觉的多周期'],
+    goldenUtterances: ['1h 上涨趋势下才允许 5min 做多', '4h 区间内启用 15min 网格'],
+  }),
 ]
 
 const SLOT_LABELS: Record<string, string> = {
@@ -721,6 +771,10 @@ export class SemanticPresentationRegistryService {
     }
     this.guardMetadata(metadata)
     return metadata
+  }
+
+  getEntry(key: string): SemanticPresentationMetadata {
+    return this.get(key)
   }
 
   renderDisplay(key: string, params: Record<string, unknown>): string {
@@ -805,6 +859,42 @@ function renderBoundaryRole(boundaryRole: string): string {
     upper: '上轨',
   }
   return roleNames[boundaryRole] ?? '边界'
+}
+
+function renderRegimeGate(params: Record<string, unknown>): string {
+  const sideScope = stringParam(params, 'sideScope', 'both')
+  const indicator = stringParam(params, 'indicator', 'ema')
+  const period = numberParam(params, 'period', 0)
+  const operator = stringParam(params, 'operator', 'GT')
+  const indicatorLabel = renderRegimeIndicator(indicator)
+  const periodLabel = period > 0 ? `${period}` : ''
+  const indicatorWithPeriod = `${indicatorLabel}${periodLabel}`
+
+  const longLine = `只在价格高于 ${indicatorWithPeriod} 时允许做多`
+  const shortLine = `只在价格低于 ${indicatorWithPeriod} 时允许做空`
+
+  if (sideScope === 'long') {
+    return operator === 'LT' ? shortLine : longLine
+  }
+  if (sideScope === 'short') {
+    return operator === 'GT' ? longLine : shortLine
+  }
+  return `${longLine}；${shortLine}`
+}
+
+function renderRegimeIndicator(indicator: string): string {
+  const normalized = indicator.toLowerCase()
+  if (normalized === 'ema') return 'EMA'
+  if (normalized === 'sma') return 'SMA'
+  if (normalized === 'ma') return 'MA'
+  return normalized.toUpperCase()
+}
+
+function renderRegimeGateClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.gate.regime.active_when') {
+    return '请确认趋势过滤的指标（EMA/SMA/MA）与周期'
+  }
+  return '请补全趋势过滤参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

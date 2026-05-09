@@ -1,4 +1,4 @@
-import type { CanonicalConditionNode, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
 import type {
   SemanticActionState,
@@ -537,6 +537,7 @@ export class CanonicalSpecBuilderService {
       orderPrograms,
     )
     const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
+    const orchestrationGates = this.buildOrchestrationGates(normalizedState)
 
     return {
       version: 2,
@@ -556,7 +557,42 @@ export class CanonicalSpecBuilderService {
       },
       orderPrograms,
       rules,
+      ...(orchestrationGates.length > 0 ? { orchestration: { gates: orchestrationGates } } : {}),
     }
+  }
+
+  private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {
+    const nodes = state.orchestration?.nodes
+    if (!nodes || nodes.length === 0) {
+      return []
+    }
+
+    const gates: CanonicalOrchestrationGate[] = []
+    for (const node of nodes) {
+      if (node.kind !== 'gate' || node.key !== 'gate.regime' || node.status !== 'locked') {
+        continue
+      }
+      if (!node.activeWhen || !this.isValidSemanticExpression(node.activeWhen)) {
+        continue
+      }
+      if (!node.target) {
+        continue
+      }
+
+      const condition = this.buildConditionFromSemanticExpression(node.activeWhen)
+      if (!condition) {
+        continue
+      }
+
+      gates.push({
+        id: node.id,
+        target: node.target,
+        activeWhen: condition,
+        effectWhenFalse: node.effectWhenFalse ?? 'block_new_entries',
+      })
+    }
+
+    return gates
   }
 
   private filterOrderProgramShadowRules(

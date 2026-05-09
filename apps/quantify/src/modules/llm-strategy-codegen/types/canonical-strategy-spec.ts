@@ -98,6 +98,7 @@ export type {
   CanonicalExpressionCondition,
   CanonicalConditionGroup,
   CanonicalConditionNode,
+  CanonicalOrchestrationGate,
   CanonicalRiskRuleSideScope,
   CanonicalRuleAction,
   CanonicalRuleActionType,

@@ -62,6 +62,7 @@ export interface CanonicalStrategyIrV1 {
   runtimeRequirements?: RuntimeRequirements
   ruleBlocks: RuleBlock[]
   orderPrograms: OrderProgram[]
+  orchestrationGates?: IrOrchestrationGate[]
   riskPolicy: {
     guards: RiskGuard[]
     riskPredicates?: RiskPredicateDef[]
@@ -231,6 +232,13 @@ export interface OffsetOrderProgramDef extends OrderProgramBaseDef {
 export type OrderProgramDef = LevelSetOrderProgramDef | OffsetOrderProgramDef
 
 export type OrderProgram = OrderProgramDef
+
+export interface IrOrchestrationGate {
+  id: string
+  exprId: string
+  target: { phase: 'entry', sideScope?: 'long' | 'short' | 'both' }
+  effectWhenFalse: 'block_new_entries'
+}
 
 export interface RiskGuard {
   id: string

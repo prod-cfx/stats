@@ -17,6 +17,8 @@ import type {
   SemanticEffect,
   SemanticEvidence,
   SemanticNodeStatus,
+  SemanticOrchestrationNode,
+  SemanticOrchestrationState,
   SemanticOrderRequirement,
   SemanticPositionConstraintState,
   SemanticPositionSizingContract,
@@ -93,6 +95,7 @@ export class SemanticSeedStateBuilderService {
     const riskUpdates = riskItems
       .map((item, index) => this.toRiskState(item, index))
       .filter((item): item is SemanticRiskState => item !== null)
+    const orchestration = this.toOrchestrationState(semanticPatch.orchestration)
 
     if (
       triggerUpdates.length === 0
@@ -100,6 +103,7 @@ export class SemanticSeedStateBuilderService {
       && riskUpdates.length === 0
       && !positionUpdate
       && !Object.values(contextSlots).some(Boolean)
+      && !orchestration
     ) {
       return null
     }
@@ -114,6 +118,7 @@ export class SemanticSeedStateBuilderService {
       contextSlots,
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
+      ...(orchestration ? { orchestration } : {}),
     })
   }
 
@@ -214,6 +219,65 @@ export class SemanticSeedStateBuilderService {
 
   private isCombinationContract(contract: SemanticAtomContract): boolean {
     return isTriggerPredicateGroupContract(contract)
+  }
+
+  private toOrchestrationState(value: unknown): SemanticOrchestrationState | undefined {
+    if (!this.isRecord(value)) {
+      return undefined
+    }
+    const rawNodes = Array.isArray(value.nodes) ? value.nodes : []
+    const nodes = rawNodes
+      .map((item, index) => this.toOrchestrationNode(item, index))
+      .filter((item): item is SemanticOrchestrationNode => item !== null)
+    if (nodes.length === 0) {
+      return undefined
+    }
+    return { nodes, contracts: [] }
+  }
+
+  private toOrchestrationNode(update: unknown, index: number): SemanticOrchestrationNode | null {
+    if (!this.isRecord(update)) {
+      return null
+    }
+    const kind = update.kind
+    if (kind !== 'gate' && kind !== 'scope' && kind !== 'program' && kind !== 'portfolioRisk') {
+      return null
+    }
+    const key = this.readTrimmedString(update.key) ?? undefined
+    const params = this.readParams(update.params)
+    const openSlots = this.readOpenSlots(update.openSlots)
+    const evidence = this.readEvidence(update.evidence)
+    const status: SemanticNodeStatus = update.status === 'open' || update.status === 'locked'
+      ? update.status
+      : (openSlots.length > 0 ? 'open' : 'locked')
+    const target = this.isRecord(update.target)
+      ? (update.target as unknown as SemanticOrchestrationNode['target'])
+      : undefined
+    const activeWhen = this.isRecord(update.activeWhen)
+      ? (update.activeWhen as unknown as SemanticOrchestrationNode['activeWhen'])
+      : undefined
+    const effectWhenFalse = update.effectWhenFalse === 'block_new_entries'
+      ? update.effectWhenFalse
+      : undefined
+    const support = this.isRecord(update.support)
+      ? (update.support as unknown as SemanticOrchestrationNode['support'])
+      : undefined
+
+    return {
+      id: this.readTrimmedString(update.id) ?? `orchestration-${kind}-${index + 1}`,
+      kind,
+      ...(key ? { key } : {}),
+      params,
+      status,
+      source: this.readSource(update.source, 'inferred'),
+      ...(evidence ? { evidence } : {}),
+      openSlots,
+      contracts: [],
+      ...(target ? { target } : {}),
+      ...(activeWhen ? { activeWhen } : {}),
+      ...(effectWhenFalse ? { effectWhenFalse } : {}),
+      ...(support ? { support } : {}),
+    }
   }
 
   private toTriggerState(update: unknown, index: number): SemanticTriggerState | null {

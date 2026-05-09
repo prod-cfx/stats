@@ -1,3 +1,4 @@
+import type { OrchestrationGateState } from './evaluate-orchestration-gates'
 import { runDecisionPrograms } from './run-decision-programs'
 
 type Programs = Parameters<typeof runDecisionPrograms>[1]
@@ -142,5 +143,149 @@ describe('partial take profit decision gate', () => {
     const compiled = (ctx as unknown as { __compiledDecisionState: { previousPositionQty: number } }).__compiledDecisionState
     expect(state.partial_tp_a).toEqual({ tier_0_fired: true })
     expect(compiled.previousPositionQty).toBe(0)
+  })
+})
+
+describe('orchestration gate enforcement', () => {
+  const OPEN_LONG_PROGRAM = {
+    id: 'program_open_long',
+    phase: 'entry' as const,
+    priority: 100,
+    when: 'predicate_open_long',
+    actions: [{ kind: 'OPEN_LONG' as const, quantity: { mode: 'pct_equity' as const, value: 50 } }],
+  }
+  const OPEN_SHORT_PROGRAM = {
+    id: 'program_open_short',
+    phase: 'entry' as const,
+    priority: 100,
+    when: 'predicate_open_short',
+    actions: [{ kind: 'OPEN_SHORT' as const, quantity: { mode: 'pct_equity' as const, value: 50 } }],
+  }
+  const CLOSE_LONG_PROGRAM = {
+    id: 'program_close_long',
+    phase: 'exit' as const,
+    priority: 100,
+    when: 'predicate_close_long',
+    actions: [{ kind: 'CLOSE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 100 } }],
+  }
+  const CLOSE_SHORT_PROGRAM = {
+    id: 'program_close_short',
+    phase: 'exit' as const,
+    priority: 100,
+    when: 'predicate_close_short',
+    actions: [{ kind: 'CLOSE_SHORT' as const, quantity: { mode: 'position_pct' as const, value: 100 } }],
+  }
+  const REDUCE_LONG_PROGRAM = {
+    id: 'program_reduce_long',
+    phase: 'exit' as const,
+    priority: 100,
+    when: 'predicate_reduce_long',
+    actions: [{ kind: 'REDUCE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 50 } }],
+  }
+
+  function makeCtx(qty: number): Ctx {
+    return {
+      position: { qty },
+      currentPrice: 100,
+      accountEquity: 10000,
+      __compiledDecisionState: { previousPositionQty: qty, lastTriggeredByProgram: {}, barIndex: 0 },
+      semanticRuntimeState: {},
+    } as unknown as Ctx
+  }
+
+  const blockLong: OrchestrationGateState = { blockEntryLong: true, blockEntryShort: false }
+  const blockShort: OrchestrationGateState = { blockEntryLong: false, blockEntryShort: true }
+  const blockBoth: OrchestrationGateState = { blockEntryLong: true, blockEntryShort: true }
+
+  it('blockEntryLong=true converts OPEN_LONG to NOOP with reason', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+      blockLong,
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toBe('compiled.orchestration.gate.block_entry_long')
+  })
+
+  it('blockEntryLong=true does not affect OPEN_SHORT', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_SHORT_PROGRAM] as unknown as Programs,
+      { predicate_open_short: true },
+      baseGuard,
+      [OPEN_SHORT_PROGRAM.id],
+      blockLong,
+    )
+    expect(decision.action).toBe('OPEN_SHORT')
+  })
+
+  it('blockEntryShort=true converts OPEN_SHORT to NOOP with reason', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_SHORT_PROGRAM] as unknown as Programs,
+      { predicate_open_short: true },
+      baseGuard,
+      [OPEN_SHORT_PROGRAM.id],
+      blockShort,
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toBe('compiled.orchestration.gate.block_entry_short')
+  })
+
+  it('blockEntryLong=true with existing long position still allows CLOSE_LONG', () => {
+    const ctx = makeCtx(1)
+    const decision = runDecisionPrograms(
+      ctx,
+      [CLOSE_LONG_PROGRAM] as unknown as Programs,
+      { predicate_close_long: true },
+      baseGuard,
+      [CLOSE_LONG_PROGRAM.id],
+      blockLong,
+    )
+    expect(decision.action).toBe('CLOSE_LONG')
+  })
+
+  it('blockEntryLong=true does not affect REDUCE_LONG (entry block !== reduce block)', () => {
+    const ctx = makeCtx(1)
+    const decision = runDecisionPrograms(
+      ctx,
+      [REDUCE_LONG_PROGRAM] as unknown as Programs,
+      { predicate_reduce_long: true },
+      baseGuard,
+      [REDUCE_LONG_PROGRAM.id],
+      blockLong,
+    )
+    expect(decision.action).toBe('ADJUST_POSITION')
+  })
+
+  it('W5: blockBoth with existing short position still allows CLOSE_SHORT', () => {
+    const ctx = makeCtx(-1)
+    const decision = runDecisionPrograms(
+      ctx,
+      [CLOSE_SHORT_PROGRAM] as unknown as Programs,
+      { predicate_close_short: true },
+      baseGuard,
+      [CLOSE_SHORT_PROGRAM.id],
+      blockBoth,
+    )
+    expect(decision.action).toBe('CLOSE_SHORT')
+  })
+
+  it('orchestrationGateState undefined => backward compatible, OPEN_LONG flows', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+    )
+    expect(decision.action).toBe('OPEN_LONG')
   })
 })

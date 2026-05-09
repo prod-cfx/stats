@@ -3,6 +3,8 @@ import type {
   SemanticEvidence,
   SemanticExpression,
   SemanticNodeStatus,
+  SemanticOrchestrationGateEffect,
+  SemanticOrchestrationGateTarget,
   SemanticPositionConstraintKey,
   SemanticPositionSizingContract,
   SemanticSlotState,
@@ -55,4 +57,16 @@ export interface CodegenSemanticPatch {
       contracts?: SemanticAtomContract[]
     }>
   }) | null
+  orchestration?: {
+    nodes?: CodegenSemanticOrchestrationNodePatch[]
+  }
+}
+
+export interface CodegenSemanticOrchestrationNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'gate'
+  key: 'gate.regime'
+  params: Record<string, unknown>
+  target: SemanticOrchestrationGateTarget
+  activeWhen: SemanticExpression
+  effectWhenFalse: SemanticOrchestrationGateEffect
 }

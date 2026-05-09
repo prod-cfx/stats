@@ -41,6 +41,7 @@ import { SemanticEventFrameProjectorService } from './services/semantic-event-fr
 import { SemanticFrameNormalizerService } from './services/semantic-frame-normalizer.service'
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
+import { SemanticOrchestrationRegistryService } from './services/semantic-orchestration-registry.service'
 import { SemanticPresentationRegistryService } from './services/semantic-presentation-registry.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from './services/semantic-seed-state-builder.service'
@@ -116,6 +117,7 @@ import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
     PositionSizingContractService,
     SemanticAtomContractService,
     SemanticAtomRegistryService,
+    SemanticOrchestrationRegistryService,
     SemanticContractReadinessService,
     SemanticContractShapeNormalizerService,
     SemanticMissingPlaceholderReconcilerService,

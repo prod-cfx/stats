@@ -1,6 +1,7 @@
 import type { StrategyDecisionV1, StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
+import type { OrchestrationGateState } from './evaluate-orchestration-gates'
 
 // MUST match PartialTakeProfitProgramMetadata in
 // apps/quantify/src/modules/llm-strategy-codegen/types/partial-take-profit.ts.
@@ -81,6 +82,7 @@ export function runDecisionPrograms(
   exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
   guardState: Readonly<CompiledGuardState>,
   decisionOrder: readonly string[],
+  orchestrationGateState?: OrchestrationGateState,
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
   compiledState.barIndex = readCurrentBarIndex(ctx, compiledState.barIndex)
@@ -133,7 +135,8 @@ export function runDecisionPrograms(
     const pendingReverseDecision = evaluatePendingReverse(program, ctx)
     if (pendingReverseDecision) {
       compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
-      return Object.freeze(pendingReverseDecision)
+      const gated = applyOrchestrationGate(pendingReverseDecision, orchestrationGateState)
+      return Object.freeze(gated)
     }
     if (hasPendingReverseForProgram(program, ctx)) {
       continue
@@ -169,12 +172,15 @@ export function runDecisionPrograms(
     const decision = buildFirstApplicableDecision(program, ctx)
     if (!decision) continue
 
+    const gatedDecision = applyOrchestrationGate(decision, orchestrationGateState)
     compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
-    if (ptpMeta) {
+    if (ptpMeta && gatedDecision.action !== 'NOOP') {
       markPartialTakeProfitTierFired(ctx, ptpMeta)
     }
-    markPositionLifecycleState(ctx, program, decision)
-    return Object.freeze(decision)
+    if (gatedDecision.action !== 'NOOP') {
+      markPositionLifecycleState(ctx, program, gatedDecision)
+    }
+    return Object.freeze(gatedDecision)
   }
 
   return Object.freeze({
@@ -985,6 +991,26 @@ function readCurrentPrice(ctx: StrategyExecutionContextV1): number {
   }
 
   return 0
+}
+
+function applyOrchestrationGate(
+  decision: StrategyDecisionV1,
+  gateState: OrchestrationGateState | undefined,
+): StrategyDecisionV1 {
+  if (!gateState) return decision
+  if (decision.action === 'OPEN_LONG' && gateState.blockEntryLong) {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.gate.block_entry_long',
+    }
+  }
+  if (decision.action === 'OPEN_SHORT' && gateState.blockEntryShort) {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.gate.block_entry_short',
+    }
+  }
+  return decision
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {

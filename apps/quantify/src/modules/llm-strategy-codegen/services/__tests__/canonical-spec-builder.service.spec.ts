@@ -3974,4 +3974,116 @@ describe('canonicalSpecBuilderService', () => {
       expect(ptpRules).toHaveLength(0)
     })
   })
+
+  describe('orchestration gates emission', () => {
+    const supportedActiveWhen: SemanticExpression = {
+      kind: 'predicate',
+      op: 'GT',
+      left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+      right: { kind: 'indicator', name: 'ema', params: { length: 50 } },
+    }
+
+    it('emits orchestration.gates from locked gate.regime nodes with valid activeWhen', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'gate-regime-long-1',
+              kind: 'gate',
+              key: 'gate.regime',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              target: { phase: 'entry', sideScope: 'long' },
+              activeWhen: supportedActiveWhen,
+              effectWhenFalse: 'block_new_entries',
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration?.gates).toBeDefined()
+      expect(spec.orchestration!.gates).toHaveLength(1)
+      const [gate] = spec.orchestration!.gates
+      expect(gate.id).toBe('gate-regime-long-1')
+      expect(gate.target.phase).toBe('entry')
+      expect(gate.target.sideScope).toBe('long')
+      expect(gate.effectWhenFalse).toBe('block_new_entries')
+      expect(gate.activeWhen).toEqual({
+        kind: 'expression',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+        right: { kind: 'indicator', name: 'ema', params: { length: 50 } },
+      })
+    })
+
+    it('omits orchestration field when state has no orchestration nodes', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({})
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('skips gate.regime nodes with status open', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'gate-regime-open',
+              kind: 'gate',
+              key: 'gate.regime',
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              target: { phase: 'entry', sideScope: 'long' },
+              activeWhen: supportedActiveWhen,
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('skips gate.regime nodes with invalid activeWhen', () => {
+      const service = new CanonicalSpecBuilderService()
+      const invalidActiveWhen = { kind: 'predicate' } as unknown as SemanticExpression
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'gate-regime-invalid',
+              kind: 'gate',
+              key: 'gate.regime',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              target: { phase: 'entry', sideScope: 'long' },
+              activeWhen: invalidActiveWhen,
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+  })
 })

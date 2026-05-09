@@ -5,6 +5,7 @@ import type {
   SemanticContextFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
+  SemanticRegimeGateFrame,
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
 import { Injectable } from '@nestjs/common'
@@ -16,6 +17,7 @@ type FrameDraft =
   | ActionFrameDraft
   | RiskFrameDraft
   | CombinationFrameDraft
+  | RegimeGateFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -23,6 +25,7 @@ type BoundaryTouchFrameDraft = Omit<SemanticBoundaryTouchFrame, 'id' | 'confiden
 type ActionFrameDraft = Omit<SemanticActionFrame, 'id' | 'confidence'>
 type RiskFrameDraft = Omit<SemanticRiskFrame, 'id' | 'confidence'>
 type CombinationFrameDraft = Omit<SemanticCombinationFrame, 'id' | 'confidence'>
+type RegimeGateFrameDraft = Omit<SemanticRegimeGateFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -36,6 +39,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseBoundaryTouches(text),
       ...this.parseActions(text),
       ...this.parseRisk(text),
+      ...this.parseRegimeGate(text),
     ]
 
     return drafts.map((draft, index) => ({
@@ -329,5 +333,45 @@ export class NaturalLanguageGatewayService {
         evidenceText: match[0],
       },
     ]
+  }
+
+  private parseRegimeGate(text: string): RegimeGateFrameDraft[] {
+    const frames: RegimeGateFrameDraft[] = []
+    const pattern = /价格\s*(高于|低于)\s*(ema|sma|ma)\s*(\d+)\s*才?\s*(?:允许)?\s*(做多|做空|开多|开空)/giu
+
+    for (const match of text.matchAll(pattern)) {
+      const direction = match[1]
+      const indicatorRaw = match[2].toLowerCase() as 'ema' | 'sma' | 'ma'
+      const period = Number(match[3])
+      const action = match[4]
+
+      const isLongAction = action === '做多' || action === '开多'
+      const isShortAction = action === '做空' || action === '开空'
+      const isAbove = direction === '高于'
+      const isBelow = direction === '低于'
+
+      if (isAbove && isLongAction) {
+        frames.push({
+          kind: 'regime_gate',
+          sideScope: 'long',
+          indicator: indicatorRaw,
+          period,
+          operator: 'GT',
+          evidenceText: match[0].trim(),
+        })
+      }
+      else if (isBelow && isShortAction) {
+        frames.push({
+          kind: 'regime_gate',
+          sideScope: 'short',
+          indicator: indicatorRaw,
+          period,
+          operator: 'LT',
+          evidenceText: match[0].trim(),
+        })
+      }
+    }
+
+    return frames
   }
 }

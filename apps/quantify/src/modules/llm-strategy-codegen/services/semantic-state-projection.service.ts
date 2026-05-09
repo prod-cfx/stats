@@ -30,7 +30,7 @@ export interface SemanticConversationView {
   }
 }
 
-export type SemanticDisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECUTE'
+export type SemanticDisplayBlockType = 'IF' | 'AND_AT_THEN' | 'OR_THEN' | 'EXECUTE' | 'ORCHESTRATION'
 
 export interface SemanticDisplayGraphBaseItem {
   id: string
@@ -51,10 +51,16 @@ export interface SemanticDisplayExecuteItem extends SemanticDisplayGraphBaseItem
   value?: string
 }
 
+export interface SemanticDisplayGateItem extends SemanticDisplayGraphBaseItem {
+  kind: 'gate'
+  publicName: string
+}
+
 export type SemanticDisplayLogicGraphItem =
   | SemanticDisplayConditionItem
   | SemanticDisplayActionItem
   | SemanticDisplayExecuteItem
+  | SemanticDisplayGateItem
 
 export interface SemanticDisplayLogicGraphBlock {
   type: SemanticDisplayBlockType
@@ -139,11 +145,51 @@ export class SemanticStateProjectionService {
       }
     }
 
+    const orchestrationBlock = this.buildDisplayOrchestrationBlock(state)
+
     return {
       blocks: [
+        ...(orchestrationBlock ? [orchestrationBlock] : []),
         ...ruleBlocks,
         this.buildDisplayExecuteBlock(state),
       ],
+    }
+  }
+
+  private buildDisplayOrchestrationBlock(state: SemanticState): SemanticDisplayLogicGraphBlock | null {
+    const nodes = state.orchestration?.nodes ?? []
+    const items: SemanticDisplayGateItem[] = []
+    for (const node of nodes) {
+      if (node.kind !== 'gate' || node.status !== 'locked' || node.key !== 'gate.regime') {
+        continue
+      }
+      let entry
+      try {
+        entry = this.presentationRegistry.getEntry('gate.regime')
+      }
+      catch {
+        continue
+      }
+      if (!entry) {
+        continue
+      }
+      const text = entry.displayRenderer({ params: node.params })
+      if (!text) {
+        continue
+      }
+      items.push({
+        kind: 'gate',
+        id: `orchestration-gate-${node.id}`,
+        publicName: entry.publicName,
+        text,
+      })
+    }
+    if (items.length === 0) {
+      return null
+    }
+    return {
+      type: 'ORCHESTRATION',
+      items,
     }
   }
 

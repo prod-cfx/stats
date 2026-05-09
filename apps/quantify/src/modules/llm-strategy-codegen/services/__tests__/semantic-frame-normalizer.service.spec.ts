@@ -141,6 +141,66 @@ describe('SemanticFrameNormalizerService', () => {
     expect(trigger?.params?.label).toBe('价格任一位于 EMA20、EMA60 上方')
   })
 
+  it('normalizes a single regime_gate frame into an orchestration node patch', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes ?? []
+
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0]).toEqual(expect.objectContaining({
+      id: 'orchestration-gate-regime-1',
+      kind: 'gate',
+      key: 'gate.regime',
+      params: expect.objectContaining({ sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      target: { phase: 'entry', sideScope: 'long' },
+      effectWhenFalse: 'block_new_entries',
+    }))
+    expect(nodes[0]?.activeWhen).toEqual({
+      kind: 'predicate',
+      op: 'GT',
+      left: { kind: 'series', source: 'bar', field: 'close' },
+      right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+    })
+  })
+
+  it('produces distinct orchestration nodes for distinct regime_gate frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      regimeGateFrame({ id: 'regime-long', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      regimeGateFrame({ id: 'regime-short', sideScope: 'short', indicator: 'ema', period: 60, operator: 'LT' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.orchestration?.nodes).toHaveLength(2)
+    expect(patch.orchestration?.nodes?.map(node => node.target.sideScope)).toEqual(
+      expect.arrayContaining(['long', 'short']),
+    )
+  })
+
+  it('deduplicates structurally identical regime_gate frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      regimeGateFrame({ id: 'regime-2', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.orchestration?.nodes).toHaveLength(1)
+  })
+
+  it('omits orchestration when no regime_gate frames are present', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20 }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.orchestration).toBeUndefined()
+  })
+
   it('joins compare frame evidence when group combination evidence is unavailable', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
       indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20, evidenceText: 'ema20' }),
@@ -195,6 +255,22 @@ function indicatorCompareFrame(input: {
     groupId: 'mixed-gate',
     confidence: 0.9,
     evidenceText: input.evidenceText ?? `ema${input.period}`,
+    ...input,
+  }
+}
+
+function regimeGateFrame(input: {
+  id: string
+  sideScope: 'long' | 'short' | 'both'
+  indicator: 'ema' | 'sma' | 'ma'
+  period: number
+  operator: 'GT' | 'LT'
+  evidenceText?: string
+}): SemanticNaturalLanguageFrame {
+  return {
+    kind: 'regime_gate',
+    confidence: 0.9,
+    evidenceText: input.evidenceText ?? `${input.indicator}${input.period} ${input.operator}`,
     ...input,
   }
 }

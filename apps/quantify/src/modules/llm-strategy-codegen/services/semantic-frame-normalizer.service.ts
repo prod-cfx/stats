@@ -4,9 +4,10 @@ import type {
   SemanticCombinationFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
+  SemanticRegimeGateFrame,
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
-import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type { CodegenSemanticOrchestrationNodePatch, CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
 import { Injectable } from '@nestjs/common'
 
@@ -26,6 +27,8 @@ export class SemanticFrameNormalizerService {
     const combinationByKey = new Map<string, SemanticCombinationMetadata>()
     const actionsByKey = new Map<SemanticActionFrame['actionKey'], SemanticActionFrame>()
     const riskByKey = new Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>()
+    const regimeGateByKey = new Map<string, CodegenSemanticOrchestrationNodePatch>()
+    const regimeGateFrames: SemanticRegimeGateFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -55,8 +58,20 @@ export class SemanticFrameNormalizerService {
             evidence: this.toEvidence(frame),
           })
           break
+        case 'regime_gate':
+          regimeGateFrames.push(frame)
+          break
       }
     }
+
+    regimeGateFrames.forEach((frame, index) => {
+      const node = this.normalizeRegimeGate(frame, index)
+      const dedupeKey = JSON.stringify([node.key, node.target.sideScope, node.activeWhen])
+
+      if (!regimeGateByKey.has(dedupeKey)) {
+        regimeGateByKey.set(dedupeKey, node)
+      }
+    })
 
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
@@ -78,7 +93,38 @@ export class SemanticFrameNormalizerService {
       patch.risk = risk
     }
 
+    const orchestrationNodes = Array.from(regimeGateByKey.values())
+    if (orchestrationNodes.length > 0) {
+      patch.orchestration = { nodes: orchestrationNodes }
+    }
+
     return patch
+  }
+
+  private normalizeRegimeGate(frame: SemanticRegimeGateFrame, index: number): CodegenSemanticOrchestrationNodePatch {
+    const indicatorName = frame.indicator === 'ma' ? 'sma' : frame.indicator
+    const activeWhen: SemanticExpression = {
+      kind: 'predicate',
+      op: frame.operator,
+      left: { kind: 'series', source: 'bar', field: 'close' },
+      right: { kind: 'indicator', name: indicatorName, params: { period: frame.period } },
+    }
+
+    return {
+      id: `orchestration-gate-regime-${index + 1}`,
+      kind: 'gate',
+      key: 'gate.regime',
+      params: {
+        sideScope: frame.sideScope,
+        indicator: frame.indicator,
+        period: frame.period,
+        operator: frame.operator,
+      },
+      target: { phase: 'entry', sideScope: frame.sideScope },
+      activeWhen,
+      effectWhenFalse: 'block_new_entries',
+      evidence: this.toEvidence(frame),
+    }
   }
 
   private appendIndicatorCompareGroup(

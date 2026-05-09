@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
+import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
   SemanticCapability,
@@ -21,7 +22,9 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
+import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
+import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
 
 type SemanticContractOwnerKind = 'trigger' | 'action' | 'risk' | 'position'
 type SemanticSubstrateRequirement =
@@ -78,11 +81,19 @@ export class SemanticContractReadinessService {
     private readonly semanticAtomContractService: SemanticAtomContractService = new SemanticAtomContractService(),
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
+    private readonly orchestrationRegistry: SemanticOrchestrationRegistryService = new SemanticOrchestrationRegistryService(),
   ) {}
 
-  normalize(state: SemanticState): SemanticContractReadinessNormalizationResult {
+  normalize(
+    state: SemanticState,
+    strategyVersion?: StrategyVersionInfo,
+  ): SemanticContractReadinessNormalizationResult {
     const activeOwners = collectActiveContractOwners(state)
-    const orchestrationResult = normalizePhase0Orchestration(state.orchestration)
+    const orchestrationResult = normalizePhase0Orchestration(
+      state.orchestration,
+      this.orchestrationRegistry,
+      strategyVersion,
+    )
     const unsupportedOrUnknownOwnerKeys = new Set(
       activeOwners
         .filter(owner => this.isUnsupportedOrUnknownOwner(owner))
@@ -321,6 +332,8 @@ function isSupportedAtom(resolved: ReturnType<SemanticAtomRegistryService['resol
 
 function normalizePhase0Orchestration(
   orchestration: SemanticState['orchestration'],
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
 ): Phase0OrchestrationNormalizationResult {
   if (!orchestration) {
     return { state: orchestration, hasBlockingSlots: false }
@@ -329,7 +342,7 @@ function normalizePhase0Orchestration(
   let changed = false
   let hasBlockingSlots = false
   const nodes = orchestration.nodes.map((node) => {
-    const nextNode = addPhase0OrchestrationBlocker(node)
+    const nextNode = applyOrchestrationReadinessForNode(node, registry, strategyVersion)
     changed ||= nextNode !== node
     hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
     return nextNode
@@ -338,6 +351,91 @@ function normalizePhase0Orchestration(
   return {
     state: changed ? { ...orchestration, nodes } : orchestration,
     hasBlockingSlots,
+  }
+}
+
+function applyOrchestrationReadinessForNode(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+): SemanticOrchestrationNode {
+  if (node.status !== 'locked') {
+    return node
+  }
+
+  if (isSupportedRegimeGate(node, strategyVersion, registry)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
+  return addPhase0OrchestrationBlocker(node)
+}
+
+/**
+ * 判断 orchestration node 是否可走 registry 驱动的 readiness 路径。
+ *
+ * 6 重 fail-closed 检查：
+ * 1) kind === 'gate'
+ * 2) key === 'gate.regime'
+ * 3) target.phase === 'entry'
+ * 4) 若 activeWhen 已提供则必须是合法 SemanticExpression（非合法即 fail-closed）
+ *    activeWhen 缺失允许走 registry 路径，由 registry.validate 产出 open slot
+ * 5) registry 已注册该 contract
+ * 6) version-gate：strategyVersion 必须存在且 atom 对该策略可执行
+ *    （strategyVersion === undefined / deployedAtSemanticVersion === null 均 fail-closed）
+ */
+function isSupportedRegimeGate(
+  node: SemanticOrchestrationNode,
+  strategyVersion: StrategyVersionInfo | undefined,
+  registry: SemanticOrchestrationRegistryService,
+): boolean {
+  if (node.kind !== 'gate') {
+    return false
+  }
+  if (node.key !== 'gate.regime') {
+    return false
+  }
+  if (node.target?.phase !== 'entry') {
+    return false
+  }
+  if (node.activeWhen !== undefined && !validateSemanticExpressionContract(node.activeWhen).ok) {
+    return false
+  }
+
+  const contract = registry.getContractByKey('gate.regime')
+  if (!contract) {
+    return false
+  }
+
+  if (!strategyVersion) {
+    return false
+  }
+
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+function applyRegistryDrivenReadiness(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+): SemanticOrchestrationNode {
+  const validation = registry.validate(node)
+  if (validation.ok) {
+    return node
+  }
+
+  const openSlots = node.openSlots ?? []
+  const slotKeys = new Set(openSlots.map(slot => slot.slotKey))
+  const merged = [...openSlots]
+  for (const slot of validation.missingSlots) {
+    if (!slotKeys.has(slot.slotKey)) {
+      merged.push(slot)
+      slotKeys.add(slot.slotKey)
+    }
+  }
+
+  return {
+    ...node,
+    status: 'open',
+    openSlots: merged,
   }
 }
 

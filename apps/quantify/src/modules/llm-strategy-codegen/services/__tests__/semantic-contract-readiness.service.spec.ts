@@ -1,4 +1,5 @@
-import type { SemanticState } from '../../types/semantic-state'
+import type { StrategyVersionInfo } from '../../nl-gateway/version-gate/version-gate.types'
+import type { SemanticOrchestrationNode, SemanticState } from '../../types/semantic-state'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
 
 describe('SemanticContractReadinessService', () => {
@@ -1862,6 +1863,9 @@ describe('SemanticContractReadinessService', () => {
             params: {},
             capabilities: [],
             requires: [],
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
             openSlots: [],
           }],
         }],
@@ -1906,6 +1910,9 @@ describe('SemanticContractReadinessService', () => {
             params: {},
             capabilities: [],
             requires: [],
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
             openSlots: [],
           }],
         }],
@@ -1928,6 +1935,158 @@ describe('SemanticContractReadinessService', () => {
     expect(openSlots).not.toContainEqual(expect.objectContaining({
       slotKey: 'orchestration.phase0.unsupported',
     }))
+  })
+
+  describe('orchestration gate.regime supported gate (Phase 5 S1)', () => {
+    const CURRENT_VERSION: StrategyVersionInfo = { deployedAtSemanticVersion: '2026.05.W02' }
+
+    function regimeGateNode(overrides: Partial<SemanticOrchestrationNode> = {}): SemanticOrchestrationNode {
+      return {
+        id: 'gate-regime-1',
+        kind: 'gate',
+        key: 'gate.regime',
+        status: 'locked',
+        source: 'user_explicit',
+        params: {},
+        target: { phase: 'entry' },
+        activeWhen: {
+          kind: 'predicate',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'constant', value: 0 },
+        } as unknown as SemanticOrchestrationNode['activeWhen'],
+        openSlots: [],
+        contracts: [],
+        ...overrides,
+      }
+    }
+
+    it('Test A: gate.regime + activeWhen valid + 新策略 → readiness 不注入 phase0 slot', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const node = result.state.orchestration?.nodes[0]
+
+      expect(node?.status).toBe('locked')
+      expect(node?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+      expect(node?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.gate.regime.active_when',
+      }))
+    })
+
+    it('Test B: gate.regime + activeWhen valid + 老策略 (deployedAtSemanticVersion=null) → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+      })
+
+      const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
+      const result = new SemanticContractReadinessService().normalize(state, legacy)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test C: gate.regime + activeWhen 缺失 → registry 驱动 active_when open slot，无 phase0 slot', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [regimeGateNode({ activeWhen: undefined })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.gate.regime.active_when',
+      }))
+      expect(openSlots).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test D: kind=gate + key=未知 → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [regimeGateNode({ key: 'unknown_gate_atom' })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test E: gate.regime + target.phase !== entry → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [regimeGateNode({ target: undefined })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test F: gate.regime + activeWhen 不是表达式对象 → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [regimeGateNode({
+            activeWhen: 'close > 0' as unknown as SemanticOrchestrationNode['activeWhen'],
+          })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test G: kind in {scope, program, portfolioRisk} → fail-closed 走 phase0（回归保留）', () => {
+      const kinds: Array<'scope' | 'program' | 'portfolioRisk'> = ['scope', 'program', 'portfolioRisk']
+      for (const kind of kinds) {
+        const state = createSemanticState({
+          orchestration: {
+            nodes: [{
+              id: `${kind}-node`,
+              kind,
+              status: 'locked',
+              source: 'user_explicit',
+              params: {},
+              openSlots: [],
+              contracts: [],
+            }],
+            contracts: [],
+          },
+        })
+
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+        expect(openSlots).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
   })
 })
 

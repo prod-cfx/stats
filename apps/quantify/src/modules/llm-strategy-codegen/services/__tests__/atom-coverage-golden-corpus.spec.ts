@@ -36,6 +36,11 @@ function collectCoverageKeys(
       keys.add(`context.${field}`)
     }
   }
+  for (const node of state.orchestration?.nodes ?? []) {
+    if (node.key) {
+      keys.add(node.key)
+    }
+  }
   for (const slot of classification.openSlots) {
     keys.add(`open_slot:${slot.slotKey}`)
   }
@@ -85,19 +90,29 @@ describe('atom coverage golden corpus', () => {
 
       for (const expectedAtom of goldenCase.expectedAtoms) {
         if (expectedAtom.category === 'context') continue
+        // Phase 5 S1: gate.regime is a supported_executable orchestration atom routed
+        // outside the trigger/action/risk/position substrate gate.
+        if (expectedAtom.category === 'orchestration') continue
 
         expect(expectedAtom.minContractSubstrate).toBe(true)
       }
     }
   })
 
-  it('tracks orchestration cases outside the executable projection gate route', () => {
+  it('tracks orchestration cases outside the executable projection gate route (excluding gate.regime supported executable)', () => {
+    // Phase 5 S1: gate.regime 已升级为 supported_executable orchestration atom，
+    // 可以走 projection_gate 路径；其他 orchestration 类（scope/program/portfolioRisk
+    // /multi_timeframe/dca/grid/time_window/partial_take_profit 等）仍然不可执行。
     const orchestrationCases = atomCoverageGoldenCases.filter(goldenCase =>
       goldenCase.tags.includes('orchestration'),
     )
 
     expect(orchestrationCases.length).toBeGreaterThan(0)
     for (const goldenCase of orchestrationCases) {
+      const isGateRegimeExecutable = goldenCase.expectedAtoms.some(
+        atom => atom.category === 'orchestration' && atom.key === 'gate.regime',
+      )
+      if (isGateRegimeExecutable) continue
       expect(goldenCase.expectedRoute).not.toBe('projection_gate')
     }
   })

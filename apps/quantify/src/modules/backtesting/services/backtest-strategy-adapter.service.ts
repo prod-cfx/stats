@@ -10,6 +10,7 @@ import {
   runDecisionPrograms,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
+import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
@@ -108,12 +109,17 @@ export class BacktestStrategyAdapterService {
             baseGuardState,
             projection.topology.riskPredicateOrder,
           )
+          const orchestrationGateState = evaluateOrchestrationGates(
+            (projection as { orchestrationGates?: Parameters<typeof evaluateOrchestrationGates>[0] }).orchestrationGates ?? [],
+            exprValues,
+          )
           const decision = runDecisionPrograms(
             ctx,
             decisionPrograms,
             exprValues,
             guardState,
             projection.topology.decisionOrder,
+            orchestrationGateState,
           )
           const orderState = runOrderPrograms(
             ctx,

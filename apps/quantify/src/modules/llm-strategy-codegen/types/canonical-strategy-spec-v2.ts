@@ -88,6 +88,13 @@ export interface CanonicalRuleV2 {
   metadata?: CanonicalRuleMetadata
 }
 
+export interface CanonicalOrchestrationGate {
+  id: string
+  target: { phase: 'entry', sideScope?: 'long' | 'short' | 'both' }
+  activeWhen: CanonicalConditionNode
+  effectWhenFalse: 'block_new_entries'
+}
+
 export interface CanonicalStrategySpecV2 {
   version: 2
   market: {
@@ -115,6 +122,9 @@ export interface CanonicalStrategySpecV2 {
     requiredTimeframes: string[]
   }
   rules: CanonicalRuleV2[]
+  orchestration?: {
+    gates: CanonicalOrchestrationGate[]
+  }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata
   }

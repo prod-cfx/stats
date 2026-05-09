@@ -1,6 +1,7 @@
 import type {
   ActionDef,
   CanonicalStrategyIrV1,
+  IrOrchestrationGate,
   OrderProgram,
   PredicateDef,
   RiskGuard,
@@ -14,6 +15,7 @@ import type {
   CanonicalConditionGroup,
   CanonicalConditionNode,
   CanonicalExpressionCondition,
+  CanonicalOrchestrationGate,
   CanonicalOrderProgramIntent,
   CanonicalRuleAction,
   CanonicalRuleSideScope,
@@ -187,6 +189,8 @@ export class CanonicalSpecV2IrCompilerService {
       })
     }
 
+    const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
+
     const maxLookback = this.resolveMaxLookback(seriesMap)
     const positionMode = hasOrderPrograms
       ? this.resolveOrderProgramPositionMode(input.canonicalSpec.orderPrograms ?? [])
@@ -230,6 +234,7 @@ export class CanonicalSpecV2IrCompilerService {
       },
       ruleBlocks,
       orderPrograms,
+      orchestrationGates,
       riskPolicy: {
         guards,
         riskPredicates,
@@ -813,6 +818,26 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
+  }
+
+  private compileOrchestrationGates(
+    spec: CanonicalStrategySpecV2,
+    context: CompileContext,
+  ): IrOrchestrationGate[] {
+    const gates = spec.orchestration?.gates ?? []
+    return gates.map((gate: CanonicalOrchestrationGate) => {
+      const exprId = this.compileCondition(
+        gate.activeWhen,
+        context,
+        `orchestration_gate_${gate.id}`,
+      )
+      return {
+        id: gate.id,
+        exprId,
+        target: gate.target,
+        effectWhenFalse: gate.effectWhenFalse,
+      }
+    })
   }
 
   private compileExpressionCondition(

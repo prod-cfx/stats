@@ -3795,3 +3795,178 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
     })
   })
 })
+
+describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
+  const fallback = {
+    exchange: 'binance' as const,
+    symbol: 'BTCUSDT',
+    baseTimeframe: '1m',
+    positionPct: 10,
+  }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'entry-close-above-open',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'series', source: 'bar', field: 'open' },
+          },
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  it('compiles a single regime gate into IR.orchestrationGates with non-empty exprId', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-regime-1',
+          target: { phase: 'entry', sideScope: 'long' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const gates = result.ir.orchestrationGates ?? []
+    expect(gates).toHaveLength(1)
+    expect(typeof gates[0].exprId).toBe('string')
+    expect(gates[0].exprId.length).toBeGreaterThan(0)
+    expect(gates[0].id).toBe('gate-regime-1')
+    expect(gates[0].target).toEqual({ phase: 'entry', sideScope: 'long' })
+    expect(gates[0].effectWhenFalse).toBe('block_new_entries')
+    expect(result.ir.signalCatalog.predicates.some(p => p.id === gates[0].exprId)).toBe(true)
+  })
+
+  it('dedupes the predicate when a trigger and a gate share the same expression', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const sharedActiveWhen = {
+      kind: 'expression' as const,
+      op: 'GT' as const,
+      left: { kind: 'series' as const, source: 'bar' as const, field: 'close' as const },
+      right: { kind: 'indicator' as const, name: 'ema' as const, params: { period: 50 } },
+    }
+
+    const spec: CanonicalStrategySpecV2 = {
+      version: 2,
+      market: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '1m',
+      },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['1m'],
+      },
+      rules: [
+        {
+          id: 'trigger-close-above-ema-50',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 200,
+          condition: sharedActiveWhen,
+          actions: [{ type: 'OPEN_LONG' }],
+        },
+      ],
+      orchestration: {
+        gates: [
+          {
+            id: 'gate-regime-share',
+            target: { phase: 'entry' },
+            activeWhen: sharedActiveWhen,
+            effectWhenFalse: 'block_new_entries',
+          },
+        ],
+      },
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const gates = result.ir.orchestrationGates ?? []
+    expect(gates).toHaveLength(1)
+    const triggerPredicateId = result.ir.ruleBlocks[0].when
+    expect(gates[0].exprId).toBe(triggerPredicateId)
+    const sharedPredicates = result.ir.signalCatalog.predicates.filter(p => p.id === gates[0].exprId)
+    expect(sharedPredicates).toHaveLength(1)
+  })
+
+  it('produces distinct exprIds for two distinct gate expressions', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-ema-50',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+        {
+          id: 'gate-ema-200',
+          target: { phase: 'entry' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 200 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const gates = result.ir.orchestrationGates ?? []
+    expect(gates).toHaveLength(2)
+    expect(gates[0].exprId).not.toBe(gates[1].exprId)
+  })
+
+  it('emits empty orchestrationGates when spec has no orchestration', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationGates).toEqual([])
+  })
+})

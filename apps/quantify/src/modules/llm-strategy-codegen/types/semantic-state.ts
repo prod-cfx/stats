@@ -275,25 +275,44 @@ export interface SemanticPositionState {
   support?: SemanticAtomSupportMetadata
 }
 
+export interface SemanticOrchestrationGateTarget {
+  phase: 'entry'
+  sideScope?: 'long' | 'short' | 'both'
+}
+
+export type SemanticOrchestrationGateEffect = 'block_new_entries'
+
 export interface SemanticOrchestrationContract {
   id: string
   kind: SemanticOrchestrationContractKind
   capabilities: readonly SemanticCapability[]
   requires: readonly SemanticRequirement[]
   params: Record<string, unknown>
+  runtimeRequirements: readonly SemanticRuntimeRequirement[]
+  stateRequirements: readonly SemanticStateRequirement[]
+  orderRequirements: readonly SemanticOrderRequirement[]
   openSlots: readonly SemanticSlotState[]
   effects?: readonly SemanticEffect[]
+  target?: SemanticOrchestrationGateTarget
+  // 兼容 #1043 atom 翻牌基建：声明该 contract 的翻牌起效版本（YYYY.MM.WNN）
+  // 缺失时 isAtomExecutableForStrategy 会 fail-closed 走旧行为
+  executableSinceVersion?: string
 }
 
 export interface SemanticOrchestrationNode {
   id: string
   kind: SemanticOrchestrationContractKind
+  key?: string
   params: Record<string, unknown>
   status: SemanticNodeStatus
   source: SemanticSource
   evidence?: SemanticEvidence
   openSlots: readonly SemanticSlotState[]
   contracts: readonly SemanticOrchestrationContract[]
+  target?: SemanticOrchestrationGateTarget
+  activeWhen?: SemanticExpression
+  effectWhenFalse?: SemanticOrchestrationGateEffect
+  support?: SemanticAtomSupportMetadata
 }
 
 export interface SemanticOrchestrationState {

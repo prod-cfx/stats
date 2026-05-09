@@ -33,6 +33,7 @@ import {
   runDecisionPrograms,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
+import { evaluateOrchestrationGates, type OrchestrationGateState } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
 import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
@@ -729,12 +730,17 @@ export class SignalGeneratorService {
               baseGuardState,
               projection.topology.riskPredicateOrder,
             )
+            const orchestrationGateState: OrchestrationGateState = evaluateOrchestrationGates(
+              (projection as { orchestrationGates?: Parameters<typeof evaluateOrchestrationGates>[0] }).orchestrationGates ?? [],
+              exprValues,
+            )
             const decision = runDecisionPrograms(
               ctx,
               decisionPrograms,
               exprValues,
               guardState,
               projection.topology.decisionOrder,
+              orchestrationGateState,
             )
             const orderState = runOrderPrograms(
               ctx,

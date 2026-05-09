@@ -34,7 +34,13 @@ describe('SemanticPresentationRegistryService', () => {
   })
 
   it('rejects missing presentation metadata instead of generating supported fallbacks', () => {
-    expect(() => presentation.get('market.trend')).toThrow('semantic_presentation_not_registered:market.trend')
+    try {
+      presentation.get('market.trend')
+      throw new Error('expected throw')
+    }
+    catch (err) {
+      expect((err as { args?: { token?: string } }).args?.token).toBe('market.trend')
+    }
   })
 
   it('keeps presentation metadata free of internal atom identifiers', () => {
@@ -97,6 +103,38 @@ describe('SemanticPresentationRegistryService', () => {
     expect(() => presentation.renderDisplay('condition.expression', {
       label: 'position.fixed_pct.value',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+  })
+
+  describe('gate.regime entry', () => {
+    it('exposes public metadata for gate.regime', () => {
+      const entry = presentation.getEntry('gate.regime')
+      expect(entry.publicName).toBe('趋势/状态过滤')
+    })
+
+    it('includes 趋势过滤 alias', () => {
+      const entry = presentation.getEntry('gate.regime')
+      expect(entry.aliases).toEqual(expect.arrayContaining(['趋势过滤']))
+    })
+
+    it('renders display string with EMA50 and 做多 without internal key leakage', () => {
+      const entry = presentation.getEntry('gate.regime')
+      const text = entry.displayRenderer({
+        params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
+      })
+      expect(text).toContain('EMA50')
+      expect(text).toContain('做多')
+      expect(text).not.toContain('gate.regime')
+      expect(text).not.toContain('orchestration')
+      expect(text).not.toContain('activeWhen')
+      expect(text).not.toContain('block_new_entries')
+    })
+
+    it('renders clarification text containing 指标 and 周期', () => {
+      const entry = presentation.getEntry('gate.regime')
+      const text = entry.clarificationRenderer('orchestration.gate.regime.active_when', {})
+      expect(text).toContain('指标')
+      expect(text).toContain('周期')
+    })
   })
 
   it('renders clarification text without leaking raw slot keys', () => {

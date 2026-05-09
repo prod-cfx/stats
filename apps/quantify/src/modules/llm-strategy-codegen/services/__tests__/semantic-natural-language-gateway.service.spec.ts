@@ -3,6 +3,7 @@ import type {
   SemanticCombinationFrame,
   SemanticContextFrame,
   SemanticIndicatorCompareFrame,
+  SemanticRegimeGateFrame,
   SemanticRiskFrame,
 } from '../../types/semantic-natural-language-frame'
 import { NaturalLanguageGatewayService } from '../natural-language-gateway.service'
@@ -162,6 +163,42 @@ describe('NaturalLanguageGatewayService', () => {
     ])
   })
 
+  it('parses long-side regime gate from "价格高于 EMA50 才允许做多"', () => {
+    const frames = regimeGateFrames(service.parse('价格高于 EMA50 才允许做多'))
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'regime_gate',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
+    ])
+  })
+
+  it('parses short-side regime gate from "价格低于 EMA60 才允许做空"', () => {
+    const frames = regimeGateFrames(service.parse('价格低于 EMA60 才允许做空'))
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'regime_gate',
+        sideScope: 'short',
+        indicator: 'ema',
+        period: 60,
+        operator: 'LT',
+      }),
+    ])
+  })
+
+  it('does not emit regime_gate frame for "上涨趋势才允许做多" (no indicator period)', () => {
+    expect(regimeGateFrames(service.parse('上涨趋势才允许做多'))).toHaveLength(0)
+  })
+
+  it('does not emit regime_gate frame for "震荡市才启用策略" (no indicator period)', () => {
+    expect(regimeGateFrames(service.parse('震荡市才启用策略'))).toHaveLength(0)
+  })
+
   it('keeps later explicit BOLL short entry after a negated long action segment', () => {
     const frames = service.parse('不要开多，BOLL上轨开空')
 
@@ -204,4 +241,10 @@ function indicatorCompareFrames(
   frames: ReturnType<NaturalLanguageGatewayService['parse']>,
 ): SemanticIndicatorCompareFrame[] {
   return frames.filter(frame => frame.kind === 'indicator_compare')
+}
+
+function regimeGateFrames(
+  frames: ReturnType<NaturalLanguageGatewayService['parse']>,
+): SemanticRegimeGateFrame[] {
+  return frames.filter(frame => frame.kind === 'regime_gate')
 }

@@ -3045,4 +3045,104 @@ describe('SemanticStateProjectionService', () => {
     expect(view.summary).toContain('风控：突破上下边界时停止策略并撤销未成交网格订单，不再重新部署网格')
     expect(view.summary).not.toBe('已识别部分条件，但仍未完整。')
   })
+
+  describe('orchestration gate display projection', () => {
+    function buildEmptyState(overrides: Partial<SemanticState> = {}): SemanticState {
+      return {
+        version: 1,
+        families: [],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-05-09T00:00:00.000Z',
+        ...overrides,
+      }
+    }
+
+    it('renders supported locked gate.regime node via presentation registry', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-gate-regime-1',
+              kind: 'gate',
+              key: 'gate.regime',
+              params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+          ],
+        },
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(1)
+      const gateItems = orchestrationBlocks[0]!.items
+      expect(gateItems).toHaveLength(1)
+      const gateItem = gateItems[0]!
+      expect(gateItem.kind).toBe('gate')
+      expect(gateItem.text).toContain('EMA50')
+      expect(gateItem.text).toContain('做多')
+
+      const flat = graph.blocks
+        .flatMap(block => block.items.map(item => item.text))
+        .join(' ')
+      expect(flat).not.toContain('gate.regime')
+      expect(flat).not.toContain('orchestration.')
+      expect(flat).not.toContain('activeWhen')
+      expect(flat).not.toContain('block_new_entries')
+    })
+
+    it('does not render orchestration gate section when state has no orchestration nodes (W2 deploy-truth invariant)', () => {
+      const state = buildEmptyState({
+        normalizationNotes: ['上涨趋势 EMA50 才允许做多'],
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(0)
+
+      const stateWithEmptyNodes = buildEmptyState({
+        orchestration: { contracts: [], nodes: [] },
+      })
+      const graph2 = service.buildDisplayLogicGraph(stateWithEmptyNodes)
+      expect(graph2.blocks.filter(block => block.type === 'ORCHESTRATION')).toHaveLength(0)
+    })
+
+    it('does not render gate.regime nodes that are not locked', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-gate-regime-open',
+              kind: 'gate',
+              key: 'gate.regime',
+              params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+          ],
+        },
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(0)
+    })
+  })
 })

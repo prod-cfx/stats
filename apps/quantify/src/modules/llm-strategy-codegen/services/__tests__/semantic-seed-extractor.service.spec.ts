@@ -1,7 +1,9 @@
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 
 describe('SemanticSeedExtractorService', () => {
   const service = new SemanticSeedExtractorService()
+  const stateBuilder = new SemanticSeedStateBuilderService()
 
   const expectEveryExecutableSeedNodeToHaveContracts = (message: string) => {
     const patch = service.extract(message)
@@ -4077,6 +4079,51 @@ describe('SemanticSeedExtractorService', () => {
     it('falls back to numeric arabic forms unchanged (backward compat)', () => {
       expectTimeframe(`BTCUSDT 1m${baseSuffix}`, '1m')
       expectTimeframe(`BTCUSDT 4小时${baseSuffix}`, '4h')
+    })
+  })
+
+  describe('orchestration regime_gate end-to-end propagation', () => {
+    const REGIME_TEXT = '价格高于 EMA50 才允许做多'
+
+    it('propagates regime_gate frame through extractor and state-builder into state.orchestration', () => {
+      const patch = service.extract(REGIME_TEXT)
+
+      expect(patch.orchestration?.nodes).toHaveLength(1)
+      const nodePatch = patch.orchestration!.nodes![0]
+      expect(nodePatch).toEqual(expect.objectContaining({
+        kind: 'gate',
+        key: 'gate.regime',
+        target: expect.objectContaining({ phase: 'entry', sideScope: 'long' }),
+        effectWhenFalse: 'block_new_entries',
+      }))
+      expect(nodePatch.activeWhen).toBeDefined()
+
+      const state = stateBuilder.build(patch)
+
+      expect(state).not.toBeNull()
+      expect(state!.orchestration).toBeDefined()
+      expect(state!.orchestration!.nodes).toHaveLength(1)
+      const node = state!.orchestration!.nodes[0]
+      expect(node.kind).toBe('gate')
+      expect(node.key).toBe('gate.regime')
+      expect(node.target).toEqual(expect.objectContaining({ phase: 'entry', sideScope: 'long' }))
+      expect(node.activeWhen).toBeDefined()
+      expect(node.effectWhenFalse).toBe('block_new_entries')
+      expect(state!.orchestration!.contracts).toEqual([])
+    })
+
+    it('is idempotent across repeated extraction of the same regime_gate input', () => {
+      const firstState = stateBuilder.build(service.extract(REGIME_TEXT))
+      const secondState = stateBuilder.build(service.extract(REGIME_TEXT))
+
+      expect(firstState?.orchestration?.nodes).toHaveLength(1)
+      expect(secondState?.orchestration?.nodes).toHaveLength(1)
+      expect(secondState?.orchestration?.nodes[0]).toEqual(
+        expect.objectContaining({
+          kind: firstState!.orchestration!.nodes[0].kind,
+          key: firstState!.orchestration!.nodes[0].key,
+        }),
+      )
     })
   })
 })
