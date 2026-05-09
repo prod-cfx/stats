@@ -16,6 +16,8 @@ import {
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 EventEmitter2
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
@@ -107,6 +109,8 @@ export class StrategyInstancesService {
     private readonly tradingSignalRepository: TradingSignalRepository,
     private readonly marketDataReadGateway: MarketDataReadGateway,
     private readonly env: EnvService,
+    // Phase 5 S5（#984）：deleteInstance 时 emit 事件让 signal-generator 清理 lifecycle state
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async createInstance(
@@ -374,6 +378,8 @@ export class StrategyInstancesService {
     }
 
     await this.instancesRepo.delete(id)
+    // Phase 5 S5（#984）：发出 deleted 事件，让 signal-generator 清理 dynamic_grid lifecycle state
+    this.eventEmitter.emit('strategy-instance.deleted', { strategyInstanceId: id })
     this.logger.log(`删除策略实例: ${id}`)
   }
 

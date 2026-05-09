@@ -32,18 +32,29 @@ describe('signalGeneratorService orchestration program wiring (live-signal fast 
     expect(src).toMatch(/Parameters<typeof runOrderPrograms>\[6\]/)
   })
 
-  it('13.E (Phase 5 S0a): runOrderPrograms 第 8 参为 programLifecycleStateIn —'
-    + ' live 端 S0a 暂传 undefined（state map 由 S5/S6 落地）', () => {
-    // 静态断言：源码包含传给 runOrderPrograms 的第 8 参 undefined
-    expect(src).toMatch(
-      /runOrderPrograms\([\s\S]*?orchestrationPrograms[\s\S]*?\?\?\s*\[\][\s\S]*?\][\s\S]*?,[\s\S]*?undefined[\s\S]*?\)/,
-    )
-    // 类型断言：第 8 参类型是 Readonly<Record<string, ProgramLifecycleState>> | undefined
+  it('13.E (Phase 5 S0a): runOrderPrograms 第 8 参类型为 Readonly<Record<string, ProgramLifecycleState>> | undefined', () => {
+    // 类型断言：第 8 参类型保持稳定
     type Param8 = Parameters<typeof import('@ai/shared/script-engine/compiled-runtime').runOrderPrograms>[7]
     type Expected = Readonly<Record<string, import(
       '@ai/shared/script-engine/compiled-runtime'
     ).ProgramLifecycleState>> | undefined
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _typeCheck: Param8 = undefined as Expected
+  })
+
+  // Phase 5 S5（#984）：live 端真实接入 dynamic_grid lifecycle map + cleanup
+  it('15.A (Phase 5 S5): 源码注入 lifecycleStateIn from programLifecycleStateByStrategyInstanceId map', () => {
+    expect(src).toContain('programLifecycleStateByStrategyInstanceId')
+    expect(src).toContain('lifecycleStateIn')
+    expect(src).toContain('lifecycleStateMap.set(strategyInstanceId, orderState.programLifecycleStateNext)')
+  })
+
+  it('15.B (Phase 5 S5): 源码定义 cleanupProgramLifecycleState + eventEmitter listener', () => {
+    expect(src).toContain('cleanupProgramLifecycleState(strategyInstanceId: string): void')
+    expect(src).toMatch(/this\.eventEmitter\.on\(['"]strategy-instance\.deleted['"]/)
+  })
+
+  it('15.C (Phase 5 S5): buildCompiledRuntimeAdapter 接受 strategyInstanceId 参数', () => {
+    expect(src).toMatch(/buildCompiledRuntimeAdapter\([\s\S]*?scriptCode:\s*string,\s*strategyInstanceId\?:\s*string/)
   })
 })

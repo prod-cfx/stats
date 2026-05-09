@@ -2,6 +2,7 @@ import type { StrategyInstanceMode, StrategyInstanceStatus } from '@ai/shared'
 import type { TestingModule } from '@nestjs/testing'
 import type { TestLegTimeframeDataDto } from '../../dto/test-strategy-instance.dto'
 
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { Test } from '@nestjs/testing'
 import { EnvService } from '@/common/services/env.service'
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
@@ -84,6 +85,11 @@ describe('strategyInstancesService - mode management', () => {
         {
           provide: EnvService,
           useValue: { isDev: jest.fn().mockReturnValue(false), isProd: jest.fn().mockReturnValue(false), isTest: jest.fn().mockReturnValue(true) },
+        },
+        {
+          // Phase 5 S5（#984）：strategy-instances 通过 EventEmitter2 通知 signal-generator 清理 lifecycle
+          provide: EventEmitter2,
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile()
