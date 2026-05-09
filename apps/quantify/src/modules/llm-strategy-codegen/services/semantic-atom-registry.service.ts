@@ -390,6 +390,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('position.no_position', ['sideScope'], { executableSinceVersion: '2026.05.W02' }),
   multiTimeframeTrigger(),
   executableTrigger('indicator.divergence', ['indicator', 'direction', 'pivotWindow', 'confirmationBars'], { executableSinceVersion: '2026.05.W02' }),
+  executableTrigger('price.candle_pattern', ['pattern', 'direction'], { executableSinceVersion: '2026.05.W02' }),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),
   unsupported('action.pause_trading', 'action', '暂停交易', 'pause_trading_public_beta_unsupported', '暂停交易动作当前公测暂未支持生成和回测。'),
 ]

@@ -790,6 +790,60 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: ['1h 上涨趋势下才允许 5min 做多', '4h 区间内启用 15min 网格'],
   }),
   presentation({
+    key: 'price.candle_pattern',
+    publicName: 'K 线形态',
+    aliases: [
+      '吞没形态',
+      '锤子线',
+      '十字星',
+      '连续实体',
+      'engulfing',
+      'hammer',
+      'doji',
+      'consecutive body',
+      'bullish engulfing',
+      'bearish engulfing',
+    ],
+    positiveExamples: [
+      '出现看涨吞没形态后开多',
+      '锤子线确认后做多',
+      '十字星出现后开空',
+      '连续 3 根阳线后加多',
+    ],
+    negativeExamples: ['像吞没', '疑似锤子', '看起来像十字星'],
+    goldenUtterances: [
+      'OKX BTCUSDT 15m，出现看涨吞没形态后开多，5% 止损。',
+      'OKX BTCUSDT 15m，bearish engulfing candle pattern，开空，5% 止损。',
+      'OKX BTCUSDT 15m，锤子线（bullish hammer）确认后做多，单笔 10%。',
+      '出现看跌十字星形态后开空',
+      '连续 3 根阳线后做多入场',
+    ],
+    displayRenderer: ({ params }) => {
+      const pattern = stringParam(params, 'pattern', 'engulfing')
+      const direction = stringParam(params, 'direction', '')
+      const dirLabel = direction === 'bullish' ? '看涨' : direction === 'bearish' ? '看跌' : ''
+      const patternLabel =
+        pattern === 'engulfing'
+          ? '吞没'
+          : pattern === 'hammer'
+            ? '锤子线'
+            : pattern === 'doji'
+              ? '十字星'
+              : pattern === 'consecutive_body'
+                ? '连续实体'
+                : pattern
+      const minBars = params && typeof params['minBars'] === 'number' ? (params['minBars'] as number) : undefined
+      const minBarsLabel = minBars !== undefined ? `（≥${minBars} 根）` : ''
+      return `${dirLabel}${patternLabel}形态${minBarsLabel}`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'price.candle_pattern.pattern') return '请选择 K 线形态：engulfing（吞没）、hammer（锤子线）、doji（十字星）或 consecutive_body（连续实体）。'
+      if (slotKey === 'price.candle_pattern.direction') return '请指明形态方向：bullish（看涨）或 bearish（看跌）。'
+      if (slotKey === 'price.candle_pattern.minBars') return '连续实体形态需要指定最少连续根数（minBars），例如 3。'
+      return '请补充 K 线形态条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.divergence',
     publicName: '指标背离',
     aliases: [

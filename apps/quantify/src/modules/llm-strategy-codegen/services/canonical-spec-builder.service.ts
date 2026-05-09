@@ -4299,6 +4299,31 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
+      case 'price.candle_pattern': {
+        // P4-2: 白名单 4 patterns；缺失 pattern 或 direction → fail-closed (null)
+        const cpPattern = typeof trigger.params.pattern === 'string'
+          ? trigger.params.pattern.trim().toLowerCase()
+          : null
+        if (cpPattern !== 'engulfing' && cpPattern !== 'hammer' && cpPattern !== 'doji' && cpPattern !== 'consecutive_body') return null
+        const cpDirection = typeof trigger.params.direction === 'string'
+          ? trigger.params.direction.trim().toLowerCase()
+          : null
+        if (cpDirection !== 'bullish' && cpDirection !== 'bearish') return null
+        const cpMinBars = typeof trigger.params.minBars === 'number' && Number.isFinite(trigger.params.minBars)
+          ? trigger.params.minBars
+          : undefined
+        return {
+          kind: 'atom',
+          key: 'price.candle_pattern',
+          semanticScope: 'market',
+          op: cpDirection === 'bullish' ? 'GTE' : 'LTE',
+          params: {
+            pattern: cpPattern,
+            direction: cpDirection,
+            ...(cpMinBars !== undefined ? { minBars: cpMinBars } : {}),
+          },
+        }
+      }
       default:
         return null
     }
