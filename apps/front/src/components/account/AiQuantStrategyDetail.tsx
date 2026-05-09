@@ -344,6 +344,7 @@ export function AiQuantStrategyDetail({
 
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
+  const equityPolyline = useMemo(() => buildPolyline(series), [series])
   const { displayTotalPnl, displayTodayPnl } = useMemo(
     () => resolveDisplayMetrics({
       totalPnl: strategy?.totalPnl,
@@ -1000,7 +1001,7 @@ export function AiQuantStrategyDetail({
               strokeWidth="3"
               strokeLinecap="round"
               strokeLinejoin="round"
-              points={buildPolyline(series)}
+              points={equityPolyline}
             />
             {series.length === 1 && coords[0] && (
               <circle cx={coords[0].x} cy={coords[0].y} r={4} fill="#38bdf8" />
