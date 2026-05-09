@@ -270,19 +270,42 @@ export class SemanticSeedStateBuilderService {
       ? (update.support as unknown as SemanticOrchestrationNode['support'])
       : undefined
 
-    const programKind = update.programKind === 'fixed_grid_gated' ? 'fixed_grid_gated' : undefined
+    const programKind = update.programKind === 'fixed_grid_gated' || update.programKind === 'dynamic_grid'
+      ? update.programKind
+      : undefined
     const activeWhenRef = this.readTrimmedString(update.activeWhenRef) ?? undefined
     const onDeactivate = update.onDeactivate === 'cancel'
       || update.onDeactivate === 'keep'
       || update.onDeactivate === 'close'
       ? update.onDeactivate
       : undefined
-    const rebuildPolicy = update.rebuildPolicy === 'static' ? update.rebuildPolicy : undefined
+    const rebuildPolicy = update.rebuildPolicy === 'static' || update.rebuildPolicy === 'anchor_on_state_change'
+      ? update.rebuildPolicy
+      : undefined
     const gridParams = this.isRecord(update.gridParams)
       ? this.normalizeGridParams(update.gridParams)
       : undefined
     const sizing = this.isRecord(update.sizing)
       ? this.normalizeProgramSizing(update.sizing)
+      : undefined
+    // Phase 5 S5：dynamic_grid 专属字段透传
+    const anchorLookbackBars = this.hasPositiveFiniteNumber(update.anchorLookbackBars) && Number.isInteger(update.anchorLookbackBars)
+      ? update.anchorLookbackBars as number
+      : undefined
+    const anchorSide = update.anchorSide === 'high' || update.anchorSide === 'low' || update.anchorSide === 'mid'
+      ? update.anchorSide
+      : undefined
+    const anchorDriftPct = this.hasPositiveFiniteNumber(update.anchorDriftPct)
+      ? update.anchorDriftPct as number
+      : undefined
+    const rebuildMinIntervalSec = this.hasPositiveFiniteNumber(update.rebuildMinIntervalSec) && Number.isInteger(update.rebuildMinIntervalSec)
+      ? update.rebuildMinIntervalSec as number
+      : undefined
+    const dynamicGridStep = this.isRecord(update.dynamicGridStep)
+      ? this.normalizeDynamicGridStep(update.dynamicGridStep)
+      : undefined
+    const levelCount = this.hasPositiveFiniteNumber(update.levelCount) && Number.isInteger(update.levelCount)
+      ? update.levelCount as number
       : undefined
 
     return {
@@ -308,7 +331,20 @@ export class SemanticSeedStateBuilderService {
       ...(rebuildPolicy ? { rebuildPolicy } : {}),
       ...(gridParams ? { gridParams } : {}),
       ...(sizing ? { sizing } : {}),
+      ...(anchorLookbackBars !== undefined ? { anchorLookbackBars } : {}),
+      ...(anchorSide ? { anchorSide } : {}),
+      ...(anchorDriftPct !== undefined ? { anchorDriftPct } : {}),
+      ...(rebuildMinIntervalSec !== undefined ? { rebuildMinIntervalSec } : {}),
+      ...(dynamicGridStep ? { dynamicGridStep } : {}),
+      ...(levelCount !== undefined ? { levelCount } : {}),
     }
+  }
+
+  private normalizeDynamicGridStep(value: SemanticPatchRecord): SemanticOrchestrationNode['dynamicGridStep'] | undefined {
+    const mode = value.mode === 'pct' || value.mode === 'absolute' ? value.mode : undefined
+    if (!mode) return undefined
+    if (!this.hasPositiveFiniteNumber(value.value)) return undefined
+    return { mode, value: value.value }
   }
 
   private normalizeGridParams(value: SemanticPatchRecord): SemanticOrchestrationNode['gridParams'] | undefined {
