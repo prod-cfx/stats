@@ -59,8 +59,7 @@ export interface SemanticSupportedAtomDefinition extends SemanticAtomDefinitionB
    * 配合 nl-gateway/version-gate.ts 的 isAtomExecutableForStrategy 做版本分流：
    * 老策略（deployedAtSemanticVersion < since）保留 fail-closed 旧行为。
    *
-   * 注：runtime decision point 的接入工作追踪在 issue #1046；
-   * 在该 issue 完成前，本字段是"被动元数据"，runtime 不消费。
+   * SemanticSupportClassifierService 会在生产入口传入 strategy version 时消费该字段。
    */
   executableSinceVersion?: string
   unsupported?: never
