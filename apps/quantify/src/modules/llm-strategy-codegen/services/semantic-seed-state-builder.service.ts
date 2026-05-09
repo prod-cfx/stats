@@ -512,6 +512,7 @@ export class SemanticSeedStateBuilderService {
       || key === 'volume.threshold'
       || key === 'volume.relative_average'
       || key === 'volatility.atr_threshold'
+      || key === 'strategy.time_window'
     ) {
       return true
     }

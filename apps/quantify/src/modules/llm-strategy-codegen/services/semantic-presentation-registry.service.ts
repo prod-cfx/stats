@@ -186,6 +186,38 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     },
   }),
   presentation({
+    key: 'strategy.time_window',
+    publicName: '交易时间窗口',
+    aliases: ['时间段过滤', '交易时段', '开仓时间', '允许开仓时间'],
+    positiveExamples: ['北京时间 9:30-11:30 内允许开仓', 'allow entries between 09:30-11:30 UTC'],
+    negativeExamples: ['不限制开仓时间'],
+    goldenUtterances: [
+      '北京时间 9:30 到 11:30 内允许开仓',
+      'allow entries between 09:30-11:30 UTC',
+      '只在上午 9:30 到 11:30 开仓',
+    ],
+    displayRenderer: ({ params }) => {
+      const timezone = stringParam(params, 'timezone', 'UTC')
+      const windowsRaw = typeof params?.windows === 'string' ? params.windows : null
+      let windowsStr = ''
+      if (windowsRaw) {
+        try {
+          const arr: Array<{ start: string; end: string }> = JSON.parse(windowsRaw)
+          windowsStr = arr.map(w => `${w.start}-${w.end}`).join(', ')
+        }
+        catch {
+          windowsStr = windowsRaw
+        }
+      }
+      return windowsStr ? `时间窗口 ${windowsStr} (${timezone})` : `时间窗口 (${timezone})`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'strategy.time_window.timezone') return '请指定时区，例如 Asia/Shanghai（北京时间）或 UTC。'
+      if (slotKey === 'strategy.time_window.windows') return '请指定允许开仓的时间段，例如 09:30-11:30（24小时制，可有多段）。'
+      return '请补充交易时间窗口条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.cross_over',
     publicName: '指标上穿',
     aliases: ['金叉', '向上交叉'],

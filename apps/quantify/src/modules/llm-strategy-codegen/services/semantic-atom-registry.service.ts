@@ -407,7 +407,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('position.leverage', 'position', '策略杠杆声明', 'leverage_contract_public_beta_unsupported', '策略内声明杠杆当前公测暂未支持生成和回测。'),
   unsupported('position.margin_mode', 'position', '逐仓/全仓声明', 'margin_mode_public_beta_unsupported', '策略内切换逐仓/全仓当前公测暂未支持生成和回测。'),
   unsupported('grid.dynamic_grid', 'trigger', '动态网格', 'dynamic_grid_public_beta_unsupported', '动态网格当前公测暂未支持生成和回测。'),
-  unsupported('strategy.time_window', 'trigger', '交易时间窗口', 'time_window_public_beta_unsupported', '交易时间窗口当前公测暂未支持生成和回测。'),
+  executableTrigger('strategy.time_window', ['timezone', 'windows'], { executableSinceVersion: '2026.05.W02' }),
   multiTimeframeTrigger(),
   unsupported('indicator.divergence', 'trigger', '指标背离', 'divergence_public_beta_unsupported', '指标背离当前公测暂未支持生成和回测。'),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),

@@ -1044,13 +1044,13 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-034-recognized-unsupported-time-window',
-    name: 'recognized unsupported time window',
+    id: 'golden-corpus-034-supported-executable-time-window',
+    name: 'supported executable time window',
     message:
       'OKX 合约 BTCUSDT 15m，只在北京时间 9 点到 11 点之间允许开多，MA20 上穿 MA50 开多，单笔 10%。',
-    tags: ['trend', 'position_lifecycle', 'orchestration'],
+    tags: ['trend', 'position_lifecycle'],
     expectedAtoms: [
-      { key: 'strategy.time_window', category: 'orchestration' },
+      { key: 'strategy.time_window', category: 'trigger', minContractSubstrate: true },
       { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
       { key: 'open_long', category: 'action', minContractSubstrate: true },
       { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
@@ -1060,9 +1060,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',
-      'unsupported:strategy.time_window',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'projection_gate',
   },
   {
     id: 'golden-corpus-035-supported-requires-slot-multi-timeframe',

@@ -4069,15 +4069,8 @@ export class SemanticSeedExtractorService {
         })
       }
 
-      if (/(?:北京时间|UTC|交易时段|时间窗口|只在).{0,24}(?:\d{1,2}\s*(?:点|:)|开盘|收盘)/iu.test(clause)) {
-        this.pushTrigger(triggers, seen, {
-          key: 'strategy.time_window',
-          phase: 'gate',
-          params: { sourceText: clause },
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-        })
+      if (this.isTimeWindowClause(clause)) {
+        this.extractTimeWindowTrigger(clause, segment, triggers, seen)
       }
 
       if (/(?:多周期|多时间框架|multi[-_\s]?timeframe|先看\s*\d{1,2}\s*(?:m|h|d|分钟|小时|天)|\d{1,2}\s*h\s*趋势)/iu.test(clause)) {
@@ -4269,6 +4262,163 @@ export class SemanticSeedExtractorService {
         })
       }
     }
+  }
+
+  private isTimeWindowClause(clause: string): boolean {
+    const hasTimezoneKeyword = /(?:北京时间|上海时间|Asia\/Shanghai|UTC|GMT|America\/New_York|纽约时间|东京时间|Asia\/Tokyo|伦敦时间|Europe\/London|交易时段|时间窗口|时间段|time\s*window|trading\s*hours?|允许开仓时间)/iu.test(clause)
+    const hasTimeDigits = /(?:\d{1,2}\s*[:：点]\s*\d{0,2}|\d{1,2}\s*[:：点]|\d{1,2}\s*点|\bAM\b|\bPM\b)/iu.test(clause)
+    // Timezone keyword alone (missing windows → open_slot) OR timezone + time digits (fully locked)
+    if (hasTimezoneKeyword) return true
+    // "只在/仅在 ... 时间" pattern with time digits
+    if (/(?:只在|仅在).{0,30}(?:\d{1,2}\s*[:：点])/iu.test(clause)) return true
+    // 时间窗口 keywords with time digits
+    if (hasTimeDigits && /(?:时间|window|trading\s*hour|开仓时间)/iu.test(clause)) return true
+    return false
+  }
+
+  /** 从自然语言句子提取 strategy.time_window atom 参数。
+   * params.timezone: string (IANA timezone 或 offset，如 "Asia/Shanghai" / "+08:00")
+   * params.windows: JSON-encoded string of Array<{start: string; end: string}>
+   * timezone 缺失 → open_slot.timezone
+   * windows 缺失 → open_slot.windows
+   */
+  private extractTimeWindowTrigger(
+    clause: string,
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+  ): void {
+    const intent = this.resolveUnsupportedTriggerIntent(clause, segment)
+
+    // 1. Extract timezone
+    const timezone = this.extractTimezone(clause)
+
+    // 2. Extract time windows (HH:mm pairs)
+    const windows = this.extractTimeWindows(clause)
+
+    const openSlots: Array<{
+      slotKey: string
+      fieldPath: string
+      status: 'open'
+      priority: 'core'
+      questionHint: string
+      affectsExecution: boolean
+    }> = []
+
+    if (!timezone) {
+      openSlots.push({
+        slotKey: 'strategy.time_window.timezone',
+        fieldPath: 'triggers[strategy.time_window].params.timezone',
+        status: 'open' as const,
+        priority: 'core' as const,
+        questionHint: '请指定时区，例如 Asia/Shanghai（北京时间）或 UTC。',
+        affectsExecution: true,
+      })
+    }
+
+    if (!windows || windows.length === 0) {
+      openSlots.push({
+        slotKey: 'strategy.time_window.windows',
+        fieldPath: 'triggers[strategy.time_window].params.windows',
+        status: 'open' as const,
+        priority: 'core' as const,
+        questionHint: '请指定允许开仓的时间段，例如 09:30-11:30（24小时制）。',
+        affectsExecution: true,
+      })
+    }
+
+    const isLocked = openSlots.length === 0
+    this.pushTrigger(triggers, seen, {
+      key: 'strategy.time_window',
+      phase: 'gate',
+      ...(intent.sideScope ? { sideScope: intent.sideScope } : {}),
+      params: {
+        ...(timezone ? { timezone } : {}),
+        // builder reads windows as Array; IR compiler receives JSON string after builder serializes it
+        ...(windows && windows.length > 0 ? { windows } : {}),
+      },
+      status: isLocked ? 'locked' : 'open',
+      source: 'user_explicit',
+      openSlots,
+    })
+  }
+
+  private extractTimezone(text: string): string | null {
+    // IANA timezone names
+    if (/Asia\/Shanghai/iu.test(text)) return 'Asia/Shanghai'
+    if (/Asia\/Tokyo/iu.test(text)) return 'Asia/Tokyo'
+    if (/Asia\/Hong_Kong/iu.test(text)) return 'Asia/Hong_Kong'
+    if (/America\/New_York/iu.test(text)) return 'America/New_York'
+    if (/America\/Chicago/iu.test(text)) return 'America/Chicago'
+    if (/Europe\/London/iu.test(text)) return 'Europe/London'
+    // Named timezone shortcuts (Chinese / English)
+    if (/北京时间|上海时间|CST|中国标准时间/iu.test(text)) return 'Asia/Shanghai'
+    if (/纽约时间|Eastern\s*Time|EST|EDT/iu.test(text)) return 'America/New_York'
+    if (/东京时间|Japan\s*Time|JST/iu.test(text)) return 'Asia/Tokyo'
+    if (/伦敦时间|London\s*Time|BST|GMT/iu.test(text)) return 'Europe/London'
+    // Plain "UTC"
+    if (/\bUTC\b/iu.test(text)) return 'UTC'
+    // critic round 1 Major #3 修复：UTC offset 转换为 IANA 兼容的 Etc/GMT 格式
+    // （IANA Etc/GMT 符号反转：UTC+8 = Etc/GMT-8），避免 runtime helper 用 IANA name 解析时抛错
+    const offsetMatch = text.match(/([+-])(\d{2}):?(\d{2})/)
+    if (offsetMatch) {
+      const sign = offsetMatch[1]
+      const hours = Number(offsetMatch[2])
+      const mins = Number(offsetMatch[3])
+      // 仅整点 offset 转 Etc/GMT；非整点（如 +05:30）不转，保留 raw offset 让 runtime 自行决定
+      if (mins === 0 && hours >= 0 && hours <= 14) {
+        // sign 反转：用户写 +08:00 (UTC+8) → IANA Etc/GMT-8
+        const ianaSign = sign === '+' ? '-' : '+'
+        return `Etc/GMT${ianaSign}${hours}`
+      }
+      return offsetMatch[0]
+    }
+    return null
+  }
+
+  private extractTimeWindows(
+    text: string,
+  ): Array<{ start: string; end: string }> | null {
+    // critic round 1 Critical #1 修复：旧实现全段扫所有时间样数字 + (i, i+1) 简单配对，
+    // "5 分钟级别 9 点到 11 点" 会被误配 (5:00, 9:00)。
+    // 新实现：单一 anchored regex 强制 start—连接词—end 同时出现。
+    // 支持：
+    //   "9:30 到 11:30" / "9:30-11:30" / "09:30 to 11:30" / "9点30 到 11点30"
+    //   "9 点 到 11 点" / "9-11" (only with explicit time-keyword nearby; see isTimeWindowClause gate)
+    const timePart = String.raw`(\d{1,2}(?:[:：点]\d{0,2})?)`
+    const sep = String.raw`\s*(?:到|至|~|–|-|to)\s*`
+    const pattern = new RegExp(`${timePart}${sep}${timePart}`, 'giu')
+
+    const windows: Array<{ start: string; end: string }> = []
+    const seen = new Set<string>()
+    let m: RegExpExecArray | null
+    // eslint-disable-next-line no-cond-assign
+    while ((m = pattern.exec(text)) !== null) {
+      const start = this.normaliseTimeOfDay(m[1])
+      const end = this.normaliseTimeOfDay(m[2])
+      if (start === null || end === null) continue
+      const key = `${start}-${end}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      windows.push({ start, end })
+    }
+
+    return windows.length > 0 ? windows : null
+  }
+
+  /**
+   * 把 "9" / "9:30" / "9点" / "9点30" / "09:30" 等格式归一化为 "HH:MM"。
+   * 小时超出 0-23 / 分钟超出 0-59 → 返回 null（fail-closed，进入 open_slot）。
+   */
+  private normaliseTimeOfDay(raw: string): string | null {
+    const match = raw.match(/^(\d{1,2})(?:[:：点](\d{0,2}))?$/)
+    if (!match) return null
+    const hour = Number(match[1])
+    const minute = match[2] ? Number(match[2] || '0') : 0
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null
+    if (hour < 0 || hour > 23) return null
+    if (minute < 0 || minute > 59) return null
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
   }
 
   private pushUnknownUnsupportedTriggers(
