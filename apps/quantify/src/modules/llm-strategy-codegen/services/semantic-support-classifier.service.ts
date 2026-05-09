@@ -10,6 +10,7 @@ import type {
   SemanticState,
   SemanticTriggerState,
 } from '../types/semantic-state'
+import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import type {
   SemanticAtomDefinition,
@@ -18,6 +19,7 @@ import type {
   SemanticAtomUnsupportedMetadata,
 } from '../types/semantic-atom-support'
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
+import { isAtomExecutableForStrategy } from '../nl-gateway/version-gate/version-gate'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 
 export type SemanticSupportRoute =
@@ -46,7 +48,7 @@ type ResolvedSemanticAtom = ReturnType<SemanticAtomRegistryService['resolve']>
 export class SemanticSupportClassifierService {
   constructor(private readonly registry: SemanticAtomRegistryService) {}
 
-  classify(state: SemanticState): SemanticSupportClassification {
+  classify(state: SemanticState, strategyVersion?: StrategyVersionInfo): SemanticSupportClassification {
     const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
     const unknownAtoms: string[] = []
 
@@ -55,19 +57,19 @@ export class SemanticSupportClassifierService {
         return { ...trigger }
       }
 
-      const resolved = this.resolveTriggerSupport(trigger)
+      const resolved = this.applyRuntimeVersionGate(this.resolveTriggerSupport(trigger), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withRegistryOpenSlots(withSupportMetadata(trigger, resolved), resolved)
     })
 
-    const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms)
+    const position = this.classifyPosition(state.position, unsupportedAtoms, unknownAtoms, strategyVersion)
 
     const actions = state.actions.map((action) => {
       if (action.status === 'superseded') {
         return { ...action }
       }
 
-      const resolved = this.registry.resolve(action.key)
+      const resolved = this.applyRuntimeVersionGate(this.registry.resolve(action.key), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withAddPositionConstraintOpenSlot(
         withRegistryOpenSlots(withSupportMetadata(action, resolved), resolved),
@@ -83,7 +85,7 @@ export class SemanticSupportClassifierService {
       const riskParams = 'params' in riskState && riskState.params !== undefined
         ? riskState.params as Record<string, unknown>
         : {}
-      const resolved = this.registry.resolve(riskState.key, riskParams)
+      const resolved = this.applyRuntimeVersionGate(this.registry.resolve(riskState.key, riskParams), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
     })
@@ -140,6 +142,7 @@ export class SemanticSupportClassifierService {
     position: SemanticPositionState | null,
     unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'],
     unknownAtoms: string[],
+    strategyVersion?: StrategyVersionInfo,
   ): SemanticPositionState | null {
     if (!position) {
       return null
@@ -154,7 +157,7 @@ export class SemanticSupportClassifierService {
         return { ...constraint }
       }
 
-      const resolved = this.registry.resolve(constraint.key, constraint.params)
+      const resolved = this.applyRuntimeVersionGate(this.registry.resolve(constraint.key, constraint.params), strategyVersion)
       this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
       return withRegistryOpenSlots(withSupportMetadata(constraint, resolved), resolved)
     })
@@ -166,7 +169,7 @@ export class SemanticSupportClassifierService {
       }
     }
 
-    const resolved = this.registry.resolve(toPositionAtomKey(position.mode))
+    const resolved = this.applyRuntimeVersionGate(this.registry.resolve(toPositionAtomKey(position.mode)), strategyVersion)
     this.collectSupportResult(resolved, unsupportedAtoms, unknownAtoms)
     return {
       ...withRegistryOpenSlots(withSupportMetadata(position, resolved), resolved),
@@ -189,6 +192,34 @@ export class SemanticSupportClassifierService {
     }
 
     return this.registry.resolve(trigger.key)
+  }
+
+  private applyRuntimeVersionGate(
+    resolved: ResolvedSemanticAtom,
+    strategyVersion: StrategyVersionInfo | undefined,
+  ): ResolvedSemanticAtom {
+    if (!strategyVersion || !isSupportedAtom(resolved) || resolved.executableSinceVersion === undefined) {
+      return resolved
+    }
+
+    if (isAtomExecutableForStrategy(resolved, strategyVersion)) {
+      return resolved
+    }
+
+    return {
+      key: resolved.key,
+      category: resolved.category,
+      supportStatus: 'recognized_unsupported',
+      requiredParams: [...resolved.requiredParams],
+      defaultableParams: [...resolved.defaultableParams],
+      executableProjection: [],
+      openSlots: [],
+      unsupported: {
+        displayName: resolved.key,
+        reasonCode: 'runtime_version_unsupported',
+        publicReason: '当前策略部署版本暂不支持该语义原子，请重新发布策略或改用替代方案。',
+      },
+    }
   }
 
   private collectSupportResult(
@@ -247,7 +278,9 @@ function withSupportMetadata<
     : { ...node, support: toSupportMetadata(resolved) }
 }
 
-function isSupportedAtom(resolved: ResolvedSemanticAtom): boolean {
+function isSupportedAtom(
+  resolved: ResolvedSemanticAtom,
+): resolved is Extract<ResolvedSemanticAtom, { supportStatus: 'supported_executable' | 'supported_requires_slot' }> {
   return resolved.supportStatus === 'supported_executable' || resolved.supportStatus === 'supported_requires_slot'
 }
 

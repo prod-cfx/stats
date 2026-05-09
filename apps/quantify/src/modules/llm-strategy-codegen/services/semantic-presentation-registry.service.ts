@@ -5,6 +5,11 @@ import type {
 } from '../types/semantic-presentation'
 import { InternalKeyLeakDetectedException } from '../exceptions/internal-key-leak.exception'
 import { SemanticPresentationTokenNotFoundException } from '../exceptions/semantic-presentation-token-not-found.exception'
+import {
+  renderDisplayToken,
+  renderEnumDisplayToken,
+  renderOptionalDisplayToken,
+} from '../nl-gateway/display-registry'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 
 const EXTRA_INTERNAL_IDENTIFIERS = ['generic_boundary']
@@ -25,7 +30,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['价格同时位于 EMA20、EMA60、EMA144 上方'],
     negativeExamples: ['只说开多但没有条件'],
     goldenUtterances: ['价格在 EMA20 和 EMA60 上方时允许开多'],
-    displayRenderer: ({ params }) => stringParam(params, 'label', '自定义条件'),
+    displayRenderer: ({ params }) => renderDisplayToken('atom.condition.expression.display', {
+      label: stringParam(params, 'label', '自定义条件'),
+    }),
   }),
   presentation({
     key: 'semantic.missing_entry_atom',
@@ -147,9 +154,11 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const metric = stringParam(params, 'metric', 'base_volume')
       const op = stringParam(params, 'operator', 'GT')
       const value = numberParam(params, 'value', 0)
-      const metricLabel = metric === 'quote_volume' ? '成交额' : '成交量'
-      const opLabel: Record<string, string> = { GT: '大于', GTE: '不低于', LT: '小于', LTE: '不高于' }
-      return `${metricLabel} ${opLabel[op] ?? '大于'} ${value}`
+      return renderDisplayToken('atom.volume.threshold.display', {
+        metric: renderEnumDisplayToken('enum.volume.metric', metric, '成交量'),
+        operator: renderEnumDisplayToken('enum.operator', op, '大于'),
+        value,
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'volume.threshold.value') return '请给出成交量阈值，例如 1000（成交量单位：张/枚）或 500000（成交额单位：USDT）。'
@@ -173,9 +182,12 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const op = stringParam(params, 'operator', 'GT')
       const period = numberParam(params, 'period', 0)
       const threshold = numberParam(params, 'threshold', 0)
-      const opLabel: Record<string, string> = { GT: '大于', GTE: '不低于', LT: '小于', LTE: '不高于' }
       const periodStr = period > 0 ? `ATR${period}` : 'ATR'
-      return `${periodStr} ${opLabel[op] ?? '大于'} ${threshold}`
+      return renderDisplayToken('atom.volatility.atr_threshold.display', {
+        indicator: periodStr,
+        operator: renderEnumDisplayToken('enum.operator', op, '大于'),
+        threshold,
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'volatility.atr_threshold.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
@@ -209,7 +221,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
           windowsStr = windowsRaw
         }
       }
-      return windowsStr ? `时间窗口 ${windowsStr} (${timezone})` : `时间窗口 (${timezone})`
+      return windowsStr
+        ? renderDisplayToken('atom.strategy.time_window.display', { windows: windowsStr, timezone })
+        : renderDisplayToken('atom.strategy.time_window.display.empty', { timezone })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'strategy.time_window.timezone') return '请指定时区，例如 Asia/Shanghai（北京时间）或 UTC。'
@@ -230,8 +244,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     ],
     displayRenderer: ({ params }) => {
       const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
-      const sideLabel: Record<string, string> = { long: '多头', short: '空头', both: '任意方向' }
-      return `已有${sideLabel[side] ?? side}仓位 → 阻止新开仓`
+      return renderDisplayToken('atom.position.has_position.display', {
+        side: renderEnumDisplayToken('enum.side', side, side),
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'position.has_position.sideScope') return '请明确仓位方向：多头（long）、空头（short）或双向（both）。'
@@ -251,8 +266,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     ],
     displayRenderer: ({ params }) => {
       const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
-      const sideLabel: Record<string, string> = { long: '多头', short: '空头', both: '任意方向' }
-      return `无${sideLabel[side] ?? side}仓位 → 允许新开仓`
+      return renderDisplayToken('atom.position.no_position.display', {
+        side: renderEnumDisplayToken('enum.side', side, side),
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'position.no_position.sideScope') return '请明确仓位方向：多头（long）、空头（short）或双向（both）。'
@@ -465,7 +481,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['开多'],
     negativeExamples: ['平掉多单'],
     goldenUtterances: ['条件满足时开多'],
-    displayRenderer: () => '开多',
+    displayRenderer: () => renderDisplayToken('atom.open_long.name'),
   }),
   presentation({
     key: 'open_short',
@@ -474,7 +490,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['开空'],
     negativeExamples: ['平掉空单'],
     goldenUtterances: ['条件满足时开空'],
-    displayRenderer: () => '开空',
+    displayRenderer: () => renderDisplayToken('atom.open_short.name'),
   }),
   presentation({
     key: 'close_long',
@@ -613,7 +629,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['亏损 5% 止损'],
     negativeExamples: ['盈利 10% 止盈'],
     goldenUtterances: ['入场后亏损 5% 强制平仓'],
-    displayRenderer: ({ params }) => `亏损 ${numberParam(params, 'valuePct', 0)}% 止损`,
+    displayRenderer: ({ params }) => renderDisplayToken('atom.risk.stop_loss_pct.display', {
+      valuePct: numberParam(params, 'valuePct', 0),
+    }),
   }),
   presentation({
     key: 'risk.take_profit_pct',
@@ -694,7 +712,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['单笔 10% 仓位'],
     negativeExamples: ['按固定币数下单'],
     goldenUtterances: ['每次使用账户 10% 仓位'],
-    displayRenderer: ({ params }) => `单笔 ${formatPercentLikeValue(numberParam(params, 'value', 0))}% 仓位`,
+    displayRenderer: ({ params }) => renderDisplayToken('atom.position.fixed_pct.display', {
+      value: formatPercentLikeValue(numberParam(params, 'value', 0)),
+    }),
   }),
   presentation({
     key: 'position.fixed_notional',
@@ -703,7 +723,10 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['单笔 100 USDT'],
     negativeExamples: ['按账户比例下单'],
     goldenUtterances: ['每次固定投入 100 USDT'],
-    displayRenderer: ({ params }) => `单笔 ${numberParam(params, 'value', 0)} ${stringParam(params, 'asset', 'USDT')}`,
+    displayRenderer: ({ params }) => renderDisplayToken('atom.position.fixed_notional.display', {
+      value: numberParam(params, 'value', 0),
+      asset: stringParam(params, 'asset', 'USDT'),
+    }),
   }),
   presentation({
     key: 'position.fixed_quantity',
@@ -712,7 +735,10 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['单笔 0.01 BTC'],
     negativeExamples: ['按账户余额百分比下单'],
     goldenUtterances: ['每次固定买入 0.01 BTC'],
-    displayRenderer: ({ params }) => `单笔 ${numberParam(params, 'value', 0)} ${stringParam(params, 'asset', '币')}`,
+    displayRenderer: ({ params }) => renderDisplayToken('atom.position.fixed_quantity.display', {
+      value: numberParam(params, 'value', 0),
+      asset: stringParam(params, 'asset', '币'),
+    }),
   }),
   presentation({
     key: 'position.pyramiding_limit',
@@ -739,13 +765,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: ['盈利 5% 先减仓 30%，再涨到 10% 再减 30%，最终 15% 全部平仓'],
     displayRenderer: ({ params }) => {
       const tiers = params.tiers
-      if (!Array.isArray(tiers) || tiers.length === 0) return '分批止盈'
+      if (!Array.isArray(tiers) || tiers.length === 0) {
+        return renderDisplayToken('atom.risk.partial_take_profit.display.empty')
+      }
       const parts = (tiers as Array<{ trigger?: { threshold?: number }; reduceRatio?: number }>).map((tier, i) => {
         const pct = typeof tier.trigger?.threshold === 'number' ? `+${tier.trigger.threshold}%` : '?%'
         const ratio = typeof tier.reduceRatio === 'number' ? `减 ${Math.round(tier.reduceRatio * 100)}%` : ''
         return `第${i + 1}档 ${pct} ${ratio}`.trim()
       })
-      return `分批止盈：${parts.join('，')}`
+      return renderDisplayToken('atom.risk.partial_take_profit.display', { tiers: parts.join('，') })
     },
   }),
   presentation({
@@ -764,7 +792,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const maxCount = typeof params?.maxCount === 'number' ? `最多 ${params.maxCount} 次` : ''
       const triggerMode = typeof params?.triggerMode === 'string' ? renderDcaTriggerMode(params.triggerMode) : ''
       const parts = [triggerMode, maxCount].filter(Boolean)
-      return parts.length > 0 ? `DCA 补仓计划：${parts.join('，')}` : 'DCA 补仓计划'
+      return parts.length > 0
+        ? renderDisplayToken('atom.position.dca_schedule.display', { parts: parts.join('，') })
+        : renderDisplayToken('atom.position.dca_schedule.display.empty')
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'position.dca_schedule.max_count') return '请确认 DCA 最多执行几次，例如 3。'
@@ -831,20 +861,13 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const pattern = stringParam(params, 'pattern', 'engulfing')
       const direction = stringParam(params, 'direction', '')
-      const dirLabel = direction === 'bullish' ? '看涨' : direction === 'bearish' ? '看跌' : ''
-      const patternLabel =
-        pattern === 'engulfing'
-          ? '吞没'
-          : pattern === 'hammer'
-            ? '锤子线'
-            : pattern === 'doji'
-              ? '十字星'
-              : pattern === 'consecutive_body'
-                ? '连续实体'
-                : pattern
       const minBars = params && typeof params['minBars'] === 'number' ? (params['minBars'] as number) : undefined
       const minBarsLabel = minBars !== undefined ? `（≥${minBars} 根）` : ''
-      return `${dirLabel}${patternLabel}形态${minBarsLabel}`
+      return renderDisplayToken('atom.price.candle_pattern.display', {
+        direction: renderEnumDisplayToken('enum.direction', direction, ''),
+        pattern: renderEnumDisplayToken('enum.pattern.candle', pattern, pattern),
+        minBars: minBarsLabel,
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'price.candle_pattern.pattern') return '请选择 K 线形态：engulfing（吞没）、hammer（锤子线）、doji（十字星）或 consecutive_body（连续实体）。'
@@ -886,18 +909,10 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const pattern = stringParam(params, 'pattern', 'head_and_shoulders')
       const direction = stringParam(params, 'direction', '')
-      const dirLabel = direction === 'bullish' ? '看涨' : direction === 'bearish' ? '看跌' : ''
-      const patternLabel =
-        pattern === 'head_and_shoulders'
-          ? '头肩'
-          : pattern === 'double_top'
-            ? '双顶'
-            : pattern === 'double_bottom'
-              ? '双底'
-              : pattern === 'triangle'
-                ? '三角形'
-                : pattern
-      return `${dirLabel}${patternLabel}形态`
+      return renderDisplayToken('atom.price.chart_pattern.display', {
+        direction: renderEnumDisplayToken('enum.direction', direction, ''),
+        pattern: renderEnumDisplayToken('enum.pattern.chart', pattern, pattern),
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'price.chart_pattern.pattern') return '请选择图形形态：head_and_shoulders（头肩）、double_top（双顶）、double_bottom（双底）或 triangle（三角形）。'
@@ -935,20 +950,13 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const direction = stringParam(params, 'direction', '')
       const reference = stringParam(params, 'reference', '')
-      const dirLabel = direction === 'bullish' ? '看涨' : direction === 'bearish' ? '看跌' : ''
-      const refLabel =
-        reference === 'prev_low'
-          ? '前低'
-          : reference === 'prev_high'
-            ? '前高'
-            : reference === 'session_low'
-              ? '日内低'
-              : reference === 'session_high'
-                ? '日内高'
-                : reference
       const reclaimBars = params && typeof params['reclaimBars'] === 'number' ? (params['reclaimBars'] as number) : undefined
       const reclaimLabel = reclaimBars !== undefined ? `（${reclaimBars} 根内 reclaim）` : ''
-      return `${dirLabel}流动性扫荡 ${refLabel}${reclaimLabel}`
+      return renderDisplayToken('atom.liquidity.sweep.display', {
+        direction: renderEnumDisplayToken('enum.direction', direction, ''),
+        reference: renderEnumDisplayToken('enum.reference', reference, reference),
+        reclaimBars: reclaimLabel,
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'liquidity.sweep.direction') return '请指明扫荡反转方向：bullish（看涨，扫前低后反弹）或 bearish（看跌，扫前高后回落）。'
@@ -984,10 +992,14 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const indicator = stringParam(params, 'indicator', 'RSI').toUpperCase()
       const direction = stringParam(params, 'direction', '')
-      const dirLabel = direction === 'bullish' ? '底背离' : direction === 'bearish' ? '顶背离' : '背离'
       const pivotWindow = numberParam(params, 'pivotWindow', 14)
       const confirmationBars = numberParam(params, 'confirmationBars', 3)
-      return `${indicator} ${dirLabel}（窗口 ${pivotWindow}，确认 ${confirmationBars} 根）`
+      return renderDisplayToken('atom.indicator.divergence.display', {
+        indicator,
+        direction: renderEnumDisplayToken('enum.divergence', direction, '背离'),
+        pivotWindow,
+        confirmationBars,
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'indicator.divergence.indicator') return '请选择背离使用的指标：rsi 或 macd。'
@@ -1024,17 +1036,9 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     ],
     displayRenderer: ({ params }) => {
       const provider = stringParam(params, 'provider', '')
-      const providerLabel =
-        provider === 'tradingview'
-          ? 'TradingView'
-          : provider === 'discord'
-            ? 'Discord'
-            : provider === 'telegram'
-              ? 'Telegram'
-              : provider === 'webhook'
-                ? 'Webhook'
-                : '外部信号'
-      return `${providerLabel} 喊单信号`
+      return renderDisplayToken('atom.external.signal.display', {
+        provider: renderEnumDisplayToken('enum.provider', provider, '外部信号'),
+      })
     },
     clarificationRenderer: (slotKey, _params) => {
       if (slotKey === 'external.signal.provider') return '请指明外部信号来源：tradingview / discord / telegram / webhook。'
@@ -1125,7 +1129,8 @@ function presentation(
 ): SemanticPresentationMetadata {
   return {
     ...metadata,
-    displayRenderer: metadata.displayRenderer ?? (() => metadata.publicName),
+    displayRenderer: metadata.displayRenderer
+      ?? (() => renderOptionalDisplayToken(`atom.${metadata.key}.name`, metadata.publicName)),
     clarificationRenderer: metadata.clarificationRenderer
       ?? ((slotKey, params) => defaultClarificationRenderer(metadata.publicName, slotKey, params)),
   }
@@ -1147,19 +1152,22 @@ function renderIndicatorBoundaryTouch(params: Record<string, unknown>): string {
   if (indicatorName === 'bollinger') {
     const period = numberParam(indicator, 'period', 20)
     const stdDev = numberParam(indicator, 'stdDev', 2)
-    return `触及 BOLL ${renderBoundaryRole(boundaryRole)}（${period}, ${stdDev}）`
+    return renderDisplayToken('atom.indicator_boundary_touch.display', {
+      indicator: 'BOLL',
+      boundaryRole: renderBoundaryRole(boundaryRole),
+      settings: `（${period}, ${stdDev}）`,
+    })
   }
 
-  return `触及 ${indicatorName.toUpperCase()} ${renderBoundaryRole(boundaryRole)}`
+  return renderDisplayToken('atom.indicator_boundary_touch.display', {
+    indicator: indicatorName.toUpperCase(),
+    boundaryRole: renderBoundaryRole(boundaryRole),
+    settings: '',
+  })
 }
 
 function renderBoundaryRole(boundaryRole: string): string {
-  const roleNames: Record<string, string> = {
-    lower: '下轨',
-    middle: '中轨',
-    upper: '上轨',
-  }
-  return roleNames[boundaryRole] ?? '边界'
+  return renderEnumDisplayToken('enum.boundaryRole', boundaryRole, '边界')
 }
 
 function renderRegimeGate(params: Record<string, unknown>): string {
@@ -1171,8 +1179,8 @@ function renderRegimeGate(params: Record<string, unknown>): string {
   const periodLabel = period > 0 ? `${period}` : ''
   const indicatorWithPeriod = `${indicatorLabel}${periodLabel}`
 
-  const longLine = `只在价格高于 ${indicatorWithPeriod} 时允许做多`
-  const shortLine = `只在价格低于 ${indicatorWithPeriod} 时允许做空`
+  const longLine = renderDisplayToken('atom.gate.regime.long.display', { indicator: indicatorWithPeriod })
+  const shortLine = renderDisplayToken('atom.gate.regime.short.display', { indicator: indicatorWithPeriod })
 
   if (sideScope === 'long') {
     return operator === 'LT' ? shortLine : longLine
@@ -1180,24 +1188,16 @@ function renderRegimeGate(params: Record<string, unknown>): string {
   if (sideScope === 'short') {
     return operator === 'GT' ? longLine : shortLine
   }
-  return `${longLine}；${shortLine}`
+  return renderDisplayToken('atom.gate.regime.both.display', { longLine, shortLine })
 }
 
 function renderRegimeIndicator(indicator: string): string {
   const normalized = indicator.toLowerCase()
-  if (normalized === 'ema') return 'EMA'
-  if (normalized === 'sma') return 'SMA'
-  if (normalized === 'ma') return 'MA'
-  return normalized.toUpperCase()
+  return renderEnumDisplayToken('enum.indicator', normalized, normalized.toUpperCase())
 }
 
 function renderDcaTriggerMode(triggerMode: string): string {
-  const labels: Record<string, string> = {
-    price_interval: '价格间隔触发',
-    time_interval: '时间间隔触发',
-    signal: '信号触发',
-  }
-  return labels[triggerMode] ?? triggerMode
+  return renderEnumDisplayToken('enum.dca.triggerMode', triggerMode, triggerMode)
 }
 
 function renderRegimeGateClarification(slotKey: string): string {
@@ -1211,9 +1211,9 @@ function renderPortfolioDrawdown(params: Record<string, unknown>): string {
   const thresholdPct = numberParam(params, 'thresholdPct', 0)
   const mode = stringParam(params, 'mode', 'enforce')
   if (mode === 'observe') {
-    return `账户回撤超过 ${thresholdPct}% 时仅记录`
+    return renderDisplayToken('atom.portfolioRisk.drawdown_block.display.observe', { thresholdPct })
   }
-  return `账户回撤超过 ${thresholdPct}% 时阻止开新仓`
+  return renderDisplayToken('atom.portfolioRisk.drawdown_block.display.enforce', { thresholdPct })
 }
 
 function renderPortfolioDrawdownClarification(slotKey: string): string {
@@ -1232,17 +1232,17 @@ function renderFixedGridGated(params: Record<string, unknown>): string {
   const levels = numberParam(source, 'levelCount', 0)
   const step = numberParam(source, 'stepPct', 0)
   const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
-  const deactivateLabel: Record<string, string> = {
-    cancel: '撤单',
-    keep: '保留挂单',
-    close: '平仓',
-  }
   const rangeLabel = lower > 0 && upper > 0
     ? `在 ${lower}-${upper} 区间`
     : anchor > 0
       ? `锚定 ${anchor}`
       : '在指定区间'
-  return `${rangeLabel}挂 ${levels} 档网格（步长 ${step}%），失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
+  return renderDisplayToken('atom.program.fixed_grid_gated.display', {
+    range: rangeLabel,
+    levels,
+    step,
+    onDeactivate: renderEnumDisplayToken('enum.onDeactivate', onDeactivate, '撤单'),
+  })
 }
 
 function renderFixedGridGatedClarification(slotKey: string): string {

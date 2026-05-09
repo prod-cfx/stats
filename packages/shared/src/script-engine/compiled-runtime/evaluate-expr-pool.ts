@@ -1,6 +1,6 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
-import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-indicators'
+import { atr, bollingerBands, ema, macd, priceHighsLows, rsi, sma } from '../helpers/technical-indicators'
 import { liquiditySweepDetector } from './liquidity-sweep-detector'
 
 export type CompiledRuntimeValue =
@@ -105,6 +105,7 @@ function evaluateSeries(
     case 'MID_BAND':
     case 'LOWER_BAND':
     case 'BOLLINGER_BARS_OUTSIDE':
+    case 'INDICATOR_DIVERGENCE':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
     case 'MARKET_REGIME':
       return readStringContextValue(ctx.marketRegime)
@@ -552,6 +553,8 @@ function resolveSeriesValueAt(
 
         return streak
       }
+      case 'INDICATOR_DIVERGENCE':
+        return evaluateIndicatorDivergence(node, bars)
       default: {
         const firstDep = node.deps?.[0]
         return typeof firstDep === 'string'
@@ -829,6 +832,58 @@ function isWithinLevelSet(
   const lower = Math.min(...levelSet.levels)
   const upper = Math.max(...levelSet.levels)
   return currentPrice >= lower && currentPrice <= upper
+}
+
+function evaluateIndicatorDivergence(
+  node: CompiledExprNode,
+  bars: readonly Bar[],
+): number | null {
+  const indicator = readStringParam(node.payload.params, 'indicator')
+  const direction = readStringParam(node.payload.params, 'direction')
+  if ((indicator !== 'rsi' && indicator !== 'macd') || (direction !== 'bullish' && direction !== 'bearish')) {
+    return null
+  }
+
+  const pivotWindow = Math.max(1, Math.floor(readNumericParam(node.payload.params, 'pivotWindow') ?? 14))
+  const confirmationBars = Math.max(0, Math.floor(readNumericParam(node.payload.params, 'confirmationBars') ?? 3))
+  if (bars.length < pivotWindow + 2) return 0
+
+  const indicatorValues = buildDivergenceIndicatorSeries(bars, indicator)
+  const pivots = priceHighsLows([...bars], pivotWindow, confirmationBars)
+  const candidates = direction === 'bearish' ? pivots.highs : pivots.lows
+  const confirmed = candidates.filter((pivot) => {
+    const value = indicatorValues[pivot.index]
+    return typeof value === 'number' && Number.isFinite(value)
+  })
+  if (confirmed.length < 2) return 0
+
+  const current = confirmed[confirmed.length - 1]!
+  const previous = confirmed[confirmed.length - 2]!
+  if (bars.length - 1 - current.index > confirmationBars) return 0
+
+  const currentIndicator = indicatorValues[current.index]
+  const previousIndicator = indicatorValues[previous.index]
+  if (typeof currentIndicator !== 'number' || typeof previousIndicator !== 'number') return 0
+
+  const diverged = direction === 'bearish'
+    ? current.value > previous.value && currentIndicator <= previousIndicator
+    : current.value < previous.value && currentIndicator >= previousIndicator
+
+  return diverged ? 1 : 0
+}
+
+function buildDivergenceIndicatorSeries(
+  bars: readonly Bar[],
+  indicator: 'rsi' | 'macd',
+): Array<number | null> {
+  const closes = bars.map(bar => bar.close)
+  return closes.map((_close, index) => {
+    const history = closes.slice(0, index + 1)
+    if (indicator === 'rsi') {
+      return rsi(history, 14)
+    }
+    return macd(history)?.macd ?? null
+  })
 }
 
 function collectSeriesHistory(

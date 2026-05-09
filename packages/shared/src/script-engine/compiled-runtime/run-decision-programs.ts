@@ -11,12 +11,15 @@ interface PartialTakeProfitMeta {
   memoryKey: string
   tierIndex: number
   totalTiers: number
+  cumulativeReduceRatio?: number
 }
 
 interface AddPositionMeta {
   maxLayers?: number
   maxExposurePct?: number
   stateKey: string
+  addMode?: 'signal_confirm' | 'profit_pct' | 'drawdown_pct' | string
+  addRatio?: number
 }
 
 interface ReversePositionMeta {
@@ -31,6 +34,12 @@ interface DcaScheduleMeta {
   capitalCap: number
   maxExposurePct?: number
   stateKey: string
+  triggerMode?: 'price_interval' | 'time_interval' | 'signal' | string
+  priceIntervalPct?: number
+  priceIntervalQuote?: number
+  timeIntervalBars?: number
+  timeIntervalMs?: number
+  exitRule?: Record<string, string>
 }
 
 interface SemanticRuntimeStateNumber {
@@ -137,7 +146,7 @@ export function runDecisionPrograms(
     const pendingReverseDecision = evaluatePendingReverse(program, ctx)
     if (pendingReverseDecision) {
       compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
-      const gated = applyOrchestrationGate(pendingReverseDecision, orchestrationGateState, portfolioRiskState)
+      const gated = applyOrchestrationGate(pendingReverseDecision, orchestrationGateState, portfolioRiskState, ctx)
       return Object.freeze(gated)
     }
     if (hasPendingReverseForProgram(program, ctx)) {
@@ -165,16 +174,22 @@ export function runDecisionPrograms(
     const lifecycleDecision = evaluatePositionLifecycle(program, ctx)
     if (lifecycleDecision) {
       compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
-      if (ptpMeta && lifecycleDecision.action !== 'NOOP') {
+      const gatedLifecycleDecision = applyOrchestrationGate(
+        lifecycleDecision,
+        orchestrationGateState,
+        portfolioRiskState,
+        ctx,
+      )
+      if (ptpMeta && gatedLifecycleDecision.action !== 'NOOP') {
         markPartialTakeProfitTierFired(ctx, ptpMeta)
       }
-      return Object.freeze(lifecycleDecision)
+      return Object.freeze(gatedLifecycleDecision)
     }
 
     const decision = buildFirstApplicableDecision(program, ctx)
     if (!decision) continue
 
-    const gatedDecision = applyOrchestrationGate(decision, orchestrationGateState, portfolioRiskState)
+    const gatedDecision = applyOrchestrationGate(decision, orchestrationGateState, portfolioRiskState, ctx)
     compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
     if (ptpMeta && gatedDecision.action !== 'NOOP') {
       markPartialTakeProfitTierFired(ctx, ptpMeta)
@@ -281,6 +296,25 @@ function markPartialTakeProfitTierFired(
     ctx.semanticRuntimeState[meta.memoryKey] = {}
   }
   ctx.semanticRuntimeState[meta.memoryKey][`tier_${meta.tierIndex}_fired`] = true
+  const firedTiers = readFiredPartialTakeProfitTierCount(ctx.semanticRuntimeState[meta.memoryKey], meta.totalTiers)
+  ctx.semanticRuntimeState[meta.memoryKey].firedTiers = firedTiers
+  ctx.semanticRuntimeState[meta.memoryKey].lastTierIndex = meta.tierIndex
+  if (typeof meta.cumulativeReduceRatio === 'number' && Number.isFinite(meta.cumulativeReduceRatio)) {
+    ctx.semanticRuntimeState[meta.memoryKey].cumulativeReduceRatio = meta.cumulativeReduceRatio
+  }
+}
+
+function readFiredPartialTakeProfitTierCount(
+  slot: Record<string, unknown>,
+  totalTiers: number,
+): number {
+  let count = 0
+  for (let i = 0; i < totalTiers; i += 1) {
+    if (slot[`tier_${i}_fired`] === true) {
+      count += 1
+    }
+  }
+  return count
 }
 
 function markPositionLifecycleState(
@@ -325,8 +359,13 @@ function evaluatePositionLifecycle(
     }
 
     const openAction = findReverseOpenAction(program, reverseMeta.toSide)
+    const resolvedOpenQuantity = openAction
+      ? resolveReverseOpenQuantity(openAction, ctx, Math.abs(currentQty), reverseMeta.sizingSource)
+      : null
     if (reverseMeta.sameBarPolicy === 'allow' && openAction) {
-      const oppositeQty = resolveOpenActionQty(openAction, ctx, Math.abs(currentQty))
+      const oppositeQty = resolvedOpenQuantity
+        ? resolveOpenActionQty(resolvedOpenQuantity, ctx, Math.abs(currentQty))
+        : 0
       if (oppositeQty <= 0) {
         return {
           action: 'NOOP',
@@ -346,8 +385,8 @@ function evaluatePositionLifecycle(
       }
     }
 
-    if (openAction) {
-      markPendingReverse(ctx, program.id, reverseMeta.toSide, openAction)
+    if (openAction && resolvedOpenQuantity) {
+      markPendingReverse(ctx, program.id, reverseMeta.toSide, openAction, resolvedOpenQuantity)
     }
 
     return {
@@ -362,6 +401,9 @@ function evaluatePositionLifecycle(
 
   const addMeta = program.metadata?.addPosition
   if (addMeta) {
+    const modeDecision = evaluateAddPositionMode(program, ctx, addMeta)
+    if (modeDecision) return modeDecision
+
     if (!hasSameSidePositionSnapshot(ctx, program)) {
       return {
         action: 'NOOP',
@@ -402,6 +444,12 @@ function evaluatePositionLifecycle(
 
   const dcaMeta = program.metadata?.dcaSchedule
   if (dcaMeta && Number.isFinite(dcaMeta.maxCount)) {
+    const exitDecision = evaluateDcaExitRule(program, ctx, dcaMeta)
+    if (exitDecision) return exitDecision
+
+    const triggerDecision = evaluateDcaTriggerMode(program, ctx, dcaMeta)
+    if (triggerDecision) return triggerDecision
+
     if (!hasSameSidePositionSnapshot(ctx, program)) {
       return {
         action: 'NOOP',
@@ -516,14 +564,32 @@ function markPendingReverse(
   programId: string,
   toSide: ReversePositionMeta['toSide'],
   action: DecisionProgramNode['actions'][number],
+  quantity: DecisionProgramNode['actions'][number]['quantity'] = action.quantity,
 ): void {
   const compiledState = ensureCompiledDecisionState(ctx)
   compiledState.pendingReverseByProgram[programId] = {
     toSide,
     actionKind: action.kind === 'OPEN_LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
-    quantity: action.quantity,
+    quantity,
     createdBarIndex: compiledState.barIndex,
   }
+}
+
+function resolveReverseOpenQuantity(
+  action: DecisionProgramNode['actions'][number],
+  ctx: StrategyExecutionContextV1,
+  currentAbsQty: number,
+  sizingSource: ReversePositionMeta['sizingSource'],
+): DecisionProgramNode['actions'][number]['quantity'] {
+  if (sizingSource === 'current_position') {
+    return { mode: 'fixed_base', value: currentAbsQty }
+  }
+
+  if (sizingSource === 'fixed' || sizingSource === 'position_sizing') {
+    return action.quantity
+  }
+
+  return action.quantity
 }
 
 function clearPendingReverse(
@@ -555,7 +621,7 @@ function exceedsMaxExposurePct(
   const currentExposurePct = readPositionExposurePct(ctx, equity)
   const nextAction = findFirstAddAction(program)
   const nextExposurePct = nextAction
-    ? quantityToExposurePct(nextAction.quantity, ctx, equity)
+    ? quantityToExposurePct(resolveLifecycleAction(program, nextAction).quantity, ctx, equity)
     : 0
   if (nextExposurePct === null) {
     return true
@@ -767,6 +833,15 @@ function incrementDcaSpentQuote(
   }
 
   slot.spentQuote = (readDcaSpentQuote(ctx, stateKey) ?? 0) + quoteValue
+  const currentPrice = readCurrentPrice(ctx)
+  if (currentPrice > 0) {
+    slot.lastPrice = currentPrice
+  }
+  const currentTimestamp = readCurrentTimestamp(ctx)
+  if (currentTimestamp !== null) {
+    slot.lastTimestamp = currentTimestamp
+  }
+  slot.lastBarIndex = ensureCompiledDecisionState(ctx).barIndex
 }
 
 function doesPositionQtyMatchSide(
@@ -781,7 +856,7 @@ function buildFirstApplicableDecision(
   ctx: StrategyExecutionContextV1,
 ): StrategyDecisionV1 | null {
   for (const action of program.actions) {
-    const decision = buildDecision(action, ctx, program.id)
+    const decision = buildDecision(resolveLifecycleAction(program, action), ctx, program.id)
     if (decision.action !== 'NOOP') {
       return decision
     }
@@ -827,6 +902,30 @@ function buildDecision(
     },
     reason: `compiled.${programId}`,
   }
+}
+
+function resolveLifecycleAction(
+  program: DecisionProgramNode,
+  action: DecisionProgramNode['actions'][number],
+): DecisionProgramNode['actions'][number] {
+  const addMeta = program.metadata?.addPosition
+  if (
+    addMeta
+    && (action.kind === 'ADD_LONG' || action.kind === 'ADD_SHORT')
+    && typeof addMeta.addRatio === 'number'
+    && Number.isFinite(addMeta.addRatio)
+    && addMeta.addRatio > 0
+  ) {
+    return {
+      ...action,
+      quantity: {
+        mode: 'position_pct',
+        value: Math.min(addMeta.addRatio, 1) * 100,
+      },
+    }
+  }
+
+  return action
 }
 
 function mapAction(
@@ -912,14 +1011,15 @@ function resolveReduceDeltaQty(
 }
 
 function resolveOpenActionQty(
-  action: DecisionProgramNode['actions'][number],
+  quantityOrAction: DecisionProgramNode['actions'][number] | DecisionProgramNode['actions'][number]['quantity'],
   ctx: StrategyExecutionContextV1,
   currentAbsQty: number,
 ): number {
-  const rawValue = action.quantity.value
+  const quantity = 'quantity' in quantityOrAction ? quantityOrAction.quantity : quantityOrAction
+  const rawValue = quantity.value
   if (!Number.isFinite(rawValue) || rawValue <= 0) return 0
 
-  switch (action.quantity.mode) {
+  switch (quantity.mode) {
     case 'position_pct':
       return currentAbsQty * rawValue / 100
     case 'fixed_base':
@@ -933,6 +1033,209 @@ function resolveOpenActionQty(
       const equity = readEquity(ctx)
       return currentPrice > 0 && equity > 0 ? equity * rawValue / 100 / currentPrice : 0
     }
+  }
+}
+
+function evaluateAddPositionMode(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+  meta: AddPositionMeta,
+): StrategyDecisionV1 | null {
+  const mode = meta.addMode ?? 'signal_confirm'
+  if (mode === 'signal_confirm') {
+    return null
+  }
+
+  const pnlPct = readPositionPnlPct(ctx)
+  if (mode === 'profit_pct') {
+    if (pnlPct !== null && pnlPct > 0) return null
+    return {
+      action: 'NOOP',
+      reason: `compiled.${program.id}.add_mode_profit_pct_not_met`,
+    }
+  }
+
+  if (mode === 'drawdown_pct') {
+    const drawdownPct = readPositionDrawdownPct(ctx)
+    if ((drawdownPct !== null && drawdownPct > 0) || (pnlPct !== null && pnlPct < 0)) return null
+    return {
+      action: 'NOOP',
+      reason: `compiled.${program.id}.add_mode_drawdown_pct_not_met`,
+    }
+  }
+
+  return {
+    action: 'NOOP',
+    reason: `compiled.${program.id}.add_mode_unsupported`,
+  }
+}
+
+function evaluateDcaTriggerMode(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+  meta: DcaScheduleMeta,
+): StrategyDecisionV1 | null {
+  const mode = meta.triggerMode ?? 'signal'
+  if (mode === 'signal') {
+    return null
+  }
+
+  const slot = ctx.semanticRuntimeState?.[meta.stateKey]
+  if (!slot || typeof slot !== 'object' || Array.isArray(slot)) {
+    return null
+  }
+
+  if (mode === 'time_interval') {
+    const timeIntervalBars = readPositiveFiniteNumber(meta.timeIntervalBars)
+    const timeIntervalMs = readPositiveFiniteNumber(meta.timeIntervalMs)
+    if (timeIntervalBars === null && timeIntervalMs === null) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_time_interval_unresolved`,
+      }
+    }
+
+    const lastBarIndex = slot.lastBarIndex
+    if (
+      timeIntervalBars !== null
+      && typeof lastBarIndex === 'number'
+      && Number.isFinite(lastBarIndex)
+      && ensureCompiledDecisionState(ctx).barIndex - lastBarIndex < timeIntervalBars
+    ) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_time_interval_wait`,
+      }
+    }
+
+    if (timeIntervalMs !== null) {
+      const lastTimestamp = slot.lastTimestamp
+      const currentTimestamp = readCurrentTimestamp(ctx)
+      if (
+        typeof lastTimestamp === 'number'
+        && Number.isFinite(lastTimestamp)
+        && currentTimestamp === null
+      ) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.dca_time_interval_time_missing`,
+        }
+      }
+      if (
+        typeof lastTimestamp === 'number'
+        && Number.isFinite(lastTimestamp)
+        && currentTimestamp !== null
+        && currentTimestamp - lastTimestamp < timeIntervalMs
+      ) {
+        return {
+          action: 'NOOP',
+          reason: `compiled.${program.id}.dca_time_interval_wait`,
+        }
+      }
+    }
+
+    return null
+  }
+
+  if (mode === 'price_interval') {
+    const priceIntervalPct = readPositiveFiniteNumber(meta.priceIntervalPct)
+    const priceIntervalQuote = readPositiveFiniteNumber(meta.priceIntervalQuote)
+    if (priceIntervalPct === null && priceIntervalQuote === null) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_price_interval_unresolved`,
+      }
+    }
+
+    const currentPrice = readCurrentPrice(ctx)
+    if (currentPrice <= 0) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_price_interval_price_missing`,
+      }
+    }
+    const lastPrice = slot.lastPrice
+    if (typeof lastPrice !== 'number' || !Number.isFinite(lastPrice) || lastPrice <= 0) {
+      return null
+    }
+
+    const nextAction = findFirstAddAction(program)
+    const isLongDca = nextAction?.kind !== 'ADD_SHORT'
+    const thresholdMove = priceIntervalQuote ?? (lastPrice * (priceIntervalPct ?? 0) / 100)
+    const intervalMet = isLongDca
+      ? currentPrice <= lastPrice - thresholdMove
+      : currentPrice >= lastPrice + thresholdMove
+    if (!intervalMet) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_price_interval_wait`,
+      }
+    }
+    return null
+  }
+
+  return {
+    action: 'NOOP',
+    reason: `compiled.${program.id}.dca_trigger_mode_unsupported`,
+  }
+}
+
+function evaluateDcaExitRule(
+  program: DecisionProgramNode,
+  ctx: StrategyExecutionContextV1,
+  meta: DcaScheduleMeta,
+): StrategyDecisionV1 | null {
+  const ruleType = meta.exitRule?.type
+  if (!ruleType || ruleType === 'cap_only') {
+    return null
+  }
+
+  if (ruleType === 'stop_dca') {
+    return {
+      action: 'NOOP',
+      reason: `compiled.${program.id}.dca_exit_rule_stop`,
+    }
+  }
+
+  if (ruleType === 'stop_on_break_previous_low') {
+    const currentPrice = readCurrentPrice(ctx)
+    const previousLow = readPreviousLow(ctx)
+    if (currentPrice <= 0 || previousLow === null) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_exit_rule_unresolved`,
+      }
+    }
+    if (currentPrice < previousLow) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_exit_rule_stop`,
+      }
+    }
+    return null
+  }
+
+  if (ruleType === 'stop_on_break_previous_high') {
+    const currentPrice = readCurrentPrice(ctx)
+    const previousHigh = readPreviousHigh(ctx)
+    if (currentPrice <= 0 || previousHigh === null) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_exit_rule_unresolved`,
+      }
+    }
+    if (currentPrice > previousHigh) {
+      return {
+        action: 'NOOP',
+        reason: `compiled.${program.id}.dca_exit_rule_stop`,
+      }
+    }
+    return null
+  }
+
+  return {
+    action: 'NOOP',
+    reason: `compiled.${program.id}.dca_exit_rule_unsupported`,
   }
 }
 
@@ -957,6 +1260,22 @@ function readCurrentBarIndex(
     }
   }
   return fallback
+}
+
+function readCurrentTimestamp(ctx: StrategyExecutionContextV1): number | null {
+  const candidates = [
+    ctx.timestamp,
+    ctx.baseTimeframeBar?.timestamp,
+    ctx.baseTimeframeBar?.time,
+    ctx.bar?.timestamp,
+    ctx.bar?.time,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate
+    }
+  }
+  return null
 }
 
 function hasSameSidePositionSnapshot(
@@ -995,10 +1314,115 @@ function readCurrentPrice(ctx: StrategyExecutionContextV1): number {
   return 0
 }
 
+function readPositionPnlPct(ctx: StrategyExecutionContextV1): number | null {
+  const position = ctx.position as Record<string, unknown> | undefined
+  const direct = readFirstFiniteNumber([
+    position?.pnlPct,
+    position?.pnlPercent,
+    position?.unrealizedPnlPct,
+    position?.unrealizedPnlPercent,
+    ctx.positionPnlPct,
+    ctx.positionPnlPercent,
+  ])
+  if (direct !== null) return direct
+
+  const currentPrice = readCurrentPrice(ctx)
+  const entryPrice = readFirstFiniteNumber([
+    ctx.position?.avgEntryPrice,
+    ctx.position?.entryPrice,
+    ctx.position?.avgPrice,
+  ])
+  const qty = readCurrentQty(ctx)
+  if (currentPrice <= 0 || entryPrice === null || entryPrice <= 0 || qty === 0) {
+    return null
+  }
+
+  const direction = qty > 0 ? 1 : -1
+  return ((currentPrice - entryPrice) / entryPrice) * 100 * direction
+}
+
+function readPositionDrawdownPct(ctx: StrategyExecutionContextV1): number | null {
+  const position = ctx.position as Record<string, unknown> | undefined
+  const direct = readFirstFinitePositiveOrZeroNumber([
+    position?.drawdownPct,
+    position?.drawdownPercent,
+    ctx.positionDrawdownPct,
+    ctx.positionDrawdownPercent,
+  ])
+  if (direct !== null) return direct
+
+  const currentPrice = readCurrentPrice(ctx)
+  if (currentPrice <= 0) return null
+
+  const qty = readCurrentQty(ctx)
+  const referencePrice = qty < 0
+    ? readFirstFiniteNumber([
+      ctx.position?.lowestPriceSinceEntry,
+      ctx.position?.troughPriceSinceEntry,
+      ctx.position?.troughPrice,
+      ctx.position?.minPriceSinceEntry,
+    ])
+    : readFirstFiniteNumber([
+      ctx.position?.highestPriceSinceEntry,
+      ctx.position?.peakPriceSinceEntry,
+      ctx.position?.peakPrice,
+      ctx.position?.maxPriceSinceEntry,
+    ])
+
+  if (referencePrice === null || referencePrice <= 0) return null
+  const drawdown = qty < 0
+    ? (currentPrice - referencePrice) / referencePrice
+    : (referencePrice - currentPrice) / referencePrice
+  return Math.max(0, drawdown * 100)
+}
+
+function readPreviousLow(ctx: StrategyExecutionContextV1): number | null {
+  const direct = readFirstFiniteNumber([
+    ctx.previousLow,
+    ctx.prevLow,
+    ctx.baseTimeframeBar?.previousLow,
+    ctx.bar?.previousLow,
+  ])
+  if (direct !== null) return direct
+
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const previous = bars.length >= 2 ? bars.at(-2) : null
+  return typeof previous?.low === 'number' && Number.isFinite(previous.low) ? previous.low : null
+}
+
+function readPreviousHigh(ctx: StrategyExecutionContextV1): number | null {
+  const direct = readFirstFiniteNumber([
+    ctx.previousHigh,
+    ctx.prevHigh,
+    ctx.baseTimeframeBar?.previousHigh,
+    ctx.bar?.previousHigh,
+  ])
+  if (direct !== null) return direct
+
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const previous = bars.length >= 2 ? bars.at(-2) : null
+  return typeof previous?.high === 'number' && Number.isFinite(previous.high) ? previous.high : null
+}
+
+function readFirstFiniteNumber(candidates: unknown[]): number | null {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function readPositiveFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
 function applyOrchestrationGate(
   decision: StrategyDecisionV1,
   gateState: OrchestrationGateState | undefined,
   portfolioRiskState: OrchestrationPortfolioRiskState | undefined,
+  ctx: StrategyExecutionContextV1,
 ): StrategyDecisionV1 {
   const observedBreaches = portfolioRiskState?.observedBreaches ?? []
   const hasObservedBreaches = observedBreaches.length > 0
@@ -1035,7 +1459,50 @@ function applyOrchestrationGate(
       return attachBreaches({ action: 'NOOP', reason })
     }
   }
+
+  const adjustedEntrySide = resolveAdjustedEntrySide(decision, ctx)
+  if (adjustedEntrySide === 'long') {
+    const portfolioBlocks = portfolioRiskState?.blockEntryLong === true
+    const gateBlocks = gateState?.blockEntryLong === true
+    if (portfolioBlocks || gateBlocks) {
+      const reason = portfolioBlocks
+        ? 'compiled.orchestration.portfolio_risk.block_entry_long'
+        : 'compiled.orchestration.gate.block_entry_long'
+      return attachBreaches({ action: 'NOOP', reason })
+    }
+  }
+  if (adjustedEntrySide === 'short') {
+    const portfolioBlocks = portfolioRiskState?.blockEntryShort === true
+    const gateBlocks = gateState?.blockEntryShort === true
+    if (portfolioBlocks || gateBlocks) {
+      const reason = portfolioBlocks
+        ? 'compiled.orchestration.portfolio_risk.block_entry_short'
+        : 'compiled.orchestration.gate.block_entry_short'
+      return attachBreaches({ action: 'NOOP', reason })
+    }
+  }
+
   return attachBreaches(decision)
+}
+
+function resolveAdjustedEntrySide(
+  decision: StrategyDecisionV1,
+  ctx: StrategyExecutionContextV1,
+): 'long' | 'short' | null {
+  if (decision.action !== 'ADJUST_POSITION' || !decision.size || decision.size.mode !== 'QTY') {
+    return null
+  }
+
+  const sizeValue = decision.size.value
+  if (!Number.isFinite(sizeValue)) {
+    return null
+  }
+
+  const currentQty = readCurrentQty(ctx)
+  const targetQty = decision.adjustMode === 'TARGET' ? sizeValue : currentQty + sizeValue
+  const currentSide = currentQty > 0 ? 'long' : currentQty < 0 ? 'short' : null
+  const targetSide = targetQty > 0 ? 'long' : targetQty < 0 ? 'short' : null
+  return targetSide !== null && targetSide !== currentSide ? targetSide : null
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {

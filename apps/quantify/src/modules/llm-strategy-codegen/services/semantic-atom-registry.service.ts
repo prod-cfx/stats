@@ -13,6 +13,7 @@ import type {
 import { Injectable } from '@nestjs/common'
 
 type UnknownSemanticAtomDefinition = SemanticUnknownAtomDefinition
+type ExecutableAtomOptions = { executableSinceVersion?: string }
 
 function baseExecutableSubstrate(): SemanticAtomContractSubstrate {
   return {
@@ -484,7 +485,7 @@ export class SemanticAtomRegistryService {
 function executableTrigger(
   key: string,
   requiredParams: string[],
-  options?: { executableSinceVersion?: string },
+  options?: ExecutableAtomOptions,
 ): SemanticSupportedAtomDefinition {
   return {
     key,
@@ -504,7 +505,7 @@ function executableTrigger(
 function executableAction(
   key: string,
   requiredParams: string[] = [],
-  options?: { executableSinceVersion?: string },
+  options?: ExecutableAtomOptions,
 ): SemanticSupportedAtomDefinition {
   return {
     key,
@@ -525,6 +526,7 @@ function executableRisk(
   key: string,
   requiredParams: string[],
   contractSubstrate: SemanticAtomContractSubstrate = baseExecutableSubstrate(),
+  options?: ExecutableAtomOptions,
 ): SemanticSupportedAtomDefinition {
   return {
     key,
@@ -535,6 +537,9 @@ function executableRisk(
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
     contractSubstrate,
+    ...(options?.executableSinceVersion !== undefined
+      ? { executableSinceVersion: options.executableSinceVersion }
+      : {}),
   }
 }
 
@@ -582,7 +587,7 @@ function executablePosition(
   key: string,
   requiredParams: string[],
   contractSubstrate: SemanticAtomContractSubstrate = positionSubstrate(),
-  options?: { executableSinceVersion?: string },
+  options?: ExecutableAtomOptions,
 ): SemanticSupportedAtomDefinition {
   return {
     key,

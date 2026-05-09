@@ -258,6 +258,10 @@ export interface StrategyHelpers {
     bollingerBands: (prices: number[], period?: number, stdDev?: number) => { upper: number, middle: number, lower: number } | null
     atr: (bars: Bar[], period?: number) => number | null
     smaVolume: (bars: Bar[], period: number) => number | null
+    priceHighsLows: (bars: Bar[], pivotWindow: number, confirmationBars?: number) => {
+      highs: Array<{ index: number, value: number }>
+      lows: Array<{ index: number, value: number }>
+    }
     stochastic: (bars: Bar[], kPeriod?: number, dPeriod?: number) => { k: number, d: number } | null
     obv: (bars: Bar[]) => number | null
     vwap: (bars: Bar[]) => number | null
@@ -438,6 +442,14 @@ export function getHelperDocs(): HelperFunctionDoc[] {
       example: 'const avgVolume20 = helpers.ta.smaVolume(bars, 20)',
       category: 'ta',
       returns: '成交量 SMA 值或 null',
+    },
+    {
+      name: 'priceHighsLows',
+      signature: 'helpers.ta.priceHighsLows(bars: Bar[], pivotWindow: number, confirmationBars?: number): object',
+      description: '检测价格 pivot high/low',
+      example: 'const pivots = helpers.ta.priceHighsLows(bars, 14, 3)',
+      category: 'ta',
+      returns: '{ highs, lows }',
     },
     
     // 信号生成
