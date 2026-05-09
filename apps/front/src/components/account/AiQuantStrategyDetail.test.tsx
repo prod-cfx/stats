@@ -331,7 +331,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(statusSection?.querySelector('p')?.className).not.toContain('cyan')
   })
 
-  it('shows compatibility warning, leverage drift, and leverage-only update controls from truthful execution data', async () => {
+  it('shows compatibility warning and leverage drift from truthful execution data without edit controls', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
@@ -394,7 +394,6 @@ describe('AiQuantStrategyDetail', () => {
           },
           canEditDeploymentLeverage: true,
         }}
-        onUpdateLeverage={() => {}}
       />,
       )
     })
@@ -407,10 +406,13 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('1x - 5x')
     expect(container.textContent).toContain('leverage drift')
     expect(container.textContent).not.toContain('运行回测')
-    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
+    expect(container.textContent).not.toContain('部署杠杆')
+    expect(container.textContent).not.toContain('选择杠杆')
+    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(false)
+    expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
   })
 
-  it('ignores invalid deployment leverage ranges instead of rendering unbounded options', async () => {
+  it('renders deployment leverage ranges as read-only data without controls', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
@@ -435,15 +437,15 @@ describe('AiQuantStrategyDetail', () => {
             marketType: 'perp',
             canEditDeploymentLeverage: true,
           })}
-          onUpdateLeverage={() => {}}
         />,
       )
     })
 
-    const leverageSelect = container.querySelector('select[name="deployment-leverage"]')
-    expect(leverageSelect).toBeTruthy()
-    expect(leverageSelect?.querySelectorAll('option')).toHaveLength(1)
     expect(container.textContent).toContain('200x - 1x')
+    expect(container.textContent).not.toContain('部署杠杆')
+    expect(container.textContent).not.toContain('选择杠杆')
+    expect(container.textContent).not.toContain('更新杠杆')
+    expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
   })
 
   it('hides deployment leverage semantics for spot strategies', async () => {

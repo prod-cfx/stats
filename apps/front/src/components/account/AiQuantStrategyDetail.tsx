@@ -33,7 +33,6 @@ const STOP_SUCCESS_MESSAGE = '策略已停止。现有持仓和挂单仍然保�
 const LIQUIDATE_AND_STOP_SUCCESS_MESSAGE = '策略已平仓并停止。'
 const STOP_ERROR_MESSAGE = '停止策略失败，请稍后重试。'
 const LIQUIDATE_AND_STOP_ERROR_MESSAGE = '平仓并停止失败，请检查模拟盘账户状态后重试。'
-const MAX_LEVERAGE_OPTION_COUNT = 200
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -315,23 +314,16 @@ function resolveRuntimeControlErrorMessage(
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
-  onUpdateLeverage?: (leverage: number) => Promise<void> | void
-  isUpdatingLeverage?: boolean
-  leverageUpdateError?: string | null
 }
 
 export function AiQuantStrategyDetail({
   lng,
   strategy: initialStrategy,
-  onUpdateLeverage,
-  isUpdatingLeverage = false,
-  leverageUpdateError = null,
 }: AiQuantStrategyDetailProps) {
   const { t } = useTranslation()
   const { session } = useAuth()
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(initialStrategy)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [leverageDraft, setLeverageDraft] = useState<number | ''>('')
   const [runtimeControlFeedback, setRuntimeControlFeedback] = useState<{
     kind: 'success' | 'error'
     message: string
@@ -367,36 +359,18 @@ export function AiQuantStrategyDetail({
   // viewOnlyAt 非空 = 用户已主动把该策略转为只读：详情页仅作历史审计展示，
   // 所有运行/部署/编辑/杠杆变更入口都隐藏。
   const isViewOnly = Boolean(strategy?.viewOnlyAt)
-  const canEditLeverage = Boolean(!isSpotMarket && !isViewOnly && strategy?.canEditDeploymentLeverage && onUpdateLeverage)
   const showsDeploymentLeverage = useMemo(() => (
     !isSpotMarket && (
       typeof strategy?.deploymentExecutionBaseline?.leverage === 'number'
     || typeof strategy?.deploymentExecutionCurrent?.leverage === 'number'
     || Boolean(strategy?.deploymentLeverageRange)
-    || canEditLeverage)
+    )
   ), [
-    canEditLeverage,
     isSpotMarket,
     strategy?.deploymentExecutionBaseline?.leverage,
     strategy?.deploymentExecutionCurrent?.leverage,
     strategy?.deploymentLeverageRange,
   ])
-  const leverageOptions = useMemo(() => {
-    if (!strategy?.deploymentLeverageRange) return []
-    const { min, max } = strategy.deploymentLeverageRange
-    if (
-      !Number.isInteger(min)
-      || !Number.isInteger(max)
-      || min < 1
-      || max < min
-      || max - min + 1 > MAX_LEVERAGE_OPTION_COUNT
-    ) {
-      return []
-    }
-    return Array.from({
-      length: max - min + 1,
-    }).map((_, index) => min + index)
-  }, [strategy?.deploymentLeverageRange])
 
   if (!strategy) {
     return (
@@ -833,40 +807,6 @@ export function AiQuantStrategyDetail({
                     </div>
                   )
                 : null}
-              {canEditLeverage && (
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <label className="text-xs text-[color:var(--cf-muted)]" htmlFor="deployment-leverage">
-                    部署杠杆
-                  </label>
-                  <select
-                    id="deployment-leverage"
-                    name="deployment-leverage"
-                    value={leverageDraft === '' ? '' : String(leverageDraft)}
-                    onChange={(event) => setLeverageDraft(Number(event.target.value))}
-                    className="h-9 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 text-sm text-[color:var(--cf-text)]"
-                  >
-                    <option value="">选择杠杆</option>
-                    {leverageOptions.map(option => (
-                      <option key={option} value={option}>{option}x</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (typeof leverageDraft === 'number' && Number.isFinite(leverageDraft)) {
-                        void onUpdateLeverage?.(leverageDraft)
-                      }
-                    }}
-                    disabled={typeof leverageDraft !== 'number' || isUpdatingLeverage}
-                    className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
-                  >
-                    {isUpdatingLeverage ? '更新中…' : '更新杠杆'}
-                  </button>
-                </div>
-              )}
-              {leverageUpdateError && (
-                <p className="mt-2 text-xs text-rose-300">{leverageUpdateError}</p>
-              )}
             </article>
           )}
         </section>

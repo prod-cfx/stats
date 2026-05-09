@@ -7,7 +7,6 @@ import { StrategyDetailPageClient } from './StrategyDetailPageClient'
 
 const mockFetchDetail = jest.fn()
 const mockMapDetailToRecord = jest.fn()
-const mockUpdateLeverage = jest.fn()
 const mockDetailProps: Array<Record<string, unknown>> = []
 const stableSession = { userId: 'user-1' }
 
@@ -48,7 +47,6 @@ jest.mock('@/components/account/AiQuantStrategyDetail', () => ({
 
 jest.mock('@/lib/api', () => ({
   fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchDetail(...args),
-  updateAccountAiQuantStrategyLeverage: (...args: unknown[]) => mockUpdateLeverage(...args),
 }))
 
 jest.mock('@/components/account/ai-quant-strategy-api-adapter', () => ({
@@ -68,7 +66,6 @@ describe('StrategyDetailPageClient', () => {
     mockDetailProps.length = 0
     mockFetchDetail.mockReset()
     mockMapDetailToRecord.mockReset()
-    mockUpdateLeverage.mockReset()
     mockFetchDetail.mockResolvedValue({ id: 'detail-1' })
     mockMapDetailToRecord.mockReturnValue({
       id: 'inst-1',
@@ -114,5 +111,8 @@ describe('StrategyDetailPageClient', () => {
     expect(mockDetailProps.at(-1)).not.toHaveProperty('onRunBacktest')
     expect(mockDetailProps.at(-1)).not.toHaveProperty('isBacktestRunning')
     expect(mockDetailProps.at(-1)).not.toHaveProperty('backtestError')
+    expect(mockDetailProps.at(-1)).not.toHaveProperty('onUpdateLeverage')
+    expect(mockDetailProps.at(-1)).not.toHaveProperty('isUpdatingLeverage')
+    expect(mockDetailProps.at(-1)).not.toHaveProperty('leverageUpdateError')
   })
 })
