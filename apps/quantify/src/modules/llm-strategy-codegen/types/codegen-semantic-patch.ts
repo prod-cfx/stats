@@ -7,6 +7,8 @@ import type {
   SemanticOrchestrationGateTarget,
   SemanticOrchestrationPortfolioRiskMode,
   SemanticOrchestrationPortfolioRiskScope,
+  SemanticOrchestrationProgramAnchorSide,
+  SemanticOrchestrationProgramDynamicGridStep,
   SemanticOrchestrationProgramGridParams,
   SemanticOrchestrationProgramKind,
   SemanticOrchestrationProgramOnDeactivate,
@@ -74,6 +76,10 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationPortfolioRiskNodePatch
   | CodegenSemanticOrchestrationProgramNodePatch
 
+export type CodegenSemanticOrchestrationProgramNodePatch =
+  | CodegenSemanticOrchestrationFixedGridGatedNodePatch
+  | CodegenSemanticOrchestrationDynamicGridNodePatch
+
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'gate'
   key: 'gate.regime'
@@ -92,14 +98,31 @@ export interface CodegenSemanticOrchestrationPortfolioRiskNodePatch extends Code
   thresholdPct: number
 }
 
-export interface CodegenSemanticOrchestrationProgramNodePatch extends CodegenSemanticNodeEnvelope {
+export interface CodegenSemanticOrchestrationFixedGridGatedNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'program'
   key: 'program.fixed_grid_gated'
   params: Record<string, unknown>
-  programKind: SemanticOrchestrationProgramKind
+  programKind: Extract<SemanticOrchestrationProgramKind, 'fixed_grid_gated'>
   activeWhenRef: string
   onDeactivate: SemanticOrchestrationProgramOnDeactivate
-  rebuildPolicy: SemanticOrchestrationProgramRebuildPolicy
+  rebuildPolicy: Extract<SemanticOrchestrationProgramRebuildPolicy, 'static'>
   gridParams: SemanticOrchestrationProgramGridParams
+  sizing: SemanticOrchestrationProgramSizing
+}
+
+export interface CodegenSemanticOrchestrationDynamicGridNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'program'
+  key: 'program.dynamic_grid'
+  params: Record<string, unknown>
+  programKind: Extract<SemanticOrchestrationProgramKind, 'dynamic_grid'>
+  activeWhenRef: string
+  onDeactivate: SemanticOrchestrationProgramOnDeactivate
+  rebuildPolicy: Extract<SemanticOrchestrationProgramRebuildPolicy, 'anchor_on_state_change'>
+  anchorLookbackBars: number
+  anchorSide: SemanticOrchestrationProgramAnchorSide
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  dynamicGridStep: SemanticOrchestrationProgramDynamicGridStep
   sizing: SemanticOrchestrationProgramSizing
 }

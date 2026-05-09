@@ -10,9 +10,9 @@ import type {
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
 import type {
+  CodegenSemanticOrchestrationFixedGridGatedNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
-  CodegenSemanticOrchestrationProgramNodePatch,
   CodegenSemanticPatch,
 } from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
@@ -38,7 +38,7 @@ export class SemanticFrameNormalizerService {
     const regimeGateFrames: SemanticRegimeGateFrame[] = []
     const portfolioDrawdownByKey = new Map<string, CodegenSemanticOrchestrationPortfolioRiskNodePatch>()
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
-    const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationProgramNodePatch>()
+    const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationFixedGridGatedNodePatch>()
     const fixedGridGatedFrames: SemanticFixedGridGatedFrame[] = []
 
     for (const frame of frames) {
@@ -188,8 +188,8 @@ export class SemanticFrameNormalizerService {
   private normalizeFixedGridGated(
     frame: SemanticFixedGridGatedFrame,
     index: number,
-  ): CodegenSemanticOrchestrationProgramNodePatch {
-    const gridParams: CodegenSemanticOrchestrationProgramNodePatch['gridParams'] = {
+  ): CodegenSemanticOrchestrationFixedGridGatedNodePatch {
+    const gridParams: CodegenSemanticOrchestrationFixedGridGatedNodePatch['gridParams'] = {
       anchorPrice: frame.anchorPrice,
       levelCount: frame.levelCount,
       stepPct: frame.stepPct,

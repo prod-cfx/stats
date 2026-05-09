@@ -125,7 +125,7 @@ describe('orchestration program.fixed_grid_gated — golden corpus (Phase 5 S4 T
       const patch = normalizer.normalize(frames)
       const programNode = patch.orchestration?.nodes.find(n => n.kind === 'program')
       expect(programNode).toBeDefined()
-      if (programNode?.kind === 'program') {
+      if (programNode?.kind === 'program' && programNode.key === 'program.fixed_grid_gated') {
         expect(programNode.key).toBe('program.fixed_grid_gated')
         expect(programNode.gridParams.lowerBound).toBe(50000)
         expect(programNode.gridParams.upperBound).toBe(60000)

@@ -286,13 +286,17 @@ export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
 export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
 
-export type SemanticOrchestrationProgramKind = 'fixed_grid_gated'
+export type SemanticOrchestrationProgramKind = 'fixed_grid_gated' | 'dynamic_grid'
 
 export type SemanticOrchestrationProgramOnDeactivate = 'cancel' | 'keep' | 'close'
 
-export type SemanticOrchestrationProgramRebuildPolicy = 'static'
+export type SemanticOrchestrationProgramRebuildPolicy = 'static' | 'anchor_on_state_change'
 
 export type SemanticOrchestrationProgramSizingMode = 'fixed_quote' | 'fixed_base' | 'fixed_pct'
+
+export type SemanticOrchestrationProgramAnchorSide = 'high' | 'low' | 'mid'
+
+export type SemanticOrchestrationProgramDynamicGridStepMode = 'pct' | 'absolute'
 
 export interface SemanticOrchestrationProgramSizing {
   mode: SemanticOrchestrationProgramSizingMode
@@ -305,6 +309,11 @@ export interface SemanticOrchestrationProgramGridParams {
   stepPct: number
   lowerBound?: number
   upperBound?: number
+}
+
+export interface SemanticOrchestrationProgramDynamicGridStep {
+  mode: SemanticOrchestrationProgramDynamicGridStepMode
+  value: number
 }
 
 export interface SemanticOrchestrationContract {
@@ -344,6 +353,12 @@ export interface SemanticOrchestrationNode {
   rebuildPolicy?: SemanticOrchestrationProgramRebuildPolicy
   gridParams?: SemanticOrchestrationProgramGridParams
   sizing?: SemanticOrchestrationProgramSizing
+  // dynamic_grid 节点专属（其它 programKind 不读）— Phase 5 S5 (#984)
+  anchorLookbackBars?: number
+  anchorSide?: SemanticOrchestrationProgramAnchorSide
+  anchorDriftPct?: number
+  rebuildMinIntervalSec?: number
+  dynamicGridStep?: SemanticOrchestrationProgramDynamicGridStep
   // portfolioRisk 节点专属（其它 kind 不读）
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number

@@ -266,8 +266,8 @@ describe('SemanticFrameNormalizerService', () => {
       kind: 'program',
       key: 'program.fixed_grid_gated',
     }))
-    if (node?.kind !== 'program') {
-      throw new Error('expected program node')
+    if (node?.kind !== 'program' || node.key !== 'program.fixed_grid_gated') {
+      throw new Error('expected fixed_grid_gated program node')
     }
     expect(node.programKind).toBe('fixed_grid_gated')
     expect(node.rebuildPolicy).toBe('static')
