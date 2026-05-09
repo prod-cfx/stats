@@ -2346,6 +2346,8 @@ export class CanonicalSpecV2IrCompilerService {
       return null
     }
 
+    context.runtimeRequirements.stateKeys.add(ptpMeta.memoryKey)
+
     // Partial take profit firing is gated by tier_*_fired flags in
     // semanticRuntimeState (see run-decision-programs.ts), so cooldownBars
     // would be redundant and could only mask a real bug. Intentionally drop it.

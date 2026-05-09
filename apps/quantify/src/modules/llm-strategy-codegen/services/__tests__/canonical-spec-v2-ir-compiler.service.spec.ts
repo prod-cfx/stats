@@ -3737,6 +3737,7 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
 
       const ptpBlocks = result.ir.ruleBlocks.filter(block => block.metadata?.partialTakeProfit !== undefined)
       expect(ptpBlocks).toHaveLength(2)
+      expect(result.ir.runtimeRequirements.stateKeys).toEqual(expect.arrayContaining(['partial_tp_test']))
 
       expect(ptpBlocks[0]).toMatchObject({
         phase: 'exit',
