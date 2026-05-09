@@ -11,7 +11,7 @@ const PTP_PROGRAM = {
   phase: 'exit' as const,
   priority: 100,
   when: 'predicate_threshold_met',
-  metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 0, totalTiers: 2 } },
+  metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 0, totalTiers: 2, cumulativeReduceRatio: 0.5 } },
   actions: [{ kind: 'REDUCE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 50 } }],
 }
 
@@ -54,6 +54,9 @@ describe('partial take profit decision gate', () => {
     expect(decision.action).toBe('ADJUST_POSITION')
     const state = (ctx as unknown as { semanticRuntimeState: Record<string, Record<string, unknown>> }).semanticRuntimeState
     expect(state.partial_tp_test.tier_0_fired).toBe(true)
+    expect(state.partial_tp_test.firedTiers).toBe(1)
+    expect(state.partial_tp_test.lastTierIndex).toBe(0)
+    expect(state.partial_tp_test.cumulativeReduceRatio).toBe(0.5)
   })
 
   it('resets only declared partial_take_profit memoryKeys on entry edge (qty 0 -> non-0)', () => {

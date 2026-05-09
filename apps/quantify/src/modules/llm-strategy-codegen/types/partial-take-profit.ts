@@ -11,6 +11,7 @@ export interface PartialTakeProfitProgramMetadata {
   memoryKey: string
   tierIndex: number
   totalTiers: number
+  cumulativeReduceRatio?: number
 }
 
 // Compile-time assertion: structural shape must mirror the runtime declaration
@@ -21,6 +22,7 @@ type _AssertShape = PartialTakeProfitProgramMetadata extends {
   memoryKey: string
   tierIndex: number
   totalTiers: number
+  cumulativeReduceRatio?: number
 } ? true : never
 
 // Trivial usage to keep _AssertShape from being tree-shaken
