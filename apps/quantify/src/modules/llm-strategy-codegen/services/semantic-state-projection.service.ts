@@ -244,6 +244,29 @@ export class SemanticStateProjectionService {
         })
         continue
       }
+      if (node.kind === 'program' && node.key === 'program.dynamic_grid') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('program.dynamic_grid')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'program',
+          id: `orchestration-program-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
+        continue
+      }
     }
     if (items.length === 0) {
       return null
