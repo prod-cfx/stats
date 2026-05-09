@@ -11,7 +11,9 @@
  * 7. display + clarification renderer
  */
 
+import { evaluateExprPool, evaluateGuards, runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
@@ -353,6 +355,47 @@ describe('price.candle_pattern atom 七层 parity', () => {
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
       })
       expect(ir.runtimeRequirements.helpers).toContain('candlePatternDetector')
+    })
+
+    it('codegen → IR → runtime: engulfing bullish utterance opens long on matching bars', () => {
+      const spec = buildCanonicalSpecFromUtterance(ENGULFING_BULLISH_UTTERANCE)
+      const { ir } = irCompiler.compile({
+        canonicalSpec: spec,
+        fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
+      })
+      const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+      const ctx: Parameters<typeof evaluateExprPool>[0] = {
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        bars: [
+          { open: 10, high: 10.5, low: 7.5, close: 8, volume: 1, timestamp: 1 },
+          { open: 7.8, high: 11, low: 7.5, close: 10.6, volume: 1, timestamp: 2 },
+        ],
+        position: { side: 'flat', qty: 0 },
+      }
+
+      const exprValues = evaluateExprPool(
+        ctx,
+        ast.exprPool as Parameters<typeof evaluateExprPool>[1],
+        ast.topology.exprOrder,
+        ast.executionModel as unknown as Parameters<typeof evaluateExprPool>[3],
+      )
+      const guardState = evaluateGuards(
+        ctx,
+        ast.guards as Parameters<typeof evaluateGuards>[1],
+        exprValues,
+        ast.topology.guardOrder,
+      )
+      const decision = runDecisionPrograms(
+        ctx,
+        ast.decisionPrograms as Parameters<typeof runDecisionPrograms>[1],
+        exprValues,
+        guardState,
+        ast.topology.decisionOrder,
+      )
+
+      expect(exprValues[ast.decisionPrograms[0]!.when]).toBe(true)
+      expect(decision.action).toBe('OPEN_LONG')
     })
 
     it('consecutive_body missing minBars: IR compiler fails closed instead of defaulting', () => {

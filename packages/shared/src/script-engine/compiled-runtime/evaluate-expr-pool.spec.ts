@@ -1,6 +1,62 @@
 import { evaluateExprPool, invalidateMemoryOperand } from './evaluate-expr-pool'
 
 describe('evaluateExprPool', () => {
+  it('evaluates CANDLE_PATTERN series and predicate from runtime bars', () => {
+    const exprPool: Array<{
+      id: string
+      nodeType: 'series' | 'predicate'
+      sourceRef: string
+      payload: {
+        kind: string
+        value?: number
+        params?: Record<string, number | string>
+      }
+      deps?: string[]
+    }> = [
+      {
+        id: 'candle_pattern_engulfing_bullish_15m',
+        nodeType: 'series',
+        sourceRef: 'candle_pattern_engulfing_bullish_15m',
+        payload: {
+          kind: 'CANDLE_PATTERN',
+          params: { pattern: 'engulfing', direction: 'bullish' },
+        },
+      },
+      {
+        id: 'const_one',
+        nodeType: 'series',
+        sourceRef: 'const_one',
+        payload: {
+          kind: 'CONST',
+          value: 1,
+        },
+      },
+      {
+        id: 'candle_pattern_eq',
+        nodeType: 'predicate',
+        sourceRef: 'price.candle_pattern',
+        payload: {
+          kind: 'EQ',
+        },
+        deps: ['candle_pattern_engulfing_bullish_15m', 'const_one'],
+      },
+    ]
+
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 10, high: 10.5, low: 7.5, close: 8, volume: 1, timestamp: 1 },
+          { open: 7.8, high: 11, low: 7.5, close: 10.6, volume: 1, timestamp: 2 },
+        ],
+      },
+      exprPool,
+      ['candle_pattern_engulfing_bullish_15m', 'const_one', 'candle_pattern_eq'],
+    )
+
+    expect(values.candle_pattern_engulfing_bullish_15m).toBe(1)
+    expect(values.candle_pattern_eq).toBe(true)
+  })
+
   it('evaluates state-gate equality predicates from runtime context values', () => {
     const exprPool: Array<{
       id: string
