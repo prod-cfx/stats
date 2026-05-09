@@ -853,8 +853,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-024-recognized-unsupported-volume-threshold',
-    name: 'recognized unsupported volume threshold',
+    id: 'golden-corpus-024-supported-executable-volume-threshold-open-slot',
+    name: 'supported executable volume threshold asks value slot',
     message: 'OKX 合约 BTCUSDT 15m，成交量大于过去均量两倍时开多，单笔 10%。',
     tags: ['position_lifecycle'],
     expectedAtoms: [
@@ -866,9 +866,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'volume.threshold',
       'open_long',
       'position.fixed_pct',
-      'unsupported:volume.threshold',
+      'open_slot:volume.threshold.value',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:volume.threshold'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-025-recognized-unsupported-atr-threshold',
@@ -1410,8 +1411,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-053-recognized-unsupported-no-false-negative-with-supported-trailing-phrase',
-    name: 'recognized unsupported no false negative with supported trailing phrase',
+    id: 'golden-corpus-053-supported-executable-volume-threshold-no-false-negative',
+    name: 'supported executable volume threshold no false negative with supported trailing phrase',
     message:
       'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，单笔 10%，trailing stop 3%，但还要成交量超过阈值。',
     tags: ['risk', 'trend'],
@@ -1424,9 +1425,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'risk.trailing_stop_pct',
       'volume.threshold',
-      'unsupported:volume.threshold',
+      'open_slot:volume.threshold.value',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:volume.threshold'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-054-supported-dca-chinese-add-funds-open-slots',

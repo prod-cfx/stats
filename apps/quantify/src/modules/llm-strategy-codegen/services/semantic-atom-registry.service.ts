@@ -400,7 +400,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('indicator.below', 'trigger', '指标静态低于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态低于条件当前公测暂未支持生成和回测。'),
   previousExtremaTrigger(),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
-  unsupported('volume.threshold', 'trigger', '成交量阈值', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
+  executableTrigger('volume.threshold', ['value', 'operator', 'metric'], { executableSinceVersion: '2026.05.W02' }),
   unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
   unsupported('risk.atr_stop', 'risk', 'ATR 动态止损', 'atr_stop_public_beta_unsupported', 'ATR 动态止损当前公测暂未支持生成和回测。'),
   unsupported('risk.partial_take_profit', 'risk', '分批止盈', 'partial_take_profit_public_beta_unsupported', '多档分批止盈当前公测暂未支持生成和回测。'),
@@ -443,7 +443,11 @@ export class SemanticAtomRegistryService {
   }
 }
 
-function executableTrigger(key: string, requiredParams: string[]): SemanticSupportedAtomDefinition {
+function executableTrigger(
+  key: string,
+  requiredParams: string[],
+  options?: { executableSinceVersion?: string },
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'trigger',
@@ -453,6 +457,9 @@ function executableTrigger(key: string, requiredParams: string[]): SemanticSuppo
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
     contractSubstrate: baseExecutableSubstrate(),
+    ...(options?.executableSinceVersion !== undefined
+      ? { executableSinceVersion: options.executableSinceVersion }
+      : {}),
   }
 }
 

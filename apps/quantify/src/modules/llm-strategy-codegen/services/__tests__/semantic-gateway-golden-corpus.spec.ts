@@ -23,6 +23,69 @@ describe('semantic gateway golden corpus', () => {
   const stateProjection = new SemanticStateProjectionService()
   const canonicalBuilder = new CanonicalSpecBuilderService()
 
+  // volume.threshold utterance corpus — ≥3 cases covering zh / en / missing-value open-slot path
+
+  it('volume.threshold zh: 成交量大于 1000 时开多 → supported_executable with locked value', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，成交量大于 1000 时开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'GT', metric: 'base_volume', value: 1000 }))
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('volume.threshold en: volume threshold keyword → trigger extracted with GTE operator', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, enter long when volume gte 2000, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'GTE', metric: 'base_volume', value: 2000 }))
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('volume.threshold missing value → open_slot path', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，成交量超过阈值时允许入场，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    // No numeric value in text → open slot
+    const classified = supportClassifier.classify(builtState!)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).toEqual(expect.arrayContaining(['volume.threshold.value']))
+    expect(classified.route).toBe('open_slots')
+  })
+
+  it('volume.threshold en missing value → open_slot path (M-B5 修复)', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, enter long when volume exceeds threshold, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('value')
+    const classified = supportClassifier.classify(builtState!)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).toEqual(expect.arrayContaining(['volume.threshold.value']))
+  })
+
+  it('volume.threshold zh with Chinese unit → open_slot, never silent value=1 (C-A3 修复)', () => {
+    // critic round 1 C-A3：reviewer A 指出 "成交量大于 1 亿 USDT" 会被旧 extractNumber 锁 value=1，
+    // 严重生产安全风险。修复后必须走 open_slot.value 强制用户改为纯数字。
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，成交量大于 1 亿 USDT 才开仓，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('value')
+    expect(trigger?.status).toBe('open')
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.openSlots.map(s => s.slotKey))
+      .toEqual(expect.arrayContaining(['volume.threshold.value']))
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)

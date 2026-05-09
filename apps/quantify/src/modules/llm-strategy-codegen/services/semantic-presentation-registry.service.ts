@@ -133,6 +133,32 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: ['成交量大于近期均量 1.5 倍时确认突破'],
   }),
   presentation({
+    key: 'volume.threshold',
+    publicName: '成交量阈值',
+    aliases: ['成交量过滤', '成交量条件', '量能阈值'],
+    positiveExamples: ['成交量大于 1000 时允许入场', '成交额超过 500 万时开多'],
+    negativeExamples: ['只用均量倍数过滤'],
+    goldenUtterances: [
+      '成交量大于 1000 时允许开多',
+      '成交额超过指定阈值时过滤入场',
+      '当前成交量低于阈值时禁止开仓',
+    ],
+    displayRenderer: ({ params }) => {
+      const metric = stringParam(params, 'metric', 'base_volume')
+      const op = stringParam(params, 'operator', 'GT')
+      const value = numberParam(params, 'value', 0)
+      const metricLabel = metric === 'quote_volume' ? '成交额' : '成交量'
+      const opLabel: Record<string, string> = { GT: '大于', GTE: '不低于', LT: '小于', LTE: '不高于' }
+      return `${metricLabel} ${opLabel[op] ?? '大于'} ${value}`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'volume.threshold.value') return '请给出成交量阈值，例如 1000（成交量单位：张/枚）或 500000（成交额单位：USDT）。'
+      if (slotKey === 'volume.threshold.operator') return '请指明比较方向：GT（大于）/ GTE（不低于）/ LT（小于）/ LTE（不高于）。'
+      if (slotKey === 'volume.threshold.metric') return '请指明量的类型：base_volume（成交量）或 quote_volume（成交额）。'
+      return '请补充成交量阈值条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.cross_over',
     publicName: '指标上穿',
     aliases: ['金叉', '向上交叉'],

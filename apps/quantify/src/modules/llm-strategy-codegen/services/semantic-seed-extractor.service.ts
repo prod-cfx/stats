@@ -4125,13 +4125,45 @@ export class SemanticSeedExtractorService {
       }
 
       if (/成交量.*(?:大于|超过|高于|阈值)|volume.*(?:gte|threshold)/iu.test(clause) && !this.hasSupportedVolumeRelativeAverageContext(clause)) {
+        const volumeIntent = this.resolveUnsupportedTriggerIntent(clause, segment)
+        const volumeOperator = /(?:小于|低于|不超过|less\s+than|lte)/iu.test(clause) ? 'LT'
+          : /(?:不低于|不少于|gte)/iu.test(clause) ? 'GTE'
+          : 'GT'
+        const volumeMetric = /(?:成交额|quote.*volume)/iu.test(clause) ? 'quote_volume' : 'base_volume'
+        // critic round 1 C-A2/C-A3 修复：
+        // 1. 检测中文/英文单位（亿/万/千/百万/M/K）：当前缺解析器，**不静默锁数值**，
+        //    强制走 open_slot.value 让用户重新指定纯数字（避免 "1 亿 USDT" 锁 value=1）。
+        // 2. 数值正则严格邻近 metric 关键词（成交量/成交额/volume/turnover），
+        //    避免捕获 "单笔 10%" / "trailing 3%" 等无关数字。
+        const hasUnsupportedUnit = /(?:亿|万|千|百万|million|billion|thousand|\d+\s*[mMkKbB](?![ai-z]))/u.test(clause)
+        const volumeValue = hasUnsupportedUnit
+          ? null
+          : this.extractNumber(clause, [
+            // 必须紧邻 metric 关键词：成交量/成交额/volume/turnover 后允许 0-12 字符再数字
+            /(?:成交量|成交额|volume|turnover)[^0-9%]{0,12}?(\d+(?:\.\d+)?)/iu,
+          ])
+        const openSlotHint = hasUnsupportedUnit
+          ? '检测到中文/英文单位（亿/万/M/K 等）。请改用纯数字阈值，例如 100000000（成交量单位：张/枚）或 500000（成交额单位：USDT）。'
+          : '请给出成交量阈值，例如 1000（成交量单位：张/枚）或 500000（成交额单位：USDT）。'
         this.pushTrigger(triggers, seen, {
           key: 'volume.threshold',
-          ...this.resolveUnsupportedTriggerIntent(clause, segment),
-          params: { sourceText: clause },
-          status: 'locked',
+          phase: volumeIntent.phase,
+          ...(volumeIntent.sideScope ? { sideScope: volumeIntent.sideScope } : {}),
+          params: {
+            operator: volumeOperator,
+            metric: volumeMetric,
+            ...(volumeValue !== null ? { value: volumeValue } : {}),
+          },
+          status: volumeValue !== null ? 'locked' : 'open',
           source: 'user_explicit',
-          openSlots: [],
+          openSlots: volumeValue !== null ? [] : [{
+            slotKey: 'volume.threshold.value',
+            fieldPath: 'triggers[volume.threshold].params.value',
+            status: 'open' as const,
+            priority: 'core' as const,
+            questionHint: openSlotHint,
+            affectsExecution: true,
+          }],
         })
       }
 
