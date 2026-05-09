@@ -25,6 +25,10 @@ export interface PositionLifecycleActionMetadata {
     capitalCap: number
     maxExposurePct?: number
     stateKey: string
+    /** triggerMode: 补仓触发方式，如 price_interval / time_interval / signal */
+    triggerMode?: string
+    /** exitRule: DCA 退出规则，如跌破前低停止 / 达到止损退出 */
+    exitRule?: Record<string, string>
   }
 }
 

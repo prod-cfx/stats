@@ -1652,12 +1652,22 @@ export class CanonicalSpecBuilderService {
       const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
       const capitalCap = this.readDcaCapitalCapValue(dcaSchedule.params.capitalCap)
       const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
+      const triggerMode = typeof dcaSchedule.params.triggerMode === 'string' ? dcaSchedule.params.triggerMode : undefined
+      const exitRule = dcaSchedule.params.exitRule && typeof dcaSchedule.params.exitRule === 'object' && !Array.isArray(dcaSchedule.params.exitRule)
+        ? dcaSchedule.params.exitRule as Record<string, string>
+        : undefined
       if (maxCount !== null && capitalCap !== null) {
+        // critic round 1 A-C2 修复：exitRule 缺失时显式塞入 cap_only 哨兵，
+        // 避免 runtime `if (exitRule)` 漏判导致无限 DCA。
+        // 与 spec "exitRule 必填" 描述对齐（cap_only 表示仅按 capitalCap 兜底退出）。
+        const effectiveExitRule = exitRule ?? { type: 'cap_only' }
         metadata.dcaSchedule = {
           maxCount,
           capitalCap,
           ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
           stateKey: 'dca_fired_count',
+          ...(triggerMode !== undefined ? { triggerMode } : {}),
+          exitRule: effectiveExitRule,
         }
       }
     }

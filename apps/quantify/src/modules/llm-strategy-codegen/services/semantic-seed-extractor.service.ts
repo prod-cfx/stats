@@ -1517,13 +1517,20 @@ export class SemanticSeedExtractorService {
       const capitalCap = this.extractQuoteAmountAfter(clause, '总投入不超过')
         ?? this.extractQuoteAmountAfter(clause, '总投入')
       const exitRule = this.hasDcaExitRule(clause) ? this.resolveDcaExitRule(clause) : null
+      // critic round 1 A-C1 修复：triggerMode 不再硬编码 'price_interval'
+      // 按 utterance 关键词分流：time_interval (每天/每周/每小时) / signal (信号触发/on signal) / price_interval (默认或每跌)
+      const triggerMode = /(?:每\s*(?:天|日|周|月|小时|hour|day|week))/iu.test(clause)
+        ? 'time_interval'
+        : /(?:信号触发|on\s+signal|信号驱动|按信号)/iu.test(clause)
+          ? 'signal'
+          : 'price_interval'
       constraints.push({
         key: 'position.dca_schedule',
         params: {
           ...(maxCount !== null && maxCount > 0 ? { maxCount } : {}),
           ...(perOrderSizing ? { perOrderSizing } : {}),
           ...(capitalCap ? { capitalCap } : {}),
-          triggerMode: 'price_interval',
+          triggerMode,
           ...(exitRule ? { exitRule } : {}),
         },
       })

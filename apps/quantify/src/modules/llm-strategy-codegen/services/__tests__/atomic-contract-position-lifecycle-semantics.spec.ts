@@ -96,19 +96,18 @@ describe('atomic contract position lifecycle semantics', () => {
     ]))
   })
 
-  it('requires DCA exit rule before deployment', () => {
+  it('dca_schedule with maxCount + capitalCap → projection_gate (supported_executable since 2026.05.W02)', () => {
+    // P2-3: position.dca_schedule 升级为 supported_executable；exitRule 为可选运行时参数，
+    // 不再作为 readiness 门控的必填 slot。
     const result = classify('每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT。')
     const position = result.classified.state.position as typeof result.classified.state.position & {
       constraints?: unknown[]
     }
 
-    expect(result.classified.route).toBe('open_slots')
+    expect(result.classified.route).toBe('projection_gate')
     expect(position?.constraints).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'position.dca_schedule',
-        openSlots: expect.arrayContaining([
-          expect.objectContaining({ slotKey: 'position.dca_schedule.exit_rule', affectsExecution: true }),
-        ]),
       }),
     ]))
   })

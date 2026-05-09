@@ -733,10 +733,29 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
   presentation({
     key: 'position.dca_schedule',
     publicName: 'DCA 补仓计划',
-    aliases: ['定投补仓', '分批补仓计划'],
-    positiveExamples: ['每跌 2% 补仓一次，最多 3 次'],
-    negativeExamples: ['只开一次固定仓位'],
-    goldenUtterances: ['价格每回撤 2% 补仓一次并限制总次数'],
+    aliases: ['定投补仓', '分批补仓计划', 'DCA', '网格补仓', '定期补仓'],
+    positiveExamples: ['每跌 2% 补仓一次，最多 3 次', '定投补仓，总资金上限 1000 USDT'],
+    negativeExamples: ['只开一次固定仓位', '单次加仓'],
+    goldenUtterances: [
+      '价格每回撤 2% 补仓一次并限制总次数',
+      '定投计划：每跌 3% 补仓 100 USDT，最多补 4 次',
+      'DCA every time price drops 2%, max 3 times',
+      '价格每下跌 5% 自动补仓，跌破前低停止',
+    ],
+    displayRenderer: ({ params }) => {
+      const maxCount = typeof params?.maxCount === 'number' ? `最多 ${params.maxCount} 次` : ''
+      const triggerMode = typeof params?.triggerMode === 'string' ? renderDcaTriggerMode(params.triggerMode) : ''
+      const parts = [triggerMode, maxCount].filter(Boolean)
+      return parts.length > 0 ? `DCA 补仓计划：${parts.join('，')}` : 'DCA 补仓计划'
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'position.dca_schedule.max_count') return '请确认 DCA 最多执行几次，例如 3。'
+      if (slotKey === 'position.dca_schedule.capital_cap') return '请确认 DCA 总资金上限，例如 1000 USDT。'
+      if (slotKey === 'position.dca_schedule.per_order_sizing') return '请确认每次 DCA 补仓金额或比例，例如 100 USDT 或 10%。'
+      if (slotKey === 'position.dca_schedule.trigger_mode') return '请确认 DCA 触发方式：price_interval（价格间隔）/ time_interval（时间间隔）/ signal（信号触发）。'
+      if (slotKey === 'position.dca_schedule.exit_rule') return '请确认 DCA 停止规则，例如跌破前低停止或达到止损退出。'
+      return '请补充 DCA 补仓计划的缺失信息。'
+    },
   }),
   presentation({
     key: 'risk.time_stop_bars',
@@ -916,6 +935,15 @@ function renderRegimeIndicator(indicator: string): string {
   if (normalized === 'sma') return 'SMA'
   if (normalized === 'ma') return 'MA'
   return normalized.toUpperCase()
+}
+
+function renderDcaTriggerMode(triggerMode: string): string {
+  const labels: Record<string, string> = {
+    price_interval: '价格间隔触发',
+    time_interval: '时间间隔触发',
+    signal: '信号触发',
+  }
+  return labels[triggerMode] ?? triggerMode
 }
 
 function renderRegimeGateClarification(slotKey: string): string {
