@@ -558,9 +558,10 @@ export class NaturalLanguageGatewayService {
   }
 
   private detectDynamicGridStep(text: string): SemanticDynamicGridFrame['step'] | null {
-    const pctMatch = /每档\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*步长/u.exec(text)
+    // 优先级：每档 X% > X% 步长 > 档 X%
+    const pctMatch = /每档\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*步长|档[^0-9]*?(\d+(?:\.\d+)?)\s*%/u.exec(text)
     if (pctMatch) {
-      const value = Number(pctMatch[1] ?? pctMatch[2])
+      const value = Number(pctMatch[1] ?? pctMatch[2] ?? pctMatch[3])
       if (Number.isFinite(value) && value > 0) return { mode: 'pct', value }
     }
     const absMatch = /每档\s*(\d+(?:\.\d+)?)\s*(?:usdt|usd|U|价位)/iu.exec(text)

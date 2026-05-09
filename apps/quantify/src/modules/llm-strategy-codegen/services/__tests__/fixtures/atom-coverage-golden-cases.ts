@@ -21,6 +21,7 @@ export type AtomicCoverageTag =
   | 'drawdown'
   | 'program'
   | 'fixed_grid'
+  | 'dynamic_grid'
   | 'phase5'
 
 export interface AtomCoverageExpectedAtom {
@@ -1878,6 +1879,29 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedKeys: [
       'program.fixed_grid_gated',
+      'gate.regime',
+      'indicator.cross_over',
+      'open_long',
+      'position.fixed_pct',
+    ],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    // Phase 5 S5（#984）：dynamic_grid 解锁 — atom 覆盖
+    id: 'golden-corpus-075-orchestration-program-dynamic-grid-supported-executable',
+    name: 'orchestration program dynamic grid supported executable',
+    message:
+      'OKX 合约 BTCUSDT 15m，价格高于 EMA50 才允许做多，在 BTCUSDT 用最近 50 根 K 线高点为锚的动态网格，5 档每档 0.5%，趋势上涨时启用，停用时撤单，MA20 上穿 MA50 开多，单笔 10%。',
+    tags: ['orchestration', 'program', 'dynamic_grid', 'phase5'],
+    expectedAtoms: [
+      { key: 'program.dynamic_grid', category: 'orchestration' },
+      { key: 'gate.regime', category: 'orchestration' },
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+      { key: 'open_long', category: 'action', minContractSubstrate: true },
+      { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'program.dynamic_grid',
       'gate.regime',
       'indicator.cross_over',
       'open_long',
