@@ -116,7 +116,16 @@ export interface CanonicalOrchestrationProgramSizing {
   value: number
 }
 
-export interface CanonicalOrchestrationProgram {
+export interface CanonicalOrchestrationProgramDynamicGridParams {
+  anchorLookbackBars: number
+  anchorSide: 'high' | 'low' | 'mid'
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  step: { mode: 'pct' | 'absolute'; value: number }
+}
+
+export interface CanonicalFixedGridGatedProgram {
   id: string
   programKind: 'fixed_grid_gated'
   activeWhenRef: string
@@ -125,6 +134,20 @@ export interface CanonicalOrchestrationProgram {
   gridParams: CanonicalOrchestrationProgramGridParams
   sizing: CanonicalOrchestrationProgramSizing
 }
+
+export interface CanonicalDynamicGridProgram {
+  id: string
+  programKind: 'dynamic_grid'
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'anchor_on_state_change'
+  dynamicGridParams: CanonicalOrchestrationProgramDynamicGridParams
+  sizing: CanonicalOrchestrationProgramSizing
+}
+
+export type CanonicalOrchestrationProgram =
+  | CanonicalFixedGridGatedProgram
+  | CanonicalDynamicGridProgram
 
 export interface CanonicalStrategySpecV2 {
   version: 2

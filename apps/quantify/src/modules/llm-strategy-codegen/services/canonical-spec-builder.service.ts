@@ -8,6 +8,7 @@ import type {
   SemanticCapabilityShape,
   SemanticExpression,
   SemanticExpressionOperand,
+  SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
@@ -651,7 +652,17 @@ export class CanonicalSpecBuilderService {
 
     const programs: CanonicalOrchestrationProgram[] = []
     for (const node of nodes) {
-      if (node.kind !== 'program' || node.status !== 'locked' || node.key !== 'program.fixed_grid_gated') {
+      if (node.kind !== 'program' || node.status !== 'locked') {
+        continue
+      }
+      if (node.key === 'program.dynamic_grid') {
+        const dynamicProgram = this.buildDynamicGridProgram(node)
+        if (dynamicProgram) {
+          programs.push(dynamicProgram)
+        }
+        continue
+      }
+      if (node.key !== 'program.fixed_grid_gated') {
         continue
       }
       if (node.programKind !== 'fixed_grid_gated') {
@@ -727,6 +738,50 @@ export class CanonicalSpecBuilderService {
     }
 
     return programs
+  }
+
+  private buildDynamicGridProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
+    if (node.programKind !== 'dynamic_grid') return null
+    if (node.rebuildPolicy !== 'anchor_on_state_change') return null
+    if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return null
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) return null
+
+    const lookback = node.anchorLookbackBars
+    if (typeof lookback !== 'number' || !Number.isInteger(lookback) || lookback < 10 || lookback > 1000) return null
+    if (node.anchorSide !== 'high' && node.anchorSide !== 'low' && node.anchorSide !== 'mid') return null
+    const driftPct = node.anchorDriftPct
+    if (typeof driftPct !== 'number' || !Number.isFinite(driftPct) || driftPct <= 0 || driftPct > 100) return null
+    const minInterval = node.rebuildMinIntervalSec
+    if (typeof minInterval !== 'number' || !Number.isInteger(minInterval) || minInterval < 60) return null
+
+    const step = node.dynamicGridStep
+    if (!step || (step.mode !== 'pct' && step.mode !== 'absolute')) return null
+    if (typeof step.value !== 'number' || !Number.isFinite(step.value) || step.value <= 0) return null
+
+    const levelCount = node.levelCount
+    if (typeof levelCount !== 'number' || !Number.isInteger(levelCount) || levelCount < 2 || levelCount > 100) return null
+
+    const sizing = node.sizing
+    if (!sizing) return null
+    if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') return null
+    if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return null
+
+    return {
+      id: node.id,
+      programKind: 'dynamic_grid',
+      activeWhenRef: node.activeWhenRef,
+      onDeactivate: node.onDeactivate,
+      rebuildPolicy: 'anchor_on_state_change',
+      dynamicGridParams: {
+        anchorLookbackBars: lookback,
+        anchorSide: node.anchorSide,
+        anchorDriftPct: driftPct,
+        rebuildMinIntervalSec: minInterval,
+        levelCount,
+        step: { mode: step.mode, value: step.value },
+      },
+      sizing: { mode: sizing.mode, value: sizing.value },
+    }
   }
 
   private filterOrderProgramShadowRules(

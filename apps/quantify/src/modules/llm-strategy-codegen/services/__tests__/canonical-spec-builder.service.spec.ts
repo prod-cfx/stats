@@ -4320,6 +4320,7 @@ describe('canonicalSpecBuilderService', () => {
       expect(spec.orchestration?.programs).toBeDefined()
       expect(spec.orchestration!.programs!).toHaveLength(1)
       const [program] = spec.orchestration!.programs!
+      if (program.programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated program')
       expect(program.id).toBe('program-fixed-grid-1')
       expect(program.programKind).toBe('fixed_grid_gated')
       expect(program.activeWhenRef).toBe('gate-regime-long-1')
