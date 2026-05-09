@@ -393,6 +393,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     clarificationRenderer: (slotKey) => renderPortfolioDrawdownClarification(slotKey),
   }),
   presentation({
+    key: 'program.dynamic_grid',
+    publicName: '动态网格',
+    aliases: ['跟随网格', '漂移网格', 'dynamic grid'],
+    positiveExamples: [
+      '在 BTCUSDT 用最近 50 根 K 线高点为锚的动态网格，5 档每档 0.5%，趋势上涨时启用，停用时撤单',
+      '围绕近 30 根 K 线中点挂 8 档动态网格，每档 100 USDT，停用时保留挂单',
+      'ETHUSDT 最近 100 根 K 线低点动态网格，3 档 1% 步长，趋势下跌启用，停用平仓',
+    ],
+    negativeExamples: ['感觉网格策略', '随便挂', '区间网格不变'],
+    goldenUtterances: [
+      '在 BTCUSDT 用最近 50 根 K 线高点为锚的动态网格，5 档每档 0.5%，趋势上涨时启用，停用时撤单',
+      '动态网格围绕近 60 根 K 线高点，5 档 0.8%，drift 1% 时重建，每次至少间隔 120 秒',
+      'ETHUSDT 最近 100 根 K 线低点动态网格，3 档 1% 步长，趋势下跌启用，停用平仓',
+    ],
+    displayRenderer: ({ params }) => renderDynamicGrid(params),
+    clarificationRenderer: (slotKey) => renderDynamicGridClarification(slotKey),
+  }),
+  presentation({
     key: 'program.fixed_grid_gated',
     publicName: '门控固定网格',
     aliases: ['门控网格', '区间网格', 'gated grid', 'fixed grid program'],
@@ -1221,6 +1239,75 @@ function renderPortfolioDrawdownClarification(slotKey: string): string {
     return '请确认账户回撤百分比阈值（0..100）'
   }
   return '请补全账户回撤护栏参数'
+}
+
+// Phase 5 S5：dynamic_grid 显式黑名单（critic round 1 M5 + critic round 2 m1）。
+// 用户可见 display 文本绝不能出现这些字面量；publicName 用中文 "高点 / 低点 / 中点 / 动态网格"。
+const DYNAMIC_GRID_DISPLAY_BLACKLIST = [
+  'program.dynamic_grid',
+  'dynamic_grid',
+  'anchor_on_state_change',
+  'high',
+  'low',
+  'mid',
+] as const
+
+function renderDynamicGrid(params: Record<string, unknown>): string {
+  const inner = objectParam(params, 'params')
+  const source = Object.keys(inner).length > 0 ? inner : params
+  const lookback = numberParam(source, 'anchorLookbackBars', 0)
+  const anchorSide = stringParam(source, 'anchorSide', 'high')
+  const levels = numberParam(source, 'levelCount', 0)
+  const step = objectParam(source, 'step')
+  const stepMode = stringParam(step, 'mode', 'pct')
+  const stepValue = numberParam(step, 'value', 0)
+  const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
+
+  const sideLabel: Record<string, string> = { high: '高点', low: '低点', mid: '中点' }
+  const deactivateLabel: Record<string, string> = {
+    cancel: '撤单',
+    keep: '保留挂单',
+    close: '平仓',
+  }
+  const stepLabel = stepMode === 'pct' ? `${stepValue}%` : `${stepValue}`
+  const text = `围绕最近 ${lookback} 根 K 线${sideLabel[anchorSide] ?? '高点'}的 ${levels} 档动态网格（每档 ${stepLabel}），失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
+  // critic round 1 M5：display 输出绝不能含黑名单字面量
+  for (const banned of DYNAMIC_GRID_DISPLAY_BLACKLIST) {
+    if (text.includes(banned)) {
+      throw new Error(`dynamic_grid display leaked blacklisted token: ${banned}`)
+    }
+  }
+  return text
+}
+
+function renderDynamicGridClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.program.dynamic_grid.anchor_lookback_bars') {
+    return '请确认动态网格的 anchor lookback K 线根数（10..1000 整数）'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.anchor_side') {
+    return '请确认 anchor 取值方向：高点 / 低点 / 中点'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.dynamic_grid_step.mode'
+    || slotKey === 'orchestration.program.dynamic_grid.dynamic_grid_step.value') {
+    return '请确认网格步长（mode = pct/absolute；value > 0）'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.level_count') {
+    return '请确认网格档位数量（2..100 整数）'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.anchor_drift_pct') {
+    return '请确认 anchor 漂移阈值百分比（>0 ≤100）'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.rebuild_min_interval_sec') {
+    return '请确认 rebuild 最小间隔秒数（≥60）'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.active_when_ref') {
+    return '请确认动态网格的启用/失活条件（引用哪个趋势/状态过滤）'
+  }
+  if (slotKey === 'orchestration.program.dynamic_grid.sizing.mode'
+    || slotKey === 'orchestration.program.dynamic_grid.sizing.value') {
+    return '请确认每档下单数量（fixed_quote / fixed_base / fixed_pct）'
+  }
+  return '请补全动态网格策略参数'
 }
 
 function renderFixedGridGated(params: Record<string, unknown>): string {
