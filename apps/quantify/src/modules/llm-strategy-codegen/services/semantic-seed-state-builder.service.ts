@@ -216,7 +216,12 @@ export class SemanticSeedStateBuilderService {
     return Boolean(
       contract.kind === 'trigger'
       && typeof contract.params.groupId === 'string'
-      && contract.params.groupId.trim().length > 0,
+      && contract.params.groupId.trim().length > 0
+      && contract.capabilities.some(capability =>
+        capability.domain === 'market'
+        && capability.verb === 'combine'
+        && capability.object === 'predicate_group',
+      )
     )
   }
 

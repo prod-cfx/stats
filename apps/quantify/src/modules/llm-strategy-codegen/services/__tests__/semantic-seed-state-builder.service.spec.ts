@@ -276,6 +276,50 @@ describe('SemanticSeedStateBuilderService', () => {
     ])
   })
 
+  it('preserves executable atom contracts when planner EMA stack params contain loose group markers', () => {
+    const state = service.build({
+      triggers: [20, 60, 144].map(period => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ema',
+          reference: { indicator: 'ema', period },
+          'reference.period': period,
+          timeframe: '15m',
+          groupId: 'loose-planner-marker',
+        },
+      })),
+      actions: [{ key: 'open_long' }],
+    })
+
+    for (const trigger of state?.triggers ?? []) {
+      expect(trigger.contracts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'price',
+              verb: 'detect',
+              object: 'signal_condition',
+            }),
+          ]),
+        }),
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'combine',
+              object: 'predicate_group',
+            }),
+          ]),
+          params: expect.objectContaining({
+            groupId: 'entry-long-ema-above-stack-15m-20-60-144',
+          }),
+        }),
+      ]))
+    }
+  })
+
   it('synthesizes supported grid contracts when planner explicitly sends null contracts', () => {
     const state = service.build({
       triggers: [{
