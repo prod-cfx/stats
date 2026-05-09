@@ -4270,6 +4270,35 @@ export class CanonicalSpecBuilderService {
           params: { side },
         }
       }
+      case 'indicator.divergence': {
+        // 白名单：仅 rsi / macd；缺失 indicator 或 direction → fail-closed (null)
+        const indicator = typeof trigger.params.indicator === 'string'
+          ? trigger.params.indicator.trim().toLowerCase()
+          : null
+        if (indicator !== 'rsi' && indicator !== 'macd') return null
+        const direction = typeof trigger.params.direction === 'string'
+          ? trigger.params.direction.trim().toLowerCase()
+          : null
+        if (direction !== 'bullish' && direction !== 'bearish') return null
+        const pivotWindow = typeof trigger.params.pivotWindow === 'number' && Number.isFinite(trigger.params.pivotWindow)
+          ? trigger.params.pivotWindow
+          : 14
+        const confirmationBars = typeof trigger.params.confirmationBars === 'number' && Number.isFinite(trigger.params.confirmationBars)
+          ? trigger.params.confirmationBars
+          : 3
+        return {
+          kind: 'atom',
+          key: 'indicator.divergence',
+          semanticScope: 'market',
+          op: direction === 'bullish' ? 'GTE' : 'LTE',
+          params: {
+            indicator,
+            direction,
+            pivotWindow,
+            confirmationBars,
+          },
+        }
+      }
       default:
         return null
     }

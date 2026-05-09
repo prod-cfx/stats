@@ -1455,6 +1455,55 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'indicator.divergence': {
+        // P4-1: RSI / MACD 顶背离（bearish）/ 底背离（bullish）
+        // IR 通过 INDICATOR_DIVERGENCE 系列 + 谓词封装 divergence predicate。
+        // fail-closed：indicator / direction 非白名单值直接抛错，避免静默降级。
+        //
+        // ⚠️ critic round 1 A-C1 公开标记：当前 strategy-runtime / backtesting / compiled-runtime
+        // 全仓 0 个 INDICATOR_DIVERGENCE 系列 evaluator 实现 (grep 验证 0 命中)，priceHighsLows helper
+        // 同样 0 实现。该 atom codegen 路径已闭环，但 runtime 信号永远 fail-closed
+        // (series.evaluate undefined → predicate EQ 永不真) 直到 follow-up issue #1062 落地。
+        // 设计取舍：维持 supported_executable 让 P4-2/3/4 后续 atom 共用同模式，避免 train 回退。
+        const divIndicator = typeof atom.params?.indicator === 'string'
+          ? atom.params.indicator.trim().toLowerCase()
+          : null
+        if (divIndicator !== 'rsi' && divIndicator !== 'macd') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:indicator`)
+        }
+        const divDirection = typeof atom.params?.direction === 'string'
+          ? atom.params.direction.trim().toLowerCase()
+          : null
+        if (divDirection !== 'bullish' && divDirection !== 'bearish') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction`)
+        }
+        const pivotWindow = this.readNumber([atom.params?.pivotWindow], 14)
+        const confirmationBars = this.readNumber([atom.params?.confirmationBars], 3)
+        const divSeriesId = `indicator_divergence_${divIndicator}_${divDirection}_${pivotWindow}_${confirmationBars}_${context.timeframe}`
+        if (!context.seriesMap.has(divSeriesId)) {
+          context.seriesMap.set(divSeriesId, {
+            id: divSeriesId,
+            kind: 'INDICATOR_DIVERGENCE',
+            timeframe: context.timeframe,
+            params: {
+              indicator: divIndicator,
+              direction: divDirection,
+              pivotWindow,
+              confirmationBars,
+            },
+          })
+        }
+        context.runtimeRequirements.helpers.add(divIndicator === 'macd' ? 'macd' : 'rsi')
+        context.runtimeRequirements.helpers.add('priceHighsLows')
+        const constOneRef = this.ensureConstSeries(context, 1)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_indicator_divergence_${divIndicator}_${divDirection}`,
+          'EQ',
+          [divSeriesId, constOneRef],
+        )
+      }
+
       default:
         throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
     }

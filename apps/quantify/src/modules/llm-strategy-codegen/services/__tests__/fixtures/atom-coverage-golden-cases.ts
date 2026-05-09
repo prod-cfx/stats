@@ -1093,24 +1093,24 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-036-recognized-unsupported-divergence',
-    name: 'recognized unsupported divergence',
-    message: 'OKX 合约 BTCUSDT 15m，RSI 底背离后开多，RSI 顶背离后平多，单笔 10%。',
+    // P4-1: indicator.divergence 已升级为 supported_executable（2026.05.W02）
+    // RSI 底背离满参，route 升为 projection_gate
+    id: 'golden-corpus-036-supported-executable-divergence',
+    name: 'supported executable divergence (P4-1)',
+    message: 'OKX 合约 BTCUSDT 15m，RSI 底背离后开多，单笔 10%，5% 止损。',
     tags: ['position_lifecycle'],
     expectedAtoms: [
-      { key: 'indicator.divergence', category: 'trigger' },
+      { key: 'indicator.divergence', category: 'trigger', minContractSubstrate: true },
       { key: 'open_long', category: 'action', minContractSubstrate: true },
-      { key: 'close_long', category: 'action', minContractSubstrate: true },
       { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
     ],
     expectedKeys: [
       'indicator.divergence',
       'open_long',
-      'close_long',
       'position.fixed_pct',
-      'unsupported:indicator.divergence',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:indicator.divergence'],
+    expectedRoute: 'projection_gate',
   },
   {
     id: 'golden-corpus-037-recognized-unsupported-chart-pattern',

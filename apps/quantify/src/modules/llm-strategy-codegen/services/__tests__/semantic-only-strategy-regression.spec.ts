@@ -1196,6 +1196,7 @@ describe('semantic-only strategy regression verification', () => {
       'strategy.time_window',
       'position.has_position',
       'position.no_position',
+      'indicator.divergence',
     ])
     expect(NORMALIZED_TRIGGER_ATOM_KEYS).not.toEqual(expect.arrayContaining([
       'bar.close_gt_open',

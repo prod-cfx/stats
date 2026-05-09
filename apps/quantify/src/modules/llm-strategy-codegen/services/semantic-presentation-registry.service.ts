@@ -789,6 +789,46 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     negativeExamples: ['看感觉的多周期'],
     goldenUtterances: ['1h 上涨趋势下才允许 5min 做多', '4h 区间内启用 15min 网格'],
   }),
+  presentation({
+    key: 'indicator.divergence',
+    publicName: '指标背离',
+    aliases: [
+      '背离',
+      '顶背离',
+      '底背离',
+      'RSI 背离',
+      'MACD 背离',
+      'bullish divergence',
+      'bearish divergence',
+    ],
+    positiveExamples: [
+      'RSI 顶背离后开空',
+      'MACD 底背离后开多',
+      'RSI 底背离 + 确认 3 根 K 线',
+    ],
+    negativeExamples: ['像背离', '疑似背离', '看起来像背离'],
+    goldenUtterances: [
+      'RSI 顶背离时开空',
+      'MACD 底背离出现后做多',
+      'RSI bullish divergence entry',
+      'RSI 背离信号但缺少指标方向',
+    ],
+    displayRenderer: ({ params }) => {
+      const indicator = stringParam(params, 'indicator', 'RSI').toUpperCase()
+      const direction = stringParam(params, 'direction', '')
+      const dirLabel = direction === 'bullish' ? '底背离' : direction === 'bearish' ? '顶背离' : '背离'
+      const pivotWindow = numberParam(params, 'pivotWindow', 14)
+      const confirmationBars = numberParam(params, 'confirmationBars', 3)
+      return `${indicator} ${dirLabel}（窗口 ${pivotWindow}，确认 ${confirmationBars} 根）`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'indicator.divergence.indicator') return '请选择背离使用的指标：rsi 或 macd。'
+      if (slotKey === 'indicator.divergence.direction') return '请指明背离方向：bullish（底背离，价格创新低但指标未创新低）或 bearish（顶背离，价格创新高但指标未创新高）。'
+      if (slotKey === 'indicator.divergence.pivotWindow') return '请指定背离判断的滚动窗口大小，例如 14（默认值）。'
+      if (slotKey === 'indicator.divergence.confirmationBars') return '请指定确认 K 线数，例如 3（默认值）。'
+      return '请补充指标背离条件的缺失信息。'
+    },
+  }),
 ]
 
 const SLOT_LABELS: Record<string, string> = {

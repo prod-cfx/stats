@@ -4127,15 +4127,70 @@ export class SemanticSeedExtractorService {
         })
       }
 
-      if (/(?:背离|divergence|底背离|顶背离)/iu.test(clause)) {
-        this.pushTrigger(triggers, seen, {
-          key: 'indicator.divergence',
-          ...this.resolveUnsupportedTriggerIntent(clause, segment),
-          params: { sourceText: clause },
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-        })
+      if (/(?:背离|divergence|底背离|顶背离|bullish\s+divergence|bearish\s+divergence)/iu.test(clause)) {
+        // critic round 1 A-M1 修复：主观词 anchor 到 (顶/底)?背离 之前，避免误吃
+        // "RSI 顶背离很像 5 月那次"（"像" 在 "背离" 后）这类正常 utterance
+        const isSubjective = /(?:像|疑似|看起来\s*像)\s*(?:顶|底)?背离|feels?\s+like\s+div|maybe\s+div|probably\s+div/iu.test(clause)
+        if (!isSubjective) {
+          // 区分 indicator：RSI / MACD 白名单；其余 → open_slot
+          const indicatorRaw = /(?:rsi)/iu.test(clause)
+            ? 'rsi'
+            : /(?:macd)/iu.test(clause)
+              ? 'macd'
+              : null
+
+          // critic round 1 A-M2 修复：bare "bullish"/"bearish" 不绑定 divergence 时
+          // 会被 "bullish trend + RSI divergence" 误锁；改为要求与 divergence 同位
+          const direction = /(?:顶背离|bearish\s+divergence|bearish\s+div\b)/iu.test(clause)
+            ? 'bearish'
+            : /(?:底背离|bullish\s+divergence|bullish\s+div\b)/iu.test(clause)
+              ? 'bullish'
+              : null
+
+          // pivotWindow 默认 14；confirmationBars 默认 3
+          const pivotWindowMatch = clause.match(/(?:pivotWindow|pivot\s*window|窗口|周期)[^\d]*(\d+)/iu)
+          const pivotWindow = pivotWindowMatch ? Number.parseInt(pivotWindowMatch[1], 10) : 14
+          const confirmationBarsMatch = clause.match(/(?:confirmationBars|confirmation\s*bars|确认\s*K\s*线|确认根数)[^\d]*(\d+)/iu)
+          const confirmationBars = confirmationBarsMatch ? Number.parseInt(confirmationBarsMatch[1], 10) : 3
+
+          const openSlots: SeedTrigger['openSlots'] = []
+          if (!indicatorRaw) {
+            openSlots.push({
+              slotKey: 'indicator.divergence.indicator',
+              fieldPath: 'trigger.params.indicator',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请选择背离使用的指标：rsi 或 macd。',
+              affectsExecution: true,
+            })
+          }
+          if (!direction) {
+            openSlots.push({
+              slotKey: 'indicator.divergence.direction',
+              fieldPath: 'trigger.params.direction',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请指明背离方向：bullish（底背离）或 bearish（顶背离）。',
+              affectsExecution: true,
+            })
+          }
+
+          this.pushTrigger(triggers, seen, {
+            key: 'indicator.divergence',
+            phase: segment === 'exit' ? 'exit' : 'entry',
+            sideScope: direction === 'bearish' ? 'short' : 'long',
+            params: {
+              ...(indicatorRaw ? { indicator: indicatorRaw } : {}),
+              ...(direction ? { direction } : {}),
+              pivotWindow,
+              confirmationBars,
+              sourceText: clause,
+            },
+            status: openSlots.length > 0 ? 'open' : 'locked',
+            source: 'user_explicit',
+            openSlots,
+          })
+        }
       }
 
       if (/(?:头肩|双底|双顶|三角形|楔形|旗形|形态|pattern)/iu.test(clause) && !/(?:截图|screenshot|image)/iu.test(clause)) {

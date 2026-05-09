@@ -117,6 +117,7 @@ export interface SeriesDef {
     | 'MID_BAND'
     | 'LOWER_BAND'
     | 'IN_TIME_WINDOW'
+    | 'INDICATOR_DIVERGENCE'
   timeframe?: string
   field?: 'open' | 'high' | 'low' | 'close'
   offsetBars?: number
