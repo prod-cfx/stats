@@ -373,7 +373,12 @@ describe('semantic-only strategy regression verification', () => {
         snapshotHash: `sha256:${sessionId}`,
       }),
     }
-    const gate = new CompiledPublicationGateService(repo as never, compiledScriptParser)
+    const gate = new CompiledPublicationGateService(
+      repo as never,
+      { markDeployedWithSemanticVersion: jest.fn() } as never,
+      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+      compiledScriptParser,
+    )
     await gate.publish({
       sessionId,
       canonicalSnapshot: artifacts.canonicalSpec as unknown as Record<string, unknown>,

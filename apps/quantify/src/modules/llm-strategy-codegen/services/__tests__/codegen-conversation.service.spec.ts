@@ -99,7 +99,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new CompiledScriptExecutionEnvelopeService(),
     new CompiledScriptParserService(),
     new StrategySummaryObservationService(),
-    new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
+    new CompiledPublicationGateService(
+      mockRepo as unknown as PublishedStrategySnapshotsRepository,
+      { markDeployedWithSemanticVersion: jest.fn() } as never,
+      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+    ),
   )
   const closeOpenExpressionSemanticState = (contextOverrides: Record<string, any> = {}) => ({
     version: 1,
