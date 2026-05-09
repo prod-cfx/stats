@@ -811,6 +811,7 @@ describe('AiQuantStrategyDetail', () => {
         <AiQuantStrategyDetail
           lng="zh"
           strategy={buildStrategy({
+            hasActiveConversation: true,
             positionOverview: {
               openPositionsCount: 2,
               closedPositionsCount: 0,
@@ -862,6 +863,45 @@ describe('AiQuantStrategyDetail', () => {
 
     expect(container.textContent).toContain('策略已平仓并停止。')
     expect(container.textContent).toContain('已停止')
+  })
+
+  it('renders running controls as an integrated horizontal action group', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            hasActiveConversation: true,
+            positionOverview: {
+              openPositionsCount: 2,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 12,
+            },
+          })}
+        />,
+      )
+    })
+
+    const panel = container.querySelector('[data-testid="strategy-runtime-control-panel"]')
+    const actions = container.querySelector('[data-testid="strategy-runtime-control-actions"]')
+    const returnLink = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
+    const stopButton = findButton('停止策略')
+    const liquidateButton = findButton('平仓并停止')
+
+    expect(panel).toBeTruthy()
+    expect(panel?.className).toContain('gap-5')
+    expect(actions).toBeTruthy()
+    expect(actions?.className).toContain('flex-row')
+    expect(actions?.className).toContain('items-center')
+    expect(actions?.className).toContain('justify-end')
+    expect(returnLink?.className).toContain('min-h-10')
+    expect(returnLink?.className).toContain('whitespace-nowrap')
+    expect(stopButton?.className).toContain('min-h-10')
+    expect(stopButton?.className).not.toContain('rose')
+    expect(liquidateButton?.className).toContain('min-h-10')
+    expect(liquidateButton?.className).toContain('rose')
+    expect(liquidateButton?.querySelector('svg')).toBeTruthy()
   })
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {

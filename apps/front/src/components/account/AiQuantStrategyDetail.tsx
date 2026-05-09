@@ -1,6 +1,7 @@
 'use client'
 
 import type { AiQuantStrategyRecord, StrategyEquityPoint, AiQuantStrategyViewState } from './ai-quant-strategy-store'
+import { AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -510,75 +511,92 @@ export function AiQuantStrategyDetail({
       )}
 
       {!isViewOnly && (strategy.status === 'running' || strategy.status === 'stopped') && (
-        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
+        <section
+          data-testid="strategy-runtime-control-panel"
+          className="flex flex-col gap-5 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+        >
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行控制</h2>
-              <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">
-                {strategy.status === 'running'
-                  ? (showLiquidateAndStop
-                      ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
-                      : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
-                  : '策略当前已停止。可返回 AI Quant 重新部署当前已发布版本。'}
-              </p>
-              {showLiquidateAndStop && (
-                <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
-                  检测到 {openPositionsCount} 个 open positions，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+              <span className={`w-fit rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
+                {strategy.status === 'running' ? '运行实例在线' : '运行实例离线'}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div className="max-w-[640px]">
+                <p className="text-sm leading-6 text-[color:var(--cf-text)]">
+                  {strategy.status === 'running'
+                    ? (showLiquidateAndStop
+                        ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
+                        : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
+                    : '当前运行实例已结束。可返回 AI Quant 重新部署当前已发布版本。'}
                 </p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {strategy.status === 'stopped' && (
-                <Link
-                  href={`/${lng}/ai-quant`}
-                  className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white"
-                >
-                  重新部署
-                </Link>
-              )}
-              {strategy.hasActiveConversation === true && (
-                <Link
-                  href={`/${lng}/ai-quant`}
-                  onClick={() => {
-                    setIntent({
-                      type: 'strategy-edit-session',
-                      strategyInstanceId: strategy.id,
-                      publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
-                      source: 'account-detail',
-                    })
-                  }}
-                  className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
-                >
-                  返回对话
-                </Link>
-              )}
-            </div>
-            {strategy.status === 'running' && (
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void openStopDialogWithLatestDetail()
-                  }}
-                  disabled={runtimeActionDisabled}
-                  className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
-                >
-                  停止策略
-                </button>
                 {showLiquidateAndStop && (
+                  <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
+                    检测到 {openPositionsCount} 个 open positions，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+                  </p>
+                )}
+              </div>
+
+              <div
+                data-testid="strategy-runtime-control-actions"
+                className="flex flex-row flex-wrap items-center justify-end gap-2 md:flex-nowrap md:gap-3"
+              >
+                {strategy.hasActiveConversation === true && (
+                  <Link
+                    href={`/${lng}/ai-quant`}
+                    onClick={() => {
+                      setIntent({
+                        type: 'strategy-edit-session',
+                        strategyInstanceId: strategy.id,
+                        publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
+                        source: 'account-detail',
+                      })
+                    }}
+                    className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-white/5 hover:text-[color:var(--cf-text-strong)]"
+                  >
+                    返回对话
+                  </Link>
+                )}
+
+                {strategy.status === 'stopped' && (
+                  <Link
+                    href={`/${lng}/ai-quant`}
+                    className="from-primary to-secondary inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl bg-gradient-to-r px-4 text-sm font-bold text-white transition hover:opacity-90"
+                  >
+                    重新部署
+                  </Link>
+                )}
+
+                {strategy.status === 'running' && (
                   <button
                     type="button"
                     onClick={() => {
                       void openStopDialogWithLatestDetail()
                     }}
                     disabled={runtimeActionDisabled}
-                    className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
                   >
+                    停止策略
+                  </button>
+                )}
+
+                {strategy.status === 'running' && showLiquidateAndStop && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openStopDialogWithLatestDetail()
+                    }}
+                    disabled={runtimeActionDisabled}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-rose-500/35 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                     平仓并停止
                   </button>
                 )}
               </div>
-            )}
+            </div>
           </div>
           {runtimeControlFeedback && (
             <p className={`mt-4 text-sm ${

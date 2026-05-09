@@ -16,7 +16,8 @@ const config: Config = {
     ],
   },
   transformIgnorePatterns: [
-    '/node_modules/(?!(p-limit|yocto-queue|lucide-react)/)',
+    '/node_modules/.pnpm/(?!(p-limit|yocto-queue|lucide-react)@)',
+    '/node_modules/(?!(\\.pnpm|p-limit|yocto-queue|lucide-react)/)',
   ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   moduleNameMapper: {
