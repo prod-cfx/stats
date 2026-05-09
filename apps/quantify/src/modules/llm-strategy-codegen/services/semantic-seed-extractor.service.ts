@@ -4073,6 +4073,13 @@ export class SemanticSeedExtractorService {
         this.extractTimeWindowTrigger(clause, segment, triggers, seen)
       }
 
+      if (this.isHasPositionClause(clause)) {
+        this.extractHasPositionTrigger(clause, triggers, seen)
+      }
+      else if (this.isNoPositionClause(clause)) {
+        this.extractNoPositionTrigger(clause, triggers, seen)
+      }
+
       if (/(?:多周期|多时间框架|multi[-_\s]?timeframe|先看\s*\d{1,2}\s*(?:m|h|d|分钟|小时|天)|\d{1,2}\s*h\s*趋势)/iu.test(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'strategy.multi_timeframe',
@@ -5660,5 +5667,81 @@ export class SemanticSeedExtractorService {
 
   private normalizeText(message?: string): string {
     return message?.trim().replace(/\s+/gu, ' ') ?? ''
+  }
+
+  // ── position.has_position / position.no_position ──────────────────────────
+
+  /** 检测 position.has_position 短语（已有仓位、持仓中 等）
+   * critic round 1 C-B2 修复：`有.{0,4}仓位` 会子串匹配 "没有/未有/无...仓位" → has 优先吃掉 no。
+   * 加负向先行 `(?<!没|未|无)有` 避免 collision。
+   */
+  private isHasPositionClause(clause: string): boolean {
+    // 中文：已有/已经开仓/持仓中；"有X仓位" 加负向先行排除"没/未/无 + 有"
+    if (/(?:已有.{0,4}仓位|持仓中|仓位存在|已开仓|已经开仓|(?<!没|未|无)有.{0,4}仓位)/iu.test(clause)) return true
+    // 英文（避免吞 "no position / not in position / when flat"）
+    if (/(?<!no\s|not\s)(?:has\s+position|when\s+(?:in\s+)?(?:a\s+)?position|when\s+holding|while\s+(?:in\s+)?position|already\s+(?:in\s+)?position)/iu.test(clause)) return true
+    return false
+  }
+
+  /** 检测 position.no_position 短语（无仓位、没有持仓 等）
+   * 注意：must be checked AFTER isHasPositionClause to avoid false negatives
+   */
+  private isNoPositionClause(clause: string): boolean {
+    // 中文：无/没有/未.*仓位；空仓
+    if (/(?:无.{0,4}仓位|没有.{0,4}仓位|仓位为零|未开仓|空仓|无持仓|没有持仓)/iu.test(clause)) return true
+    // 英文
+    if (/(?:no\s+position|when\s+flat|when\s+not\s+(?:in\s+)?(?:a\s+)?position|not\s+(?:in\s+)?position|enter\s+only\s+when\s+flat)/iu.test(clause)) return true
+    return false
+  }
+
+  /** 从自然语言提取 position.has_position atom（已有仓位 → 阻止新开仓）
+   * 当方向不明确时默认 both（任意方向），保持 locked 状态避免路由降级为 open_slots。
+   */
+  private extractHasPositionTrigger(
+    clause: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+  ): void {
+    const sideScope = this.resolvePositionSideScope(clause) ?? 'both'
+    this.pushTrigger(triggers, seen, {
+      key: 'position.has_position',
+      phase: 'gate',
+      sideScope,
+      params: { sideScope },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    })
+  }
+
+  /** 从自然语言提取 position.no_position atom（无仓位 → 允许开仓，有仓位时 gate 拦截）
+   * 当方向不明确时默认 both（任意方向），保持 locked 状态避免路由降级为 open_slots。
+   */
+  private extractNoPositionTrigger(
+    clause: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+  ): void {
+    const sideScope = this.resolvePositionSideScope(clause) ?? 'both'
+    this.pushTrigger(triggers, seen, {
+      key: 'position.no_position',
+      phase: 'gate',
+      sideScope,
+      params: { sideScope },
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    })
+  }
+
+  /** 从 clause 解析多空方向 */
+  private resolvePositionSideScope(clause: string): 'long' | 'short' | 'both' | null {
+    // 多头 / long
+    if (/(?:多头|多仓|long\s+position|long\s+side)/iu.test(clause)) return 'long'
+    // 空头 / short
+    if (/(?:空头|空仓|short\s+position|short\s+side)/iu.test(clause)) return 'short'
+    // 双向 / both explicit
+    if (/(?:双向|多空|both\s+side|any\s+(?:direction|position))/iu.test(clause)) return 'both'
+    return null
   }
 }

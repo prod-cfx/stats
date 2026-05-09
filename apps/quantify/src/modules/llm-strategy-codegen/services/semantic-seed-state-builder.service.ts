@@ -613,6 +613,8 @@ export class SemanticSeedStateBuilderService {
       || key === 'volume.relative_average'
       || key === 'volatility.atr_threshold'
       || key === 'strategy.time_window'
+      || key === 'position.has_position'
+      || key === 'position.no_position'
     ) {
       return true
     }

@@ -1909,17 +1909,27 @@ export class CanonicalSpecV2IrCompilerService {
 
     if (
       rule.phase === 'gate'
-      && rule.condition.key === 'position.has_position'
+      && (rule.condition.key === 'position.has_position' || rule.condition.key === 'position.no_position')
       && rule.condition.op === 'EQ'
       && rule.condition.value === false
       && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
     ) {
+      // critic round 1 C-A2 修复：必须传 appliesTo 以保留 sideScope 语义
+      // ("已有多头仓位时不再开多" 必须只阻止做多，不能阻止做空)；
+      // 没传时 silent collapse 为全方向 block。
+      // sideScope 优先从 condition.params.side 取（builder 写入），
+      // fallback 到 rule.sideScope（顶层规则方向）。
+      const conditionSide = (rule.condition.params as { side?: string } | undefined)?.side
+      const effectiveSide = (conditionSide === 'long' || conditionSide === 'short' || conditionSide === 'both')
+        ? conditionSide as CanonicalRuleSideScope
+        : rule.sideScope
       return {
         id: `guard_${rule.id}`,
         kind: 'MAX_POSITION_PCT',
         scope: 'position',
         value: 0,
         onBreach: 'BLOCK_NEW_ENTRY',
+        appliesTo: this.toRiskGuardAppliesTo(effectiveSide),
       }
     }
 

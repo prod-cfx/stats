@@ -229,6 +229,78 @@ describe('semantic gateway golden corpus', () => {
     ]))
   })
 
+  // position.has_position / position.no_position utterance corpus — ≥4 cases
+  it('position.has_position zh locked: 已有多头仓位时不再开多 → has_position locked sideScope=long', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，已有多头仓位时不再开多，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'position.has_position')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ sideScope: 'long' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('position.no_position zh locked: 无多头仓位才开多 → no_position locked sideScope=long', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，无多头仓位才开多，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'position.no_position')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ sideScope: 'long' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('position.has_position en locked: block entries when in position → has_position locked sideScope=both', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, block entries when in position, MA20 cross above MA50, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'position.has_position')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ sideScope: 'both' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+    const unsupportedKeys = supportClassifier.classify(builtState!).unsupportedAtoms.map(a => a.key)
+    expect(unsupportedKeys).not.toContain('position.has_position')
+  })
+
+  it('position.has_position no explicit direction: 已有仓位时不再开仓 → locked sideScope=both', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，已有仓位时不再开仓，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'position.has_position')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ sideScope: 'both' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('position.no_position critic C-B2 regression: "没有多头仓位才开多" → no_position（不被 has 误吞）', () => {
+    // critic round 1 C-B2：原 isHasPositionClause regex `有.{0,4}仓位` 会子串匹配 "没有...仓位"，
+    // has 优先吃 no。修复后 has 加负向先行 `(?<!没|未|无)有`，确保走 no_position 分支。
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，没有多头仓位才开多。')
+    const noTrigger = seedPatch.triggers.find(t => t.key === 'position.no_position')
+    const hasTrigger = seedPatch.triggers.find(t => t.key === 'position.has_position')
+    expect(noTrigger).toBeDefined()
+    expect(hasTrigger).toBeUndefined()
+    expect(noTrigger?.params?.sideScope).toBe('long')
+  })
+
+  it('position.has_position critic C-A2 regression: sideScope 在 IR appliesTo 落地（不被 silent collapse）', () => {
+    // critic round 1 C-A2：旧 IR 不读 condition.params.side，sideScope=long 与 short 编出相同 guard。
+    // 修复后必须把 sideScope 传给 RiskGuard.appliesTo。
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，已有多头仓位时不再开多。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'position.has_position')
+    expect(trigger?.sideScope).toBe('long')
+    const spec = canonicalBuilder.buildFromSemanticState(builtState!)
+    const gateRule = spec.rules.find(r => r.phase === 'gate' && r.condition?.key === 'position.has_position')
+    expect(gateRule).toBeDefined()
+    expect((gateRule?.condition as { params?: { side?: string } } | undefined)?.params?.side).toBe('long')
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)

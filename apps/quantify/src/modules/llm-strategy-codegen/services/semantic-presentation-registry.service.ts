@@ -218,6 +218,48 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     },
   }),
   presentation({
+    key: 'position.has_position',
+    publicName: '已有仓位卫语句',
+    aliases: ['已有仓位不再开仓', '持仓中禁止开仓', '仓位存在时阻止入场', '有仓位'],
+    positiveExamples: ['已有多头仓位时不再开多', '当持仓中禁止同向重复开仓'],
+    negativeExamples: ['无仓位时开仓', '加仓'],
+    goldenUtterances: [
+      '已有多头仓位时不再开多',
+      '持仓中禁止开仓',
+      'block entries when in position',
+    ],
+    displayRenderer: ({ params }) => {
+      const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
+      const sideLabel: Record<string, string> = { long: '多头', short: '空头', both: '任意方向' }
+      return `已有${sideLabel[side] ?? side}仓位 → 阻止新开仓`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'position.has_position.sideScope') return '请明确仓位方向：多头（long）、空头（short）或双向（both）。'
+      return '请补充仓位检查条件的缺失信息。'
+    },
+  }),
+  presentation({
+    key: 'position.no_position',
+    publicName: '无仓位卫语句',
+    aliases: ['无仓位才开仓', '空仓时才开仓', '没有持仓时允许入场', '未开仓'],
+    positiveExamples: ['无多头仓位才开多', '当前无仓时才允许入场'],
+    negativeExamples: ['已有仓位时开仓', '加仓'],
+    goldenUtterances: [
+      '无多头仓位才开多',
+      '未开仓时才允许入场',
+      'enter only when flat',
+    ],
+    displayRenderer: ({ params }) => {
+      const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
+      const sideLabel: Record<string, string> = { long: '多头', short: '空头', both: '任意方向' }
+      return `无${sideLabel[side] ?? side}仓位 → 允许新开仓`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'position.no_position.sideScope') return '请明确仓位方向：多头（long）、空头（short）或双向（both）。'
+      return '请补充无仓位检查条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.cross_over',
     publicName: '指标上穿',
     aliases: ['金叉', '向上交叉'],

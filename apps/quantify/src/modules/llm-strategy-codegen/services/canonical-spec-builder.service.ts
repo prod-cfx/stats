@@ -1693,7 +1693,7 @@ export class CanonicalSpecBuilderService {
 
   private isNoPositionGateCondition(condition: CanonicalConditionNode): boolean {
     return condition.kind === 'atom'
-      && condition.key === 'position.has_position'
+      && (condition.key === 'position.has_position' || condition.key === 'position.no_position')
       && condition.op === 'EQ'
       && condition.value === false
   }
@@ -4129,6 +4129,36 @@ export class CanonicalSpecBuilderService {
             timezone,
             windows: JSON.stringify(windowsParam),
           },
+        }
+      }
+      // position.has_position: 已有仓位 → 阻止新开仓（gate guard）
+      // 编译为 position.has_position EQ false（与 IR compiler MAX_POSITION_PCT 分支对齐）
+      case 'position.has_position': {
+        const side = typeof trigger.params.sideScope === 'string'
+          ? trigger.params.sideScope as 'long' | 'short' | 'both'
+          : (trigger.sideScope ?? 'both')
+        return {
+          kind: 'atom',
+          key: 'position.has_position',
+          semanticScope: 'position',
+          op: 'EQ',
+          value: false,
+          params: { side },
+        }
+      }
+      // position.no_position: 无仓位 → 阻止新开仓（当有仓位时 gate guard）
+      // 语义与 has_position 对称：no_position = !has_position，同样编译为 has_position EQ false
+      case 'position.no_position': {
+        const side = typeof trigger.params.sideScope === 'string'
+          ? trigger.params.sideScope as 'long' | 'short' | 'both'
+          : (trigger.sideScope ?? 'both')
+        return {
+          kind: 'atom',
+          key: 'position.no_position',
+          semanticScope: 'position',
+          op: 'EQ',
+          value: false,
+          params: { side },
         }
       }
       default:
