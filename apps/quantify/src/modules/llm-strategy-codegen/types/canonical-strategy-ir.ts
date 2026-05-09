@@ -27,6 +27,14 @@ export interface PositionLifecycleActionMetadata {
     stateKey: string
     /** triggerMode: 补仓触发方式，如 price_interval / time_interval / signal */
     triggerMode?: string
+    /** priceIntervalPct: price_interval 触发阈值百分比，如每跌 5% */
+    priceIntervalPct?: number
+    /** priceIntervalQuote: price_interval 触发阈值绝对价格间隔 */
+    priceIntervalQuote?: number
+    /** timeIntervalBars: time_interval 触发间隔 bar 数 */
+    timeIntervalBars?: number
+    /** timeIntervalMs: time_interval 触发间隔毫秒数 */
+    timeIntervalMs?: number
     /** exitRule: DCA 退出规则，如跌破前低停止 / 达到止损退出 */
     exitRule?: Record<string, string>
   }

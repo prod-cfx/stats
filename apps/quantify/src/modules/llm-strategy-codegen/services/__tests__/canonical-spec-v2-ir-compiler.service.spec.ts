@@ -3740,14 +3740,14 @@ describe('canonicalSpecV2IrCompilerService phase-1 gate atoms', () => {
 
       expect(ptpBlocks[0]).toMatchObject({
         phase: 'exit',
-        metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 0, totalTiers: 2 } },
+        metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 0, totalTiers: 2, cumulativeReduceRatio: 0.5 } },
       })
       expect(ptpBlocks[0].actions).toEqual([
         { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 50 } },
       ])
       expect(ptpBlocks[1]).toMatchObject({
         phase: 'exit',
-        metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 1, totalTiers: 2 } },
+        metadata: { partialTakeProfit: { memoryKey: 'partial_tp_test', tierIndex: 1, totalTiers: 2, cumulativeReduceRatio: 1 } },
       })
       expect(ptpBlocks[1].actions).toEqual([
         { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 100 } },

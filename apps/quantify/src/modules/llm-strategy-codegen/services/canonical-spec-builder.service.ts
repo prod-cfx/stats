@@ -1756,6 +1756,10 @@ export class CanonicalSpecBuilderService {
       const capitalCap = this.readDcaCapitalCapValue(dcaSchedule.params.capitalCap)
       const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
       const triggerMode = typeof dcaSchedule.params.triggerMode === 'string' ? dcaSchedule.params.triggerMode : undefined
+      const priceIntervalPct = this.readFiniteNumber(dcaSchedule.params.priceIntervalPct)
+      const priceIntervalQuote = this.readFiniteNumber(dcaSchedule.params.priceIntervalQuote)
+      const timeIntervalBars = this.readFiniteNumber(dcaSchedule.params.timeIntervalBars)
+      const timeIntervalMs = this.readFiniteNumber(dcaSchedule.params.timeIntervalMs)
       const exitRule = dcaSchedule.params.exitRule && typeof dcaSchedule.params.exitRule === 'object' && !Array.isArray(dcaSchedule.params.exitRule)
         ? dcaSchedule.params.exitRule as Record<string, string>
         : undefined
@@ -1770,6 +1774,10 @@ export class CanonicalSpecBuilderService {
           ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
           stateKey: 'dca_fired_count',
           ...(triggerMode !== undefined ? { triggerMode } : {}),
+          ...this.optionalNumberField('priceIntervalPct', priceIntervalPct),
+          ...this.optionalNumberField('priceIntervalQuote', priceIntervalQuote),
+          ...this.optionalNumberField('timeIntervalBars', timeIntervalBars),
+          ...this.optionalNumberField('timeIntervalMs', timeIntervalMs),
           exitRule: effectiveExitRule,
         }
       }
@@ -2381,11 +2389,13 @@ export class CanonicalSpecBuilderService {
     const derived = this.deriveCumulativeReduceRatios(parsedTiers.map(tier => tier.reduceRatio))
 
     const rules: CanonicalRuleV2[] = []
+    let cumulativeReduceRatio = 0
     for (let i = 0; i < parsedTiers.length; i += 1) {
       const ratio = derived[i]
       if (ratio <= 0) {
         continue
       }
+      cumulativeReduceRatio = Number(Math.min(1, cumulativeReduceRatio + parsedTiers[i].reduceRatio).toFixed(6))
       const sizing = { mode: 'RATIO' as const, value: ratio }
       const actions: CanonicalRuleV2['actions'] = []
       if (sideScope === 'long' || sideScope === 'both') {
@@ -2422,6 +2432,7 @@ export class CanonicalSpecBuilderService {
             memoryKey,
             tierIndex: i,
             totalTiers,
+            cumulativeReduceRatio,
           },
         },
       })
