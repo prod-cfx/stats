@@ -16,7 +16,7 @@ import { PositionSizingContractService } from './position-sizing-contract.servic
 import { normalizeRiskSemantics } from './semantic-state-normalization'
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode' | 'reference' | 'lookbackBars' | 'multiplier'
   paramValue: number | string
   slotValue: number | string
   extraParams?: Record<string, number | string>
@@ -485,6 +485,16 @@ export class SemanticStateReducerService {
     return Number.isInteger(value) && value > 0 ? value : null
   }
 
+  private parsePositiveNumberAnswer(answerText: string): number | null {
+    const match = answerText.match(/\d+(?:\.\d+)?/u)
+    if (!match) {
+      return null
+    }
+
+    const value = Number(match[0])
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
   private applyContractRequirementAnswer(
     owner: { contracts?: SemanticAtomContract[] },
     slot: SemanticSlotState,
@@ -882,6 +892,32 @@ export class SemanticStateReducerService {
         paramKey: 'confirmationMode',
         paramValue: confirmationMode,
         slotValue: confirmationMode,
+      }
+    }
+
+    if (slot.slotKey === 'trigger.volume.relative_average.lookback_bars') {
+      const lookbackBars = this.parsePositiveIntegerAnswer(answerText)
+      if (lookbackBars === null) {
+        return null
+      }
+
+      return {
+        paramKey: 'lookbackBars',
+        paramValue: lookbackBars,
+        slotValue: lookbackBars,
+      }
+    }
+
+    if (slot.slotKey === 'trigger.volume.relative_average.multiplier') {
+      const multiplier = this.parsePositiveNumberAnswer(answerText)
+      if (multiplier === null) {
+        return null
+      }
+
+      return {
+        paramKey: 'multiplier',
+        paramValue: multiplier,
+        slotValue: multiplier,
       }
     }
 

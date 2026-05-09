@@ -189,6 +189,44 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes one AND action-binding contract for planner EMA stack triggers', () => {
+    const state = service.build({
+      triggers: [20, 60, 144].map(period => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ema',
+          reference: { indicator: 'ema', period },
+          'reference.period': period,
+          timeframe: '15m',
+        },
+      })),
+      actions: [{ key: 'open_long' }],
+    })
+
+    const groupIds = new Set(
+      state?.triggers.map(trigger =>
+        trigger.contracts?.find(contract => typeof contract.params.groupId === 'string')?.params.groupId,
+      ),
+    )
+
+    expect(groupIds).toEqual(new Set(['entry-long-ema-above-stack-15m-20-60-144']))
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            params: expect.objectContaining({
+              join: 'AND',
+              actionKey: 'open_long',
+              actionBinding: 'single_action',
+            }),
+          }),
+        ]),
+      }),
+    ]))
+  })
+
   it('synthesizes supported grid contracts when planner explicitly sends null contracts', () => {
     const state = service.build({
       triggers: [{

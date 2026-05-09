@@ -105,6 +105,80 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it.each([
+    {
+      slotKey: 'trigger.volume.relative_average.lookback_bars',
+      fieldPath: 'triggers[volume.relative_average].params.lookbackBars',
+      answer: '过去 20 根 K 线',
+      expectedParam: { lookbackBars: 20 },
+      expectedValue: 20,
+    },
+    {
+      slotKey: 'trigger.volume.relative_average.multiplier',
+      fieldPath: 'triggers[volume.relative_average].params.multiplier',
+      answer: '高于均量 1.5 倍',
+      expectedParam: { multiplier: 1.5 },
+      expectedValue: 1.5,
+    },
+  ])('locks relative-average volume trigger slot $slotKey from clarification answers', ({
+    slotKey,
+    fieldPath,
+    answer,
+    expectedParam,
+    expectedValue,
+  }) => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [{
+          id: 'entry-volume-relative-average',
+          key: 'volume.relative_average',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { event: 'spike', comparator: 'gt' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey,
+            fieldPath,
+            status: 'open',
+            priority: 'core',
+            questionHint: '请确认放量参数。',
+            affectsExecution: true,
+          }],
+        }],
+        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-09T00:00:00.000Z',
+      },
+      targetSlotKey: slotKey,
+      targetFieldPath: fieldPath,
+      targetSlotId: buildSemanticSlotId({ slotKey, fieldPath }),
+      answer,
+      messageIndex: 11,
+    })
+
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      params: expect.objectContaining(expectedParam),
+      openSlots: [expect.objectContaining({
+        slotKey,
+        fieldPath,
+        status: 'locked',
+        value: expectedValue,
+        evidence: {
+          text: answer,
+          messageIndex: 11,
+          source: 'user_explicit',
+        },
+      })],
+    }))
+  })
+
   it('turns add-position constraint clarification into a position lifecycle constraint', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
