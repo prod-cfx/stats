@@ -66,23 +66,24 @@ model LlmStrategy {
 }
 
 model LlmStrategyInstance {
-  id                 String                    @id @default(cuid())
-  strategyId         String                    @map("strategy_id")
-  name               String
-  status             LlmStrategyInstanceStatus @default(paused)
-  mode               LlmStrategyInstanceMode   @default(PAPER)
-  llmModel           String                    @map("llm_model")
-  scheduleCron       String?                   @map("schedule_cron")
-  maxToolCallsPerRun Int?                      @map("max_tool_calls_per_run")
-  maxRunsPerHour     Int?                      @map("max_runs_per_hour")
-  cooldownSeconds    Int?                      @map("cooldown_seconds")
-  configOverrides    Json?                     @map("config_overrides")
-  createdBy          String                    @map("created_by")
-  updatedBy          String                    @map("updated_by")
-  metadata           Json?
-  lastRunAt          DateTime?                 @map("last_run_at")
-  createdAt          DateTime                  @default(now()) @map("created_at")
-  updatedAt          DateTime                  @default(now()) @updatedAt @map("updated_at")
+  id                        String                    @id @default(cuid())
+  strategyId                String                    @map("strategy_id")
+  name                      String
+  status                    LlmStrategyInstanceStatus @default(paused)
+  mode                      LlmStrategyInstanceMode   @default(PAPER)
+  llmModel                  String                    @map("llm_model")
+  scheduleCron              String?                   @map("schedule_cron")
+  maxToolCallsPerRun        Int?                      @map("max_tool_calls_per_run")
+  maxRunsPerHour            Int?                      @map("max_runs_per_hour")
+  cooldownSeconds           Int?                      @map("cooldown_seconds")
+  configOverrides           Json?                     @map("config_overrides")
+  createdBy                 String                    @map("created_by")
+  updatedBy                 String                    @map("updated_by")
+  metadata                  Json?
+  lastRunAt                 DateTime?                 @map("last_run_at")
+  deployedAtSemanticVersion String?                   @map("deployed_at_semantic_version")
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @default(now()) @updatedAt @map("updated_at")
 
   strategy       LlmStrategy                   @relation(fields: [strategyId], references: [id], onDelete: Cascade)
   runs           LlmStrategyRun[]

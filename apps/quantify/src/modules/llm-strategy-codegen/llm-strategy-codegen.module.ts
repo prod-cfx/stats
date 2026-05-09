@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 
 import { AiModule } from '@/modules/ai/ai.module'
 import { AccountStrategyViewModule } from '@/modules/account-strategy-view/account-strategy-view.module'
+import { LlmStrategiesModule } from '@/modules/llm-strategies/llm-strategies.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AccountAiQuantConversationsController } from './controllers/account-ai-quant-conversations.controller'
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
@@ -62,9 +63,10 @@ import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canoni
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 import { UnsupportedFallbackService } from './services/unsupported-fallback.service'
+import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
 
 @Module({
-  imports: [PrismaModule, AiModule, AccountStrategyViewModule],
+  imports: [PrismaModule, AiModule, AccountStrategyViewModule, NlGatewayModule, LlmStrategiesModule],
   controllers: [AccountAiQuantConversationsController, LiveLlmStrategyCodegenController],
   providers: [
     AiQuantConversationsRepository,

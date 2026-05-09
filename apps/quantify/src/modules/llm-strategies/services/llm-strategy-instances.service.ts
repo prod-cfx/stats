@@ -8,6 +8,7 @@ import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response
 
 import { Prisma as PrismaNamespace } from '@/prisma/prisma.types'
 
+import { validateSemanticVersion } from '@/modules/llm-strategy-codegen/nl-gateway/version-gate/version-gate'
 import { LlmStrategyInstanceNameConflictException } from '../exceptions/llm-strategy-instance-name-conflict.exception'
 import { LlmStrategyInstanceNotFoundException } from '../exceptions/llm-strategy-instance-not-found.exception'
 import { LlmStrategyNotLiveException } from '../exceptions/llm-strategy-not-live.exception'
@@ -184,6 +185,21 @@ export class LlmStrategyInstancesService {
       }
       throw error
     }
+  }
+
+  /**
+   * 部署完成时写入语义版本号，供 atom 翻牌 version-gate 使用。
+   * 必须在 PublishedStrategySnapshot 写入同事务内调用，避免 snapshot 写成功但版本字段未更新的中间态。
+   *
+   * critic round 1 M5：service 层强制 SEMANTIC_VERSION_PATTERN 校验，
+   * 拒绝 'W2'（缺零填充）等会破坏后续 SQL `>=` 比较的格式。
+   */
+  async markDeployedWithSemanticVersion(
+    id: string,
+    deployedAtSemanticVersion: string,
+  ): Promise<LlmStrategyInstance> {
+    validateSemanticVersion(deployedAtSemanticVersion)
+    return this.repository.markDeployedWithSemanticVersion(id, deployedAtSemanticVersion)
   }
 
   async delete(id: string): Promise<void> {

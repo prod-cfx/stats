@@ -10,9 +10,16 @@ import type {
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import { createHash } from 'node:crypto'
+import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { PrismaClient } from '@/prisma/prisma.types'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { LlmStrategyInstancesService } from '@/modules/llm-strategies/services/llm-strategy-instances.service'
 import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semantic-runtime-state.util'
+import { CURRENT_SEMANTIC_VERSION } from '../nl-gateway/version-gate/version-gate'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
@@ -91,6 +98,8 @@ const DEFAULT_PERP_PLATFORM_MAX_LEVERAGE = 5
 export class CompiledPublicationGateService {
   constructor(
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
+    private readonly llmStrategyInstancesService: LlmStrategyInstancesService,
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     private readonly scriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
   ) {}
 
@@ -132,38 +141,56 @@ export class CompiledPublicationGateService {
       compilerConsistency,
     }
 
-    const snapshot = await this.publishedSnapshotsRepo.create({
-      sessionId: input.sessionId,
-      strategyTemplateId: input.strategyTemplateId ?? null,
-      strategyInstanceId: input.strategyInstanceId ?? null,
-      scriptSnapshot: input.script,
-      specSnapshot: input.canonicalSnapshot,
-      semanticGraph: input.semanticPredicateGraph ?? input.semanticView,
-      compiledIr: input.ir as unknown as Record<string, unknown>,
-      irSnapshot: input.ir as unknown as Record<string, unknown>,
-      astSnapshot,
-      compiledManifest: manifest as unknown as Record<string, unknown>,
-      consistencyReport,
-      userIntentSummary: input.userIntentSummary,
-      strategySummary: input.strategySummary,
-      scriptSummary,
-      lockedParams: input.lockedParams,
-      snapshotVersion: 3,
-      paramsSnapshot: {
-        exchange: strategyConfig.exchange,
-        symbol: strategyConfig.symbol,
-        timeframe: strategyConfig.baseTimeframe,
-        marketType: strategyConfig.marketType,
-        positionPct: strategyConfig.positionPct,
-        positionSizing: strategyConfig.positionSizing,
-      },
-      strategyConfig: strategyConfig as unknown as Record<string, unknown>,
-      backtestConfigDefaults: backtestConfigDefaults as unknown as Record<string, unknown>,
-      deploymentExecutionDefaults: deploymentExecutionDefaults as unknown as Record<string, unknown>,
-      deploymentExecutionConstraints: deploymentExecutionConstraints as unknown as Record<string, unknown>,
-      executionEnvelope: input.executionEnvelope as unknown as Record<string, unknown>,
-      executionPolicy: input.ir.executionPolicy as unknown as Record<string, unknown>,
-      dataRequirements: input.ast.dataRequirements as unknown as Record<string, unknown>,
+    // 显式包一层 withTransaction 保证 snapshot 写入与 deployedAtSemanticVersion
+    // 标记原子（#1043 critic round 1 C1）。当前 publish() 调用方包括 fire-and-forget 的
+    // CodegenSessionPublicationPipelineService.run（见 codegen-conversation.service.ts:2519），
+    // 该路径脱离 HTTP 生命周期，AfterCommitInterceptor / @Transactional 不会触发，因此必须在
+    // service 内部显式开启事务。如外层已有事务，withTransaction 会复用现有 cls scope。
+    const snapshot = await this.txHost.withTransaction(async () => {
+      const created = await this.publishedSnapshotsRepo.create({
+        sessionId: input.sessionId,
+        strategyTemplateId: input.strategyTemplateId ?? null,
+        strategyInstanceId: input.strategyInstanceId ?? null,
+        scriptSnapshot: input.script,
+        specSnapshot: input.canonicalSnapshot,
+        semanticGraph: input.semanticPredicateGraph ?? input.semanticView,
+        compiledIr: input.ir as unknown as Record<string, unknown>,
+        irSnapshot: input.ir as unknown as Record<string, unknown>,
+        astSnapshot,
+        compiledManifest: manifest as unknown as Record<string, unknown>,
+        consistencyReport,
+        userIntentSummary: input.userIntentSummary,
+        strategySummary: input.strategySummary,
+        scriptSummary,
+        lockedParams: input.lockedParams,
+        snapshotVersion: 3,
+        paramsSnapshot: {
+          exchange: strategyConfig.exchange,
+          symbol: strategyConfig.symbol,
+          timeframe: strategyConfig.baseTimeframe,
+          marketType: strategyConfig.marketType,
+          positionPct: strategyConfig.positionPct,
+          positionSizing: strategyConfig.positionSizing,
+        },
+        strategyConfig: strategyConfig as unknown as Record<string, unknown>,
+        backtestConfigDefaults: backtestConfigDefaults as unknown as Record<string, unknown>,
+        deploymentExecutionDefaults: deploymentExecutionDefaults as unknown as Record<string, unknown>,
+        deploymentExecutionConstraints: deploymentExecutionConstraints as unknown as Record<string, unknown>,
+        executionEnvelope: input.executionEnvelope as unknown as Record<string, unknown>,
+        executionPolicy: input.ir.executionPolicy as unknown as Record<string, unknown>,
+        dataRequirements: input.ast.dataRequirements as unknown as Record<string, unknown>,
+      })
+
+      // 部署完成同事务写 semantic version，供 atom 翻牌 version-gate 使用。
+      // 仅当 strategyInstanceId 存在（关联到 instance）时写入；template snapshot 跳过。
+      if (input.strategyInstanceId) {
+        await this.llmStrategyInstancesService.markDeployedWithSemanticVersion(
+          input.strategyInstanceId,
+          CURRENT_SEMANTIC_VERSION,
+        )
+      }
+
+      return created
     })
 
     return {

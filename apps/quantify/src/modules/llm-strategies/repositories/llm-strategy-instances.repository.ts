@@ -140,6 +140,20 @@ export class LlmStrategyInstancesRepository {
     })
   }
 
+  /**
+   * 写入策略部署时的语义版本号，供 atom 翻牌 version-gate 使用。
+   * 走 txHost.tx 自动参与外层事务（与 PublishedStrategySnapshot 写入同事务）。
+   */
+  async markDeployedWithSemanticVersion(
+    id: string,
+    deployedAtSemanticVersion: string,
+  ): Promise<LlmStrategyInstance> {
+    return this.txHost.tx.llmStrategyInstance.update({
+      where: { id },
+      data: { deployedAtSemanticVersion },
+    })
+  }
+
   async findRunningWithSchedule() {
     return this.txHost.tx.llmStrategyInstance.findMany({
       where: {

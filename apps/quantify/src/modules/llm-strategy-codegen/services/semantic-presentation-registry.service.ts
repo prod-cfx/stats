@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common'
 import type {
   SemanticPresentationMetadata,
 } from '../types/semantic-presentation'
+import { InternalKeyLeakDetectedException } from '../exceptions/internal-key-leak.exception'
+import { SemanticPresentationTokenNotFoundException } from '../exceptions/semantic-presentation-token-not-found.exception'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 
 const EXTRA_INTERNAL_IDENTIFIERS = ['generic_boundary']
@@ -570,7 +572,7 @@ export class SemanticPresentationRegistryService {
   get(key: string): SemanticPresentationMetadata {
     const metadata = this.presentations.get(key)
     if (!metadata) {
-      throw new Error(`semantic_presentation_not_registered:${key}`)
+      throw new SemanticPresentationTokenNotFoundException({ token: key })
     }
     this.guardMetadata(metadata)
     return metadata
@@ -601,7 +603,10 @@ export class SemanticPresentationRegistryService {
 
   private guardPublicText(key: string, output: string): string {
     if (this.getInternalIdentifierLeakPattern().test(output)) {
-      throw new Error(`semantic_presentation_internal_key_leak:${key}`)
+      throw new InternalKeyLeakDetectedException({
+        key,
+        details: `semantic_presentation_internal_key_leak:${key}`,
+      })
     }
     return output
   }
