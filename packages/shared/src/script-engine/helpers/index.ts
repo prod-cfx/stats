@@ -29,5 +29,7 @@ export { getHelperDocs } from './helpers.types'
 export * as signalHelpers from './signal-helpers'
 export type { Signal } from './signal-helpers'
 
+export { candlePatternDetector } from './candle-pattern-detector'
+export type { CandlePattern, CandlePatternDetectorInput, CandlePatternDirection } from './candle-pattern-detector'
 export * as technicalIndicators from './technical-indicators'
 export type { Bar } from './technical-indicators'

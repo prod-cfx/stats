@@ -1,5 +1,6 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
+import { candlePatternDetector } from '../helpers/candle-pattern-detector'
 import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-indicators'
 
 export type CompiledRuntimeValue =
@@ -102,6 +103,7 @@ function evaluateSeries(
     case 'MID_BAND':
     case 'LOWER_BAND':
     case 'BOLLINGER_BARS_OUTSIDE':
+    case 'CANDLE_PATTERN':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
     case 'MARKET_REGIME':
       return readStringContextValue(ctx.marketRegime)
@@ -531,6 +533,8 @@ function resolveSeriesValueAt(
 
         return streak
       }
+      case 'CANDLE_PATTERN':
+        return evaluateCandlePatternSeries(node, bars, offset + (node.payload.offsetBars ?? 0))
       default: {
         const firstDep = node.deps?.[0]
         return typeof firstDep === 'string'
@@ -935,6 +939,37 @@ function readNumericParam(
   const raw = params?.[key]
   const value = typeof raw === 'string' ? Number(raw) : raw
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function evaluateCandlePatternSeries(
+  node: CompiledExprNode,
+  bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
+  offset: number,
+): number | null {
+  if (offset < 0 || offset >= bars.length) return null
+
+  const pattern = readStringParam(node.payload.params, 'pattern')
+  const direction = readStringParam(node.payload.params, 'direction')
+  if (!isCandlePattern(pattern) || !isCandlePatternDirection(direction)) return null
+
+  const minBars = pattern === 'consecutive_body'
+    ? readNumericParam(node.payload.params, 'minBars') ?? undefined
+    : undefined
+  const endExclusive = bars.length - offset
+  const scopedBars = bars.slice(0, endExclusive)
+
+  return candlePatternDetector(scopedBars, { pattern, direction, minBars }) ? 1 : 0
+}
+
+function isCandlePattern(value: string | null): value is 'engulfing' | 'hammer' | 'doji' | 'consecutive_body' {
+  return value === 'engulfing'
+    || value === 'hammer'
+    || value === 'doji'
+    || value === 'consecutive_body'
+}
+
+function isCandlePatternDirection(value: string | null): value is 'bullish' | 'bearish' {
+  return value === 'bullish' || value === 'bearish'
 }
 
 function readStringParam(

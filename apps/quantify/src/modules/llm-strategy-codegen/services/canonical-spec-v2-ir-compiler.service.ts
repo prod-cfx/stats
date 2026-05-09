@@ -1541,13 +1541,8 @@ export class CanonicalSpecV2IrCompilerService {
         // P4-2: 白名单 4 patterns：engulfing / hammer / doji / consecutive_body
         // IR 通过 CANDLE_PATTERN 系列 + EQ predicate 封装 candle pattern 信号。
         // fail-closed：pattern / direction 非白名单值直接抛错，避免静默降级。
-        //
-        // ⚠️ runtime gap 公开标记（同 P4-1 A-C1 模式）：当前 strategy-runtime / backtesting /
-        // compiled-runtime 全仓 0 个 CANDLE_PATTERN 系列 evaluator 实现（grep 验证 0 命中），
-        // candlePatternDetector helper 同样 0 实现。该 atom codegen 路径已闭环，但 runtime
-        // 信号永远 fail-closed（series.evaluate undefined → predicate EQ 永不真）直到
-        // follow-up issue #1062 落地。
-        // 设计取舍：维持 supported_executable 让后续 atom 共用同模式，避免 train 回退。
+        // compiled-runtime 通过 candlePatternDetector 消费 CANDLE_PATTERN series，
+        // backtest 与 live signal 共用 evaluateExprPool 路径。
         const cpPattern = typeof atom.params?.pattern === 'string'
           ? atom.params.pattern.trim().toLowerCase()
           : null
