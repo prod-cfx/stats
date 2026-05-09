@@ -192,6 +192,42 @@ describe('SemanticContractReadinessService', () => {
     expect(result.state.triggers[0].openSlots).toEqual([])
   })
 
+  it('accepts state.read_write.program_lifecycle (Phase 5 S0a substrate)', () => {
+    const state = createSemanticState({
+      triggers: [{
+        id: 'trigger-program-lifecycle',
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        params: {},
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' },
+        contracts: [{
+          id: 'trigger-contract-program-lifecycle',
+          kind: 'trigger',
+          capabilities: [],
+          requires: [],
+          params: {},
+          runtimeRequirements: [
+            { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+          ],
+          stateRequirements: [
+            { domain: 'state', verb: 'read_write', object: 'program_lifecycle' },
+          ],
+          orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    expect(result.ready).toBe(true)
+    expect(result.missingRequirements).toEqual([])
+    expect(result.state.triggers[0].openSlots).toEqual([])
+  })
+
   it('fails closed on unknown runtime state and order requirements', () => {
     const state = createSemanticState({
       actions: [{

@@ -1,4 +1,5 @@
 import type { StrategyAdapterV1, StrategyDecisionV1 } from '@ai/shared'
+import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { createScriptEngine } from '@ai/shared/node'
@@ -98,6 +99,11 @@ export class BacktestStrategyAdapterService {
       // peakEquity 在 build() 闭包内逐 bar 维护，与 account-strategy-view.service.ts:1970 同公式
       let peakEquity: number | undefined
 
+      // Phase 5 S0a: program lifecycle 跨 K 线状态（按 symbol 分桶）。
+      // 闭包持久；同一 backtest 跑结束后随 adapter 一起被回收（无需显式 cleanup）。
+      // S0a fixed_grid_gated 仅写 placeholder；S5/S6 在此 map 上维护 dynamic_grid / adaptive_volatility_grid 实状态。
+      const programLifecycleStateBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+
       return {
         protocolVersion: 'v1',
         onBar(ctx) {
@@ -148,6 +154,11 @@ export class BacktestStrategyAdapterService {
             orchestrationGateState,
             portfolioRiskState,
           )
+          // Phase 5 S0a: 取本 symbol 上一根 K 线的 lifecycle state，传入 runOrderPrograms 第 8 参。
+          const symbolKey = readContextSymbol(ctx)
+          const lifecycleStateForCurrentBar = symbolKey
+            ? programLifecycleStateBySymbol.get(symbolKey)
+            : undefined
           const orderState = runOrderPrograms(
             ctx,
             orderPrograms,
@@ -156,7 +167,17 @@ export class BacktestStrategyAdapterService {
             projection.topology.orderProgramOrder,
             executionModel,
             orchestrationPrograms,
+            lifecycleStateForCurrentBar,
           )
+          // 回写 next state 到 map，供下一根 K 线使用。
+          // 直接持有 runtime 返回的 frozen 引用，保 freeze 不变量端到端贯通
+          // （runtime 已对该对象顶层 Object.freeze）。
+          if (symbolKey) {
+            programLifecycleStateBySymbol.set(
+              symbolKey,
+              orderState.programLifecycleStateNext,
+            )
+          }
 
           // T12 M2: 仅当 decision=NOOP + orchestration program 进入 close 阶段 + 当前持仓非 0
           // 时合成 CLOSE_*；OPEN_*/CLOSE_*/REDUCE_* 一律不动（W5 不变量保护）。
@@ -236,6 +257,12 @@ function readContextPositionQty(ctx: unknown): number {
   const c = ctx as { position?: { qty?: unknown } }
   const qty = c.position?.qty
   return typeof qty === 'number' && Number.isFinite(qty) ? qty : 0
+}
+
+function readContextSymbol(ctx: unknown): string | undefined {
+  if (!ctx || typeof ctx !== 'object') return undefined
+  const c = ctx as { symbol?: unknown }
+  return typeof c.symbol === 'string' && c.symbol.length > 0 ? c.symbol : undefined
 }
 
 function synthesizeCloseDecision(

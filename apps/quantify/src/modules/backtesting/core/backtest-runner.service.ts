@@ -979,11 +979,18 @@ export class BacktestRunnerService {
       params: input.input.strategy.params,
     }
 
+    // Phase 5 S0a: 给 compiled-runtime 暴露 ctx.bars 通道（StrategyExecutionContextV1.bars）。
+    // 取主腿 + base timeframe 的 ScriptRuntimeBar[]（与 packages/shared Bar 字段兼容：
+    // {open, high, low, close, volume, timestamp}）。S0a fixed_grid_gated 不消费，
+    // S5/S6 dynamic_grid / adaptive_volatility_grid 走此通道做 ATR/regime 判定。
+    const primaryBars = dataForPrimary[input.input.baseTimeframe]?.bars ?? []
+
     const runtimeContext = buildMultiLegStrategyContext(multiLegContext)
     return {
       ts: bar.closeTime,
       symbol: bar.symbol,
       baseTimeframeBar: bar,
+      bars: primaryBars,
       htfState,
       position: {
         ...input.position,

@@ -853,6 +853,9 @@ const SUPPORTED_SUBSTRATE_REQUIREMENT_KEYS = new Set([
   'state.write.remembered_level',
   'state.read_write.pyramiding_layer_count',
   'state.read_write.dca_fired_count',
+  // Phase 5 S0a: program lifecycle 跨 K 线状态通道；多 program 共用此 vocabulary，
+  // runtime 按 program.id 分桶（详见 CompiledOrderState.programLifecycleStateNext）
+  'state.read_write.program_lifecycle',
   'order.support.market_order',
   'order.support.close_position',
   'order.support.reduce_position',

@@ -1,5 +1,6 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
 import type { CompiledOrchestrationProgram } from '@ai/shared/script-engine/compiled-runtime/compiled-orchestration-program'
+import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime/program-lifecycle-state'
 import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/evaluate-expr-pool'
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
@@ -1493,6 +1494,84 @@ describe('backtestCompiledRuntimeCompat', () => {
       }
       const merged = mergeAdapterDecision(decision, orderState, 2)
       expect(merged).toEqual(decision)
+    })
+  })
+
+  describe('program lifecycle substrate (Phase 5 S0a)', () => {
+    const guardState = Object.freeze({
+      blockNewEntry: false,
+      forceExit: false,
+      strategyHalt: false,
+      cancelOrderPrograms: false,
+      triggered: Object.freeze([] as string[]),
+    })
+
+    function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+      return {
+        id: 'orch_grid_1',
+        programKind: 'fixed_grid_gated',
+        activeWhenExprId: 'gate_regime',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'static',
+        gridParams: { anchorPrice: 50000, levelCount: 3, stepPct: 5 },
+        sizing: { mode: 'fixed_quote', value: 100 },
+        ...overrides,
+      }
+    }
+
+    it('fixed_grid_gated 跨连续 5 根 K 线：lifecycleStateBySymbol 持续含 program key（noop placeholder）', () => {
+      const program = makeProgram({ id: 'orch_grid_persistent' })
+      // 模拟 backtest-strategy-adapter 闭包：按 symbol 维护跨 bar lifecycle map
+      const lifecycleBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+      const symbol = 'BTCUSDT'
+
+      for (let bar = 0; bar < 5; bar++) {
+        const stateIn = lifecycleBySymbol.get(symbol)
+        const orderState = runOrderPrograms(
+          { symbol, bars: [{ open: 100, high: 110, low: 95, close: 105, volume: 1, timestamp: bar }] } as any,
+          [],
+          { gate_regime: bar % 2 === 0 }, // 交替 active/inactive，验证 lifecycle 在两种分支均持续
+          guardState,
+          [],
+          undefined,
+          [program],
+          stateIn,
+        )
+        // 第 8 参穿透到 runtime；fixed_grid_gated placeholder 写入 next state
+        expect(orderState.programLifecycleStateNext[program.id]).toEqual({
+          kind: 'fixed_grid_gated',
+        })
+        // 回写 next 到 map（adapter 闭包行为）
+        lifecycleBySymbol.set(symbol, { ...orderState.programLifecycleStateNext })
+      }
+
+      // 5 根 K 线后，map 仍含 program key
+      expect(lifecycleBySymbol.get(symbol)?.[program.id]).toEqual({
+        kind: 'fixed_grid_gated',
+      })
+    })
+
+    it('多 symbol 隔离：BTCUSDT 与 ETHUSDT 各自维护独立 lifecycle 桶', () => {
+      const program = makeProgram({ id: 'orch_grid_multi' })
+      const lifecycleBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+
+      for (const symbol of ['BTCUSDT', 'ETHUSDT']) {
+        const stateIn = lifecycleBySymbol.get(symbol)
+        const orderState = runOrderPrograms(
+          { symbol, bars: [] } as any,
+          [],
+          { gate_regime: true },
+          guardState,
+          [],
+          undefined,
+          [program],
+          stateIn,
+        )
+        lifecycleBySymbol.set(symbol, { ...orderState.programLifecycleStateNext })
+      }
+
+      expect(lifecycleBySymbol.get('BTCUSDT')?.[program.id]).toEqual({ kind: 'fixed_grid_gated' })
+      expect(lifecycleBySymbol.get('ETHUSDT')?.[program.id]).toEqual({ kind: 'fixed_grid_gated' })
     })
   })
 })

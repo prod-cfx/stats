@@ -1,6 +1,7 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { CompiledOrchestrationProgram } from './compiled-orchestration-program'
 import type { CompiledGuardState } from './evaluate-guards'
+import type { ProgramLifecycleState } from './program-lifecycle-state'
 import { runOrderPrograms } from './run-order-programs'
 
 const ctx = {} as unknown as StrategyExecutionContextV1
@@ -268,5 +269,138 @@ describe('runOrderPrograms — orchestration program lifecycle (Phase 5 S4 T11)'
     expect(payload.activeWhen).toBe('expr_gate_regime')
     expect(payload.gridParams).toEqual(program.gridParams)
     expect(payload.sizing).toEqual(program.sizing)
+  })
+})
+
+describe('runOrderPrograms — program lifecycle substrate (Phase 5 S0a)', () => {
+  it('第 8 参 undefined → 行为与现有完全一致（回归保护）', () => {
+    const program = makeProgram()
+    const stateA = runOrderPrograms(
+      ctx,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const stateB = runOrderPrograms(
+      ctx,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      undefined,
+    )
+    expect(stateB.workingOrders).toEqual(stateA.workingOrders)
+    expect(stateB.activeProgramIds).toEqual(stateA.activeProgramIds)
+    expect(stateB.cancelledProgramIds).toEqual(stateA.cancelledProgramIds)
+    expect(stateB.closeProgramIds).toEqual(stateA.closeProgramIds)
+  })
+
+  it('第 8 参传入 {} → 行为与 undefined 一致（state map 为空 → 同样输出）', () => {
+    const program = makeProgram()
+    const empty: Readonly<Record<string, ProgramLifecycleState>> = {}
+    const state = runOrderPrograms(
+      ctx,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      empty,
+    )
+    expect(state.activeProgramIds).toEqual([program.id])
+    expect(state.workingOrders).toHaveLength(1)
+  })
+
+  it('fixed_grid_gated active → programLifecycleStateNext[id] 写入 placeholder', () => {
+    const program = makeProgram({ id: 'orch_grid_x' })
+    const state = runOrderPrograms(
+      ctx,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    expect(state.programLifecycleStateNext).toBeDefined()
+    expect(state.programLifecycleStateNext['orch_grid_x']).toEqual({
+      kind: 'fixed_grid_gated',
+    })
+  })
+
+  it('fixed_grid_gated active=false onDeactivate=cancel → 仍写 placeholder（lifecycle 持续）', () => {
+    const program = makeProgram({ id: 'orch_grid_y', onDeactivate: 'cancel' })
+    const state = runOrderPrograms(
+      ctx,
+      [],
+      { expr_gate_regime: false },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    expect(state.programLifecycleStateNext['orch_grid_y']).toEqual({
+      kind: 'fixed_grid_gated',
+    })
+  })
+
+  it('programLifecycleStateNext 顶层 Object.freeze → mutation throws', () => {
+    const program = makeProgram({ id: 'orch_grid_z' })
+    const state = runOrderPrograms(
+      ctx,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    expect(Object.isFrozen(state.programLifecycleStateNext)).toBe(true)
+    expect(() => {
+      ;(state.programLifecycleStateNext as Record<string, ProgramLifecycleState>).mutated = {
+        kind: 'fixed_grid_gated',
+      }
+    }).toThrow()
+  })
+
+  it('ctx.bars 传与不传 → fixed_grid_gated 输出不变（S0a noop placeholder）', () => {
+    const program = makeProgram({ id: 'orch_grid_q' })
+    const ctxNoBars = {} as unknown as StrategyExecutionContextV1
+    const ctxWithBars = {
+      bars: [
+        { open: 100, high: 110, low: 95, close: 105, volume: 1, timestamp: 1 },
+        { open: 105, high: 115, low: 100, close: 112, volume: 1, timestamp: 2 },
+      ],
+    } as unknown as StrategyExecutionContextV1
+
+    const stateNo = runOrderPrograms(
+      ctxNoBars,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const stateWith = runOrderPrograms(
+      ctxWithBars,
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    expect(stateWith.workingOrders).toEqual(stateNo.workingOrders)
+    expect(stateWith.activeProgramIds).toEqual(stateNo.activeProgramIds)
+    expect(stateWith.cancelledProgramIds).toEqual(stateNo.cancelledProgramIds)
+    expect(stateWith.closeProgramIds).toEqual(stateNo.closeProgramIds)
+    expect(stateWith.programLifecycleStateNext).toEqual(stateNo.programLifecycleStateNext)
   })
 })

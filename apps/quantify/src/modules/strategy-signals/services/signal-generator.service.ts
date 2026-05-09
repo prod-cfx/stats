@@ -761,6 +761,9 @@ export class SignalGeneratorService {
               projection.topology.orderProgramOrder,
               executionModel,
               ((projection as { orchestrationPrograms?: unknown }).orchestrationPrograms ?? []) as Parameters<typeof runOrderPrograms>[6],
+              // Phase 5 S0a: live 端暂不维护 programLifecycleState map（state map +
+              // cleanup hook 由 S5/S6 实施时落地，详见 follow-up issue）。
+              undefined,
             )
 
             return buildCompiledManifest(

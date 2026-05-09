@@ -31,4 +31,19 @@ describe('signalGeneratorService orchestration program wiring (live-signal fast 
   it('13.D: 第 7 参数类型化为 Parameters<typeof runOrderPrograms>[6]', () => {
     expect(src).toMatch(/Parameters<typeof runOrderPrograms>\[6\]/)
   })
+
+  it('13.E (Phase 5 S0a): runOrderPrograms 第 8 参为 programLifecycleStateIn —'
+    + ' live 端 S0a 暂传 undefined（state map 由 S5/S6 落地）', () => {
+    // 静态断言：源码包含传给 runOrderPrograms 的第 8 参 undefined
+    expect(src).toMatch(
+      /runOrderPrograms\([\s\S]*?orchestrationPrograms[\s\S]*?\?\?\s*\[\][\s\S]*?\][\s\S]*?,[\s\S]*?undefined[\s\S]*?\)/,
+    )
+    // 类型断言：第 8 参类型是 Readonly<Record<string, ProgramLifecycleState>> | undefined
+    type Param8 = Parameters<typeof import('@ai/shared/script-engine/compiled-runtime').runOrderPrograms>[7]
+    type Expected = Readonly<Record<string, import(
+      '@ai/shared/script-engine/compiled-runtime'
+    ).ProgramLifecycleState>> | undefined
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _typeCheck: Param8 = undefined as Expected
+  })
 })
