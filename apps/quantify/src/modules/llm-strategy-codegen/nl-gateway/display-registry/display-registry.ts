@@ -28,23 +28,17 @@ export function renderDisplayToken(
   values: DisplayTokenTemplateValues = {},
 ): string {
   const template = getDisplayToken(token).zh
-  return template.replace(/\{([A-Za-z0-9_.]+)\}/gu, (_match, key: string) => String(values[key] ?? ''))
-}
-
-export function renderOptionalDisplayToken(
-  token: string,
-  fallback: string,
-  values: DisplayTokenTemplateValues = {},
-): string {
-  const found = TOKEN_BY_ID.get(token)
-  if (!found) return fallback
-  return found.zh.replace(/\{([A-Za-z0-9_.]+)\}/gu, (_match, key: string) => String(values[key] ?? ''))
+  return template.replace(/\{([A-Za-z0-9_.]+)\}/gu, (_match, key: string) => {
+    if (!Object.prototype.hasOwnProperty.call(values, key) || values[key] === undefined || values[key] === null) {
+      throw new SemanticPresentationTokenNotFoundException({ token: `${token}.${key}` })
+    }
+    return String(values[key])
+  })
 }
 
 export function renderEnumDisplayToken(
   tokenPrefix: string,
   value: string,
-  fallback: string,
 ): string {
-  return renderOptionalDisplayToken(`${tokenPrefix}.${value}`, fallback)
+  return renderDisplayToken(`${tokenPrefix}.${value}`)
 }

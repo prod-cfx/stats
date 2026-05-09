@@ -6,9 +6,9 @@ import type {
 import { InternalKeyLeakDetectedException } from '../exceptions/internal-key-leak.exception'
 import { SemanticPresentationTokenNotFoundException } from '../exceptions/semantic-presentation-token-not-found.exception'
 import {
+  getDisplayToken,
   renderDisplayToken,
   renderEnumDisplayToken,
-  renderOptionalDisplayToken,
 } from '../nl-gateway/display-registry'
 import {
   buildInternalIdentifierKeys,
@@ -154,8 +154,8 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const op = stringParam(params, 'operator', 'GT')
       const value = numberParam(params, 'value', 0)
       return renderDisplayToken('atom.volume.threshold.display', {
-        metric: renderEnumDisplayToken('enum.volume.metric', metric, '成交量'),
-        operator: renderEnumDisplayToken('enum.operator', op, '大于'),
+        metric: renderEnumDisplayToken('enum.volume.metric', metric),
+        operator: renderEnumDisplayToken('enum.operator', op),
         value,
       })
     },
@@ -180,7 +180,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const periodStr = period > 0 ? `ATR${period}` : 'ATR'
       return renderDisplayToken('atom.volatility.atr_threshold.display', {
         indicator: periodStr,
-        operator: renderEnumDisplayToken('enum.operator', op, '大于'),
+        operator: renderEnumDisplayToken('enum.operator', op),
         threshold,
       })
     },
@@ -232,7 +232,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
       return renderDisplayToken('atom.position.has_position.display', {
-        side: renderEnumDisplayToken('enum.side', side, side),
+        side: renderEnumDisplayToken('enum.side', side),
       })
     },
     clarificationRenderer: (slotKey, _params) => {
@@ -250,7 +250,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const side = typeof params?.sideScope === 'string' ? params.sideScope : 'both'
       return renderDisplayToken('atom.position.no_position.display', {
-        side: renderEnumDisplayToken('enum.side', side, side),
+        side: renderEnumDisplayToken('enum.side', side),
       })
     },
     clarificationRenderer: (slotKey, _params) => {
@@ -844,8 +844,8 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const minBars = params && typeof params['minBars'] === 'number' ? (params['minBars'] as number) : undefined
       const minBarsLabel = minBars !== undefined ? `（≥${minBars} 根）` : ''
       return renderDisplayToken('atom.price.candle_pattern.display', {
-        direction: renderEnumDisplayToken('enum.direction', direction, ''),
-        pattern: renderEnumDisplayToken('enum.pattern.candle', pattern, pattern),
+        direction: direction ? renderEnumDisplayToken('enum.direction', direction) : '',
+        pattern: renderEnumDisplayToken('enum.pattern.candle', pattern),
         minBars: minBarsLabel,
       })
     },
@@ -885,8 +885,8 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const pattern = stringParam(params, 'pattern', 'head_and_shoulders')
       const direction = stringParam(params, 'direction', '')
       return renderDisplayToken('atom.price.chart_pattern.display', {
-        direction: renderEnumDisplayToken('enum.direction', direction, ''),
-        pattern: renderEnumDisplayToken('enum.pattern.chart', pattern, pattern),
+        direction: direction ? renderEnumDisplayToken('enum.direction', direction) : '',
+        pattern: renderEnumDisplayToken('enum.pattern.chart', pattern),
       })
     },
     clarificationRenderer: (slotKey, _params) => {
@@ -923,8 +923,8 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const reclaimBars = params && typeof params['reclaimBars'] === 'number' ? (params['reclaimBars'] as number) : undefined
       const reclaimLabel = reclaimBars !== undefined ? `（${reclaimBars} 根内 reclaim）` : ''
       return renderDisplayToken('atom.liquidity.sweep.display', {
-        direction: renderEnumDisplayToken('enum.direction', direction, ''),
-        reference: renderEnumDisplayToken('enum.reference', reference, reference),
+        direction: direction ? renderEnumDisplayToken('enum.direction', direction) : '',
+        reference: reference ? renderEnumDisplayToken('enum.reference', reference) : '',
         reclaimBars: reclaimLabel,
       })
     },
@@ -961,7 +961,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       const confirmationBars = numberParam(params, 'confirmationBars', 3)
       return renderDisplayToken('atom.indicator.divergence.display', {
         indicator,
-        direction: renderEnumDisplayToken('enum.divergence', direction, '背离'),
+        direction: direction ? renderEnumDisplayToken('enum.divergence', direction) : '背离',
         pivotWindow,
         confirmationBars,
       })
@@ -1002,7 +1002,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const provider = stringParam(params, 'provider', '')
       return renderDisplayToken('atom.external.signal.display', {
-        provider: renderEnumDisplayToken('enum.provider', provider, '外部信号'),
+        provider: provider ? renderEnumDisplayToken('enum.provider', provider) : '外部信号',
       })
     },
     clarificationRenderer: (slotKey, _params) => {
@@ -1039,6 +1039,7 @@ export class SemanticPresentationRegistryService {
     if (!metadata) {
       throw new SemanticPresentationTokenNotFoundException({ token: key })
     }
+    this.guardSupportedAtomNameToken(metadata.key)
     this.guardMetadata(metadata)
     return metadata
   }
@@ -1070,6 +1071,13 @@ export class SemanticPresentationRegistryService {
     }
   }
 
+  private guardSupportedAtomNameToken(key: string): void {
+    const atom = this.atomRegistry.resolve(key)
+    if (atom.supportStatus.startsWith('supported_')) {
+      getDisplayToken(`atom.${key}.name`)
+    }
+  }
+
   private guardPublicText(key: string, output: string): string {
     if (this.getInternalIdentifierLeakPattern().test(output)) {
       throw new InternalKeyLeakDetectedException({
@@ -1095,7 +1103,7 @@ function presentation(
   return {
     ...metadata,
     displayRenderer: metadata.displayRenderer
-      ?? (() => renderOptionalDisplayToken(`atom.${metadata.key}.name`, metadata.publicName)),
+      ?? (() => renderDisplayToken(`atom.${metadata.key}.name`)),
     clarificationRenderer: metadata.clarificationRenderer
       ?? ((slotKey, params) => defaultClarificationRenderer(metadata.publicName, slotKey, params)),
   }
@@ -1132,7 +1140,7 @@ function renderIndicatorBoundaryTouch(params: Record<string, unknown>): string {
 }
 
 function renderBoundaryRole(boundaryRole: string): string {
-  return renderEnumDisplayToken('enum.boundaryRole', boundaryRole, '边界')
+  return renderEnumDisplayToken('enum.boundaryRole', boundaryRole)
 }
 
 function renderRegimeGate(params: Record<string, unknown>): string {
@@ -1158,11 +1166,11 @@ function renderRegimeGate(params: Record<string, unknown>): string {
 
 function renderRegimeIndicator(indicator: string): string {
   const normalized = indicator.toLowerCase()
-  return renderEnumDisplayToken('enum.indicator', normalized, normalized.toUpperCase())
+  return renderEnumDisplayToken('enum.indicator', normalized)
 }
 
 function renderDcaTriggerMode(triggerMode: string): string {
-  return renderEnumDisplayToken('enum.dca.triggerMode', triggerMode, triggerMode)
+  return renderEnumDisplayToken('enum.dca.triggerMode', triggerMode)
 }
 
 function renderRegimeGateClarification(slotKey: string): string {
@@ -1206,7 +1214,7 @@ function renderFixedGridGated(params: Record<string, unknown>): string {
     range: rangeLabel,
     levels,
     step,
-    onDeactivate: renderEnumDisplayToken('enum.onDeactivate', onDeactivate, '撤单'),
+    onDeactivate: renderEnumDisplayToken('enum.onDeactivate', onDeactivate),
   })
 }
 

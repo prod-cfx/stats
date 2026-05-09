@@ -4,7 +4,6 @@ export {
   listDisplayTokens,
   renderDisplayToken,
   renderEnumDisplayToken,
-  renderOptionalDisplayToken,
 } from './display-registry'
 export type {
   DisplayToken,

@@ -1,6 +1,6 @@
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from '../semantic-presentation-registry.service'
-import { getDisplayToken, listDisplayTokens } from '../../nl-gateway/display-registry'
+import { getDisplayToken, listDisplayTokens, renderDisplayToken } from '../../nl-gateway/display-registry'
 
 describe('SemanticPresentationRegistryService', () => {
   const atomRegistry = new SemanticAtomRegistryService()
@@ -21,6 +21,10 @@ describe('SemanticPresentationRegistryService', () => {
         openSlots: expect.any(Array),
       }))
       expect(supportedAtom.executableProjection.length).toBeGreaterThan(0)
+      expect(getDisplayToken(`atom.${key}.name`)).toEqual(expect.objectContaining({
+        kind: 'atom',
+        zh: expect.any(String),
+      }))
       expect(presentation.get(key)).toEqual(expect.objectContaining({
         key,
         publicName: expect.any(String),
@@ -51,26 +55,23 @@ describe('SemanticPresentationRegistryService', () => {
     expect(listDisplayTokens('enum').length).toBeGreaterThan(0)
     expect(listDisplayTokens('slot').length).toBeGreaterThan(0)
 
-    for (const atomKey of [
-      'volume.threshold',
-      'volatility.atr_threshold',
-      'strategy.time_window',
-      'position.has_position',
-      'position.no_position',
-      'price.previous_extrema',
-      'strategy.multi_timeframe',
-      'risk.time_stop_bars',
-      'indicator.divergence',
-      'price.candle_pattern',
-      'price.chart_pattern',
-      'liquidity.sweep',
-      'external.signal',
-    ]) {
+    for (const atomKey of atomRegistry.list().filter(atom => atom.supportStatus.startsWith('supported_')).map(atom => atom.key)) {
       expect(getDisplayToken(`atom.${atomKey}.name`)).toEqual(expect.objectContaining({
         kind: 'atom',
         zh: expect.any(String),
       }))
     }
+  })
+
+  it('rejects display token template drift when placeholder values are missing', () => {
+    expectSemanticTokenNotFound(
+      () => renderDisplayToken('atom.condition.expression.display'),
+      'atom.condition.expression.display.label',
+    )
+    expectSemanticTokenNotFound(
+      () => renderDisplayToken('atom.volume.threshold.display', { metric: '成交量', operator: '大于' }),
+      'atom.volume.threshold.display.value',
+    )
   })
 
   it('keeps presentation metadata free of internal atom identifiers', () => {
@@ -133,6 +134,25 @@ describe('SemanticPresentationRegistryService', () => {
     expect(() => presentation.renderDisplay('condition.expression', {
       label: 'position.fixed_pct.value',
     })).toThrow('semantic_presentation_internal_key_leak:condition.expression')
+  })
+
+  it('rejects unknown enum display tokens without leaking raw values', () => {
+    expectSemanticTokenNotFound(
+      () => presentation.renderDisplay('position.dca_schedule', { triggerMode: 'triggerMode', maxCount: 3 }),
+      'enum.dca.triggerMode.triggerMode',
+    )
+    expectSemanticTokenNotFound(
+      () => presentation.renderDisplay('price.candle_pattern', { pattern: 'bearish_engulfing', direction: 'bullish' }),
+      'enum.pattern.candle.bearish_engulfing',
+    )
+    expectSemanticTokenNotFound(
+      () => presentation.renderDisplay('liquidity.sweep', { direction: 'bullish', reference: 'raw_session_pivot' }),
+      'enum.reference.raw_session_pivot',
+    )
+    expectSemanticTokenNotFound(
+      () => presentation.renderDisplay('external.signal', { provider: 'raw_provider' }),
+      'enum.provider.raw_provider',
+    )
   })
 
   describe('gate.regime entry', () => {
@@ -340,4 +360,16 @@ describe('SemanticPresentationRegistryService', () => {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+}
+
+function expectSemanticTokenNotFound(action: () => unknown, token: string): void {
+  try {
+    action()
+    throw new Error('expected semantic token not found')
+  }
+  catch (err) {
+    expect((err as { args?: { token?: string } }).args?.token).toBe(token)
+    expect((err as Error).message).toBe('Semantic presentation token not found in registry')
+    expect((err as Error).message).not.toContain(token)
+  }
 }

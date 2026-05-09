@@ -6,4 +6,4 @@ export interface DisplayToken {
   zh: string
 }
 
-export type DisplayTokenTemplateValues = Record<string, string | number>
+export type DisplayTokenTemplateValues = Record<string, string | number | null | undefined>
