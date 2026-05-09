@@ -298,6 +298,44 @@ describe('semantic gateway golden corpus', () => {
     expect((gateRule?.condition as { params?: { side?: string } } | undefined)?.params?.side).toBe('long')
   })
 
+  // action.add_position utterance corpus — ≥4 cases: zh signal_confirm / zh profit_pct / en scale_in / missing addMode open_slot
+  it('action.add_position zh signal_confirm: 信号再次出现时加仓 50% → add_position locked addMode=signal_confirm', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，信号再次出现时加仓 50%，最多加仓 3 次，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const action = builtState?.actions.find(a => a.key === 'action.add_position')
+    expect(action).toBeDefined()
+    expect(action?.params).toMatchObject({ addMode: 'signal_confirm', addRatio: 0.5 })
+    expect(action?.status).toBe('locked')
+  })
+
+  it('action.add_position zh profit_pct: 盈利 5% 后加仓 30% → add_position locked addMode=profit_pct', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，盈利 5% 后加仓 30%，最多加仓 2 次，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const action = builtState?.actions.find(a => a.key === 'action.add_position')
+    expect(action).toBeDefined()
+    expect(action?.params).toMatchObject({ addMode: 'profit_pct', addRatio: 0.3 })
+    expect(action?.status).toBe('locked')
+  })
+
+  it('action.add_position en scale_in: scale in 30% when profit 5% → add_position locked addMode=profit_pct', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, MA20 cross above MA50 open long, scale in 30% when profit 5%, max 2 times, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const action = builtState?.actions.find(a => a.key === 'action.add_position')
+    expect(action).toBeDefined()
+    expect(action?.params).toMatchObject({ addMode: 'profit_pct' })
+    expect(action?.status).toBe('locked')
+  })
+
+  it('action.add_position zh missing addMode: 加仓 → add_position extracted but addMode absent', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，加仓，单笔 10%。')
+    const action = seedPatch.actions.find(a => a.key === 'action.add_position')
+    expect(action).toBeDefined()
+    expect(action?.params).not.toHaveProperty('addMode')
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)

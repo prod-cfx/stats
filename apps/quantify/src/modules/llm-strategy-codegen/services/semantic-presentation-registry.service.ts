@@ -491,10 +491,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
   presentation({
     key: 'action.add_position',
     publicName: '加仓',
-    aliases: ['追加仓位', '顺势加码'],
-    positiveExamples: ['突破后再加一笔仓位'],
+    aliases: ['追加仓位', '顺势加码', '金字塔加仓', 'scale in', 'pyramid'],
+    positiveExamples: ['突破后再加一笔仓位', '信号再次出现时加仓 50%', '盈利 5% 后加仓 30%'],
     negativeExamples: ['只开第一笔仓位'],
-    goldenUtterances: ['盈利后按规则加仓一次'],
+    goldenUtterances: [
+      '信号再次出现时加仓 50%',
+      '盈利 5% 后加仓 30%',
+      'scale in 30% when profit 5%',
+      '加仓',
+    ],
   }),
   presentation({
     key: 'action.reverse_position',

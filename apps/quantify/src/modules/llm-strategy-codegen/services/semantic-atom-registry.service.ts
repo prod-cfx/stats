@@ -339,14 +339,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableAction('action.reduce_position'),
   executableAction('reduce_long'),
   executableAction('reduce_short'),
-  supportedRequiresSlotAction('action.add_position', [], [
-    {
-      slotKey: 'action.add_position.constraint',
-      fieldPath: 'actions.params.constraint',
-      priority: 'risk',
-      questionHint: '请确认加仓的约束，例如最大加仓次数或最大总敞口比例。',
-    },
-  ]),
+  executableAction('action.add_position', ['addMode', 'addRatio'], { executableSinceVersion: '2026.05.W02' }),
   supportedRequiresSlotAction('action.reverse_position', ['sameBarPolicy', 'sizingSource'], [
     {
       slotKey: 'action.reverse_position.same_bar_policy',
@@ -465,16 +458,23 @@ function executableTrigger(
   }
 }
 
-function executableAction(key: string): SemanticSupportedAtomDefinition {
+function executableAction(
+  key: string,
+  requiredParams: string[] = [],
+  options?: { executableSinceVersion?: string },
+): SemanticSupportedAtomDefinition {
   return {
     key,
     category: 'action',
     supportStatus: 'supported_executable',
-    requiredParams: [],
+    requiredParams,
     defaultableParams: [],
     executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
     openSlots: [],
     contractSubstrate: baseExecutableSubstrate(),
+    ...(options?.executableSinceVersion !== undefined
+      ? { executableSinceVersion: options.executableSinceVersion }
+      : {}),
   }
 }
 

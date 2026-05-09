@@ -15,6 +15,10 @@ export interface PositionLifecycleActionMetadata {
     maxLayers?: number
     maxExposurePct?: number
     stateKey: string
+    /** addMode 决定 runtime 触发条件：signal_confirm / profit_pct / drawdown_pct */
+    addMode?: string
+    /** addRatio 相对原仓位的加仓比例 (0, 1] */
+    addRatio?: number
   }
   dcaSchedule?: {
     maxCount: number

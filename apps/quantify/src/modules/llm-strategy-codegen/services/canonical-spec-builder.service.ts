@@ -1138,6 +1138,11 @@ export class CanonicalSpecBuilderService {
       )),
     )
 
+    // When no entry trigger group explicitly references "加仓/补仓/scale in", the
+    // add_position action came from a non-trigger clause (e.g. "盈利后加仓").
+    // In that case we bind add_position to ALL entry groups (not just evidence-tagged ones).
+    const addPositionHasEvidenceTriggers = this.hasAnyAddPositionEvidenceTriggers(executableGroups)
+
     for (const group of executableGroups) {
       if (group.phase !== 'entry' && group.phase !== 'exit') {
         continue
@@ -1148,7 +1153,7 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(group, state.actions, state.position)
+      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(group, state.actions, state.position, addPositionHasEvidenceTriggers)
       if (!lifecycleAction && !this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
         continue
       }
@@ -1364,11 +1369,12 @@ export class CanonicalSpecBuilderService {
     group: SemanticTriggerCombinationGroup,
     actions: SemanticActionState[],
     position: SemanticPositionState | null,
+    addPositionHasEvidenceTriggers = true,
   ): SemanticActionState | null {
     const lockedActions = actions.filter(action => action.status === 'locked')
     if (group.phase === 'entry') {
       const explicitAddPosition = lockedActions.find(action => action.key === 'action.add_position')
-      if (explicitAddPosition && this.shouldBindAddPositionAction(group, position)) {
+      if (explicitAddPosition && (this.shouldBindAddPositionAction(group, position) || !addPositionHasEvidenceTriggers)) {
         return explicitAddPosition
       }
 
@@ -1420,6 +1426,14 @@ export class CanonicalSpecBuilderService {
     }
 
     return false
+  }
+
+  private hasAnyAddPositionEvidenceTriggers(groups: readonly SemanticTriggerCombinationGroup[]): boolean {
+    return groups.some(g =>
+      g.phase === 'entry'
+      && (g.actionKey === 'action.add_position'
+        || g.members.some(t => this.textContainsPositionLifecycleAction(t.evidence?.text, /加仓|补仓|scale\s*in/iu))),
+    )
   }
 
   private shouldBindDcaScheduleAction(group: SemanticTriggerCombinationGroup): boolean {
@@ -1564,10 +1578,16 @@ export class CanonicalSpecBuilderService {
     if (action.key === 'action.add_position' && action.params?.lifecycleKind !== 'dca_schedule') {
       const pyramidingLimit = this.findPositionConstraint(position, 'position.pyramiding_limit')
       const maxExposure = this.findPositionConstraint(position, 'position.max_exposure_pct')
+      // critic round 1 A-M2 修复：addMode / addRatio 必须透传至 IR action metadata，
+      // 否则 runtime 拿到 ADD_LONG 但分不清 signal_confirm/profit_pct/drawdown_pct 三种 mode 的行为，
+      // 导致 silent-equivalent (P2-1 atom 翻牌名义闭环但语义全等价)。
+      const addMode = typeof action.params?.addMode === 'string' ? action.params.addMode : undefined
       metadata.addPosition = {
         stateKey: 'pyramiding_layer_count',
         ...this.optionalNumberField('maxLayers', pyramidingLimit?.params.maxLayers),
         ...this.optionalNumberField('maxExposurePct', maxExposure?.params.maxExposurePct ?? maxExposure?.params.valuePct),
+        ...(addMode ? { addMode } : {}),
+        ...this.optionalNumberField('addRatio', action.params?.addRatio),
       }
     }
 

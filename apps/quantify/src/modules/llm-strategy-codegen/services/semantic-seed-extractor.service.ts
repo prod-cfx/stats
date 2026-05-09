@@ -1443,12 +1443,18 @@ export class SemanticSeedExtractorService {
         continue
       }
       const sizingPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
+      const addMode = this.resolveAddPositionMode(clause)
+      const addRatio = sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
+        ? sizingPercent / 100
+        : null
       push({
         key: 'action.add_position',
         params: {
           sideScope: this.resolveLifecycleSideScope(clause),
-          ...(sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
-            ? { sizing: { kind: 'ratio', value: sizingPercent / 100, unit: 'ratio' } }
+          ...(addMode !== null ? { addMode } : {}),
+          ...(addRatio !== null ? { addRatio } : {}),
+          ...(addRatio !== null
+            ? { sizing: { kind: 'ratio', value: addRatio, unit: 'ratio' } }
             : {}),
         },
       })
@@ -1681,6 +1687,20 @@ export class SemanticSeedExtractorService {
     if (/双向|多空|long\s*\/\s*short/iu.test(text)) return 'both'
     if (/空单|做空|开空|平空|short/iu.test(text) && !/多单|做多|开多|平多|long/iu.test(text)) return 'short'
     return 'long'
+  }
+
+  private resolveAddPositionMode(clause: string): 'signal_confirm' | 'profit_pct' | 'drawdown_pct' | null {
+    if (/盈利.{0,12}(?:后|时|再|则)|profit.{0,12}(?:add|scale|pyramid)|上涨.{0,12}(?:加仓|补仓)|(?:scale|add|pyramid).{0,20}(?:when|if|after)\s+profit/iu.test(clause)) {
+      return 'profit_pct'
+    }
+    if (/(?:每跌|下跌|回撤|drawdown|pullback).{0,12}(?:加仓|补仓|scale)/iu.test(clause)) {
+      return 'drawdown_pct'
+    }
+    if (/(?:信号|signal).{0,12}(?:再次|确认|confirm|加仓|补仓)|(?:再次|重新).*(?:出现|触发|信号)/iu.test(clause)
+      || /(?:回踩|回调).{0,12}(?:不破|守住|站稳)/iu.test(clause)) {
+      return 'signal_confirm'
+    }
+    return null
   }
 
   private extractPercentAfterKeywords(text: string, keywords: readonly string[]): number | null {
