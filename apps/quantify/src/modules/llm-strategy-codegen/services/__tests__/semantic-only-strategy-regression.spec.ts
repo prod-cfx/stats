@@ -375,7 +375,6 @@ describe('semantic-only strategy regression verification', () => {
     }
     const gate = new CompiledPublicationGateService(
       repo as never,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
       compiledScriptParser,
     )

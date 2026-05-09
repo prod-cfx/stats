@@ -101,7 +101,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new StrategySummaryObservationService(),
     new CompiledPublicationGateService(
       mockRepo as unknown as PublishedStrategySnapshotsRepository,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
     ),
   )
