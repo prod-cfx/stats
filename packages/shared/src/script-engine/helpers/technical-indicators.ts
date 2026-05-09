@@ -41,8 +41,7 @@ export interface ChartPatternDetectorOptions {
  * 检测价格 pivot high/low。
  *
  * pivotWindow 控制左侧历史窗口，confirmationBars 控制右侧确认窗口。
- * 当右侧可用 K 线少于 confirmationBars 时，按当前已知 K 线做实时确认，
- * 因此 backtest/runtime 不需要读取未来数据。
+ * 只有右侧确认窗口完整存在时才返回 pivot，避免实时最后一根 K 线形成可重绘信号。
  */
 export function priceHighsLows(
   bars: Bar[],
@@ -57,7 +56,8 @@ export function priceHighsLows(
     return result
   }
 
-  for (let index = leftWindow; index < bars.length; index += 1) {
+  const lastConfirmableIndex = bars.length - rightWindow - 1
+  for (let index = leftWindow; index <= lastConfirmableIndex; index += 1) {
     const bar = bars[index]
     if (!bar) continue
 

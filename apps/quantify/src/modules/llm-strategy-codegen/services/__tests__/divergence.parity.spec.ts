@@ -51,6 +51,7 @@ function buildRsiBearishDivergenceBars() {
     ...linear(94, 112, 5),
     109,
     107,
+    106,
   ]
   return closes.map((close, index) => ({
     open: close,

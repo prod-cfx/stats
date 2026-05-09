@@ -57,6 +57,32 @@ describe('evaluateExprPool', () => {
     expect(values.candle_pattern_eq).toBe(true)
   })
 
+  it('evaluates candle patterns from the required tail window only', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: Number.NaN, high: Number.NaN, low: Number.NaN, close: Number.NaN, volume: 1, timestamp: 0 },
+          { open: 10, high: 10.5, low: 7.5, close: 8, volume: 1, timestamp: 1 },
+          { open: 7.8, high: 11, low: 7.5, close: 10.6, volume: 1, timestamp: 2 },
+        ],
+      },
+      [
+        {
+          id: 'candle_pattern_engulfing_bullish_15m',
+          nodeType: 'series',
+          sourceRef: 'candle_pattern_engulfing_bullish_15m',
+          payload: {
+            kind: 'CANDLE_PATTERN',
+            params: { pattern: 'engulfing', direction: 'bullish' },
+          },
+        },
+      ],
+      ['candle_pattern_engulfing_bullish_15m'],
+    )
+
+    expect(values.candle_pattern_engulfing_bullish_15m).toBe(1)
+  })
+
   it('evaluates state-gate equality predicates from runtime context values', () => {
     const exprPool: Array<{
       id: string
@@ -309,7 +335,7 @@ describe('evaluateExprPool', () => {
       }))
     }
 
-    function buildDivergenceExprPool(indicator: 'rsi' | 'macd', direction: 'bullish' | 'bearish') {
+    function buildDivergenceExprPool(indicator: 'rsi' | 'macd', direction: 'bullish' | 'bearish', offsetBars?: number) {
       return [
         {
           id: 'indicator_divergence',
@@ -317,6 +343,7 @@ describe('evaluateExprPool', () => {
           sourceRef: 'indicator_divergence',
           payload: {
             kind: 'INDICATOR_DIVERGENCE',
+            offsetBars,
             params: {
               indicator,
               direction,
@@ -424,6 +451,60 @@ describe('evaluateExprPool', () => {
 
       expect(boundary.indicator_divergence).toBe(1)
       expect(expired.indicator_divergence).toBe(0)
+    })
+
+    it('applies offsetBars before evaluating divergence history', () => {
+      const closes = [
+        ...linear(80, 108, 15),
+        ...linear(104, 90, 6),
+        ...linear(94, 112, 5),
+        109,
+        107,
+      ]
+      const exprPool = buildDivergenceExprPool('rsi', 'bearish', 1)
+
+      const values = evaluateExprPool(
+        { bars: buildBars([...closes, 106]) },
+        exprPool,
+        ['indicator_divergence'],
+      )
+
+      expect(values.indicator_divergence).toBe(1)
+    })
+
+    it('uses runtime previous offsets when predicates resolve prior divergence values', () => {
+      const closes = [
+        ...linear(80, 108, 15),
+        ...linear(104, 90, 6),
+        ...linear(94, 112, 5),
+        109,
+        107,
+      ]
+      const exprPool = [
+        ...buildDivergenceExprPool('rsi', 'bearish'),
+        {
+          id: 'const_half',
+          nodeType: 'series' as const,
+          sourceRef: 'const_half',
+          payload: { kind: 'CONST', value: 0.5 },
+        },
+        {
+          id: 'divergence_crossed',
+          nodeType: 'predicate' as const,
+          sourceRef: 'divergence_crossed',
+          deps: ['indicator_divergence', 'const_half'],
+          payload: { kind: 'CROSS_OVER' },
+        },
+      ]
+
+      const values = evaluateExprPool(
+        { bars: buildBars(closes) },
+        exprPool,
+        ['indicator_divergence', 'const_half', 'divergence_crossed'],
+      )
+
+      expect(values.indicator_divergence).toBe(1)
+      expect(values.divergence_crossed).toBe(true)
     })
   })
 
@@ -813,6 +894,33 @@ describe('evaluateExprPool', () => {
 
     expect(values.liquidity_sweep).toBe(1)
     expect(values.sweep_confirmed).toBe(true)
+  })
+
+  it('fails LIQUIDITY_SWEEP closed when the current runtime bar is invalid', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 },
+          { open: 100, high: 100.5, low: 98.5, close: 99.5, volume: 1, timestamp: 2 },
+          { open: 99.5, high: Number.NaN, low: 99, close: 99.2, volume: 1, timestamp: 3 },
+        ],
+      },
+      [
+        {
+          id: 'liquidity_sweep',
+          nodeType: 'series',
+          sourceRef: 'liquidity_sweep',
+          payload: {
+            kind: 'LIQUIDITY_SWEEP',
+            timeframe: '15m',
+            params: { direction: 'bullish', reference: 'prev_low', reclaimBars: 3 },
+          },
+        },
+      ],
+      ['liquidity_sweep'],
+    )
+
+    expect(values.liquidity_sweep).toBe(0)
   })
 
   describe('MEMORY operand', () => {

@@ -19,7 +19,7 @@ export function candlePatternDetector(
   bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
   input: CandlePatternDetectorInput,
 ): boolean {
-  if (bars.length === 0 || !bars.every(isValidBar)) return false
+  if (bars.length === 0) return false
 
   switch (input.pattern) {
     case 'engulfing':
@@ -41,6 +41,8 @@ function detectsEngulfing(
 
   const previous = bars[bars.length - 2]!
   const current = bars[bars.length - 1]!
+  if (!isValidBar(previous) || !isValidBar(current)) return false
+
   const previousBody = realBody(previous)
   const currentBody = realBody(current)
   if (previousBody.size === 0 || currentBody.size === 0) return false
@@ -64,6 +66,7 @@ function detectsHammer(
 ): boolean {
   const current = bars[bars.length - 1]
   if (!current) return false
+  if (!isValidBar(current)) return false
 
   const range = current.high - current.low
   const body = realBody(current)
@@ -86,6 +89,7 @@ function detectsDoji(
 ): boolean {
   const current = bars[bars.length - 1]
   if (!current) return false
+  if (!isValidBar(current)) return false
 
   const range = current.high - current.low
   if (range <= 0) return false
@@ -107,6 +111,8 @@ function detectsConsecutiveBody(
   if (bars.length < minBars) return false
 
   const window = bars.slice(bars.length - minBars)
+  if (!window.every(isValidBar)) return false
+
   return direction === 'bullish'
     ? window.every(isBullish)
     : window.every(isBearish)

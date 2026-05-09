@@ -1,5 +1,45 @@
 import type { Bar, ChartPatternDirection, ChartPatternKind } from './technical-indicators'
-import { chartPatternDetector } from './technical-indicators'
+import { chartPatternDetector, priceHighsLows } from './technical-indicators'
+
+function bar(high: number, low = high): Bar {
+  return {
+    open: low,
+    high,
+    low,
+    close: low,
+    volume: 1,
+    timestamp: high,
+  }
+}
+
+describe('priceHighsLows', () => {
+  it('does not return pivots until the full right-side confirmation window exists', () => {
+    const unconfirmed = priceHighsLows(
+      [
+        bar(100),
+        bar(90),
+        bar(110),
+      ],
+      1,
+      2,
+    )
+
+    const confirmed = priceHighsLows(
+      [
+        bar(100),
+        bar(90),
+        bar(110),
+        bar(105),
+        bar(104),
+      ],
+      1,
+      2,
+    )
+
+    expect(unconfirmed.highs).toEqual([])
+    expect(confirmed.highs).toEqual([{ index: 2, value: 110 }])
+  })
+})
 
 describe('chartPatternDetector', () => {
   function barsFromCloses(closes: number[]): Bar[] {

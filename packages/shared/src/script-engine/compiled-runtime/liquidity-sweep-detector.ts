@@ -29,20 +29,27 @@ export function liquiditySweepDetector(input: LiquiditySweepDetectorInput): bool
   const reclaimBars = normalizeReclaimBars(input.reclaimBars)
   if (reclaimBars === null) return false
 
-  const bars = input.bars.map(normalizeBar).filter((bar): bar is NormalizedBar => bar !== null)
+  const bars = input.bars.map(normalizeBar)
   if (bars.length < 2) return false
 
   const currentIndex = bars.length - 1
+  const current = bars[currentIndex]
+  if (!current) return false
+
   const side = reference.endsWith('_low') ? 'low' : 'high'
-  if (!closesBackToSameSide(bars[currentIndex]!, side, null)) return false
+  if (!closesBackToSameSide(current, side, null)) return false
 
   const firstCandidateIndex = Math.max(1, currentIndex - reclaimBars)
+  if (!isValidWindow(bars, firstCandidateIndex - 1, currentIndex)) return false
+
   for (let sweepIndex = currentIndex; sweepIndex >= firstCandidateIndex; sweepIndex -= 1) {
     const level = resolveReferenceLevel(bars, sweepIndex, reference, input.timezone ?? 'UTC')
     if (level === null) continue
-    if (!wickPenetrates(bars[sweepIndex]!, level, side)) continue
+    const sweepBar = bars[sweepIndex]
+    if (!sweepBar) return false
+    if (!wickPenetrates(sweepBar, level, side)) continue
     if (currentIndex - sweepIndex > reclaimBars) continue
-    if (!closesBackToSameSide(bars[currentIndex]!, side, level)) continue
+    if (!closesBackToSameSide(current, side, level)) continue
     if (hasEarlierReclaim(bars, sweepIndex, currentIndex, side, level)) continue
     return true
   }
@@ -115,7 +122,7 @@ function readTimestamp(bar: Partial<Bar>): number | null {
 }
 
 function resolveReferenceLevel(
-  bars: readonly NormalizedBar[],
+  bars: readonly (NormalizedBar | null)[],
   sweepIndex: number,
   reference: LiquiditySweepReference,
   timezone: string,
@@ -126,8 +133,18 @@ function resolveReferenceLevel(
   if (reference === 'prev_low') return previousBar.low
   if (reference === 'prev_high') return previousBar.high
 
-  const sessionKey = sessionDateKey(bars[sweepIndex]!.timestamp, timezone)
-  const sessionBars = bars.slice(0, sweepIndex).filter(bar => sessionDateKey(bar.timestamp, timezone) === sessionKey)
+  const sweepBar = bars[sweepIndex]
+  if (!sweepBar) return null
+
+  const sessionKey = sessionDateKey(sweepBar.timestamp, timezone)
+  const sessionBars: NormalizedBar[] = []
+  for (let index = 0; index < sweepIndex; index += 1) {
+    const bar = bars[index]
+    if (!bar) return null
+    if (sessionDateKey(bar.timestamp, timezone) === sessionKey) {
+      sessionBars.push(bar)
+    }
+  }
   if (sessionBars.length === 0) return null
 
   if (reference === 'session_low') return Math.min(...sessionBars.map(bar => bar.low))
@@ -144,16 +161,29 @@ function closesBackToSameSide(bar: NormalizedBar, side: SweepSide, level: number
 }
 
 function hasEarlierReclaim(
-  bars: readonly NormalizedBar[],
+  bars: readonly (NormalizedBar | null)[],
   sweepIndex: number,
   currentIndex: number,
   side: SweepSide,
   level: number,
 ): boolean {
   for (let index = sweepIndex; index < currentIndex; index += 1) {
-    if (closesBackToSameSide(bars[index]!, side, level)) return true
+    const bar = bars[index]
+    if (!bar) return true
+    if (closesBackToSameSide(bar, side, level)) return true
   }
   return false
+}
+
+function isValidWindow(
+  bars: readonly (NormalizedBar | null)[],
+  startIndex: number,
+  endIndex: number,
+): boolean {
+  for (let index = Math.max(0, startIndex); index <= endIndex; index += 1) {
+    if (!bars[index]) return false
+  }
+  return true
 }
 
 function sessionDateKey(timestamp: number, timezone: string): string {

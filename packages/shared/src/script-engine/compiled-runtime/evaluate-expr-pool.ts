@@ -559,7 +559,7 @@ function resolveSeriesValueAt(
       case 'CANDLE_PATTERN':
         return evaluateCandlePatternSeries(node, bars, offset + (node.payload.offsetBars ?? 0))
       case 'INDICATOR_DIVERGENCE':
-        return evaluateIndicatorDivergence(node, bars)
+        return evaluateIndicatorDivergence(node, bars, offset + (node.payload.offsetBars ?? 0))
       case 'CHART_PATTERN':
         return evaluateChartPattern(node, bars)
       default: {
@@ -872,6 +872,7 @@ function evaluateChartPattern(
 function evaluateIndicatorDivergence(
   node: CompiledExprNode,
   bars: readonly Bar[],
+  offset: number,
 ): number | null {
   const indicator = readStringParam(node.payload.params, 'indicator')
   const direction = readStringParam(node.payload.params, 'direction')
@@ -881,10 +882,14 @@ function evaluateIndicatorDivergence(
 
   const pivotWindow = Math.max(1, Math.floor(readNumericParam(node.payload.params, 'pivotWindow') ?? 14))
   const confirmationBars = Math.max(0, Math.floor(readNumericParam(node.payload.params, 'confirmationBars') ?? 3))
-  if (bars.length < pivotWindow + 2) return 0
+  if (offset < 0 || offset >= bars.length) return null
 
-  const indicatorValues = buildDivergenceIndicatorSeries(bars, indicator)
-  const pivots = priceHighsLows([...bars], pivotWindow, confirmationBars)
+  const endExclusive = bars.length - offset
+  const scopedBars = bars.slice(0, endExclusive)
+  if (scopedBars.length < pivotWindow + 2) return 0
+
+  const indicatorValues = buildDivergenceIndicatorSeries(scopedBars, indicator)
+  const pivots = priceHighsLows([...scopedBars], pivotWindow, confirmationBars)
   const candidates = direction === 'bearish' ? pivots.highs : pivots.lows
   const confirmed = candidates.filter((pivot) => {
     const value = indicatorValues[pivot.index]
@@ -894,7 +899,7 @@ function evaluateIndicatorDivergence(
 
   const current = confirmed[confirmed.length - 1]!
   const previous = confirmed[confirmed.length - 2]!
-  if (bars.length - 1 - current.index > confirmationBars) return 0
+  if (scopedBars.length - 1 - current.index > confirmationBars) return 0
 
   const currentIndicator = indicatorValues[current.index]
   const previousIndicator = indicatorValues[previous.index]

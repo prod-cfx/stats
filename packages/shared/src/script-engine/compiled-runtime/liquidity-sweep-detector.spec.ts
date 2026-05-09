@@ -115,4 +115,30 @@ describe('liquiditySweepDetector', () => {
       reclaimBars: 2,
     })).toBe(false)
   })
+
+  it('fails closed instead of compressing invalid bars out of the sweep window', () => {
+    expect(liquiditySweepDetector({
+      bars: [
+        bar(t(0), 100, 101, 99, 100),
+        bar(t(0, 15), Number.NaN, Number.NaN, Number.NaN, Number.NaN),
+        bar(t(0, 30), 100, 100.5, 98.5, 99.5),
+      ],
+      direction: 'bullish',
+      reference: 'prev_low',
+      reclaimBars: 3,
+    })).toBe(false)
+  })
+
+  it('fails closed when the current bar is invalid', () => {
+    expect(liquiditySweepDetector({
+      bars: [
+        bar(t(0), 100, 101, 99, 100),
+        bar(t(0, 15), 100, 100.5, 98.5, 99.5),
+        bar(t(0, 30), 99.5, Number.NaN, 99, 99.2),
+      ],
+      direction: 'bullish',
+      reference: 'prev_low',
+      reclaimBars: 3,
+    })).toBe(false)
+  })
 })
