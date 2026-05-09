@@ -297,6 +297,60 @@ function previousExtremaTrigger(): SemanticSupportedAtomDefinition {
   }
 }
 
+// P4-5: external.signal — atom-only `supported_requires_slot`，无 webhook 运行时基建
+// （ingestion / HMAC verify / signal queue 另开 follow-up issue）。
+// 用户必须显式指明 provider + signalId + secret，否则 atom 一直处于 open_slots 状态，
+// 不会进入 canonical 落地路径，避免任何"接收外部喊单后自动开仓"的静默执行。
+const EXTERNAL_SIGNAL_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
+  {
+    slotKey: 'external.signal.provider',
+    fieldPath: 'trigger.params.provider',
+    priority: 'core',
+    questionHint: '请指明外部信号来源：tradingview / discord / telegram / webhook。',
+  },
+  {
+    slotKey: 'external.signal.signalId',
+    fieldPath: 'trigger.params.signalId',
+    priority: 'core',
+    questionHint: '请提供外部信号订阅 ID（用于过滤推送）。',
+  },
+  {
+    slotKey: 'external.signal.secret',
+    fieldPath: 'trigger.params.secret',
+    priority: 'risk',
+    questionHint: '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。',
+  },
+]
+
+function externalSignalSubstrate(): SemanticAtomContractSubstrate {
+  return {
+    runtimeRequirements: [
+      // P4-5 atom-only: webhook ingestion / HMAC verify / signal queue 基建另开 issue
+      { domain: 'runtime', verb: 'provide', object: 'external_signal_inbox' },
+    ],
+    stateRequirements: [{ domain: 'state', verb: 'read', object: 'last_signal_id' }],
+    orderRequirements: [{ domain: 'order', verb: 'support', object: 'market_order' }],
+    openSlots: EXTERNAL_SIGNAL_OPEN_SLOTS.map(slot => ({ ...slot })),
+  }
+}
+
+function externalSignalTrigger(): SemanticSupportedAtomDefinition {
+  return {
+    key: 'external.signal',
+    category: 'trigger',
+    supportStatus: 'supported_requires_slot',
+    requiredParams: ['provider', 'signalId', 'secret'],
+    defaultableParams: [],
+    // executableSinceVersion 显式 undefined：webhook runtime 基建未落地，
+    // canonical/runtime 路径暂不可用；slot 全部填齐后仍停在 requires_slot 状态。
+    // executableProjection 仅声明未来 projection 目标（external_signal_runtime）作为占位，
+    // 与 sibling supported_requires_slot atoms 保持非空 projection 约束一致。
+    executableProjection: ['external_signal_runtime'],
+    openSlots: EXTERNAL_SIGNAL_OPEN_SLOTS.map(slot => ({ ...slot })),
+    contractSubstrate: externalSignalSubstrate(),
+  }
+}
+
 const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('execution.on_start', ['timing', 'orderType', 'occurrence']),
   executableTrigger('condition.expression', []),
@@ -377,6 +431,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
   unsupported('indicator.below', 'trigger', '指标静态低于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态低于条件当前公测暂未支持生成和回测。'),
   previousExtremaTrigger(),
+  externalSignalTrigger(),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   executableTrigger('volume.threshold', ['value', 'operator', 'metric'], { executableSinceVersion: '2026.05.W02' }),
   executableTrigger('volatility.atr_threshold', ['period', 'threshold', 'thresholdUnit', 'operator'], { executableSinceVersion: '2026.05.W02' }),

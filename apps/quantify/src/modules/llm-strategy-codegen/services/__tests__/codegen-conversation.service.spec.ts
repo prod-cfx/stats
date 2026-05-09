@@ -11438,7 +11438,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ...buildLockedMaSemanticState(),
       triggers: [{
         id: 'unknown-signal',
-        key: 'external.signal',
+        // P4-5 后 external.signal 已升级为 supported_requires_slot；
+        // 这里测试的是 unknown atom support gate 行为，改用未注册的 image.pattern 作为 placeholder
+        key: 'image.pattern',
         phase: 'entry',
         params: {},
         status: 'locked',
@@ -11493,7 +11495,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
       triggers: [{
         id: 'unknown-signal',
-        key: 'external.signal',
+        // P4-5 后 external.signal 已升级为 supported_requires_slot；
+        // 这里测试的是 unknown atom support gate 行为，改用未注册的 image.pattern 作为 placeholder
+        key: 'image.pattern',
         phase: 'entry',
         params: {},
         status: 'locked',

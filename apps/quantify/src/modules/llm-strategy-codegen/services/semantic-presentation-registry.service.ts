@@ -997,6 +997,52 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
       return '请补充指标背离条件的缺失信息。'
     },
   }),
+  presentation({
+    key: 'external.signal',
+    publicName: '外部喊单 / Webhook 信号',
+    aliases: [
+      '外部喊单',
+      '喊单群',
+      'KOL 信号',
+      '外部信号',
+      'tradingview 信号',
+      'discord 信号',
+      'telegram 信号',
+      'webhook',
+      'external signal',
+    ],
+    positiveExamples: [
+      '收到 TradingView webhook 信号后开多',
+      'discord 喊单群发出 buy 信号就开仓',
+      'telegram bot 推送外部信号触发开多',
+    ],
+    negativeExamples: ['看群里讨论后随手开仓'],
+    goldenUtterances: [
+      'OKX BTCUSDT 15m，收到 tradingview webhook 信号后开多，5% 止损。',
+      'OKX BTCUSDT 15m, on discord buy signal open long, 5% stop loss.',
+      'OKX BTCUSDT 15m，telegram bot 推送外部信号 BTC_LONG_01 时开仓。',
+    ],
+    displayRenderer: ({ params }) => {
+      const provider = stringParam(params, 'provider', '')
+      const providerLabel =
+        provider === 'tradingview'
+          ? 'TradingView'
+          : provider === 'discord'
+            ? 'Discord'
+            : provider === 'telegram'
+              ? 'Telegram'
+              : provider === 'webhook'
+                ? 'Webhook'
+                : '外部信号'
+      return `${providerLabel} 喊单信号`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'external.signal.provider') return '请指明外部信号来源：tradingview / discord / telegram / webhook。'
+      if (slotKey === 'external.signal.signalId') return '请提供外部信号订阅 ID（用于过滤推送）。'
+      if (slotKey === 'external.signal.secret') return '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。'
+      return '请补充外部信号触发条件的缺失信息。'
+    },
+  }),
 ]
 
 const SLOT_LABELS: Record<string, string> = {

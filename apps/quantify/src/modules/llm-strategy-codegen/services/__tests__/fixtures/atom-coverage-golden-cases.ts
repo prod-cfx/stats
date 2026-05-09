@@ -1176,12 +1176,14 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   },
   {
     id: 'golden-corpus-040-unknown-unsupported-external-signal',
-    name: 'unknown unsupported external signal',
+    // P4-5 后 external.signal 升级为 supported_requires_slot；本案缺少 provider/signalId/secret
+    // 三个必填 slot，因此走 open_slots 路径，而非 unknown_unsupported。
+    name: 'external signal requires slot (P4-5)',
     message: 'OKX 合约 BTCUSDT 15m，收到外部喊单群信号就开多，单笔 10%。',
     tags: ['event_driven'],
     expectedAtoms: [{ key: 'external.signal', category: 'trigger' }],
-    expectedKeys: ['external.signal', 'unknown:external.signal'],
-    expectedRoute: 'unknown_unsupported',
+    expectedKeys: ['external.signal'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-041-unknown-unsupported-screenshot-mystery-pattern',
@@ -1289,7 +1291,9 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   },
   {
     id: 'golden-corpus-046-combo-supported-plus-unknown-blocks-as-unknown',
-    name: 'combo supported plus unknown blocks as unknown',
+    // P4-5 后 external.signal 升级为 supported_requires_slot；combo 路由从
+    // unknown_unsupported 降级为 open_slots（external.signal 等待用户填 slots）。
+    name: 'combo supported plus external_signal requires slot (P4-5)',
     message:
       'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，并参考 KOL 口令强弱决定是否交易，单笔 10%。',
     tags: ['trend', 'event_driven'],
@@ -1297,12 +1301,14 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
       { key: 'external.signal', category: 'trigger' },
     ],
-    expectedKeys: ['indicator.cross_over', 'external.signal', 'unknown:external.signal'],
-    expectedRoute: 'unknown_unsupported',
+    expectedKeys: ['indicator.cross_over', 'external.signal'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-047-combo-supported-volume-plus-unknown-keeps-unknown-precedence',
-    name: 'combo supported volume plus unknown keeps unknown precedence',
+    // P4-5 后 external.signal 升级为 supported_requires_slot；combo 路由从
+    // unknown_unsupported 降级为 open_slots。
+    name: 'combo supported volume plus external_signal requires slot (P4-5)',
     message:
       'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，同时成交量放大，并参考 KOL 口令强弱决定是否交易，单笔 10%。',
     tags: ['trend', 'event_driven'],
@@ -1315,10 +1321,9 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'volume.relative_average',
       'external.signal',
-      'unknown:external.signal',
     ],
     forbiddenKeys: ['volume.spike', 'unsupported:volume.spike'],
-    expectedRoute: 'unknown_unsupported',
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-048-supported-market-regime-trend-direction',
@@ -1515,12 +1520,14 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   },
   {
     id: 'golden-corpus-059-unknown-unsupported-mystery-ai-score',
-    name: 'unknown unsupported mystery ai score',
+    // P4-5 后 external.signal 已升级为 supported_requires_slot；本案路由从
+    // unknown_unsupported 降级为 open_slots（缺 provider/signalId/secret）。
+    name: 'mystery ai score routes to external_signal requires slot (P4-5)',
     message: 'OKX 合约 BTCUSDT 15m，内部 AI 神秘评分超过 90 就开多。',
     tags: ['event_driven'],
     expectedAtoms: [{ key: 'external.signal', category: 'trigger' }],
-    expectedKeys: ['external.signal', 'unknown:external.signal'],
-    expectedRoute: 'unknown_unsupported',
+    expectedKeys: ['external.signal'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-060-open-slots-supported-trigger-without-market-context-and-sizing',

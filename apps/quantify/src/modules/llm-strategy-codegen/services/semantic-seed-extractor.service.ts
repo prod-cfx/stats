@@ -4780,14 +4780,60 @@ export class SemanticSeedExtractorService {
   ): void {
     for (const clause of this.splitLogicClauses(segment)) {
       const intent = this.resolveUnsupportedTriggerIntent(clause, segment)
-      if (/(?:外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)) {
+      // critic round 1 P4-5 B2 修复：provider 关键词必须与 signal-semantic 词共现，避免
+      // "下载 webhook 文档"/"讨论 telegram 群" 等非信号语义文本被误识别为 external.signal。
+      const hasSignalSemantics = /(?:外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)
+      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:信号|喊单|推送|触发|signal|alert|hook|bot|webhook)|(?:信号|喊单|推送|触发|on)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
+      if (hasSignalSemantics || hasProviderWithSignalContext) {
+        // P4-5: external.signal — atom-only `supported_requires_slot`
+        // 必填 slot：provider（tradingview/discord/telegram/webhook）+ signalId + secret
+        // provider 可从文本关键词锁定；signalId / secret 必须由用户显式提供
+        const provider = /tradingview/iu.test(clause)
+          ? 'tradingview'
+          : /discord/iu.test(clause)
+            ? 'discord'
+            : /telegram/iu.test(clause)
+              ? 'telegram'
+              : /webhook/iu.test(clause)
+                ? 'webhook'
+                : null
+        const externalOpenSlots: SeedTrigger['openSlots'] = []
+        if (!provider) {
+          externalOpenSlots.push({
+            slotKey: 'external.signal.provider',
+            fieldPath: 'trigger.params.provider',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请指明外部信号来源：tradingview / discord / telegram / webhook。',
+            affectsExecution: true,
+          })
+        }
+        externalOpenSlots.push({
+          slotKey: 'external.signal.signalId',
+          fieldPath: 'trigger.params.signalId',
+          status: 'open',
+          priority: 'core',
+          questionHint: '请提供外部信号订阅 ID（用于过滤推送）。',
+          affectsExecution: true,
+        })
+        externalOpenSlots.push({
+          slotKey: 'external.signal.secret',
+          fieldPath: 'trigger.params.secret',
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。',
+          affectsExecution: true,
+        })
         this.pushTrigger(triggers, seen, {
           key: 'external.signal',
           ...intent,
-          params: { sourceText: clause },
-          status: 'locked',
+          params: {
+            ...(provider ? { provider } : {}),
+            sourceText: clause,
+          },
+          status: 'open',
           source: 'user_explicit',
-          openSlots: [],
+          openSlots: externalOpenSlots,
         })
       }
 

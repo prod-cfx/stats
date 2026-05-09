@@ -523,7 +523,9 @@ describe('semanticSupportClassifierService', () => {
         },
         {
           id: 'unknown',
-          key: 'external.signal',
+          // P4-5 后 external.signal 已升级为 supported_requires_slot；测试 unknown 优先级
+          // 改用未注册的 image.pattern 作为 unknown atom 占位。
+          key: 'image.pattern',
           phase: 'entry',
           params: {},
           status: 'locked',
@@ -535,7 +537,7 @@ describe('semanticSupportClassifierService', () => {
     }))
 
     expect(result.route).toBe('unknown_unsupported')
-    expect(result.unknownAtoms).toEqual(['external.signal'])
+    expect(result.unknownAtoms).toEqual(['image.pattern'])
     expect(result.unsupportedAtoms).toEqual([
       expect.objectContaining({ key: 'volume.spike' }),
     ])
