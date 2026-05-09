@@ -5,10 +5,9 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { setIntent } from '@/components/ai-quant/intent-storage'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchAccountAiQuantStrategyDetail, performAccountAiQuantStrategyAction } from '@/lib/api'
-import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
-import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { resolveDisplayMetrics } from './account-strategy-display-metrics'
 import { mapAccountStrategyDetailToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamRows } from './dynamic-param-summary'
@@ -33,6 +32,7 @@ const STOP_SUCCESS_MESSAGE = '策略已停止。现有持仓和挂单仍然保�
 const LIQUIDATE_AND_STOP_SUCCESS_MESSAGE = '策略已平仓并停止。'
 const STOP_ERROR_MESSAGE = '停止策略失败，请稍后重试。'
 const LIQUIDATE_AND_STOP_ERROR_MESSAGE = '平仓并停止失败，请检查模拟盘账户状态后重试。'
+const MAX_LEVERAGE_OPTION_COUNT = 200
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -337,7 +337,6 @@ export function AiQuantStrategyDetail({
   } | null>(null)
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState<'stop' | 'liquidate_and_stop' | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
-  const [editGuardOpen, setEditGuardOpen] = useState(false)
 
   useEffect(() => {
     setStrategy(initialStrategy)
@@ -382,9 +381,19 @@ export function AiQuantStrategyDetail({
   ])
   const leverageOptions = useMemo(() => {
     if (!strategy?.deploymentLeverageRange) return []
+    const { min, max } = strategy.deploymentLeverageRange
+    if (
+      !Number.isInteger(min)
+      || !Number.isInteger(max)
+      || min < 1
+      || max < min
+      || max - min + 1 > MAX_LEVERAGE_OPTION_COUNT
+    ) {
+      return []
+    }
     return Array.from({
-      length: strategy.deploymentLeverageRange.max - strategy.deploymentLeverageRange.min + 1,
-    }).map((_, index) => strategy.deploymentLeverageRange!.min + index)
+      length: max - min + 1,
+    }).map((_, index) => min + index)
   }, [strategy?.deploymentLeverageRange])
 
   if (!strategy) {
@@ -527,14 +536,8 @@ export function AiQuantStrategyDetail({
                 </Link>
               )}
               <Link
-                href={strategy.status === 'running' ? '#' : `/${lng}/ai-quant`}
-                onClick={(event) => {
-                  if (strategy.status === 'running') {
-                    event.preventDefault()
-                    setEditGuardOpen(true)
-                    return
-                  }
-
+                href={`/${lng}/ai-quant`}
+                onClick={() => {
                   setIntent({
                     type: 'strategy-edit-session',
                     strategyInstanceId: strategy.id,
@@ -544,7 +547,7 @@ export function AiQuantStrategyDetail({
                 }}
                 className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
               >
-                返回对话修改
+                返回对话
               </Link>
             </div>
             {strategy.status === 'running' && (
@@ -602,22 +605,6 @@ export function AiQuantStrategyDetail({
           if (runtimeControlFeedback?.kind === 'error') {
             setRuntimeControlFeedback(null)
           }
-        }}
-      />
-
-      <RunningStrategyEditGuardDialog
-        open={editGuardOpen}
-        mode="running"
-        stopPending={pendingRuntimeAction !== null}
-        errorMessage={runtimeControlFeedback?.kind === 'error' ? runtimeControlFeedback.message : null}
-        onViewRunningStrategy={() => setEditGuardOpen(false)}
-        onStopStrategy={() => {
-          setEditGuardOpen(false)
-          void openStopDialogWithLatestDetail()
-        }}
-        onClose={() => {
-          if (pendingRuntimeAction) return
-          setEditGuardOpen(false)
         }}
       />
 

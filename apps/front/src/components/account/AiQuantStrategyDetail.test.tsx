@@ -1,8 +1,8 @@
 /** @jest-environment jsdom */
 
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
@@ -408,6 +408,42 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('leverage drift')
     expect(container.textContent).not.toContain('运行回测')
     expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
+  })
+
+  it('ignores invalid deployment leverage ranges instead of rendering unbounded options', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            deploymentExecutionBaseline: {
+              leverage: 2,
+              priceSource: 'mark',
+              orderType: 'market',
+              timeInForce: 'IOC',
+            },
+            deploymentExecutionCurrent: {
+              leverage: 2,
+              priceSource: 'mark',
+              orderType: 'market',
+              timeInForce: 'IOC',
+            },
+            deploymentLeverageRange: {
+              min: 200,
+              max: 1,
+            },
+            marketType: 'perp',
+            canEditDeploymentLeverage: true,
+          })}
+          onUpdateLeverage={() => {}}
+        />,
+      )
+    })
+
+    const leverageSelect = container.querySelector('select[name="deployment-leverage"]')
+    expect(leverageSelect).toBeTruthy()
+    expect(leverageSelect?.querySelectorAll('option')).toHaveLength(1)
+    expect(container.textContent).toContain('200x - 1x')
   })
 
   it('hides deployment leverage semantics for spot strategies', async () => {
@@ -829,7 +865,7 @@ describe('AiQuantStrategyDetail', () => {
   })
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
-    mockPerformAccountAiQuantStrategyAction.mockRejectedValue(new Error(''))
+    mockPerformAccountAiQuantStrategyAction.mockRejectedValue(new Error(' '))
     mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
       status: 'running',
       positionOverview: {
@@ -884,7 +920,8 @@ describe('AiQuantStrategyDetail', () => {
     })
 
     expect(container.textContent).toContain('重新部署')
-    expect(container.textContent).toContain('返回对话修改')
+    expect(container.textContent).toContain('返回对话')
+    expect(container.textContent).not.toContain('返回对话修改')
     expect(container.textContent).not.toContain('停止策略')
   })
 
@@ -912,7 +949,7 @@ describe('AiQuantStrategyDetail', () => {
     const buttonTexts = Array.from(container.querySelectorAll('button')).map(b => b.textContent ?? '')
     const linkTexts = Array.from(container.querySelectorAll('a')).map(a => a.textContent ?? '')
     expect(buttonTexts.some(text => text.includes('停止策略') || text.includes('平仓并停止'))).toBe(false)
-    expect(linkTexts.some(text => text.trim() === '重新部署' || text.trim() === '返回对话修改')).toBe(false)
+    expect(linkTexts.some(text => text.trim() === '重新部署' || text.trim() === '返回对话')).toBe(false)
   })
 
   it('stores strategy edit session intent before returning to chat for stopped strategy', async () => {
@@ -927,7 +964,7 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话修改')
+    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
     expect(link).toBeTruthy()
 
     const preventNavigation = (event: Event) => event.preventDefault()
@@ -950,21 +987,35 @@ describe('AiQuantStrategyDetail', () => {
     })
   })
 
-  it('does not store edit session intent when running strategy opens edit guard', async () => {
+  it('stores strategy edit session intent before returning to the bound chat for running strategy', async () => {
     localStorage.clear()
 
     await act(async () => {
       root.render(<AiQuantStrategyDetail lng="zh" strategy={buildStrategy({ status: 'running' })} />)
     })
 
-    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话修改')
+    const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
+    expect(link).toBeTruthy()
 
-    await act(async () => {
-      link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    const preventNavigation = (event: Event) => event.preventDefault()
+    link?.addEventListener('click', preventNavigation)
+    try {
+      await act(async () => {
+        link?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      })
+    } finally {
+      link?.removeEventListener('click', preventNavigation)
+    }
+
+    const raw = localStorage.getItem('ai_quant_return_intent_v1')
+    expect(raw).toBeTruthy()
+    expect(JSON.parse(raw!)).toMatchObject({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'inst-runtime-control',
+      publishedSnapshotId: 'snapshot-1',
+      source: 'account-detail',
     })
-
-    expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
-    expect(container.textContent).toContain('策略正在运行，不能直接修改')
+    expect(container.textContent).not.toContain('策略正在运行，不能直接修改')
   })
 
   it('shows liquidate_and_stop when current open orders indicate runtime risk without open positions', async () => {
