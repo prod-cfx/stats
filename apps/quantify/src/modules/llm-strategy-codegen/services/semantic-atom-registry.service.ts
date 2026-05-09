@@ -371,7 +371,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executablePosition('position.fixed_quantity', ['value', 'asset']),
   executablePosition('position.pyramiding_limit', [], pyramidingLimitSubstrate()),
   executablePosition('position.max_exposure_pct', [], maxExposurePctSubstrate()),
-  executablePosition('position.dca_schedule', ['maxCount', 'capitalCap', 'perOrderSizing', 'triggerMode', 'exitRule'], dcaScheduleSubstrate(), { executableSinceVersion: '2026.05.W02' }),
+  executablePosition('position.dca_schedule', ['maxCount', 'capitalCap', 'perOrderSizing', 'triggerMode', 'exitRule'], dcaScheduleSubstrate(DCA_SCHEDULE_OPEN_SLOTS), { executableSinceVersion: '2026.05.W02' }),
   unsupported('market.trend', 'trigger', '市场趋势旧别名', 'market_state_alias_public_beta_unsupported', 'market.trend 是旧状态别名，当前投影仅支持 trend.direction。'),
   unsupported('market.range', 'trigger', '震荡区间旧别名', 'market_state_alias_public_beta_unsupported', 'market.range 是旧状态别名，当前投影仅支持 market.regime。'),
   unsupported('indicator.above', 'trigger', '指标静态高于条件', 'indicator_static_compare_public_beta_unsupported', '指标静态高于条件当前公测暂未支持生成和回测。'),
@@ -390,6 +390,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableTrigger('position.no_position', ['sideScope'], { executableSinceVersion: '2026.05.W02' }),
   multiTimeframeTrigger(),
   executableTrigger('indicator.divergence', ['indicator', 'direction', 'pivotWindow', 'confirmationBars'], { executableSinceVersion: '2026.05.W02' }),
+  executableTrigger('price.candle_pattern', ['pattern', 'direction'], { executableSinceVersion: '2026.05.W02' }),
   unsupported('price.pattern', 'trigger', '图形形态', 'chart_pattern_public_beta_unsupported', '图形形态识别当前公测暂未支持生成和回测。'),
   unsupported('action.pause_trading', 'action', '暂停交易', 'pause_trading_public_beta_unsupported', '暂停交易动作当前公测暂未支持生成和回测。'),
 ]

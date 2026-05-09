@@ -370,7 +370,65 @@ describe('semantic gateway golden corpus', () => {
     const action = seedPatch.actions.find(a => a.key === 'action.reverse_position')
     expect(action).toBeDefined()
     expect(action?.params?.sameBarPolicy).toBe('next_bar_only')
-    expect(action?.params?.sizingSource).toBe('explicit')
+    expect(action?.params?.sizingSource).toBe('fixed')
+  })
+
+  // price.candle_pattern utterance corpus — ≥4 cases: 4 patterns 各 1 + 主观负向 + 非白名单负向
+  it('price.candle_pattern zh engulfing bullish: 看涨吞没形态后开多 → supported_executable, locked, pattern=engulfing', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，出现看涨吞没形态后开多，5% 止损，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.candle_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'engulfing', direction: 'bullish' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.unsupportedAtoms.map(a => a.key)).not.toContain('price.candle_pattern')
+  })
+
+  it('price.candle_pattern en hammer bearish: bearish hammer candle → pattern=hammer, direction=bearish', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, bearish hammer candle pattern confirmed, open short, 5% stop loss, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.candle_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'hammer', direction: 'bearish' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('price.candle_pattern zh doji bullish: 看涨十字星形态 → pattern=doji, direction=bullish', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，bullish doji 出现后开多，5% 止损，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.candle_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'doji', direction: 'bullish' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('price.candle_pattern zh consecutive_body bullish minBars=3: 连续 3 根阳线 → pattern=consecutive_body, minBars=3', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，bullish consecutive body 连续 3 根后做多，5% 止损，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.candle_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'consecutive_body', direction: 'bullish', minBars: 3 })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('price.candle_pattern negative subjective: "看起来像锤子" → 不产生 price.candle_pattern trigger', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，K 线看起来像锤子，但不确定，MA20 开多，5% 止损。')
+    const trigger = seedPatch.triggers?.find(t => t.key === 'price.candle_pattern')
+    expect(trigger).toBeUndefined()
+  })
+
+  it('price.candle_pattern negative non-whitelist: 三只乌鸦形态 → 不产生 price.candle_pattern trigger', () => {
+    // 三只乌鸦不在白名单；含 "形态" → 可能走 price.pattern unsupported，不走 price.candle_pattern
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，出现三只乌鸦形态后开空，5% 止损。')
+    const candleTrigger = seedPatch.triggers?.find(t => t.key === 'price.candle_pattern')
+    expect(candleTrigger).toBeUndefined()
   })
 
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {

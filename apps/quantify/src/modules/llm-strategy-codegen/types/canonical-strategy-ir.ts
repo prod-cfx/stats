@@ -118,6 +118,7 @@ export interface SeriesDef {
     | 'LOWER_BAND'
     | 'IN_TIME_WINDOW'
     | 'INDICATOR_DIVERGENCE'
+    | 'CANDLE_PATTERN'
   timeframe?: string
   field?: 'open' | 'high' | 'low' | 'close'
   offsetBars?: number

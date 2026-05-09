@@ -1442,7 +1442,7 @@ export class SemanticSeedExtractorService {
       if (this.hasNegatedPositionLifecycleActionContext(clause)) {
         continue
       }
-      const sizingPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
+      const sizingPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '每次补仓', '加仓', '补仓', '每次'])
       const addMode = this.resolveAddPositionMode(clause)
       const addRatio = sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
         ? sizingPercent / 100
@@ -1497,7 +1497,7 @@ export class SemanticSeedExtractorService {
         continue
       }
       const maxLayers = this.extractNumberBefore(clause, ['次', '层'], /(?:次|层)/u)
-      const layerPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
+      const layerPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '每次补仓', '加仓', '补仓', '每次'])
       if (maxLayers !== null && maxLayers > 0) {
         constraints.push({
           key: 'position.pyramiding_limit',
@@ -1514,6 +1514,9 @@ export class SemanticSeedExtractorService {
     for (const clause of this.extractDcaLifecycleTexts(text)) {
       const maxCount = this.extractNumberBefore(clause, ['次'], /(?:次|回)/u)
       const perOrderSizing = this.extractQuoteAmountAfter(clause, '每次')
+        ?? this.extractQuoteAmountAfter(clause, '定投补仓')
+        ?? this.extractQuoteAmountAfter(clause, '补仓')
+        ?? this.extractQuoteAmountAfter(clause, '定投')
       const capitalCap = this.extractQuoteAmountAfter(clause, '总投入不超过')
         ?? this.extractQuoteAmountAfter(clause, '总投入')
       const exitRule = this.hasDcaExitRule(clause) ? this.resolveDcaExitRule(clause) : null
@@ -1523,14 +1526,16 @@ export class SemanticSeedExtractorService {
         ? 'time_interval'
         : /(?:信号触发|on\s+signal|信号驱动|按信号)/iu.test(clause)
           ? 'signal'
-          : 'price_interval'
+          : /(?:每跌|每下跌|price\s+drops?|drops?\s+\d+(?:\.\d+)?\s*%)/iu.test(clause)
+            ? 'price_interval'
+            : undefined
       constraints.push({
         key: 'position.dca_schedule',
         params: {
           ...(maxCount !== null && maxCount > 0 ? { maxCount } : {}),
           ...(perOrderSizing ? { perOrderSizing } : {}),
           ...(capitalCap ? { capitalCap } : {}),
-          triggerMode,
+          ...(triggerMode ? { triggerMode } : {}),
           ...(exitRule ? { exitRule } : {}),
         },
       })
@@ -1595,7 +1600,7 @@ export class SemanticSeedExtractorService {
     for (const segment of this.splitPositionLifecycleSegments(text)) {
       const clauses = this.splitPositionLifecycleClauses(segment)
       const addClauses = clauses.filter(clause =>
-        /(?:加仓|scale\s*in)/iu.test(clause)
+        /(?:加仓|补仓|scale\s*in)/iu.test(clause)
         && !this.isDcaLifecycleClause(clause)
         && !this.hasNegatedPositionLifecycleActionContext(clause),
       )
@@ -4184,6 +4189,87 @@ export class SemanticSeedExtractorService {
               ...(direction ? { direction } : {}),
               pivotWindow,
               confirmationBars,
+              sourceText: clause,
+            },
+            status: openSlots.length > 0 ? 'open' : 'locked',
+            source: 'user_explicit',
+            openSlots,
+          })
+        }
+      }
+
+      // P4-2: price.candle_pattern — 白名单 4 patterns：engulfing / hammer / doji / consecutive_body
+      // 主观文本（"看起来像锤子"/"疑似吞没"）→ 不产生 trigger
+      // 缺 pattern 或 direction → open_slot；consecutive_body 缺 minBars → open_slot
+      if (/(?:吞没|engulfing|锤子|hammer|十字星|doji|连续实体|consecutive[\s_]body)/iu.test(clause)) {
+        // A-M2 防御：主观词必须锚定在 pattern 名词之前才视为主观
+        const isSubjective = /(?:像|疑似|看起来\s*像)\s*(?:吞没|锤子|十字星|连续实体|engulfing|hammer|doji|consecutive[\s_]body)|(?:feels?|looks?)\s+like\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)|kind\s+of\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)|maybe\s+(?:bullish\s+|bearish\s+)?(?:engulfing|hammer|doji|consecutive[\s_]body)/iu.test(clause)
+        if (!isSubjective) {
+          // 严格枚举：pattern 必须精确匹配白名单
+          const patternRaw = /(?:吞没|engulfing)/iu.test(clause)
+            ? 'engulfing'
+            : /(?:锤子|hammer)/iu.test(clause)
+              ? 'hammer'
+              : /(?:十字星|doji)/iu.test(clause)
+                ? 'doji'
+                : /(?:连续实体|consecutive[\s_]body)/iu.test(clause)
+                  ? 'consecutive_body'
+                  : null
+
+          // A-M2 防御：direction 词必须与 pattern 同位，避免 "bullish market" 误锁
+          const candlePatternTerm = '(?:吞没|锤子|十字星|连续实体|engulfing|hammer|doji|consecutive[\\s_]body)'
+          const bullishCandlePattern = new RegExp(`(?:bullish\\s+${candlePatternTerm}|${candlePatternTerm}\\s+bullish|看涨\\s*${candlePatternTerm}|${candlePatternTerm}\\s*看涨)`, 'iu')
+          const bearishCandlePattern = new RegExp(`(?:bearish\\s+${candlePatternTerm}|${candlePatternTerm}\\s+bearish|看跌\\s*${candlePatternTerm}|${candlePatternTerm}\\s*看跌)`, 'iu')
+          const direction = bullishCandlePattern.test(clause)
+            ? 'bullish'
+            : bearishCandlePattern.test(clause)
+              ? 'bearish'
+              : null
+
+          // minBars 仅用于 consecutive_body，其他 pattern 可忽略
+          const minBarsMatch = clause.match(/(?:minBars|min[\s_]bars|最少|连续\s*)(\d+)/iu)
+          const minBars = minBarsMatch ? Number.parseInt(minBarsMatch[1], 10) : null
+
+          const openSlots: SeedTrigger['openSlots'] = []
+          if (!patternRaw) {
+            openSlots.push({
+              slotKey: 'price.candle_pattern.pattern',
+              fieldPath: 'trigger.params.pattern',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请选择 K 线形态：engulfing（吞没）、hammer（锤子线）、doji（十字星）或 consecutive_body（连续实体）。',
+              affectsExecution: true,
+            })
+          }
+          if (!direction) {
+            openSlots.push({
+              slotKey: 'price.candle_pattern.direction',
+              fieldPath: 'trigger.params.direction',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请指明形态方向：bullish（看涨）或 bearish（看跌）。',
+              affectsExecution: true,
+            })
+          }
+          if (patternRaw === 'consecutive_body' && minBars === null) {
+            openSlots.push({
+              slotKey: 'price.candle_pattern.minBars',
+              fieldPath: 'trigger.params.minBars',
+              status: 'open',
+              priority: 'core',
+              questionHint: '连续实体形态需要指定最少连续根数（minBars），例如 3。',
+              affectsExecution: true,
+            })
+          }
+
+          this.pushTrigger(triggers, seen, {
+            key: 'price.candle_pattern',
+            phase: segment === 'exit' ? 'exit' : 'entry',
+            sideScope: direction === 'bearish' ? 'short' : 'long',
+            params: {
+              ...(patternRaw ? { pattern: patternRaw } : {}),
+              ...(direction ? { direction } : {}),
+              ...(minBars !== null ? { minBars } : {}),
               sourceText: clause,
             },
             status: openSlots.length > 0 ? 'open' : 'locked',

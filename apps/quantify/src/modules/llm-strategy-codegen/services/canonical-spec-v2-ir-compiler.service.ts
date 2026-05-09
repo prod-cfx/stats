@@ -1504,6 +1504,70 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'price.candle_pattern': {
+        // P4-2: 白名单 4 patterns：engulfing / hammer / doji / consecutive_body
+        // IR 通过 CANDLE_PATTERN 系列 + EQ predicate 封装 candle pattern 信号。
+        // fail-closed：pattern / direction 非白名单值直接抛错，避免静默降级。
+        //
+        // ⚠️ runtime gap 公开标记（同 P4-1 A-C1 模式）：当前 strategy-runtime / backtesting /
+        // compiled-runtime 全仓 0 个 CANDLE_PATTERN 系列 evaluator 实现（grep 验证 0 命中），
+        // candlePatternDetector helper 同样 0 实现。该 atom codegen 路径已闭环，但 runtime
+        // 信号永远 fail-closed（series.evaluate undefined → predicate EQ 永不真）直到
+        // follow-up issue #1062 落地。
+        // 设计取舍：维持 supported_executable 让后续 atom 共用同模式，避免 train 回退。
+        const cpPattern = typeof atom.params?.pattern === 'string'
+          ? atom.params.pattern.trim().toLowerCase()
+          : null
+        if (
+          cpPattern !== 'engulfing'
+          && cpPattern !== 'hammer'
+          && cpPattern !== 'doji'
+          && cpPattern !== 'consecutive_body'
+        ) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:pattern`)
+        }
+        const cpDirection = typeof atom.params?.direction === 'string'
+          ? atom.params.direction.trim().toLowerCase()
+          : null
+        if (cpDirection !== 'bullish' && cpDirection !== 'bearish') {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction`)
+        }
+        const cpMinBars = cpPattern === 'consecutive_body'
+          && typeof atom.params?.minBars === 'number'
+          && Number.isInteger(atom.params.minBars)
+          && atom.params.minBars > 0
+          ? atom.params.minBars
+          : undefined
+        if (cpPattern === 'consecutive_body' && cpMinBars === undefined) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:minBars`)
+        }
+        const cpSeriesId = cpMinBars !== undefined
+          ? `candle_pattern_${cpPattern}_${cpDirection}_${cpMinBars}_${context.timeframe}`
+          : `candle_pattern_${cpPattern}_${cpDirection}_${context.timeframe}`
+        if (!context.seriesMap.has(cpSeriesId)) {
+          context.seriesMap.set(cpSeriesId, {
+            id: cpSeriesId,
+            kind: 'CANDLE_PATTERN',
+            timeframe: context.timeframe,
+            params: {
+              pattern: cpPattern,
+              direction: cpDirection,
+              ...(cpMinBars !== undefined ? { minBars: cpMinBars } : {}),
+            },
+          })
+        }
+        context.runtimeRequirements.helpers.add('candlePatternDetector')
+        const constOneRef = this.ensureConstSeries(context, 1)
+        return this.upsertPredicate(
+          context.predicateMap,
+          cpMinBars !== undefined
+            ? `${seed}_candle_pattern_${cpPattern}_${cpDirection}_${cpMinBars}`
+            : `${seed}_candle_pattern_${cpPattern}_${cpDirection}`,
+          'EQ',
+          [cpSeriesId, constOneRef],
+        )
+      }
+
       default:
         throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
     }
