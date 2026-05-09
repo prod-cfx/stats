@@ -1156,11 +1156,19 @@ export class SemanticSeedStateBuilderService {
       params,
     })
 
+    if (key === 'risk.partial_take_profit' && !Array.isArray(params.tiers)) {
+      return [contract]
+    }
+
     return [this.withRegistryContractSubstrate(key, contract)]
   }
 
   private canSynthesizeRiskContract(key: string, params: Record<string, unknown>): boolean {
-    if (key === 'risk.atr_stop' || key === 'risk.partial_take_profit') {
+    if (key === 'risk.atr_stop') {
+      return true
+    }
+
+    if (key === 'risk.partial_take_profit') {
       return true
     }
 
@@ -1456,7 +1464,7 @@ export class SemanticSeedStateBuilderService {
         return typeof params.triggerMode !== 'string' || params.triggerMode.length === 0
       }
       if (slot.slotKey === 'position.dca_schedule.exit_rule') {
-        return this.readUnknownShape(params.exitRule) === null
+        return false
       }
 
       return true
@@ -2076,7 +2084,10 @@ export class SemanticSeedStateBuilderService {
     }
 
     if (options.contracts) {
-      const openSlots = this.removeContractRequiredSlots(options.openSlots, options.fieldPath)
+      const openSlots = this.mergeOpenSlots(
+        this.removeContractRequiredSlots(options.openSlots, options.fieldPath),
+        options.contracts.flatMap(contract => contract.openSlots ?? []),
+      )
       return {
         status: this.resolveNodeStatus(options.statusValue, openSlots),
         openSlots,
@@ -2109,6 +2120,21 @@ export class SemanticSeedStateBuilderService {
         affectsExecution: true,
       },
     ]
+  }
+
+  private mergeOpenSlots(
+    baseSlots: SemanticSlotState[],
+    additionalSlots: SemanticSlotState[],
+  ): SemanticSlotState[] {
+    const seen = new Set(baseSlots.map(slot => `${slot.slotKey}:${slot.fieldPath}`))
+    const merged = [...baseSlots]
+    for (const slot of additionalSlots) {
+      const id = `${slot.slotKey}:${slot.fieldPath}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      merged.push(slot)
+    }
+    return merged
   }
 
   private removeContractRequiredSlots(openSlots: SemanticSlotState[], fieldPath: string): SemanticSlotState[] {

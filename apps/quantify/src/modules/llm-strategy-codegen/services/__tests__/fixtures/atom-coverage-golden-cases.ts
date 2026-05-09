@@ -313,8 +313,8 @@ export const positionLifecycleGoldenCases: AtomCoverageGoldenCase[] = [
       { key: 'price.percent_change', category: 'trigger', minContractSubstrate: true },
       { key: 'position.dca_schedule', category: 'position', minContractSubstrate: true },
     ],
-    expectedKeys: ['price.percent_change', 'position.dca_schedule', 'open_slot:position.dca_schedule.exit_rule'],
-    expectedRoute: 'open_slots',
+    expectedKeys: ['price.percent_change', 'position.dca_schedule'],
+    expectedRoute: 'projection_gate',
   },
 ]
 
@@ -1032,7 +1032,6 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_slot:position.dca_schedule.capital_cap',
       'open_slot:position.dca_schedule.per_order_sizing',
       'open_slot:position.dca_schedule.trigger_mode',
-      'open_slot:position.dca_schedule.exit_rule',
     ],
     expectedRoute: 'open_slots',
   },
@@ -1443,7 +1442,6 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'position.dca_schedule',
       'open_slot:position.dca_schedule.capital_cap',
       'open_slot:position.dca_schedule.per_order_sizing',
-      'open_slot:position.dca_schedule.exit_rule',
     ],
     expectedRoute: 'open_slots',
   },

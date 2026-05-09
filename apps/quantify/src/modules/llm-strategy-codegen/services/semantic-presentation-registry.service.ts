@@ -774,14 +774,6 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: ['突破前高后开多', '跌破前低后离场'],
   }),
   presentation({
-    key: 'risk.partial_take_profit',
-    publicName: '分批止盈',
-    aliases: ['分批止盈', '阶梯止盈', 'partial take profit'],
-    positiveExamples: ['盈利 5% 减仓 50%', '止盈分两档'],
-    negativeExamples: ['看心情减仓'],
-    goldenUtterances: ['盈利达到 5% 时分批止盈', '止盈分两档逐步减仓'],
-  }),
-  presentation({
     key: 'strategy.multi_timeframe',
     publicName: '多周期过滤',
     aliases: ['多周期', 'multi timeframe', 'HTF 过滤'],

@@ -370,7 +370,7 @@ describe('semantic gateway golden corpus', () => {
     const action = seedPatch.actions.find(a => a.key === 'action.reverse_position')
     expect(action).toBeDefined()
     expect(action?.params?.sameBarPolicy).toBe('next_bar_only')
-    expect(action?.params?.sizingSource).toBe('explicit')
+    expect(action?.params?.sizingSource).toBe('fixed')
   })
 
   // price.candle_pattern utterance corpus — ≥4 cases: 4 patterns 各 1 + 主观负向 + 非白名单负向

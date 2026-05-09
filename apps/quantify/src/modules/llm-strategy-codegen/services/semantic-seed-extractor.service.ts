@@ -1442,7 +1442,7 @@ export class SemanticSeedExtractorService {
       if (this.hasNegatedPositionLifecycleActionContext(clause)) {
         continue
       }
-      const sizingPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
+      const sizingPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '每次补仓', '加仓', '补仓', '每次'])
       const addMode = this.resolveAddPositionMode(clause)
       const addRatio = sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
         ? sizingPercent / 100
@@ -1497,7 +1497,7 @@ export class SemanticSeedExtractorService {
         continue
       }
       const maxLayers = this.extractNumberBefore(clause, ['次', '层'], /(?:次|层)/u)
-      const layerPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '加仓', '每次'])
+      const layerPercent = this.extractPercentAfterKeywords(clause, ['每次加仓', '每次补仓', '加仓', '补仓', '每次'])
       if (maxLayers !== null && maxLayers > 0) {
         constraints.push({
           key: 'position.pyramiding_limit',
@@ -1514,6 +1514,9 @@ export class SemanticSeedExtractorService {
     for (const clause of this.extractDcaLifecycleTexts(text)) {
       const maxCount = this.extractNumberBefore(clause, ['次'], /(?:次|回)/u)
       const perOrderSizing = this.extractQuoteAmountAfter(clause, '每次')
+        ?? this.extractQuoteAmountAfter(clause, '定投补仓')
+        ?? this.extractQuoteAmountAfter(clause, '补仓')
+        ?? this.extractQuoteAmountAfter(clause, '定投')
       const capitalCap = this.extractQuoteAmountAfter(clause, '总投入不超过')
         ?? this.extractQuoteAmountAfter(clause, '总投入')
       const exitRule = this.hasDcaExitRule(clause) ? this.resolveDcaExitRule(clause) : null
@@ -1523,14 +1526,16 @@ export class SemanticSeedExtractorService {
         ? 'time_interval'
         : /(?:信号触发|on\s+signal|信号驱动|按信号)/iu.test(clause)
           ? 'signal'
-          : 'price_interval'
+          : /(?:每跌|每下跌|price\s+drops?|drops?\s+\d+(?:\.\d+)?\s*%)/iu.test(clause)
+            ? 'price_interval'
+            : undefined
       constraints.push({
         key: 'position.dca_schedule',
         params: {
           ...(maxCount !== null && maxCount > 0 ? { maxCount } : {}),
           ...(perOrderSizing ? { perOrderSizing } : {}),
           ...(capitalCap ? { capitalCap } : {}),
-          triggerMode,
+          ...(triggerMode ? { triggerMode } : {}),
           ...(exitRule ? { exitRule } : {}),
         },
       })
@@ -1595,7 +1600,7 @@ export class SemanticSeedExtractorService {
     for (const segment of this.splitPositionLifecycleSegments(text)) {
       const clauses = this.splitPositionLifecycleClauses(segment)
       const addClauses = clauses.filter(clause =>
-        /(?:加仓|scale\s*in)/iu.test(clause)
+        /(?:加仓|补仓|scale\s*in)/iu.test(clause)
         && !this.isDcaLifecycleClause(clause)
         && !this.hasNegatedPositionLifecycleActionContext(clause),
       )

@@ -1185,6 +1185,7 @@ export class CanonicalSpecBuilderService {
     // add_position action came from a non-trigger clause (e.g. "盈利后加仓").
     // In that case we bind add_position to ALL entry groups (not just evidence-tagged ones).
     const addPositionHasEvidenceTriggers = this.hasAnyAddPositionEvidenceTriggers(executableGroups)
+    const dcaScheduleHasEvidenceTriggers = this.hasAnyDcaScheduleEvidenceTriggers(executableGroups)
 
     for (const group of executableGroups) {
       if (group.phase !== 'entry' && group.phase !== 'exit') {
@@ -1196,7 +1197,13 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
-      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(group, state.actions, state.position, addPositionHasEvidenceTriggers)
+      const lifecycleAction = this.resolveLifecycleActionForTriggerGroup(
+        group,
+        state.actions,
+        state.position,
+        addPositionHasEvidenceTriggers,
+        dcaScheduleHasEvidenceTriggers,
+      )
       if (!lifecycleAction && !this.isSemanticTriggerGroupActionAllowed(group, actionKeys)) {
         continue
       }
@@ -1413,6 +1420,7 @@ export class CanonicalSpecBuilderService {
     actions: SemanticActionState[],
     position: SemanticPositionState | null,
     addPositionHasEvidenceTriggers = true,
+    dcaScheduleHasEvidenceTriggers = true,
   ): SemanticActionState | null {
     const lockedActions = actions.filter(action => action.status === 'locked')
     if (group.phase === 'entry') {
@@ -1421,8 +1429,8 @@ export class CanonicalSpecBuilderService {
         return explicitAddPosition
       }
 
-      const dcaSchedule = this.findPositionConstraint(position, 'position.dca_schedule')
-      if (dcaSchedule && this.shouldBindDcaScheduleAction(group)) {
+      const dcaSchedule = this.findActivePositionConstraint(position, 'position.dca_schedule')
+      if (dcaSchedule && (this.shouldBindDcaScheduleAction(group) || !dcaScheduleHasEvidenceTriggers)) {
         return {
           id: `${dcaSchedule.id}:action.add_position`,
           key: 'action.add_position',
@@ -1479,13 +1487,17 @@ export class CanonicalSpecBuilderService {
     )
   }
 
+  private hasAnyDcaScheduleEvidenceTriggers(groups: readonly SemanticTriggerCombinationGroup[]): boolean {
+    return groups.some(g => g.phase === 'entry' && this.shouldBindDcaScheduleAction(g))
+  }
+
   private shouldBindDcaScheduleAction(group: SemanticTriggerCombinationGroup): boolean {
     if (group.actionKey === 'action.add_position' || group.actionKey === 'position.dca_schedule') {
       return true
     }
 
     return group.members.some(trigger =>
-      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /DCA|定投|补仓/iu),
+      this.textContainsPositionLifecycleAction(trigger.evidence?.text, /DCA|定投|补仓|每跌|每下跌|scale\s*in/iu),
     )
   }
 
@@ -1646,7 +1658,7 @@ export class CanonicalSpecBuilderService {
     }
 
     const dcaSchedule = action.key === 'action.add_position' && action.params?.lifecycleKind === 'dca_schedule'
-      ? this.findPositionConstraint(position, 'position.dca_schedule')
+      ? this.findActivePositionConstraint(position, 'position.dca_schedule')
       : null
     if (dcaSchedule) {
       const maxCount = this.readFiniteNumber(dcaSchedule.params.maxCount)
@@ -1702,6 +1714,13 @@ export class CanonicalSpecBuilderService {
     key: SemanticPositionConstraintState['key'],
   ): SemanticPositionConstraintState | null {
     return position?.constraints?.find(constraint => constraint.status === 'locked' && constraint.key === key) ?? null
+  }
+
+  private findActivePositionConstraint(
+    position: SemanticPositionState | null,
+    key: SemanticPositionConstraintState['key'],
+  ): SemanticPositionConstraintState | null {
+    return position?.constraints?.find(constraint => constraint.status !== 'superseded' && constraint.key === key) ?? null
   }
 
   private optionalNumberField<K extends string>(key: K, value: unknown): Record<K, number> | {} {
@@ -2255,7 +2274,7 @@ export class CanonicalSpecBuilderService {
       const reduceRatio = typeof tier.reduceRatio === 'number' && Number.isFinite(tier.reduceRatio)
         ? tier.reduceRatio
         : null
-      if (threshold === null || reduceRatio === null) {
+      if (threshold === null || reduceRatio === null || reduceRatio <= 0 || reduceRatio > 1) {
         // TODO(#984): see open_slot note above.
         return []
       }
