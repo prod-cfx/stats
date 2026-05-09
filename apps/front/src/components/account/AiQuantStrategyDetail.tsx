@@ -487,36 +487,36 @@ export function AiQuantStrategyDetail({
       {!isViewOnly && (strategy.status === 'running' || strategy.status === 'stopped') && (
         <section
           data-testid="strategy-runtime-control-panel"
-          className="flex flex-col gap-5 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+          className="flex flex-col gap-4 rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
         >
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
               <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行控制</h2>
               <span className={`w-fit rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
                 {strategy.status === 'running' ? '运行实例在线' : '运行实例离线'}
               </span>
             </div>
 
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="max-w-[640px]">
-                <p className="text-sm leading-6 text-[color:var(--cf-text)]">
-                  {strategy.status === 'running'
-                    ? (showLiquidateAndStop
-                        ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
-                        : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
-                    : '当前运行实例已结束。可返回 AI Quant 重新部署当前已发布版本。'}
+            <div>
+              <p className="text-sm leading-6 text-[color:var(--cf-text)]">
+                {strategy.status === 'running'
+                  ? (showLiquidateAndStop
+                      ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
+                      : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
+                  : '当前运行实例已结束。可返回 AI Quant 重新部署当前已发布版本。'}
+              </p>
+              {showLiquidateAndStop && (
+                <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
+                  检测到 {openPositionsCount} 个 open positions，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
                 </p>
-                {showLiquidateAndStop && (
-                  <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
-                    检测到 {openPositionsCount} 个 open positions，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
-                  </p>
-                )}
-              </div>
+              )}
+            </div>
 
-              <div
-                data-testid="strategy-runtime-control-actions"
-                className="flex flex-row flex-wrap items-center justify-end gap-2 md:flex-nowrap md:gap-3"
-              >
+            <div
+              data-testid="strategy-runtime-control-actions"
+              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 items-center">
                 {strategy.hasActiveConversation === true && (
                   <Link
                     href={`/${lng}/ai-quant`}
@@ -528,16 +528,18 @@ export function AiQuantStrategyDetail({
                         source: 'account-detail',
                       })
                     }}
-                    className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-white/5 hover:text-[color:var(--cf-text-strong)]"
+                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg px-2 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-white/5 hover:text-[color:var(--cf-text-strong)]"
                   >
                     返回对话
                   </Link>
                 )}
+              </div>
 
+              <div className="flex flex-row flex-wrap items-center gap-2 sm:justify-end">
                 {strategy.status === 'stopped' && (
                   <Link
                     href={`/${lng}/ai-quant`}
-                    className="from-primary to-secondary inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl bg-gradient-to-r px-4 text-sm font-bold text-white transition hover:opacity-90"
+                    className="from-primary to-secondary inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg bg-gradient-to-r px-4 text-sm font-bold text-white transition hover:opacity-90"
                   >
                     重新部署
                   </Link>
@@ -550,7 +552,7 @@ export function AiQuantStrategyDetail({
                       void openStopDialogWithLatestDetail()
                     }}
                     disabled={runtimeActionDisabled}
-                    className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
+                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
                   >
                     停止策略
                   </button>
@@ -563,7 +565,7 @@ export function AiQuantStrategyDetail({
                       void openStopDialogWithLatestDetail()
                     }}
                     disabled={runtimeActionDisabled}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-rose-500/35 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 min-w-max items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-rose-500/35 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                     平仓并停止
