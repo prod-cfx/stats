@@ -2,6 +2,7 @@ import type {
   SemanticActionFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
+  SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
@@ -10,6 +11,7 @@ import type {
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
 import type {
+  CodegenSemanticOrchestrationDynamicGridNodePatch,
   CodegenSemanticOrchestrationFixedGridGatedNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
@@ -40,6 +42,8 @@ export class SemanticFrameNormalizerService {
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
     const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationFixedGridGatedNodePatch>()
     const fixedGridGatedFrames: SemanticFixedGridGatedFrame[] = []
+    const dynamicGridByKey = new Map<string, CodegenSemanticOrchestrationDynamicGridNodePatch>()
+    const dynamicGridFrames: SemanticDynamicGridFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -78,6 +82,9 @@ export class SemanticFrameNormalizerService {
         case 'fixed_grid_gated':
           fixedGridGatedFrames.push(frame)
           break
+        case 'dynamic_grid':
+          dynamicGridFrames.push(frame)
+          break
       }
     }
 
@@ -108,6 +115,23 @@ export class SemanticFrameNormalizerService {
       }
     })
 
+    dynamicGridFrames.forEach((frame, index) => {
+      const node = this.normalizeDynamicGrid(frame, index)
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.activeWhenRef,
+        node.anchorLookbackBars,
+        node.anchorSide,
+        node.dynamicGridStep,
+        node.levelCount,
+        node.onDeactivate,
+      ])
+
+      if (!dynamicGridByKey.has(dedupeKey)) {
+        dynamicGridByKey.set(dedupeKey, node)
+      }
+    })
+
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
@@ -132,6 +156,7 @@ export class SemanticFrameNormalizerService {
       ...Array.from(regimeGateByKey.values()),
       ...Array.from(portfolioDrawdownByKey.values()),
       ...Array.from(fixedGridGatedByKey.values()),
+      ...Array.from(dynamicGridByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
@@ -220,6 +245,39 @@ export class SemanticFrameNormalizerService {
       onDeactivate: frame.onDeactivate,
       rebuildPolicy: 'static',
       gridParams,
+      sizing: frame.sizing,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  private normalizeDynamicGrid(
+    frame: SemanticDynamicGridFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationDynamicGridNodePatch {
+    return {
+      id: `orchestration-program-dynamic-grid-${index + 1}`,
+      kind: 'program',
+      key: 'program.dynamic_grid',
+      params: {
+        anchorLookbackBars: frame.anchorLookbackBars,
+        anchorSide: frame.anchorSide,
+        levelCount: frame.levelCount,
+        step: frame.step,
+        anchorDriftPct: frame.anchorDriftPct,
+        rebuildMinIntervalSec: frame.rebuildMinIntervalSec,
+        onDeactivate: frame.onDeactivate,
+        sizing: frame.sizing,
+      },
+      programKind: 'dynamic_grid',
+      activeWhenRef: frame.activeWhenRef,
+      onDeactivate: frame.onDeactivate,
+      rebuildPolicy: 'anchor_on_state_change',
+      anchorLookbackBars: frame.anchorLookbackBars,
+      anchorSide: frame.anchorSide,
+      anchorDriftPct: frame.anchorDriftPct,
+      rebuildMinIntervalSec: frame.rebuildMinIntervalSec,
+      levelCount: frame.levelCount,
+      dynamicGridStep: frame.step,
       sizing: frame.sizing,
       evidence: this.toEvidence(frame),
     }
