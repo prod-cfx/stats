@@ -34,7 +34,7 @@ import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabi
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
-import { buildTriggerCombinationContract, normalizeRiskSemantic } from './semantic-state-normalization'
+import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 type SemanticPatchRecord = Record<string, unknown>
@@ -213,16 +213,7 @@ export class SemanticSeedStateBuilderService {
   }
 
   private isCombinationContract(contract: SemanticAtomContract): boolean {
-    return Boolean(
-      contract.kind === 'trigger'
-      && typeof contract.params.groupId === 'string'
-      && contract.params.groupId.trim().length > 0
-      && contract.capabilities.some(capability =>
-        capability.domain === 'market'
-        && capability.verb === 'combine'
-        && capability.object === 'predicate_group',
-      )
-    )
+    return isTriggerPredicateGroupContract(contract)
   }
 
   private toTriggerState(update: unknown, index: number): SemanticTriggerState | null {

@@ -133,6 +133,15 @@ export function buildTriggerCombinationContract(
   }
 }
 
+export function isTriggerPredicateGroupContract(contract: SemanticAtomContract): boolean {
+  return contract.kind === 'trigger'
+    && contract.capabilities.some(capability =>
+      capability.domain === 'market'
+      && capability.verb === 'combine'
+      && capability.object === 'predicate_group',
+    )
+}
+
 export function normalizeTriggerCombinationContracts(
   triggers: SemanticTriggerState[],
 ): SemanticTriggerState[] {
@@ -354,7 +363,7 @@ function upgradeTriggerCombinationContract(
 
   return {
     ...contract,
-    capabilities: hasStandardTriggerCombinationCapability(contract)
+    capabilities: isTriggerPredicateGroupContract(contract)
       ? [...contract.capabilities]
       : [...contract.capabilities, ...standard.capabilities],
     requires: [...contract.requires],
@@ -507,16 +516,13 @@ function isRiskBasisOpenSlot(slotKey: string, fieldPath: string): boolean {
   return RISK_BASIS_SLOT_KEYS.has(slotKey) || RISK_BASIS_OPEN_SLOT_PATTERN.test(fieldPath)
 }
 
-function hasStandardTriggerCombinationCapability(contract: SemanticAtomContract): boolean {
-  return contract.capabilities.some(capability =>
-    capability.domain === 'market'
-    && capability.verb === 'combine'
-    && capability.object === 'predicate_group',
-  )
-}
-
 function isCombinationLikeContract(contract: SemanticAtomContract): boolean {
-  return contract.kind === 'trigger' && readString(contract.params.groupId) !== null
+  return isTriggerPredicateGroupContract(contract)
+    || (
+      contract.kind === 'trigger'
+      && contract.capabilities.length === 0
+      && readString(contract.params.groupId) !== null
+    )
 }
 
 function readFirstString(params: Record<string, unknown>, keys: readonly string[]): string | null {
