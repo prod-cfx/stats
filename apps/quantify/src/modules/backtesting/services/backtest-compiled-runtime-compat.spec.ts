@@ -1574,4 +1574,171 @@ describe('backtestCompiledRuntimeCompat', () => {
       expect(lifecycleBySymbol.get('ETHUSDT')?.[program.id]).toEqual({ kind: 'fixed_grid_gated' })
     })
   })
+
+  // Phase 5 S5（#984）：dynamic_grid backtest 接入回归
+  describe('dynamic_grid program lifecycle (Phase 5 S5)', () => {
+    const guardState = Object.freeze({
+      blockNewEntry: false,
+      forceExit: false,
+      strategyHalt: false,
+      cancelOrderPrograms: false,
+      triggered: Object.freeze([] as string[]),
+    })
+
+    function makeDynamicGridProgram(overrides: Partial<Extract<CompiledOrchestrationProgram, { programKind: 'dynamic_grid' }>> = {}): Extract<CompiledOrchestrationProgram, { programKind: 'dynamic_grid' }> {
+      return {
+        id: overrides.id ?? 'orch_dyn_bt',
+        programKind: 'dynamic_grid',
+        activeWhenExprId: overrides.activeWhenExprId ?? 'gate_regime',
+        onDeactivate: overrides.onDeactivate ?? 'cancel',
+        rebuildPolicy: 'anchor_on_state_change',
+        dynamicGridParams: overrides.dynamicGridParams ?? {
+          anchorLookbackBars: 10,
+          anchorSide: 'high',
+          anchorDriftPct: 1,
+          rebuildMinIntervalSec: 60,
+          levelCount: 2,
+          step: { mode: 'pct', value: 5 },
+        },
+        sizing: overrides.sizing ?? { mode: 'fixed_quote', value: 100 },
+      }
+    }
+
+    function makeBars(count: number, recipe: (i: number) => { high: number; low: number }) {
+      const bars = []
+      for (let i = 0; i < count; i++) {
+        const r = recipe(i)
+        bars.push({
+          open: r.high,
+          high: r.high,
+          low: r.low,
+          close: (r.high + r.low) / 2,
+          volume: 1,
+          timestamp: 1_700_000_000_000 + i * 60_000,
+        })
+      }
+      return bars
+    }
+
+    it('rebuild 触发：anchor 漂移 + 距上次 ≥ minInterval → 新 ladder + 更新 lifecycle', () => {
+      const program = makeDynamicGridProgram({ id: 'orch_dyn_rebuild_bt' })
+      const lifecycleBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+      const symbol = 'BTCUSDT'
+
+      // 第 1 根：首次 build
+      let bars = makeBars(10, () => ({ high: 100, low: 90 }))
+      let stateIn = lifecycleBySymbol.get(symbol)
+      let orderState = runOrderPrograms(
+        { symbol, bars } as any,
+        [],
+        { gate_regime: true },
+        guardState,
+        [],
+        undefined,
+        [program],
+        stateIn,
+      )
+      lifecycleBySymbol.set(symbol, { ...orderState.programLifecycleStateNext })
+      const firstEntry = lifecycleBySymbol.get(symbol)?.[program.id]
+      expect(firstEntry?.kind).toBe('dynamic_grid')
+      if (firstEntry?.kind === 'dynamic_grid') {
+        expect(firstEntry.lastBuildAnchor).toBe(100)
+      }
+
+      // 第 2 根：anchor 漂移到 110，distance >> 60s → rebuild（用更晚的时间戳）
+      bars = makeBars(10, () => ({ high: 110, low: 100 }))
+      // 覆盖所有 bar 时间戳到很久以后，确保 now > prev.lastBuildAt + 60s
+      for (let i = 0; i < bars.length; i++) {
+        bars[i].timestamp = 1_700_010_000_000 + i * 60_000 // 1 万秒后
+      }
+      stateIn = lifecycleBySymbol.get(symbol)
+      orderState = runOrderPrograms(
+        { symbol, bars } as any,
+        [],
+        { gate_regime: true },
+        guardState,
+        [],
+        undefined,
+        [program],
+        stateIn,
+      )
+      lifecycleBySymbol.set(symbol, { ...orderState.programLifecycleStateNext })
+      const secondEntry = lifecycleBySymbol.get(symbol)?.[program.id]
+      if (secondEntry?.kind === 'dynamic_grid') {
+        expect(secondEntry.lastBuildAnchor).toBe(110)
+      }
+    })
+
+    it('限速 NOOP：drift 达标但距上次 < minInterval → 保留旧 ladder', () => {
+      const program = makeDynamicGridProgram({ id: 'orch_dyn_throttle_bt' })
+      const prev: Record<string, ProgramLifecycleState> = {
+        orch_dyn_throttle_bt: Object.freeze({
+          kind: 'dynamic_grid' as const,
+          lastBuildAnchor: 100,
+          lastBuildAt: 1_700_000_000_000 + 200_000,
+          lastBuildLadder: Object.freeze([
+            { id: 'orch_dyn_throttle_bt:0', level: 95 },
+            { id: 'orch_dyn_throttle_bt:1', level: 90.25 },
+          ]),
+        }),
+      }
+      const bars = makeBars(10, () => ({ high: 110, low: 100 }))
+      // bars[last].timestamp = 1_700_000_000_000 + 9*60_000 = 540_000ms
+      // 540_000 - 200_000 = 340_000ms = 340s > 60s ... actually let me set the timestamp explicitly
+      bars[bars.length - 1].timestamp = 1_700_000_000_000 + 200_000 + 30_000 // 30s 后 → throttle
+      const orderState = runOrderPrograms(
+        { symbol: 'BTCUSDT', bars } as any,
+        [],
+        { gate_regime: true },
+        guardState,
+        [],
+        undefined,
+        [program],
+        prev,
+      )
+      // 限速 → 保留旧 ladder，state 透传
+      expect(orderState.workingOrders[0].levels).toEqual([95, 90.25])
+      expect(orderState.programLifecycleStateNext.orch_dyn_throttle_bt).toEqual(prev.orch_dyn_throttle_bt)
+    })
+
+    it('K 线不足（无 prev）→ cancelled', () => {
+      const program = makeDynamicGridProgram({ id: 'orch_dyn_kshort_bt' })
+      const bars = makeBars(5, () => ({ high: 100, low: 90 }))
+      const orderState = runOrderPrograms(
+        { symbol: 'BTCUSDT', bars } as any,
+        [],
+        { gate_regime: true },
+        guardState,
+        [],
+        undefined,
+        [program],
+      )
+      expect(orderState.cancelledProgramIds).toEqual(['orch_dyn_kshort_bt'])
+    })
+
+    it('activeWhen=false × close → close + 透传 prev', () => {
+      const program = makeDynamicGridProgram({ id: 'orch_dyn_close_bt', onDeactivate: 'close' })
+      const prev: Record<string, ProgramLifecycleState> = {
+        orch_dyn_close_bt: Object.freeze({
+          kind: 'dynamic_grid' as const,
+          lastBuildAnchor: 100,
+          lastBuildAt: 1,
+          lastBuildLadder: Object.freeze([{ id: 'orch_dyn_close_bt:0', level: 95 }]),
+        }),
+      }
+      const bars = makeBars(10, () => ({ high: 100, low: 90 }))
+      const orderState = runOrderPrograms(
+        { symbol: 'BTCUSDT', bars } as any,
+        [],
+        { gate_regime: false },
+        guardState,
+        [],
+        undefined,
+        [program],
+        prev,
+      )
+      expect(orderState.closeProgramIds).toEqual(['orch_dyn_close_bt'])
+      expect(orderState.programLifecycleStateNext.orch_dyn_close_bt).toEqual(prev.orch_dyn_close_bt)
+    })
+  })
 })
