@@ -853,8 +853,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-024-recognized-unsupported-volume-threshold',
-    name: 'recognized unsupported volume threshold',
+    id: 'golden-corpus-024-supported-executable-volume-threshold-open-slot',
+    name: 'supported executable volume threshold asks value slot',
     message: 'OKX 合约 BTCUSDT 15m，成交量大于过去均量两倍时开多，单笔 10%。',
     tags: ['position_lifecycle'],
     expectedAtoms: [
@@ -866,13 +866,14 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'volume.threshold',
       'open_long',
       'position.fixed_pct',
-      'unsupported:volume.threshold',
+      'open_slot:volume.threshold.value',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:volume.threshold'],
+    expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-025-recognized-unsupported-atr-threshold',
-    name: 'recognized unsupported atr threshold',
+    id: 'golden-corpus-025-supported-executable-atr-threshold-open-slot',
+    name: 'supported executable atr threshold asks period and threshold slots',
     message: 'OKX 合约 BTCUSDT 15m，ATR 大于阈值时过滤开多，MA20 上穿 MA50 开多，单笔 10%。',
     tags: ['trend', 'position_lifecycle'],
     expectedAtoms: [
@@ -886,9 +887,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',
-      'unsupported:volatility.atr_threshold',
+      'open_slot:volatility.atr_threshold.threshold',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:volatility.atr_threshold'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-026-recognized-unsupported-atr-stop',
@@ -1042,13 +1044,13 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'unsupported_fallback',
   },
   {
-    id: 'golden-corpus-034-recognized-unsupported-time-window',
-    name: 'recognized unsupported time window',
+    id: 'golden-corpus-034-supported-executable-time-window',
+    name: 'supported executable time window',
     message:
       'OKX 合约 BTCUSDT 15m，只在北京时间 9 点到 11 点之间允许开多，MA20 上穿 MA50 开多，单笔 10%。',
-    tags: ['trend', 'position_lifecycle', 'orchestration'],
+    tags: ['trend', 'position_lifecycle'],
     expectedAtoms: [
-      { key: 'strategy.time_window', category: 'orchestration' },
+      { key: 'strategy.time_window', category: 'trigger', minContractSubstrate: true },
       { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
       { key: 'open_long', category: 'action', minContractSubstrate: true },
       { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
@@ -1058,9 +1060,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',
-      'unsupported:strategy.time_window',
     ],
-    expectedRoute: 'unsupported_fallback',
+    expectedRoute: 'projection_gate',
   },
   {
     id: 'golden-corpus-035-supported-requires-slot-multi-timeframe',
@@ -1256,8 +1257,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-045-combo-supported-plus-atr-unsupported-blocks-whole-route',
-    name: 'combo supported plus atr unsupported blocks whole route',
+    id: 'golden-corpus-045-combo-supported-plus-atr-threshold-open-slots',
+    name: 'combo supported plus atr threshold asks period and threshold slots',
     message:
       'OKX 合约 BTCUSDT 15m，RSI14 低于 30 开多，RSI14 高于 70 平多，同时 ATR 小于阈值才交易，单笔 10%。',
     tags: ['mean_reversion', 'position_lifecycle'],
@@ -1276,9 +1277,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'open_long',
       'close_long',
       'position.fixed_pct',
-      'unsupported:volatility.atr_threshold',
+      'open_slot:volatility.atr_threshold.threshold',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:volatility.atr_threshold'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-046-combo-supported-plus-unknown-blocks-as-unknown',
@@ -1410,8 +1412,8 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     expectedRoute: 'open_slots',
   },
   {
-    id: 'golden-corpus-053-recognized-unsupported-no-false-negative-with-supported-trailing-phrase',
-    name: 'recognized unsupported no false negative with supported trailing phrase',
+    id: 'golden-corpus-053-supported-executable-volume-threshold-no-false-negative',
+    name: 'supported executable volume threshold no false negative with supported trailing phrase',
     message:
       'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，单笔 10%，trailing stop 3%，但还要成交量超过阈值。',
     tags: ['risk', 'trend'],
@@ -1424,9 +1426,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
       'indicator.cross_over',
       'risk.trailing_stop_pct',
       'volume.threshold',
-      'unsupported:volume.threshold',
+      'open_slot:volume.threshold.value',
     ],
-    expectedRoute: 'unsupported_fallback',
+    forbiddenKeys: ['unsupported:volume.threshold'],
+    expectedRoute: 'open_slots',
   },
   {
     id: 'golden-corpus-054-supported-dca-chinese-add-funds-open-slots',

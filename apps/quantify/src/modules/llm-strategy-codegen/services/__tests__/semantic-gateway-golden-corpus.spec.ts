@@ -23,6 +23,212 @@ describe('semantic gateway golden corpus', () => {
   const stateProjection = new SemanticStateProjectionService()
   const canonicalBuilder = new CanonicalSpecBuilderService()
 
+  // volume.threshold utterance corpus — ≥3 cases covering zh / en / missing-value open-slot path
+
+  it('volume.threshold zh: 成交量大于 1000 时开多 → supported_executable with locked value', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，成交量大于 1000 时开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'GT', metric: 'base_volume', value: 1000 }))
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('volume.threshold en: volume threshold keyword → trigger extracted with GTE operator', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, enter long when volume gte 2000, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'GTE', metric: 'base_volume', value: 2000 }))
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('volume.threshold missing value → open_slot path', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，成交量超过阈值时允许入场，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    // No numeric value in text → open slot
+    const classified = supportClassifier.classify(builtState!)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).toEqual(expect.arrayContaining(['volume.threshold.value']))
+    expect(classified.route).toBe('open_slots')
+  })
+
+  it('volume.threshold en missing value → open_slot path (M-B5 修复)', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, enter long when volume exceeds threshold, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('value')
+    const classified = supportClassifier.classify(builtState!)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).toEqual(expect.arrayContaining(['volume.threshold.value']))
+  })
+
+  it('volume.threshold zh with Chinese unit → open_slot, never silent value=1 (C-A3 修复)', () => {
+    // critic round 1 C-A3：reviewer A 指出 "成交量大于 1 亿 USDT" 会被旧 extractNumber 锁 value=1，
+    // 严重生产安全风险。修复后必须走 open_slot.value 强制用户改为纯数字。
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，成交量大于 1 亿 USDT 才开仓，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volume.threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('value')
+    expect(trigger?.status).toBe('open')
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.openSlots.map(s => s.slotKey))
+      .toEqual(expect.arrayContaining(['volume.threshold.value']))
+  })
+
+  // volatility.atr_threshold utterance corpus — ≥4 cases covering zh locked / en locked / zh missing / en missing / zh unit
+  it('volatility.atr_threshold zh locked: ATR14 大于 50 才开仓 → supported_executable with locked params', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，ATR14 大于 50 才开仓，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'GT', period: 14, threshold: 50 }))
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('volatility.atr_threshold en locked: block entries when ATR less than 100 → supported_executable with LT operator', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, block entries when ATR less than 100, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'LT', threshold: 100 }))
+    expect(trigger?.openSlots?.map(s => s.slotKey)).not.toContain('volatility.atr_threshold.threshold')
+  })
+
+  it('volatility.atr_threshold zh missing: ATR 过滤入场 → open_slot for threshold', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，ATR 过滤入场，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('threshold')
+    const classified = supportClassifier.classify(builtState!)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).toEqual(expect.arrayContaining(['volatility.atr_threshold.threshold']))
+    expect(classified.route).toBe('open_slots')
+  })
+
+  it('volatility.atr_threshold en missing: filter by ATR → open_slot path', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, filter by ATR threshold, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('threshold')
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.openSlots.map(s => s.slotKey))
+      .toEqual(expect.arrayContaining(['volatility.atr_threshold.threshold']))
+  })
+
+  it('volatility.atr_threshold zh unit: ATR 大于 1 万 → open_slot.threshold, never silent value=1 (C-A3 同款保护)', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，ATR14 大于 1 万时允许入场，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('threshold')
+    expect(trigger?.openSlots?.map(s => s.slotKey))
+      .toEqual(expect.arrayContaining(['volatility.atr_threshold.threshold']))
+  })
+
+  // strategy.time_window utterance corpus — ≥4 cases covering zh locked / en locked / zh missing timezone / zh missing windows
+  it('strategy.time_window zh locked: 北京时间 9:30 到 11:30 内允许开仓 → locked with timezone + windows', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，北京时间 9:30 到 11:30 内允许开仓，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ timezone: 'Asia/Shanghai' })
+    // seed extractor stores windows as Array; builder serializes to JSON string in canonical condition
+    expect(Array.isArray(trigger?.params?.windows)).toBe(true)
+    expect((trigger?.params?.windows as Array<{ start: string; end: string }>)[0]).toMatchObject({ start: '09:30', end: '11:30' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('strategy.time_window en locked: allow entries between 09:30-11:30 UTC → locked with timezone + windows', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, allow entries between 09:30-11:30 UTC, MA20 cross above MA50, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ timezone: 'UTC' })
+    expect(Array.isArray(trigger?.params?.windows)).toBe(true)
+    expect((trigger?.params?.windows as Array<{ start: string; end: string }>)[0]).toMatchObject({ start: '09:30', end: '11:30' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('strategy.time_window zh missing timezone: 9:30 到 11:30 内开仓 → open_slot.timezone', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，时间窗口 9:30 到 11:30 内开仓，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('timezone')
+    expect(trigger?.openSlots?.map(s => s.slotKey)).toEqual(
+      expect.arrayContaining(['strategy.time_window.timezone']),
+    )
+  })
+
+  it('strategy.time_window zh missing windows: Asia/Shanghai 时区内开仓 → open_slot.windows', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，只在 Asia/Shanghai 时区内开仓，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ timezone: 'Asia/Shanghai' })
+    expect(trigger?.openSlots?.map(s => s.slotKey)).toEqual(
+      expect.arrayContaining(['strategy.time_window.windows']),
+    )
+  })
+
+  it('strategy.time_window critic #1 regression: "5 分钟级别 9 点到 11 点" 不被误配 (5:00, 9:00)', () => {
+    // critic round 1 Critical #1：旧 extractTimeWindows 全段扫数字 + (i, i+1) 配对
+    // 会把 "5 分钟级别" 的 5 + "9 点到 11 点" 的 9 误配成 (5:00, 9:00)。
+    // 修复后改为 anchored regex 强制 start—连接词—end 同时出现。
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，北京时间 5 分钟级别 9 点到 11 点之间允许开多。')
+    const trigger = seedPatch.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    const windows = trigger?.params?.windows as Array<{ start: string, end: string }> | undefined
+    expect(windows).toBeDefined()
+    expect(windows).toHaveLength(1)
+    expect(windows![0]).toEqual({ start: '09:00', end: '11:00' })
+  })
+
+  it('strategy.time_window critic #3 regression: +08:00 offset → IANA Etc/GMT-8 (runtime-safe)', () => {
+    // critic round 1 Major #3：原 extractTimezone 把 "+08:00" 写到 params.timezone，
+    // 但 runtime 用 IANA name 解析会抛错。修复：转换为 IANA Etc/GMT 兼容格式。
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，+08:00 时区 9:30 到 11:30 内允许开仓。')
+    const trigger = seedPatch.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params?.timezone).toBe('Etc/GMT-8')
+  })
+
+  it('strategy.time_window critic Critical #1 regression: invalid hour → fail-closed open_slot', () => {
+    // 旧实现不校验 hour < 24，会产出 "25:00" 这种非法时间。修复后 fail-closed 走 open_slot.windows
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，UTC 时区 25 点到 30 点之间允许开多。')
+    const trigger = seedPatch.triggers.find(t => t.key === 'strategy.time_window')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params?.windows).toBeUndefined()
+    expect(trigger?.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotKey: 'strategy.time_window.windows' }),
+    ]))
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)

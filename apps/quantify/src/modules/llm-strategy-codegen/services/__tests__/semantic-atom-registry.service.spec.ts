@@ -108,6 +108,18 @@ describe('semanticAtomRegistryService', () => {
         requiredParams: ['lookbackBars', 'multiplier'],
       },
       {
+        key: 'volume.threshold',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['value', 'operator', 'metric'],
+      },
+      {
+        key: 'volatility.atr_threshold',
+        category: 'trigger',
+        supportStatus: 'supported_executable',
+        requiredParams: ['period', 'threshold', 'thresholdUnit', 'operator'],
+      },
+      {
         key: 'risk.atr_multiple_stop',
         category: 'risk',
         supportStatus: 'supported_executable',

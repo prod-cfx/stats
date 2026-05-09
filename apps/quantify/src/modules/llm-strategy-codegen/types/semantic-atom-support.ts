@@ -54,6 +54,15 @@ interface SemanticAtomDefinitionBase {
 export interface SemanticSupportedAtomDefinition extends SemanticAtomDefinitionBase {
   supportStatus: 'supported_executable' | 'supported_requires_slot'
   contractSubstrate: SemanticAtomContractSubstrate
+  /**
+   * Atom 翻牌生效的语义版本号（格式 YYYY.MM.WNN）。
+   * 配合 nl-gateway/version-gate.ts 的 isAtomExecutableForStrategy 做版本分流：
+   * 老策略（deployedAtSemanticVersion < since）保留 fail-closed 旧行为。
+   *
+   * 注：runtime decision point 的接入工作追踪在 issue #1046；
+   * 在该 issue 完成前，本字段是"被动元数据"，runtime 不消费。
+   */
+  executableSinceVersion?: string
   unsupported?: never
   replacement?: never
 }
