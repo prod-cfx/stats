@@ -854,6 +854,58 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     },
   }),
   presentation({
+    key: 'price.chart_pattern',
+    publicName: '图形形态',
+    aliases: [
+      '头肩',
+      '头肩顶',
+      '头肩底',
+      '双顶',
+      '双底',
+      '三角形',
+      'head and shoulders',
+      'inverse head and shoulders',
+      'h&s',
+      'double top',
+      'double bottom',
+      'triangle',
+    ],
+    positiveExamples: [
+      '出现头肩底形态后开多',
+      '双顶形成后开空',
+      '双底形成后做多',
+      '三角形向上突破后开多',
+    ],
+    negativeExamples: ['看起来像头肩', '疑似双顶', 'looks like a triangle'],
+    goldenUtterances: [
+      'OKX BTCUSDT 1h，出现头肩底形态后开多，5% 止损。',
+      'OKX BTCUSDT 1h，bearish double top breakdown，开空，5% 止损。',
+      'OKX BTCUSDT 1h，double bottom 形态确认后做多，单笔 10%。',
+      'OKX BTCUSDT 1h，bullish triangle breakout 后开多，5% 止损。',
+    ],
+    displayRenderer: ({ params }) => {
+      const pattern = stringParam(params, 'pattern', 'head_and_shoulders')
+      const direction = stringParam(params, 'direction', '')
+      const dirLabel = direction === 'bullish' ? '看涨' : direction === 'bearish' ? '看跌' : ''
+      const patternLabel =
+        pattern === 'head_and_shoulders'
+          ? '头肩'
+          : pattern === 'double_top'
+            ? '双顶'
+            : pattern === 'double_bottom'
+              ? '双底'
+              : pattern === 'triangle'
+                ? '三角形'
+                : pattern
+      return `${dirLabel}${patternLabel}形态`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'price.chart_pattern.pattern') return '请选择图形形态：head_and_shoulders（头肩）、double_top（双顶）、double_bottom（双底）或 triangle（三角形）。'
+      if (slotKey === 'price.chart_pattern.direction') return '请指明形态突破方向：bullish（看涨）或 bearish（看跌）。'
+      return '请补充图形形态条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.divergence',
     publicName: '指标背离',
     aliases: [

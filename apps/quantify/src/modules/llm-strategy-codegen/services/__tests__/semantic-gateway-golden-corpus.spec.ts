@@ -431,6 +431,64 @@ describe('semantic gateway golden corpus', () => {
     expect(candleTrigger).toBeUndefined()
   })
 
+  // price.chart_pattern utterance corpus — ≥4 cases: 4 patterns 各 1 + 主观负向 + 非白名单负向
+  it('price.chart_pattern zh head_and_shoulders bullish: 头肩底形态后开多 → supported_executable, locked, pattern=head_and_shoulders', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 1h，出现头肩底形态后开多，5% 止损，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.chart_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'head_and_shoulders', direction: 'bullish' })
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.unsupportedAtoms.map(a => a.key)).not.toContain('price.chart_pattern')
+  })
+
+  it('price.chart_pattern en double_top: bearish double top → pattern=double_top, direction=bearish', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 1h, double top breakdown confirmed, open short, 5% stop loss, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.chart_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'double_top', direction: 'bearish' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('price.chart_pattern zh double_bottom: 双底形态后做多 → pattern=double_bottom, direction=bullish (intrinsic)', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 1h，double bottom 形态确认后做多，5% 止损，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.chart_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'double_bottom', direction: 'bullish' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('price.chart_pattern en triangle bullish: bullish triangle breakout → pattern=triangle, direction=bullish', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 1h, bullish triangle breakout, open long, 5% stop loss, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'price.chart_pattern')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toMatchObject({ pattern: 'triangle', direction: 'bullish' })
+    expect(trigger?.status).toBe('locked')
+  })
+
+  it('price.chart_pattern negative subjective: "看起来像头肩" → 不产生 price.chart_pattern trigger', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 1h，K 线看起来像头肩，但不确定，MA20 开多，5% 止损。')
+    const trigger = seedPatch.triggers?.find(t => t.key === 'price.chart_pattern')
+    expect(trigger).toBeUndefined()
+  })
+
+  it('price.chart_pattern negative non-whitelist: 楔形 → 不产生 price.chart_pattern trigger，走 price.pattern fallback', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 1h，出现楔形形态后开多，5% 止损。')
+    const chartTrigger = seedPatch.triggers?.find(t => t.key === 'price.chart_pattern')
+    expect(chartTrigger).toBeUndefined()
+    const fallbackTrigger = seedPatch.triggers?.find(t => t.key === 'price.pattern')
+    expect(fallbackTrigger).toBeDefined()
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)
