@@ -10,6 +10,28 @@ import { runOrderPrograms } from '@ai/shared/script-engine/compiled-runtime/run-
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 
+function linear(start: number, end: number, count: number): number[] {
+  return Array.from({ length: count }, (_item, index) => start + ((end - start) * index) / (count - 1))
+}
+
+function buildRsiBearishDivergenceBars() {
+  const closes = [
+    ...linear(80, 108, 15),
+    ...linear(104, 90, 6),
+    ...linear(94, 112, 5),
+    109,
+    107,
+  ]
+
+  return closes.map((close, index) => ({
+    time: index + 1,
+    open: close,
+    high: close + 0.2,
+    low: close - 0.2,
+    close,
+  }))
+}
+
 describe('backtestCompiledRuntimeCompat', () => {
   it('evaluates CROSS_OVER using previous and current series values', () => {
     const values = evaluateExprPool(
@@ -205,6 +227,44 @@ describe('backtestCompiledRuntimeCompat', () => {
 
     expect(typeof values.macd_line).toBe('number')
     expect(typeof values.macd_signal).toBe('number')
+  })
+
+  it('consumes INDICATOR_DIVERGENCE series as a compiled-runtime backtest signal', () => {
+    const values = evaluateExprPool(
+      { bars: buildRsiBearishDivergenceBars() } as any,
+      [
+        {
+          id: 'indicator_divergence',
+          nodeType: 'series',
+          sourceRef: 'indicator_divergence_rsi_bearish',
+          payload: {
+            kind: 'INDICATOR_DIVERGENCE',
+            params: {
+              indicator: 'rsi',
+              direction: 'bearish',
+              pivotWindow: 2,
+              confirmationBars: 2,
+            },
+          },
+        },
+        {
+          id: 'const_one',
+          nodeType: 'series',
+          sourceRef: 'const_one',
+          payload: { kind: 'CONST', value: 1 },
+        },
+        {
+          id: 'entry_divergence',
+          nodeType: 'predicate',
+          deps: ['indicator_divergence', 'const_one'],
+          payload: { kind: 'EQ' },
+        },
+      ] as any,
+      ['indicator_divergence', 'const_one', 'entry_divergence'],
+    )
+
+    expect(values.indicator_divergence).toBe(1)
+    expect(values.entry_divergence).toBe(true)
   })
 
   it('evaluates PRICE_CHANGE_PCT as relative change so entry programs are not shadowed by always-true exits', () => {
