@@ -210,11 +210,15 @@ export class SignalGeneratorService {
     )
     this.registerCronJob()
     // Phase 5 S5（#984）：strategy-instance.deleted 事件触发清理 lifecycle map
-    this.eventEmitter.on('strategy-instance.deleted', (payload: { strategyInstanceId?: string }) => {
-      if (payload?.strategyInstanceId) {
-        this.cleanupProgramLifecycleState(payload.strategyInstanceId)
-      }
-    })
+    // 部分 spec 注入的 EventEmitter mock 不实现 .on()，因此此处做容错（unit spec 中
+    // 不依赖 cleanup 路径；live 真实 EventEmitter2 始终具备 .on()）。
+    if (typeof this.eventEmitter?.on === 'function') {
+      this.eventEmitter.on('strategy-instance.deleted', (payload: { strategyInstanceId?: string }) => {
+        if (payload?.strategyInstanceId) {
+          this.cleanupProgramLifecycleState(payload.strategyInstanceId)
+        }
+      })
+    }
   }
 
   private registerCronJob() {
