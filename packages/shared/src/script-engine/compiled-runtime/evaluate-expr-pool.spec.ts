@@ -518,6 +518,46 @@ describe('evaluateExprPool', () => {
     expect(values.breakout).toBe(true)
   })
 
+  it('evaluates LIQUIDITY_SWEEP series as a consumable EQ predicate signal', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 },
+          { open: 100, high: 100.5, low: 98.5, close: 99.5, volume: 1, timestamp: 2 },
+        ],
+      },
+      [
+        {
+          id: 'liquidity_sweep',
+          nodeType: 'series',
+          sourceRef: 'liquidity_sweep',
+          payload: {
+            kind: 'LIQUIDITY_SWEEP',
+            timeframe: '15m',
+            params: { direction: 'bullish', reference: 'prev_low', reclaimBars: 3 },
+          },
+        },
+        {
+          id: 'const_one',
+          nodeType: 'series',
+          sourceRef: 'const_one',
+          payload: { kind: 'CONST', value: 1 },
+        },
+        {
+          id: 'sweep_confirmed',
+          nodeType: 'predicate',
+          sourceRef: 'sweep_confirmed',
+          deps: ['liquidity_sweep', 'const_one'],
+          payload: { kind: 'EQ' },
+        },
+      ],
+      ['liquidity_sweep', 'const_one', 'sweep_confirmed'],
+    )
+
+    expect(values.liquidity_sweep).toBe(1)
+    expect(values.sweep_confirmed).toBe(true)
+  })
+
   describe('MEMORY operand', () => {
     function buildMemoryNode(id: string, memoryKey: string, path?: string[]) {
       return {

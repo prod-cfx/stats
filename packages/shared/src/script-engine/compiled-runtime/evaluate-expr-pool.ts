@@ -1,6 +1,7 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
 import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-indicators'
+import { liquiditySweepDetector } from './liquidity-sweep-detector'
 
 export type CompiledRuntimeValue =
   | number
@@ -26,6 +27,7 @@ interface CompiledExprNode {
     params?: Record<string, number | string | boolean>
     memoryKey?: string
     path?: string[]
+    timezone?: string
   }
 }
 
@@ -93,6 +95,7 @@ function evaluateSeries(
     case 'MACD_SIGNAL':
     case 'HIGHEST_HIGH':
     case 'LOWEST_LOW':
+    case 'LIQUIDITY_SWEEP':
     case 'VOLUME':
     case 'SMA_VOLUME':
     case 'POSITION_BARS_HELD':
@@ -436,6 +439,24 @@ function resolveSeriesValueAt(
         const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
         if (window.length === 0) return null
         return Math.min(...window.map(bar => bar.low))
+      }
+      case 'LIQUIDITY_SWEEP': {
+        const direction = readStringParam(node.payload.params, 'direction')
+        const reference = readStringParam(node.payload.params, 'reference')
+        const reclaimBars = readNumericParam(node.payload.params, 'reclaimBars') ?? undefined
+        const timezone = readStringParam(node.payload.params, 'timezone') ?? readStringValue(node.payload.timezone) ?? 'UTC'
+        const endIndex = bars.length - offset
+        if (endIndex <= 0) return null
+        const sweepBars = offset === 0 ? bars : bars.slice(0, endIndex)
+        return liquiditySweepDetector({
+          bars: sweepBars,
+          direction,
+          reference,
+          reclaimBars,
+          timezone,
+        })
+          ? 1
+          : 0
       }
       case 'VOLUME':
         return readVolumeAtOffset(bars, offset + (node.payload.offsetBars ?? 0))
@@ -943,6 +964,10 @@ function readStringParam(
 ): string | null {
   const raw = params?.[key]
   return typeof raw === 'string' && raw.length > 0 ? raw : null
+}
+
+function readStringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
 }
 
 function resolveSeriesInputNodeId(

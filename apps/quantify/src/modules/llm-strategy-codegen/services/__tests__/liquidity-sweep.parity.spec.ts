@@ -12,6 +12,7 @@
  */
 
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
@@ -19,6 +20,7 @@ import { SemanticPresentationRegistryService } from '../semantic-presentation-re
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime'
 
 const atomRegistry = new SemanticAtomRegistryService()
 const seedExtractor = new SemanticSeedExtractorService()
@@ -27,6 +29,7 @@ const supportClassifier = new SemanticSupportClassifierService(atomRegistry)
 const readiness = new SemanticContractReadinessService()
 const canonicalBuilder = new CanonicalSpecBuilderService()
 const irCompiler = new CanonicalSpecV2IrCompilerService()
+const astCompiler = new CanonicalStrategyAstCompilerService()
 const presentationRegistry = new SemanticPresentationRegistryService(atomRegistry)
 
 // 满参 utterances（reference / direction 各典型一句）
@@ -345,6 +348,33 @@ describe('liquidity.sweep atom 七层 parity', () => {
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
       })
       expect(ir.runtimeRequirements.helpers).toContain('liquiditySweepDetector')
+    })
+
+    it('codegen → IR → runtime closes the loop and triggers the sweep predicate', () => {
+      const spec = buildCanonicalSpecFromUtterance(PREV_LOW_BULLISH_UTTERANCE)
+      const { ir } = irCompiler.compile({
+        canonicalSpec: spec,
+        fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '15m', positionPct: 10 },
+      })
+      const ast = astCompiler.compile(ir)
+      const sweepPredicate = ast.exprPool.find(expr =>
+        expr.nodeType === 'predicate'
+        && expr.sourceRef.includes('liquidity_sweep')
+      )
+      expect(sweepPredicate).toBeDefined()
+
+      const values = evaluateExprPool(
+        {
+          bars: [
+            { open: 100, high: 101, low: 99, close: 100, volume: 1, timestamp: 1 },
+            { open: 100, high: 100.5, low: 98.5, close: 99.5, volume: 1, timestamp: 2 },
+          ],
+        },
+        ast.exprPool,
+        ast.topology.exprOrder,
+      )
+
+      expect(values[sweepPredicate!.id]).toBe(true)
     })
   })
 
