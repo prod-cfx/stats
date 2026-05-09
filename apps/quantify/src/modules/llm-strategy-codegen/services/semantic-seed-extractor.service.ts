@@ -1461,7 +1461,8 @@ export class SemanticSeedExtractorService {
     }
 
     for (const clause of this.splitPositionLifecycleClauses(text)) {
-      if (!/(?:反手|reverse\s+position|flip\s+position)/iu.test(clause) || this.hasNegatedPositionLifecycleActionContext(clause)) {
+      // critic round 1 B-M3 修复：alias '翻仓' 在 presentation 已注册但 extractor 缺；补全前后一致
+      if (!/(?:反手|反向开仓|反转持仓|翻仓|reverse\s+position|flip\s+position)/iu.test(clause) || this.hasNegatedPositionLifecycleActionContext(clause)) {
         continue
       }
       const fromSide = /平空|空单/u.test(clause) && /做多|开多/u.test(clause) ? 'short' : 'long'
@@ -1474,9 +1475,13 @@ export class SemanticSeedExtractorService {
           sameBarPolicy: /允许.{0,12}(?:同一根|同根).{0,8}K|(?:同一根|同根).{0,8}K.{0,12}允许/u.test(text)
             ? 'allow'
             : 'next_bar_only',
+          // critic round 1 A-C1 修复：sizingSource 值集分裂 silent-rename。
+          // builder readReverseSizingSource 仅识别 'current_position' / 'fixed'，
+          // 旧 'explicit' 会 silently fallback 为 'position_sizing'，IR 端永远拿不到 extractor 写的值。
+          // 改写 'fixed'，与 builder 枚举对齐（同 P2-1 A-M2 silent-equivalent 教训）。
           sizingSource: /沿用(?:原|当前)?仓位|原仓位|当前仓位|same\s+size/iu.test(text)
             ? 'current_position'
-            : 'explicit',
+            : 'fixed',
         },
       })
     }

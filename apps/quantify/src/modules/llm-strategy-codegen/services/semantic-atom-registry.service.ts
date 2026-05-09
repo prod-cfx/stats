@@ -340,20 +340,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   executableAction('reduce_long'),
   executableAction('reduce_short'),
   executableAction('action.add_position', ['addMode', 'addRatio'], { executableSinceVersion: '2026.05.W02' }),
-  supportedRequiresSlotAction('action.reverse_position', ['sameBarPolicy', 'sizingSource'], [
-    {
-      slotKey: 'action.reverse_position.same_bar_policy',
-      fieldPath: 'actions.params.sameBarPolicy',
-      priority: 'behavior',
-      questionHint: '请确认反手是否允许在同一根 K 线内完成。',
-    },
-    {
-      slotKey: 'action.reverse_position.sizing_source',
-      fieldPath: 'actions.params.sizingSource',
-      priority: 'risk',
-      questionHint: '请确认反手仓位大小来源，例如沿用原仓位或使用固定仓位。',
-    },
-  ]),
+  executableAction('action.reverse_position', ['fromSide', 'toSide', 'sameBarPolicy', 'sizingSource'], { executableSinceVersion: '2026.05.W02' }),
   executableAction('action.grid_ladder'),
   executableAction('place_limit_grid'),
   executableRisk('risk.condition_expression', []),

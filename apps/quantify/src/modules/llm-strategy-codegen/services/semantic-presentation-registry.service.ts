@@ -504,10 +504,15 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
   presentation({
     key: 'action.reverse_position',
     publicName: '反手',
-    aliases: ['反向开仓', '平仓后反向'],
-    positiveExamples: ['多单止损后反手开空'],
+    aliases: ['反向开仓', '平仓后反向', '反转持仓', '翻仓'],
+    positiveExamples: ['多单止损后反手开空', '信号反转时由多翻空，使用当前仓位', '由空翻多，下根 K 线执行'],
     negativeExamples: ['只平仓不反向'],
-    goldenUtterances: ['跌破关键位后平多并反手做空'],
+    goldenUtterances: [
+      '信号反转时由多翻空，使用当前仓位',
+      '由空翻多，下根 K 线执行',
+      'reverse position long to short, same bar',
+      '反手',
+    ],
   }),
   presentation({
     key: 'action.grid_ladder',

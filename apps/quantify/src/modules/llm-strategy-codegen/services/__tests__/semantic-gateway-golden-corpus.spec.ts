@@ -336,6 +336,43 @@ describe('semantic gateway golden corpus', () => {
     expect(action?.params).not.toHaveProperty('addMode')
   })
 
+  // action.reverse_position utterance corpus — ≥4 cases: zh long→short / zh short→long / en same bar / zh missing (open_slot default)
+  it('action.reverse_position zh long→short: 信号反转时由多翻空，使用当前仓位 → reverse_position fromSide=long sizingSource=current_position', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，MA20 下穿 MA50，信号反转时由多翻空，反手，沿用当前仓位。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const action = builtState?.actions.find(a => a.key === 'action.reverse_position')
+    expect(action).toBeDefined()
+    expect(action?.params).toMatchObject({ fromSide: 'long', toSide: 'short', sizingSource: 'current_position' })
+    expect(action?.status).toBe('locked')
+  })
+
+  it('action.reverse_position zh short→long: 平空做多反手 → reverse_position fromSide=short sameBarPolicy=next_bar_only', () => {
+    const seedPatch = seedExtractor.extract('平空做多反手')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const action = builtState?.actions.find(a => a.key === 'action.reverse_position')
+    expect(action).toBeDefined()
+    expect(action?.params).toMatchObject({ fromSide: 'short', toSide: 'long', sameBarPolicy: 'next_bar_only' })
+  })
+
+  it('action.reverse_position en same bar: reverse position 允许同一根 K 线反手 → sameBarPolicy=allow', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, MA20 cross below MA50, reverse position, 允许同一根 K 线反手。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const action = builtState?.actions.find(a => a.key === 'action.reverse_position')
+    expect(action).toBeDefined()
+    expect(action?.params?.sameBarPolicy).toBe('allow')
+  })
+
+  it('action.reverse_position zh missing explicit params: 反手 → reverse_position extracted with defaults (not absent)', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，MA20 下穿 MA50 止损，反手。')
+    const action = seedPatch.actions.find(a => a.key === 'action.reverse_position')
+    expect(action).toBeDefined()
+    expect(action?.params?.sameBarPolicy).toBe('next_bar_only')
+    expect(action?.params?.sizingSource).toBe('explicit')
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)
