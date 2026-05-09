@@ -4009,8 +4009,8 @@ describe('canonicalSpecBuilderService', () => {
 
       const spec = service.buildFromSemanticState(state)
       expect(spec.orchestration?.gates).toBeDefined()
-      expect(spec.orchestration!.gates).toHaveLength(1)
-      const [gate] = spec.orchestration!.gates
+      expect(spec.orchestration!.gates!).toHaveLength(1)
+      const [gate] = spec.orchestration!.gates!
       expect(gate.id).toBe('gate-regime-long-1')
       expect(gate.target.phase).toBe('entry')
       expect(gate.target.sideScope).toBe('long')
@@ -4084,6 +4084,198 @@ describe('canonicalSpecBuilderService', () => {
 
       const spec = service.buildFromSemanticState(state)
       expect(spec.orchestration).toBeUndefined()
+    })
+  })
+
+  describe('orchestration portfolioRisks emission', () => {
+    it('emits orchestration.portfolioRisks from locked portfolioRisk.drawdown_block node', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'portfolio-risk-drawdown-1',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'enforce',
+              thresholdPct: 25,
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration?.portfolioRisks).toBeDefined()
+      expect(spec.orchestration!.portfolioRisks!).toHaveLength(1)
+      const [risk] = spec.orchestration!.portfolioRisks!
+      expect(risk.id).toBe('portfolio-risk-drawdown-1')
+      expect(risk.scope).toBe('portfolio')
+      expect(risk.mode).toBe('enforce')
+      expect(risk.thresholdPct).toBe(25)
+      expect(risk.effectWhenTriggered).toBe('block_new_entries')
+    })
+
+    it('omits orchestration field when state has no orchestration nodes (gates+portfolioRisks both empty)', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({})
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('skips portfolioRisk nodes with status open', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'portfolio-risk-drawdown-open',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'enforce',
+              thresholdPct: 25,
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('skips portfolioRisk nodes with invalid scope/mode/thresholdPct', () => {
+      const service = new CanonicalSpecBuilderService()
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'portfolio-risk-bad-scope',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'position' as unknown as 'portfolio',
+              mode: 'enforce',
+              thresholdPct: 25,
+            },
+            {
+              id: 'portfolio-risk-bad-mode',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'panic' as unknown as 'enforce',
+              thresholdPct: 25,
+            },
+            {
+              id: 'portfolio-risk-bad-threshold-zero',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'enforce',
+              thresholdPct: 0,
+            },
+            {
+              id: 'portfolio-risk-bad-threshold-over',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'enforce',
+              thresholdPct: 150,
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration).toBeUndefined()
+    })
+
+    it('emits both gates and portfolioRisks when each kind has a locked node', () => {
+      const service = new CanonicalSpecBuilderService()
+      const supportedActiveWhen: SemanticExpression = {
+        kind: 'predicate',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+        right: { kind: 'indicator', name: 'ema', params: { length: 50 } },
+      }
+      const state: SemanticState = {
+        ...createSemanticState({}),
+        orchestration: {
+          nodes: [
+            {
+              id: 'gate-regime-long-2',
+              kind: 'gate',
+              key: 'gate.regime',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              target: { phase: 'entry', sideScope: 'long' },
+              activeWhen: supportedActiveWhen,
+              effectWhenFalse: 'block_new_entries',
+            },
+            {
+              id: 'portfolio-risk-drawdown-2',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+              params: {},
+              scope: 'portfolio',
+              mode: 'observe',
+              thresholdPct: 10,
+            },
+          ],
+          contracts: [],
+        },
+      }
+
+      const spec = service.buildFromSemanticState(state)
+      expect(spec.orchestration?.gates).toBeDefined()
+      expect(spec.orchestration!.gates!).toHaveLength(1)
+      expect(spec.orchestration?.portfolioRisks).toBeDefined()
+      expect(spec.orchestration!.portfolioRisks!).toHaveLength(1)
+      expect(spec.orchestration!.portfolioRisks![0].mode).toBe('observe')
+      expect(spec.orchestration!.portfolioRisks![0].thresholdPct).toBe(10)
     })
   })
 })

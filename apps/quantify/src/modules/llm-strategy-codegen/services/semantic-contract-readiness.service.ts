@@ -367,7 +367,65 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  if (isSupportedPortfolioDrawdownBlock(node, strategyVersion, registry)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
   return addPhase0OrchestrationBlocker(node)
+}
+
+/**
+ * 判断 portfolioRisk node 是否可走 registry 驱动的 readiness 路径。
+ *
+ * 7 重 fail-closed 检查：
+ * 1) kind === 'portfolioRisk'
+ * 2) key === 'portfolioRisk.drawdown_block'
+ * 3) scope === 'portfolio'
+ * 4) mode === 'observe' || mode === 'enforce'
+ * 5) thresholdPct 是有限正数且 ≤ 100
+ * 6) registry 已注册该 contract
+ * 7) version-gate：strategyVersion 必须存在且 atom 对该策略可执行
+ *    （strategyVersion === undefined / deployedAtSemanticVersion === null 均 fail-closed）
+ */
+function isSupportedPortfolioDrawdownBlock(
+  node: SemanticOrchestrationNode,
+  strategyVersion: StrategyVersionInfo | undefined,
+  registry: SemanticOrchestrationRegistryService,
+): boolean {
+  if (node.kind !== 'portfolioRisk') {
+    return false
+  }
+  if (node.key !== 'portfolioRisk.drawdown_block') {
+    return false
+  }
+  if (node.scope !== 'portfolio') {
+    return false
+  }
+  if (node.mode !== 'observe' && node.mode !== 'enforce') {
+    return false
+  }
+  const thresholdPct = node.thresholdPct
+  if (thresholdPct !== undefined) {
+    if (
+      typeof thresholdPct !== 'number'
+      || !Number.isFinite(thresholdPct)
+      || thresholdPct <= 0
+      || thresholdPct > 100
+    ) {
+      return false
+    }
+  }
+
+  const contract = registry.getContractByKey('portfolioRisk.drawdown_block')
+  if (!contract) {
+    return false
+  }
+
+  if (!strategyVersion) {
+    return false
+  }
+
+  return registry.isExecutableForStrategy(contract, strategyVersion)
 }
 
 /**

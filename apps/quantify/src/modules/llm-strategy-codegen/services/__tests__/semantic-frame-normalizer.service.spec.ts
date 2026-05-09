@@ -158,12 +158,17 @@ describe('SemanticFrameNormalizerService', () => {
       target: { phase: 'entry', sideScope: 'long' },
       effectWhenFalse: 'block_new_entries',
     }))
-    expect(nodes[0]?.activeWhen).toEqual({
-      kind: 'predicate',
-      op: 'GT',
-      left: { kind: 'series', source: 'bar', field: 'close' },
-      right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
-    })
+    const firstNode = nodes[0]
+    if (firstNode?.kind === 'gate') {
+      expect(firstNode.activeWhen).toEqual({
+        kind: 'predicate',
+        op: 'GT',
+        left: { kind: 'series', source: 'bar', field: 'close' },
+        right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+      })
+    } else {
+      throw new Error('expected gate node')
+    }
   })
 
   it('produces distinct orchestration nodes for distinct regime_gate frames', () => {
@@ -175,7 +180,8 @@ describe('SemanticFrameNormalizerService', () => {
     const patch = normalizer.normalize(frames)
 
     expect(patch.orchestration?.nodes).toHaveLength(2)
-    expect(patch.orchestration?.nodes?.map(node => node.target.sideScope)).toEqual(
+    const gateNodes = patch.orchestration?.nodes?.filter(node => node.kind === 'gate') ?? []
+    expect(gateNodes.map(node => node.target.sideScope)).toEqual(
       expect.arrayContaining(['long', 'short']),
     )
   })
@@ -189,6 +195,61 @@ describe('SemanticFrameNormalizerService', () => {
     const patch = normalizer.normalize(frames)
 
     expect(patch.orchestration?.nodes).toHaveLength(1)
+  })
+
+  it('normalizes a single portfolio_drawdown frame into a portfolioRisk orchestration node', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes ?? []
+
+    expect(nodes).toHaveLength(1)
+    expect(nodes[0]).toEqual(expect.objectContaining({
+      id: 'orchestration-portfolio-risk-drawdown-1',
+      kind: 'portfolioRisk',
+      key: 'portfolioRisk.drawdown_block',
+      scope: 'portfolio',
+      mode: 'enforce',
+      thresholdPct: 10,
+    }))
+  })
+
+  it('produces distinct portfolioRisk nodes for distinct portfolio_drawdown frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
+      portfolioDrawdownFrame({ id: 'pdd-2', thresholdPct: 20, mode: 'enforce' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes?.filter(node => node.kind === 'portfolioRisk') ?? []
+
+    expect(nodes).toHaveLength(2)
+  })
+
+  it('deduplicates structurally identical portfolio_drawdown frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
+      portfolioDrawdownFrame({ id: 'pdd-2', thresholdPct: 10, mode: 'enforce' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+
+    expect(patch.orchestration?.nodes).toHaveLength(1)
+  })
+
+  it('merges regime_gate and portfolio_drawdown into a single orchestration.nodes array', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes ?? []
+
+    expect(nodes).toHaveLength(2)
+    expect(nodes.map(node => node.kind)).toEqual(expect.arrayContaining(['gate', 'portfolioRisk']))
   })
 
   it('omits orchestration when no regime_gate frames are present', () => {
@@ -272,6 +333,22 @@ function regimeGateFrame(input: {
     confidence: 0.9,
     evidenceText: input.evidenceText ?? `${input.indicator}${input.period} ${input.operator}`,
     ...input,
+  }
+}
+
+function portfolioDrawdownFrame(input: {
+  id: string
+  thresholdPct: number
+  mode: 'observe' | 'enforce'
+  evidenceText?: string
+}): SemanticNaturalLanguageFrame {
+  return {
+    kind: 'portfolio_drawdown',
+    confidence: 0.9,
+    evidenceText: input.evidenceText ?? `账户回撤超过${input.thresholdPct}%`,
+    id: input.id,
+    thresholdPct: input.thresholdPct,
+    mode: input.mode,
   }
 }
 

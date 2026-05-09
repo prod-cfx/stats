@@ -11,6 +11,7 @@ import {
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
+import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
@@ -87,10 +88,28 @@ export class BacktestStrategyAdapterService {
       const riskPredicates = projection.riskPredicates as Parameters<typeof evaluateRiskPredicates>[1]
       const decisionPrograms = projection.decisionPrograms as Parameters<typeof runDecisionPrograms>[1]
       const orderPrograms = projection.orderPrograms as Parameters<typeof runOrderPrograms>[1]
+      const portfolioRisks = (projection as {
+        orchestrationPortfolioRisks?: Parameters<typeof evaluateOrchestrationPortfolioRisks>[0]
+      }).orchestrationPortfolioRisks ?? []
+
+      // peakEquity 在 build() 闭包内逐 bar 维护，与 account-strategy-view.service.ts:1970 同公式
+      let peakEquity: number | undefined
 
       return {
         protocolVersion: 'v1',
         onBar(ctx) {
+          // accountDrawdownPct = max(0, (peak-curr)/peak*100)
+          // 与 account-strategy-view.service.ts:1970 computeMaxDrawdownPct 同公式
+          // live signal 侧 drawdown 上报由 follow-up issue #1058 接入；本 PR 仅 backtest 注入
+          const currentEquity = readContextEquity(ctx)
+          if (typeof currentEquity === 'number' && Number.isFinite(currentEquity)) {
+            peakEquity = peakEquity === undefined ? currentEquity : Math.max(peakEquity, currentEquity)
+            if (peakEquity > 0) {
+              ;(ctx as { accountDrawdownPct?: number }).accountDrawdownPct
+                = Math.max(0, ((peakEquity - currentEquity) / peakEquity) * 100)
+            }
+          }
+
           const exprValues = evaluateExprPool(
             ctx,
             exprPool,
@@ -113,6 +132,10 @@ export class BacktestStrategyAdapterService {
             (projection as { orchestrationGates?: Parameters<typeof evaluateOrchestrationGates>[0] }).orchestrationGates ?? [],
             exprValues,
           )
+          const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
+            portfolioRisks,
+            { drawdownPct: (ctx as { accountDrawdownPct?: number }).accountDrawdownPct },
+          )
           const decision = runDecisionPrograms(
             ctx,
             decisionPrograms,
@@ -120,6 +143,7 @@ export class BacktestStrategyAdapterService {
             guardState,
             projection.topology.decisionOrder,
             orchestrationGateState,
+            portfolioRiskState,
           )
           const orderState = runOrderPrograms(
             ctx,
@@ -188,4 +212,17 @@ export class BacktestStrategyAdapterService {
 
     return result.value
   }
+}
+
+function readContextEquity(ctx: unknown): number | undefined {
+  if (!ctx || typeof ctx !== 'object') return undefined
+  const c = ctx as { accountEquity?: unknown, portfolio?: { equity?: unknown } }
+  if (typeof c.accountEquity === 'number' && Number.isFinite(c.accountEquity)) {
+    return c.accountEquity
+  }
+  if (c.portfolio && typeof c.portfolio === 'object') {
+    const equity = c.portfolio.equity
+    if (typeof equity === 'number' && Number.isFinite(equity)) return equity
+  }
+  return undefined
 }

@@ -1,4 +1,4 @@
-import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
 import type {
   SemanticActionState,
@@ -538,6 +538,8 @@ export class CanonicalSpecBuilderService {
     )
     const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const orchestrationGates = this.buildOrchestrationGates(normalizedState)
+    const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
+    const hasOrchestration = orchestrationGates.length > 0 || orchestrationPortfolioRisks.length > 0
 
     return {
       version: 2,
@@ -557,8 +559,49 @@ export class CanonicalSpecBuilderService {
       },
       orderPrograms,
       rules,
-      ...(orchestrationGates.length > 0 ? { orchestration: { gates: orchestrationGates } } : {}),
+      ...(hasOrchestration
+        ? {
+            orchestration: {
+              ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
+              ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
+            },
+          }
+        : {}),
     }
+  }
+
+  private buildOrchestrationPortfolioRisks(state: SemanticState): CanonicalOrchestrationPortfolioRisk[] {
+    const nodes = state.orchestration?.nodes
+    if (!nodes || nodes.length === 0) {
+      return []
+    }
+
+    const risks: CanonicalOrchestrationPortfolioRisk[] = []
+    for (const node of nodes) {
+      if (node.kind !== 'portfolioRisk' || node.status !== 'locked' || node.key !== 'portfolioRisk.drawdown_block') {
+        continue
+      }
+      if (node.scope !== 'portfolio') {
+        continue
+      }
+      if (node.mode !== 'observe' && node.mode !== 'enforce') {
+        continue
+      }
+      const thresholdPct = node.thresholdPct
+      if (typeof thresholdPct !== 'number' || !Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct > 100) {
+        continue
+      }
+
+      risks.push({
+        id: node.id,
+        scope: node.scope,
+        mode: node.mode,
+        thresholdPct,
+        effectWhenTriggered: 'block_new_entries',
+      })
+    }
+
+    return risks
   }
 
   private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {

@@ -259,6 +259,13 @@ export class SemanticSeedStateBuilderService {
     const effectWhenFalse = update.effectWhenFalse === 'block_new_entries'
       ? update.effectWhenFalse
       : undefined
+    const mode = update.mode === 'observe' || update.mode === 'enforce'
+      ? update.mode
+      : undefined
+    const scope = update.scope === 'portfolio' ? update.scope : undefined
+    const thresholdPct = typeof update.thresholdPct === 'number' && Number.isFinite(update.thresholdPct)
+      ? update.thresholdPct
+      : undefined
     const support = this.isRecord(update.support)
       ? (update.support as unknown as SemanticOrchestrationNode['support'])
       : undefined
@@ -276,6 +283,9 @@ export class SemanticSeedStateBuilderService {
       ...(target ? { target } : {}),
       ...(activeWhen ? { activeWhen } : {}),
       ...(effectWhenFalse ? { effectWhenFalse } : {}),
+      ...(mode ? { mode } : {}),
+      ...(scope ? { scope } : {}),
+      ...(thresholdPct !== undefined ? { thresholdPct } : {}),
       ...(support ? { support } : {}),
     }
   }

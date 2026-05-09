@@ -35,6 +35,8 @@ const FALLBACK_STRATEGY_PROTOCOL_DECLARATIONS = [
   '  symbol?: string',
   '  timeframe?: string',
   '  currentPrice?: number',
+  '  accountEquity?: number',
+  '  accountDrawdownPct?: number',
   '  indicators?: Record<string, number>',
   '  bars?: Array<Record<string, unknown>>',
   '}',

@@ -375,6 +375,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     clarificationRenderer: (slotKey) => renderRegimeGateClarification(slotKey),
   }),
   presentation({
+    key: 'portfolioRisk.drawdown_block',
+    publicName: '组合回撤护栏',
+    aliases: ['组合回撤', '账户回撤护栏', 'portfolio drawdown', 'drawdown block'],
+    positiveExamples: [
+      '账户回撤超过 10% 停止开新仓',
+      '回撤 5% 仅记录不停',
+      '账户回撤超过 15% 阻止开仓',
+    ],
+    negativeExamples: ['感觉亏了', '风控大概在 10%', '形态像头肩顶'],
+    goldenUtterances: [
+      '账户回撤超过 10% 停止开新仓',
+      '回撤 5% 仅记录不停',
+      '账户回撤超过 15% 阻止开仓',
+    ],
+    displayRenderer: ({ params }) => renderPortfolioDrawdown(params),
+    clarificationRenderer: (slotKey) => renderPortfolioDrawdownClarification(slotKey),
+  }),
+  presentation({
     key: 'market.regime',
     publicName: '市场状态',
     aliases: ['行情结构', '市场环境'],
@@ -905,6 +923,22 @@ function renderRegimeGateClarification(slotKey: string): string {
     return '请确认趋势过滤的指标（EMA/SMA/MA）与周期'
   }
   return '请补全趋势过滤参数'
+}
+
+function renderPortfolioDrawdown(params: Record<string, unknown>): string {
+  const thresholdPct = numberParam(params, 'thresholdPct', 0)
+  const mode = stringParam(params, 'mode', 'enforce')
+  if (mode === 'observe') {
+    return `账户回撤超过 ${thresholdPct}% 时仅记录`
+  }
+  return `账户回撤超过 ${thresholdPct}% 时阻止开新仓`
+}
+
+function renderPortfolioDrawdownClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.portfolio_drawdown.threshold_pct') {
+    return '请确认账户回撤百分比阈值（0..100）'
+  }
+  return '请补全账户回撤护栏参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

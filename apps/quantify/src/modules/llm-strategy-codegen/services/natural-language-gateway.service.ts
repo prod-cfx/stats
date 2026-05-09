@@ -5,6 +5,7 @@ import type {
   SemanticContextFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
+  SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
@@ -18,6 +19,7 @@ type FrameDraft =
   | RiskFrameDraft
   | CombinationFrameDraft
   | RegimeGateFrameDraft
+  | PortfolioDrawdownFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -26,6 +28,7 @@ type ActionFrameDraft = Omit<SemanticActionFrame, 'id' | 'confidence'>
 type RiskFrameDraft = Omit<SemanticRiskFrame, 'id' | 'confidence'>
 type CombinationFrameDraft = Omit<SemanticCombinationFrame, 'id' | 'confidence'>
 type RegimeGateFrameDraft = Omit<SemanticRegimeGateFrame, 'id' | 'confidence'>
+type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -40,6 +43,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseActions(text),
       ...this.parseRisk(text),
       ...this.parseRegimeGate(text),
+      ...this.parsePortfolioDrawdown(text),
     ]
 
     return drafts.map((draft, index) => ({
@@ -370,6 +374,36 @@ export class NaturalLanguageGatewayService {
           evidenceText: match[0].trim(),
         })
       }
+    }
+
+    return frames
+  }
+
+  private parsePortfolioDrawdown(text: string): PortfolioDrawdownFrameDraft[] {
+    const frames: PortfolioDrawdownFrameDraft[] = []
+
+    const enforcePattern = /(?:账户)?\s*回撤\s*(?:超过|大于|过)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:停止|不要|阻止|禁止)\s*(?:开)?\s*(?:新)?\s*仓/giu
+    for (const match of text.matchAll(enforcePattern)) {
+      const thresholdPct = Number(match[1])
+      if (thresholdPct <= 0 || thresholdPct > 100) continue
+      frames.push({
+        kind: 'portfolio_drawdown',
+        thresholdPct,
+        mode: 'enforce',
+        evidenceText: match[0].trim(),
+      })
+    }
+
+    const observePattern = /(?:账户)?\s*回撤\s*(?:超过|大于|过)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:仅|只)?\s*(?:记录|观察|observe)/giu
+    for (const match of text.matchAll(observePattern)) {
+      const thresholdPct = Number(match[1])
+      if (thresholdPct <= 0 || thresholdPct > 100) continue
+      frames.push({
+        kind: 'portfolio_drawdown',
+        thresholdPct,
+        mode: 'observe',
+        evidenceText: match[0].trim(),
+      })
     }
 
     return frames

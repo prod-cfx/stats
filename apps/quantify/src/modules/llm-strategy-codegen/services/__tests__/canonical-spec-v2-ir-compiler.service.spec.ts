@@ -3969,4 +3969,74 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     const result = compiler.compile({ canonicalSpec: spec, fallback })
     expect(result.ir.orchestrationGates).toEqual([])
   })
+
+  it('compiles a single portfolioRisk into IR.orchestrationPortfolioRisks with passthrough metadata', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      portfolioRisks: [
+        {
+          id: 'portfolio-drawdown-1',
+          scope: 'portfolio',
+          mode: 'observe',
+          thresholdPct: 10,
+          effectWhenTriggered: 'block_new_entries',
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const risks = result.ir.orchestrationPortfolioRisks ?? []
+    expect(risks).toHaveLength(1)
+    expect(risks[0]).toEqual({
+      id: 'portfolio-drawdown-1',
+      scope: 'portfolio',
+      mode: 'observe',
+      thresholdPct: 10,
+      effectWhenTriggered: 'block_new_entries',
+    })
+  })
+
+  it('emits empty orchestrationPortfolioRisks when spec has no orchestration.portfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationPortfolioRisks).toEqual([])
+  })
+
+  it('emits both orchestrationGates and orchestrationPortfolioRisks when spec contains each kind', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.orchestration = {
+      gates: [
+        {
+          id: 'gate-regime-mix',
+          target: { phase: 'entry', sideScope: 'long' },
+          activeWhen: {
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close' },
+            right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
+          },
+          effectWhenFalse: 'block_new_entries',
+        },
+      ],
+      portfolioRisks: [
+        {
+          id: 'portfolio-drawdown-mix',
+          scope: 'portfolio',
+          mode: 'enforce',
+          thresholdPct: 15,
+          effectWhenTriggered: 'block_new_entries',
+        },
+      ],
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.orchestrationGates).toHaveLength(1)
+    expect(result.ir.orchestrationPortfolioRisks).toHaveLength(1)
+    expect(result.ir.orchestrationPortfolioRisks?.[0].id).toBe('portfolio-drawdown-mix')
+    expect(result.ir.orchestrationPortfolioRisks?.[0].mode).toBe('enforce')
+    expect(result.ir.orchestrationPortfolioRisks?.[0].thresholdPct).toBe(15)
+  })
 })

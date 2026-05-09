@@ -2,6 +2,7 @@ import type {
   ActionDef,
   CanonicalStrategyIrV1,
   IrOrchestrationGate,
+  IrOrchestrationPortfolioRisk,
   OrderProgram,
   PredicateDef,
   RiskGuard,
@@ -16,6 +17,7 @@ import type {
   CanonicalConditionNode,
   CanonicalExpressionCondition,
   CanonicalOrchestrationGate,
+  CanonicalOrchestrationPortfolioRisk,
   CanonicalOrderProgramIntent,
   CanonicalRuleAction,
   CanonicalRuleSideScope,
@@ -190,6 +192,7 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
+    const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
     const positionMode = hasOrderPrograms
@@ -235,6 +238,7 @@ export class CanonicalSpecV2IrCompilerService {
       ruleBlocks,
       orderPrograms,
       orchestrationGates,
+      orchestrationPortfolioRisks,
       riskPolicy: {
         guards,
         riskPredicates,
@@ -838,6 +842,19 @@ export class CanonicalSpecV2IrCompilerService {
         effectWhenFalse: gate.effectWhenFalse,
       }
     })
+  }
+
+  private compileOrchestrationPortfolioRisks(
+    spec: CanonicalStrategySpecV2,
+  ): IrOrchestrationPortfolioRisk[] {
+    const risks = spec.orchestration?.portfolioRisks ?? []
+    return risks.map((risk: CanonicalOrchestrationPortfolioRisk) => ({
+      id: risk.id,
+      scope: risk.scope,
+      mode: risk.mode,
+      thresholdPct: risk.thresholdPct,
+      effectWhenTriggered: risk.effectWhenTriggered,
+    }))
   }
 
   private compileExpressionCondition(

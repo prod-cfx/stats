@@ -3,6 +3,7 @@ import type {
   SemanticCombinationFrame,
   SemanticContextFrame,
   SemanticIndicatorCompareFrame,
+  SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
 } from '../../types/semantic-natural-language-frame'
@@ -199,6 +200,54 @@ describe('NaturalLanguageGatewayService', () => {
     expect(regimeGateFrames(service.parse('震荡市才启用策略'))).toHaveLength(0)
   })
 
+  it('parses enforce-mode portfolio drawdown from "账户回撤超过 10% 停止开新仓"', () => {
+    const frames = portfolioDrawdownFrames(service.parse('账户回撤超过 10% 停止开新仓'))
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'portfolio_drawdown',
+        thresholdPct: 10,
+        mode: 'enforce',
+      }),
+    ])
+  })
+
+  it('parses observe-mode portfolio drawdown from "账户回撤 5% 仅记录"', () => {
+    const frames = portfolioDrawdownFrames(service.parse('账户回撤 5% 仅记录'))
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'portfolio_drawdown',
+        thresholdPct: 5,
+        mode: 'observe',
+      }),
+    ])
+  })
+
+  it('parses portfolio drawdown without 账户 prefix from "回撤超过 15% 阻止开仓"', () => {
+    const frames = portfolioDrawdownFrames(service.parse('回撤超过 15% 阻止开仓'))
+
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'portfolio_drawdown',
+        thresholdPct: 15,
+        mode: 'enforce',
+      }),
+    ])
+  })
+
+  it('does not emit portfolio_drawdown frame for vague text "感觉账户在亏"', () => {
+    expect(portfolioDrawdownFrames(service.parse('感觉账户在亏'))).toHaveLength(0)
+  })
+
+  it('does not emit portfolio_drawdown frame for thresholdPct = 0', () => {
+    expect(portfolioDrawdownFrames(service.parse('回撤 0% 停止开仓'))).toHaveLength(0)
+  })
+
+  it('does not emit portfolio_drawdown frame for thresholdPct > 100', () => {
+    expect(portfolioDrawdownFrames(service.parse('回撤 150% 停止开仓'))).toHaveLength(0)
+  })
+
   it('keeps later explicit BOLL short entry after a negated long action segment', () => {
     const frames = service.parse('不要开多，BOLL上轨开空')
 
@@ -247,4 +296,10 @@ function regimeGateFrames(
   frames: ReturnType<NaturalLanguageGatewayService['parse']>,
 ): SemanticRegimeGateFrame[] {
   return frames.filter(frame => frame.kind === 'regime_gate')
+}
+
+function portfolioDrawdownFrames(
+  frames: ReturnType<NaturalLanguageGatewayService['parse']>,
+): SemanticPortfolioDrawdownFrame[] {
+  return frames.filter(frame => frame.kind === 'portfolio_drawdown')
 }

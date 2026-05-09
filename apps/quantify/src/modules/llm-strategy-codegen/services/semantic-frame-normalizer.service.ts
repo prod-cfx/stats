@@ -4,10 +4,15 @@ import type {
   SemanticCombinationFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
+  SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
-import type { CodegenSemanticOrchestrationNodePatch, CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import type {
+  CodegenSemanticOrchestrationGateNodePatch,
+  CodegenSemanticOrchestrationPortfolioRiskNodePatch,
+  CodegenSemanticPatch,
+} from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
 import { Injectable } from '@nestjs/common'
 
@@ -27,8 +32,10 @@ export class SemanticFrameNormalizerService {
     const combinationByKey = new Map<string, SemanticCombinationMetadata>()
     const actionsByKey = new Map<SemanticActionFrame['actionKey'], SemanticActionFrame>()
     const riskByKey = new Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>()
-    const regimeGateByKey = new Map<string, CodegenSemanticOrchestrationNodePatch>()
+    const regimeGateByKey = new Map<string, CodegenSemanticOrchestrationGateNodePatch>()
     const regimeGateFrames: SemanticRegimeGateFrame[] = []
+    const portfolioDrawdownByKey = new Map<string, CodegenSemanticOrchestrationPortfolioRiskNodePatch>()
+    const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -61,6 +68,9 @@ export class SemanticFrameNormalizerService {
         case 'regime_gate':
           regimeGateFrames.push(frame)
           break
+        case 'portfolio_drawdown':
+          portfolioDrawdownFrames.push(frame)
+          break
       }
     }
 
@@ -70,6 +80,15 @@ export class SemanticFrameNormalizerService {
 
       if (!regimeGateByKey.has(dedupeKey)) {
         regimeGateByKey.set(dedupeKey, node)
+      }
+    })
+
+    portfolioDrawdownFrames.forEach((frame, index) => {
+      const node = this.normalizePortfolioDrawdown(frame, index)
+      const dedupeKey = JSON.stringify([node.key, node.scope, node.mode, node.thresholdPct])
+
+      if (!portfolioDrawdownByKey.has(dedupeKey)) {
+        portfolioDrawdownByKey.set(dedupeKey, node)
       }
     })
 
@@ -93,7 +112,10 @@ export class SemanticFrameNormalizerService {
       patch.risk = risk
     }
 
-    const orchestrationNodes = Array.from(regimeGateByKey.values())
+    const orchestrationNodes = [
+      ...Array.from(regimeGateByKey.values()),
+      ...Array.from(portfolioDrawdownByKey.values()),
+    ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
     }
@@ -101,7 +123,7 @@ export class SemanticFrameNormalizerService {
     return patch
   }
 
-  private normalizeRegimeGate(frame: SemanticRegimeGateFrame, index: number): CodegenSemanticOrchestrationNodePatch {
+  private normalizeRegimeGate(frame: SemanticRegimeGateFrame, index: number): CodegenSemanticOrchestrationGateNodePatch {
     const indicatorName = frame.indicator === 'ma' ? 'sma' : frame.indicator
     const activeWhen: SemanticExpression = {
       kind: 'predicate',
@@ -123,6 +145,25 @@ export class SemanticFrameNormalizerService {
       target: { phase: 'entry', sideScope: frame.sideScope },
       activeWhen,
       effectWhenFalse: 'block_new_entries',
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  private normalizePortfolioDrawdown(
+    frame: SemanticPortfolioDrawdownFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationPortfolioRiskNodePatch {
+    return {
+      id: `orchestration-portfolio-risk-drawdown-${index + 1}`,
+      kind: 'portfolioRisk',
+      key: 'portfolioRisk.drawdown_block',
+      params: {
+        thresholdPct: frame.thresholdPct,
+        mode: frame.mode,
+      },
+      scope: 'portfolio',
+      mode: frame.mode,
+      thresholdPct: frame.thresholdPct,
       evidence: this.toEvidence(frame),
     }
   }

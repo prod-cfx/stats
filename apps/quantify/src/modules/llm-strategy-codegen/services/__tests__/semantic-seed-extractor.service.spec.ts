@@ -4096,7 +4096,9 @@ describe('SemanticSeedExtractorService', () => {
         target: expect.objectContaining({ phase: 'entry', sideScope: 'long' }),
         effectWhenFalse: 'block_new_entries',
       }))
-      expect(nodePatch.activeWhen).toBeDefined()
+      if (nodePatch.kind === 'gate') {
+        expect(nodePatch.activeWhen).toBeDefined()
+      }
 
       const state = stateBuilder.build(patch)
 
@@ -4122,6 +4124,54 @@ describe('SemanticSeedExtractorService', () => {
         expect.objectContaining({
           kind: firstState!.orchestration!.nodes[0].kind,
           key: firstState!.orchestration!.nodes[0].key,
+        }),
+      )
+    })
+  })
+
+  describe('orchestration portfolioRisk drawdown end-to-end propagation', () => {
+    const PORTFOLIO_DRAWDOWN_TEXT = '账户回撤超过 10% 停止开新仓'
+
+    it('propagates portfolio_drawdown frame through extractor and state-builder into state.orchestration', () => {
+      const patch = service.extract(PORTFOLIO_DRAWDOWN_TEXT)
+
+      expect(patch.orchestration?.nodes).toHaveLength(1)
+      const nodePatch = patch.orchestration!.nodes![0]
+      expect(nodePatch).toEqual(expect.objectContaining({
+        kind: 'portfolioRisk',
+        key: 'portfolioRisk.drawdown_block',
+        scope: 'portfolio',
+        mode: 'enforce',
+        thresholdPct: 10,
+      }))
+
+      const state = stateBuilder.build(patch)
+
+      expect(state).not.toBeNull()
+      expect(state!.orchestration).toBeDefined()
+      expect(state!.orchestration!.nodes).toHaveLength(1)
+      const node = state!.orchestration!.nodes[0]
+      expect(node.kind).toBe('portfolioRisk')
+      expect(node.key).toBe('portfolioRisk.drawdown_block')
+      expect(node.mode).toBe('enforce')
+      expect(node.scope).toBe('portfolio')
+      expect(node.thresholdPct).toBe(10)
+      expect(state!.orchestration!.contracts).toEqual([])
+    })
+
+    it('is idempotent across repeated extraction of the same portfolio_drawdown input', () => {
+      const firstState = stateBuilder.build(service.extract(PORTFOLIO_DRAWDOWN_TEXT))
+      const secondState = stateBuilder.build(service.extract(PORTFOLIO_DRAWDOWN_TEXT))
+
+      expect(firstState?.orchestration?.nodes).toHaveLength(1)
+      expect(secondState?.orchestration?.nodes).toHaveLength(1)
+      expect(secondState?.orchestration?.nodes[0]).toEqual(
+        expect.objectContaining({
+          kind: firstState!.orchestration!.nodes[0].kind,
+          key: firstState!.orchestration!.nodes[0].key,
+          mode: firstState!.orchestration!.nodes[0].mode,
+          scope: firstState!.orchestration!.nodes[0].scope,
+          thresholdPct: firstState!.orchestration!.nodes[0].thresholdPct,
         }),
       )
     })

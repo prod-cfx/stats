@@ -3144,5 +3144,113 @@ describe('SemanticStateProjectionService', () => {
       const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
       expect(orchestrationBlocks).toHaveLength(0)
     })
+
+    it('renders supported locked portfolioRisk.drawdown_block via presentation registry', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-portfolio-drawdown-1',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              params: { mode: 'enforce', thresholdPct: 10 },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+          ],
+        },
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(1)
+      const items = orchestrationBlocks[0]!.items
+      expect(items).toHaveLength(1)
+      const item = items[0]! as { kind: string, publicName: string, text: string }
+      expect(item.kind).toBe('portfolioRisk')
+      expect(item.publicName).toBe('组合回撤护栏')
+      expect(item.text).toContain('10')
+      expect(item.text).toContain('阻止')
+
+      const flat = graph.blocks
+        .flatMap(block => block.items.map(i => (i as { text: string }).text))
+        .join(' ')
+      expect(flat).not.toContain('portfolioRisk.drawdown_block')
+      expect(flat).not.toContain('orchestration.')
+      expect(flat).not.toContain('block_new_entries')
+      expect(flat).not.toContain('drawdown_block')
+      expect(flat).not.toContain('enforce')
+      expect(flat).not.toContain('observe')
+    })
+
+    it('does not render orchestration block when portfolioRisk node is not locked (W2 deploy-truth invariant)', () => {
+      const stateNoOrch = buildEmptyState({
+        normalizationNotes: ['账户回撤超过 10% 停止开新仓'],
+      })
+      const graph1 = service.buildDisplayLogicGraph(stateNoOrch)
+      expect(graph1.blocks.filter(block => block.type === 'ORCHESTRATION')).toHaveLength(0)
+
+      const stateOpen = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-portfolio-drawdown-open',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              params: { mode: 'enforce', thresholdPct: 10 },
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+          ],
+        },
+      })
+      const graph2 = service.buildDisplayLogicGraph(stateOpen)
+      expect(graph2.blocks.filter(block => block.type === 'ORCHESTRATION')).toHaveLength(0)
+    })
+
+    it('renders gate.regime and portfolioRisk.drawdown_block together in same orchestration block when both locked', () => {
+      const state = buildEmptyState({
+        orchestration: {
+          contracts: [],
+          nodes: [
+            {
+              id: 'orchestration-gate-regime-1',
+              kind: 'gate',
+              key: 'gate.regime',
+              params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+            {
+              id: 'orchestration-portfolio-drawdown-1',
+              kind: 'portfolioRisk',
+              key: 'portfolioRisk.drawdown_block',
+              params: { mode: 'observe', thresholdPct: 5 },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+              contracts: [],
+            },
+          ],
+        },
+      })
+
+      const graph = service.buildDisplayLogicGraph(state)
+      const orchestrationBlocks = graph.blocks.filter(block => block.type === 'ORCHESTRATION')
+      expect(orchestrationBlocks).toHaveLength(1)
+      const items = orchestrationBlocks[0]!.items
+      expect(items).toHaveLength(2)
+      const kinds = items.map(i => i.kind)
+      expect(kinds).toContain('gate')
+      expect(kinds).toContain('portfolioRisk')
+    })
   })
 })

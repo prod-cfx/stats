@@ -6,6 +6,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticRiskFrame
   | SemanticCombinationFrame
   | SemanticRegimeGateFrame
+  | SemanticPortfolioDrawdownFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -60,4 +61,10 @@ export interface SemanticRegimeGateFrame extends SemanticFrameBase {
   indicator: 'ema' | 'sma' | 'ma'
   period: number
   operator: 'GT' | 'LT'
+}
+
+export interface SemanticPortfolioDrawdownFrame extends SemanticFrameBase {
+  kind: 'portfolio_drawdown'
+  thresholdPct: number
+  mode: 'observe' | 'enforce'
 }

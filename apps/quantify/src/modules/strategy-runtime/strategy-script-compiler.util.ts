@@ -99,6 +99,8 @@ const FALLBACK_STRATEGY_TYPE_DECLARATIONS = [
   '  symbol?: string',
   '  timeframe?: string',
   '  currentPrice?: number',
+  '  accountEquity?: number',
+  '  accountDrawdownPct?: number',
   '  indicators?: Record<string, number>',
   '  bars?: Bar[]',
   '  helpers?: StrategyHelpers',

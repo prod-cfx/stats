@@ -2,6 +2,7 @@ import type { StrategyDecisionV1, StrategyExecutionContextV1 } from '../../strat
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 import type { OrchestrationGateState } from './evaluate-orchestration-gates'
+import type { OrchestrationPortfolioRiskState } from './evaluate-orchestration-portfolio-risks'
 
 // MUST match PartialTakeProfitProgramMetadata in
 // apps/quantify/src/modules/llm-strategy-codegen/types/partial-take-profit.ts.
@@ -83,6 +84,7 @@ export function runDecisionPrograms(
   guardState: Readonly<CompiledGuardState>,
   decisionOrder: readonly string[],
   orchestrationGateState?: OrchestrationGateState,
+  portfolioRiskState?: OrchestrationPortfolioRiskState,
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
   compiledState.barIndex = readCurrentBarIndex(ctx, compiledState.barIndex)
@@ -135,7 +137,7 @@ export function runDecisionPrograms(
     const pendingReverseDecision = evaluatePendingReverse(program, ctx)
     if (pendingReverseDecision) {
       compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
-      const gated = applyOrchestrationGate(pendingReverseDecision, orchestrationGateState)
+      const gated = applyOrchestrationGate(pendingReverseDecision, orchestrationGateState, portfolioRiskState)
       return Object.freeze(gated)
     }
     if (hasPendingReverseForProgram(program, ctx)) {
@@ -172,7 +174,7 @@ export function runDecisionPrograms(
     const decision = buildFirstApplicableDecision(program, ctx)
     if (!decision) continue
 
-    const gatedDecision = applyOrchestrationGate(decision, orchestrationGateState)
+    const gatedDecision = applyOrchestrationGate(decision, orchestrationGateState, portfolioRiskState)
     compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
     if (ptpMeta && gatedDecision.action !== 'NOOP') {
       markPartialTakeProfitTierFired(ctx, ptpMeta)
@@ -996,21 +998,44 @@ function readCurrentPrice(ctx: StrategyExecutionContextV1): number {
 function applyOrchestrationGate(
   decision: StrategyDecisionV1,
   gateState: OrchestrationGateState | undefined,
+  portfolioRiskState: OrchestrationPortfolioRiskState | undefined,
 ): StrategyDecisionV1 {
-  if (!gateState) return decision
-  if (decision.action === 'OPEN_LONG' && gateState.blockEntryLong) {
+  const observedBreaches = portfolioRiskState?.observedBreaches ?? []
+  const hasObservedBreaches = observedBreaches.length > 0
+  const attachBreaches = (d: StrategyDecisionV1): StrategyDecisionV1 => {
+    if (!hasObservedBreaches) return d
     return {
-      action: 'NOOP',
-      reason: 'compiled.orchestration.gate.block_entry_long',
+      ...d,
+      meta: {
+        ...(d.meta ?? {}),
+        observedBreaches: [...observedBreaches],
+      },
     }
   }
-  if (decision.action === 'OPEN_SHORT' && gateState.blockEntryShort) {
-    return {
-      action: 'NOOP',
-      reason: 'compiled.orchestration.gate.block_entry_short',
+
+  if (!gateState && !portfolioRiskState) return decision
+
+  if (decision.action === 'OPEN_LONG') {
+    const portfolioBlocks = portfolioRiskState?.blockEntryLong === true
+    const gateBlocks = gateState?.blockEntryLong === true
+    if (portfolioBlocks || gateBlocks) {
+      const reason = portfolioBlocks
+        ? 'compiled.orchestration.portfolio_risk.block_entry_long'
+        : 'compiled.orchestration.gate.block_entry_long'
+      return attachBreaches({ action: 'NOOP', reason })
     }
   }
-  return decision
+  if (decision.action === 'OPEN_SHORT') {
+    const portfolioBlocks = portfolioRiskState?.blockEntryShort === true
+    const gateBlocks = gateState?.blockEntryShort === true
+    if (portfolioBlocks || gateBlocks) {
+      const reason = portfolioBlocks
+        ? 'compiled.orchestration.portfolio_risk.block_entry_short'
+        : 'compiled.orchestration.gate.block_entry_short'
+      return attachBreaches({ action: 'NOOP', reason })
+    }
+  }
+  return attachBreaches(decision)
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {

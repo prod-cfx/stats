@@ -95,6 +95,14 @@ export interface CanonicalOrchestrationGate {
   effectWhenFalse: 'block_new_entries'
 }
 
+export interface CanonicalOrchestrationPortfolioRisk {
+  id: string
+  scope: 'portfolio'
+  mode: 'observe' | 'enforce'
+  thresholdPct: number
+  effectWhenTriggered: 'block_new_entries'
+}
+
 export interface CanonicalStrategySpecV2 {
   version: 2
   market: {
@@ -123,7 +131,8 @@ export interface CanonicalStrategySpecV2 {
   }
   rules: CanonicalRuleV2[]
   orchestration?: {
-    gates: CanonicalOrchestrationGate[]
+    gates?: CanonicalOrchestrationGate[]
+    portfolioRisks?: CanonicalOrchestrationPortfolioRisk[]
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata

@@ -137,6 +137,48 @@ describe('SemanticPresentationRegistryService', () => {
     })
   })
 
+  describe('portfolioRisk.drawdown_block entry', () => {
+    it('exposes public metadata for portfolioRisk.drawdown_block', () => {
+      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
+      expect(entry.publicName).toBe('组合回撤护栏')
+      expect(entry.aliases).toEqual(expect.arrayContaining(['组合回撤']))
+    })
+
+    it('renders enforce-mode display string without leaking internal keys', () => {
+      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
+      const text = entry.displayRenderer({ params: { thresholdPct: 10, mode: 'enforce' } })
+      expect(text).toContain('10')
+      expect(text).toContain('阻止')
+      expect(text).toContain('账户')
+      expect(text).not.toContain('portfolioRisk.drawdown_block')
+      expect(text).not.toContain('orchestration')
+      expect(text).not.toContain('block_new_entries')
+      expect(text).not.toContain('drawdown_block')
+      expect(text).not.toContain('enforce')
+      expect(text).not.toContain('observe')
+    })
+
+    it('renders observe-mode display string without leaking internal keys', () => {
+      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
+      const text = entry.displayRenderer({ params: { thresholdPct: 5, mode: 'observe' } })
+      expect(text).toContain('5')
+      expect(text).toContain('记录')
+      expect(text).not.toContain('portfolioRisk.drawdown_block')
+      expect(text).not.toContain('orchestration')
+      expect(text).not.toContain('block_new_entries')
+      expect(text).not.toContain('drawdown_block')
+      expect(text).not.toContain('enforce')
+      expect(text).not.toContain('observe')
+    })
+
+    it('renders clarification text containing 回撤 and 阈值', () => {
+      const entry = presentation.getEntry('portfolioRisk.drawdown_block')
+      const text = entry.clarificationRenderer('orchestration.portfolio_drawdown.threshold_pct', {})
+      expect(text).toContain('回撤')
+      expect(text).toContain('阈值')
+    })
+  })
+
   it('renders clarification text without leaking raw slot keys', () => {
     const text = presentation.renderClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
 

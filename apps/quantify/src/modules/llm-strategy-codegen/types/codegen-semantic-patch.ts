@@ -5,6 +5,8 @@ import type {
   SemanticNodeStatus,
   SemanticOrchestrationGateEffect,
   SemanticOrchestrationGateTarget,
+  SemanticOrchestrationPortfolioRiskMode,
+  SemanticOrchestrationPortfolioRiskScope,
   SemanticPositionConstraintKey,
   SemanticPositionSizingContract,
   SemanticSlotState,
@@ -62,11 +64,24 @@ export interface CodegenSemanticPatch {
   }
 }
 
-export interface CodegenSemanticOrchestrationNodePatch extends CodegenSemanticNodeEnvelope {
+export type CodegenSemanticOrchestrationNodePatch =
+  | CodegenSemanticOrchestrationGateNodePatch
+  | CodegenSemanticOrchestrationPortfolioRiskNodePatch
+
+export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'gate'
   key: 'gate.regime'
   params: Record<string, unknown>
   target: SemanticOrchestrationGateTarget
   activeWhen: SemanticExpression
   effectWhenFalse: SemanticOrchestrationGateEffect
+}
+
+export interface CodegenSemanticOrchestrationPortfolioRiskNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'portfolioRisk'
+  key: 'portfolioRisk.drawdown_block'
+  params: Record<string, unknown>
+  scope: SemanticOrchestrationPortfolioRiskScope
+  mode: SemanticOrchestrationPortfolioRiskMode
+  thresholdPct: number
 }

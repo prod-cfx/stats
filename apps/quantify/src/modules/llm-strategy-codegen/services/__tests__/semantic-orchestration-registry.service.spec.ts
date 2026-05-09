@@ -68,4 +68,82 @@ describe('SemanticOrchestrationRegistryService', () => {
       service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION }),
     ).toBe(true)
   })
+
+  describe('portfolioRisk.drawdown_block', () => {
+    function buildPortfolioNode(
+      overrides: Partial<SemanticOrchestrationNode> = {},
+    ): SemanticOrchestrationNode {
+      return {
+        id: 'pdd-1',
+        kind: 'portfolioRisk',
+        key: 'portfolioRisk.drawdown_block',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+        mode: 'enforce',
+        thresholdPct: 10,
+        scope: 'portfolio',
+        ...overrides,
+      }
+    }
+
+    it('getContractByKey("portfolioRisk.drawdown_block") returns contract pinned to CURRENT_SEMANTIC_VERSION with guard/block/new_entries effect', () => {
+      const contract = service.getContractByKey('portfolioRisk.drawdown_block')
+      expect(contract).not.toBeNull()
+      expect(contract?.id).toBe('portfolioRisk.drawdown_block')
+      expect(contract?.kind).toBe('portfolioRisk')
+      expect(contract?.executableSinceVersion).toBe(CURRENT_SEMANTIC_VERSION)
+      expect(contract?.effects).toEqual(
+        expect.arrayContaining([{ domain: 'guard', verb: 'block', object: 'new_entries' }]),
+      )
+    })
+
+    it('validate returns ok for a fully-specified portfolioRisk.drawdown_block node', () => {
+      const node = buildPortfolioNode()
+      expect(service.validate(node)).toEqual({ ok: true, missingSlots: [] })
+    })
+
+    it('validate flags missing thresholdPct with the threshold_pct slot', () => {
+      const node = buildPortfolioNode({ thresholdPct: undefined })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots).toHaveLength(1)
+      expect(result.missingSlots[0]!.slotKey).toBe('orchestration.portfolio_drawdown.threshold_pct')
+      expect(result.missingSlots[0]!.fieldPath).toBe(
+        `orchestration.portfolioRisk.drawdown_block[${node.id}]`,
+      )
+    })
+
+    it('validate flags thresholdPct=0 as invalid', () => {
+      const node = buildPortfolioNode({ thresholdPct: 0 })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots[0]!.slotKey).toBe('orchestration.portfolio_drawdown.threshold_pct')
+    })
+
+    it('validate flags an invalid mode value', () => {
+      const node = buildPortfolioNode({
+        mode: 'unknown' as unknown as SemanticOrchestrationNode['mode'],
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots).toHaveLength(1)
+    })
+
+    it('validate flags scope!="portfolio" as invalid', () => {
+      const node = buildPortfolioNode({
+        scope: 'strategy' as unknown as SemanticOrchestrationNode['scope'],
+      })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots).toHaveLength(1)
+    })
+
+    it('isExecutableForStrategy returns false for a strategy without semantic version (fail-closed)', () => {
+      const contract = service.getContractByKey('portfolioRisk.drawdown_block')!
+      expect(service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: null })).toBe(false)
+    })
+  })
 })

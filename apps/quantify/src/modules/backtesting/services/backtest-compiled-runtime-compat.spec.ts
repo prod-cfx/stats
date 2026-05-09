@@ -1,6 +1,7 @@
 import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/evaluate-expr-pool'
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
+import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
@@ -1140,6 +1141,126 @@ describe('backtestCompiledRuntimeCompat', () => {
       action: 'CLOSE_SHORT',
       size: { mode: 'RATIO', value: 1 },
       reason: 'compiled.decision_exit_short',
+    })
+  })
+
+  describe('orchestration portfolio risk integration (backtest)', () => {
+    const baseCtx = () => ({
+      currentPrice: 100,
+      baseTimeframeBar: { close: 100 },
+      position: { qty: 0 },
+      portfolio: { equity: 10000 },
+    } as any)
+
+    const entryProgram = [{
+      id: 'decision_entry',
+      phase: 'entry',
+      priority: 100,
+      when: 'entry_hit',
+      actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 10 } }],
+    }] as any
+
+    const guardState = {
+      blockNewEntry: false,
+      forceExit: false,
+      strategyHalt: false,
+      cancelOrderPrograms: false,
+      triggered: [],
+    }
+
+    it('drawdown 5% < threshold 10% (enforce) → OPEN_LONG flows', () => {
+      const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
+        [{ id: 'risk-dd', scope: 'portfolio', mode: 'enforce', thresholdPct: 10, effectWhenTriggered: 'block_new_entries' }],
+        { drawdownPct: 5 },
+      )
+      expect(portfolioRiskState).toEqual({ blockEntryLong: false, blockEntryShort: false, observedBreaches: [] })
+
+      const decision = runDecisionPrograms(
+        baseCtx(),
+        entryProgram,
+        { entry_hit: true },
+        guardState,
+        ['decision_entry'],
+        undefined,
+        portfolioRiskState,
+      )
+
+      expect(decision).toEqual({
+        action: 'OPEN_LONG',
+        size: { mode: 'RATIO', value: 0.1 },
+        reason: 'compiled.decision_entry',
+      })
+    })
+
+    it('drawdown 12% > threshold 10% (enforce) → NOOP block_entry_long', () => {
+      const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
+        [{ id: 'risk-dd', scope: 'portfolio', mode: 'enforce', thresholdPct: 10, effectWhenTriggered: 'block_new_entries' }],
+        { drawdownPct: 12 },
+      )
+      expect(portfolioRiskState).toEqual({ blockEntryLong: true, blockEntryShort: true, observedBreaches: [] })
+
+      const decision = runDecisionPrograms(
+        baseCtx(),
+        entryProgram,
+        { entry_hit: true },
+        guardState,
+        ['decision_entry'],
+        undefined,
+        portfolioRiskState,
+      )
+
+      expect(decision).toEqual({
+        action: 'NOOP',
+        reason: 'compiled.orchestration.portfolio_risk.block_entry_long',
+      })
+    })
+
+    it('drawdown 12% (observe mode) → OPEN_LONG flows + decision.meta.observedBreaches contains risk id', () => {
+      const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
+        [{ id: 'risk-dd', scope: 'portfolio', mode: 'observe', thresholdPct: 10, effectWhenTriggered: 'block_new_entries' }],
+        { drawdownPct: 12 },
+      )
+      expect(portfolioRiskState).toEqual({ blockEntryLong: false, blockEntryShort: false, observedBreaches: ['risk-dd'] })
+
+      const decision = runDecisionPrograms(
+        baseCtx(),
+        entryProgram,
+        { entry_hit: true },
+        guardState,
+        ['decision_entry'],
+        undefined,
+        portfolioRiskState,
+      )
+
+      expect(decision).toMatchObject({
+        action: 'OPEN_LONG',
+        size: { mode: 'RATIO', value: 0.1 },
+        reason: 'compiled.decision_entry',
+        meta: { observedBreaches: ['risk-dd'] },
+      })
+    })
+
+    it('drawdown undefined + enforce → fail-closed double block (NOOP)', () => {
+      const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
+        [{ id: 'risk-dd', scope: 'portfolio', mode: 'enforce', thresholdPct: 10, effectWhenTriggered: 'block_new_entries' }],
+        { drawdownPct: undefined },
+      )
+      expect(portfolioRiskState).toEqual({ blockEntryLong: true, blockEntryShort: true, observedBreaches: [] })
+
+      const decision = runDecisionPrograms(
+        baseCtx(),
+        entryProgram,
+        { entry_hit: true },
+        guardState,
+        ['decision_entry'],
+        undefined,
+        portfolioRiskState,
+      )
+
+      expect(decision).toEqual({
+        action: 'NOOP',
+        reason: 'compiled.orchestration.portfolio_risk.block_entry_long',
+      })
     })
   })
 })

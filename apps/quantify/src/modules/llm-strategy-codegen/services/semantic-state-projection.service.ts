@@ -56,11 +56,17 @@ export interface SemanticDisplayGateItem extends SemanticDisplayGraphBaseItem {
   publicName: string
 }
 
+export interface SemanticDisplayPortfolioRiskItem extends SemanticDisplayGraphBaseItem {
+  kind: 'portfolioRisk'
+  publicName: string
+}
+
 export type SemanticDisplayLogicGraphItem =
   | SemanticDisplayConditionItem
   | SemanticDisplayActionItem
   | SemanticDisplayExecuteItem
   | SemanticDisplayGateItem
+  | SemanticDisplayPortfolioRiskItem
 
 export interface SemanticDisplayLogicGraphBlock {
   type: SemanticDisplayBlockType
@@ -158,31 +164,57 @@ export class SemanticStateProjectionService {
 
   private buildDisplayOrchestrationBlock(state: SemanticState): SemanticDisplayLogicGraphBlock | null {
     const nodes = state.orchestration?.nodes ?? []
-    const items: SemanticDisplayGateItem[] = []
+    const items: SemanticDisplayLogicGraphItem[] = []
     for (const node of nodes) {
-      if (node.kind !== 'gate' || node.status !== 'locked' || node.key !== 'gate.regime') {
+      if (node.status !== 'locked') {
         continue
       }
-      let entry
-      try {
-        entry = this.presentationRegistry.getEntry('gate.regime')
-      }
-      catch {
+      if (node.kind === 'gate' && node.key === 'gate.regime') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('gate.regime')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'gate',
+          id: `orchestration-gate-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
         continue
       }
-      if (!entry) {
+      if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.drawdown_block') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('portfolioRisk.drawdown_block')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'portfolioRisk',
+          id: `orchestration-portfolio-risk-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
         continue
       }
-      const text = entry.displayRenderer({ params: node.params })
-      if (!text) {
-        continue
-      }
-      items.push({
-        kind: 'gate',
-        id: `orchestration-gate-${node.id}`,
-        publicName: entry.publicName,
-        text,
-      })
     }
     if (items.length === 0) {
       return null

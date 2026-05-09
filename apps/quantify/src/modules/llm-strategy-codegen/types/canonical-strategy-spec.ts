@@ -99,6 +99,7 @@ export type {
   CanonicalConditionGroup,
   CanonicalConditionNode,
   CanonicalOrchestrationGate,
+  CanonicalOrchestrationPortfolioRisk,
   CanonicalRiskRuleSideScope,
   CanonicalRuleAction,
   CanonicalRuleActionType,

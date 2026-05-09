@@ -2088,6 +2088,180 @@ describe('SemanticContractReadinessService', () => {
       }
     })
   })
+
+  describe('orchestration portfolioRisk.drawdown_block supported (Phase 5 S7)', () => {
+    const CURRENT_VERSION: StrategyVersionInfo = { deployedAtSemanticVersion: '2026.05.W02' }
+
+    function drawdownBlockNode(overrides: Partial<SemanticOrchestrationNode> = {}): SemanticOrchestrationNode {
+      return {
+        id: 'pr-drawdown-1',
+        kind: 'portfolioRisk',
+        key: 'portfolioRisk.drawdown_block',
+        status: 'locked',
+        source: 'user_explicit',
+        params: {},
+        scope: 'portfolio',
+        mode: 'enforce',
+        thresholdPct: 10,
+        openSlots: [],
+        contracts: [],
+        ...overrides,
+      }
+    }
+
+    it('Test A: portfolioRisk.drawdown_block + 完整字段 + 新策略 → 不注入 phase0 slot', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [drawdownBlockNode()], contracts: [] },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const node = result.state.orchestration?.nodes[0]
+
+      expect(node?.status).toBe('locked')
+      expect(node?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+      expect(node?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.portfolio_drawdown.threshold_pct',
+      }))
+    })
+
+    it('Test B: portfolioRisk.drawdown_block + thresholdPct 缺失 → registry 驱动 threshold_pct open slot，无 phase0 slot', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [drawdownBlockNode({ thresholdPct: undefined })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.portfolio_drawdown.threshold_pct',
+      }))
+      expect(openSlots).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test C: kind=portfolioRisk + key=未知 → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [drawdownBlockNode({ key: 'portfolioRisk.unknown' })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test D: scope !== portfolio → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [drawdownBlockNode({ scope: 'symbol' as unknown as SemanticOrchestrationNode['scope'] })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test E: mode 非 observe|enforce → fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [drawdownBlockNode({ mode: 'reduce' as unknown as SemanticOrchestrationNode['mode'] })],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test F: thresholdPct ≤ 0 或 > 100 → fail-closed 走 phase0', () => {
+      for (const bad of [0, -5, 100.01, 500]) {
+        const state = createSemanticState({
+          orchestration: {
+            nodes: [drawdownBlockNode({ thresholdPct: bad })],
+            contracts: [],
+          },
+        })
+
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+        expect(openSlots).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('Test G: 老策略 (deployedAtSemanticVersion=null) → 双 fail-closed 走 phase0', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [drawdownBlockNode()], contracts: [] },
+      })
+
+      const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
+      const result = new SemanticContractReadinessService().normalize(state, legacy)
+      const openSlots = result.state.orchestration?.nodes[0].openSlots ?? []
+
+      expect(openSlots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('Test H: gate.regime + portfolioRisk.drawdown_block 同时存在 → 两条独立 supported 路径互不干扰', () => {
+      const regimeNode: SemanticOrchestrationNode = {
+        id: 'gate-regime-coexist',
+        kind: 'gate',
+        key: 'gate.regime',
+        status: 'locked',
+        source: 'user_explicit',
+        params: {},
+        target: { phase: 'entry' },
+        activeWhen: {
+          kind: 'predicate',
+          op: 'GT',
+          left: { kind: 'series', source: 'bar', field: 'close' },
+          right: { kind: 'constant', value: 0 },
+        } as unknown as SemanticOrchestrationNode['activeWhen'],
+        openSlots: [],
+        contracts: [],
+      }
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [regimeNode, drawdownBlockNode()],
+          contracts: [],
+        },
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const nodes = result.state.orchestration?.nodes ?? []
+
+      expect(nodes).toHaveLength(2)
+      for (const n of nodes) {
+        expect(n.status).toBe('locked')
+        expect(n.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+  })
 })
 
 describe('SemanticContractReadinessService timeframe pairing', () => {

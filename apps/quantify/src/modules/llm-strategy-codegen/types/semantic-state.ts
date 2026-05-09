@@ -282,6 +282,10 @@ export interface SemanticOrchestrationGateTarget {
 
 export type SemanticOrchestrationGateEffect = 'block_new_entries'
 
+export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
+
+export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
+
 export interface SemanticOrchestrationContract {
   id: string
   kind: SemanticOrchestrationContractKind
@@ -312,6 +316,10 @@ export interface SemanticOrchestrationNode {
   target?: SemanticOrchestrationGateTarget
   activeWhen?: SemanticExpression
   effectWhenFalse?: SemanticOrchestrationGateEffect
+  // portfolioRisk 节点专属（其它 kind 不读）
+  mode?: SemanticOrchestrationPortfolioRiskMode
+  thresholdPct?: number
+  scope?: SemanticOrchestrationPortfolioRiskScope
   support?: SemanticAtomSupportMetadata
 }
 

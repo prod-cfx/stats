@@ -66,6 +66,13 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
     minPriceSinceEntry?: number
   }
   accountEquity?: number
+  /**
+   * 账户级回撤百分比（0..100 浮点，正数）
+   * 公式：(peakEquity - currentEquity) / peakEquity * 100；equity 增长时为 0
+   * 与 apps/quantify/src/modules/account-strategy-view/services/account-strategy-view.service.ts:1970 同公式
+   * Phase 5 S7 portfolioRisk.drawdown_block evaluator 消费此字段
+   */
+  accountDrawdownPct?: number
   semanticRuntimeState?: Record<string, Record<string, unknown>>
   indicators?: Record<string, number>
   bars?: Bar[]

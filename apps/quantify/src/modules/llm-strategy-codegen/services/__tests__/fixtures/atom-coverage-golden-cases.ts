@@ -18,6 +18,8 @@ export type AtomicCoverageTag =
   | 'context'
   | 'risk'
   | 'orchestration'
+  | 'drawdown'
+  | 'phase5'
 
 export interface AtomCoverageExpectedAtom {
   key: string
@@ -1826,6 +1828,26 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedKeys: [
       'gate.regime',
+      'indicator.cross_over',
+      'open_long',
+      'position.fixed_pct',
+    ],
+    expectedRoute: 'projection_gate',
+  },
+  {
+    id: 'golden-corpus-073-orchestration-portfolio-drawdown-block-supported-executable',
+    name: 'orchestration portfolio drawdown block supported executable',
+    message:
+      'OKX 合约 BTCUSDT 15m，账户回撤超过 10% 停止开新仓，MA20 上穿 MA50 开多，单笔 10%。',
+    tags: ['orchestration', 'portfolio_risk', 'drawdown', 'phase5'],
+    expectedAtoms: [
+      { key: 'portfolioRisk.drawdown_block', category: 'orchestration' },
+      { key: 'indicator.cross_over', category: 'trigger', minContractSubstrate: true },
+      { key: 'open_long', category: 'action', minContractSubstrate: true },
+      { key: 'position.fixed_pct', category: 'position', minContractSubstrate: true },
+    ],
+    expectedKeys: [
+      'portfolioRisk.drawdown_block',
       'indicator.cross_over',
       'open_long',
       'position.fixed_pct',

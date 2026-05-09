@@ -67,6 +67,7 @@ export interface CanonicalStrategyIrV1 {
   ruleBlocks: RuleBlock[]
   orderPrograms: OrderProgram[]
   orchestrationGates?: IrOrchestrationGate[]
+  orchestrationPortfolioRisks?: IrOrchestrationPortfolioRisk[]
   riskPolicy: {
     guards: RiskGuard[]
     riskPredicates?: RiskPredicateDef[]
@@ -242,6 +243,14 @@ export interface IrOrchestrationGate {
   exprId: string
   target: { phase: 'entry', sideScope?: 'long' | 'short' | 'both' }
   effectWhenFalse: 'block_new_entries'
+}
+
+export interface IrOrchestrationPortfolioRisk {
+  id: string
+  scope: 'portfolio'
+  mode: 'observe' | 'enforce'
+  thresholdPct: number
+  effectWhenTriggered: 'block_new_entries'
 }
 
 export interface RiskGuard {

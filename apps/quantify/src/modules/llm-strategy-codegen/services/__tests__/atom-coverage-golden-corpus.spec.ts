@@ -90,8 +90,8 @@ describe('atom coverage golden corpus', () => {
 
       for (const expectedAtom of goldenCase.expectedAtoms) {
         if (expectedAtom.category === 'context') continue
-        // Phase 5 S1: gate.regime is a supported_executable orchestration atom routed
-        // outside the trigger/action/risk/position substrate gate.
+        // Phase 5 S1/S7: gate.regime + portfolioRisk.drawdown_block 是 supported_executable
+        // orchestration atoms，路由在 trigger/action/risk/position substrate gate 之外。
         if (expectedAtom.category === 'orchestration') continue
 
         expect(expectedAtom.minContractSubstrate).toBe(true)
@@ -99,20 +99,26 @@ describe('atom coverage golden corpus', () => {
     }
   })
 
-  it('tracks orchestration cases outside the executable projection gate route (excluding gate.regime supported executable)', () => {
-    // Phase 5 S1: gate.regime 已升级为 supported_executable orchestration atom，
-    // 可以走 projection_gate 路径；其他 orchestration 类（scope/program/portfolioRisk
+  it('tracks orchestration cases outside the executable projection gate route (excluding gate.regime + portfolioRisk.drawdown_block supported executable)', () => {
+    // Phase 5 S1: gate.regime 升级为 supported_executable orchestration atom。
+    // Phase 5 S7: portfolioRisk.drawdown_block 升级为第二个 supported_executable orchestration atom。
+    // 其他 orchestration 类（scope/program/其它 portfolioRisk 子键
     // /multi_timeframe/dca/grid/time_window/partial_take_profit 等）仍然不可执行。
+    const SUPPORTED_EXECUTABLE_ORCHESTRATION_KEYS = new Set([
+      'gate.regime',
+      'portfolioRisk.drawdown_block',
+    ])
     const orchestrationCases = atomCoverageGoldenCases.filter(goldenCase =>
       goldenCase.tags.includes('orchestration'),
     )
 
     expect(orchestrationCases.length).toBeGreaterThan(0)
     for (const goldenCase of orchestrationCases) {
-      const isGateRegimeExecutable = goldenCase.expectedAtoms.some(
-        atom => atom.category === 'orchestration' && atom.key === 'gate.regime',
+      const isSupportedExecutable = goldenCase.expectedAtoms.some(
+        atom => atom.category === 'orchestration'
+          && SUPPORTED_EXECUTABLE_ORCHESTRATION_KEYS.has(atom.key),
       )
-      if (isGateRegimeExecutable) continue
+      if (isSupportedExecutable) continue
       expect(goldenCase.expectedRoute).not.toBe('projection_gate')
     }
   })

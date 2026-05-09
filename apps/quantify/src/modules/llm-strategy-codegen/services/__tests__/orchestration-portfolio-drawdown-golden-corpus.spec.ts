@@ -1,5 +1,5 @@
-import type { CompiledOrchestrationGate } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
-import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
+import type { CompiledOrchestrationPortfolioRisk } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
+import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 
 import type { StrategyVersionInfo } from '../../nl-gateway/version-gate/version-gate.types'
@@ -13,14 +13,14 @@ import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 /**
- * Phase 5 S1 Task 17 — gate.regime golden corpus.
+ * Phase 5 S7 Task 16 — portfolioRisk.drawdown_block golden corpus.
  *
- * 5 段集成 spec：
+ * 5 段集成 spec（与 S1 gate.regime corpus 对称）：
  *   A. NL → frame → patch → state pipeline
- *   B. Readiness 6 fail-closed branches（含老策略 fail-closed）
+ *   B. Readiness 7 fail-closed branches（含老策略 fail-closed）
  *   C. Display 不泄漏内部 key（含 W2 缺 state node 不渲染）
- *   D. Canonical → IR → evaluator 全链路
- *   E. W5 已有空仓 + gate=false → CLOSE_SHORT
+ *   D. Canonical → IR → evaluator 全链路（含 enforce vs observe undefined 分岔）
+ *   E. W5 已有空仓 + drawdown 触发 → CLOSE_SHORT 仍正常
  *
  * 注：B/D 段直接构造 SemanticState，避免依赖完整 NL pipeline；
  * 只有 A 段验证 NL pipeline 端到端贯通。
@@ -48,61 +48,66 @@ function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticSt
   }
 }
 
-function regimeGateNode(overrides: Partial<SemanticOrchestrationNode> = {}): SemanticOrchestrationNode {
+function portfolioDrawdownNode(
+  overrides: Partial<SemanticOrchestrationNode> = {},
+): SemanticOrchestrationNode {
   return {
-    id: 'gate-regime-1',
-    kind: 'gate',
-    key: 'gate.regime',
+    id: 'orchestration-portfolio-risk-drawdown-1',
+    kind: 'portfolioRisk',
+    key: 'portfolioRisk.drawdown_block',
     status: 'locked',
     source: 'user_explicit',
-    params: {},
-    target: { phase: 'entry', sideScope: 'long' },
-    activeWhen: {
-      kind: 'predicate',
-      op: 'GT',
-      left: { kind: 'series', source: 'bar', field: 'close' },
-      right: { kind: 'indicator', name: 'ema', params: { period: 50 } },
-    },
-    effectWhenFalse: 'block_new_entries',
+    params: { thresholdPct: 10, mode: 'enforce' },
+    scope: 'portfolio',
+    mode: 'enforce',
+    thresholdPct: 10,
     openSlots: [],
     contracts: [],
     ...overrides,
   }
 }
 
-describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () => {
+describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 S7 Task 16)', () => {
   // ============================================================
   // Section A — NL → frame → patch → state pipeline
   // ============================================================
   describe('Section A: NL pipeline', () => {
-    it('parses 价格高于 EMA50 才允许做多 into a locked gate.regime orchestration node', () => {
+    it('parses 账户回撤超过 10% 停止开新仓 into a locked portfolioRisk.drawdown_block node', () => {
       const gateway = new NaturalLanguageGatewayService()
       const normalizer = new SemanticFrameNormalizerService()
       const builder = new SemanticSeedStateBuilderService()
 
-      const frames = gateway.parse('价格高于 EMA50 才允许做多')
-      expect(frames.some(f => f.kind === 'regime_gate')).toBe(true)
+      const frames = gateway.parse('账户回撤超过 10% 停止开新仓')
+      const drawdownFrames = frames.filter(f => f.kind === 'portfolio_drawdown')
+      expect(drawdownFrames).toHaveLength(1)
+      const frame = drawdownFrames[0]
+      if (frame.kind === 'portfolio_drawdown') {
+        expect(frame.thresholdPct).toBe(10)
+        expect(frame.mode).toBe('enforce')
+      }
 
       const patch = normalizer.normalize(frames)
       const node = patch.orchestration?.nodes[0]
       expect(node).toBeDefined()
       expect(node).toEqual(expect.objectContaining({
-        kind: 'gate',
-        key: 'gate.regime',
-        target: { phase: 'entry', sideScope: 'long' },
-        effectWhenFalse: 'block_new_entries',
+        kind: 'portfolioRisk',
+        key: 'portfolioRisk.drawdown_block',
       }))
-      if (node?.kind === 'gate') {
-        expect(node.activeWhen).toEqual(expect.objectContaining({ kind: 'predicate', op: 'GT' }))
+      if (node?.kind === 'portfolioRisk') {
+        expect(node.mode).toBe('enforce')
+        expect(node.thresholdPct).toBe(10)
+        expect(node.scope).toBe('portfolio')
       }
 
       const state = builder.build(patch)
       expect(state).not.toBeNull()
       const stateNode = state!.orchestration?.nodes[0]
       expect(stateNode).toBeDefined()
-      expect(stateNode?.kind).toBe('gate')
-      expect(stateNode?.key).toBe('gate.regime')
-      expect(stateNode?.target).toEqual({ phase: 'entry', sideScope: 'long' })
+      expect(stateNode?.kind).toBe('portfolioRisk')
+      expect(stateNode?.key).toBe('portfolioRisk.drawdown_block')
+      expect(stateNode?.mode).toBe('enforce')
+      expect(stateNode?.thresholdPct).toBe(10)
+      expect(stateNode?.scope).toBe('portfolio')
       expect(stateNode?.status).toBe('locked')
     })
   })
@@ -113,9 +118,9 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
   describe('Section B: readiness fail-closed branches', () => {
     const readiness = () => new SemanticContractReadinessService()
 
-    it('B.1 gate.regime + activeWhen valid + 新策略 → 不注入 phase0 slot', () => {
+    it('B.1 portfolioRisk.drawdown_block + enforce + thresholdPct=10 + scope=portfolio + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+        orchestration: { nodes: [portfolioDrawdownNode()], contracts: [] },
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
       const slots = result.state.orchestration?.nodes[0].openSlots ?? []
@@ -124,24 +129,27 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
       }))
     })
 
-    it('B.2 gate.regime missing activeWhen → registry-driven active_when open slot', () => {
+    it('B.2 missing thresholdPct → registry openSlot orchestration.portfolio_drawdown.threshold_pct', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode({ activeWhen: undefined })], contracts: [] },
+        orchestration: {
+          nodes: [portfolioDrawdownNode({ thresholdPct: undefined })],
+          contracts: [],
+        },
       })
       const result = readiness().normalize(state, CURRENT_VERSION)
       const slots = result.state.orchestration?.nodes[0].openSlots ?? []
       expect(slots).toContainEqual(expect.objectContaining({
-        slotKey: 'orchestration.gate.regime.active_when',
+        slotKey: 'orchestration.portfolio_drawdown.threshold_pct',
       }))
       expect(slots).not.toContainEqual(expect.objectContaining({
         slotKey: 'orchestration.phase0.unsupported',
       }))
     })
 
-    it('B.3 kind=gate + key=未知 → phase0 unsupported', () => {
+    it('B.3 unknown key (kind=portfolioRisk + key=portfolioRisk.unknown) → phase0 unsupported', () => {
       const state = createSemanticState({
         orchestration: {
-          nodes: [regimeGateNode({ key: 'unknown_gate_atom' })],
+          nodes: [portfolioDrawdownNode({ key: 'portfolioRisk.unknown' })],
           contracts: [],
         },
       })
@@ -152,25 +160,11 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
       }))
     })
 
-    it('B.4 gate.regime + target.phase=exit → phase0 unsupported', () => {
+    it('B.4 scope !== portfolio → phase0 unsupported', () => {
       const state = createSemanticState({
         orchestration: {
-          nodes: [regimeGateNode({ target: { phase: 'exit' as 'entry', sideScope: 'long' } })],
-          contracts: [],
-        },
-      })
-      const result = readiness().normalize(state, CURRENT_VERSION)
-      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
-      expect(slots).toContainEqual(expect.objectContaining({
-        slotKey: 'orchestration.phase0.unsupported',
-      }))
-    })
-
-    it('B.5 gate.regime + activeWhen 不是表达式对象 → phase0 unsupported', () => {
-      const state = createSemanticState({
-        orchestration: {
-          nodes: [regimeGateNode({
-            activeWhen: 'not-an-expression' as unknown as SemanticOrchestrationNode['activeWhen'],
+          nodes: [portfolioDrawdownNode({
+            scope: 'symbol' as unknown as SemanticOrchestrationNode['scope'],
           })],
           contracts: [],
         },
@@ -182,9 +176,53 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
       }))
     })
 
-    it('B.6 gate.regime valid + 老策略 (deployedAtSemanticVersion=null) → 双 fail-closed phase0', () => {
+    it('B.5 invalid mode → phase0 unsupported', () => {
       const state = createSemanticState({
-        orchestration: { nodes: [regimeGateNode()], contracts: [] },
+        orchestration: {
+          nodes: [portfolioDrawdownNode({
+            mode: 'unknown' as unknown as SemanticOrchestrationNode['mode'],
+          })],
+          contracts: [],
+        },
+      })
+      const result = readiness().normalize(state, CURRENT_VERSION)
+      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      expect(slots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('B.6a thresholdPct=0 (≤0) → phase0 unsupported', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [portfolioDrawdownNode({ thresholdPct: 0 })],
+          contracts: [],
+        },
+      })
+      const result = readiness().normalize(state, CURRENT_VERSION)
+      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      expect(slots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('B.6b thresholdPct=150 (>100) → phase0 unsupported', () => {
+      const state = createSemanticState({
+        orchestration: {
+          nodes: [portfolioDrawdownNode({ thresholdPct: 150 })],
+          contracts: [],
+        },
+      })
+      const result = readiness().normalize(state, CURRENT_VERSION)
+      const slots = result.state.orchestration?.nodes[0].openSlots ?? []
+      expect(slots).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('B.7 老策略 (deployedAtSemanticVersion=null) → phase0 unsupported（双 fail-closed）', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [portfolioDrawdownNode()], contracts: [] },
       })
       const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
       const result = readiness().normalize(state, legacy)
@@ -201,19 +239,10 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
   describe('Section C: display projection invariants', () => {
     const projection = new SemanticStateProjectionService()
 
-    it('C.1 supported gate.regime renders human label without internal keys', () => {
+    it('C.1 supported portfolioRisk.drawdown_block renders 中文 label without leaking internal keys', () => {
       const state = createSemanticState({
         orchestration: {
-          nodes: [{
-            id: 'orchestration-gate-regime-1',
-            kind: 'gate',
-            key: 'gate.regime',
-            params: { sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' },
-            status: 'locked',
-            source: 'user_explicit',
-            openSlots: [],
-            contracts: [],
-          }],
+          nodes: [portfolioDrawdownNode()],
           contracts: [],
         },
       })
@@ -223,19 +252,21 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
       expect(orchestrationBlocks).toHaveLength(1)
 
       const flat = graph.blocks.flatMap(b => b.items.map(i => i.text)).join(' ')
-      // 中文 label：当前 presentation 渲染为「只在价格高于 EMA50 时允许做多」
-      expect(flat).toContain('EMA50')
-      expect(flat).toContain('做多')
-      expect(flat).toMatch(/价格\s*高于/u)
-      expect(flat).not.toContain('gate.regime')
-      expect(flat).not.toContain('orchestration.gate')
-      expect(flat).not.toContain('activeWhen')
+      // 中文 label：当前 presentation 渲染为「账户回撤超过 10% 时阻止开新仓」
+      expect(flat).toContain('账户回撤')
+      expect(flat).toContain('10')
+      expect(flat).toContain('阻止')
+      expect(flat).not.toContain('portfolioRisk.drawdown_block')
+      expect(flat).not.toContain('orchestration.')
       expect(flat).not.toContain('block_new_entries')
+      expect(flat).not.toContain('drawdown_block')
+      expect(flat).not.toContain('enforce')
+      expect(flat).not.toContain('observe')
     })
 
     it('C.2 W2: 无 orchestration nodes → display 无 ORCHESTRATION block', () => {
       const state = createSemanticState({
-        normalizationNotes: ['只在 EMA50 上方才做多'],
+        normalizationNotes: ['账户回撤超过 10% 停止开新仓'],
       })
       const graph = projection.buildDisplayLogicGraph(state)
       expect(graph.blocks.filter(b => b.type === 'ORCHESTRATION')).toHaveLength(0)
@@ -246,7 +277,9 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
   // Section D — Canonical → IR → evaluator
   // ============================================================
   describe('Section D: canonical → IR → evaluator', () => {
-    function buildPipeline() {
+    function buildPipeline(
+      nodeOverrides: Partial<SemanticOrchestrationNode> = {},
+    ) {
       const builder = new CanonicalSpecBuilderService()
       const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -282,24 +315,7 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
           openSlots: [],
         },
         orchestration: {
-          nodes: [{
-            id: 'gate-regime-long-1',
-            kind: 'gate',
-            key: 'gate.regime',
-            status: 'locked',
-            source: 'user_explicit',
-            openSlots: [],
-            contracts: [],
-            params: {},
-            target: { phase: 'entry', sideScope: 'long' },
-            activeWhen: {
-              kind: 'predicate',
-              op: 'GT',
-              left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
-              right: { kind: 'indicator', name: 'ema', params: { length: 50 } },
-            },
-            effectWhenFalse: 'block_new_entries',
-          }],
+          nodes: [portfolioDrawdownNode(nodeOverrides)],
           contracts: [],
         },
       })
@@ -317,44 +333,58 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
       return { spec, ir }
     }
 
-    it('D.1 spec.orchestration.gates 与 ir.orchestrationGates 各 1 条 + non-empty exprId', () => {
+    it('D.1 spec.orchestration.portfolioRisks 与 ir.orchestrationPortfolioRisks 各 1 条 + 形态正确', () => {
       const { spec, ir } = buildPipeline()
-      expect(spec.orchestration?.gates).toHaveLength(1)
-      const gates = ir.orchestrationGates ?? []
-      expect(gates).toHaveLength(1)
-      expect(typeof gates[0].exprId).toBe('string')
-      expect(gates[0].exprId.length).toBeGreaterThan(0)
+      expect(spec.orchestration?.portfolioRisks).toHaveLength(1)
+      const risks = ir.orchestrationPortfolioRisks ?? []
+      expect(risks).toHaveLength(1)
+      expect(risks[0]).toEqual(expect.objectContaining({
+        scope: 'portfolio',
+        mode: 'enforce',
+        thresholdPct: 10,
+        effectWhenTriggered: 'block_new_entries',
+      }))
+      expect(typeof risks[0].id).toBe('string')
+      expect(risks[0].id.length).toBeGreaterThan(0)
     })
 
-    it('D.2 evaluator: gate=true → blockEntryLong=false', () => {
+    it('D.2 evaluator: drawdownPct=12 + threshold=10 + enforce → blockEntryLong/Short=true', () => {
       const { ir } = buildPipeline()
-      const gates = ir.orchestrationGates ?? []
-      const exprId = gates[0].exprId
-      const result = evaluateOrchestrationGates(gates, { [exprId]: true })
+      const risks = (ir.orchestrationPortfolioRisks ?? []) as CompiledOrchestrationPortfolioRisk[]
+      const result = evaluateOrchestrationPortfolioRisks(risks, { drawdownPct: 12 })
+      expect(result.blockEntryLong).toBe(true)
+      expect(result.blockEntryShort).toBe(true)
+      expect(result.observedBreaches).toEqual([])
+    })
+
+    it('D.3 evaluator: drawdownPct=undefined + enforce → fail-closed double block', () => {
+      const { ir } = buildPipeline()
+      const risks = (ir.orchestrationPortfolioRisks ?? []) as CompiledOrchestrationPortfolioRisk[]
+      const result = evaluateOrchestrationPortfolioRisks(risks, { drawdownPct: undefined })
+      expect(result.blockEntryLong).toBe(true)
+      expect(result.blockEntryShort).toBe(true)
+      expect(result.observedBreaches).toEqual([])
+    })
+
+    it('D.4 evaluator: drawdownPct=undefined + observe → no block + observedBreaches=[]', () => {
+      const { ir } = buildPipeline({
+        mode: 'observe',
+        params: { thresholdPct: 10, mode: 'observe' },
+      })
+      const risks = (ir.orchestrationPortfolioRisks ?? []) as CompiledOrchestrationPortfolioRisk[]
+      expect(risks[0].mode).toBe('observe')
+      const result = evaluateOrchestrationPortfolioRisks(risks, { drawdownPct: undefined })
       expect(result.blockEntryLong).toBe(false)
-    })
-
-    it('D.3 evaluator: gate=false → blockEntryLong=true', () => {
-      const { ir } = buildPipeline()
-      const gates = ir.orchestrationGates ?? []
-      const exprId = gates[0].exprId
-      const result = evaluateOrchestrationGates(gates, { [exprId]: false })
-      expect(result.blockEntryLong).toBe(true)
-    })
-
-    it('D.4 evaluator: missing exprValue → fail-closed (block long)', () => {
-      const { ir } = buildPipeline()
-      const gates = ir.orchestrationGates ?? []
-      const result = evaluateOrchestrationGates(gates, {})
-      expect(result.blockEntryLong).toBe(true)
+      expect(result.blockEntryShort).toBe(false)
+      expect(result.observedBreaches).toEqual([])
     })
   })
 
   // ============================================================
-  // Section E — W5: existing short + gate=false → CLOSE_SHORT
+  // Section E — W5: existing short + drawdown 触发 → CLOSE_SHORT
   // ============================================================
-  describe('Section E: W5 existing short + gate=false → CLOSE_SHORT', () => {
-    it('E.1 gate 仅拦截 OPEN_*；CLOSE_SHORT 不受 gate 影响', () => {
+  describe('Section E: W5 existing short + drawdown 触发 → CLOSE_SHORT', () => {
+    it('E.1 portfolioRisk enforce 仅拦截 OPEN_*；CLOSE_SHORT 不受影响', () => {
       type Programs = Parameters<typeof runDecisionPrograms>[1]
       type Ctx = Parameters<typeof runDecisionPrograms>[0]
       type Guard = Parameters<typeof runDecisionPrograms>[3]
@@ -369,11 +399,12 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
         actions: [{ kind: 'CLOSE_SHORT' as const, quantity: { mode: 'position_pct' as const, value: 100 } }],
       }
 
-      const SHORT_GATE: CompiledOrchestrationGate = {
-        id: 'gate-short',
-        exprId: 'expr-short',
-        target: { phase: 'entry', sideScope: 'short' },
-        effectWhenFalse: 'block_new_entries',
+      const PORTFOLIO_RISK: CompiledOrchestrationPortfolioRisk = {
+        id: 'risk-portfolio-1',
+        scope: 'portfolio',
+        mode: 'enforce',
+        thresholdPct: 10,
+        effectWhenTriggered: 'block_new_entries',
       }
 
       const ctx = {
@@ -384,9 +415,10 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
         semanticRuntimeState: {},
       } as unknown as Ctx
 
-      const exprValues = { 'expr-short': false, predicate_close_short: true }
-      const gateState = evaluateOrchestrationGates([SHORT_GATE], exprValues as never)
-      expect(gateState.blockEntryShort).toBe(true)
+      const exprValues = { predicate_close_short: true }
+      const portfolioRiskState = evaluateOrchestrationPortfolioRisks([PORTFOLIO_RISK], { drawdownPct: 12 })
+      expect(portfolioRiskState.blockEntryLong).toBe(true)
+      expect(portfolioRiskState.blockEntryShort).toBe(true)
 
       const decision = runDecisionPrograms(
         ctx,
@@ -394,7 +426,8 @@ describe('orchestration gate.regime — golden corpus (Phase 5 S1 Task 17)', () 
         exprValues as never,
         baseGuard,
         [CLOSE_SHORT_PROGRAM.id],
-        gateState,
+        undefined,
+        portfolioRiskState,
       )
 
       expect(decision.action).toBe('CLOSE_SHORT')

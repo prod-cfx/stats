@@ -34,6 +34,7 @@ import {
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates, type OrchestrationGateState } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
+import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
@@ -734,6 +735,10 @@ export class SignalGeneratorService {
               (projection as { orchestrationGates?: Parameters<typeof evaluateOrchestrationGates>[0] }).orchestrationGates ?? [],
               exprValues,
             )
+            const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
+              (projection as { orchestrationPortfolioRisks?: Parameters<typeof evaluateOrchestrationPortfolioRisks>[0] }).orchestrationPortfolioRisks ?? [],
+              { drawdownPct: ctx.accountDrawdownPct },
+            )
             const decision = runDecisionPrograms(
               ctx,
               decisionPrograms,
@@ -741,6 +746,7 @@ export class SignalGeneratorService {
               guardState,
               projection.topology.decisionOrder,
               orchestrationGateState,
+              portfolioRiskState,
             )
             const orderState = runOrderPrograms(
               ctx,

@@ -1,4 +1,5 @@
 import type { OrchestrationGateState } from './evaluate-orchestration-gates'
+import type { OrchestrationPortfolioRiskState } from './evaluate-orchestration-portfolio-risks'
 import { runDecisionPrograms } from './run-decision-programs'
 
 type Programs = Parameters<typeof runDecisionPrograms>[1]
@@ -287,5 +288,186 @@ describe('orchestration gate enforcement', () => {
       [OPEN_LONG_PROGRAM.id],
     )
     expect(decision.action).toBe('OPEN_LONG')
+  })
+})
+
+describe('orchestration portfolioRisk enforcement', () => {
+  const OPEN_LONG_PROGRAM = {
+    id: 'program_open_long',
+    phase: 'entry' as const,
+    priority: 100,
+    when: 'predicate_open_long',
+    actions: [{ kind: 'OPEN_LONG' as const, quantity: { mode: 'pct_equity' as const, value: 50 } }],
+  }
+  const OPEN_SHORT_PROGRAM = {
+    id: 'program_open_short',
+    phase: 'entry' as const,
+    priority: 100,
+    when: 'predicate_open_short',
+    actions: [{ kind: 'OPEN_SHORT' as const, quantity: { mode: 'pct_equity' as const, value: 50 } }],
+  }
+  const CLOSE_LONG_PROGRAM = {
+    id: 'program_close_long',
+    phase: 'exit' as const,
+    priority: 100,
+    when: 'predicate_close_long',
+    actions: [{ kind: 'CLOSE_LONG' as const, quantity: { mode: 'position_pct' as const, value: 100 } }],
+  }
+  const CLOSE_SHORT_PROGRAM = {
+    id: 'program_close_short',
+    phase: 'exit' as const,
+    priority: 100,
+    when: 'predicate_close_short',
+    actions: [{ kind: 'CLOSE_SHORT' as const, quantity: { mode: 'position_pct' as const, value: 100 } }],
+  }
+
+  function makeCtx(qty: number): Ctx {
+    return {
+      position: { qty },
+      currentPrice: 100,
+      accountEquity: 10000,
+      __compiledDecisionState: { previousPositionQty: qty, lastTriggeredByProgram: {}, barIndex: 0 },
+      semanticRuntimeState: {},
+    } as unknown as Ctx
+  }
+
+  const gateBlockLong: OrchestrationGateState = { blockEntryLong: true, blockEntryShort: false }
+  const portfolioBlockLong: OrchestrationPortfolioRiskState = {
+    blockEntryLong: true,
+    blockEntryShort: false,
+    observedBreaches: [],
+  }
+  const portfolioBlockShort: OrchestrationPortfolioRiskState = {
+    blockEntryLong: false,
+    blockEntryShort: true,
+    observedBreaches: [],
+  }
+  const portfolioBlockBoth: OrchestrationPortfolioRiskState = {
+    blockEntryLong: true,
+    blockEntryShort: true,
+    observedBreaches: [],
+  }
+  const portfolioObservedOnly: OrchestrationPortfolioRiskState = {
+    blockEntryLong: false,
+    blockEntryShort: false,
+    observedBreaches: ['risk-1'],
+  }
+
+  it('portfolioRiskState undefined => no change (regression)', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+      undefined,
+      undefined,
+    )
+    expect(decision.action).toBe('OPEN_LONG')
+  })
+
+  it('portfolioRiskState.blockEntryLong=true converts OPEN_LONG to NOOP with portfolioRisk reason', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+      undefined,
+      portfolioBlockLong,
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toBe('compiled.orchestration.portfolio_risk.block_entry_long')
+  })
+
+  it('portfolioRiskState.blockEntryShort=true converts OPEN_SHORT to NOOP with portfolioRisk reason', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_SHORT_PROGRAM] as unknown as Programs,
+      { predicate_open_short: true },
+      baseGuard,
+      [OPEN_SHORT_PROGRAM.id],
+      undefined,
+      portfolioBlockShort,
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toBe('compiled.orchestration.portfolio_risk.block_entry_short')
+  })
+
+  it('gate blocks long + portfolioRiskState undefined => NOOP gate reason', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+      gateBlockLong,
+      undefined,
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toBe('compiled.orchestration.gate.block_entry_long')
+  })
+
+  it('gate blocks long + portfolio blocks long => portfolioRisk reason wins (priority)', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+      gateBlockLong,
+      portfolioBlockLong,
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toBe('compiled.orchestration.portfolio_risk.block_entry_long')
+  })
+
+  it('observedBreaches non-empty + no block + OPEN_LONG => decision flows with observedBreaches in meta', () => {
+    const ctx = makeCtx(0)
+    const decision = runDecisionPrograms(
+      ctx,
+      [OPEN_LONG_PROGRAM] as unknown as Programs,
+      { predicate_open_long: true },
+      baseGuard,
+      [OPEN_LONG_PROGRAM.id],
+      undefined,
+      portfolioObservedOnly,
+    )
+    expect(decision.action).toBe('OPEN_LONG')
+    expect(decision.meta).toBeDefined()
+    expect((decision.meta as { observedBreaches?: string[] }).observedBreaches).toEqual(['risk-1'])
+  })
+
+  it('W5: gate blocks + portfolio observedBreaches + existing long + CLOSE_LONG flows', () => {
+    const ctx = makeCtx(1)
+    const decision = runDecisionPrograms(
+      ctx,
+      [CLOSE_LONG_PROGRAM] as unknown as Programs,
+      { predicate_close_long: true },
+      baseGuard,
+      [CLOSE_LONG_PROGRAM.id],
+      gateBlockLong,
+      portfolioObservedOnly,
+    )
+    expect(decision.action).toBe('CLOSE_LONG')
+  })
+
+  it('W5: portfolioRiskState.blockEntryShort=true + existing short + CLOSE_SHORT flows', () => {
+    const ctx = makeCtx(-1)
+    const decision = runDecisionPrograms(
+      ctx,
+      [CLOSE_SHORT_PROGRAM] as unknown as Programs,
+      { predicate_close_short: true },
+      baseGuard,
+      [CLOSE_SHORT_PROGRAM.id],
+      undefined,
+      portfolioBlockBoth,
+    )
+    expect(decision.action).toBe('CLOSE_SHORT')
   })
 })
