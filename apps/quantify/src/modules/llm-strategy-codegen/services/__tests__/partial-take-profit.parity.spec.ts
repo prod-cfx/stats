@@ -47,13 +47,15 @@ describe('risk.partial_take_profit atom 七层 parity', () => {
       supportStatus: 'supported_executable',
       requiredParams: expect.arrayContaining(['tiers', 'memoryKey']),
     })
+    if (atom.supportStatus !== 'supported_executable') throw new Error('expected executable partial take profit atom')
     expect(atom.executableProjection).toEqual(expect.arrayContaining(['canonical_spec_v2', 'compiled_runtime']))
-    expect((atom as { executableSinceVersion?: string }).executableSinceVersion).toBe('2026.05.W02')
+    expect(atom.executableSinceVersion).toBe('2026.05.W02')
   })
 
   it('Layer 1b — atom registry: resolve without tiers → supported_requires_slot', () => {
     const atom = atomRegistry.resolve('risk.partial_take_profit', {})
     expect(atom.supportStatus).toBe('supported_requires_slot')
+    if (atom.supportStatus !== 'supported_requires_slot') throw new Error('expected partial take profit open-slot atom')
     expect(atom.openSlots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ slotKey: 'risk.partial_take_profit.tiers' }),
