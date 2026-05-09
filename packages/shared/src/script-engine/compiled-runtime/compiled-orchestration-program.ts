@@ -1,13 +1,15 @@
 /**
- * Orchestration program contract type (Phase 5 S4, issue #984).
+ * Orchestration program contract type (Phase 5 S4 + S5, issue #984).
  *
- * `program.fixed_grid_gated` 是 Phase 5 第三个 supported orchestration capability：
- * - 通过 activeWhenExprId 引用 gate.regime 的 expr id（IR 阶段 inline 字面量）
- * - 失活时按 onDeactivate 行为：cancel(撤单) / keep(保单子) / close(平仓)
- * - rebuildPolicy 'static' 表示 ladder 在 IR 阶段一次生成，runtime 不重建
+ * `program.fixed_grid_gated` 是 Phase 5 S4 注册的第三个 supported orchestration capability。
+ * `program.dynamic_grid` 是 Phase 5 S5 注册的第四个 supported orchestration capability。
  *
- * 与 evaluate-orchestration-gates.ts / evaluate-orchestration-portfolio-risks.ts
- * 同目录，由 runOrderPrograms 第 7 参数消费。
+ * union 改为 discriminated by `programKind`（critic round 1 M2）：
+ * - 'fixed_grid_gated' 变体：静态 ladder（IR 阶段一次生成，runtime 不重建）
+ * - 'dynamic_grid'     变体：anchor 跟随 lookback 窗口 high/low/mid 漂移触发 ladder rebuild
+ *
+ * 由 runOrderPrograms 第 7 参 (orchestrationPrograms) 消费；lifecycle 状态由第 8 参 + 返回
+ * `programLifecycleStateNext` 透传（详见 ProgramLifecycleState）。
  */
 
 export interface CompiledOrchestrationProgramGridParams {
@@ -23,7 +25,21 @@ export interface CompiledOrchestrationProgramSizing {
   value: number
 }
 
-export interface CompiledOrchestrationProgram {
+export interface CompiledOrchestrationProgramDynamicGridStep {
+  mode: 'pct' | 'absolute'
+  value: number
+}
+
+export interface CompiledOrchestrationProgramDynamicGridParams {
+  anchorLookbackBars: number
+  anchorSide: 'high' | 'low' | 'mid'
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  step: CompiledOrchestrationProgramDynamicGridStep
+}
+
+export interface CompiledFixedGridGatedProgram {
   id: string
   programKind: 'fixed_grid_gated'
   activeWhenExprId: string
@@ -31,4 +47,30 @@ export interface CompiledOrchestrationProgram {
   rebuildPolicy: 'static'
   gridParams: CompiledOrchestrationProgramGridParams
   sizing: CompiledOrchestrationProgramSizing
+}
+
+export interface CompiledDynamicGridProgram {
+  id: string
+  programKind: 'dynamic_grid'
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'anchor_on_state_change'
+  dynamicGridParams: CompiledOrchestrationProgramDynamicGridParams
+  sizing: CompiledOrchestrationProgramSizing
+}
+
+export type CompiledOrchestrationProgram =
+  | CompiledFixedGridGatedProgram
+  | CompiledDynamicGridProgram
+
+export function isFixedGridGatedProgram(
+  program: CompiledOrchestrationProgram,
+): program is CompiledFixedGridGatedProgram {
+  return program.programKind === 'fixed_grid_gated'
+}
+
+export function isDynamicGridProgram(
+  program: CompiledOrchestrationProgram,
+): program is CompiledDynamicGridProgram {
+  return program.programKind === 'dynamic_grid'
 }

@@ -1277,7 +1277,7 @@ describe('backtestCompiledRuntimeCompat', () => {
       triggered: Object.freeze([] as string[]),
     })
 
-    function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+    function makeProgram(overrides: Partial<Extract<CompiledOrchestrationProgram, { programKind: 'fixed_grid_gated' }>> = {}): Extract<CompiledOrchestrationProgram, { programKind: 'fixed_grid_gated' }> {
       return {
         id: 'orch_grid_1',
         programKind: 'fixed_grid_gated',
@@ -1506,7 +1506,7 @@ describe('backtestCompiledRuntimeCompat', () => {
       triggered: Object.freeze([] as string[]),
     })
 
-    function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+    function makeProgram(overrides: Partial<Extract<CompiledOrchestrationProgram, { programKind: 'fixed_grid_gated' }>> = {}): Extract<CompiledOrchestrationProgram, { programKind: 'fixed_grid_gated' }> {
       return {
         id: 'orch_grid_1',
         programKind: 'fixed_grid_gated',

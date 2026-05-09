@@ -1,5 +1,8 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
-import type { CompiledOrchestrationProgram } from './compiled-orchestration-program'
+import type {
+  CompiledFixedGridGatedProgram,
+  CompiledOrchestrationProgram,
+} from './compiled-orchestration-program'
 import type { CompiledGuardState } from './evaluate-guards'
 import type { ProgramLifecycleState } from './program-lifecycle-state'
 import { runOrderPrograms } from './run-order-programs'
@@ -21,7 +24,7 @@ const guardCancelAll: CompiledGuardState = Object.freeze({
   triggered: Object.freeze([] as string[]),
 }) as CompiledGuardState
 
-function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+function makeProgram(overrides: Partial<CompiledFixedGridGatedProgram> = {}): CompiledFixedGridGatedProgram {
   return {
     id: 'orch_grid_1',
     programKind: 'fixed_grid_gated',
@@ -203,7 +206,7 @@ describe('runOrderPrograms — orchestration program lifecycle (Phase 5 S4 T11)'
   })
 
   it('guardState.cancelOrderPrograms=true forces cancel even when active=true / onDeactivate=close', () => {
-    const programs: CompiledOrchestrationProgram[] = [
+    const programs: readonly CompiledOrchestrationProgram[] = [
       makeProgram({ id: 'orch_a', onDeactivate: 'close' }),
       makeProgram({ id: 'orch_b', onDeactivate: 'keep' }),
     ]
