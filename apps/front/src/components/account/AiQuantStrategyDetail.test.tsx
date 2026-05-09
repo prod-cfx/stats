@@ -909,12 +909,12 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('策略已平仓并停止。')
   })
 
-  it('shows redeploy and return-to-chat entries after the strategy is stopped', async () => {
+  it('shows redeploy and return-to-chat entries after a bound-chat strategy is stopped', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
           lng="zh"
-          strategy={buildStrategy({ status: 'stopped' })}
+          strategy={buildStrategy({ status: 'stopped', hasActiveConversation: true })}
         />,
       )
     })
@@ -922,6 +922,21 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('重新部署')
     expect(container.textContent).toContain('返回对话')
     expect(container.textContent).not.toContain('返回对话修改')
+    expect(container.textContent).not.toContain('停止策略')
+  })
+
+  it('hides return-to-chat entry for plaza-run strategies without a conversation', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({ status: 'stopped', hasActiveConversation: false })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('重新部署')
+    expect(container.textContent).not.toContain('返回对话')
     expect(container.textContent).not.toContain('停止策略')
   })
 
@@ -959,7 +974,7 @@ describe('AiQuantStrategyDetail', () => {
       root.render(
         <AiQuantStrategyDetail
           lng="zh"
-          strategy={buildStrategy({ status: 'stopped', publishedSnapshotId: 'snapshot-1' })}
+          strategy={buildStrategy({ status: 'stopped', publishedSnapshotId: 'snapshot-1', hasActiveConversation: true })}
         />,
       )
     })
@@ -991,7 +1006,7 @@ describe('AiQuantStrategyDetail', () => {
     localStorage.clear()
 
     await act(async () => {
-      root.render(<AiQuantStrategyDetail lng="zh" strategy={buildStrategy({ status: 'running' })} />)
+      root.render(<AiQuantStrategyDetail lng="zh" strategy={buildStrategy({ status: 'running', hasActiveConversation: true })} />)
     })
 
     const link = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
