@@ -667,6 +667,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     goldenUtterances: ['策略总敞口不超过账户 30%'],
   }),
   presentation({
+    key: 'risk.partial_take_profit',
+    publicName: '分批止盈',
+    aliases: ['分档止盈', '多档止盈', '部分止盈', '阶梯止盈'],
+    positiveExamples: ['盈利 5% 减仓 30%, 10% 再减 30%, 15% 全部平仓'],
+    negativeExamples: ['盈利 10% 全部止盈'],
+    goldenUtterances: ['盈利 5% 先减仓 30%，再涨到 10% 再减 30%，最终 15% 全部平仓'],
+    displayRenderer: ({ params }) => {
+      const tiers = params.tiers
+      if (!Array.isArray(tiers) || tiers.length === 0) return '分批止盈'
+      const parts = (tiers as Array<{ trigger?: { threshold?: number }; reduceRatio?: number }>).map((tier, i) => {
+        const pct = typeof tier.trigger?.threshold === 'number' ? `+${tier.trigger.threshold}%` : '?%'
+        const ratio = typeof tier.reduceRatio === 'number' ? `减 ${Math.round(tier.reduceRatio * 100)}%` : ''
+        return `第${i + 1}档 ${pct} ${ratio}`.trim()
+      })
+      return `分批止盈：${parts.join('，')}`
+    },
+  }),
+  presentation({
     key: 'position.dca_schedule',
     publicName: 'DCA 补仓计划',
     aliases: ['定投补仓', '分批补仓计划'],

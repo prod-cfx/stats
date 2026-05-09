@@ -296,7 +296,7 @@ describe('semantic gateway golden corpus', () => {
     const trigger = builtState?.triggers.find(t => t.key === 'position.has_position')
     expect(trigger?.sideScope).toBe('long')
     const spec = canonicalBuilder.buildFromSemanticState(builtState!)
-    const gateRule = spec.rules.find(r => r.phase === 'gate' && r.condition?.key === 'position.has_position')
+    const gateRule = spec.rules.find(r => r.phase === 'gate' && r.condition?.kind === 'atom' && r.condition.key === 'position.has_position')
     expect(gateRule).toBeDefined()
     expect((gateRule?.condition as { params?: { side?: string } } | undefined)?.params?.side).toBe('long')
   })

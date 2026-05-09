@@ -641,6 +641,7 @@ function resolvePartialTakeProfitAtom(
       executableProjection: ['canonical_spec_v2', 'compiled_runtime'],
       openSlots: [],
       contractSubstrate: partialTakeProfitSubstrate(memoryKey as string),
+      executableSinceVersion: '2026.05.W02',
     }
   }
 
