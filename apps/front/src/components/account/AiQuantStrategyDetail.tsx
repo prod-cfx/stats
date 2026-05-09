@@ -344,6 +344,7 @@ export function AiQuantStrategyDetail({
 
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
+  const equityPolyline = useMemo(() => buildPolyline(series), [series])
   const { displayTotalPnl, displayTodayPnl } = useMemo(
     () => resolveDisplayMetrics({
       totalPnl: strategy?.totalPnl,
@@ -535,20 +536,22 @@ export function AiQuantStrategyDetail({
                   重新部署
                 </Link>
               )}
-              <Link
-                href={`/${lng}/ai-quant`}
-                onClick={() => {
-                  setIntent({
-                    type: 'strategy-edit-session',
-                    strategyInstanceId: strategy.id,
-                    publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
-                    source: 'account-detail',
-                  })
-                }}
-                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
-              >
-                返回对话
-              </Link>
+              {strategy.hasActiveConversation === true && (
+                <Link
+                  href={`/${lng}/ai-quant`}
+                  onClick={() => {
+                    setIntent({
+                      type: 'strategy-edit-session',
+                      strategyInstanceId: strategy.id,
+                      publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
+                      source: 'account-detail',
+                    })
+                  }}
+                  className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                >
+                  返回对话
+                </Link>
+              )}
             </div>
             {strategy.status === 'running' && (
               <div className="flex flex-wrap gap-3">
@@ -998,7 +1001,7 @@ export function AiQuantStrategyDetail({
               strokeWidth="3"
               strokeLinecap="round"
               strokeLinejoin="round"
-              points={buildPolyline(series)}
+              points={equityPolyline}
             />
             {series.length === 1 && coords[0] && (
               <circle cx={coords[0].x} cy={coords[0].y} r={4} fill="#38bdf8" />
