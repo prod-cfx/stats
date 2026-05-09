@@ -3,6 +3,7 @@ import type {
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticContextFrame,
+  SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
@@ -22,6 +23,7 @@ type FrameDraft =
   | RegimeGateFrameDraft
   | PortfolioDrawdownFrameDraft
   | FixedGridGatedFrameDraft
+  | DynamicGridFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -32,6 +34,7 @@ type CombinationFrameDraft = Omit<SemanticCombinationFrame, 'id' | 'confidence'>
 type RegimeGateFrameDraft = Omit<SemanticRegimeGateFrame, 'id' | 'confidence'>
 type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | 'confidence'>
 type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confidence'>
+type DynamicGridFrameDraft = Omit<SemanticDynamicGridFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -47,6 +50,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseRisk(text),
       ...this.parseRegimeGate(text),
       ...this.parsePortfolioDrawdown(text),
+      ...this.parseDynamicGrid(text),
       ...this.parseFixedGridGated(text),
     ]
 
@@ -480,6 +484,109 @@ export class NaturalLanguageGatewayService {
 
   private hasGateReference(text: string): boolean {
     return /(?:趋势|行情|上涨|下跌|震荡|启用|禁用|失活|gate|regime)/iu.test(text)
+  }
+
+  /**
+   * 解析 dynamic_grid 帧（Phase 5 S5 #984）。
+   *
+   * 必需字段（任一缺失则不抽帧）：
+   *   - anchorLookbackBars（最近 N 根 K 线）
+   *   - anchorSide（高点/低点/中点 ↔ high/low/mid）
+   *   - levelCount（X 档）
+   *   - dynamicGridStep（每档 X% / 每档 X USDT / 每档 X 张 / X% 步长）
+   *   - activeWhenRef（趋势/鲸鱼等启用提示存在 → orchestration-gate-regime-1）
+   *   - onDeactivate（停用时 撤单/保留/平仓）
+   * 可选字段：anchorDriftPct（drift X% 时重建）/ rebuildMinIntervalSec（至少间隔 X 秒）
+   *
+   * 必须先识别"动态网格 / 漂移网格 / 跟随"等显式 dynamic 标记，避免误抢
+   * fixed_grid_gated 的"区间网格"语义。
+   */
+  private parseDynamicGrid(text: string): DynamicGridFrameDraft[] {
+    if (!this.hasDynamicGridMarker(text)) return []
+
+    const anchorMatch = /(?:最近|近|跟随)\s*(\d+)\s*根\s*k\s*线/iu.exec(text)
+    if (!anchorMatch) return []
+    const anchorLookbackBars = Number(anchorMatch[1])
+    if (!Number.isInteger(anchorLookbackBars) || anchorLookbackBars <= 0) return []
+
+    const anchorSide = this.detectAnchorSide(text)
+    if (!anchorSide) return []
+
+    const levelCountMatch = /(\d+)\s*档/u.exec(text)
+    if (!levelCountMatch) return []
+    const levelCount = Number(levelCountMatch[1])
+    if (!Number.isInteger(levelCount) || levelCount <= 0) return []
+
+    const step = this.detectDynamicGridStep(text)
+    if (!step) return []
+
+    const onDeactivate = this.detectOnDeactivate(text)
+    if (!onDeactivate) return []
+
+    if (!this.hasGateReference(text)) return []
+
+    const sizing = this.detectGridSizing(text)
+    const anchorDriftPct = this.detectAnchorDriftPct(text)
+    const rebuildMinIntervalSec = this.detectRebuildMinIntervalSec(text)
+
+    return [
+      {
+        kind: 'dynamic_grid',
+        anchorLookbackBars,
+        anchorSide,
+        levelCount,
+        step,
+        anchorDriftPct,
+        rebuildMinIntervalSec,
+        activeWhenRef: 'orchestration-gate-regime-1',
+        onDeactivate,
+        sizing,
+        evidenceText: anchorMatch[0],
+      },
+    ]
+  }
+
+  private hasDynamicGridMarker(text: string): boolean {
+    return /(动态网格|漂移网格|跟随\s*\d+\s*根\s*k\s*线|dynamic\s*grid)/iu.test(text)
+  }
+
+  private detectAnchorSide(text: string): SemanticDynamicGridFrame['anchorSide'] | null {
+    if (/中点|mid/iu.test(text)) return 'mid'
+    if (/高点|high/iu.test(text)) return 'high'
+    if (/低点|low/iu.test(text)) return 'low'
+    return null
+  }
+
+  private detectDynamicGridStep(text: string): SemanticDynamicGridFrame['step'] | null {
+    const pctMatch = /每档\s*(\d+(?:\.\d+)?)\s*%|(\d+(?:\.\d+)?)\s*%\s*步长/u.exec(text)
+    if (pctMatch) {
+      const value = Number(pctMatch[1] ?? pctMatch[2])
+      if (Number.isFinite(value) && value > 0) return { mode: 'pct', value }
+    }
+    const absMatch = /每档\s*(\d+(?:\.\d+)?)\s*(?:usdt|usd|U|价位)/iu.exec(text)
+    if (absMatch) {
+      const value = Number(absMatch[1])
+      if (Number.isFinite(value) && value > 0) return { mode: 'absolute', value }
+    }
+    return null
+  }
+
+  private detectAnchorDriftPct(text: string): number {
+    const m = /drift\s*(\d+(?:\.\d+)?)\s*%|漂移\s*(\d+(?:\.\d+)?)\s*%/iu.exec(text)
+    if (m) {
+      const value = Number(m[1] ?? m[2])
+      if (Number.isFinite(value) && value > 0) return value
+    }
+    return 1 // 默认 1% drift
+  }
+
+  private detectRebuildMinIntervalSec(text: string): number {
+    const m = /(?:至少)?\s*间隔\s*(\d+)\s*秒|min\s*interval\s*(\d+)/iu.exec(text)
+    if (m) {
+      const value = Number(m[1] ?? m[2])
+      if (Number.isInteger(value) && value >= 60) return value
+    }
+    return 60 // 默认硬下限 60 秒
   }
 
   private detectGridSizing(text: string): SemanticFixedGridGatedFrame['sizing'] {
