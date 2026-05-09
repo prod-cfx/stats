@@ -116,7 +116,19 @@ export interface CanonicalOrchestrationProgramSizing {
   value: number
 }
 
-export interface CanonicalOrchestrationProgram {
+// Phase 5 S6 (#984): adaptive_volatility_grid program param block
+export interface CanonicalOrchestrationProgramAdaptiveGridParams {
+  atrPeriod: number
+  atrMultiplier: number
+  rangeMultiplier: number
+  atrDriftPct: number
+  rebuildCooldownSec: number
+  minStepPct: number
+  maxStepPct: number
+  levelCount: number
+}
+
+export interface CanonicalFixedGridGatedProgram {
   id: string
   programKind: 'fixed_grid_gated'
   activeWhenRef: string
@@ -125,6 +137,20 @@ export interface CanonicalOrchestrationProgram {
   gridParams: CanonicalOrchestrationProgramGridParams
   sizing: CanonicalOrchestrationProgramSizing
 }
+
+export interface CanonicalAdaptiveVolatilityGridProgram {
+  id: string
+  programKind: 'adaptive_volatility_grid'
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'atr_window'
+  adaptiveGridParams: CanonicalOrchestrationProgramAdaptiveGridParams
+  sizing: CanonicalOrchestrationProgramSizing
+}
+
+export type CanonicalOrchestrationProgram =
+  | CanonicalFixedGridGatedProgram
+  | CanonicalAdaptiveVolatilityGridProgram
 
 export interface CanonicalStrategySpecV2 {
   version: 2

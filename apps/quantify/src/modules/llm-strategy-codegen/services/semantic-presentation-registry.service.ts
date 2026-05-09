@@ -426,6 +426,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderFixedGridGated(params),
     clarificationRenderer: (slotKey) => renderFixedGridGatedClarification(slotKey),
   }),
+  // Phase 5 S6 (#984): adaptive_volatility_grid
+  presentation({
+    key: 'program.adaptive_volatility_grid',
+    publicName: 'ATR 自适应网格',
+    aliases: ['波动自适应网格', 'atr grid', 'adaptive grid', '波动率网格'],
+    positiveExamples: [
+      '用 ATR(14) 的 1.5 倍为步长、3 倍为区间的自适应网格',
+      'ATR 自适应网格，6 档，每档不少于 0.2% 不超过 2%',
+      '波动率 14 自适应网格，1 倍步长 5 倍区间',
+    ],
+    negativeExamples: ['挂个自适应网格', '随便用 ATR'],
+    goldenUtterances: [
+      'ATR(14) 1.5 倍步长 3 倍区间自适应网格 6 档，趋势上涨时启用',
+      'ATR(20) 自适应网格 5 档每档钳制 0.1%-1.5%，停用平仓',
+    ],
+    displayRenderer: ({ params }) => renderAdaptiveVolatilityGrid(params),
+    clarificationRenderer: (slotKey) => renderAdaptiveVolatilityGridClarification(slotKey),
+  }),
   presentation({
     key: 'market.regime',
     publicName: '市场状态',
@@ -1256,6 +1274,47 @@ function renderFixedGridGatedClarification(slotKey: string): string {
     return '请确认每档下单数量'
   }
   return '请补全网格策略参数'
+}
+
+// Phase 5 S6 (#984): adaptive_volatility_grid
+//
+// 注意（critic round 2 Q8 黑名单 + 双向 grep）：
+//   - 必须不出现内部 key 字面量：`program.adaptive_volatility_grid` /
+//     `atr_window` / `adaptive_volatility_grid`（snake_case 内部标识）
+//   - 必须保留用户友好 fragment：`ATR(N)` / `自适应网格` / `波动率` / `钳制`
+function renderAdaptiveVolatilityGrid(params: Record<string, unknown>): string {
+  const inner = objectParam(params, 'params')
+  const source = Object.keys(inner).length > 0 ? inner : params
+  const atrPeriod = numberParam(source, 'atrPeriod', 14)
+  const atrMultiplier = numberParam(source, 'atrMultiplier', 1.5)
+  const rangeMultiplier = numberParam(source, 'rangeMultiplier', 3)
+  const minStepPct = numberParam(source, 'minStepPct', 0.2)
+  const maxStepPct = numberParam(source, 'maxStepPct', 2)
+  const levelCount = numberParam(source, 'levelCount', 6)
+  const onDeactivate = stringParam(source, 'onDeactivate', 'cancel')
+  const deactivateLabel: Record<string, string> = {
+    cancel: '撤单',
+    keep: '保留挂单',
+    close: '平仓',
+  }
+  return (
+    `ATR(${atrPeriod}) 的 ${atrMultiplier} 倍为步长、${rangeMultiplier} 倍为区间的自适应网格，`
+    + `${levelCount} 档，每档 ${minStepPct}%-${maxStepPct}% 钳制，失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
+  )
+}
+
+function renderAdaptiveVolatilityGridClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_period') return '请确认 ATR 周期（2..200 整数）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_multiplier') return '请确认 ATR 步长系数（>0）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.range_multiplier') return '请确认 ATR 区间系数（>0）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.atr_drift_pct') return '请确认 ATR 漂移百分比（>0 且 ≤100）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.rebuild_cooldown_sec') return '请确认重建冷却时长（≥300 整数秒）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.min_step_pct') return '请确认最小步长百分比（>0）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.max_step_pct') return '请确认最大步长百分比（>0 且 ≥ 最小步长）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.level_count') return '请确认档位数量（2..100 整数）'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.sizing') return '请确认每档下单数量'
+  if (slotKey === 'orchestration.program.adaptive_volatility_grid.active_when_ref') return '请确认网格启用/失活条件（引用哪个趋势过滤）'
+  return '请补全自适应网格参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

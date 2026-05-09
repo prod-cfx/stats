@@ -1,5 +1,6 @@
 import type {
   SemanticActionFrame,
+  SemanticAdaptiveVolatilityGridFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticContextFrame,
@@ -22,6 +23,7 @@ type FrameDraft =
   | RegimeGateFrameDraft
   | PortfolioDrawdownFrameDraft
   | FixedGridGatedFrameDraft
+  | AdaptiveVolatilityGridFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -32,6 +34,7 @@ type CombinationFrameDraft = Omit<SemanticCombinationFrame, 'id' | 'confidence'>
 type RegimeGateFrameDraft = Omit<SemanticRegimeGateFrame, 'id' | 'confidence'>
 type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | 'confidence'>
 type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confidence'>
+type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -47,6 +50,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseRisk(text),
       ...this.parseRegimeGate(text),
       ...this.parsePortfolioDrawdown(text),
+      ...this.parseAdaptiveVolatilityGrid(text),
       ...this.parseFixedGridGated(text),
     ]
 
@@ -490,5 +494,140 @@ export class NaturalLanguageGatewayService {
     const pctMatch = /每档\s*(\d+(?:\.\d+)?)\s*%/u.exec(text)
     if (pctMatch) return { mode: 'fixed_pct', value: Number(pctMatch[1]) }
     return { mode: 'fixed_pct', value: 5 }
+  }
+
+  /**
+   * Phase 5 S6 (#984): adaptive_volatility_grid 解析。
+   *
+   * 触发：包含 "ATR / atr / 波动率" 锚词；解析时不与 fixed_grid_gated 冲突
+   * （fixed_grid_gated 要求 "区间挂...档" 或 "锚定..."，与 adaptive 不重叠）。
+   *
+   * 歧义规则（critic round 1 M5 + round 2 Q7）：
+   *   1) `K 倍步长` / `K 倍 step` → atrMultiplier=K（优先匹配）
+   *   2) `M 倍区间` / `M 倍 range` → rangeMultiplier=M（优先匹配）
+   *   3) 无锚词时按出现顺序：第一个 `X 倍` → atrMultiplier，第二个 → rangeMultiplier
+   *   4) ATR 周期：`ATR(N)` / `atr N` / `波动率 N` / `atr-N` 四种归一化为 atrPeriod=N
+   *   5) 钳制范围：`不少于 X% 不超过 Y%` / `钳制 X%-Y%` / `每档 X%-Y%`
+   */
+  private parseAdaptiveVolatilityGrid(text: string): AdaptiveVolatilityGridFrameDraft[] {
+    if (!/(ATR|atr|波动率)/u.test(text)) return []
+    if (!/自适应/u.test(text) && !/自动?调整/u.test(text)) return []
+
+    const onDeactivate = this.detectOnDeactivate(text) ?? 'cancel'
+    if (!this.hasGateReference(text) && !/启用|趋势|上涨|下跌|震荡|鲸鱼|做多|做空/iu.test(text)) {
+      return []
+    }
+
+    const atrPeriod = this.detectAtrPeriod(text)
+    if (atrPeriod === null) return []
+
+    const { atrMultiplier, rangeMultiplier } = this.detectAtrMultipliers(text)
+    if (atrMultiplier === null || rangeMultiplier === null) return []
+
+    const levelCount = this.detectAdaptiveLevelCount(text)
+    if (levelCount === null) return []
+
+    const stepRange = this.detectAdaptiveStepRange(text)
+    if (!stepRange) return []
+
+    const sizing = this.detectGridSizing(text)
+    const atrDriftPct = this.detectAtrDriftPct(text)
+    const rebuildCooldownSec = this.detectRebuildCooldownSec(text)
+
+    const frame: AdaptiveVolatilityGridFrameDraft = {
+      kind: 'adaptive_volatility_grid',
+      atrPeriod,
+      atrMultiplier,
+      rangeMultiplier,
+      minStepPct: stepRange.minPct,
+      maxStepPct: stepRange.maxPct,
+      levelCount,
+      activeWhenRef: 'orchestration-gate-regime-1',
+      onDeactivate,
+      sizing,
+      evidenceText: text.slice(0, 120),
+    }
+    if (atrDriftPct !== null) frame.atrDriftPct = atrDriftPct
+    if (rebuildCooldownSec !== null) frame.rebuildCooldownSec = rebuildCooldownSec
+
+    return [frame]
+  }
+
+  private detectAtrPeriod(text: string): number | null {
+    const parenMatch = /ATR\s*[(（]\s*(\d+)\s*[)）]/iu.exec(text)
+    if (parenMatch) return Number(parenMatch[1])
+    const dashMatch = /atr\s*-\s*(\d+)/iu.exec(text)
+    if (dashMatch) return Number(dashMatch[1])
+    const spaceMatch = /atr\s+(\d+)/iu.exec(text)
+    if (spaceMatch) return Number(spaceMatch[1])
+    const cnMatch = /波动率\s*(\d+)/u.exec(text)
+    if (cnMatch) return Number(cnMatch[1])
+    return null
+  }
+
+  private detectAtrMultipliers(text: string): {
+    atrMultiplier: number | null
+    rangeMultiplier: number | null
+  } {
+    let atrMultiplier: number | null = null
+    let rangeMultiplier: number | null = null
+
+    const stepAnchor = /(\d+(?:\.\d+)?)\s*倍\s*(?:步长|step)/iu.exec(text)
+    if (stepAnchor) atrMultiplier = Number(stepAnchor[1])
+    const rangeAnchor = /(\d+(?:\.\d+)?)\s*倍\s*(?:区间|range)/iu.exec(text)
+    if (rangeAnchor) rangeMultiplier = Number(rangeAnchor[1])
+
+    if (atrMultiplier === null || rangeMultiplier === null) {
+      const fallback = Array.from(text.matchAll(/(\d+(?:\.\d+)?)\s*倍/giu))
+        .map(m => Number(m[1]))
+        .filter(n => Number.isFinite(n) && n > 0)
+      if (atrMultiplier === null && fallback[0] !== undefined) atrMultiplier = fallback[0]
+      if (rangeMultiplier === null && fallback[1] !== undefined) rangeMultiplier = fallback[1]
+    }
+
+    return { atrMultiplier, rangeMultiplier }
+  }
+
+  private detectAdaptiveLevelCount(text: string): number | null {
+    const m = /(\d+)\s*档/u.exec(text)
+    if (!m) return null
+    const value = Number(m[1])
+    return Number.isInteger(value) && value >= 2 ? value : null
+  }
+
+  private detectAdaptiveStepRange(text: string): { minPct: number; maxPct: number } | null {
+    const explicit = /(?:钳制|每档)\s*(\d+(?:\.\d+)?)\s*%\s*-\s*(\d+(?:\.\d+)?)\s*%/u.exec(text)
+    if (explicit) {
+      const minPct = Number(explicit[1])
+      const maxPct = Number(explicit[2])
+      if (minPct > 0 && maxPct >= minPct) return { minPct, maxPct }
+    }
+    const verbose = /不少于\s*(\d+(?:\.\d+)?)\s*%[^0-9]*?不超过\s*(\d+(?:\.\d+)?)\s*%/u.exec(text)
+    if (verbose) {
+      const minPct = Number(verbose[1])
+      const maxPct = Number(verbose[2])
+      if (minPct > 0 && maxPct >= minPct) return { minPct, maxPct }
+    }
+    const dashRange = /每档\s*(\d+(?:\.\d+)?)\s*%\s*-\s*(\d+(?:\.\d+)?)\s*%/u.exec(text)
+    if (dashRange) {
+      const minPct = Number(dashRange[1])
+      const maxPct = Number(dashRange[2])
+      if (minPct > 0 && maxPct >= minPct) return { minPct, maxPct }
+    }
+    return null
+  }
+
+  private detectAtrDriftPct(text: string): number | null {
+    const m = /(?:atr|波动率)?\s*漂移\s*(\d+(?:\.\d+)?)\s*%/iu.exec(text)
+    if (!m) return null
+    const value = Number(m[1])
+    return Number.isFinite(value) && value > 0 && value <= 100 ? value : null
+  }
+
+  private detectRebuildCooldownSec(text: string): number | null {
+    const m = /冷却\s*(\d+)\s*秒/u.exec(text)
+    if (!m) return null
+    const value = Number(m[1])
+    return Number.isInteger(value) && value > 0 ? value : null
   }
 }

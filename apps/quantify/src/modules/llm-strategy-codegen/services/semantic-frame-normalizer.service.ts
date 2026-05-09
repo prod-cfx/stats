@@ -1,5 +1,6 @@
 import type {
   SemanticActionFrame,
+  SemanticAdaptiveVolatilityGridFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticFixedGridGatedFrame,
@@ -10,9 +11,10 @@ import type {
   SemanticRiskFrame,
 } from '../types/semantic-natural-language-frame'
 import type {
+  CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch,
+  CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
-  CodegenSemanticOrchestrationProgramNodePatch,
   CodegenSemanticPatch,
 } from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
@@ -38,8 +40,10 @@ export class SemanticFrameNormalizerService {
     const regimeGateFrames: SemanticRegimeGateFrame[] = []
     const portfolioDrawdownByKey = new Map<string, CodegenSemanticOrchestrationPortfolioRiskNodePatch>()
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
-    const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationProgramNodePatch>()
+    const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch>()
     const fixedGridGatedFrames: SemanticFixedGridGatedFrame[] = []
+    const adaptiveByKey = new Map<string, CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch>()
+    const adaptiveFrames: SemanticAdaptiveVolatilityGridFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -78,6 +82,9 @@ export class SemanticFrameNormalizerService {
         case 'fixed_grid_gated':
           fixedGridGatedFrames.push(frame)
           break
+        case 'adaptive_volatility_grid':
+          adaptiveFrames.push(frame)
+          break
       }
     }
 
@@ -108,6 +115,25 @@ export class SemanticFrameNormalizerService {
       }
     })
 
+    adaptiveFrames.forEach((frame, index) => {
+      const node = this.normalizeAdaptiveVolatilityGrid(frame, index)
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.activeWhenRef,
+        node.atrPeriod,
+        node.atrMultiplier,
+        node.rangeMultiplier,
+        node.minStepPct,
+        node.maxStepPct,
+        node.levelCount,
+        node.onDeactivate,
+      ])
+
+      if (!adaptiveByKey.has(dedupeKey)) {
+        adaptiveByKey.set(dedupeKey, node)
+      }
+    })
+
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
@@ -132,6 +158,7 @@ export class SemanticFrameNormalizerService {
       ...Array.from(regimeGateByKey.values()),
       ...Array.from(portfolioDrawdownByKey.values()),
       ...Array.from(fixedGridGatedByKey.values()),
+      ...Array.from(adaptiveByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
@@ -188,8 +215,8 @@ export class SemanticFrameNormalizerService {
   private normalizeFixedGridGated(
     frame: SemanticFixedGridGatedFrame,
     index: number,
-  ): CodegenSemanticOrchestrationProgramNodePatch {
-    const gridParams: CodegenSemanticOrchestrationProgramNodePatch['gridParams'] = {
+  ): CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch {
+    const gridParams: CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch['gridParams'] = {
       anchorPrice: frame.anchorPrice,
       levelCount: frame.levelCount,
       stepPct: frame.stepPct,
@@ -220,6 +247,44 @@ export class SemanticFrameNormalizerService {
       onDeactivate: frame.onDeactivate,
       rebuildPolicy: 'static',
       gridParams,
+      sizing: frame.sizing,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S6 (#984): adaptive_volatility_grid frame → patch
+  private normalizeAdaptiveVolatilityGrid(
+    frame: SemanticAdaptiveVolatilityGridFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch {
+    return {
+      id: `orchestration-program-adaptive-volatility-grid-${index + 1}`,
+      kind: 'program',
+      key: 'program.adaptive_volatility_grid',
+      params: {
+        atrPeriod: frame.atrPeriod,
+        atrMultiplier: frame.atrMultiplier,
+        rangeMultiplier: frame.rangeMultiplier,
+        minStepPct: frame.minStepPct,
+        maxStepPct: frame.maxStepPct,
+        levelCount: frame.levelCount,
+        onDeactivate: frame.onDeactivate,
+        sizing: frame.sizing,
+        atrDriftPct: frame.atrDriftPct,
+        rebuildCooldownSec: frame.rebuildCooldownSec,
+      },
+      programKind: 'adaptive_volatility_grid',
+      activeWhenRef: frame.activeWhenRef,
+      onDeactivate: frame.onDeactivate,
+      rebuildPolicy: 'atr_window',
+      atrPeriod: frame.atrPeriod,
+      atrMultiplier: frame.atrMultiplier,
+      rangeMultiplier: frame.rangeMultiplier,
+      atrDriftPct: frame.atrDriftPct ?? 20,
+      rebuildCooldownSec: frame.rebuildCooldownSec ?? 300,
+      minStepPct: frame.minStepPct,
+      maxStepPct: frame.maxStepPct,
+      levelCount: frame.levelCount,
       sizing: frame.sizing,
       evidence: this.toEvidence(frame),
     }

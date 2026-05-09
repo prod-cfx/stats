@@ -266,8 +266,8 @@ describe('SemanticFrameNormalizerService', () => {
       kind: 'program',
       key: 'program.fixed_grid_gated',
     }))
-    if (node?.kind !== 'program') {
-      throw new Error('expected program node')
+    if (node?.kind !== 'program' || node.key !== 'program.fixed_grid_gated') {
+      throw new Error('expected fixed_grid_gated program node')
     }
     expect(node.programKind).toBe('fixed_grid_gated')
     expect(node.rebuildPolicy).toBe('static')
@@ -305,6 +305,55 @@ describe('SemanticFrameNormalizerService', () => {
     const programNodes = patch.orchestration?.nodes?.filter(node => node.kind === 'program') ?? []
 
     expect(programNodes).toHaveLength(1)
+  })
+
+  it('normalizes a single adaptive_volatility_grid frame into a program orchestration node', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      adaptiveVolatilityGridFrame({ id: 'adv-1' }),
+    ]
+
+    const patch = normalizer.normalize(frames)
+    const nodes = patch.orchestration?.nodes ?? []
+
+    expect(nodes).toHaveLength(1)
+    const node = nodes[0]
+    expect(node).toEqual(expect.objectContaining({
+      kind: 'program',
+      key: 'program.adaptive_volatility_grid',
+    }))
+    if (node?.kind !== 'program' || node.key !== 'program.adaptive_volatility_grid') {
+      throw new Error('expected adaptive program node')
+    }
+    expect(node.programKind).toBe('adaptive_volatility_grid')
+    expect(node.rebuildPolicy).toBe('atr_window')
+    expect(node.activeWhenRef).toBe('orchestration-gate-regime-1')
+    expect(node.atrPeriod).toBe(14)
+    expect(node.atrMultiplier).toBe(1.5)
+    expect(node.rangeMultiplier).toBe(3)
+    expect(node.minStepPct).toBe(0.2)
+    expect(node.maxStepPct).toBe(2)
+    expect(node.levelCount).toBe(6)
+    expect(node.sizing).toEqual({ mode: 'fixed_quote', value: 50 })
+  })
+
+  it('deduplicates structurally identical adaptive_volatility_grid frames', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      adaptiveVolatilityGridFrame({ id: 'adv-1' }),
+      adaptiveVolatilityGridFrame({ id: 'adv-2' }),
+    ]
+    const patch = normalizer.normalize(frames)
+    const programs = patch.orchestration?.nodes?.filter(n => n.kind === 'program') ?? []
+    expect(programs).toHaveLength(1)
+  })
+
+  it('produces distinct adaptive nodes for distinct atrMultiplier', () => {
+    const frames: SemanticNaturalLanguageFrame[] = [
+      adaptiveVolatilityGridFrame({ id: 'adv-1', atrMultiplier: 1.5 }),
+      adaptiveVolatilityGridFrame({ id: 'adv-2', atrMultiplier: 2.5 }),
+    ]
+    const patch = normalizer.normalize(frames)
+    const programs = patch.orchestration?.nodes?.filter(n => n.kind === 'program') ?? []
+    expect(programs).toHaveLength(2)
   })
 
   it('merges regime_gate, portfolio_drawdown and fixed_grid_gated into a single orchestration.nodes array', () => {
@@ -457,5 +506,39 @@ function riskFrame(input: { id: string, valuePct: number, evidenceText: string }
     riskKey: 'risk.stop_loss_pct',
     confidence: 0.9,
     ...input,
+  }
+}
+
+function adaptiveVolatilityGridFrame(input: {
+  id: string
+  atrPeriod?: number
+  atrMultiplier?: number
+  rangeMultiplier?: number
+  minStepPct?: number
+  maxStepPct?: number
+  levelCount?: number
+  activeWhenRef?: string
+  onDeactivate?: 'cancel' | 'keep' | 'close'
+  sizing?: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
+  atrDriftPct?: number
+  rebuildCooldownSec?: number
+  evidenceText?: string
+}): SemanticNaturalLanguageFrame {
+  return {
+    kind: 'adaptive_volatility_grid',
+    id: input.id,
+    confidence: 0.9,
+    evidenceText: input.evidenceText ?? 'ATR(14) 自适应网格 6 档',
+    atrPeriod: input.atrPeriod ?? 14,
+    atrMultiplier: input.atrMultiplier ?? 1.5,
+    rangeMultiplier: input.rangeMultiplier ?? 3,
+    minStepPct: input.minStepPct ?? 0.2,
+    maxStepPct: input.maxStepPct ?? 2,
+    levelCount: input.levelCount ?? 6,
+    activeWhenRef: input.activeWhenRef ?? 'orchestration-gate-regime-1',
+    onDeactivate: input.onDeactivate ?? 'cancel',
+    sizing: input.sizing ?? { mode: 'fixed_quote', value: 50 },
+    ...(input.atrDriftPct !== undefined ? { atrDriftPct: input.atrDriftPct } : {}),
+    ...(input.rebuildCooldownSec !== undefined ? { rebuildCooldownSec: input.rebuildCooldownSec } : {}),
   }
 }

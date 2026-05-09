@@ -283,7 +283,19 @@ export interface IrOrchestrationProgramSizing {
   value: number
 }
 
-export interface IrOrchestrationProgram {
+// Phase 5 S6 (#984)
+export interface IrOrchestrationProgramAdaptiveGridParams {
+  atrPeriod: number
+  atrMultiplier: number
+  rangeMultiplier: number
+  atrDriftPct: number
+  rebuildCooldownSec: number
+  minStepPct: number
+  maxStepPct: number
+  levelCount: number
+}
+
+export interface IrFixedGridGatedProgram {
   id: string
   programKind: 'fixed_grid_gated'
   activeWhenExprId: string
@@ -292,6 +304,20 @@ export interface IrOrchestrationProgram {
   gridParams: IrOrchestrationProgramGridParams
   sizing: IrOrchestrationProgramSizing
 }
+
+export interface IrAdaptiveVolatilityGridProgram {
+  id: string
+  programKind: 'adaptive_volatility_grid'
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'atr_window'
+  adaptiveGridParams: IrOrchestrationProgramAdaptiveGridParams
+  sizing: IrOrchestrationProgramSizing
+}
+
+export type IrOrchestrationProgram =
+  | IrFixedGridGatedProgram
+  | IrAdaptiveVolatilityGridProgram
 
 export interface RiskGuard {
   id: string

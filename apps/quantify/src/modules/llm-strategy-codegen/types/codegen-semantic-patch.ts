@@ -72,7 +72,8 @@ export interface CodegenSemanticPatch {
 export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationGateNodePatch
   | CodegenSemanticOrchestrationPortfolioRiskNodePatch
-  | CodegenSemanticOrchestrationProgramNodePatch
+  | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+  | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'gate'
@@ -92,14 +93,41 @@ export interface CodegenSemanticOrchestrationPortfolioRiskNodePatch extends Code
   thresholdPct: number
 }
 
-export interface CodegenSemanticOrchestrationProgramNodePatch extends CodegenSemanticNodeEnvelope {
+export interface CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'program'
   key: 'program.fixed_grid_gated'
   params: Record<string, unknown>
-  programKind: SemanticOrchestrationProgramKind
+  programKind: 'fixed_grid_gated'
   activeWhenRef: string
   onDeactivate: SemanticOrchestrationProgramOnDeactivate
-  rebuildPolicy: SemanticOrchestrationProgramRebuildPolicy
+  rebuildPolicy: 'static'
   gridParams: SemanticOrchestrationProgramGridParams
   sizing: SemanticOrchestrationProgramSizing
 }
+
+// Phase 5 S6 (#984): adaptive_volatility_grid program patch 变体
+export interface CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'program'
+  key: 'program.adaptive_volatility_grid'
+  params: Record<string, unknown>
+  programKind: 'adaptive_volatility_grid'
+  activeWhenRef: string
+  onDeactivate: SemanticOrchestrationProgramOnDeactivate
+  rebuildPolicy: 'atr_window'
+  atrPeriod: number
+  atrMultiplier: number
+  rangeMultiplier: number
+  atrDriftPct: number
+  rebuildCooldownSec: number
+  minStepPct: number
+  maxStepPct: number
+  levelCount: number
+  sizing: SemanticOrchestrationProgramSizing
+}
+
+/**
+ * @deprecated 历史别名，保留以兼容外部调用方；新代码用 CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+ */
+export type CodegenSemanticOrchestrationProgramNodePatch =
+  | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+  | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch

@@ -4330,6 +4330,7 @@ describe('canonicalSpecBuilderService', () => {
       expect(program.activeWhenRef).toBe('gate-regime-long-1')
       expect(program.onDeactivate).toBe('cancel')
       expect(program.rebuildPolicy).toBe('static')
+      if (program.programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated')
       expect(program.gridParams).toEqual(validGridParams)
       expect(program.sizing).toEqual(validSizing)
     })

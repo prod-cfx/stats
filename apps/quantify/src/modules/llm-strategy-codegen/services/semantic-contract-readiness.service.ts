@@ -377,6 +377,10 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  if (isSupportedAdaptiveVolatilityGrid(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
   return addPhase0OrchestrationBlocker(node)
 }
 
@@ -500,6 +504,90 @@ function isSupportedFixedGridGated(
     return false
   }
 
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * Phase 5 S6 (#984): 判断 program.adaptive_volatility_grid node 是否可走 registry
+ * 驱动的 readiness 路径。
+ *
+ * 16 重 fail-closed 检查（plan v3 Acceptance 章节）：
+ * 1) kind === 'program'
+ * 2) key === 'program.adaptive_volatility_grid'
+ * 3) programKind === 'adaptive_volatility_grid'
+ * 4) onDeactivate ∈ {'cancel','keep','close'}
+ * 5) rebuildPolicy === 'atr_window'
+ * 6) atrPeriod 整数 ∈ [2, 200]
+ * 7) atrMultiplier > 0 finite
+ * 8) rangeMultiplier > 0 finite
+ * 9) atrDriftPct ∈ (0, 100] finite
+ * 10) rebuildCooldownSec 整数 ≥ 300（硬下限；与 S5 60s 区分）
+ * 11) minStepPct > 0 finite
+ * 12) maxStepPct > 0 finite
+ * 13) maxStepPct >= minStepPct（配置矛盾拒绝）
+ * 14) levelCount 整数 ∈ [2, 100]
+ * 15) sizing.mode 合法 enum + sizing.value > 0 finite
+ * 16) activeWhenRef cross-node check + 双 version-gate
+ */
+function isSupportedAdaptiveVolatilityGrid(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (!isProgramNode(node)) return false
+  if (node.key !== 'program.adaptive_volatility_grid') return false
+  if (node.programKind !== 'adaptive_volatility_grid') return false
+  if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return false
+  if (node.rebuildPolicy !== 'atr_window') return false
+
+  const isPositiveFinite = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0
+  const isPositiveInteger = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v) && v > 0
+
+  if (!isPositiveInteger(node.atrPeriod) || node.atrPeriod < 2 || node.atrPeriod > 200) return false
+  if (!isPositiveFinite(node.atrMultiplier)) return false
+  if (!isPositiveFinite(node.rangeMultiplier)) return false
+  if (
+    typeof node.atrDriftPct !== 'number'
+    || !Number.isFinite(node.atrDriftPct)
+    || node.atrDriftPct <= 0
+    || node.atrDriftPct > 100
+  ) {
+    return false
+  }
+  // Phase 5 S6 risk delta — 硬下限 300（与 S5 dynamic_grid 60s 区分；ATR 是
+  // 滑动窗口统计量，需更长 cooldown 反映其平滑特性）
+  if (!isPositiveInteger(node.rebuildCooldownSec) || node.rebuildCooldownSec < 300) return false
+  if (!isPositiveFinite(node.minStepPct)) return false
+  if (!isPositiveFinite(node.maxStepPct)) return false
+  if (node.maxStepPct < node.minStepPct) return false
+  if (
+    typeof node.levelCount !== 'number'
+    || !Number.isFinite(node.levelCount)
+    || !Number.isInteger(node.levelCount)
+    || node.levelCount < 2
+    || node.levelCount > 100
+  ) {
+    return false
+  }
+
+  const sizing = node.sizing
+  if (!sizing) return false
+  if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') return false
+  if (!isPositiveFinite(sizing.value)) return false
+
+  if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') return false
+  const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
+  if (!referenced) return false
+  if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') return false
+  if (referenced.status !== 'locked') return false
+  if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) return false
+
+  const contract = registry.getContractByKey('program.adaptive_volatility_grid')
+  if (!contract) return false
+  if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)
 }
 

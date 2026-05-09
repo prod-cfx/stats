@@ -8,6 +8,7 @@ import type {
   SemanticCapabilityShape,
   SemanticExpression,
   SemanticExpressionOperand,
+  SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
@@ -651,82 +652,121 @@ export class CanonicalSpecBuilderService {
 
     const programs: CanonicalOrchestrationProgram[] = []
     for (const node of nodes) {
-      if (node.kind !== 'program' || node.status !== 'locked' || node.key !== 'program.fixed_grid_gated') {
-        continue
-      }
-      if (node.programKind !== 'fixed_grid_gated') {
-        continue
-      }
-      if (node.rebuildPolicy !== 'static') {
-        continue
-      }
-      if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') {
-        continue
-      }
-      if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) {
+      if (node.kind !== 'program' || node.status !== 'locked') continue
+
+      if (node.key === 'program.fixed_grid_gated') {
+        const program = this.buildFixedGridGatedProgram(node)
+        if (program) programs.push(program)
         continue
       }
 
-      const grid = node.gridParams
-      if (!grid) {
+      // Phase 5 S6 (#984)
+      if (node.key === 'program.adaptive_volatility_grid') {
+        const program = this.buildAdaptiveVolatilityGridProgram(node)
+        if (program) programs.push(program)
         continue
       }
-      const { anchorPrice, levelCount, stepPct, lowerBound, upperBound } = grid
-      if (typeof anchorPrice !== 'number' || !Number.isFinite(anchorPrice) || anchorPrice <= 0) {
-        continue
-      }
-      if (typeof levelCount !== 'number' || !Number.isInteger(levelCount) || levelCount < 2) {
-        continue
-      }
-      if (typeof stepPct !== 'number' || !Number.isFinite(stepPct) || stepPct <= 0) {
-        continue
-      }
-      if (lowerBound !== undefined) {
-        if (typeof lowerBound !== 'number' || !Number.isFinite(lowerBound) || lowerBound <= 0) {
-          continue
-        }
-        if (upperBound !== undefined && !(lowerBound < upperBound)) {
-          continue
-        }
-      }
-      if (upperBound !== undefined) {
-        if (typeof upperBound !== 'number' || !Number.isFinite(upperBound) || upperBound <= 0) {
-          continue
-        }
-      }
-
-      const sizing = node.sizing
-      if (!sizing) {
-        continue
-      }
-      if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') {
-        continue
-      }
-      if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) {
-        continue
-      }
-
-      programs.push({
-        id: node.id,
-        programKind: 'fixed_grid_gated',
-        activeWhenRef: node.activeWhenRef,
-        onDeactivate: node.onDeactivate,
-        rebuildPolicy: 'static',
-        gridParams: {
-          anchorPrice,
-          levelCount,
-          stepPct,
-          ...(lowerBound !== undefined ? { lowerBound } : {}),
-          ...(upperBound !== undefined ? { upperBound } : {}),
-        },
-        sizing: {
-          mode: sizing.mode,
-          value: sizing.value,
-        },
-      })
     }
 
     return programs
+  }
+
+  private buildFixedGridGatedProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
+    if (node.programKind !== 'fixed_grid_gated') return null
+    if (node.rebuildPolicy !== 'static') return null
+    if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return null
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) return null
+
+    const grid = node.gridParams
+    if (!grid) return null
+    const { anchorPrice, levelCount, stepPct, lowerBound, upperBound } = grid
+    if (typeof anchorPrice !== 'number' || !Number.isFinite(anchorPrice) || anchorPrice <= 0) return null
+    if (typeof levelCount !== 'number' || !Number.isInteger(levelCount) || levelCount < 2) return null
+    if (typeof stepPct !== 'number' || !Number.isFinite(stepPct) || stepPct <= 0) return null
+    if (lowerBound !== undefined) {
+      if (typeof lowerBound !== 'number' || !Number.isFinite(lowerBound) || lowerBound <= 0) return null
+      if (upperBound !== undefined && !(lowerBound < upperBound)) return null
+    }
+    if (upperBound !== undefined && (typeof upperBound !== 'number' || !Number.isFinite(upperBound) || upperBound <= 0)) {
+      return null
+    }
+
+    const sizing = node.sizing
+    if (!sizing) return null
+    if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') return null
+    if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return null
+
+    return {
+      id: node.id,
+      programKind: 'fixed_grid_gated',
+      activeWhenRef: node.activeWhenRef,
+      onDeactivate: node.onDeactivate,
+      rebuildPolicy: 'static',
+      gridParams: {
+        anchorPrice,
+        levelCount,
+        stepPct,
+        ...(lowerBound !== undefined ? { lowerBound } : {}),
+        ...(upperBound !== undefined ? { upperBound } : {}),
+      },
+      sizing: { mode: sizing.mode, value: sizing.value },
+    }
+  }
+
+  private buildAdaptiveVolatilityGridProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
+    if (node.programKind !== 'adaptive_volatility_grid') return null
+    if (node.rebuildPolicy !== 'atr_window') return null
+    if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return null
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) return null
+
+    const isPositiveFinite = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && v > 0
+    const isPositiveInt = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v) && v > 0
+
+    if (!isPositiveInt(node.atrPeriod) || node.atrPeriod < 2 || node.atrPeriod > 200) return null
+    if (!isPositiveFinite(node.atrMultiplier)) return null
+    if (!isPositiveFinite(node.rangeMultiplier)) return null
+    if (
+      typeof node.atrDriftPct !== 'number'
+      || !Number.isFinite(node.atrDriftPct)
+      || node.atrDriftPct <= 0
+      || node.atrDriftPct > 100
+    ) return null
+    if (!isPositiveInt(node.rebuildCooldownSec) || node.rebuildCooldownSec < 300) return null
+    if (!isPositiveFinite(node.minStepPct)) return null
+    if (!isPositiveFinite(node.maxStepPct)) return null
+    if (node.maxStepPct < node.minStepPct) return null
+    if (
+      typeof node.levelCount !== 'number'
+      || !Number.isInteger(node.levelCount)
+      || node.levelCount < 2
+      || node.levelCount > 100
+    ) return null
+
+    const sizing = node.sizing
+    if (!sizing) return null
+    if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') return null
+    if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return null
+
+    return {
+      id: node.id,
+      programKind: 'adaptive_volatility_grid',
+      activeWhenRef: node.activeWhenRef,
+      onDeactivate: node.onDeactivate,
+      rebuildPolicy: 'atr_window',
+      adaptiveGridParams: {
+        atrPeriod: node.atrPeriod,
+        atrMultiplier: node.atrMultiplier,
+        rangeMultiplier: node.rangeMultiplier,
+        atrDriftPct: node.atrDriftPct,
+        rebuildCooldownSec: node.rebuildCooldownSec,
+        minStepPct: node.minStepPct,
+        maxStepPct: node.maxStepPct,
+        levelCount: node.levelCount,
+      },
+      sizing: { mode: sizing.mode, value: sizing.value },
+    }
   }
 
   private filterOrderProgramShadowRules(

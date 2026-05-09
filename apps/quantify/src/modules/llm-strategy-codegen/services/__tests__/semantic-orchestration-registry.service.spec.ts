@@ -424,4 +424,169 @@ describe('SemanticOrchestrationRegistryService', () => {
       ).toBe(true)
     })
   })
+
+  describe('program.adaptive_volatility_grid', () => {
+    function buildAdaptiveNode(
+      overrides: Partial<SemanticOrchestrationNode> = {},
+    ): SemanticOrchestrationNode {
+      return {
+        id: 'pgm-adaptive-1',
+        kind: 'program',
+        key: 'program.adaptive_volatility_grid',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [],
+        programKind: 'adaptive_volatility_grid',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'atr_window',
+        atrPeriod: 14,
+        atrMultiplier: 1.5,
+        rangeMultiplier: 3,
+        atrDriftPct: 25,
+        rebuildCooldownSec: 600,
+        minStepPct: 0.2,
+        maxStepPct: 2,
+        levelCount: 6,
+        sizing: { mode: 'fixed_quote', value: 100 },
+        activeWhenRef: 'gate-regime-1',
+        ...overrides,
+      }
+    }
+
+    it('getContractByKey 返回 adaptive_volatility_grid contract（含 bar_ohlcv runtime + program_lifecycle state）', () => {
+      const contract = service.getContractByKey('program.adaptive_volatility_grid')
+      expect(contract).not.toBeNull()
+      expect(contract?.id).toBe('program.adaptive_volatility_grid')
+      expect(contract?.kind).toBe('program')
+      expect(contract?.executableSinceVersion).toBe(CURRENT_SEMANTIC_VERSION)
+      expect(contract?.capabilities).toEqual([
+        { domain: 'orchestration', verb: 'manage', object: 'adaptive_volatility_grid_ladder', shape: {} },
+      ])
+      expect(contract?.runtimeRequirements).toEqual(
+        expect.arrayContaining([
+          { domain: 'runtime', verb: 'provide', object: 'limit_order' },
+          { domain: 'runtime', verb: 'read', object: 'account_equity' },
+          { domain: 'runtime', verb: 'provide', object: 'bar_ohlcv' },
+        ]),
+      )
+      expect(contract?.stateRequirements).toEqual([
+        { domain: 'state', verb: 'read_write', object: 'program_lifecycle' },
+      ])
+      expect(contract?.orderRequirements).toEqual(
+        expect.arrayContaining([
+          { domain: 'order', verb: 'support', object: 'limit_order' },
+          { domain: 'order', verb: 'cancel', object: 'limit_order' },
+        ]),
+      )
+      expect(contract?.effects).toEqual([
+        { domain: 'guard', verb: 'manage', object: 'limit_ladder' },
+      ])
+    })
+
+    it('validate 完整节点返回 ok', () => {
+      expect(service.validate(buildAdaptiveNode())).toEqual({ ok: true, missingSlots: [] })
+    })
+
+    it('validate 拒绝 programKind 不匹配', () => {
+      const node = buildAdaptiveNode({ programKind: 'fixed_grid_gated' })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.program_kind')).toBe(true)
+    })
+
+    it('validate 拒绝非法 onDeactivate', () => {
+      const node = buildAdaptiveNode({ onDeactivate: 'pause' as never })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.on_deactivate')).toBe(true)
+    })
+
+    it('validate 拒绝 rebuildPolicy 非 atr_window', () => {
+      const node = buildAdaptiveNode({ rebuildPolicy: 'static' })
+      const result = service.validate(node)
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.rebuild_policy')).toBe(true)
+    })
+
+    it('validate 拒绝 atrPeriod=1 / 201', () => {
+      for (const bad of [1, 201]) {
+        const result = service.validate(buildAdaptiveNode({ atrPeriod: bad }))
+        expect(result.ok).toBe(false)
+        expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.atr_period')).toBe(true)
+      }
+    })
+
+    it('validate 拒绝 atrMultiplier <= 0', () => {
+      const result = service.validate(buildAdaptiveNode({ atrMultiplier: 0 }))
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.atr_multiplier')).toBe(true)
+    })
+
+    it('validate 拒绝 rangeMultiplier <= 0', () => {
+      const result = service.validate(buildAdaptiveNode({ rangeMultiplier: -1 }))
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.range_multiplier')).toBe(true)
+    })
+
+    it('validate 拒绝 atrDriftPct=0 / 101', () => {
+      for (const bad of [0, 101]) {
+        const result = service.validate(buildAdaptiveNode({ atrDriftPct: bad }))
+        expect(result.ok).toBe(false)
+        expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.atr_drift_pct')).toBe(true)
+      }
+    })
+
+    it('validate 拒绝 rebuildCooldownSec=299（硬下限 300）', () => {
+      const result = service.validate(buildAdaptiveNode({ rebuildCooldownSec: 299 }))
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.rebuild_cooldown_sec')).toBe(true)
+    })
+
+    it('validate 接受 rebuildCooldownSec=300（边界）', () => {
+      expect(service.validate(buildAdaptiveNode({ rebuildCooldownSec: 300 })).ok).toBe(true)
+    })
+
+    it('validate 拒绝 minStepPct<=0 / maxStepPct<=0', () => {
+      expect(service.validate(buildAdaptiveNode({ minStepPct: 0 })).ok).toBe(false)
+      expect(service.validate(buildAdaptiveNode({ maxStepPct: 0 })).ok).toBe(false)
+    })
+
+    it('validate 拒绝 maxStepPct < minStepPct（配置矛盾）', () => {
+      const result = service.validate(buildAdaptiveNode({ minStepPct: 2, maxStepPct: 1 }))
+      expect(result.ok).toBe(false)
+      expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.max_step_pct')).toBe(true)
+    })
+
+    it('validate 拒绝 levelCount=1 / 101 / 非整数', () => {
+      for (const bad of [1, 101, 5.5]) {
+        const result = service.validate(buildAdaptiveNode({ levelCount: bad }))
+        expect(result.ok).toBe(false)
+        expect(result.missingSlots.some(s => s.slotKey === 'orchestration.program.adaptive_volatility_grid.level_count')).toBe(true)
+      }
+    })
+
+    it('validate 拒绝非法 sizing.mode 与 sizing.value<=0', () => {
+      expect(service.validate(buildAdaptiveNode({ sizing: { mode: 'unknown' as never, value: 100 } })).ok).toBe(false)
+      expect(service.validate(buildAdaptiveNode({ sizing: { mode: 'fixed_quote', value: 0 } })).ok).toBe(false)
+    })
+
+    it('validate 拒绝 activeWhenRef 缺失或空字符串', () => {
+      expect(service.validate(buildAdaptiveNode({ activeWhenRef: undefined })).ok).toBe(false)
+      expect(service.validate(buildAdaptiveNode({ activeWhenRef: '   ' })).ok).toBe(false)
+    })
+
+    it('isExecutableForStrategy 在 CURRENT_SEMANTIC_VERSION 返回 true', () => {
+      const contract = service.getContractByKey('program.adaptive_volatility_grid')!
+      expect(
+        service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: CURRENT_SEMANTIC_VERSION }),
+      ).toBe(true)
+    })
+
+    it('isExecutableForStrategy 无 semantic version → false（fail-closed）', () => {
+      const contract = service.getContractByKey('program.adaptive_volatility_grid')!
+      expect(service.isExecutableForStrategy(contract, { deployedAtSemanticVersion: null })).toBe(false)
+    })
+  })
 })

@@ -270,19 +270,36 @@ export class SemanticSeedStateBuilderService {
       ? (update.support as unknown as SemanticOrchestrationNode['support'])
       : undefined
 
-    const programKind = update.programKind === 'fixed_grid_gated' ? 'fixed_grid_gated' : undefined
+    const programKind = update.programKind === 'fixed_grid_gated' || update.programKind === 'adaptive_volatility_grid'
+      ? update.programKind
+      : undefined
     const activeWhenRef = this.readTrimmedString(update.activeWhenRef) ?? undefined
     const onDeactivate = update.onDeactivate === 'cancel'
       || update.onDeactivate === 'keep'
       || update.onDeactivate === 'close'
       ? update.onDeactivate
       : undefined
-    const rebuildPolicy = update.rebuildPolicy === 'static' ? update.rebuildPolicy : undefined
+    const rebuildPolicy = update.rebuildPolicy === 'static' || update.rebuildPolicy === 'atr_window'
+      ? update.rebuildPolicy
+      : undefined
     const gridParams = this.isRecord(update.gridParams)
       ? this.normalizeGridParams(update.gridParams)
       : undefined
     const sizing = this.isRecord(update.sizing)
       ? this.normalizeProgramSizing(update.sizing)
+      : undefined
+
+    // Phase 5 S6 (#984): adaptive_volatility_grid 专属字段透传
+    const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+    const atrPeriod = isFiniteNumber(update.atrPeriod) ? update.atrPeriod : undefined
+    const atrMultiplier = isFiniteNumber(update.atrMultiplier) ? update.atrMultiplier : undefined
+    const rangeMultiplier = isFiniteNumber(update.rangeMultiplier) ? update.rangeMultiplier : undefined
+    const atrDriftPct = isFiniteNumber(update.atrDriftPct) ? update.atrDriftPct : undefined
+    const rebuildCooldownSec = isFiniteNumber(update.rebuildCooldownSec) ? update.rebuildCooldownSec : undefined
+    const minStepPct = isFiniteNumber(update.minStepPct) ? update.minStepPct : undefined
+    const maxStepPct = isFiniteNumber(update.maxStepPct) ? update.maxStepPct : undefined
+    const levelCount = isFiniteNumber(update.levelCount) && Number.isInteger(update.levelCount)
+      ? update.levelCount
       : undefined
 
     return {
@@ -308,6 +325,14 @@ export class SemanticSeedStateBuilderService {
       ...(rebuildPolicy ? { rebuildPolicy } : {}),
       ...(gridParams ? { gridParams } : {}),
       ...(sizing ? { sizing } : {}),
+      ...(atrPeriod !== undefined ? { atrPeriod } : {}),
+      ...(atrMultiplier !== undefined ? { atrMultiplier } : {}),
+      ...(rangeMultiplier !== undefined ? { rangeMultiplier } : {}),
+      ...(atrDriftPct !== undefined ? { atrDriftPct } : {}),
+      ...(rebuildCooldownSec !== undefined ? { rebuildCooldownSec } : {}),
+      ...(minStepPct !== undefined ? { minStepPct } : {}),
+      ...(maxStepPct !== undefined ? { maxStepPct } : {}),
+      ...(levelCount !== undefined ? { levelCount } : {}),
     }
   }
 

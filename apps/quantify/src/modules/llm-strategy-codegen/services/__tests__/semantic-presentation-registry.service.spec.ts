@@ -257,6 +257,78 @@ describe('SemanticPresentationRegistryService', () => {
     })
   })
 
+  // Phase 5 S6 (#984)
+  describe('program.adaptive_volatility_grid entry', () => {
+    it('exposes public metadata for program.adaptive_volatility_grid', () => {
+      const entry = presentation.getEntry('program.adaptive_volatility_grid')
+      expect(entry.publicName).toBe('ATR 自适应网格')
+      expect(entry.aliases).toEqual(expect.arrayContaining(['波动自适应网格']))
+    })
+
+    it('display 文本不出现内部 key（黑名单：3 内部字面量）', () => {
+      const entry = presentation.getEntry('program.adaptive_volatility_grid')
+      const text = entry.displayRenderer({
+        params: {
+          atrPeriod: 14,
+          atrMultiplier: 1.5,
+          rangeMultiplier: 3,
+          minStepPct: 0.2,
+          maxStepPct: 2,
+          levelCount: 6,
+          onDeactivate: 'cancel',
+        },
+      })
+      // 负 grep（critic round 2 Q8）：禁内部 key 字面量
+      expect(text).not.toMatch(/program\.adaptive_volatility_grid/)
+      expect(text).not.toMatch(/atr_window/)
+      expect(text).not.toMatch(/adaptive_volatility_grid/)
+      // 正 grep（critic round 2 Q8）：保留用户友好 fragment
+      expect(text).toMatch(/ATR/)
+      expect(text).toMatch(/自适应网格/)
+      expect(text).toContain('14')
+      expect(text).toContain('1.5')
+      expect(text).toContain('6 档')
+      expect(text).toContain('钳制')
+      expect(text).toContain('撤单')
+    })
+
+    it('display close / keep 渲染对应中文', () => {
+      const entry = presentation.getEntry('program.adaptive_volatility_grid')
+      expect(entry.displayRenderer({
+        params: { atrPeriod: 14, atrMultiplier: 1, rangeMultiplier: 3, minStepPct: 0.2, maxStepPct: 2, levelCount: 6, onDeactivate: 'close' },
+      })).toContain('平仓')
+      expect(entry.displayRenderer({
+        params: { atrPeriod: 14, atrMultiplier: 1, rangeMultiplier: 3, minStepPct: 0.2, maxStepPct: 2, levelCount: 6, onDeactivate: 'keep' },
+      })).toContain('保留挂单')
+    })
+
+    it('clarification 文本不暴露 slotKey 原文', () => {
+      const entry = presentation.getEntry('program.adaptive_volatility_grid')
+      const text = entry.clarificationRenderer(
+        'orchestration.program.adaptive_volatility_grid.atr_period',
+        {},
+      )
+      expect(text).toContain('ATR 周期')
+      expect(text).not.toContain('atr_period')
+      expect(text).not.toContain('orchestration.program')
+    })
+
+    it('clarification 各 9 个 slot 都返回有意义文本', () => {
+      const entry = presentation.getEntry('program.adaptive_volatility_grid')
+      const slots = [
+        'atr_period', 'atr_multiplier', 'range_multiplier',
+        'atr_drift_pct', 'rebuild_cooldown_sec',
+        'min_step_pct', 'max_step_pct', 'level_count',
+        'sizing', 'active_when_ref',
+      ]
+      for (const slot of slots) {
+        const text = entry.clarificationRenderer(`orchestration.program.adaptive_volatility_grid.${slot}`, {})
+        expect(text.length).toBeGreaterThan(2)
+        expect(text).not.toContain(slot)
+      }
+    })
+  })
+
   it('renders clarification text without leaking raw slot keys', () => {
     const text = presentation.renderClarification('risk.stop_loss_pct', 'risk.stop_loss_pct.valuePct', {})
 

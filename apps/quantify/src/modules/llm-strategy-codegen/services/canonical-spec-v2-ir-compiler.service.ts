@@ -877,15 +877,30 @@ export class CanonicalSpecV2IrCompilerService {
       if (exprId === undefined) {
         continue
       }
-      result.push({
-        id: program.id,
-        programKind: program.programKind,
-        activeWhenExprId: exprId,
-        onDeactivate: program.onDeactivate,
-        rebuildPolicy: program.rebuildPolicy,
-        gridParams: { ...program.gridParams },
-        sizing: { ...program.sizing },
-      })
+      if (program.programKind === 'fixed_grid_gated') {
+        result.push({
+          id: program.id,
+          programKind: 'fixed_grid_gated',
+          activeWhenExprId: exprId,
+          onDeactivate: program.onDeactivate,
+          rebuildPolicy: 'static',
+          gridParams: { ...program.gridParams },
+          sizing: { ...program.sizing },
+        })
+        continue
+      }
+      // Phase 5 S6 (#984)
+      if (program.programKind === 'adaptive_volatility_grid') {
+        result.push({
+          id: program.id,
+          programKind: 'adaptive_volatility_grid',
+          activeWhenExprId: exprId,
+          onDeactivate: program.onDeactivate,
+          rebuildPolicy: 'atr_window',
+          adaptiveGridParams: { ...program.adaptiveGridParams },
+          sizing: { ...program.sizing },
+        })
+      }
     }
     return result
   }

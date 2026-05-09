@@ -2543,6 +2543,195 @@ describe('SemanticContractReadinessService', () => {
       }))
     })
 
+    // Phase 5 S6 (#984) — adaptive_volatility_grid 16 fail-closed
+    function adaptiveNode(overrides: Partial<SemanticOrchestrationNode> = {}): SemanticOrchestrationNode {
+      return {
+        id: 'program-adaptive-1',
+        kind: 'program',
+        key: 'program.adaptive_volatility_grid',
+        status: 'locked',
+        source: 'user_explicit',
+        params: {},
+        programKind: 'adaptive_volatility_grid',
+        activeWhenRef: 'gate-regime-ref',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'atr_window',
+        atrPeriod: 14,
+        atrMultiplier: 1.5,
+        rangeMultiplier: 3,
+        atrDriftPct: 25,
+        rebuildCooldownSec: 600,
+        minStepPct: 0.2,
+        maxStepPct: 2,
+        levelCount: 6,
+        sizing: { mode: 'fixed_quote', value: 100 },
+        openSlots: [],
+        contracts: [],
+        ...overrides,
+      }
+    }
+
+    it('S6 #1 完整 adaptive + valid gate ref + 新策略 → 不注入 phase0 slot', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
+      })
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      expect(program?.status).toBe('locked')
+      expect(program?.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('S6 #2-5 各 16 fail-closed (key/programKind/onDeactivate/rebuildPolicy)', () => {
+      const variations: Array<Partial<SemanticOrchestrationNode>> = [
+        { key: 'program.unknown' },
+        { programKind: 'fixed_grid_gated' },
+        { onDeactivate: 'rollover' as never },
+        { rebuildPolicy: 'static' },
+      ]
+      for (const v of variations) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode(v)], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #6 atrPeriod 越界 (1 / 201 / 非整数) → fail-closed', () => {
+      for (const atrPeriod of [1, 201, 14.5]) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ atrPeriod })], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #7-8 atrMultiplier / rangeMultiplier <= 0 → fail-closed', () => {
+      for (const overrides of [{ atrMultiplier: 0 }, { rangeMultiplier: -1 }, { atrMultiplier: NaN }]) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode(overrides)], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #9 atrDriftPct 越界 (0 / 101) → fail-closed', () => {
+      for (const atrDriftPct of [0, 101]) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ atrDriftPct })], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #10 rebuildCooldownSec=299（硬下限 300 不达）→ fail-closed', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode(), adaptiveNode({ rebuildCooldownSec: 299 })], contracts: [] },
+      })
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('S6 #11-13 minStepPct / maxStepPct / max < min → fail-closed', () => {
+      for (const overrides of [{ minStepPct: 0 }, { maxStepPct: 0 }, { minStepPct: 2, maxStepPct: 1 }]) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode(overrides)], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #14 levelCount 越界 (1 / 101 / 非整数) → fail-closed', () => {
+      for (const levelCount of [1, 101, 5.5]) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ levelCount })], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #15 sizing 非法 → fail-closed', () => {
+      for (const sizing of [
+        { mode: 'unknown' as never, value: 100 },
+        { mode: 'fixed_quote' as const, value: 0 },
+      ]) {
+        const state = createSemanticState({
+          orchestration: { nodes: [regimeGateNode(), adaptiveNode({ sizing })], contracts: [] },
+        })
+        const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+        const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+        expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
+    it('S6 #16a activeWhenRef 引用不存在节点 → fail-closed', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode(), adaptiveNode({ activeWhenRef: 'no-such-id' })], contracts: [] },
+      })
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('S6 #16b 老策略 (deployedAtSemanticVersion=null) → fail-closed', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
+      })
+      const legacy: StrategyVersionInfo = { deployedAtSemanticVersion: null }
+      const result = new SemanticContractReadinessService().normalize(state, legacy)
+      const program = result.state.orchestration?.nodes.find(n => n.kind === 'program')
+      expect(program?.openSlots ?? []).toContainEqual(expect.objectContaining({
+        slotKey: 'orchestration.phase0.unsupported',
+      }))
+    })
+
+    it('S6 #17 fixed_grid_gated + adaptive_volatility_grid 共存互不干扰', () => {
+      const state = createSemanticState({
+        orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode(), adaptiveNode()], contracts: [] },
+      })
+      const result = new SemanticContractReadinessService().normalize(state, CURRENT_VERSION)
+      const programs = (result.state.orchestration?.nodes ?? []).filter(n => n.kind === 'program')
+      expect(programs).toHaveLength(2)
+      for (const p of programs) {
+        expect(p.status).toBe('locked')
+        expect(p.openSlots ?? []).not.toContainEqual(expect.objectContaining({
+          slotKey: 'orchestration.phase0.unsupported',
+        }))
+      }
+    })
+
     it('Test K: gate.regime + portfolioRisk.drawdown_block + program.fixed_grid_gated 三者共存互不干扰', () => {
       const drawdownNode: SemanticOrchestrationNode = {
         id: 'pr-drawdown-coexist',

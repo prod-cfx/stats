@@ -4083,6 +4083,7 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(programs[0].programKind).toBe('fixed_grid_gated')
     expect(programs[0].onDeactivate).toBe('cancel')
     expect(programs[0].rebuildPolicy).toBe('static')
+    if (programs[0].programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated')
     expect(programs[0].gridParams).toEqual({ anchorPrice: 30000, levelCount: 10, stepPct: 0.5 })
     expect(programs[0].sizing).toEqual({ mode: 'fixed_quote', value: 100 })
   })
@@ -4210,6 +4211,7 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     const gate = (result.ir.orchestrationGates ?? [])[0]
     const program = (result.ir.orchestrationPrograms ?? [])[0]
     expect(program.activeWhenExprId).toBe(gate.exprId)
+    if (program.programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated')
     expect(program.gridParams.lowerBound).toBe(28000)
     expect(program.gridParams.upperBound).toBe(32000)
     expect(program.sizing).toEqual({ mode: 'fixed_pct', value: 5 })

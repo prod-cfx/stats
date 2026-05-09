@@ -8,6 +8,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticRegimeGateFrame
   | SemanticPortfolioDrawdownFrame
   | SemanticFixedGridGatedFrame
+  | SemanticAdaptiveVolatilityGridFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -80,4 +81,20 @@ export interface SemanticFixedGridGatedFrame extends SemanticFrameBase {
   activeWhenRef: string
   onDeactivate: 'cancel' | 'keep' | 'close'
   sizing: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
+}
+
+// Phase 5 S6 (#984): adaptive_volatility_grid frame
+export interface SemanticAdaptiveVolatilityGridFrame extends SemanticFrameBase {
+  kind: 'adaptive_volatility_grid'
+  atrPeriod: number
+  atrMultiplier: number
+  rangeMultiplier: number
+  minStepPct: number
+  maxStepPct: number
+  levelCount: number
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  sizing: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
+  atrDriftPct?: number
+  rebuildCooldownSec?: number
 }

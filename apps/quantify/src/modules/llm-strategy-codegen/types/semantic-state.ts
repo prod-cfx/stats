@@ -286,11 +286,11 @@ export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
 export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
 
-export type SemanticOrchestrationProgramKind = 'fixed_grid_gated'
+export type SemanticOrchestrationProgramKind = 'fixed_grid_gated' | 'adaptive_volatility_grid'
 
 export type SemanticOrchestrationProgramOnDeactivate = 'cancel' | 'keep' | 'close'
 
-export type SemanticOrchestrationProgramRebuildPolicy = 'static'
+export type SemanticOrchestrationProgramRebuildPolicy = 'static' | 'atr_window'
 
 export type SemanticOrchestrationProgramSizingMode = 'fixed_quote' | 'fixed_base' | 'fixed_pct'
 
@@ -344,6 +344,17 @@ export interface SemanticOrchestrationNode {
   rebuildPolicy?: SemanticOrchestrationProgramRebuildPolicy
   gridParams?: SemanticOrchestrationProgramGridParams
   sizing?: SemanticOrchestrationProgramSizing
+  // adaptive_volatility_grid 专属（其它 programKind 不读）— Phase 5 S6 (#984)
+  // 注：levelCount 单列于此而非复用 gridParams.levelCount，因为 gridParams
+  // 还含 anchorPrice / stepPct（fixed_grid_gated 必填，不应渗到 adaptive）
+  atrPeriod?: number
+  atrMultiplier?: number
+  rangeMultiplier?: number
+  atrDriftPct?: number
+  rebuildCooldownSec?: number
+  minStepPct?: number
+  maxStepPct?: number
+  levelCount?: number
   // portfolioRisk 节点专属（其它 kind 不读）
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number

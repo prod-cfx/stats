@@ -1,4 +1,5 @@
 import type {
+  SemanticAdaptiveVolatilityGridFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticContextFrame,
@@ -293,6 +294,96 @@ describe('NaturalLanguageGatewayService', () => {
     expect(fixedGridGatedFrames(service.parse('挂网格'))).toHaveLength(0)
   })
 
+  // --- Phase 5 S6 (#984) adaptive_volatility_grid ---
+
+  it('parses adaptive frame from ATR(14) 1.5 倍步长 3 倍区间 utterance', () => {
+    const frames = adaptiveVolatilityGridFrames(
+      service.parse('用 ATR(14) 的 1.5 倍为步长、3 倍为区间的自适应网格 6 档 每档 0.2%-2% 钳制，趋势上涨时启用，停用时撤单'),
+    )
+    expect(frames).toEqual([
+      expect.objectContaining({
+        kind: 'adaptive_volatility_grid',
+        atrPeriod: 14,
+        atrMultiplier: 1.5,
+        rangeMultiplier: 3,
+        levelCount: 6,
+        minStepPct: 0.2,
+        maxStepPct: 2,
+        onDeactivate: 'cancel',
+        activeWhenRef: 'orchestration-gate-regime-1',
+      }),
+    ])
+  })
+
+  it('parses ATR(20) 2 倍步长 4 倍区间 5 档 utterance', () => {
+    const frames = adaptiveVolatilityGridFrames(
+      service.parse('ETHUSDT 用 ATR(20) 2 倍步长 4 倍区间 自适应网格 5 档 每档 0.1%-1.5%，鲸鱼活跃时启用，停用平仓'),
+    )
+    expect(frames).toEqual([
+      expect.objectContaining({
+        atrPeriod: 20,
+        atrMultiplier: 2,
+        rangeMultiplier: 4,
+        levelCount: 5,
+        minStepPct: 0.1,
+        maxStepPct: 1.5,
+        onDeactivate: 'close',
+      }),
+    ])
+  })
+
+  it('parses 不少于/不超过 钳制 + atr-7 dash form + 冷却秒数', () => {
+    const frames = adaptiveVolatilityGridFrames(
+      service.parse('BTC ATR(7) 自适应网格，2.5 倍步长，3.5 倍区间，6 档 每档不少于 0.5% 不超过 3%，冷却 600 秒，趋势上涨时启用'),
+    )
+    expect(frames).toEqual([
+      expect.objectContaining({
+        atrPeriod: 7,
+        atrMultiplier: 2.5,
+        rangeMultiplier: 3.5,
+        minStepPct: 0.5,
+        maxStepPct: 3,
+        rebuildCooldownSec: 600,
+      }),
+    ])
+  })
+
+  it('parses 波动率 N 写法 + 数字漂移触发重建', () => {
+    const frames = adaptiveVolatilityGridFrames(
+      service.parse('波动率 14 自适应网格 8 档 atr 漂移 25% 触发重建 每档 0.3%-2%，趋势震荡时启用，1 倍步长 5 倍区间，停用时保留'),
+    )
+    expect(frames).toEqual([
+      expect.objectContaining({
+        atrPeriod: 14,
+        atrMultiplier: 1,
+        rangeMultiplier: 5,
+        levelCount: 8,
+        atrDriftPct: 25,
+        onDeactivate: 'keep',
+      }),
+    ])
+  })
+
+  it('falls back to positional 倍 when no anchor word is present', () => {
+    const frames = adaptiveVolatilityGridFrames(
+      service.parse('atr 14 自适应网格 6 档 1 倍 5 倍 每档 0.2%-2%，趋势上涨时启用'),
+    )
+    expect(frames).toEqual([
+      expect.objectContaining({
+        atrMultiplier: 1,
+        rangeMultiplier: 5,
+      }),
+    ])
+  })
+
+  it('does not emit adaptive frame for vague text 没有 ATR 锚词', () => {
+    expect(adaptiveVolatilityGridFrames(service.parse('挂个自适应网格'))).toHaveLength(0)
+  })
+
+  it('does not emit adaptive frame when 缺少档位 / 钳制范围 / 倍数', () => {
+    expect(adaptiveVolatilityGridFrames(service.parse('ATR(14) 自适应网格，趋势上涨时启用'))).toHaveLength(0)
+  })
+
   it('keeps later explicit BOLL short entry after a negated long action segment', () => {
     const frames = service.parse('不要开多，BOLL上轨开空')
 
@@ -353,4 +444,10 @@ function fixedGridGatedFrames(
   frames: ReturnType<NaturalLanguageGatewayService['parse']>,
 ): SemanticFixedGridGatedFrame[] {
   return frames.filter(frame => frame.kind === 'fixed_grid_gated')
+}
+
+function adaptiveVolatilityGridFrames(
+  frames: ReturnType<NaturalLanguageGatewayService['parse']>,
+): SemanticAdaptiveVolatilityGridFrame[] {
+  return frames.filter(frame => frame.kind === 'adaptive_volatility_grid')
 }

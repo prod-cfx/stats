@@ -1,5 +1,11 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
-import type { CompiledOrchestrationProgram } from './compiled-orchestration-program'
+import { atr } from '../helpers/technical-indicators'
+import type {
+  CompiledAdaptiveVolatilityGridProgram,
+  CompiledFixedGridGatedProgram,
+  CompiledOrchestrationProgram,
+} from './compiled-orchestration-program'
+import { isValidAdaptiveVolatilityGrid } from './compiled-orchestration-program'
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 import type { ProgramLifecycleState } from './program-lifecycle-state'
@@ -20,15 +26,18 @@ export interface CompiledOrderState {
   activeProgramIds: readonly string[]
   cancelledProgramIds: readonly string[]
   closeProgramIds: readonly string[]
-  // Phase 5 S0a: program lifecycle 跨 K 线状态通道；S0a 仅 fixed_grid_gated 占位 noop。
-  // S5/S6 引入复杂 entry 时升级为深 freeze。
+  // Phase 5 S0a: program lifecycle 跨 K 线状态通道；S6 adaptive_volatility_grid 写入深 freeze entry。
   programLifecycleStateNext: Readonly<Record<string, ProgramLifecycleState>>
 }
 
+// Phase 5 S6 (#984) — adaptive_volatility_grid runtime 失败 reason
+const REASON_ATR_UNAVAILABLE_KEEP_LADDER = 'compiled.orchestration.program.atr_unavailable_keep_ladder'
+const REASON_ATR_UNAVAILABLE_NO_PRIOR_LADDER = 'compiled.orchestration.program.atr_unavailable_no_prior_ladder'
+const REASON_REBUILD_THROTTLED = 'compiled.orchestration.program.rebuild_throttled'
+const REASON_ATR_INVALID_COMPUTATION = 'compiled.orchestration.program.atr_invalid_computation'
+
 export function runOrderPrograms(
-  // ctx 当前只用于 S5/S6 经 ctx.bars 读 K 线窗口；S0a path 不消费。
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _ctx: StrategyExecutionContextV1,
+  ctx: StrategyExecutionContextV1,
   programs: readonly OrderProgramNode[],
   exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
   guardState: Readonly<CompiledGuardState>,
@@ -36,12 +45,9 @@ export function runOrderPrograms(
   _executionModel?: Record<string, unknown>,
   orchestrationPrograms?: readonly CompiledOrchestrationProgram[],
   // Phase 5 S0a: 第 8 参 — 上一根 K 线产出的 lifecycle 状态（按 program.id 索引）。
-  // S0a fixed_grid_gated 不消费此参数（保 0 回归）；S5/S6 dynamic_grid / adaptive_volatility_grid 消费。
-  // K 线窗口由 ctx.bars 暴露（StrategyExecutionContextV1.bars，runner populate）。
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _programLifecycleStateIn?: Readonly<Record<string, ProgramLifecycleState>>,
+  programLifecycleStateIn?: Readonly<Record<string, ProgramLifecycleState>>,
 ): Readonly<CompiledOrderState> {
-  // ---------- Orchestration program lifecycle (Phase 5 S4 T11) ----------
+  // ---------- Orchestration program lifecycle (Phase 5 S4 T11 + S6 adaptive) ----------
   const orchWorkingOrders: Array<{
     id: string
     sourceRef: string
@@ -56,46 +62,33 @@ export function runOrderPrograms(
 
   if (orchestrationPrograms && orchestrationPrograms.length > 0) {
     for (const program of orchestrationPrograms) {
-      if (guardState.cancelOrderPrograms) {
-        orchCancelledIds.push(program.id)
-        // S0a: fixed_grid_gated 仍写 placeholder（lifecycle 持续，由 close/cleanup 负责清除）
-        if (program.programKind === 'fixed_grid_gated') {
-          programLifecycleStateNext[program.id] = { kind: 'fixed_grid_gated' }
-        }
-        continue
-      }
-
-      // fail-closed: invalid activeWhenExprId / sizing / gridParams → cancel
-      if (!isValidOrchestrationProgram(program)) {
-        orchCancelledIds.push(program.id)
-        continue
-      }
-
-      const exprValue = exprValues[program.activeWhenExprId]
-      const isActive = exprValue === true
-
-      // S0a: fixed_grid_gated 占位 placeholder（active / inactive / close 各分支均写）
       if (program.programKind === 'fixed_grid_gated') {
-        programLifecycleStateNext[program.id] = { kind: 'fixed_grid_gated' }
-      }
-
-      if (isActive) {
-        orchActiveIds.push(program.id)
-        orchWorkingOrders.push(buildOrchestrationWorkingOrder(program))
+        runFixedGridGatedProgram({
+          program,
+          exprValues,
+          guardState,
+          orchWorkingOrders,
+          orchActiveIds,
+          orchCancelledIds,
+          orchCloseIds,
+          programLifecycleStateNext,
+        })
         continue
       }
-
-      // inactive: dispatch by onDeactivate
-      switch (program.onDeactivate) {
-        case 'cancel':
-          orchCancelledIds.push(program.id)
-          break
-        case 'keep':
-          orchWorkingOrders.push(buildOrchestrationWorkingOrder(program))
-          break
-        case 'close':
-          orchCloseIds.push(program.id)
-          break
+      if (program.programKind === 'adaptive_volatility_grid') {
+        runAdaptiveVolatilityGridProgram({
+          ctx,
+          program,
+          exprValues,
+          guardState,
+          programLifecycleStateIn,
+          orchWorkingOrders,
+          orchActiveIds,
+          orchCancelledIds,
+          orchCloseIds,
+          programLifecycleStateNext,
+        })
+        continue
       }
     }
   }
@@ -124,12 +117,69 @@ export function runOrderPrograms(
     activeProgramIds: Object.freeze([...orchActiveIds, ...legacyActiveIds]),
     cancelledProgramIds: Object.freeze([...orchCancelledIds, ...legacyCancelledIds]),
     closeProgramIds: Object.freeze([...orchCloseIds]),
-    // S0a: 顶层 freeze 即可（fixed_grid_gated entry 无嵌套结构）；S5/S6 引入复杂 entry 时升级为深 freeze。
     programLifecycleStateNext: Object.freeze(programLifecycleStateNext),
   })
 }
 
-function isValidOrchestrationProgram(program: CompiledOrchestrationProgram): boolean {
+// ----------- fixed_grid_gated 分支（S4，逐字段保持） -----------
+
+interface FixedGridGatedRunArgs {
+  program: CompiledFixedGridGatedProgram
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>
+  guardState: Readonly<CompiledGuardState>
+  orchWorkingOrders: Array<{
+    id: string
+    sourceRef: string
+    payload?: Record<string, unknown>
+    levels?: readonly number[]
+  }>
+  orchActiveIds: string[]
+  orchCancelledIds: string[]
+  orchCloseIds: string[]
+  programLifecycleStateNext: Record<string, ProgramLifecycleState>
+}
+
+function runFixedGridGatedProgram(args: FixedGridGatedRunArgs): void {
+  const {
+    program, exprValues, guardState,
+    orchWorkingOrders, orchActiveIds, orchCancelledIds, orchCloseIds,
+    programLifecycleStateNext,
+  } = args
+  if (guardState.cancelOrderPrograms) {
+    orchCancelledIds.push(program.id)
+    programLifecycleStateNext[program.id] = { kind: 'fixed_grid_gated' }
+    return
+  }
+
+  if (!isValidFixedGridGated(program)) {
+    orchCancelledIds.push(program.id)
+    return
+  }
+
+  const exprValue = exprValues[program.activeWhenExprId]
+  const isActive = exprValue === true
+  programLifecycleStateNext[program.id] = { kind: 'fixed_grid_gated' }
+
+  if (isActive) {
+    orchActiveIds.push(program.id)
+    orchWorkingOrders.push(buildFixedGridGatedWorkingOrder(program))
+    return
+  }
+
+  switch (program.onDeactivate) {
+    case 'cancel':
+      orchCancelledIds.push(program.id)
+      break
+    case 'keep':
+      orchWorkingOrders.push(buildFixedGridGatedWorkingOrder(program))
+      break
+    case 'close':
+      orchCloseIds.push(program.id)
+      break
+  }
+}
+
+function isValidFixedGridGated(program: CompiledFixedGridGatedProgram): boolean {
   if (typeof program.activeWhenExprId !== 'string' || program.activeWhenExprId.length === 0) return false
   const { gridParams, sizing } = program
   if (!gridParams) return false
@@ -140,19 +190,7 @@ function isValidOrchestrationProgram(program: CompiledOrchestrationProgram): boo
   return true
 }
 
-/**
- * Build orchestration program working order.
- *
- * Levels formula (MVP, fixed_grid_gated):
- *   levels[i] = anchorPrice * (1 - stepPct/100)^(i+1)   for i = 0..levelCount-1
- * 即"等比向下挂买单"，与 anchorPrice=50000/stepPct=5/levelCount=3 →
- *   [47500, 45125, 42868.75] 一致。
- *
- * 若设置 lowerBound：levels 不下穿（< lowerBound 的 level 被裁剪掉）。
- * 若设置 upperBound：levels 不上穿（> upperBound 的 level 被裁剪掉）。
- * 数值四舍五入到 2 位小数（与 fixture 对齐）。
- */
-function buildOrchestrationWorkingOrder(program: CompiledOrchestrationProgram): {
+function buildFixedGridGatedWorkingOrder(program: CompiledFixedGridGatedProgram): {
   id: string
   sourceRef: string
   payload?: Record<string, unknown>
@@ -177,6 +215,289 @@ function buildOrchestrationWorkingOrder(program: CompiledOrchestrationProgram): 
       sizing: { ...sizing },
     },
     levels: Object.freeze(rawLevels),
+  }
+}
+
+// ----------- adaptive_volatility_grid 分支（S6 八路径） -----------
+//
+// 8 路径（plan v3 Acceptance Runtime）：
+//   1) fail-closed: isValidAdaptiveVolatilityGrid === false → cancelled
+//   2) inline atr() helper（来自 @ai/shared/script-engine/helpers/technical-indicators）
+//   3) active 状态判断
+//   4) inactive 分支按 onDeactivate cancel/keep/close
+//   5) ATR 计算（atr(ctx.bars, atrPeriod) → number | null）
+//   6) ATR 不可用 Path A（有 prev → keep prev ladder + reason）/
+//      Path B（无 prev → cancelled + key 缺席 + reason）
+//   7) ATR rebuild 决策（drift / cooldown 钳制 / NaN 安全网）
+//   8) deterministic now: ctx.timestamp ?? bars[last].timestamp（禁 Date.now()）
+
+interface AdaptiveRunArgs {
+  ctx: StrategyExecutionContextV1
+  program: CompiledAdaptiveVolatilityGridProgram
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>
+  guardState: Readonly<CompiledGuardState>
+  programLifecycleStateIn?: Readonly<Record<string, ProgramLifecycleState>>
+  orchWorkingOrders: Array<{
+    id: string
+    sourceRef: string
+    payload?: Record<string, unknown>
+    levels?: readonly number[]
+  }>
+  orchActiveIds: string[]
+  orchCancelledIds: string[]
+  orchCloseIds: string[]
+  programLifecycleStateNext: Record<string, ProgramLifecycleState>
+}
+
+function runAdaptiveVolatilityGridProgram(args: AdaptiveRunArgs): void {
+  const {
+    ctx, program, exprValues, guardState, programLifecycleStateIn,
+    orchWorkingOrders, orchActiveIds, orchCancelledIds, orchCloseIds,
+    programLifecycleStateNext,
+  } = args
+  const prev = readAdaptivePrev(programLifecycleStateIn, program.id)
+
+  // Path 4 应用 S5 M4：cancelOrderPrograms guard pass-through
+  if (guardState.cancelOrderPrograms) {
+    orchCancelledIds.push(program.id)
+    if (prev) {
+      programLifecycleStateNext[program.id] = prev
+    }
+    // 无 prev → key 缺席（与 S0a substrate adapter map merge 视为 eviction）
+    return
+  }
+
+  // Path 1: 16 fail-closed
+  if (!isValidAdaptiveVolatilityGrid(program)) {
+    orchCancelledIds.push(program.id)
+    return
+  }
+
+  // Path 3: active 状态判断
+  const isActive = exprValues[program.activeWhenExprId] === true
+
+  // Path 4: inactive 三模式 — 三 mode 在持有 prev 时均透传 lifecycle state，
+  // 与 cancelOrderPrograms guard pass-through 语义对齐（critic round 3 fix）。
+  // 防止 active→inactive(cancel)→active 抖动绕过 rebuildCooldownSec 硬下限：
+  // 透传 prev 后再次 active 时仍按 drift / cooldown 比较，不会视为首次 build。
+  if (!isActive) {
+    switch (program.onDeactivate) {
+      case 'cancel':
+        orchCancelledIds.push(program.id)
+        if (prev) {
+          programLifecycleStateNext[program.id] = prev
+        }
+        break
+      case 'keep':
+        if (prev && prev.lastBuildLadder.length > 0) {
+          orchWorkingOrders.push(buildAdaptiveWorkingOrderFromLadder(program, prev.lastBuildLadder, undefined))
+          programLifecycleStateNext[program.id] = prev
+        }
+        else {
+          orchCancelledIds.push(program.id)
+        }
+        break
+      case 'close':
+        orchCloseIds.push(program.id)
+        if (prev) {
+          programLifecycleStateNext[program.id] = prev
+        }
+        break
+    }
+    return
+  }
+
+  // Path 5: ATR 计算
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const currentATR = atr(bars, program.adaptiveGridParams.atrPeriod)
+
+  // Path 6 ATR 不可用拆分两路径
+  if (currentATR === null) {
+    if (prev && prev.lastBuildLadder.length > 0) {
+      // Path A: 保留 prev ladder + reason
+      orchActiveIds.push(program.id)
+      orchWorkingOrders.push(
+        buildAdaptiveWorkingOrderFromLadder(program, prev.lastBuildLadder, REASON_ATR_UNAVAILABLE_KEEP_LADDER),
+      )
+      programLifecycleStateNext[program.id] = prev
+      return
+    }
+    // Path B: 无 prev → cancelled + key 缺席（critic round 2 Major #2）
+    orchCancelledIds.push(program.id)
+    return
+  }
+
+  // Path 8: deterministic now（critic round 2 应用 S5 M3：禁 Date.now()）
+  const lastBar = bars[bars.length - 1]
+  const now = ctx.timestamp ?? lastBar?.timestamp
+  const currentClose = lastBar?.close ?? Number.NaN
+
+  // currentClose <= 0 安全网（critic round 2 Minor edge）
+  if (!Number.isFinite(currentClose) || currentClose <= 0 || typeof now !== 'number') {
+    orchCancelledIds.push(program.id)
+    return
+  }
+
+  // Path 7: rebuild 决策
+  const params = program.adaptiveGridParams
+
+  // 首次 build（无 prev OR kind mismatch）→ 直接 rebuild（无 cooldown）
+  if (!prev) {
+    const rebuilt = tryRebuild({ program, currentATR, currentClose, now })
+    if (!rebuilt) {
+      orchCancelledIds.push(program.id)
+      return
+    }
+    orchActiveIds.push(program.id)
+    orchWorkingOrders.push(rebuilt.workingOrder)
+    programLifecycleStateNext[program.id] = rebuilt.entry
+    return
+  }
+
+  // 有 prev：drift 比较
+  const atrDriftActual = (Math.abs(currentATR - prev.lastBuildATR) / prev.lastBuildATR) * 100
+
+  if (atrDriftActual < params.atrDriftPct) {
+    // 不 rebuild：keep prev ladder + 透传 prev state
+    orchActiveIds.push(program.id)
+    orchWorkingOrders.push(buildAdaptiveWorkingOrderFromLadder(program, prev.lastBuildLadder, undefined))
+    programLifecycleStateNext[program.id] = prev
+    return
+  }
+
+  // drift ≥ threshold + 距上次 < cooldown → throttled
+  const elapsedSec = (now - prev.lastBuildAt) / 1000
+  if (elapsedSec < params.rebuildCooldownSec) {
+    orchActiveIds.push(program.id)
+    orchWorkingOrders.push(buildAdaptiveWorkingOrderFromLadder(program, prev.lastBuildLadder, REASON_REBUILD_THROTTLED))
+    programLifecycleStateNext[program.id] = prev
+    return
+  }
+
+  // drift ≥ threshold + 距上次 ≥ cooldown → rebuild
+  const rebuilt = tryRebuild({ program, currentATR, currentClose, now })
+  if (!rebuilt) {
+    orchCancelledIds.push(program.id)
+    return
+  }
+  orchActiveIds.push(program.id)
+  orchWorkingOrders.push(rebuilt.workingOrder)
+  programLifecycleStateNext[program.id] = rebuilt.entry
+}
+
+function readAdaptivePrev(
+  programLifecycleStateIn: Readonly<Record<string, ProgramLifecycleState>> | undefined,
+  programId: string,
+):
+  | (Extract<ProgramLifecycleState, { kind: 'adaptive_volatility_grid' }>)
+  | undefined {
+  const entry = programLifecycleStateIn?.[programId]
+  if (!entry || entry.kind !== 'adaptive_volatility_grid') return undefined
+  return entry
+}
+
+interface RebuildResult {
+  workingOrder: {
+    id: string
+    sourceRef: string
+    payload?: Record<string, unknown>
+    levels?: readonly number[]
+  }
+  entry: ProgramLifecycleState
+}
+
+interface RebuildArgs {
+  program: CompiledAdaptiveVolatilityGridProgram
+  currentATR: number
+  currentClose: number
+  now: number
+}
+
+function tryRebuild(args: RebuildArgs): RebuildResult | null {
+  const { program, currentATR, currentClose, now } = args
+  const params = program.adaptiveGridParams
+
+  const rawStep = params.atrMultiplier * currentATR
+
+  // NaN/0/Inf 安全网（critic round 1 M2）
+  if (
+    !Number.isFinite(rawStep)
+    || rawStep <= 0
+    || !Number.isFinite(currentATR)
+    || currentATR <= 0
+    || !Number.isFinite(currentClose)
+    || currentClose <= 0
+  ) {
+    return null
+  }
+
+  const rawStepPct = (rawStep / currentClose) * 100
+  if (!Number.isFinite(rawStepPct) || rawStepPct <= 0) return null
+
+  // 钳制
+  const stepPct = Math.min(Math.max(rawStepPct, params.minStepPct), params.maxStepPct)
+  const rebuildClamped = rawStepPct < params.minStepPct || rawStepPct > params.maxStepPct
+  const range = params.rangeMultiplier * currentATR
+
+  // 切分（critic round 2 Major #1）：lower=floor(N/2), upper=N-lower
+  const lowerCount = Math.floor(params.levelCount / 2)
+  const upperCount = params.levelCount - lowerCount
+
+  const decay = 1 - stepPct / 100
+  const growth = 1 + stepPct / 100
+  const levels: Array<{ id: string; level: number }> = []
+
+  for (let i = 0; i < lowerCount; i++) {
+    const price = round2(currentClose * decay ** (i + 1))
+    if (price < currentClose - range) continue
+    if (!Number.isFinite(price) || price <= 0) continue
+    levels.push({ id: `${program.id}_lower_${i + 1}`, level: price })
+  }
+  for (let j = 0; j < upperCount; j++) {
+    const price = round2(currentClose * growth ** (j + 1))
+    if (price > currentClose + range) continue
+    if (!Number.isFinite(price) || price <= 0) continue
+    levels.push({ id: `${program.id}_upper_${j + 1}`, level: price })
+  }
+
+  const frozenLadder = Object.freeze(levels.map(level => Object.freeze(level)))
+  const entry: ProgramLifecycleState = Object.freeze({
+    kind: 'adaptive_volatility_grid' as const,
+    lastBuildATR: currentATR,
+    lastBuildAt: now,
+    lastBuildLadder: frozenLadder,
+    rebuildClamped,
+  })
+
+  const workingOrder = buildAdaptiveWorkingOrderFromLadder(program, frozenLadder, undefined)
+  return { workingOrder, entry }
+}
+
+function buildAdaptiveWorkingOrderFromLadder(
+  program: CompiledAdaptiveVolatilityGridProgram,
+  ladder: ReadonlyArray<{ id: string; level: number }>,
+  reason: string | undefined,
+): {
+  id: string
+  sourceRef: string
+  payload?: Record<string, unknown>
+  levels?: readonly number[]
+} {
+  const { activeWhenExprId, sizing, adaptiveGridParams } = program
+  const levels = Object.freeze(ladder.map(item => item.level))
+  const payload: Record<string, unknown> = {
+    activeWhen: activeWhenExprId,
+    adaptiveGridParams: { ...adaptiveGridParams },
+    sizing: { ...sizing },
+  }
+  if (reason !== undefined) {
+    payload.reason = reason
+  }
+  return {
+    id: program.id,
+    sourceRef: 'orchestration:program.adaptive_volatility_grid',
+    payload,
+    levels,
   }
 }
 

@@ -1,5 +1,9 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
-import type { CompiledOrchestrationProgram } from '@ai/shared/script-engine/compiled-runtime/compiled-orchestration-program'
+import type {
+  CompiledAdaptiveVolatilityGridProgram,
+  CompiledFixedGridGatedProgram,
+  CompiledOrchestrationProgram,
+} from '@ai/shared/script-engine/compiled-runtime/compiled-orchestration-program'
 import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime/program-lifecycle-state'
 import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/evaluate-expr-pool'
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
@@ -1337,7 +1341,7 @@ describe('backtestCompiledRuntimeCompat', () => {
       triggered: Object.freeze([] as string[]),
     })
 
-    function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+    function makeProgram(overrides: Partial<CompiledFixedGridGatedProgram> = {}): CompiledFixedGridGatedProgram {
       return {
         id: 'orch_grid_1',
         programKind: 'fixed_grid_gated',
@@ -1566,7 +1570,7 @@ describe('backtestCompiledRuntimeCompat', () => {
       triggered: Object.freeze([] as string[]),
     })
 
-    function makeProgram(overrides: Partial<CompiledOrchestrationProgram> = {}): CompiledOrchestrationProgram {
+    function makeProgram(overrides: Partial<CompiledFixedGridGatedProgram> = {}): CompiledFixedGridGatedProgram {
       return {
         id: 'orch_grid_1',
         programKind: 'fixed_grid_gated',
@@ -1632,6 +1636,147 @@ describe('backtestCompiledRuntimeCompat', () => {
 
       expect(lifecycleBySymbol.get('BTCUSDT')?.[program.id]).toEqual({ kind: 'fixed_grid_gated' })
       expect(lifecycleBySymbol.get('ETHUSDT')?.[program.id]).toEqual({ kind: 'fixed_grid_gated' })
+    })
+
+    // ===== Phase 5 S6 (#984) adaptive_volatility_grid 接入回归 =====
+    function makeAdaptiveProgram(overrides: Partial<CompiledAdaptiveVolatilityGridProgram> = {}): CompiledAdaptiveVolatilityGridProgram {
+      return {
+        id: 'adaptive_grid_1',
+        programKind: 'adaptive_volatility_grid',
+        activeWhenExprId: 'gate_regime',
+        onDeactivate: 'cancel',
+        rebuildPolicy: 'atr_window',
+        adaptiveGridParams: {
+          atrPeriod: 14,
+          atrMultiplier: 1.5,
+          rangeMultiplier: 10,
+          atrDriftPct: 1,
+          rebuildCooldownSec: 600,
+          minStepPct: 0.2,
+          maxStepPct: 5,
+          levelCount: 6,
+        },
+        sizing: { mode: 'fixed_quote', value: 100 },
+        ...overrides,
+      }
+    }
+
+    function makeAtrBars(count: number, opts: { high?: number; low?: number; close?: number; startTimestamp?: number; intervalMs?: number } = {}) {
+      const high = opts.high ?? 100.5
+      const low = opts.low ?? 99.5
+      const close = opts.close ?? 100
+      const start = opts.startTimestamp ?? 1_700_000_000_000
+      const interval = opts.intervalMs ?? 60_000
+      return Array.from({ length: count }, (_, i) => ({
+        open: close, high, low, close, volume: 1000, timestamp: start + i * interval,
+      }))
+    }
+
+    it('adaptive 跨连续 5 根 K 线：lifecycleStateBySymbol 持续含 adaptive entry（含 lastBuildATR / rebuildClamped）', () => {
+      const program = makeAdaptiveProgram({ id: 'adaptive_persistent' })
+      const lifecycleBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+      const symbol = 'BTCUSDT'
+      const baseBars = makeAtrBars(20)
+      // bar 0：首次 build；bar 1..4 ATR 基本不变 → 非 rebuild
+      for (let bar = 0; bar < 5; bar++) {
+        const stateIn = lifecycleBySymbol.get(symbol)
+        const orderState = runOrderPrograms(
+          { symbol, bars: baseBars.slice(0, 15 + bar) } as any,
+          [],
+          { gate_regime: true },
+          guardState,
+          [],
+          undefined,
+          [program],
+          stateIn,
+        )
+        const entry = orderState.programLifecycleStateNext[program.id]
+        expect(entry?.kind).toBe('adaptive_volatility_grid')
+        if (entry?.kind === 'adaptive_volatility_grid') {
+          expect(entry.lastBuildATR).toBeGreaterThan(0)
+          expect(typeof entry.rebuildClamped).toBe('boolean')
+        }
+        lifecycleBySymbol.set(symbol, { ...orderState.programLifecycleStateNext })
+      }
+      const finalEntry = lifecycleBySymbol.get(symbol)?.[program.id]
+      expect(finalEntry?.kind).toBe('adaptive_volatility_grid')
+    })
+
+    it('adaptive ATR 漂移触发 rebuild：第 2 根 K 线 cooldown NOOP（throttled）', () => {
+      const program = makeAdaptiveProgram({ id: 'adaptive_throttle' }, )
+      const lifecycleBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+      const symbol = 'BTCUSDT'
+
+      // 第一帧：稳定波动（ATR=1）
+      const bars1 = makeAtrBars(20, { high: 100.5, low: 99.5, close: 100, startTimestamp: 1_700_000_000_000 })
+      const state1 = runOrderPrograms(
+        { symbol, bars: bars1 } as any, [], { gate_regime: true }, guardState, [], undefined, [program],
+        lifecycleBySymbol.get(symbol),
+      )
+      lifecycleBySymbol.set(symbol, { ...state1.programLifecycleStateNext })
+      const entry1 = state1.programLifecycleStateNext[program.id]
+      expect(entry1?.kind).toBe('adaptive_volatility_grid')
+
+      // 第二帧：60s 后 ATR 突变（drift > 1%）但 cooldown=600s 未到 → throttled
+      const bars2 = makeAtrBars(20, { high: 105, low: 95, close: 100, startTimestamp: 1_700_000_060_000 })
+      const state2 = runOrderPrograms(
+        { symbol, bars: bars2 } as any, [], { gate_regime: true }, guardState, [], undefined, [program],
+        lifecycleBySymbol.get(symbol),
+      )
+      const wo2 = state2.workingOrders.find(w => w.id === program.id)
+      expect((wo2?.payload as Record<string, unknown>).reason).toBe('compiled.orchestration.program.rebuild_throttled')
+      // throttle 透传 prev
+      expect(state2.programLifecycleStateNext[program.id]).toEqual(entry1)
+    })
+
+    it('adaptive ATR 不可用 Path A：bars 不足以产出 ATR + 有 prev → keep ladder + reason', () => {
+      const program = makeAdaptiveProgram({ id: 'adaptive_path_a' })
+      const lifecycleBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
+      const symbol = 'BTCUSDT'
+      const prev: ProgramLifecycleState = {
+        kind: 'adaptive_volatility_grid',
+        lastBuildATR: 1,
+        lastBuildAt: 1_700_000_000_000,
+        lastBuildLadder: [{ id: 'a', level: 99 }, { id: 'b', level: 101 }],
+        rebuildClamped: false,
+      }
+      lifecycleBySymbol.set(symbol, { [program.id]: prev })
+      const orderState = runOrderPrograms(
+        { symbol, bars: makeAtrBars(5) } as any,  // 不够 atrPeriod+1
+        [], { gate_regime: true }, guardState, [], undefined, [program],
+        lifecycleBySymbol.get(symbol),
+      )
+      const wo = orderState.workingOrders.find(w => w.id === program.id)
+      expect((wo?.payload as Record<string, unknown>).reason).toBe('compiled.orchestration.program.atr_unavailable_keep_ladder')
+      expect(orderState.programLifecycleStateNext[program.id]).toEqual(prev)
+    })
+
+    it('adaptive ATR 不可用 Path B：无 prev → cancelled + key 缺席（substrate eviction 契约）', () => {
+      const program = makeAdaptiveProgram({ id: 'adaptive_path_b' })
+      const orderState = runOrderPrograms(
+        { symbol: 'BTCUSDT', bars: makeAtrBars(3) } as any,
+        [], { gate_regime: true }, guardState, [], undefined, [program],
+      )
+      expect(orderState.cancelledProgramIds).toContain(program.id)
+      expect(orderState.programLifecycleStateNext).not.toHaveProperty(program.id)
+    })
+
+    it('adaptive activeWhen=false × close：closeProgramIds + 透传 prev state', () => {
+      const program = makeAdaptiveProgram({ id: 'adaptive_close', onDeactivate: 'close' })
+      const prev: ProgramLifecycleState = {
+        kind: 'adaptive_volatility_grid',
+        lastBuildATR: 1,
+        lastBuildAt: 1_700_000_000_000,
+        lastBuildLadder: [{ id: 'a', level: 99 }],
+        rebuildClamped: false,
+      }
+      const orderState = runOrderPrograms(
+        { symbol: 'BTCUSDT', bars: makeAtrBars(20) } as any,
+        [], { gate_regime: false }, guardState, [], undefined, [program],
+        { [program.id]: prev },
+      )
+      expect(orderState.closeProgramIds).toContain(program.id)
+      expect(orderState.programLifecycleStateNext[program.id]).toEqual(prev)
     })
   })
 })

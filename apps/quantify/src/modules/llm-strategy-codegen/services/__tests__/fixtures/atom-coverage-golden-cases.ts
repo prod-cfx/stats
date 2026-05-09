@@ -1885,6 +1885,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedRoute: 'projection_gate',
   },
+  // Phase 5 S6 (#984): adaptive_volatility_grid atom-coverage 解锁留 follow-up
+  // — extractor 当前对 ATR 自适应网格 utterance 输出含未注册 atoms（如指标 fragment）
+  // 导致 classifier 走 unsupported_fallback；core 33 cases 已在
+  // orchestration-adaptive-volatility-grid-golden-corpus.spec.ts 全覆盖
   ...phase3MtfCases,
   ...phase3PreviousExtremaCases,
 ]

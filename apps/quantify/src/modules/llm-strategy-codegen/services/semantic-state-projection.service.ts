@@ -244,6 +244,26 @@ export class SemanticStateProjectionService {
         })
         continue
       }
+      // Phase 5 S6 (#984)
+      if (node.kind === 'program' && node.key === 'program.adaptive_volatility_grid') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('program.adaptive_volatility_grid')
+        }
+        catch {
+          continue
+        }
+        if (!entry) continue
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) continue
+        items.push({
+          kind: 'program',
+          id: `orchestration-program-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
+        continue
+      }
     }
     if (items.length === 0) {
       return null

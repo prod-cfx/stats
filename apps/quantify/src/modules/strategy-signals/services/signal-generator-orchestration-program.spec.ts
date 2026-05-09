@@ -32,12 +32,17 @@ describe('signalGeneratorService orchestration program wiring (live-signal fast 
     expect(src).toMatch(/Parameters<typeof runOrderPrograms>\[6\]/)
   })
 
-  it('13.E (Phase 5 S0a): runOrderPrograms 第 8 参为 programLifecycleStateIn —'
-    + ' live 端 S0a 暂传 undefined（state map 由 S5/S6 落地）', () => {
-    // 静态断言：源码包含传给 runOrderPrograms 的第 8 参 undefined
-    expect(src).toMatch(
-      /runOrderPrograms\([\s\S]*?orchestrationPrograms[\s\S]*?\?\?\s*\[\][\s\S]*?\][\s\S]*?,[\s\S]*?undefined[\s\S]*?\)/,
-    )
+  it('13.E (Phase 5 S0a → S6): runOrderPrograms 第 8 参为 programLifecycleStateIn —'
+    + ' live 端 S6 维护 programLifecycleStateByStrategyInstanceId Map（按 instance.id 索引）', () => {
+    // 静态断言：源码包含 state map 字段声明（class field）
+    expect(src).toMatch(/programLifecycleStateByStrategyInstanceId/)
+    // 静态断言：传给 runOrderPrograms 的第 8 参为 programLifecycleStateIn（lookup 自 map）
+    expect(src).toMatch(/programLifecycleStateIn\s*=\s*instanceId/)
+    expect(src).toMatch(/runOrderPrograms\([\s\S]*?programLifecycleStateIn[\s\S]*?\)/)
+    // 静态断言：写回 programLifecycleStateNext 到 map
+    expect(src).toMatch(/programLifecycleStateByStrategyInstanceId\.set\([\s\S]*?programLifecycleStateNext/)
+    // 静态断言：cleanup hook clearProgramLifecycleStateForInstance
+    expect(src).toMatch(/clearProgramLifecycleStateForInstance/)
     // 类型断言：第 8 参类型是 Readonly<Record<string, ProgramLifecycleState>> | undefined
     type Param8 = Parameters<typeof import('@ai/shared/script-engine/compiled-runtime').runOrderPrograms>[7]
     type Expected = Readonly<Record<string, import(

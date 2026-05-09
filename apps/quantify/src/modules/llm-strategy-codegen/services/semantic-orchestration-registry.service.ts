@@ -19,6 +19,7 @@ export interface SemanticOrchestrationValidationResult {
 const GATE_REGIME_KEY = 'gate.regime'
 const PORTFOLIO_DRAWDOWN_BLOCK_KEY = 'portfolioRisk.drawdown_block'
 const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
+const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
 
 const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
   id: 'program.fixed_grid_gated',
@@ -43,6 +44,71 @@ const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
       domain: 'runtime',
       verb: 'read',
       object: 'account_equity',
+    },
+  ],
+  stateRequirements: [
+    {
+      domain: 'state',
+      verb: 'read_write',
+      object: 'program_lifecycle',
+    },
+  ],
+  orderRequirements: [
+    {
+      domain: 'order',
+      verb: 'support',
+      object: 'limit_order',
+    },
+    {
+      domain: 'order',
+      verb: 'cancel',
+      object: 'limit_order',
+    },
+  ],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'guard',
+      verb: 'manage',
+      object: 'limit_ladder',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+// Phase 5 S6 (#984): adaptive_volatility_grid contract
+//   capability: orchestration manage adaptive_volatility_grid_ladder
+//   runtimeRequirements: limit_order + account.equity + bar_ohlcv (S0a vocab)
+//   stateRequirements: program_lifecycle (S0a vocab)
+//   orderRequirements: limit_order support + cancel
+const PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT: SemanticOrchestrationContract = {
+  id: 'program.adaptive_volatility_grid',
+  kind: 'program',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'manage',
+      object: 'adaptive_volatility_grid_ladder',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'provide',
+      object: 'limit_order',
+    },
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'account_equity',
+    },
+    {
+      domain: 'runtime',
+      verb: 'provide',
+      object: 'bar_ohlcv',
     },
   ],
   stateRequirements: [
@@ -148,6 +214,7 @@ export class SemanticOrchestrationRegistryService {
     [GATE_REGIME_KEY, GATE_REGIME_CONTRACT],
     [PORTFOLIO_DRAWDOWN_BLOCK_KEY, PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT],
     [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
+    [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -197,6 +264,15 @@ export class SemanticOrchestrationRegistryService {
   private validateProgramNode(
     node: SemanticOrchestrationNode,
   ): SemanticOrchestrationValidationResult {
+    if (node.key === PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY) {
+      return this.validateAdaptiveVolatilityGridNode(node)
+    }
+    return this.validateFixedGridGatedNode(node)
+  }
+
+  private validateFixedGridGatedNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
     const missingSlots: SemanticSlotState[] = []
     const fieldPath = `orchestration.program.fixed_grid_gated[${node.id}]`
     const pushSlot = (field: string, hint: string): void => {
@@ -211,7 +287,7 @@ export class SemanticOrchestrationRegistryService {
     }
 
     if (node.key !== PROGRAM_FIXED_GRID_GATED_KEY) {
-      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated）')
+      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated / program.adaptive_volatility_grid）')
       return { ok: false, missingSlots }
     }
 
@@ -279,6 +355,119 @@ export class SemanticOrchestrationRegistryService {
 
     if (!sizing || !isPositiveFinite(sizing.value)) {
       pushSlot('sizing.value', '请确认仓位数值（>0 有限数）')
+    }
+
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
+      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  /**
+   * adaptive_volatility_grid 节点 9 个 open slot ↔ readiness 16 fail-closed 一一映射：
+   *   atr_period (#6) / atr_multiplier (#7) / range_multiplier (#8)
+   *   min_step_pct (#11) / max_step_pct (#12) / level_count (#14)
+   *   sizing (#15) / active_when_ref (#16) / rebuild_cooldown_sec (#10)
+   */
+  private validateAdaptiveVolatilityGridNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.program.adaptive_volatility_grid[${node.id}]`
+    const pushSlot = (field: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.program.adaptive_volatility_grid.${field}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    if (node.programKind !== 'adaptive_volatility_grid') {
+      pushSlot('program_kind', '请确认 programKind 为 adaptive_volatility_grid')
+    }
+
+    const onDeactivate = node.onDeactivate
+    if (onDeactivate !== 'cancel' && onDeactivate !== 'keep' && onDeactivate !== 'close') {
+      pushSlot('on_deactivate', '请确认停用时行为（cancel/keep/close）')
+    }
+
+    if (node.rebuildPolicy !== 'atr_window') {
+      pushSlot('rebuild_policy', '请确认重建策略（仅支持 atr_window）')
+    }
+
+    const isPositiveFinite = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && v > 0
+    const isPositiveInteger = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && Number.isInteger(v) && v > 0
+
+    if (!isPositiveInteger(node.atrPeriod) || node.atrPeriod < 2 || node.atrPeriod > 200) {
+      pushSlot('atr_period', '请确认 ATR 周期（2..200 整数）')
+    }
+
+    if (!isPositiveFinite(node.atrMultiplier)) {
+      pushSlot('atr_multiplier', '请确认 ATR 步长系数（>0 有限数）')
+    }
+
+    if (!isPositiveFinite(node.rangeMultiplier)) {
+      pushSlot('range_multiplier', '请确认 ATR 区间系数（>0 有限数）')
+    }
+
+    if (
+      typeof node.atrDriftPct !== 'number'
+      || !Number.isFinite(node.atrDriftPct)
+      || node.atrDriftPct <= 0
+      || node.atrDriftPct > 100
+    ) {
+      pushSlot('atr_drift_pct', '请确认 ATR 漂移百分比（>0 且 ≤100）')
+    }
+
+    // Phase 5 S6 risk delta: rebuildCooldownSec 硬下限 300（与 S5 60s 区分）
+    if (
+      !isPositiveInteger(node.rebuildCooldownSec)
+      || (node.rebuildCooldownSec ?? 0) < 300
+    ) {
+      pushSlot('rebuild_cooldown_sec', '请确认重建冷却时长（≥300 整数秒）')
+    }
+
+    if (!isPositiveFinite(node.minStepPct)) {
+      pushSlot('min_step_pct', '请确认最小步长百分比（>0 有限数）')
+    }
+
+    if (!isPositiveFinite(node.maxStepPct)) {
+      pushSlot('max_step_pct', '请确认最大步长百分比（>0 有限数）')
+    }
+
+    if (
+      isPositiveFinite(node.minStepPct)
+      && isPositiveFinite(node.maxStepPct)
+      && (node.maxStepPct as number) < (node.minStepPct as number)
+    ) {
+      pushSlot('max_step_pct', '请确认最大步长不小于最小步长')
+    }
+
+    const levelCount = node.levelCount
+    if (
+      typeof levelCount !== 'number'
+      || !Number.isFinite(levelCount)
+      || !Number.isInteger(levelCount)
+      || levelCount < 2
+      || levelCount > 100
+    ) {
+      pushSlot('level_count', '请确认档位数量（2..100 整数）')
+    }
+
+    const sizing = node.sizing
+    if (
+      !sizing
+      || (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct')
+    ) {
+      pushSlot('sizing', '请确认仓位模式（fixed_quote/fixed_base/fixed_pct）')
+    } else if (!isPositiveFinite(sizing.value)) {
+      pushSlot('sizing', '请确认仓位数值（>0 有限数）')
     }
 
     if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
