@@ -19,6 +19,7 @@ export interface SemanticOrchestrationValidationResult {
 const GATE_REGIME_KEY = 'gate.regime'
 const PORTFOLIO_DRAWDOWN_BLOCK_KEY = 'portfolioRisk.drawdown_block'
 const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
+const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 
 const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
   id: 'program.fixed_grid_gated',
@@ -43,6 +44,66 @@ const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
       domain: 'runtime',
       verb: 'read',
       object: 'account_equity',
+    },
+  ],
+  stateRequirements: [
+    {
+      domain: 'state',
+      verb: 'read_write',
+      object: 'program_lifecycle',
+    },
+  ],
+  orderRequirements: [
+    {
+      domain: 'order',
+      verb: 'support',
+      object: 'limit_order',
+    },
+    {
+      domain: 'order',
+      verb: 'cancel',
+      object: 'limit_order',
+    },
+  ],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'guard',
+      verb: 'manage',
+      object: 'limit_ladder',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+const PROGRAM_DYNAMIC_GRID_CONTRACT: SemanticOrchestrationContract = {
+  id: 'program.dynamic_grid',
+  kind: 'program',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'manage',
+      object: 'dynamic_grid_ladder',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'provide',
+      object: 'limit_order',
+    },
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'account_equity',
+    },
+    {
+      domain: 'runtime',
+      verb: 'provide',
+      object: 'bar_ohlcv',
     },
   ],
   stateRequirements: [
@@ -148,6 +209,7 @@ export class SemanticOrchestrationRegistryService {
     [GATE_REGIME_KEY, GATE_REGIME_CONTRACT],
     [PORTFOLIO_DRAWDOWN_BLOCK_KEY, PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT],
     [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
+    [PROGRAM_DYNAMIC_GRID_KEY, PROGRAM_DYNAMIC_GRID_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -197,6 +259,10 @@ export class SemanticOrchestrationRegistryService {
   private validateProgramNode(
     node: SemanticOrchestrationNode,
   ): SemanticOrchestrationValidationResult {
+    if (node.key === PROGRAM_DYNAMIC_GRID_KEY) {
+      return this.validateDynamicGridProgramNode(node)
+    }
+
     const missingSlots: SemanticSlotState[] = []
     const fieldPath = `orchestration.program.fixed_grid_gated[${node.id}]`
     const pushSlot = (field: string, hint: string): void => {
@@ -211,7 +277,7 @@ export class SemanticOrchestrationRegistryService {
     }
 
     if (node.key !== PROGRAM_FIXED_GRID_GATED_KEY) {
-      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated）')
+      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated / program.dynamic_grid）')
       return { ok: false, missingSlots }
     }
 
@@ -277,6 +343,106 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('sizing.mode', '请确认仓位模式（fixed_quote/fixed_base/fixed_pct）')
     }
 
+    if (!sizing || !isPositiveFinite(sizing.value)) {
+      pushSlot('sizing.value', '请确认仓位数值（>0 有限数）')
+    }
+
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
+      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  private validateDynamicGridProgramNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.program.dynamic_grid[${node.id}]`
+    const pushSlot = (field: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.program.dynamic_grid.${field}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    const isPositiveFinite = (v: unknown): v is number =>
+      typeof v === 'number' && Number.isFinite(v) && v > 0
+
+    if (node.programKind !== 'dynamic_grid') {
+      pushSlot('program_kind', '请确认 programKind 为 dynamic_grid')
+    }
+
+    const onDeactivate = node.onDeactivate
+    if (onDeactivate !== 'cancel' && onDeactivate !== 'keep' && onDeactivate !== 'close') {
+      pushSlot('on_deactivate', '请确认停用时行为（cancel/keep/close）')
+    }
+
+    if (node.rebuildPolicy !== 'anchor_on_state_change') {
+      pushSlot('rebuild_policy', '请确认重建策略（仅支持 anchor_on_state_change）')
+    }
+
+    const lookback = node.anchorLookbackBars
+    if (
+      typeof lookback !== 'number'
+      || !Number.isFinite(lookback)
+      || !Number.isInteger(lookback)
+      || lookback < 10
+      || lookback > 1000
+    ) {
+      pushSlot('anchor_lookback_bars', '请确认 anchor lookback K 线根数（10..1000 整数）')
+    }
+
+    const anchorSide = node.anchorSide
+    if (anchorSide !== 'high' && anchorSide !== 'low' && anchorSide !== 'mid') {
+      pushSlot('anchor_side', '请确认 anchor 取值方向（high/low/mid）')
+    }
+
+    const driftPct = node.anchorDriftPct
+    if (driftPct === undefined || !isPositiveFinite(driftPct) || driftPct > 100) {
+      pushSlot('anchor_drift_pct', '请确认 anchor 漂移阈值（0..100 有限正数）')
+    }
+
+    const minInterval = node.rebuildMinIntervalSec
+    if (
+      typeof minInterval !== 'number'
+      || !Number.isFinite(minInterval)
+      || !Number.isInteger(minInterval)
+      || minInterval < 60
+    ) {
+      pushSlot('rebuild_min_interval_sec', '请确认 rebuild 最小间隔（≥60 秒整数）')
+    }
+
+    const step = node.dynamicGridStep
+    if (!step || (step.mode !== 'pct' && step.mode !== 'absolute')) {
+      pushSlot('dynamic_grid_step.mode', '请确认网格步长模式（pct/absolute）')
+    }
+    if (!step || !isPositiveFinite(step.value)) {
+      pushSlot('dynamic_grid_step.value', '请确认网格步长数值（>0 有限数）')
+    }
+
+    const levelCount = node.levelCount
+    if (
+      typeof levelCount !== 'number'
+      || !Number.isFinite(levelCount)
+      || !Number.isInteger(levelCount)
+      || levelCount < 2
+      || levelCount > 100
+    ) {
+      pushSlot('level_count', '请确认网格档位数量（2..100 整数）')
+    }
+
+    const sizing = node.sizing
+    if (
+      !sizing
+      || (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct')
+    ) {
+      pushSlot('sizing.mode', '请确认仓位模式（fixed_quote/fixed_base/fixed_pct）')
+    }
     if (!sizing || !isPositiveFinite(sizing.value)) {
       pushSlot('sizing.value', '请确认仓位数值（>0 有限数）')
     }

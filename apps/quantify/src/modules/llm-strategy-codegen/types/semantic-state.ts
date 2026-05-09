@@ -354,11 +354,14 @@ export interface SemanticOrchestrationNode {
   gridParams?: SemanticOrchestrationProgramGridParams
   sizing?: SemanticOrchestrationProgramSizing
   // dynamic_grid 节点专属（其它 programKind 不读）— Phase 5 S5 (#984)
+  // 与 S4 gridParams 平级；不与 fixed_grid_gated 共用结构，便于 type narrowing。
   anchorLookbackBars?: number
   anchorSide?: SemanticOrchestrationProgramAnchorSide
   anchorDriftPct?: number
   rebuildMinIntervalSec?: number
   dynamicGridStep?: SemanticOrchestrationProgramDynamicGridStep
+  // dynamic_grid 节点的档位数（与 fixed_grid_gated 的 gridParams.levelCount 互斥）
+  levelCount?: number
   // portfolioRisk 节点专属（其它 kind 不读）
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number
