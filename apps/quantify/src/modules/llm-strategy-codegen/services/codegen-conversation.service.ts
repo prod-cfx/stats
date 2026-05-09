@@ -152,6 +152,7 @@ interface StructuredClarificationContinuationArgs {
     id: string
     status: LlmCodegenSessionStatus
     latestSpecDesc?: Prisma.JsonValue | null
+    strategyInstanceId?: string | null
   }
   checklist: StrategyLogicSnapshot
   semanticState: SemanticState
@@ -266,9 +267,10 @@ export class CodegenConversationService {
       plan,
     })
     initialSemanticState = this.reconcileSemanticMissingPlaceholders(initialSemanticState)
+    const initialStrategyVersion = this.currentStrategyVersion()
     const initialSupportGate = this.semanticSupportClassifier.classify(
       initialSemanticState,
-      this.currentStrategyVersion(),
+      initialStrategyVersion,
     )
     initialSemanticState = this.reconcileSemanticMissingPlaceholders(initialSupportGate.state)
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
@@ -341,7 +343,7 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
-    initialSemanticState = this.normalizeSemanticContractReadiness(initialSemanticState)
+    initialSemanticState = this.normalizeSemanticContractReadiness(initialSemanticState, initialStrategyVersion)
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(initialSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
     const normalization = semanticArtifacts.normalization
@@ -1438,6 +1440,7 @@ export class CodegenConversationService {
     }
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
       this.reconcileSemanticMissingPlaceholders(preReadinessSupportGateResponse.semanticState),
+      preReadinessSupportGateResponse.strategyVersion,
     )
     const inferredConfirmation = await this.withConfirmedInferredDecisionKeys(
       baseConstraintPack,
@@ -1447,6 +1450,7 @@ export class CodegenConversationService {
         providerCode: this.resolveProviderCode(dto.providerCode),
         model: dto.model,
       },
+      preReadinessSupportGateResponse.strategyVersion,
     )
     const baseSemanticState = this.reconcileSemanticMissingPlaceholders(inferredConfirmation.semanticState)
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
@@ -1493,6 +1497,7 @@ export class CodegenConversationService {
       this.withRequiredSemanticOpenSlots(semanticStateBeforeRequiredSlots, {}, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(plannedSemanticState.position),
       }),
+      supportGateResponse.strategyVersion,
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
@@ -1736,11 +1741,13 @@ export class CodegenConversationService {
 
     const semanticStateAfterSupport = this.normalizeSemanticContractReadiness(
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
+      supportGateResponse.strategyVersion,
     )
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.withRequiredSemanticOpenSlots(semanticStateAfterSupport, {}, {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterSupport.position),
       }),
+      supportGateResponse.strategyVersion,
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
@@ -2024,6 +2031,7 @@ export class CodegenConversationService {
 
       const replacementState = this.normalizeSemanticContractReadiness(
         this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
+        supportGate.strategyVersion,
       )
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState)
       const clarificationState = semanticArtifacts.clarificationState
@@ -2184,6 +2192,7 @@ export class CodegenConversationService {
 
     const reducedSemanticState = this.normalizeSemanticContractReadiness(
       this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
+      supportGate.strategyVersion,
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = semanticArtifacts.clarificationState
@@ -2351,6 +2360,7 @@ export class CodegenConversationService {
     }
     const semanticStateAfterAnswers = this.normalizeSemanticContractReadiness(
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
+      supportGateResponse.strategyVersion,
     )
     const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers)
     const confirmationViewNormalization = confirmationViewArtifacts.normalization
@@ -2372,6 +2382,7 @@ export class CodegenConversationService {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
         },
       ),
+      supportGateResponse.strategyVersion,
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
@@ -5076,6 +5087,7 @@ export class CodegenConversationService {
     args: StructuredClarificationContinuationArgs,
   ): Promise<CodegenSessionResponseDto> {
     const semanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
+    const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
     const historyAfterAnswer = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
@@ -5088,6 +5100,7 @@ export class CodegenConversationService {
           preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticState.position),
         },
       ),
+      strategyVersion,
     )
     const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const semanticClarificationState = this.buildClarificationFromSemanticState(reducedSemanticState)
@@ -7020,7 +7033,11 @@ export class CodegenConversationService {
     constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
     guidePrompt?: GuidePromptConfig
     recommendationStyle?: RecommendationStyle
-  }): Promise<{ semanticState: SemanticState; response: CodegenSessionResponseDto | null }> {
+  }): Promise<{
+    semanticState: SemanticState
+    response: CodegenSessionResponseDto | null
+    strategyVersion: StrategyVersionInfo
+  }> {
     const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
     const classification = this.semanticSupportClassifier.classify(args.semanticState, strategyVersion)
     if (classification.route === 'unsupported_fallback') {
@@ -7063,6 +7080,7 @@ export class CodegenConversationService {
       return {
         semanticState: nextState,
         response: await this.returnPersistedSessionResponse(args.session.id, args.userId, response),
+        strategyVersion,
       }
     }
 
@@ -7105,12 +7123,14 @@ export class CodegenConversationService {
       return {
         semanticState: nextState,
         response: await this.returnPersistedSessionResponse(args.session.id, args.userId, response),
+        strategyVersion,
       }
     }
 
     return {
       semanticState: this.clearUnsupportedFallback(classification.state),
       response: null,
+      strategyVersion,
     }
   }
 
@@ -7831,12 +7851,16 @@ export class CodegenConversationService {
     semanticState: SemanticState,
     message: string | undefined,
     options?: { providerCode?: string, model?: string },
+    strategyVersion?: StrategyVersionInfo,
   ): Promise<{
       semanticState: SemanticState
       constraintPack: ConstraintPackSnapshot
       consumed: boolean
     }> {
-    const normalizedSemanticState = this.normalizeSemanticContractReadiness(this.normalizeRiskState(semanticState))
+    const normalizedSemanticState = this.normalizeSemanticContractReadiness(
+      this.normalizeRiskState(semanticState),
+      strategyVersion,
+    )
     const clarification = this.resolveSemanticClarificationArtifacts(normalizedSemanticState)
     const decision = this.buildStrategyDecision({
       semanticState: normalizedSemanticState,

@@ -144,6 +144,106 @@ describe('semanticSupportClassifierService', () => {
     expect(result.state.triggers[0].support).toBeUndefined()
   })
 
+  it('applies runtime version gate to versioned action atoms', () => {
+    const legacy = service.classify(baseState({
+      actions: [{
+        id: 'add-position',
+        key: 'action.add_position',
+        params: { addMode: 'fixed_ratio', addRatio: 0.2 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }), { deployedAtSemanticVersion: null })
+
+    const current = service.classify(baseState({
+      actions: [{
+        id: 'add-position',
+        key: 'action.add_position',
+        params: { addMode: 'fixed_ratio', addRatio: 0.2 },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    }), { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(legacy.route).toBe('unsupported_fallback')
+    expect(legacy.unsupportedAtoms).toContainEqual(expect.objectContaining({
+      key: 'action.add_position',
+      reasonCode: 'runtime_version_unsupported',
+    }))
+    expect(current.route).toBe('open_slots')
+    expect(current.unsupportedAtoms).toEqual([])
+    expect(current.state.actions[0].support).toBeUndefined()
+  })
+
+  it('applies runtime version gate to versioned risk atoms', () => {
+    const state = baseState({
+      risk: [{
+        id: 'partial-take-profit',
+        key: 'risk.partial_take_profit',
+        params: {
+          tiers: [{ trigger: { kind: 'pnl_pct', threshold: 5 }, reduceRatio: 0.5 }],
+          memoryKey: 'partial_tp_abc',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+    })
+
+    const legacy = service.classify(state, { deployedAtSemanticVersion: null })
+    const current = service.classify(state, { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(legacy.route).toBe('unsupported_fallback')
+    expect(legacy.unsupportedAtoms).toContainEqual(expect.objectContaining({
+      key: 'risk.partial_take_profit',
+      reasonCode: 'runtime_version_unsupported',
+    }))
+    expect(current.route).toBe('projection_gate')
+    expect(current.unsupportedAtoms).toEqual([])
+    expect(current.state.risk[0].support).toBeUndefined()
+  })
+
+  it('applies runtime version gate to versioned position constraints', () => {
+    const state = baseState({
+      position: {
+        mode: 'constraint_only',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        constraints: [{
+          id: 'dca',
+          key: 'position.dca_schedule',
+          params: {
+            maxCount: 4,
+            capitalCap: 500,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+            triggerMode: 'price_interval',
+            exitRule: 'take_profit_or_stop_loss',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        }],
+      },
+    })
+
+    const legacy = service.classify(state, { deployedAtSemanticVersion: null })
+    const current = service.classify(state, { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(legacy.route).toBe('unsupported_fallback')
+    expect(legacy.unsupportedAtoms).toContainEqual(expect.objectContaining({
+      key: 'position.dca_schedule',
+      reasonCode: 'runtime_version_unsupported',
+    }))
+    expect(current.route).toBe('projection_gate')
+    expect(current.unsupportedAtoms).toEqual([])
+    expect(current.state.position?.constraints?.[0].support).toBeUndefined()
+  })
+
   it('uses registry support status as authoritative over stale unsupported metadata', () => {
     const result = service.classify(baseState({
       triggers: [{
