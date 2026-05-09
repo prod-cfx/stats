@@ -98,6 +98,52 @@ describe('semanticSupportClassifierService', () => {
     expect(result.unknownAtoms).toEqual([])
   })
 
+  it('fails closed for versioned executable atoms when deployedAtSemanticVersion is null', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'volume',
+        key: 'volume.threshold',
+        phase: 'entry',
+        params: { value: 1000, operator: 'GT', metric: 'base_volume' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }), { deployedAtSemanticVersion: null })
+
+    expect(result.route).toBe('unsupported_fallback')
+    expect(result.unsupportedAtoms).toEqual([
+      expect.objectContaining({
+        key: 'volume.threshold',
+        reasonCode: 'runtime_version_unsupported',
+      }),
+    ])
+    expect(result.state.triggers[0].support).toEqual(expect.objectContaining({
+      supportStatus: 'recognized_unsupported',
+      unsupportedReasonCode: 'runtime_version_unsupported',
+    }))
+  })
+
+  it('keeps versioned executable atoms executable when deployedAtSemanticVersion is at since version', () => {
+    const result = service.classify(baseState({
+      triggers: [{
+        id: 'volume',
+        key: 'volume.threshold',
+        phase: 'entry',
+        params: { value: 1000, operator: 'GT', metric: 'base_volume' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit', openSlots: [] }],
+    }), { deployedAtSemanticVersion: '2026.05.W02' })
+
+    expect(result.route).toBe('projection_gate')
+    expect(result.unsupportedAtoms).toEqual([])
+    expect(result.state.triggers[0].support).toBeUndefined()
+  })
+
   it('uses registry support status as authoritative over stale unsupported metadata', () => {
     const result = service.classify(baseState({
       triggers: [{
