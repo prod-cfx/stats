@@ -12,9 +12,7 @@ describe('compiledPublicationGateService', () => {
     }
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
-      undefined,
     )
     const ir = {
       ...createIrFixture(),
@@ -220,9 +218,7 @@ describe('compiledPublicationGateService', () => {
     }
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
-      undefined,
     )
     const ir = createIrFixture({
       exchange: 'okx',
@@ -283,9 +279,7 @@ describe('compiledPublicationGateService', () => {
     }
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
-      undefined,
     )
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
@@ -368,9 +362,7 @@ describe('compiledPublicationGateService', () => {
     }
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
-      undefined,
     )
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
@@ -439,7 +431,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-on-start-1' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     ast.decisionPrograms[0] = {
@@ -516,7 +508,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-perp-1' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createShortOnlyIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -579,7 +571,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-on-start-2' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     ast.decisionPrograms[0] = {
@@ -660,7 +652,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-2' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = {
       ...createIrFixture(),
       market: {
@@ -747,7 +739,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-fixed-quote' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const baseIr = createIrFixture()
     const ir = {
       ...baseIr,
@@ -828,7 +820,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-multi' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = {
       ...createIrFixture(),
       market: {
@@ -904,7 +896,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn(),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -976,7 +968,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn(),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -1032,7 +1024,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn(),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -1113,7 +1105,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-short-only' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createShortOnlyIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -1203,7 +1195,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn(),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -1301,7 +1293,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-outside-ok' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixtureWithOutsideBandRule()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -1416,7 +1408,7 @@ describe('compiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-bollinger' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { markDeployedWithSemanticVersion: jest.fn() } as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never, { withTransaction: (cb: () => Promise<unknown>) => cb() } as never)
     const ir = createIrFixtureWithOutsideBandRule()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -1548,9 +1540,7 @@ describe('compiledPublicationGateService', () => {
     }
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion: jest.fn() } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
-      undefined,
     )
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
@@ -1618,15 +1608,12 @@ describe('compiledPublicationGateService', () => {
     }))
   })
 
-  // #1043 atom 翻牌 version-gate writer 侧
-  it('writes deployedAtSemanticVersion when strategyInstanceId is provided', async () => {
+  it('publishes codegen strategy instance snapshots without legacy LLM instance version writer', async () => {
     const publishedSnapshotsRepo = {
-      create: jest.fn().mockResolvedValue({ id: 'snapshot-version-1', snapshotHash: 'hash-version-1' }),
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-strategy-instance-1', snapshotHash: 'hash-strategy-instance-1' }),
     }
-    const markDeployedWithSemanticVersion = jest.fn().mockResolvedValue(undefined)
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion } as never,
       { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
     )
     const ir = createIrFixture()
@@ -1641,9 +1628,10 @@ describe('compiledPublicationGateService', () => {
     }
     const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
 
-    await gate.publish({
-      sessionId: 'session-version-1',
-      strategyInstanceId: 'instance-write-test',
+    const result = await gate.publish({
+      sessionId: 'session-strategy-instance-1',
+      strategyTemplateId: 'template-strategy-instance-1',
+      strategyInstanceId: 'strategy-instance-id-from-codegen',
       canonicalSnapshot: { market: { exchange: ir.market.venue, symbol: ir.market.symbol, marketType: ir.market.instrumentType, timeframe: ir.market.timeframes[0] } },
       semanticView: {},
       semanticPredicateGraph: createSemanticPredicateGraphFixture(),
@@ -1659,55 +1647,15 @@ describe('compiledPublicationGateService', () => {
       lockedParams: {},
     })
 
-    expect(markDeployedWithSemanticVersion).toHaveBeenCalledTimes(1)
-    expect(markDeployedWithSemanticVersion).toHaveBeenCalledWith(
-      'instance-write-test',
-      expect.stringMatching(/^\d{4}\.\d{2}\.W\d{2}$/),
-    )
-  })
-
-  it('skips deployedAtSemanticVersion write for template snapshots without strategyInstanceId', async () => {
-    const publishedSnapshotsRepo = {
-      create: jest.fn().mockResolvedValue({ id: 'snapshot-template-1', snapshotHash: 'hash-template-1' }),
-    }
-    const markDeployedWithSemanticVersion = jest.fn()
-    const gate = new CompiledPublicationGateService(
-      publishedSnapshotsRepo as never,
-      { markDeployedWithSemanticVersion } as never,
-      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
-    )
-    const ir = createIrFixture()
-    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
-    const executionEnvelope = {
-      positionMode: 'long_only' as const,
-      marginMode: 'cross' as const,
-      tickSize: 0.01,
-      pricePrecision: 2,
-      quantityPrecision: 6,
-      fillAssumption: 'strict' as const,
-    }
-    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
-
-    await gate.publish({
-      sessionId: 'session-template-1',
-      strategyTemplateId: 'tmpl-1',
-      strategyInstanceId: null,
-      canonicalSnapshot: { market: { exchange: ir.market.venue, symbol: ir.market.symbol, marketType: ir.market.instrumentType, timeframe: ir.market.timeframes[0] } },
-      semanticView: {},
-      semanticPredicateGraph: createSemanticPredicateGraphFixture(),
-      graphSnapshot: { nodes: [], edges: [] } as never,
-      ir: { ...ir, source: { ...ir.source, graphDigest: hashFixtureSemanticPredicateGraph() } } as never,
-      ast,
-      executionEnvelope,
-      script,
-      semanticConsistencyReport: { status: 'PASSED' } as never,
-      userIntentSummary: {},
-      strategySummary: {},
-      scriptSummary: {},
-      lockedParams: {},
+    expect(result).toEqual({
+      snapshotId: 'snapshot-strategy-instance-1',
+      snapshotHash: 'hash-strategy-instance-1',
+      consistencyReport: expect.objectContaining({ status: 'PASSED' }),
     })
-
-    expect(markDeployedWithSemanticVersion).not.toHaveBeenCalled()
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      strategyTemplateId: 'template-strategy-instance-1',
+      strategyInstanceId: 'strategy-instance-id-from-codegen',
+    }))
   })
 })
 

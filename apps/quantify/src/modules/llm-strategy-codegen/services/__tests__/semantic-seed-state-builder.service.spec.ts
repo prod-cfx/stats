@@ -189,6 +189,137 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(JSON.stringify(state)).not.toContain('"slotKey":"contract.required"')
   })
 
+  it('synthesizes one AND action-binding contract for planner EMA stack triggers', () => {
+    const state = service.build({
+      triggers: [20, 60, 144].map(period => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ema',
+          reference: { indicator: 'ema', period },
+          'reference.period': period,
+          timeframe: '15m',
+        },
+      })),
+      actions: [{ key: 'open_long' }],
+    })
+
+    const groupIds = new Set(
+      state?.triggers.map(trigger =>
+        trigger.contracts?.find(contract => typeof contract.params.groupId === 'string')?.params.groupId,
+      ),
+    )
+
+    expect(groupIds).toEqual(new Set(['entry-long-ema-above-stack-15m-20-60-144']))
+    expect(state?.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            params: expect.objectContaining({
+              join: 'AND',
+              actionKey: 'open_long',
+              actionBinding: 'single_action',
+            }),
+          }),
+        ]),
+      }),
+    ]))
+  })
+
+  it('normalizes mixed existing planner EMA stack contracts into one computed group', () => {
+    const legacyCombinationContract = {
+      id: 'legacy-entry-ema-20-group',
+      kind: 'trigger',
+      capabilities: [{
+        domain: 'market',
+        verb: 'combine',
+        object: 'predicate_group',
+        shape: { groupId: 'legacy-entry-ema-20-only' },
+      }],
+      requires: [],
+      params: {
+        groupId: 'legacy-entry-ema-20-only',
+        join: 'AND',
+        actionKey: 'open_long',
+        actionBinding: 'single_action',
+      },
+      runtimeRequirements: [],
+      stateRequirements: [],
+      orderRequirements: [],
+      openSlots: [],
+    }
+    const state = service.build({
+      triggers: [20, 60, 144].map(period => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ema',
+          reference: { indicator: 'ema', period },
+          'reference.period': period,
+          timeframe: '15m',
+        },
+        ...(period === 20 ? { contracts: [legacyCombinationContract] } : {}),
+      })),
+      actions: [{ key: 'open_long' }],
+    })
+
+    const groupIds = state?.triggers.map(trigger =>
+      trigger.contracts?.find(contract => typeof contract.params.groupId === 'string')?.params.groupId,
+    )
+
+    expect(groupIds).toEqual([
+      'entry-long-ema-above-stack-15m-20-60-144',
+      'entry-long-ema-above-stack-15m-20-60-144',
+      'entry-long-ema-above-stack-15m-20-60-144',
+    ])
+  })
+
+  it('preserves executable atom contracts when planner EMA stack params contain loose group markers', () => {
+    const state = service.build({
+      triggers: [20, 60, 144].map(period => ({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: {
+          indicator: 'ema',
+          reference: { indicator: 'ema', period },
+          'reference.period': period,
+          timeframe: '15m',
+          groupId: 'loose-planner-marker',
+        },
+      })),
+      actions: [{ key: 'open_long' }],
+    })
+
+    for (const trigger of state?.triggers ?? []) {
+      expect(trigger.contracts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'price',
+              verb: 'detect',
+              object: 'signal_condition',
+            }),
+          ]),
+        }),
+        expect.objectContaining({
+          capabilities: expect.arrayContaining([
+            expect.objectContaining({
+              domain: 'market',
+              verb: 'combine',
+              object: 'predicate_group',
+            }),
+          ]),
+          params: expect.objectContaining({
+            groupId: 'entry-long-ema-above-stack-15m-20-60-144',
+          }),
+        }),
+      ]))
+    }
+  })
+
   it('synthesizes supported grid contracts when planner explicitly sends null contracts', () => {
     const state = service.build({
       triggers: [{

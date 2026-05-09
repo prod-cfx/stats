@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 
 import type { SemanticAtomContract, SemanticTriggerState } from '../types/semantic-state'
+import { isTriggerPredicateGroupContract } from './semantic-state-normalization'
 
 export type SemanticTriggerCombinationJoin = 'AND' | 'OR'
 export type SemanticTriggerCombinationPhase = SemanticTriggerState['phase']
@@ -75,7 +76,12 @@ export class SemanticTriggerCombinationContractService {
 
   private isTriggerCombinationContract(contract: SemanticAtomContract): boolean {
     const runtimeKind = (contract as { kind?: unknown }).kind
-    return this.hasStringParam(contract.params, 'groupId') && (runtimeKind === 'trigger' || runtimeKind === undefined)
+    return isTriggerPredicateGroupContract(contract)
+      || (
+        contract.capabilities.length === 0
+        && this.hasStringParam(contract.params, 'groupId')
+        && (runtimeKind === 'trigger' || runtimeKind === undefined)
+      )
   }
 
   private resolveContractParams(

@@ -16,10 +16,7 @@ import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { LlmStrategyInstancesService } from '@/modules/llm-strategies/services/llm-strategy-instances.service'
 import { normalizeRuntimeRequirements } from '@/modules/strategy-runtime/semantic-runtime-state.util'
-import { CURRENT_SEMANTIC_VERSION } from '../nl-gateway/version-gate/version-gate'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
@@ -98,7 +95,6 @@ const DEFAULT_PERP_PLATFORM_MAX_LEVERAGE = 5
 export class CompiledPublicationGateService {
   constructor(
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
-    private readonly llmStrategyInstancesService: LlmStrategyInstancesService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     private readonly scriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
   ) {}
@@ -141,11 +137,10 @@ export class CompiledPublicationGateService {
       compilerConsistency,
     }
 
-    // 显式包一层 withTransaction 保证 snapshot 写入与 deployedAtSemanticVersion
-    // 标记原子（#1043 critic round 1 C1）。当前 publish() 调用方包括 fire-and-forget 的
-    // CodegenSessionPublicationPipelineService.run（见 codegen-conversation.service.ts:2519），
-    // 该路径脱离 HTTP 生命周期，AfterCommitInterceptor / @Transactional 不会触发，因此必须在
-    // service 内部显式开启事务。如外层已有事务，withTransaction 会复用现有 cls scope。
+    // 显式包一层 withTransaction 保证 snapshot 写入在 fire-and-forget 发布路径中仍有事务边界。
+    // 当前 publish() 调用方包括 CodegenSessionPublicationPipelineService.run，该路径脱离 HTTP
+    // 生命周期，AfterCommitInterceptor / @Transactional 不会触发，因此必须在 service 内部显式
+    // 开启事务。如外层已有事务，withTransaction 会复用现有 cls scope。
     const snapshot = await this.txHost.withTransaction(async () => {
       const created = await this.publishedSnapshotsRepo.create({
         sessionId: input.sessionId,
@@ -180,15 +175,6 @@ export class CompiledPublicationGateService {
         executionPolicy: input.ir.executionPolicy as unknown as Record<string, unknown>,
         dataRequirements: input.ast.dataRequirements as unknown as Record<string, unknown>,
       })
-
-      // 部署完成同事务写 semantic version，供 atom 翻牌 version-gate 使用。
-      // 仅当 strategyInstanceId 存在（关联到 instance）时写入；template snapshot 跳过。
-      if (input.strategyInstanceId) {
-        await this.llmStrategyInstancesService.markDeployedWithSemanticVersion(
-          input.strategyInstanceId,
-          CURRENT_SEMANTIC_VERSION,
-        )
-      }
 
       return created
     })

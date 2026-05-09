@@ -34,7 +34,7 @@ import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabi
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
-import { normalizeRiskSemantic } from './semantic-state-normalization'
+import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 type SemanticPatchRecord = Record<string, unknown>
@@ -86,6 +86,7 @@ export class SemanticSeedStateBuilderService {
     const triggerUpdates = triggerItems
       .map((item, index) => this.toTriggerState(item, index))
       .filter((item): item is SemanticTriggerState => item !== null)
+    const groupedTriggerUpdates = this.withMovingAverageStackCombinationContracts(triggerUpdates)
     const actionUpdates = actionItems
       .map((item, index) => this.toActionState(item, index))
       .filter((item): item is SemanticActionState => item !== null)
@@ -106,7 +107,7 @@ export class SemanticSeedStateBuilderService {
     return this.withRequiredSeedOpenSlots({
       version: 1,
       families: [],
-      triggers: triggerUpdates,
+      triggers: groupedTriggerUpdates,
       actions: actionUpdates,
       risk: riskUpdates,
       position: positionUpdate,
@@ -114,6 +115,105 @@ export class SemanticSeedStateBuilderService {
       normalizationNotes: [],
       updatedAt: new Date().toISOString(),
     })
+  }
+
+  private withMovingAverageStackCombinationContracts(
+    triggers: SemanticTriggerState[],
+  ): SemanticTriggerState[] {
+    const groups = new Map<number, { groupId: string }>()
+    const candidates = new Map<string, Array<{ trigger: SemanticTriggerState, index: number, period: number }>>()
+
+    triggers.forEach((trigger, index) => {
+      const period = this.readMovingAverageReferencePeriod(trigger.params)
+      const indicator = this.readMovingAverageIndicator(trigger.params)
+      if (
+        period === null
+        || !indicator
+        || (trigger.key !== 'indicator.above' && trigger.key !== 'indicator.below')
+        || (trigger.phase !== 'entry' && trigger.phase !== 'exit')
+      ) {
+        return
+      }
+
+      const sideScope = trigger.sideScope ?? 'long'
+      const timeframe = this.readTrimmedString(trigger.params.timeframe) ?? ''
+      const groupKey = [
+        trigger.phase,
+        sideScope,
+        trigger.key,
+        indicator,
+        timeframe,
+      ].join(':')
+      candidates.set(groupKey, [...(candidates.get(groupKey) ?? []), { trigger, index, period }])
+    })
+
+    for (const members of candidates.values()) {
+      const periods = Array.from(new Set(members.map(member => member.period))).sort((left, right) => left - right)
+      if (periods.length < 2) continue
+
+      const first = members[0]!.trigger
+      const sideScope = first.sideScope ?? 'long'
+      const indicator = this.readMovingAverageIndicator(first.params)
+      if (!indicator) continue
+
+      const direction = first.key === 'indicator.above' ? 'above' : 'below'
+      const timeframe = this.readTrimmedString(first.params.timeframe)
+      const groupId = `${first.phase}-${sideScope}-${indicator}-${direction}-stack${timeframe ? `-${timeframe}` : ''}-${periods.join('-')}`
+      for (const member of members) {
+        groups.set(member.index, { groupId })
+      }
+    }
+
+    if (groups.size === 0) {
+      return triggers
+    }
+
+    return triggers.map((trigger, index) => {
+      const group = groups.get(index)
+      if (!group) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        contracts: [
+          ...(trigger.contracts ?? []).filter(contract => !this.isCombinationContract(contract)),
+          buildTriggerCombinationContract({
+            groupId: group.groupId,
+            join: 'AND',
+            phase: trigger.phase,
+            sideScope: trigger.sideScope,
+          }),
+        ],
+      }
+    })
+  }
+
+  private readMovingAverageReferencePeriod(params: Record<string, unknown>): number | null {
+    const directPeriod = params['reference.period']
+    if (this.hasPositiveFiniteNumber(directPeriod)) {
+      return directPeriod
+    }
+
+    const reference = params.reference
+    if (this.isRecord(reference) && this.hasPositiveFiniteNumber(reference.period)) {
+      return reference.period
+    }
+
+    return null
+  }
+
+  private readMovingAverageIndicator(params: Record<string, unknown>): string | null {
+    const indicator = this.readTrimmedString(params.indicator)?.toLowerCase()
+    if (indicator === 'ma' || indicator === 'sma' || indicator === 'ema') {
+      return indicator
+    }
+
+    return null
+  }
+
+  private isCombinationContract(contract: SemanticAtomContract): boolean {
+    return isTriggerPredicateGroupContract(contract)
   }
 
   private toTriggerState(update: unknown, index: number): SemanticTriggerState | null {

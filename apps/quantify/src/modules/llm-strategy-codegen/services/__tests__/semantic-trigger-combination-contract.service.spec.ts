@@ -93,6 +93,33 @@ describe('SemanticTriggerCombinationContractService', () => {
     expect(result[0]?.members.map(member => member.id)).toEqual(['ema20-above', 'ema60-above', 'ema144-above'])
   })
 
+  it('ignores ordinary atom contract group markers when a predicate group contract exists', () => {
+    const result = service.resolveExecutableGroups([20, 60, 144].map(period =>
+      trigger({
+        id: `ema${period}-above`,
+        key: `price.above.ema${period}`,
+        params: { groupId: 'loose-planner-marker' },
+        contracts: [
+          normalSignalContract({ groupId: 'loose-planner-marker' }),
+          combinationContract({ groupId: 'entry-ema-stack', join: 'AND' }),
+        ],
+      }),
+    ))
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        groupId: 'entry-ema-stack',
+        join: 'AND',
+        members: [
+          expect.objectContaining({ id: 'ema20-above' }),
+          expect.objectContaining({ id: 'ema60-above' }),
+          expect.objectContaining({ id: 'ema144-above' }),
+        ],
+      }),
+    ])
+    expect(result.map(group => group.groupId)).not.toContain('loose-planner-marker')
+  })
+
   it('resolves an explicit OR exit contract group as one close long action', () => {
     const result = service.resolveExecutableGroups([
       trigger({
@@ -235,6 +262,25 @@ function combinationContract(params: Record<string, unknown>): SemanticAtomContr
     id: `contract-${String(params.groupId)}`,
     kind: 'trigger',
     capabilities: [],
+    requires: [],
+    params,
+    runtimeRequirements: [],
+    stateRequirements: [],
+    orderRequirements: [],
+    openSlots: [],
+  }
+}
+
+function normalSignalContract(params: Record<string, unknown>): SemanticAtomContract {
+  return {
+    id: `contract-signal-${String(params.groupId)}`,
+    kind: 'trigger',
+    capabilities: [{
+      domain: 'price',
+      verb: 'detect',
+      object: 'signal_condition',
+      shape: { groupId: String(params.groupId ?? '') },
+    }],
     requires: [],
     params,
     runtimeRequirements: [],
