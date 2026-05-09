@@ -275,7 +275,16 @@ export interface IrOrchestrationProgramSizing {
   value: number
 }
 
-export interface IrOrchestrationProgram {
+export interface IrOrchestrationProgramDynamicGridParams {
+  anchorLookbackBars: number
+  anchorSide: 'high' | 'low' | 'mid'
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  step: { mode: 'pct' | 'absolute'; value: number }
+}
+
+export interface IrFixedGridGatedProgram {
   id: string
   programKind: 'fixed_grid_gated'
   activeWhenExprId: string
@@ -284,6 +293,18 @@ export interface IrOrchestrationProgram {
   gridParams: IrOrchestrationProgramGridParams
   sizing: IrOrchestrationProgramSizing
 }
+
+export interface IrDynamicGridProgram {
+  id: string
+  programKind: 'dynamic_grid'
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'anchor_on_state_change'
+  dynamicGridParams: IrOrchestrationProgramDynamicGridParams
+  sizing: IrOrchestrationProgramSizing
+}
+
+export type IrOrchestrationProgram = IrFixedGridGatedProgram | IrDynamicGridProgram
 
 export interface RiskGuard {
   id: string

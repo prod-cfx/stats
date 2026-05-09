@@ -877,6 +877,21 @@ export class CanonicalSpecV2IrCompilerService {
       if (exprId === undefined) {
         continue
       }
+      if (program.programKind === 'dynamic_grid') {
+        result.push({
+          id: program.id,
+          programKind: 'dynamic_grid',
+          activeWhenExprId: exprId,
+          onDeactivate: program.onDeactivate,
+          rebuildPolicy: 'anchor_on_state_change',
+          dynamicGridParams: {
+            ...program.dynamicGridParams,
+            step: { ...program.dynamicGridParams.step },
+          },
+          sizing: { ...program.sizing },
+        })
+        continue
+      }
       result.push({
         id: program.id,
         programKind: program.programKind,

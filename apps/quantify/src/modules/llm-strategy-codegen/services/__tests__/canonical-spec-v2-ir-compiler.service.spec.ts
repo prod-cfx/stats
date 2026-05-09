@@ -4080,11 +4080,13 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     const gate = (result.ir.orchestrationGates ?? [])[0]
     expect(programs[0].activeWhenExprId).toBe(gate.exprId)
     expect(programs[0].id).toBe('program-grid-1')
-    expect(programs[0].programKind).toBe('fixed_grid_gated')
-    expect(programs[0].onDeactivate).toBe('cancel')
-    expect(programs[0].rebuildPolicy).toBe('static')
-    expect(programs[0].gridParams).toEqual({ anchorPrice: 30000, levelCount: 10, stepPct: 0.5 })
-    expect(programs[0].sizing).toEqual({ mode: 'fixed_quote', value: 100 })
+    const irProgram0 = programs[0]
+    if (irProgram0.programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated program')
+    expect(irProgram0.programKind).toBe('fixed_grid_gated')
+    expect(irProgram0.onDeactivate).toBe('cancel')
+    expect(irProgram0.rebuildPolicy).toBe('static')
+    expect(irProgram0.gridParams).toEqual({ anchorPrice: 30000, levelCount: 10, stepPct: 0.5 })
+    expect(irProgram0.sizing).toEqual({ mode: 'fixed_quote', value: 100 })
   })
 
   it('drops orphan program when activeWhenRef points to non-existent gate', () => {
@@ -4209,6 +4211,7 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(result.ir.orchestrationPrograms).toHaveLength(1)
     const gate = (result.ir.orchestrationGates ?? [])[0]
     const program = (result.ir.orchestrationPrograms ?? [])[0]
+    if (program.programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated program')
     expect(program.activeWhenExprId).toBe(gate.exprId)
     expect(program.gridParams.lowerBound).toBe(28000)
     expect(program.gridParams.upperBound).toBe(32000)
