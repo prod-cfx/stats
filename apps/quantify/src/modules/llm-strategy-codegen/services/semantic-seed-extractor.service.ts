@@ -4286,7 +4286,8 @@ export class SemanticSeedExtractorService {
       const chartPatternHit = /(?:头肩|双底|双顶|三角形|head\s+and\s+shoulders|h&s|double\s+top|double\s+bottom|triangle)/iu.test(clause)
       if (chartPatternHit) {
         // A-M2 防御：主观词必须锚定在 pattern 名词之前才视为主观
-        const isSubjective = /(?:像|疑似|看起来\s*像|类似)\s*(?:头肩|双底|双顶|三角形|head\s+and\s+shoulders|double\s+top|double\s+bottom|triangle)|(?:feels?\s+like|looks?\s+like|kind\s+of|maybe)\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:head\s+and\s+shoulders|double\s+top|double\s+bottom|triangle)/iu.test(clause)
+        // critic round 1 P4-3 B1 修复：补全 h&s 主观词识别（与 chartPatternHit / chartPatternRaw 的 h&s 分支对齐）
+        const isSubjective = /(?:像|疑似|看起来\s*像|类似)\s*(?:头肩|双底|双顶|三角形|head\s+and\s+shoulders|h&s|double\s+top|double\s+bottom|triangle)|(?:feels?\s+like|looks?\s+like|kind\s+of|maybe)\s+(?:a\s+)?(?:bullish\s+|bearish\s+)?(?:head\s+and\s+shoulders|h&s|double\s+top|double\s+bottom|triangle)/iu.test(clause)
         if (!isSubjective) {
           // 严格枚举：pattern 必须精确匹配白名单
           const chartPatternRaw = /(?:头肩|head\s+and\s+shoulders|h&s)/iu.test(clause)

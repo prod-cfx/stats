@@ -163,6 +163,9 @@ describe('price.chart_pattern atom 七层 parity', () => {
         'OKX BTCUSDT 1h, looks like a bullish triangle, open long only after MA20 confirmation.',
         'OKX BTCUSDT 1h, kind of head and shoulders pattern, wait for confirmation.',
         'OKX BTCUSDT 1h, maybe double bottom, open long later.',
+        // critic round 1 P4-3 B1 回归：h&s 主观文本同样应被拒绝
+        'OKX BTCUSDT 1h, looks like h&s, wait for MA20 confirmation.',
+        'OKX BTCUSDT 1h, kind of bearish h&s here, hold off.',
       ]
       for (const utterance of utterances) {
         const patch = seedExtractor.extract(utterance)
