@@ -86,6 +86,64 @@ describe('semantic gateway golden corpus', () => {
       .toEqual(expect.arrayContaining(['volume.threshold.value']))
   })
 
+  // volatility.atr_threshold utterance corpus — ≥4 cases covering zh locked / en locked / zh missing / en missing / zh unit
+  it('volatility.atr_threshold zh locked: ATR14 大于 50 才开仓 → supported_executable with locked params', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，ATR14 大于 50 才开仓，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'GT', period: 14, threshold: 50 }))
+    expect(trigger?.status).toBe('locked')
+    expect(trigger?.openSlots).toEqual([])
+  })
+
+  it('volatility.atr_threshold en locked: block entries when ATR less than 100 → supported_executable with LT operator', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, block entries when ATR less than 100, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).toEqual(expect.objectContaining({ operator: 'LT', threshold: 100 }))
+    expect(trigger?.openSlots?.map(s => s.slotKey)).not.toContain('volatility.atr_threshold.threshold')
+  })
+
+  it('volatility.atr_threshold zh missing: ATR 过滤入场 → open_slot for threshold', () => {
+    const seedPatch = seedExtractor.extract('OKX 合约 BTCUSDT 15m，ATR 过滤入场，MA20 上穿 MA50 开多，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('threshold')
+    const classified = supportClassifier.classify(builtState!)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).toEqual(expect.arrayContaining(['volatility.atr_threshold.threshold']))
+    expect(classified.route).toBe('open_slots')
+  })
+
+  it('volatility.atr_threshold en missing: filter by ATR → open_slot path', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m, filter by ATR threshold, position 10%.')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('threshold')
+    const classified = supportClassifier.classify(builtState!)
+    expect(classified.openSlots.map(s => s.slotKey))
+      .toEqual(expect.arrayContaining(['volatility.atr_threshold.threshold']))
+  })
+
+  it('volatility.atr_threshold zh unit: ATR 大于 1 万 → open_slot.threshold, never silent value=1 (C-A3 同款保护)', () => {
+    const seedPatch = seedExtractor.extract('OKX BTCUSDT 15m，ATR14 大于 1 万时允许入场，单笔 10%。')
+    const builtState = seedStateBuilder.build(seedPatch)
+    expect(builtState).not.toBeNull()
+    const trigger = builtState?.triggers.find(t => t.key === 'volatility.atr_threshold')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params).not.toHaveProperty('threshold')
+    expect(trigger?.openSlots?.map(s => s.slotKey))
+      .toEqual(expect.arrayContaining(['volatility.atr_threshold.threshold']))
+  })
+
   it('keeps the P0 EMA gate plus BOLL boundary strategy stable through the full semantic chain', () => {
     const frames = gateway.parse(P0_INPUT)
     const gatewayPatch = frameNormalizer.normalize(frames)

@@ -4167,14 +4167,105 @@ export class SemanticSeedExtractorService {
         })
       }
 
-      if (/(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于|threshold|filter|greater\s+than|less\s+than|gte|lte)/iu.test(clause)) {
+      if (
+        /(?:ATR|平均真实波幅).*(?:阈值|过滤|大于|小于|threshold|filter|greater\s+than|less\s+than|gte|lte)/iu.test(clause)
+        // critic round 1 M-A6：排除 ATR 止损/止盈/trailing 等已存在 atom 的关键词，避免与
+        // risk.atr_take_profit / risk.atr_stop_loss / risk.trailing_stop 误命中
+        && !/(?:止损|止盈|stop|trailing|动态|dynamic)/iu.test(clause)
+      ) {
+        const atrIntent = this.resolveUnsupportedTriggerIntent(clause, segment)
+        // critic round 1 C-A3/C-B1 修复：4 操作符分支顺序按"长字符串优先"匹配，
+        // 避免 "不超过" 误归 LT、"不高于" 误归 GT。
+        // 严苛规则：
+        //   "不超过" / "不高于" / "<=" / "lte" → LTE
+        //   "不低于" / "不少于" / "≥" / "gte" → GTE
+        //   "小于" / "低于" / "less than" → LT
+        //   "大于" / "高于" / "超过" / "greater than" / 默认 → GT
+        const atrOperator = /(?:不超过|不高于|<=|lte)/iu.test(clause) ? 'LTE'
+          : /(?:不低于|不少于|>=|gte)/iu.test(clause) ? 'GTE'
+          : /(?:小于|低于|less\s+than)/iu.test(clause) ? 'LT'
+          : 'GT'
+        // critic round 1 C-A1 修复：字段名从 atrPeriod → period，与 canonical-spec-builder /
+        // canonical-spec-v2-ir-compiler 在 trigger.params.period 的读取约定对齐，
+        // 避免 silent default to 14 的严重 bug。
+        // critic round 1 M-A5 修复：period 加 \d{1,4} 上界
+        const period = this.extractNumber(clause, [
+          /(?:ATR|平均真实波幅)\s*(\d{1,4})/iu,
+        ])
+        // critic round 1 M-A4 修复：[ai-z] 是字符类（含 a + i-z），漏 b-h；改为 [a-z] 并白名单
+        // 常见 timeframe 后缀（1m/5m/15m/1h/4h/1d/1w/30m）避免 "MA20" 误命中
+        const isLikelyTimeframe = /\b\d+\s*[mhdw]\b/iu.test(clause) && !/(?:亿|万|千|百万|billion|million)/iu.test(clause)
+        const hasUnsupportedUnit = /(?:亿|万|千|百万|million|billion|thousand)/iu.test(clause)
+          || (!isLikelyTimeframe && /\b\d+\s*[KkMmBb]\b/u.test(clause))
+        // critic round 1 C-B3 修复：threshold 提取限制 clause 内不跨标点
+        // [^0-9,，。；;]{0,12} 排除标点跨段
+        const atrThreshold = hasUnsupportedUnit
+          ? null
+          : this.extractNumber(clause, [
+            /(?:阈值|threshold|过滤|filter)[^0-9,，。；;]{0,12}?(\d+(?:\.\d+)?)/iu,
+            /(?:大于|小于|低于|高于|超过|不超过|不低于|不高于|greater\s+than|less\s+than|gte|lte|>=|<=)\s*(\d+(?:\.\d+)?)/iu,
+          ])
+        // critic round 1 C-A2 修复：当前 IR compiler 不消费 thresholdUnit。pct 分支会 silent-wrong
+        // （IR 不区分 50 USDT 与 50% 都按 ATR>50 比较）。简化方案：仅支持 quote_currency；
+        // 检测到 % 时整个 trigger 改走 recognized_unsupported（pct 单位待 IR 支持后通过 follow-up issue 重新启用）
+        const hasPercentUnit = /(?:%|percent|百分)/iu.test(clause)
+        if (hasPercentUnit) {
+          this.pushTrigger(triggers, seen, {
+            key: 'volatility.atr_threshold',
+            ...this.resolveUnsupportedTriggerIntent(clause, segment),
+            params: { sourceText: clause, reason: 'atr_pct_unit_not_supported_yet' },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          })
+          continue
+        }
+        const openSlots: Array<{
+          slotKey: string
+          fieldPath: string
+          status: 'open'
+          priority: 'core'
+          questionHint: string
+          affectsExecution: boolean
+        }> = []
+        if (period === null) {
+          openSlots.push({
+            slotKey: 'volatility.atr_threshold.period',
+            fieldPath: 'triggers[volatility.atr_threshold].params.period',
+            status: 'open' as const,
+            priority: 'core' as const,
+            questionHint: '请指定 ATR 计算周期，例如 14（常用默认值）。',
+            affectsExecution: true,
+          })
+        }
+        if (atrThreshold === null) {
+          const thresholdHint = hasUnsupportedUnit
+            ? '检测到中文/英文单位（亿/万/M/K 等）。请改用纯数字阈值，例如 50。'
+            : '请给出 ATR 阈值数值，例如 50。'
+          openSlots.push({
+            slotKey: 'volatility.atr_threshold.threshold',
+            fieldPath: 'triggers[volatility.atr_threshold].params.threshold',
+            status: 'open' as const,
+            priority: 'core' as const,
+            questionHint: thresholdHint,
+            affectsExecution: true,
+          })
+        }
+        const isLocked = openSlots.length === 0
         this.pushTrigger(triggers, seen, {
           key: 'volatility.atr_threshold',
-          ...this.resolveUnsupportedTriggerIntent(clause, segment),
-          params: { sourceText: clause },
-          status: 'locked',
+          phase: atrIntent.phase,
+          ...(atrIntent.sideScope ? { sideScope: atrIntent.sideScope } : {}),
+          params: {
+            operator: atrOperator,
+            ...(period !== null ? { period } : {}),
+            ...(atrThreshold !== null ? { threshold: atrThreshold } : {}),
+            // C-A2：pct 分支已移除，仅写 quote_currency
+            thresholdUnit: 'quote_currency',
+          },
+          status: isLocked ? 'locked' : 'open',
           source: 'user_explicit',
-          openSlots: [],
+          openSlots,
         })
       }
     }

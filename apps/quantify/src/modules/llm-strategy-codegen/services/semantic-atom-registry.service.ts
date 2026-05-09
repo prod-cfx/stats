@@ -401,7 +401,7 @@ const ATOMS: SemanticRegisteredAtomDefinition[] = [
   previousExtremaTrigger(),
   unsupported('volume.spike', 'trigger', '成交量放大', 'volume_condition_public_beta_unsupported', '成交量条件当前公测暂未支持生成和回测。'),
   executableTrigger('volume.threshold', ['value', 'operator', 'metric'], { executableSinceVersion: '2026.05.W02' }),
-  unsupported('volatility.atr_threshold', 'trigger', 'ATR 波动率阈值', 'atr_condition_public_beta_unsupported', 'ATR 条件当前公测暂未支持生成和回测。'),
+  executableTrigger('volatility.atr_threshold', ['period', 'threshold', 'thresholdUnit', 'operator'], { executableSinceVersion: '2026.05.W02' }),
   unsupported('risk.atr_stop', 'risk', 'ATR 动态止损', 'atr_stop_public_beta_unsupported', 'ATR 动态止损当前公测暂未支持生成和回测。'),
   unsupported('risk.partial_take_profit', 'risk', '分批止盈', 'partial_take_profit_public_beta_unsupported', '多档分批止盈当前公测暂未支持生成和回测。'),
   unsupported('position.leverage', 'position', '策略杠杆声明', 'leverage_contract_public_beta_unsupported', '策略内声明杠杆当前公测暂未支持生成和回测。'),

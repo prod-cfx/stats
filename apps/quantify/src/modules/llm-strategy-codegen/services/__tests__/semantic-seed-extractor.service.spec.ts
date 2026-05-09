@@ -973,13 +973,13 @@ describe('SemanticSeedExtractorService', () => {
     expect(volumeTrigger?.openSlots ?? []).toEqual([])
   })
 
-  it('extracts ATR threshold and filter wording as recognized unsupported trigger atom', () => {
+  it('extracts ATR threshold and filter wording as supported_executable trigger atom with threshold extracted', () => {
     const patch = service.extract('OKX BTCUSDT 1h，ATR threshold filter passes when ATR greater than 100, then MA 金叉做多。')
 
     expect(patch.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'volatility.atr_threshold',
-        params: expect.objectContaining({ sourceText: expect.stringContaining('ATR threshold filter') }),
+        params: expect.objectContaining({ threshold: 100, thresholdUnit: 'quote_currency' }),
       }),
     ]))
   })

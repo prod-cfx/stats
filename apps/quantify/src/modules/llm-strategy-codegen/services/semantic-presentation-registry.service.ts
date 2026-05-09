@@ -159,6 +159,33 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     },
   }),
   presentation({
+    key: 'volatility.atr_threshold',
+    publicName: 'ATR 波动率阈值',
+    aliases: ['ATR 过滤', 'ATR 条件', 'ATR 大于阈值', '平均真实波幅阈值'],
+    positiveExamples: ['ATR14 大于 50 才允许入场', 'ATR 小于 100 时禁止开仓'],
+    negativeExamples: ['只用固定止损'],
+    goldenUtterances: [
+      'ATR14 大于 50 时允许开多',
+      'block entries when ATR less than 100',
+      'ATR 过滤入场',
+    ],
+    displayRenderer: ({ params }) => {
+      const op = stringParam(params, 'operator', 'GT')
+      const period = numberParam(params, 'period', 0)
+      const threshold = numberParam(params, 'threshold', 0)
+      const opLabel: Record<string, string> = { GT: '大于', GTE: '不低于', LT: '小于', LTE: '不高于' }
+      const periodStr = period > 0 ? `ATR${period}` : 'ATR'
+      return `${periodStr} ${opLabel[op] ?? '大于'} ${threshold}`
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'volatility.atr_threshold.period') return '请指定 ATR 计算周期，例如 14（常用默认值）。'
+      if (slotKey === 'volatility.atr_threshold.threshold') return '请给出 ATR 阈值数值，例如 50。'
+      if (slotKey === 'volatility.atr_threshold.thresholdUnit') return '请指定阈值单位：quote_currency（价格单位，如 USDT）或 pct（百分比）。'
+      if (slotKey === 'volatility.atr_threshold.operator') return '请指明比较方向：GT（大于）/ GTE（不低于）/ LT（小于）/ LTE（不高于）。'
+      return '请补充 ATR 波动率阈值条件的缺失信息。'
+    },
+  }),
+  presentation({
     key: 'indicator.cross_over',
     publicName: '指标上穿',
     aliases: ['金叉', '向上交叉'],
