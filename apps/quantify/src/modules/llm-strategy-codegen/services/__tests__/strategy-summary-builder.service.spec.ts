@@ -83,7 +83,7 @@ describe('strategySummaryBuilderService', () => {
   it('builds strategy summary from canonical spec without injecting missing defaults', () => {
     const canonicalBuilder = new CanonicalSpecBuilderService()
     const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
-    const spec = canonicalBuilder.build({
+    const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       entryRules: ['价格突破关键阻力位入场'],
       exitRules: ['价格跌破关键支撑位出场'],
     })

@@ -9,7 +9,12 @@ import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy
 import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
-import { createApiClient, createTestingApp } from '../fixtures/fixtures'
+import {
+  createApiClient,
+  createSemanticEmaStackPublishedSnapshotFixture,
+  createTestingApp,
+  SEMANTIC_EMA_STACK_EXECUTION_SEMANTIC_KEY,
+} from '../fixtures/fixtures'
 
 const RUNTIME_SIGNAL_CONFIG = {
   ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
@@ -24,18 +29,6 @@ const RUNTIME_SIGNAL_CONFIG = {
     maxRiskFraction: 0.5,
   },
 }
-
-const PUBLISHED_RUNTIME_SCRIPT = `const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(): StrategyDecisionV1 {
-    return {
-      action: 'OPEN_LONG',
-      size: { mode: 'RATIO', value: 0.1 },
-      reason: 'compiled.entry',
-    }
-  },
-}
-strategy`
 
 const RUNTIME_SYMBOL_CODE = 'BTCUSDT:SPOT'
 
@@ -128,21 +121,25 @@ describe('account-strategy-view (E2E)', () => {
     prisma: PrismaClient,
     params: { symbolId: string; close: number; time: Date },
   ) {
+    const timeframeMs = 15 * 60 * 1000
     return prisma.marketBar.createMany({
-      data: [{
-        symbolId: params.symbolId,
-        timeframe: mapTimeframe('15m'),
-        time: params.time,
-        open: params.close - 50,
-        high: params.close + 50,
-        low: params.close - 100,
-        close: params.close,
-        volume: 10,
-        quoteVolume: params.close * 10,
-        trades: 5,
-        source: 'E2E',
-        isFinal: true,
-      }],
+      data: Array.from({ length: 30 }, (_, index) => {
+        const close = params.close - (29 - index) * 100
+        return {
+          symbolId: params.symbolId,
+          timeframe: mapTimeframe('15m'),
+          time: new Date(params.time.getTime() - (29 - index) * timeframeMs),
+          open: close - 50,
+          high: close + 50,
+          low: close - 100,
+          close,
+          volume: 10,
+          quoteVolume: close * 10,
+          trades: 5,
+          source: 'E2E',
+          isFinal: true,
+        }
+      }),
       skipDuplicates: true,
     })
   }
@@ -277,52 +274,16 @@ describe('account-strategy-view (E2E)', () => {
 
     const snapshot = await prisma.publishedStrategySnapshot.create({
       data: {
-        sessionId: session.id,
-        strategyTemplateId: templateId,
-        strategyInstanceId: running.id,
-        snapshotHash: 'snapshot-hash-e2e',
-        scriptHash: 'script-hash-e2e',
-        specHash: 'spec-hash-e2e',
-        scriptSnapshot: PUBLISHED_RUNTIME_SCRIPT,
-        specSnapshot: {},
-        astSnapshot: {
-          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
-          runtimeExecutionSemantics: [{
-            semanticKey: 'on_start.entry.primary',
-          }],
-        },
-        consistencyReport: {},
-        userIntentSummary: {},
-        strategySummary: {},
-        scriptSummary: {},
-        strategyConfig: {
+        ...createSemanticEmaStackPublishedSnapshotFixture({
+          sessionId: session.id,
+          strategyTemplateId: templateId,
+          strategyInstanceId: running.id,
+          snapshotHash: 'snapshot-hash-e2e',
           exchange: 'binance',
           symbol: RUNTIME_SYMBOL_CODE,
           timeframe: '15m',
           positionPct: 10,
-          marketType: 'spot',
-        },
-        deploymentExecutionDefaults: {
-          leverage: 1,
-          priceSource: 'close',
-          orderType: 'market',
-          timeInForce: 'GTC',
-        },
-        deploymentExecutionConstraints: {
-          defaultLeverage: 1,
-        },
-        lockedParams: {
-          exchange: 'binance',
-          symbol: RUNTIME_SYMBOL_CODE,
-          timeframe: '15m',
-          positionPct: 10,
-        },
-        paramsSnapshot: {
-          exchange: 'binance',
-          symbol: RUNTIME_SYMBOL_CODE,
-          timeframe: '15m',
-          positionPct: 10,
-        },
+        }),
       },
     })
     publishedSnapshotId = snapshot.id
@@ -565,7 +526,7 @@ describe('account-strategy-view (E2E)', () => {
     })
     expect(runtimeState).toBeDefined()
     expect(runtimeState?.status).toBe('ready')
-    expect(runtimeState?.executionSemanticKey).toBe('on_start.entry.primary')
+    expect(runtimeState?.executionSemanticKey).toBe(SEMANTIC_EMA_STACK_EXECUTION_SEMANTIC_KEY)
 
     const tradingService = app.get(TradingService)
     const placeOrderSpy = jest.spyOn(tradingService, 'placeOrder').mockResolvedValue({
@@ -613,7 +574,7 @@ describe('account-strategy-view (E2E)', () => {
           publishedSnapshotId?: string
           executionSemanticKey?: string
         }
-      } | null)?.runtimeProvenance?.executionSemanticKey).toBe('on_start.entry.primary')
+      } | null)?.runtimeProvenance?.executionSemanticKey).toBe(SEMANTIC_EMA_STACK_EXECUTION_SEMANTIC_KEY)
 
       const execution = await waitForExecution(async () => {
         return prisma.userSignalExecution.findFirst({

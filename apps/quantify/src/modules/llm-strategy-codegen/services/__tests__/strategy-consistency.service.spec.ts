@@ -20,7 +20,7 @@ describe('strategyConsistencyService', () => {
   const summaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
 
   it('passes when script aligns with canonical bollinger spec', () => {
-    const spec = canonicalBuilder.build({
+    const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -395,7 +395,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into a published-aligned script with ratio sizing', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -536,7 +536,7 @@ strategy
   })
 
   it('passes when compiled pct-equity sizing is exactly one percent', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -656,7 +656,7 @@ strategy
   })
 
   it('fails when compiled execution market metadata drifts from canonical spec', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -666,7 +666,7 @@ strategy
       exitRules: ['回到中轨时平仓'],
       riskRules: { positionPct: 10, stopLossPct: 5, exchange: 'okx', marketType: 'perp' },
     })
-    const driftedSpec = canonicalBuilder.build({
+    const driftedSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -874,7 +874,7 @@ strategy
   })
 
   it('fails when fallback script is detected', () => {
-    const spec = canonicalBuilder.build({
+    const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       entryRules: ['rsi < 30 做多'],
       exitRules: ['rsi > 70 平仓'],
     })
@@ -902,7 +902,7 @@ strategy
   })
 
   it('fails when bollinger branch directions are reversed even if action set matches', () => {
-    const spec = canonicalBuilder.build({
+    const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: [
@@ -935,7 +935,7 @@ strategy
   })
 
   it('passes when ratio sizing is derived from normalized positionPct params', () => {
-    const spec = canonicalBuilder.build({
+    const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -978,7 +978,7 @@ strategy
       exitRules: ['价格回到布林带中轨时平仓'],
       riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
     }
-    const canonicalSpec = canonicalBuilder.build(checklist)
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly(checklist)
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: `
@@ -1005,7 +1005,7 @@ strategy
   })
 
   it('fails when ratio sizing uses raw positionPct without normalization', () => {
-    const spec = canonicalBuilder.build({
+    const spec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
@@ -1044,7 +1044,7 @@ strategy
       exitRules: ['短均线下穿长均线（死叉）出场'],
       riskRules: { positionPct: 10 },
     }
-    const canonicalSpec = canonicalBuilder.build(checklist)
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly(checklist)
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: `
@@ -1076,7 +1076,7 @@ strategy
       exitRules: ['短均线上穿长均线（金叉）时平空'],
       riskRules: { positionPct: 10 },
     }
-    const canonicalSpec = canonicalBuilder.build(checklist)
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly(checklist)
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: `
@@ -1109,7 +1109,7 @@ strategy
       exitRules: ['价格回到布林带中轨时平仓'],
       riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
     }
-    const canonicalSpec = canonicalBuilder.build(checklist)
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly(checklist)
 
     const report = consistency.evaluate({
       canonicalSpec,
@@ -1137,7 +1137,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into an RSI-threshold momentum script', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],
@@ -1171,7 +1171,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into a MACD momentum script', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['MACD 金叉时做多'],
@@ -1205,7 +1205,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into a grid rebalance script', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['在固定区间 60000-80000 内执行网格买入，网格步长 1%，共 10 格'],
@@ -1244,7 +1244,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into a short-grid rebalance script', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['在固定区间 60000-80000 内执行上方网格做空，网格步长 1%，共 10 格'],
@@ -1278,7 +1278,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into a bidirectional grid script', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: [
@@ -1536,7 +1536,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles into a breakout script', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['突破前20根K线最高价时做多，冷却 5 根K线'],
@@ -1570,7 +1570,7 @@ strategy
   })
 
   it('passes when Donchian breakout aliases map into breakout semantic rules', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['突破唐奇安上轨时做多'],
@@ -1603,7 +1603,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles take-profit, trailing-stop and time-stop semantics', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],
@@ -1639,7 +1639,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles short breakout and short-side trade management', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['跌破前20根K线最低价时做空，冷却 5 根K线'],
@@ -1677,7 +1677,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles partial take-profit into reduce actions', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],
@@ -1712,7 +1712,7 @@ strategy
   })
 
   it('passes when canonical spec v2 compiles partial take-profit ratio into reduce actions', () => {
-    const canonicalSpec = canonicalBuilder.build({
+    const canonicalSpec = canonicalBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['RSI 14 低于 30 时做多'],

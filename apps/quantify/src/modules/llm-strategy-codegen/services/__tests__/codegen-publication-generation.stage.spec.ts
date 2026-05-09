@@ -576,7 +576,7 @@ describe('codegenPublicationGenerationStage', () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedGridSemanticState()
-    const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
+    const legacyBuildSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromLegacyChecklistForTestsOnly')
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
     const buildFromSemanticStateSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromSemanticState')
     const executionEnvelopeBuild = jest.fn().mockReturnValue({})
@@ -621,7 +621,7 @@ describe('codegenPublicationGenerationStage', () => {
 
     expect(buildFromSemanticStateSpy).toHaveBeenCalledWith(semanticState)
     expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
-    expect(buildSpy).not.toHaveBeenCalled()
+    expect(legacyBuildSpy).not.toHaveBeenCalled()
     expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(artifacts.canonicalSpec)
     expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expect.objectContaining({
       grid: expect.objectContaining({
@@ -1577,7 +1577,7 @@ describe('codegenPublicationGenerationStage', () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
-    const canonicalSpecOverride = canonicalSpecBuilder.build({
+    const canonicalSpecOverride = canonicalSpecBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['1h'],
       entryRules: ['EMA7 上穿 EMA21 做多'],

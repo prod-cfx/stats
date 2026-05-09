@@ -9,7 +9,7 @@ describe('specDescBuilderService', () => {
   const digestService = new CanonicalSpecV2DigestService()
 
   it('builds rule-based specDesc summary', () => {
-    const canonicalSpec = canonicalSpecBuilder.build({
+    const canonicalSpec = canonicalSpecBuilder.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],

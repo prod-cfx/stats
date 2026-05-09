@@ -187,6 +187,12 @@ describe('SemanticSeedExtractorService', () => {
     expect(service.extract('20 日均线上穿 50 日均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
     expect(service.extract('7日EMA 上穿 21日MA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
     expect(service.extract('50日SMA 下穿 100日SMA 开空，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('20小时均线上穿50小时均线开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('5分钟EMA 上穿 20分钟EMA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('15分MA 上穿 30分MA 开多，单笔10%').contextSlots?.timeframe).toBeUndefined()
+    expect(service.extract('BTC 1小时 MA50 上方开多，单笔10%').contextSlots).toEqual(expect.objectContaining({
+      timeframe: '1h',
+    }))
   })
 
   it('keeps explicit timeframe wording while filtering indicator-period wording', () => {
@@ -216,6 +222,27 @@ describe('SemanticSeedExtractorService', () => {
           lookbackWindow: '24h',
           memoryKey: 'breakout',
         }),
+      }),
+    ]))
+  })
+
+  it('keeps breakout retest open when the breakout reference is undefined', () => {
+    const patch = service.extract('BTC 突破后不立刻买，等回踩再买。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'condition.sequence',
+        status: 'open',
+        params: expect.objectContaining({
+          sequenceKind: 'breakout_retest',
+          memoryKey: 'breakout',
+        }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'trigger.breakout_retest.reference_definition',
+            affectsExecution: true,
+          }),
+        ]),
       }),
     ]))
   })
@@ -3768,6 +3795,31 @@ describe('SemanticSeedExtractorService', () => {
 
     const signatures = boundaryTriggers.map(trigger => `${trigger.params?.boundaryRole}:${trigger.phase}:${trigger.sideScope}`)
     expect(new Set(signatures).size).toBe(signatures.length)
+  })
+
+  it('does not infer touch mode when a split boundary clause has a nearby breakout verb', () => {
+    const patch = service.extract('15min 突破布林带下轨买入，上轨卖出')
+    const lowerBoundary = patch.triggers?.find(trigger =>
+      trigger.key === 'price.detect.indicator_boundary'
+      && trigger.params?.boundaryRole === 'lower',
+    )
+    const upperBoundary = patch.triggers?.find(trigger =>
+      trigger.key === 'price.detect.indicator_boundary'
+      && trigger.params?.boundaryRole === 'upper',
+    )
+
+    expect(lowerBoundary).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        boundaryRole: 'lower',
+        confirmationMode: 'breakout',
+      }),
+    }))
+    expect(upperBoundary).toEqual(expect.objectContaining({
+      params: expect.objectContaining({
+        boundaryRole: 'upper',
+        confirmationMode: 'touch',
+      }),
+    }))
   })
 
   it.each([

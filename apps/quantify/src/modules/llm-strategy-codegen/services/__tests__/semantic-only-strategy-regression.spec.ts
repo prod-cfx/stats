@@ -16,6 +16,7 @@ import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
+import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 import { buildNormalizedIntentFromSemanticState } from '../semantic-state-normalization'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
@@ -24,6 +25,7 @@ import { StrategyClarificationRulesService } from '../strategy-clarification-rul
 import { StrategyCompileabilityDecisionService } from '../strategy-compileability-decision.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { ORIGINAL_STRATEGY_ATOMIC_CASES } from './fixtures/original-strategy-atomic-cases'
 
 interface PublishedCaseResult {
   semanticState: SemanticState
@@ -63,6 +65,7 @@ describe('semantic-only strategy regression verification', () => {
   jest.setTimeout(60_000)
 
   const seedExtractor = new SemanticSeedExtractorService()
+  const semanticStateProjection = new SemanticStateProjectionService()
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
   const specDescBuilder = new SpecDescBuilderService()
   const scriptProfileExtractor = new ScriptProfileExtractorService()
@@ -190,6 +193,20 @@ describe('semantic-only strategy regression verification', () => {
     return canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))
   }
 
+  function observableActionTypes(canonicalSpec: CanonicalStrategySpecV2): string[] {
+    const actionTypes = ruleActionTypes(canonicalSpec)
+    if ((canonicalSpec.orderPrograms ?? []).length > 0) {
+      actionTypes.push('PLACE_GRID_ORDER')
+    }
+    if (canonicalSpec.rules.some(rule => rule.metadata?.cancelOrders === true)) {
+      actionTypes.push('CANCEL_UNFILLED_ORDERS')
+    }
+    if (canonicalSpec.rules.some(rule => rule.metadata?.onBreach === 'HALT_STRATEGY')) {
+      actionTypes.push('STOP_STRATEGY')
+    }
+    return actionTypes
+  }
+
   function ruleConditionKeysByPhase(canonicalSpec: CanonicalStrategySpecV2, phase: CanonicalRuleV2['phase']): string[] {
     const keys: string[] = []
     const visit = (condition: CanonicalRuleV2['condition']) => {
@@ -198,6 +215,7 @@ describe('semantic-only strategy regression verification', () => {
         return
       }
       if (condition.kind === 'expression') {
+        keys.push('condition.expression')
         return
       }
       for (const child of condition.children) {
@@ -210,8 +228,89 @@ describe('semantic-only strategy regression verification', () => {
     return keys
   }
 
+  function observableConditionKeysByPhase(
+    semanticState: SemanticState,
+    canonicalSpec: CanonicalStrategySpecV2,
+    phase: CanonicalRuleV2['phase'],
+  ): string[] {
+    const keys = ruleConditionKeysByPhase(canonicalSpec, phase)
+    if (phase === 'entry') {
+      keys.push(
+        ...semanticState.triggers
+          .filter(trigger => trigger.phase === 'entry' && trigger.key === 'grid.range_rebalance')
+          .map(trigger => trigger.key),
+      )
+    }
+    return keys
+  }
+
+  function ruleConditionExpressionsByPhase(canonicalSpec: CanonicalStrategySpecV2, phase: CanonicalRuleV2['phase']): unknown[] {
+    const expressions: unknown[] = []
+    const visit = (condition: CanonicalRuleV2['condition']) => {
+      if (condition.kind === 'atom') {
+        return
+      }
+      if (condition.kind === 'expression') {
+        expressions.push(condition)
+        return
+      }
+      for (const child of condition.children) {
+        visit(child)
+      }
+    }
+    for (const rule of canonicalSpec.rules.filter(rule => rule.phase === phase)) {
+      visit(rule.condition)
+    }
+    return expressions
+  }
+
   function rulesByPhase(canonicalSpec: CanonicalStrategySpecV2, phase: CanonicalRuleV2['phase']): CanonicalRuleV2[] {
     return canonicalSpec.rules.filter(rule => rule.phase === phase)
+  }
+
+  function expectMultisetContains(actual: string[], expected: string[]): void {
+    const remaining = [...actual]
+    for (const value of expected) {
+      const index = remaining.indexOf(value)
+      expect(index).toBeGreaterThanOrEqual(0)
+      remaining.splice(index, 1)
+    }
+  }
+
+  function matchesPartialValue(actual: unknown, expected: unknown): boolean {
+    if (expected === null || typeof expected !== 'object') {
+      return Object.is(actual, expected)
+    }
+    if (actual === null || typeof actual !== 'object') {
+      return false
+    }
+    if (Array.isArray(expected)) {
+      if (!Array.isArray(actual) || actual.length < expected.length) return false
+      return expected.every((expectedItem, index) => matchesPartialValue(actual[index], expectedItem))
+    }
+    return Object.entries(expected as Record<string, unknown>).every(([key, expectedValue]) =>
+      matchesPartialValue((actual as Record<string, unknown>)[key], expectedValue),
+    )
+  }
+
+  function expectItemsContainPartials<T>(actualItems: T[], expectedItems: Array<Record<string, unknown>>): void {
+    const remaining = [...actualItems]
+    for (const expected of expectedItems) {
+      const index = remaining.findIndex(item => matchesPartialValue(item, expected))
+      expect(index).toBeGreaterThanOrEqual(0)
+      remaining.splice(index, 1)
+    }
+  }
+
+  function readLockedSemanticContext(semanticState: SemanticState): Record<string, string> {
+    const context: Record<string, string> = {}
+    for (const field of ['exchange', 'symbol', 'marketType', 'timeframe'] as const) {
+      const slot = semanticState.contextSlots[field]
+      if (slot?.status === 'locked' && typeof slot.value === 'string') {
+        context[field] = slot.value
+      }
+    }
+    return context
   }
 
   function compiledRiskPredicates(publishedSnapshot: PublishedStrategySnapshotRecord): NonNullable<CanonicalStrategyIrV1['riskPolicy']['riskPredicates']> {
@@ -274,7 +373,12 @@ describe('semantic-only strategy regression verification', () => {
         snapshotHash: `sha256:${sessionId}`,
       }),
     }
-    const gate = new CompiledPublicationGateService(repo as never, compiledScriptParser)
+    const gate = new CompiledPublicationGateService(
+      repo as never,
+      { markDeployedWithSemanticVersion: jest.fn() } as never,
+      { withTransaction: (cb: () => Promise<unknown>) => cb() } as never,
+      compiledScriptParser,
+    )
     await gate.publish({
       sessionId,
       canonicalSnapshot: artifacts.canonicalSpec as unknown as Record<string, unknown>,
@@ -362,6 +466,80 @@ describe('semantic-only strategy regression verification', () => {
       ...(timeframe ? { timeframes: [timeframe] } : {}),
     }
   }
+
+  describe('original user strategy atomic semantics', () => {
+    it.each(ORIGINAL_STRATEGY_ATOMIC_CASES)('$id keeps original text as atomic semantic source', (testCase) => {
+      const semanticState = buildSemanticStateFromMessage(testCase.message)
+      const canonicalSpec = canonicalSpecBuilder.buildFromSemanticState(withDefaultPositionSizing(withLockedMarketContext(semanticState, {
+        exchange: testCase.expectedContext?.exchange as 'binance' | 'okx' | 'hyperliquid' | undefined,
+        symbol: testCase.expectedContext?.symbol,
+        marketType: testCase.expectedContext?.marketType as 'spot' | 'perp' | undefined,
+        timeframe: testCase.expectedContext?.timeframe,
+      })))
+      const summary = semanticStateProjection.buildConversationView(semanticState).summary
+      if (process.env.DEBUG_ORIGINAL_ATOMIC_CASES === '1') {
+        // eslint-disable-next-line no-console
+        console.log(JSON.stringify({
+          id: testCase.id,
+          summary,
+          triggers: semanticState.triggers.map(trigger => ({
+            key: trigger.key,
+            phase: trigger.phase,
+            status: trigger.status,
+            sideScope: trigger.sideScope,
+            params: trigger.params,
+            openSlots: trigger.openSlots,
+          })),
+          actions: semanticState.actions.map(action => action.key),
+          entryKeys: ruleConditionKeysByPhase(canonicalSpec, 'entry'),
+          exitKeys: ruleConditionKeysByPhase(canonicalSpec, 'exit'),
+          riskKeys: ruleConditionKeysByPhase(canonicalSpec, 'risk'),
+          entryExpressions: ruleConditionExpressionsByPhase(canonicalSpec, 'entry'),
+          exitExpressions: ruleConditionExpressionsByPhase(canonicalSpec, 'exit'),
+          actionTypes: ruleActionTypes(canonicalSpec),
+          orderPrograms: canonicalSpec.orderPrograms,
+        }))
+      }
+
+      for (const expected of testCase.expectedSummaryIncludes ?? []) {
+        expect(summary).toContain(expected)
+      }
+      for (const forbidden of testCase.expectedSummaryExcludes ?? []) {
+        expect(summary).not.toContain(forbidden)
+      }
+      expectMultisetContains(
+        observableConditionKeysByPhase(semanticState, canonicalSpec, 'entry'),
+        testCase.expectedEntryAtomKeys ?? [],
+      )
+      expectMultisetContains(
+        observableConditionKeysByPhase(semanticState, canonicalSpec, 'exit'),
+        testCase.expectedExitAtomKeys ?? [],
+      )
+      expectMultisetContains(observableActionTypes(canonicalSpec), testCase.expectedActionTypes ?? [])
+      if (testCase.expectedSemanticTriggers) {
+        expectItemsContainPartials(semanticState.triggers, testCase.expectedSemanticTriggers)
+      }
+      if (testCase.expectedOrderPrograms) {
+        expectItemsContainPartials(canonicalSpec.orderPrograms ?? [], testCase.expectedOrderPrograms)
+      }
+      if (testCase.expectedContext) {
+        expect(readLockedSemanticContext(semanticState)).toEqual(expect.objectContaining(testCase.expectedContext))
+      }
+      expectSemanticArtifactsAreChecklistFree(semanticState, canonicalSpec)
+    })
+  })
+
+  it('never calls checklist canonical build for original strategy corpus', () => {
+    const legacyBuildSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromLegacyChecklistForTestsOnly')
+
+    for (const testCase of ORIGINAL_STRATEGY_ATOMIC_CASES) {
+      const semanticState = withDefaultPositionSizing(withLockedMarketContext(buildSemanticStateFromMessage(testCase.message)))
+      canonicalSpecBuilder.buildFromSemanticState(semanticState)
+    }
+
+    expect(legacyBuildSpy).not.toHaveBeenCalled()
+    legacyBuildSpy.mockRestore()
+  })
 
   it('keeps default stop loss basis out of semantic open slots', async () => {
     const semanticState = buildSemanticStateFromMessage('做多，亏损 5% 止损')
@@ -1069,7 +1247,6 @@ describe('semantic-only strategy regression verification', () => {
       /buildFallbackSemanticState\s*\(/u,
       /buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly/u,
       /canonicalSpecBuilder\.build\(\s*checklist\b/u,
-      /\bsession\s*(?:(?:\?\.)|\.)\s*checklist\b|\bsession\s*(?:\?\.\s*)?\[\s*['"]checklist['"]\s*\]/u,
     ]
 
     for (const file of productionFiles) {

@@ -1632,23 +1632,19 @@ describe('compiledPublicationGateService', () => {
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
-      kind: 'execution_envelope_v1' as const,
-      compileSchemaVersion: 1,
-      generatedAt: '2026-05-09T00:00:00.000Z',
-      symbol: ir.market.symbol,
-      timeframe: ir.market.timeframes[0]!,
-      strategy: { id: 'strategy-version-1', name: 'version-gate-test', version: 1 },
-      runtime: { mode: 'live' as const, partialFillsAllowed: ir.executionPolicy.allowPartialFill },
-      datasets: { primary: { source: 'symbol_kline' as const, symbol: ir.market.symbol, timeframe: ir.market.timeframes[0]! } },
-      indicatorPlan: { snapshots: [] },
-      decisionPipelines: [],
+      positionMode: 'long_only' as const,
+      marginMode: 'cross' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
     }
     const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
 
     await gate.publish({
       sessionId: 'session-version-1',
       strategyInstanceId: 'instance-write-test',
-      canonicalSnapshot: { market: { exchange: ir.market.venue, symbol: ir.market.symbol, marketType: 'perp', timeframe: ir.market.timeframes[0] } },
+      canonicalSnapshot: { market: { exchange: ir.market.venue, symbol: ir.market.symbol, marketType: ir.market.instrumentType, timeframe: ir.market.timeframes[0] } },
       semanticView: {},
       semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: { nodes: [], edges: [] } as never,
@@ -1683,16 +1679,12 @@ describe('compiledPublicationGateService', () => {
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
-      kind: 'execution_envelope_v1' as const,
-      compileSchemaVersion: 1,
-      generatedAt: '2026-05-09T00:00:00.000Z',
-      symbol: ir.market.symbol,
-      timeframe: ir.market.timeframes[0]!,
-      strategy: { id: 'strategy-template-1', name: 'template-test', version: 1 },
-      runtime: { mode: 'live' as const, partialFillsAllowed: ir.executionPolicy.allowPartialFill },
-      datasets: { primary: { source: 'symbol_kline' as const, symbol: ir.market.symbol, timeframe: ir.market.timeframes[0]! } },
-      indicatorPlan: { snapshots: [] },
-      decisionPipelines: [],
+      positionMode: 'long_only' as const,
+      marginMode: 'cross' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
     }
     const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
 
@@ -1700,7 +1692,7 @@ describe('compiledPublicationGateService', () => {
       sessionId: 'session-template-1',
       strategyTemplateId: 'tmpl-1',
       strategyInstanceId: null,
-      canonicalSnapshot: { market: { exchange: ir.market.venue, symbol: ir.market.symbol, marketType: 'perp', timeframe: ir.market.timeframes[0] } },
+      canonicalSnapshot: { market: { exchange: ir.market.venue, symbol: ir.market.symbol, marketType: ir.market.instrumentType, timeframe: ir.market.timeframes[0] } },
       semanticView: {},
       semanticPredicateGraph: createSemanticPredicateGraphFixture(),
       graphSnapshot: { nodes: [], edges: [] } as never,

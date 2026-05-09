@@ -1,10 +1,15 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { SuperTest, Test as SupertestTest } from 'supertest'
+import type { StrategyAstV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ast'
+import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import type { PublishedStrategyAstSnapshot } from '@/modules/llm-strategy-codegen/types/publication-gate'
 import { randomBytes } from 'node:crypto'
 import { BadRequestException, ValidationPipe } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { createEnvAccessor } from '@/common/env/env.accessor'
+import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { supertestRequest } from '../helpers/supertest-compat'
@@ -257,4 +262,286 @@ export function generateRandomString(length: number = 10): string {
   }
 
   return result
+}
+
+export const SEMANTIC_EMA_STACK_EXECUTION_SEMANTIC_KEY = 'on_start.entry.primary'
+
+export interface SemanticEmaStackSnapshotOptions {
+  id?: string
+  sessionId?: string
+  strategyTemplateId?: string
+  strategyInstanceId?: string
+  snapshotHash?: string
+  exchange?: 'binance' | 'okx' | 'hyperliquid'
+  symbol?: string
+  timeframe?: string
+  marketType?: 'spot' | 'perp'
+  positionPct?: number
+}
+
+export function createSemanticEmaStackCompiledSnapshotFixture(
+  options: SemanticEmaStackSnapshotOptions = {},
+) {
+  const ir = createSemanticEmaStackIrFixture(options)
+  const ast = new CanonicalStrategyAstCompilerService().compile(ir) as StrategyAstV1 & PublishedStrategyAstSnapshot
+  ast.runtimeExecutionSemantics = [{
+    semanticKey: SEMANTIC_EMA_STACK_EXECUTION_SEMANTIC_KEY,
+    trigger: 'on_start',
+    phase: 'entry',
+    consumePolicy: 'once',
+    requiredRuntimeContext: {
+      barIndex: 1,
+      requiresReferenceBar: true,
+      requiresSymbol: true,
+      requiresTimeframe: true,
+    },
+    sourceRefs: ['entry_ema_stack'],
+  }]
+  const executionEnvelope = createSemanticEmaStackExecutionEnvelope(options)
+  const emitter = new CompiledScriptEmitterService()
+  const scriptSnapshot = emitter.emit({ ast, executionEnvelope })
+  const projection = emitter.buildProjection({ ast, executionEnvelope })
+
+  return {
+    ir,
+    ast,
+    executionEnvelope,
+    scriptSnapshot,
+    compiledManifest: projection.compiledManifest,
+  }
+}
+
+export function createSemanticEmaStackPublishedSnapshotFixture(
+  options: SemanticEmaStackSnapshotOptions = {},
+) {
+  const compiledSnapshot = createSemanticEmaStackCompiledSnapshotFixture(options)
+  const exchange = options.exchange ?? 'binance'
+  const symbol = options.symbol ?? 'BTCUSDT'
+  const timeframe = options.timeframe ?? '15m'
+  const marketType = options.marketType ?? 'spot'
+  const positionPct = options.positionPct ?? 10
+
+  return {
+    id: options.id ?? 'semantic-ema-stack-snapshot',
+    sessionId: options.sessionId ?? 'semantic-ema-stack-session',
+    strategyTemplateId: options.strategyTemplateId ?? 'semantic-ema-stack-template',
+    strategyInstanceId: options.strategyInstanceId ?? 'semantic-ema-stack-instance',
+    snapshotHash: options.snapshotHash ?? 'semantic-ema-stack-snapshot-hash',
+    scriptHash: 'semantic-ema-stack-script-hash',
+    specHash: compiledSnapshot.compiledManifest.specHash,
+    irHash: compiledSnapshot.compiledManifest.irHash,
+    astDigest: compiledSnapshot.compiledManifest.astDigest,
+    structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
+    scriptSnapshot: compiledSnapshot.scriptSnapshot,
+    specSnapshot: {
+      version: 2,
+      market: { exchange, symbol, marketType, defaultTimeframe: timeframe },
+      indicators: [
+        { id: 'ema_fast', kind: 'ema', params: { period: 7 } },
+        { id: 'ema_slow', kind: 'ema', params: { period: 21 } },
+      ],
+      rules: [{
+        id: 'entry_ema_stack',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: {
+          key: 'indicator.above',
+          params: {
+            indicator: 'ema',
+            fastPeriod: 7,
+            slowPeriod: 21,
+            timeframe,
+          },
+        },
+        actions: [{ key: 'open_long', sizing: { mode: 'fixed_ratio', value: positionPct / 100 } }],
+      }, {
+        id: 'exit_ema_stack',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: {
+          key: 'indicator.below',
+          params: {
+            indicator: 'ema',
+            fastPeriod: 7,
+            slowPeriod: 21,
+            timeframe,
+          },
+        },
+        actions: [{ key: 'close_long' }],
+      }],
+      risk: [{ key: 'risk.stop_loss_pct', params: { valuePct: 4, basis: 'entry_avg_price' } }],
+      position: { mode: 'fixed_ratio', value: positionPct / 100, positionMode: 'long_only' },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+    },
+    semanticGraph: {
+      version: 'semantic-strategy-graph.v1',
+      nodes: [
+        { id: 'ema_fast', kind: 'indicator', indicator: 'ema', params: { period: 7 } },
+        { id: 'ema_slow', kind: 'indicator', indicator: 'ema', params: { period: 21 } },
+      ],
+      actions: [{ id: 'open_long', kind: 'OPEN_LONG' }, { id: 'close_long', kind: 'CLOSE_LONG' }],
+    },
+    compiledIr: compiledSnapshot.ir,
+    irSnapshot: compiledSnapshot.ir,
+    astSnapshot: compiledSnapshot.ast,
+    compiledManifest: compiledSnapshot.compiledManifest,
+    consistencyReport: {
+      status: 'PASSED',
+      checks: [{
+        id: 'semantic_ema_stack_fixture_ir_spec_phase_alignment',
+        status: 'passed',
+        message: 'Spec snapshot, IR, AST, and emitted script all include entry and exit EMA stack phases.',
+      }],
+    },
+    userIntentSummary: { marketScope: [symbol], thesis: 'EMA stack semantic fixture' },
+    strategySummary: { thesis: 'Open long when fast EMA is above slow EMA.' },
+    scriptSummary: { indicators: ['EMA'], runtime: 'compiler.v1' },
+    paramsSnapshot: {
+      exchange,
+      symbol,
+      timeframe,
+      positionPct,
+      marketType,
+    },
+    strategyConfig: {
+      exchange,
+      symbol,
+      timeframe,
+      baseTimeframe: timeframe,
+      stateTimeframes: [timeframe],
+      positionPct,
+      marketType,
+      strategyDeclaredLeverageRange: null,
+    },
+    backtestConfigDefaults: {
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: 'close',
+      allowPartial: false,
+    },
+    deploymentExecutionDefaults: {
+      leverage: 1,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'GTC',
+    },
+    deploymentExecutionConstraints: {
+      platformRiskMaxLeverage: 1,
+      strategyDeclaredLeverageRange: null,
+      defaultLeverage: 1,
+      supportedPriceSources: ['close'],
+      supportedOrderTypes: ['market'],
+      supportedTimeInForce: ['GTC'],
+      constraintExplanation: 'semantic EMA stack e2e fixture',
+    },
+    lockedParams: {
+      exchange,
+      symbol,
+      timeframe,
+      positionPct,
+      marketType,
+    },
+    executionEnvelope: compiledSnapshot.executionEnvelope,
+    executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+    dataRequirements: { primary: [timeframe], requiredTimeframes: [timeframe], warmupBars: 21 },
+    snapshotVersion: 2,
+  }
+}
+
+function createSemanticEmaStackIrFixture(
+  options: SemanticEmaStackSnapshotOptions,
+): CanonicalStrategyIrV1 {
+  const exchange = options.exchange ?? 'binance'
+  const symbol = options.symbol ?? 'BTCUSDT'
+  const timeframe = options.timeframe ?? '15m'
+  const positionPct = options.positionPct ?? 10
+  const instrumentType = options.marketType === 'perp' ? 'perpetual' : 'spot'
+  const closeSeriesId = `close_${timeframe}`
+
+  return {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+      specHash: 'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+    },
+    market: {
+      venue: exchange,
+      instrumentType,
+      symbol,
+      timeframes: [timeframe],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: positionPct },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 21,
+      maxLookback: 21,
+      requiredTimeframes: [timeframe],
+    },
+    signalCatalog: {
+      series: [
+        { id: closeSeriesId, kind: 'PRICE', timeframe, field: 'close' },
+        { id: 'ema_fast', kind: 'EMA', inputs: [closeSeriesId], params: { period: 7 } },
+        { id: 'ema_slow', kind: 'EMA', inputs: [closeSeriesId], params: { period: 21 } },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_ema_stack', kind: 'GT', args: ['ema_fast', 'ema_slow'] },
+        { id: 'exit_ema_stack', kind: 'LT', args: ['ema_fast', 'ema_slow'] },
+      ],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_ema_stack',
+        phase: 'entry',
+        when: 'entry_ema_stack',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: positionPct } },
+        ],
+      },
+      {
+        id: 'exit_ema_stack',
+        phase: 'exit',
+        when: 'exit_ema_stack',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [
+        { id: 'stop_loss_4', kind: 'STOP_LOSS_PCT', scope: 'position', value: 4, onBreach: 'FORCE_EXIT' },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+}
+
+function createSemanticEmaStackExecutionEnvelope(options: SemanticEmaStackSnapshotOptions) {
+  return {
+    positionMode: 'long_only' as const,
+    marginMode: options.marketType === 'perp' ? 'cross' as const : 'cash' as const,
+    tickSize: 0.01,
+    pricePrecision: 2,
+    quantityPrecision: 6,
+    fillAssumption: 'strict' as const,
+  }
 }
