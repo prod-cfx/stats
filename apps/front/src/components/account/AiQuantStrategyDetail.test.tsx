@@ -1,8 +1,8 @@
 /** @jest-environment jsdom */
 
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
@@ -408,6 +408,42 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('leverage drift')
     expect(container.textContent).not.toContain('运行回测')
     expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
+  })
+
+  it('ignores invalid deployment leverage ranges instead of rendering unbounded options', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            deploymentExecutionBaseline: {
+              leverage: 2,
+              priceSource: 'mark',
+              orderType: 'market',
+              timeInForce: 'IOC',
+            },
+            deploymentExecutionCurrent: {
+              leverage: 2,
+              priceSource: 'mark',
+              orderType: 'market',
+              timeInForce: 'IOC',
+            },
+            deploymentLeverageRange: {
+              min: 200,
+              max: 1,
+            },
+            marketType: 'perp',
+            canEditDeploymentLeverage: true,
+          })}
+          onUpdateLeverage={() => {}}
+        />,
+      )
+    })
+
+    const leverageSelect = container.querySelector('select[name="deployment-leverage"]')
+    expect(leverageSelect).toBeTruthy()
+    expect(leverageSelect?.querySelectorAll('option')).toHaveLength(1)
+    expect(container.textContent).toContain('200x - 1x')
   })
 
   it('hides deployment leverage semantics for spot strategies', async () => {
@@ -829,7 +865,7 @@ describe('AiQuantStrategyDetail', () => {
   })
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
-    mockPerformAccountAiQuantStrategyAction.mockRejectedValue(new Error(''))
+    mockPerformAccountAiQuantStrategyAction.mockRejectedValue(new Error(' '))
     mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
       status: 'running',
       positionOverview: {
