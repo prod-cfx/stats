@@ -11,7 +11,9 @@
  * 7. display + clarification renderer
  */
 
+import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
 import { SemanticContractReadinessService } from '../semantic-contract-readiness.service'
@@ -27,6 +29,7 @@ const supportClassifier = new SemanticSupportClassifierService(atomRegistry)
 const readiness = new SemanticContractReadinessService()
 const canonicalBuilder = new CanonicalSpecBuilderService()
 const irCompiler = new CanonicalSpecV2IrCompilerService()
+const astCompiler = new CanonicalStrategyAstCompilerService()
 const presentationRegistry = new SemanticPresentationRegistryService(atomRegistry)
 
 // 满参 utterances（一种 pattern 各一句）
@@ -70,6 +73,17 @@ function findChartAtom(node: unknown): Record<string, unknown> | null {
     if (found) return found
   }
   return null
+}
+
+function buildBullishHeadAndShouldersBars() {
+  return [130, 120, 112, 108, 116, 114, 96, 118, 119, 109, 123].map((close, index) => ({
+    open: close,
+    high: close,
+    low: close,
+    close,
+    volume: 1,
+    timestamp: index + 1,
+  }))
 }
 
 describe('price.chart_pattern atom 七层 parity', () => {
@@ -322,6 +336,50 @@ describe('price.chart_pattern atom 七层 parity', () => {
         fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '1h', positionPct: 10 },
       })
       expect(ir.runtimeRequirements.helpers).toContain('chartPatternDetector')
+    })
+
+    it('rejects intrinsic pattern direction conflicts instead of compiling fail-closed signals', () => {
+      const spec = buildCanonicalSpecFromUtterance(DOUBLE_TOP_UTTERANCE)
+      const rule = spec.rules.find(item => findChartAtom(item.condition))
+      expect(rule).toBeDefined()
+      const atom = findChartAtom(rule!.condition)
+      expect(atom).not.toBeNull()
+      const params = atom?.['params']
+      expect(params && typeof params === 'object' && !Array.isArray(params)).toBe(true)
+      const writableParams = params as Record<string, unknown>
+      writableParams.direction = 'bullish'
+
+      expect(() => irCompiler.compile({
+        canonicalSpec: spec,
+        fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '1h', positionPct: 10 },
+      })).toThrow('codegen.canonical_spec_v2_condition_unsupported:price.chart_pattern:direction_pattern_conflict')
+    })
+
+    it('codegen → IR → compiled runtime consumes CHART_PATTERN instead of fail-closed', () => {
+      const spec = buildCanonicalSpecFromUtterance(HNS_BULLISH_UTTERANCE)
+      const { ir } = irCompiler.compile({
+        canonicalSpec: spec,
+        fallback: { exchange: 'okx', symbol: 'BTCUSDT', baseTimeframe: '1h', positionPct: 10 },
+      })
+      const ast = astCompiler.compile(ir)
+      const values = evaluateExprPool(
+        { bars: buildBullishHeadAndShouldersBars() },
+        ast.exprPool as Parameters<typeof evaluateExprPool>[1],
+        ast.topology.exprOrder,
+      )
+      const chartSeriesExpr = ast.exprPool.find(expr =>
+        expr.nodeType === 'series' && expr.payload.kind === 'CHART_PATTERN',
+      )
+      const chartPredicateExpr = ast.exprPool.find(expr =>
+        expr.nodeType === 'predicate'
+        && typeof expr.sourceRef === 'string'
+        && expr.sourceRef.includes('chart_pattern_head_and_shoulders_bullish'),
+      )
+
+      expect(chartSeriesExpr).toBeDefined()
+      expect(chartPredicateExpr).toBeDefined()
+      expect(values[chartSeriesExpr!.id]).toBe(1)
+      expect(values[chartPredicateExpr!.id]).toBe(true)
     })
   })
 

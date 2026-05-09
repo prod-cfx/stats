@@ -25,6 +25,18 @@ export interface PriceHighsLowsResult {
   lows: PricePivotPoint[]
 }
 
+export type ChartPatternKind = 'head_and_shoulders' | 'double_top' | 'double_bottom' | 'triangle'
+export type ChartPatternDirection = 'bullish' | 'bearish'
+
+export interface ChartPatternDetectorOptions {
+  pivotWindow?: number
+  confirmationBars?: number
+  tolerancePct?: number
+  minBreakoutPct?: number
+  minSwingPct?: number
+  lookbackBars?: number
+}
+
 /**
  * 检测价格 pivot high/low。
  *
@@ -70,6 +82,358 @@ export function priceHighsLows(
   }
 
   return result
+}
+
+/**
+ * 基于价格 pivot 的图形形态检测。
+ *
+ * 返回 1/0 以便 compiled runtime 直接通过 EQ(series, 1) 消费。
+ */
+export function chartPatternDetector(
+  bars: Bar[],
+  pattern: ChartPatternKind,
+  direction: ChartPatternDirection,
+  options: ChartPatternDetectorOptions = {},
+): number {
+  const pivotWindow = Math.max(1, Math.floor(options.pivotWindow ?? 2))
+  const confirmationBars = Math.max(0, Math.floor(options.confirmationBars ?? 1))
+  const lookbackBars = Math.max(pivotWindow + confirmationBars + 2, Math.floor(options.lookbackBars ?? 80))
+  const tolerancePct = nonNegativeFinite(options.tolerancePct, 0.04)
+  const minBreakoutPct = nonNegativeFinite(options.minBreakoutPct, 0)
+  const minSwingPct = nonNegativeFinite(options.minSwingPct, 0.02)
+
+  if (!Array.isArray(bars) || bars.length < pivotWindow + confirmationBars + 3) {
+    return 0
+  }
+  if (!isSupportedChartPattern(pattern, direction)) {
+    return 0
+  }
+
+  const windowStart = Math.max(0, bars.length - lookbackBars)
+  const windowBars = bars.slice(windowStart)
+  const pivots = priceHighsLows(windowBars, pivotWindow, confirmationBars)
+  const normalizedPivots: PriceHighsLowsResult = {
+    highs: pivots.highs.map(pivot => ({ index: pivot.index + windowStart, value: pivot.value })),
+    lows: pivots.lows.map(pivot => ({ index: pivot.index + windowStart, value: pivot.value })),
+  }
+
+  const current = bars[bars.length - 1]
+  if (!current || !Number.isFinite(current.close)) return 0
+
+  const matched = (() => {
+    if (pattern === 'head_and_shoulders') {
+      return direction === 'bearish'
+        ? hasBearishHeadAndShoulders(bars, normalizedPivots, tolerancePct, minBreakoutPct, minSwingPct)
+        : hasBullishHeadAndShoulders(bars, normalizedPivots, tolerancePct, minBreakoutPct, minSwingPct)
+    }
+    if (pattern === 'double_top') {
+      return direction === 'bearish'
+        && hasDoubleTop(bars, normalizedPivots, tolerancePct, minBreakoutPct, minSwingPct)
+    }
+    if (pattern === 'double_bottom') {
+      return direction === 'bullish'
+        && hasDoubleBottom(bars, normalizedPivots, tolerancePct, minBreakoutPct, minSwingPct)
+    }
+    return hasTriangleBreakout(bars, normalizedPivots, direction, minBreakoutPct, minSwingPct)
+  })()
+
+  return matched ? 1 : 0
+}
+
+function isSupportedChartPattern(pattern: ChartPatternKind, direction: ChartPatternDirection): boolean {
+  if (pattern === 'double_top') return direction === 'bearish'
+  if (pattern === 'double_bottom') return direction === 'bullish'
+  return pattern === 'head_and_shoulders' || pattern === 'triangle'
+}
+
+function hasBearishHeadAndShoulders(
+  bars: Bar[],
+  pivots: PriceHighsLowsResult,
+  tolerancePct: number,
+  minBreakoutPct: number,
+  minSwingPct: number,
+): boolean {
+  for (const [left, head, right] of latestPivotTriples(pivots.highs)) {
+    if (!isNear(left.value, right.value, tolerancePct)) continue
+    if (head.value <= left.value * (1 + minSwingPct) || head.value <= right.value * (1 + minSwingPct)) continue
+
+    const leftNeck = lowestPivotBetween(pivots.lows, left.index, head.index)
+    const rightNeck = lowestPivotBetween(pivots.lows, head.index, right.index)
+    if (!leftNeck || !rightNeck) continue
+    if (!hasSwingDepth(head.value, Math.min(leftNeck.value, rightNeck.value), minSwingPct)) continue
+
+    if (crossedBelowLine(bars, leftNeck, rightNeck, minBreakoutPct, right.index)) {
+      return true
+    }
+  }
+  return false
+}
+
+function hasBullishHeadAndShoulders(
+  bars: Bar[],
+  pivots: PriceHighsLowsResult,
+  tolerancePct: number,
+  minBreakoutPct: number,
+  minSwingPct: number,
+): boolean {
+  for (const [left, head, right] of latestPivotTriples(pivots.lows)) {
+    if (!isNear(left.value, right.value, tolerancePct)) continue
+    if (head.value >= left.value * (1 - minSwingPct) || head.value >= right.value * (1 - minSwingPct)) continue
+
+    const leftNeck = highestPivotBetween(pivots.highs, left.index, head.index)
+    const rightNeck = highestPivotBetween(pivots.highs, head.index, right.index)
+    if (!leftNeck || !rightNeck) continue
+    if (!hasSwingDepth(Math.max(leftNeck.value, rightNeck.value), head.value, minSwingPct)) continue
+
+    if (crossedAboveLine(bars, leftNeck, rightNeck, minBreakoutPct, right.index)) {
+      return true
+    }
+  }
+  return false
+}
+
+function hasDoubleTop(
+  bars: Bar[],
+  pivots: PriceHighsLowsResult,
+  tolerancePct: number,
+  minBreakoutPct: number,
+  minSwingPct: number,
+): boolean {
+  for (const [left, right] of latestPivotPairs(pivots.highs)) {
+    if (!isNear(left.value, right.value, tolerancePct)) continue
+    const neckline = lowestPivotBetween(pivots.lows, left.index, right.index)
+    if (!neckline) continue
+    if (!hasSwingDepth(Math.min(left.value, right.value), neckline.value, minSwingPct)) continue
+    if (crossedBelowLevel(bars, neckline.value, minBreakoutPct, right.index)) {
+      return true
+    }
+  }
+  return false
+}
+
+function hasDoubleBottom(
+  bars: Bar[],
+  pivots: PriceHighsLowsResult,
+  tolerancePct: number,
+  minBreakoutPct: number,
+  minSwingPct: number,
+): boolean {
+  for (const [left, right] of latestPivotPairs(pivots.lows)) {
+    if (!isNear(left.value, right.value, tolerancePct)) continue
+    const neckline = highestPivotBetween(pivots.highs, left.index, right.index)
+    if (!neckline) continue
+    if (!hasSwingDepth(neckline.value, Math.max(left.value, right.value), minSwingPct)) continue
+    if (crossedAboveLevel(bars, neckline.value, minBreakoutPct, right.index)) {
+      return true
+    }
+  }
+  return false
+}
+
+function hasTriangleBreakout(
+  bars: Bar[],
+  pivots: PriceHighsLowsResult,
+  direction: ChartPatternDirection,
+  minBreakoutPct: number,
+  minSwingPct: number,
+): boolean {
+  const latestIndex = bars.length - 1
+  const highs = pivots.highs.filter(pivot => pivot.index < latestIndex)
+  const lows = pivots.lows.filter(pivot => pivot.index < latestIndex)
+  if (highs.length < 2 || lows.length < 2) return false
+
+  const highA = highs[highs.length - 2]!
+  const highB = highs[highs.length - 1]!
+  const lowA = lows[lows.length - 2]!
+  const lowB = lows[lows.length - 1]!
+  if (highA.index === highB.index || lowA.index === lowB.index) return false
+
+  const resistanceSlope = (highB.value - highA.value) / (highB.index - highA.index)
+  const supportSlope = (lowB.value - lowA.value) / (lowB.index - lowA.index)
+  if (resistanceSlope >= supportSlope) return false
+
+  const firstGap = highA.value - lowA.value
+  const latestResistance = interpolateLine(highA, highB, latestIndex)
+  const latestSupport = interpolateLine(lowA, lowB, latestIndex)
+  if (latestResistance === null || latestSupport === null) return false
+
+  const latestGap = latestResistance - latestSupport
+  if (!Number.isFinite(firstGap) || !Number.isFinite(latestGap) || firstGap <= 0 || latestGap <= 0) return false
+  if (latestGap >= firstGap * 0.85) return false
+  if (!hasSwingDepth(highA.value, lowA.value, minSwingPct)) return false
+
+  const structureEndIndex = Math.max(highB.index, lowB.index)
+  return direction === 'bullish'
+    ? crossedAboveLine(bars, highA, highB, minBreakoutPct, structureEndIndex)
+    : crossedBelowLine(bars, lowA, lowB, minBreakoutPct, structureEndIndex)
+}
+
+function crossedAboveLine(
+  bars: readonly Bar[],
+  left: PricePivotPoint,
+  right: PricePivotPoint,
+  minBreakoutPct: number,
+  structureEndIndex: number,
+): boolean {
+  return crossedAboveDynamicThreshold(
+    bars,
+    index => interpolateLine(left, right, index),
+    minBreakoutPct,
+    structureEndIndex,
+  )
+}
+
+function crossedBelowLine(
+  bars: readonly Bar[],
+  left: PricePivotPoint,
+  right: PricePivotPoint,
+  minBreakoutPct: number,
+  structureEndIndex: number,
+): boolean {
+  return crossedBelowDynamicThreshold(
+    bars,
+    index => interpolateLine(left, right, index),
+    minBreakoutPct,
+    structureEndIndex,
+  )
+}
+
+function crossedAboveLevel(
+  bars: readonly Bar[],
+  level: number,
+  minBreakoutPct: number,
+  structureEndIndex: number,
+): boolean {
+  return crossedAboveDynamicThreshold(bars, () => level, minBreakoutPct, structureEndIndex)
+}
+
+function crossedBelowLevel(
+  bars: readonly Bar[],
+  level: number,
+  minBreakoutPct: number,
+  structureEndIndex: number,
+): boolean {
+  return crossedBelowDynamicThreshold(bars, () => level, minBreakoutPct, structureEndIndex)
+}
+
+function crossedAboveDynamicThreshold(
+  bars: readonly Bar[],
+  thresholdAt: (index: number) => number | null,
+  minBreakoutPct: number,
+  structureEndIndex: number,
+): boolean {
+  const latestIndex = bars.length - 1
+  if (!crossedAboveAt(bars, thresholdAt, minBreakoutPct, latestIndex)) return false
+  for (let index = Math.max(1, structureEndIndex + 1); index < latestIndex; index += 1) {
+    if (crossedAboveAt(bars, thresholdAt, minBreakoutPct, index)) return false
+  }
+  return true
+}
+
+function crossedBelowDynamicThreshold(
+  bars: readonly Bar[],
+  thresholdAt: (index: number) => number | null,
+  minBreakoutPct: number,
+  structureEndIndex: number,
+): boolean {
+  const latestIndex = bars.length - 1
+  if (!crossedBelowAt(bars, thresholdAt, minBreakoutPct, latestIndex)) return false
+  for (let index = Math.max(1, structureEndIndex + 1); index < latestIndex; index += 1) {
+    if (crossedBelowAt(bars, thresholdAt, minBreakoutPct, index)) return false
+  }
+  return true
+}
+
+function crossedAboveAt(
+  bars: readonly Bar[],
+  thresholdAt: (index: number) => number | null,
+  minBreakoutPct: number,
+  index: number,
+): boolean {
+  const current = bars[index]?.close
+  const previous = bars[index - 1]?.close
+  const currentThreshold = thresholdAt(index)
+  const previousThreshold = thresholdAt(index - 1)
+  if (typeof current !== 'number' || !Number.isFinite(current)) return false
+  if (typeof previous !== 'number' || !Number.isFinite(previous)) return false
+  if (currentThreshold === null || previousThreshold === null) return false
+  return current > currentThreshold * (1 + minBreakoutPct)
+    && previous <= previousThreshold * (1 + minBreakoutPct)
+}
+
+function crossedBelowAt(
+  bars: readonly Bar[],
+  thresholdAt: (index: number) => number | null,
+  minBreakoutPct: number,
+  index: number,
+): boolean {
+  const current = bars[index]?.close
+  const previous = bars[index - 1]?.close
+  const currentThreshold = thresholdAt(index)
+  const previousThreshold = thresholdAt(index - 1)
+  if (typeof current !== 'number' || !Number.isFinite(current)) return false
+  if (typeof previous !== 'number' || !Number.isFinite(previous)) return false
+  if (currentThreshold === null || previousThreshold === null) return false
+  return current < currentThreshold * (1 - minBreakoutPct)
+    && previous >= previousThreshold * (1 - minBreakoutPct)
+}
+
+function latestPivotPairs(pivots: PricePivotPoint[]): Array<[PricePivotPoint, PricePivotPoint]> {
+  const pairs: Array<[PricePivotPoint, PricePivotPoint]> = []
+  for (let rightIndex = pivots.length - 1; rightIndex >= 1; rightIndex -= 1) {
+    pairs.push([pivots[rightIndex - 1]!, pivots[rightIndex]!])
+  }
+  return pairs
+}
+
+function latestPivotTriples(pivots: PricePivotPoint[]): Array<[PricePivotPoint, PricePivotPoint, PricePivotPoint]> {
+  const triples: Array<[PricePivotPoint, PricePivotPoint, PricePivotPoint]> = []
+  for (let rightIndex = pivots.length - 1; rightIndex >= 2; rightIndex -= 1) {
+    triples.push([pivots[rightIndex - 2]!, pivots[rightIndex - 1]!, pivots[rightIndex]!])
+  }
+  return triples
+}
+
+function highestPivotBetween(pivots: PricePivotPoint[], start: number, end: number): PricePivotPoint | null {
+  return bestPivotBetween(pivots, start, end, (left, right) => left.value > right.value)
+}
+
+function lowestPivotBetween(pivots: PricePivotPoint[], start: number, end: number): PricePivotPoint | null {
+  return bestPivotBetween(pivots, start, end, (left, right) => left.value < right.value)
+}
+
+function bestPivotBetween(
+  pivots: PricePivotPoint[],
+  start: number,
+  end: number,
+  better: (left: PricePivotPoint, right: PricePivotPoint) => boolean,
+): PricePivotPoint | null {
+  let best: PricePivotPoint | null = null
+  for (const pivot of pivots) {
+    if (pivot.index <= start || pivot.index >= end) continue
+    if (!best || better(pivot, best)) best = pivot
+  }
+  return best
+}
+
+function interpolateLine(left: PricePivotPoint, right: PricePivotPoint, index: number): number | null {
+  const width = right.index - left.index
+  if (width === 0) return null
+  return left.value + ((right.value - left.value) * (index - left.index)) / width
+}
+
+function isNear(left: number, right: number, tolerancePct: number): boolean {
+  const base = Math.max(Math.abs(left), Math.abs(right), 1)
+  return Math.abs(left - right) / base <= tolerancePct
+}
+
+function hasSwingDepth(high: number, low: number, minSwingPct: number): boolean {
+  if (high <= low) return false
+  return (high - low) / Math.max(Math.abs(high), 1) >= minSwingPct
+}
+
+function nonNegativeFinite(value: number | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
 }
 
 /**

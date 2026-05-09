@@ -262,6 +262,19 @@ export interface StrategyHelpers {
       highs: Array<{ index: number, value: number }>
       lows: Array<{ index: number, value: number }>
     }
+    chartPatternDetector: (
+      bars: Bar[],
+      pattern: 'head_and_shoulders' | 'double_top' | 'double_bottom' | 'triangle',
+      direction: 'bullish' | 'bearish',
+      options?: {
+        pivotWindow?: number
+        confirmationBars?: number
+        tolerancePct?: number
+        minBreakoutPct?: number
+        minSwingPct?: number
+        lookbackBars?: number
+      },
+    ) => number
     stochastic: (bars: Bar[], kPeriod?: number, dPeriod?: number) => { k: number, d: number } | null
     obv: (bars: Bar[]) => number | null
     vwap: (bars: Bar[]) => number | null
@@ -450,6 +463,14 @@ export function getHelperDocs(): HelperFunctionDoc[] {
       example: 'const pivots = helpers.ta.priceHighsLows(bars, 14, 3)',
       category: 'ta',
       returns: '{ highs, lows }',
+    },
+    {
+      name: 'chartPatternDetector',
+      signature: 'helpers.ta.chartPatternDetector(bars: Bar[], pattern: string, direction: string, options?: object): number',
+      description: '基于 pivot high/low 检测图形形态',
+      example: 'const hns = helpers.ta.chartPatternDetector(bars, "head_and_shoulders", "bearish")',
+      category: 'ta',
+      returns: '命中返回 1，否则返回 0',
     },
     
     // 信号生成

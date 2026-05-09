@@ -36,6 +36,16 @@ function buildRsiBearishDivergenceBars() {
   }))
 }
 
+function buildBearishHeadAndShouldersBars() {
+  return [100, 112, 104, 124, 103, 111, 98].map((close, index) => ({
+    time: index + 1,
+    open: close,
+    high: close,
+    low: close,
+    close,
+  }))
+}
+
 describe('backtestCompiledRuntimeCompat', () => {
   it('evaluates CROSS_OVER using previous and current series values', () => {
     const values = evaluateExprPool(
@@ -269,6 +279,44 @@ describe('backtestCompiledRuntimeCompat', () => {
 
     expect(values.indicator_divergence).toBe(1)
     expect(values.entry_divergence).toBe(true)
+  })
+
+  it('consumes CHART_PATTERN series as a compiled-runtime backtest signal', () => {
+    const values = evaluateExprPool(
+      { bars: buildBearishHeadAndShouldersBars() } as any,
+      [
+        {
+          id: 'chart_pattern',
+          nodeType: 'series',
+          sourceRef: 'chart_pattern_head_and_shoulders_bearish',
+          payload: {
+            kind: 'CHART_PATTERN',
+            params: {
+              pattern: 'head_and_shoulders',
+              direction: 'bearish',
+              pivotWindow: 1,
+              confirmationBars: 1,
+            },
+          },
+        },
+        {
+          id: 'const_one',
+          nodeType: 'series',
+          sourceRef: 'const_one',
+          payload: { kind: 'CONST', value: 1 },
+        },
+        {
+          id: 'entry_chart_pattern',
+          nodeType: 'predicate',
+          deps: ['chart_pattern', 'const_one'],
+          payload: { kind: 'EQ' },
+        },
+      ] as any,
+      ['chart_pattern', 'const_one', 'entry_chart_pattern'],
+    )
+
+    expect(values.chart_pattern).toBe(1)
+    expect(values.entry_chart_pattern).toBe(true)
   })
 
   it('evaluates PRICE_CHANGE_PCT as relative change so entry programs are not shadowed by always-true exits', () => {

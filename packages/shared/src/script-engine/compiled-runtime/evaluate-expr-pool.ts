@@ -1,7 +1,7 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
+import { atr, bollingerBands, chartPatternDetector, ema, macd, priceHighsLows, rsi, sma } from '../helpers/technical-indicators'
 import { candlePatternDetector } from '../helpers/candle-pattern-detector'
-import { atr, bollingerBands, ema, macd, priceHighsLows, rsi, sma } from '../helpers/technical-indicators'
 import { liquiditySweepDetector } from './liquidity-sweep-detector'
 
 export type CompiledRuntimeValue =
@@ -108,6 +108,7 @@ function evaluateSeries(
     case 'BOLLINGER_BARS_OUTSIDE':
     case 'CANDLE_PATTERN':
     case 'INDICATOR_DIVERGENCE':
+    case 'CHART_PATTERN':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
     case 'MARKET_REGIME':
       return readStringContextValue(ctx.marketRegime)
@@ -559,6 +560,8 @@ function resolveSeriesValueAt(
         return evaluateCandlePatternSeries(node, bars, offset + (node.payload.offsetBars ?? 0))
       case 'INDICATOR_DIVERGENCE':
         return evaluateIndicatorDivergence(node, bars)
+      case 'CHART_PATTERN':
+        return evaluateChartPattern(node, bars)
       default: {
         const firstDep = node.deps?.[0]
         return typeof firstDep === 'string'
@@ -836,6 +839,34 @@ function isWithinLevelSet(
   const lower = Math.min(...levelSet.levels)
   const upper = Math.max(...levelSet.levels)
   return currentPrice >= lower && currentPrice <= upper
+}
+
+function evaluateChartPattern(
+  node: CompiledExprNode,
+  bars: readonly Bar[],
+): number | null {
+  const pattern = readStringParam(node.payload.params, 'pattern')
+  const direction = readStringParam(node.payload.params, 'direction')
+  if (
+    (
+      pattern !== 'head_and_shoulders'
+      && pattern !== 'double_top'
+      && pattern !== 'double_bottom'
+      && pattern !== 'triangle'
+    )
+    || (direction !== 'bullish' && direction !== 'bearish')
+  ) {
+    return null
+  }
+
+  return chartPatternDetector([...bars], pattern, direction, {
+    pivotWindow: readNumericParam(node.payload.params, 'pivotWindow') ?? 2,
+    confirmationBars: readNumericParam(node.payload.params, 'confirmationBars') ?? 1,
+    tolerancePct: readNumericParam(node.payload.params, 'tolerancePct') ?? 0.04,
+    minBreakoutPct: readNumericParam(node.payload.params, 'minBreakoutPct') ?? 0,
+    minSwingPct: readNumericParam(node.payload.params, 'minSwingPct') ?? 0.02,
+    lookbackBars: readNumericParam(node.payload.params, 'lookbackBars') ?? 80,
+  })
 }
 
 function evaluateIndicatorDivergence(

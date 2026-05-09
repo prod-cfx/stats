@@ -427,6 +427,73 @@ describe('evaluateExprPool', () => {
     })
   })
 
+  describe('CHART_PATTERN series', () => {
+    function buildBars(closes: number[]) {
+      return closes.map((close, index) => ({
+        open: close,
+        high: close,
+        low: close,
+        close,
+        volume: 1,
+        timestamp: index + 1,
+      }))
+    }
+
+    function buildChartPatternExprPool(pattern: string, direction: string) {
+      return [
+        {
+          id: 'chart_pattern',
+          nodeType: 'series' as const,
+          sourceRef: 'chart_pattern',
+          payload: {
+            kind: 'CHART_PATTERN',
+            params: {
+              pattern,
+              direction,
+              pivotWindow: 1,
+              confirmationBars: 1,
+            },
+          },
+        },
+        {
+          id: 'const_one',
+          nodeType: 'series' as const,
+          sourceRef: 'const_one',
+          payload: { kind: 'CONST', value: 1 },
+        },
+        {
+          id: 'chart_pattern_predicate',
+          nodeType: 'predicate' as const,
+          sourceRef: 'chart_pattern_predicate',
+          deps: ['chart_pattern', 'const_one'],
+          payload: { kind: 'EQ' },
+        },
+      ]
+    }
+
+    it('consumes CHART_PATTERN series as a numeric signal in EQ predicates', () => {
+      const values = evaluateExprPool(
+        { bars: buildBars([100, 112, 104, 124, 103, 111, 98]) },
+        buildChartPatternExprPool('head_and_shoulders', 'bearish'),
+        ['chart_pattern', 'const_one', 'chart_pattern_predicate'],
+      )
+
+      expect(values.chart_pattern).toBe(1)
+      expect(values.chart_pattern_predicate).toBe(true)
+    })
+
+    it('fails closed for unsupported intrinsic direction combinations', () => {
+      const values = evaluateExprPool(
+        { bars: buildBars([100, 112, 104, 113, 101]) },
+        buildChartPatternExprPool('double_top', 'bullish'),
+        ['chart_pattern', 'const_one', 'chart_pattern_predicate'],
+      )
+
+      expect(values.chart_pattern).toBe(0)
+      expect(values.chart_pattern_predicate).toBe(false)
+    })
+  })
+
   it('fails sequence predicates closed when runtime state is empty and no deps exist', () => {
     const exprPool: Array<{
       id: string

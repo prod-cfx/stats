@@ -1608,13 +1608,8 @@ export class CanonicalSpecV2IrCompilerService {
       case 'price.chart_pattern': {
         // P4-3: 白名单 4 patterns：head_and_shoulders / double_top / double_bottom / triangle
         // IR 通过 CHART_PATTERN 系列 + EQ predicate 封装图形形态信号。
-        // fail-closed：pattern / direction 非白名单值直接抛错，避免静默降级。
-        //
-        // ⚠️ runtime gap 公开标记（同 P4-1 / P4-2 模式）：当前 strategy-runtime / backtesting /
-        // compiled-runtime 全仓 0 个 CHART_PATTERN 系列 evaluator 实现，chartPatternDetector
-        // helper 同样 0 实现。该 atom codegen 路径已闭环，但 runtime 信号永远 fail-closed
-        // （series.evaluate undefined → predicate EQ 永不真）直到 follow-up issue #1062 落地。
-        // 设计取舍：维持 supported_executable 让后续 atom 共用同模式，避免 train 回退。
+        // fail-closed：pattern / direction 非白名单值直接抛错，runtime 由 shared compiled-runtime
+        // 的 chartPatternDetector 基于 priceHighsLows pivot helper 统一评估。
         const chPattern = typeof atom.params?.pattern === 'string'
           ? atom.params.pattern.trim().toLowerCase()
           : null
@@ -1631,6 +1626,11 @@ export class CanonicalSpecV2IrCompilerService {
           : null
         if (chDirection !== 'bullish' && chDirection !== 'bearish') {
           throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction`)
+        }
+        const chDirectionPatternConflict = (chPattern === 'double_top' && chDirection !== 'bearish')
+          || (chPattern === 'double_bottom' && chDirection !== 'bullish')
+        if (chDirectionPatternConflict) {
+          throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:direction_pattern_conflict`)
         }
         const chSeriesId = `chart_pattern_${chPattern}_${chDirection}_${context.timeframe}`
         if (!context.seriesMap.has(chSeriesId)) {
