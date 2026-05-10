@@ -54,6 +54,12 @@ export interface PublishedStrategyRuntimeContextInput {
     entryPrice?: number
     positionSide?: string
   } | null
+  /**
+   * Phase 5 S7 follow-up (#1058) — live signal 注入 LlmStrategyInstance.drawdownPct（0..100 浮点正数）；
+   * undefined 表"无可用数据" → evaluator 在 enforce 模式 fail-closed double block。
+   * 公式与 backtest adapter 同源（与 account-strategy-view.service.ts:1970 一致）。
+   */
+  accountDrawdownPct?: number
 }
 
 export class SignalGenerationDecisionStage {
@@ -99,6 +105,9 @@ export class SignalGenerationDecisionStage {
             currentPrice: referencePrice || 0,
             timestamp: Date.now(),
             params: this.buildEffectiveParams(strategy, instance),
+            // Phase 5 S7 follow-up (#1058) — codegen 测试入口显式不注入 drawdown，
+            // 与 live signal fast path 区分（critic R-1 防 codegen 闭包漂移）
+            accountDrawdownPct: undefined,
           })
 
           let result = await engine.execute(compiledScript.executableCode, {
@@ -445,7 +454,15 @@ export class SignalGenerationDecisionStage {
   buildPublishedStrategyContext(input: PublishedStrategyRuntimeContextInput): ReturnType<typeof buildStrategyContext> & {
     __compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
     semanticRuntimeState?: SemanticRuntimeState
+    accountDrawdownPct?: number
   } {
+    // Phase 5 S7 follow-up (#1058) — accountDrawdownPct 仅注入有限正数；NaN / Infinity / 负值
+    // 一律视为缺失（evaluator 内 Number.isFinite 兜底，但此处也防止上游污染）
+    const drawdownPctValue = input.accountDrawdownPct
+    const drawdownPctSafe = typeof drawdownPctValue === 'number' && Number.isFinite(drawdownPctValue)
+      ? drawdownPctValue
+      : undefined
+
     return {
       ...buildStrategyContext({
         bars: input.bars,
@@ -459,6 +476,7 @@ export class SignalGenerationDecisionStage {
       ...(input.compiledDecisionState ? { __compiledDecisionState: input.compiledDecisionState } : {}),
       ...(input.semanticRuntimeState ? { semanticRuntimeState: input.semanticRuntimeState } : {}),
       ...(input.position ? { position: input.position } : {}),
+      ...(drawdownPctSafe !== undefined ? { accountDrawdownPct: drawdownPctSafe } : {}),
     }
   }
 

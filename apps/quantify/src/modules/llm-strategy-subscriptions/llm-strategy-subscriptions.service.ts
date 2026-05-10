@@ -312,6 +312,10 @@ export class LlmStrategySubscriptionsService {
     await this.repo.update(subscriptionId, updatePayload)
     this.logger.log(`用户 ${userId} 更新 LLM 订阅 ${subscriptionId}`)
 
+    // 注：caller R3 决策 A_new 后 drawdownPct 已迁到 StrategyInstance（per-user single tenant），
+    // 不再依赖 UserLlmStrategySubscription 触发聚合；写入侧由 AccountsService.applyLedgerDelta
+    // 的 afterCommit 钩子负责重算受影响的 StrategyInstance（issue #1058）
+
     const detail = await this.repo.findByIdWithDetails(subscriptionId)
     if (!detail) {
       throw new LlmSubscriptionNotFoundException({ subscriptionId })

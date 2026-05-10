@@ -41,6 +41,7 @@ describe('signalExecutorService auto stop', () => {
       { markStage: jest.fn(), markExecuted: jest.fn(), markFailed: jest.fn(), markSkipped: jest.fn() } as any,
       { recordExecutionSummary: jest.fn() } as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     ;(service as any).processAccount = jest.fn().mockResolvedValue('failed')

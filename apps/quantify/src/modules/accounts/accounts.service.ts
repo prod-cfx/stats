@@ -11,6 +11,10 @@ import { ErrorCode, LedgerEntryType, PositionStatus } from '@ai/shared'
 import { Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { LlmStrategyInstanceDrawdownAggregatorService } from '@/modules/llm-strategies/services/llm-strategy-instance-drawdown-aggregator.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { InsufficientBalanceException } from './exceptions/insufficient-balance.exception'
 import { LedgerEntryConflictException } from './exceptions/ledger-entry-conflict.exception'
@@ -48,7 +52,11 @@ interface ApplyLedgerDeltaParams {
 
 @Injectable()
 export class AccountsService {
-  constructor(private readonly accountsRepository: AccountsRepository) {}
+  constructor(
+    private readonly accountsRepository: AccountsRepository,
+    private readonly txEvents: TransactionEventsService,
+    private readonly drawdownAggregator: LlmStrategyInstanceDrawdownAggregatorService,
+  ) {}
 
   async createUserStrategyAccount(userId: string, dto: CreateStrategyAccountDto) {
     const initialBalance = new Decimal(dto.initialBalance)
@@ -358,6 +366,12 @@ export class AccountsService {
       })
     }
 
+    // Phase 5 S7 follow-up (#1058): 维护 peakEquity 用于 live drawdown 上报。
+    // M1 边界：equity ≤ 0 时跳过（避免污染下游 drawdown 计算的分母）；条件 update 由 repository 内置实现。
+    if (updatedAccount.equity.gt(0)) {
+      await this.accountsRepository.updatePeakEquityIfHigher(accountId, updatedAccount.equity)
+    }
+
     await this.accountsRepository.createLedger({
       userStrategyAccountId: accountId,
       positionId,
@@ -367,6 +381,12 @@ export class AccountsService {
       referenceId,
       description,
       occurredAt: occurredAt ?? new Date(),
+    })
+
+    // Phase 5 S7 follow-up (#1058): 事务 commit 后异步触发 LlmStrategyInstance.drawdownPct 重算。
+    // 调用方需走 withAfterCommit / @TransactionalWithAfterCommit 包装才能 drain（事务规范 #465）。
+    this.txEvents.afterCommit(async () => {
+      await this.drawdownAggregator.recomputeForAccount(accountId)
     })
 
     return updatedAccount

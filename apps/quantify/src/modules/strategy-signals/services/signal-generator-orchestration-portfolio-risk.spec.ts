@@ -63,6 +63,18 @@ describe('signalGeneratorService portfolio risk gate (live-signal fast path)', (
       expect(state.blockEntryLong).toBe(true)
       expect(state.blockEntryShort).toBe(true)
     })
+
+    it('#1058 Mn3: drawdownPct=NaN, enforce → fail-closed double block (防退化)', () => {
+      const state = evaluateOrchestrationPortfolioRisks(risks, { drawdownPct: Number.NaN })
+      expect(state.blockEntryLong).toBe(true)
+      expect(state.blockEntryShort).toBe(true)
+    })
+
+    it('#1058 R1: drawdownPct=Infinity, enforce → fail-closed double block', () => {
+      const state = evaluateOrchestrationPortfolioRisks(risks, { drawdownPct: Number.POSITIVE_INFINITY })
+      expect(state.blockEntryLong).toBe(true)
+      expect(state.blockEntryShort).toBe(true)
+    })
   })
 
   describe('source wiring (signal-generator.service.ts)', () => {
@@ -83,6 +95,13 @@ describe('signalGeneratorService portfolio risk gate (live-signal fast path)', (
 
     it('runDecisionPrograms 接收 portfolioRiskState 作为第 7 参数', () => {
       expect(src).toMatch(/runDecisionPrograms\([\s\S]*?orchestrationGateState[\s\S]*?portfolioRiskState[\s\S]*?\)/)
+    })
+
+    it('#1058 R3 A_new: buildPublishedStrategyContext 注入 instance.drawdownPct 直接读（无 cast）', () => {
+      // 验证 consumer 端真实读取 StrategyInstance.drawdownPct（caller R3 决策 A_new）；
+      // 不允许 `(instance as { drawdownPct?... }).drawdownPct` 类型断言绕过
+      expect(src).toMatch(/accountDrawdownPct:\s*instance\.drawdownPct\s*\?\?\s*undefined/)
+      expect(src).not.toMatch(/instance as \{\s*drawdownPct/)
     })
   })
 })

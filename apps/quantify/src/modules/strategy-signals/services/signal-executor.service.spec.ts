@@ -68,6 +68,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       txHost as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
       positionAdmissionService,
     )
     return service
@@ -108,7 +109,7 @@ describe('signalExecutorService', () => {
   })
 
   it('delegates signal-created events to the execution pipeline when enabled', async () => {
-    const withTransaction = jest.fn(async (fn: () => Promise<void>) => fn())
+    const withAfterCommit = jest.fn(async (fn: () => Promise<void>) => fn())
     const config = {
       ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
       execution: {
@@ -118,14 +119,16 @@ describe('signalExecutorService', () => {
     }
     const service = createService()
     ;(service as any).configService.get.mockReturnValue(config)
-    ;(service as any).txHost.withTransaction = withTransaction
+    // Phase 5 S7 follow-up (#1058): handler 现走 txEvents.withAfterCommit（非 HTTP 路径必须显式包装），
+    // 内部由 withAfterCommit 自动开启事务并 drain afterCommit 任务
+    ;(service as any).txEvents.withAfterCommit = withAfterCommit
     const executeSignalForSubscribedUsers = jest
       .spyOn(service as any, 'executeSignalForSubscribedUsers')
       .mockResolvedValue(undefined)
 
     await service.handleSignalCreated({ signalId: 'signal-1' } as any)
 
-    expect(withTransaction).toHaveBeenCalled()
+    expect(withAfterCommit).toHaveBeenCalled()
     expect(executeSignalForSubscribedUsers).toHaveBeenCalledWith('signal-1', config)
   })
 
@@ -1369,6 +1372,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -1465,6 +1469,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -1564,6 +1569,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -1663,6 +1669,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const reservedQuote = new Prisma.Decimal(10)
@@ -1768,6 +1775,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const filledOrder = {
@@ -1887,6 +1895,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
@@ -1947,6 +1956,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const filledOrder = {
@@ -2078,6 +2088,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       telemetry as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
@@ -2147,6 +2158,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       {} as any,
       { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     jest.spyOn(service as any, 'lockAccount').mockResolvedValue({
@@ -2221,6 +2233,7 @@ describe('signalExecutorService', () => {
       executionRepository as any,
       {} as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const filledOrder = {
@@ -2316,6 +2329,7 @@ describe('signalExecutorService', () => {
       {} as any,
       {} as any,
       {} as any,
+      { withAfterCommit: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
     )
 
     const fee = (service as any).extractOrderFee({

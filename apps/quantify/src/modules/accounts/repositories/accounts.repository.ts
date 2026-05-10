@@ -130,6 +130,21 @@ export class AccountsRepository {
     return this.txHost.tx.userStrategyAccount.update({ where: { id }, data })
   }
 
+  /**
+   * 条件 update peakEquity：仅当 newEquity > 0 且 (peakEquity IS NULL 或 peakEquity < newEquity) 时写入。
+   * 调用方需保证 newEquity 是 finite 数；equity ≤ 0 由调用方在 service 层短路（见 #1058 plan §M1 边界）。
+   * Issue: #1058
+   */
+  async updatePeakEquityIfHigher(id: string, newEquity: Prisma.Decimal): Promise<void> {
+    await this.txHost.tx.userStrategyAccount.updateMany({
+      where: {
+        id,
+        OR: [{ peakEquity: null }, { peakEquity: { lt: newEquity } }],
+      },
+      data: { peakEquity: newEquity },
+    })
+  }
+
   async createLedger(data: Prisma.PnlLedgerUncheckedCreateInput) {
     return this.txHost.tx.pnlLedger.create({ data })
   }

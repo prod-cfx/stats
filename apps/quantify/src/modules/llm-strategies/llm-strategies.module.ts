@@ -14,8 +14,10 @@ import {
   LlmStrategyInstancesRepository,
   LlmStrategyRunsRepository,
 } from './repositories'
+import { LlmStrategyInstanceDrawdownRepository } from './repositories/llm-strategy-instance-drawdown.repository'
 import { LiveLlmStrategyInstancesService } from './services/live-llm-strategy-instances.service'
 import { LlmStrategiesService } from './services/llm-strategies.service'
+import { LlmStrategyInstanceDrawdownAggregatorService } from './services/llm-strategy-instance-drawdown-aggregator.service'
 import { LlmStrategyInstanceSchedulerService } from './services/llm-strategy-instance-scheduler.service'
 import { LlmStrategyInstancesService } from './services/llm-strategy-instances.service'
 import { LlmStrategyRunsService } from './services/llm-strategy-runs.service'
@@ -32,11 +34,13 @@ import { LlmStrategyRunsService } from './services/llm-strategy-runs.service'
     LlmStrategyInstancesRepository,
     LlmStrategyRunsRepository,
     LlmSubscriptionsRepository,
+    LlmStrategyInstanceDrawdownRepository,
     LlmStrategiesService,
     LlmStrategyInstancesService,
     LlmStrategyInstanceSchedulerService,
     LlmStrategyRunsService,
     LiveLlmStrategyInstancesService,
+    LlmStrategyInstanceDrawdownAggregatorService,
     LlmOrchestratedEngineV3,
     LlmToolsService,
   ],
@@ -45,6 +49,7 @@ import { LlmStrategyRunsService } from './services/llm-strategy-runs.service'
     LlmStrategyInstancesService,
     LlmStrategyInstanceSchedulerService,
     LlmStrategyRunsService,
+    LlmStrategyInstanceDrawdownAggregatorService,
     LlmOrchestratedEngineV3,
     LlmToolsService,
   ],

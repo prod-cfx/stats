@@ -42,6 +42,8 @@ import { normalizeLedgerSymbol } from '@/modules/trading/core/symbol-normalizer'
 import { TradingExecutionService } from '@/modules/trading-execution/services/trading-execution.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingService } from '@/modules/trading/trading.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { TransactionEventsService } from '@/common/services/transaction-events.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { StrategySignalEvents } from '../constants/strategy-signal.constants'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -101,6 +103,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
     private readonly executionRepository: SignalExecutionRepository,
     private readonly telemetry: SignalTelemetryService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    private readonly txEvents: TransactionEventsService,
     private readonly positionAdmissionService: PositionAdmissionService = new PositionAdmissionService(),
   ) {}
 
@@ -137,7 +140,12 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       return
     }
 
-    await this.txHost.withTransaction(async () => {
+    // Phase 5 S7 follow-up (#1058) — 非 HTTP 路径必须用 withAfterCommit 包装：
+    // (1) 自动建立 CLS 上下文（OnEvent 脱离请求作用域）
+    // (2) 自动开 tx
+    // (3) 在 tx commit 后 drain afterCommit 任务（此处 = drawdown aggregator 重算）
+    // 替换原裸 txHost.withTransaction（事务规范 #465 §"非 HTTP 场景"）
+    await this.txEvents.withAfterCommit(async () => {
       await this.executeSignalForSubscribedUsers(event.signalId, config)
     })
   }
@@ -182,7 +190,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
     for (const signal of signals) {
       try {
-        await this.executeSignalForSubscribedUsers(signal.id, config)
+        // Phase 5 S7 follow-up (#1058) — recovery cron 与 OnEvent 路径同样需 withAfterCommit
+        // 包装才能 drain drawdown aggregator 重算（事务规范 #465 §"非 HTTP 场景"）
+        await this.txEvents.withAfterCommit(async () => {
+          await this.executeSignalForSubscribedUsers(signal.id, config)
+        })
       }
       catch (error) {
         this.logger.error(

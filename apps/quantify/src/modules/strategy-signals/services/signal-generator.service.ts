@@ -877,6 +877,11 @@ export class SignalGeneratorService {
         compiledDecisionState,
         semanticRuntimeState,
         position,
+        // Phase 5 S7 follow-up (#1058) caller R3 决策 A_new — 注入 StrategyInstance.drawdownPct 到 ctx；
+        // NULL → undefined → evaluator 在 enforce 模式 fail-closed double block。
+        // instance: StrategyInstanceWithTemplate (Prisma.StrategyInstanceGetPayload<{include:{strategyTemplate:true}}>)
+        // 默认包含所有 scalar 字段（含本 PR 新增的 drawdownPct），无需类型断言
+        accountDrawdownPct: instance.drawdownPct ?? undefined,
       })
 
       const compiledAdapter = this.buildCompiledRuntimeAdapter(strategy.script, instance.id)

@@ -98,6 +98,8 @@ model UserStrategyAccount {
   equity             Decimal   @default(0) @db.Decimal(48, 18)
   totalRealizedPnl   Decimal   @default(0) @map("total_realized_pnl") @db.Decimal(48, 18)
   totalUnrealizedPnl Decimal   @default(0) @map("total_unrealized_pnl") @db.Decimal(48, 18)
+  /// 历史最高 equity 快照；NULL 表示尚未触发过 settlement 维护；equity > 0 才更新
+  peakEquity         Decimal?  @map("peak_equity") @db.Decimal(48, 18)
   lastEquityRecalcAt DateTime? @map("last_equity_recalc_at")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @default(now()) @updatedAt @map("updated_at")
@@ -272,6 +274,12 @@ model StrategyInstance {
   createdBy                 String?                @map("created_by")
   updatedBy                 String?                @map("updated_by")
   metadata                  Json?
+  /// Phase 5 S7 follow-up (#1058) — 该 instance 当前的 drawdownPct（per-user single tenant；公式与 backtest adapter / account-strategy-view.service.ts:1970 同源）；NULL 表无可用数据 → fail-closed
+  drawdownPct               Float?                 @map("drawdown_pct")
+  /// Phase 5 S7 follow-up (#1058) — 对应 UserStrategyAccount 的 peakEquity 快照（仅哨兵观察 / debug；consumer 不读）
+  peakEquity                Decimal?               @map("peak_equity") @db.Decimal(48, 18)
+  /// Phase 5 S7 follow-up (#1058) — drawdownPct 最近一次 aggregator 写入时间（哨兵观察）
+  lastDrawdownRecalcAt      DateTime?              @map("last_drawdown_recalc_at")
   createdAt                 DateTime               @default(now()) @map("created_at")
   updatedAt                 DateTime               @default(now()) @updatedAt @map("updated_at")
 
