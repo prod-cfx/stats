@@ -628,9 +628,8 @@ export class CanonicalSpecBuilderService {
     return result
   }
 
-  // Phase 5 S2 (#1104): scope.symbol substrate
-  // Phase 5 S2 (#1104) + S3 (#1109): scope union substrate
-  // 输出 status='locked' 的 scope.symbol + scope.timeframe；其他 status 不输出（open→locked 流转语义）
+  // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110): scope union substrate（symbol + timeframe + dataSource）
+  // 输出 status='locked' scope；按 node.id 字典序，保证 byte-equal（含旧 v1 单/多 symbol scope 字节兼容）
   private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
     const nodes = state.orchestration?.nodes
     if (!nodes || nodes.length === 0) {
@@ -639,7 +638,8 @@ export class CanonicalSpecBuilderService {
     const scopes: CanonicalOrchestrationScope[] = []
     for (const node of nodes) {
       if (node.kind !== 'scope' || node.status !== 'locked') continue
-      // scope.symbol 分支
+
+      // S2: scope.symbol
       if (node.key === 'scope.symbol' && node.symbolScopeKind === 'symbol') {
         const symbols = Array.isArray(node.symbols) ? node.symbols.filter((s): s is string => typeof s === 'string') : []
         if (symbols.length === 0) continue
@@ -654,7 +654,8 @@ export class CanonicalSpecBuilderService {
         })
         continue
       }
-      // scope.timeframe 分支（Phase 5 S3 #1109）
+
+      // S3: scope.timeframe
       if (node.key === 'scope.timeframe' && node.timeframeScopeKind === 'timeframe') {
         const primary = node.primaryTimeframe
         const required = Array.isArray(node.requiredTimeframes)
@@ -673,9 +674,33 @@ export class CanonicalSpecBuilderService {
           requiredTimeframes: sortedRequired,
           alignmentPolicy,
         })
+        continue
+      }
+
+      // S9: scope.dataSource — readiness 已保证 role/feedId/schemaRef 必填合法
+      if (node.key === 'scope.dataSource' && node.dataSourceScopeKind === 'dataSource') {
+        const role = node.dataSourceRole
+        const feedIdRaw = node.dataSourceFeedId
+        const schemaRef = node.dataSourceSchemaRef
+        if (
+          (role !== 'primary' && role !== 'confirmation' && role !== 'event')
+          || typeof feedIdRaw !== 'string'
+          || (schemaRef !== 'ohlcv' && schemaRef !== 'orderbook' && schemaRef !== 'liquidation' && schemaRef !== 'webhook_event')
+        ) {
+          continue
+        }
+        const feedId = feedIdRaw.trim()
+        if (feedId === '') continue
+        scopes.push({
+          id: node.id,
+          scopeKind: 'dataSource',
+          role,
+          feedId,
+          schemaRef,
+        })
       }
     }
-    return scopes
+    return scopes.sort((a, b) => a.id.localeCompare(b.id))
   }
 
   // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 (primary ∪ required) union dedup

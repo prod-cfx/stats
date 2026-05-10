@@ -4,6 +4,7 @@ import type {
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
   SemanticContextFrame,
+  SemanticDataSourceScopeFrame,
   SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
@@ -33,6 +34,7 @@ type FrameDraft =
   | SymbolScopeFrameDraft
   | LegScopeFrameDraft
   | TimeframeScopeFrameDraft
+  | DataSourceScopeFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -48,6 +50,7 @@ type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame
 type SymbolScopeFrameDraft = Omit<SemanticSymbolScopeFrame, 'id' | 'confidence'>
 type LegScopeFrameDraft = Omit<SemanticLegScopeFrame, 'id' | 'confidence'>
 type TimeframeScopeFrameDraft = Omit<SemanticTimeframeScopeFrame, 'id' | 'confidence'>
+type DataSourceScopeFrameDraft = Omit<SemanticDataSourceScopeFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -60,6 +63,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseSymbolScope(text),
       ...this.parseLegScope(text),
       ...this.parseTimeframeScope(text),
+      ...this.parseDataSourceScope(text),
       ...this.parseEmaGates(text),
       ...this.parseBoundaryTouches(text),
       ...this.parseActions(text),
@@ -658,6 +662,89 @@ export class NaturalLanguageGatewayService {
       alignmentPolicy,
       evidenceText: text.slice(0, Math.min(text.length, 80)),
     }]
+  }
+
+  /**
+   * Phase 5 S9 (#1110): scope.dataSource utterance parser
+   *
+   * 双门槛（critic round 1 C3 修复 — 与 S2 parseSymbolScope 互斥/共存声明）:
+   *   1) 触发短语精准多 OR
+   *   2) feedId 至少 1 个（venue 路径 OR webhook 命名空间，**全小写**）
+   *
+   * 说明：
+   *   - venue 路径全小写正则与 S2 大写 `\b([A-Z]{2,5})USDT\b` 互斥不撞
+   *   - utterance 同时含 S2 + S9 触发短语 + symbols + feedId 时，两 frame 共存合法
+   *   - role/schemaRef 任一推断失败 → 不写 frame（让 readiness fail-closed 提示用户补全）
+   */
+  private parseDataSourceScope(text: string): DataSourceScopeFrameDraft[] {
+    // (1) 触发短语精准多 OR
+    const triggerPattern = /(数据源|行情源|主源|确认源|事件源|primary feed|confirmation feed|event source|external signal|webhook|外部信号|主行情|辅源|次源)/iu
+    if (!triggerPattern.test(text)) return []
+
+    // (2) feedId 提取（双轨）
+    const venueRe = /\b(binance|okx|bybit|coinbase|hyperliquid)\.(spot|perp|futures)\.[a-z0-9]+\b/giu
+    const webhookRe = /\bwebhook\.[a-z0-9][a-z0-9_.-]*\b/giu
+
+    const feedIdSet = new Set<string>()
+    for (const m of text.matchAll(venueRe)) feedIdSet.add(m[0].toLowerCase())
+    for (const m of text.matchAll(webhookRe)) feedIdSet.add(m[0].toLowerCase())
+    if (feedIdSet.size === 0) return []  // critic m4：trigger 命中但 feedId 提取空 → 不写 frame
+
+    // (3) clause-level 拆分：以分号/逗号/句号切分，逐 clause 决定 role + feedId 配对
+    const clauses = text.split(/[；;。，,]/u).map(c => c.trim()).filter(c => c.length > 0)
+    const drafts: DataSourceScopeFrameDraft[] = []
+    const usedFeedIds = new Set<string>()
+
+    for (const clause of clauses) {
+      const role = this.detectDataSourceRole(clause)
+      if (!role) continue
+      // 在 clause 内匹配 feedId
+      let feedId = ''
+      for (const m of clause.matchAll(venueRe)) {
+        const candidate = m[0].toLowerCase()
+        if (!usedFeedIds.has(candidate)) {
+          feedId = candidate
+          break
+        }
+      }
+      if (feedId === '') {
+        for (const m of clause.matchAll(webhookRe)) {
+          const candidate = m[0].toLowerCase()
+          if (!usedFeedIds.has(candidate)) {
+            feedId = candidate
+            break
+          }
+        }
+      }
+      if (feedId === '') continue
+      const schemaRef = this.detectDataSourceSchemaRef(clause, role)
+      if (!schemaRef) continue
+      usedFeedIds.add(feedId)
+      drafts.push({
+        kind: 'data_source_scope',
+        role,
+        feedId,
+        schemaRef,
+        evidenceText: clause.slice(0, Math.min(clause.length, 80)),
+      })
+    }
+
+    return drafts
+  }
+
+  private detectDataSourceRole(text: string): SemanticDataSourceScopeFrame['role'] | null {
+    if (/(主行情|主源|primary)/iu.test(text)) return 'primary'
+    if (/(确认|confirmation|辅源|次源|辅|次)/iu.test(text)) return 'confirmation'
+    if (/(事件源|event source|webhook|外部信号|事件)/iu.test(text)) return 'event'
+    return null
+  }
+
+  private detectDataSourceSchemaRef(text: string, role: SemanticDataSourceScopeFrame['role']): SemanticDataSourceScopeFrame['schemaRef'] | null {
+    if (/(K线|OHLC|ohlcv)/iu.test(text)) return 'ohlcv'
+    if (/(订单簿|orderbook)/iu.test(text)) return 'orderbook'
+    if (/(清算|liquidation)/iu.test(text)) return 'liquidation'
+    if (role === 'event') return 'webhook_event'
+    return null
   }
 
   private parseRegimeGate(text: string): RegimeGateFrameDraft[] {

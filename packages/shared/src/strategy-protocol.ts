@@ -48,6 +48,18 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
    * 字段事实：lastClosedBarTs 是毫秒（与 packages/shared Bar.timestamp 同源）。
    */
   timeframeBarStatus?: Record<string, { lastClosedBarTs: number; lastClosedBarIndex: number }>
+  /**
+   * Phase 5 S9 (#1110): 多 scope.dataSource 策略 caller 注入的 feed 状态映射
+   *   key   = feedId（与 spec.orchestration.scopes[i].feedId 一一对应）
+   *   value = { schema, permissionGranted, hasData }
+   * 0 个 scope.dataSource 策略不读；≥1 时缺该字段触发 fail-closed.feeds_unprovided
+   * 注入路径由 follow-up issue 跟踪
+   */
+  dataSourceFeeds?: Readonly<Record<string, {
+    schema: 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
+    permissionGranted: boolean
+    hasData: boolean
+  }>>
   timeframe?: string
   currentPrice?: number
   marketRegime?: string

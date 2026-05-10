@@ -1,4 +1,8 @@
 import type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
+import type {
+  SemanticOrchestrationDataSourceRole,
+  SemanticOrchestrationDataSourceSchema,
+} from './semantic-state'
 
 export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 
@@ -210,6 +214,8 @@ export interface RuleBlock {
     legScopeRef?: string
     // Phase 5 S3 (#1109): 多周期策略中显式声明该 rule 归属哪个 scope.timeframe id
     timeframeScopeRef?: string
+    // Phase 5 S9 (#1110): 显式声明该 rule 归属哪个 scope.dataSource id
+    dataSourceScopeRef?: string
   } & PositionLifecycleActionMetadata
 }
 
@@ -384,9 +390,19 @@ export interface IrOrchestrationTimeframeScope {
   alignmentPolicy: 'strict' | 'tolerant'
 }
 
+// Phase 5 S9 (#1110): scope.dataSource substrate IR
+export interface IrOrchestrationDataSourceScope {
+  id: string
+  scopeKind: 'dataSource'
+  role: SemanticOrchestrationDataSourceRole
+  feedId: string
+  schemaRef: SemanticOrchestrationDataSourceSchema
+}
+
 export type IrOrchestrationScope =
   | IrOrchestrationSymbolScope
   | IrOrchestrationTimeframeScope
+  | IrOrchestrationDataSourceScope
 
 export interface RiskGuard {
   id: string

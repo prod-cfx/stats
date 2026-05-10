@@ -138,23 +138,25 @@ export class SemanticContractReadinessService {
     // Phase 5 S11 (#1112): 多 leg 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
     //   leg binding 第二参 baseNextState 用作 pre-binding 原始 status：避免被 symbol binding 链式降级后误跳过判断
     //   （两条 binding 各自独立 fail-closed，同一 owner 双 ref 缺失会同时落两条 missing_binding open slot）
-    const { state: nextState, hasBlockingSlots: legBindingHasBlockingSlots } =
+    const { state: afterLegBinding, hasBlockingSlots: legBindingHasBlockingSlots } =
       applyLegScopeBindingFailClosed(afterSymbolBinding, baseNextState)
-    const symbolBound = applySymbolScopeBindingFailClosed(baseNextState)
     // Phase 5 S3 (#1109): timeframe scope binding fail-closed（≥1 scope.timeframe locked 即强制）
-    const timeframeBound = applyTimeframeScopeBindingFailClosed(symbolBound.state)
+    const timeframeBound = applyTimeframeScopeBindingFailClosed(afterLegBinding)
+    // Phase 5 S9 (#1110): 多 dataSource scope 策略 binding fail-closed（dataSourceScopeRef 声明且 ref 不在 supported 集合时降为 open + missing_binding slot）
+    const { state: nextState, hasBlockingSlots: dataSourceBindingHasBlockingSlots } =
+      applyDataSourceScopeBindingFailClosed(timeframeBound.state)
 
     return {
-      state: timeframeBound.state,
+      state: nextState,
       ready: unsupportedOrUnknownOwnerKeys.size === 0
         && missingRequirements.length === 0
         && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
-        && !hasBlockingOwnerOpenSlots(timeframeBound.state)
+        && !hasBlockingOwnerOpenSlots(nextState)
         && !orchestrationResult.hasBlockingSlots
         && !symbolBindingHasBlockingSlots
-        && !legBindingHasBlockingSlots,
-        && !symbolBound.hasBlockingSlots
-        && !timeframeBound.hasBlockingSlots,
+        && !legBindingHasBlockingSlots
+        && !timeframeBound.hasBlockingSlots
+        && !dataSourceBindingHasBlockingSlots,
       missingRequirements,
     }
   }
@@ -381,11 +383,12 @@ function normalizePhase0Orchestration(
       ? applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass1)
       : node,
   )
-  const finalNodes = afterLegPass2.map((node) =>
-    node.kind === 'scope'
-      ? node
-      : applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass2),
-  )
+  const finalNodes = afterLegPass2.map((node) => {
+    // scope.symbol 与 scope.leg 已在前 passes 收敛，跳过；
+    // 其它（含 scope.timeframe、scope.dataSource、未支持 scope kinds、gate/program/portfolioRisk）走最后 pass。
+    if (isSymbolScopeNode(node) || isLegScopeNode(node)) return node
+    return applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass2)
+  })
 
   let changed = false
   let hasBlockingSlots = false
@@ -435,7 +438,14 @@ function applyOrchestrationReadinessForNode(
   }
 
   if (isSupportedLegScope(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
   if (isSupportedTimeframeScope(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
+  if (isSupportedDataSourceScope(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry, siblingNodes)
   }
 
@@ -580,6 +590,65 @@ function isSupportedLegScope(
   }
 
   const contract = registry.getContractByKey('scope.leg')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * Phase 5 S9 (#1110): scope.dataSource 节点 9 重 fail-closed:
+ *   1) kind === 'scope'
+ *   2) key === 'scope.dataSource'
+ *   3) dataSourceScopeKind === 'dataSource'
+ *   4) dataSourceRole ∈ {primary, confirmation, event}
+ *   5) dataSourceFeedId trim 非空 + 长度 ≤ 64 + 匹配 ^[a-z0-9][a-z0-9_.-]{0,63}$
+ *   6) dataSourceSchemaRef ∈ {ohlcv, orderbook, liquidation, webhook_event}（所有 role 必填）
+ *   7) cross-node：feedId 与其它 supported scope.dataSource 不重复 + role='primary' 全局唯一
+ *   8) registry 已注册 scope.dataSource contract
+ *   9) version-gate：strategyVersion 存在 + atom 对该策略可执行
+ */
+function isSupportedDataSourceScope(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (node.kind !== 'scope') return false
+  if (node.key !== 'scope.dataSource') return false
+  if (node.dataSourceScopeKind !== 'dataSource') return false
+
+  const role = node.dataSourceRole
+  if (role !== 'primary' && role !== 'confirmation' && role !== 'event') return false
+
+  const FEED_ID_FORMAT = /^[a-z0-9][a-z0-9_.-]{0,63}$/u
+  const feedIdRaw = node.dataSourceFeedId
+  if (typeof feedIdRaw !== 'string') return false
+  const feedId = feedIdRaw.trim()
+  if (feedId === '' || feedId.length > 64 || !FEED_ID_FORMAT.test(feedId)) return false
+
+  const schemaRef = node.dataSourceSchemaRef
+  if (schemaRef !== 'ohlcv' && schemaRef !== 'orderbook' && schemaRef !== 'liquidation' && schemaRef !== 'webhook_event') return false
+
+  // (7) 与其它 status='locked' 且 key='scope.dataSource' 节点对比 — feedId 不重复 + role='primary' 全局唯一
+  const otherLockedScopes = siblingNodes.filter(
+    (other) =>
+      other.id !== node.id
+      && other.kind === 'scope'
+      && other.key === 'scope.dataSource'
+      && other.status === 'locked',
+  )
+  for (const other of otherLockedScopes) {
+    if (typeof other.dataSourceFeedId === 'string' && other.dataSourceFeedId.trim() === feedId) {
+      return false
+    }
+  }
+  if (role === 'primary') {
+    if (otherLockedScopes.some((other) => other.dataSourceRole === 'primary')) {
+      return false
+    }
+  }
+
+  const contract = registry.getContractByKey('scope.dataSource')
   if (!contract) return false
   if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)
@@ -1230,27 +1299,14 @@ function applySymbolScopeBindingFailClosed(
 }
 
 /**
- * Phase 5 S11 (#1112): 多 scope.leg 策略对每个 trigger/action/risk/positionConstraint 节点
- * 进行 binding fail-closed 校验（与 S2 applySymbolScopeBindingFailClosed 平行）：
- *   - supportedLegScopeIds.size < 2：兜底，不触发检查（单/0 leg 旧策略行为不变）
- *   - supportedLegScopeIds.size >= 2 时：每个 status='locked' 的 owner 节点必须有
- *     legScopeRef trim 后非空且 ∈ supportedLegScopeIds，否则 status 降为 'open' +
- *     加 orchestration.scope.leg.missing_binding open slot
+ * Phase 5 S11 (#1112): 多 scope.leg 策略 binding fail-closed
+ *   - supportedLegScopeIds.size < 2：旧策略零侵入
+ *   - size >= 2 时：每个 status='locked' 的 owner 节点必须有 legScopeRef ∈ supported；否则降为 'open' + missing_binding slot
+ *   - preBindingState 用于在 symbol binding 链式降级后仍保留 owner 原始 status，避免误跳过
  */
 function applyLegScopeBindingFailClosed(
   state: SemanticState,
   preBindingState?: SemanticState,
- * Phase 5 S3 (#1109): timeframe scope binding fail-closed
- *
- * 与 S2 ≥2 阈值不同——S3 ≥1 supported scope.timeframe locked 节点即强制 owner ref。
- * 理由：timeframe alignment 是 per-program runtime 校验，必须有显式 binding；不允许 ambient 兜底。
- * 同 owner 同时缺 symbolScopeRef + timeframeScopeRef 时，两个 missing_binding slot 各自单独追加（不合并）。
- *
- * open→locked 流转语义：scope 节点 status='open' 期间 supportedScopeIds 集合不含该 scope，
- * 不强制 owner ref；status 改 'locked' 后下一轮 normalize 即 cascading 检查。
- */
-function applyTimeframeScopeBindingFailClosed(
-  state: SemanticState,
 ): { state: SemanticState; hasBlockingSlots: boolean } {
   const orchestration = state.orchestration
   if (!orchestration) {
@@ -1270,8 +1326,6 @@ function applyTimeframeScopeBindingFailClosed(
     return { state, hasBlockingSlots: false }
   }
 
-  // Phase 5 S11 (#1112): leg binding 与 symbol binding 独立判断
-  //   依据 preBindingState 的 owner 原始 status（避免被 symbol binding 链式降级后跳过判断）
   const triggerStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const actionStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
   const riskStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
@@ -1282,6 +1336,78 @@ function applyTimeframeScopeBindingFailClosed(
   for (const r of sourceState.risk) riskStatusBeforeBinding.set(r.id, r.status)
   for (const c of sourceState.position?.constraints ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
 
+  let hasBlockingSlots = false
+
+  function buildLegMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
+    return {
+      slotKey: 'orchestration.scope.leg.missing_binding',
+      fieldPath: `${ownerLabel}[${ownerId}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个策略腿`,
+      affectsExecution: true,
+    }
+  }
+
+  function isMissingLegRef(ref: unknown): boolean {
+    if (typeof ref !== 'string') return true
+    const trimmed = ref.trim()
+    if (trimmed === '') return true
+    return !supportedLegScopeIds.has(trimmed)
+  }
+
+  const triggers = state.triggers.map((trigger) => {
+    const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
+    if (preStatus !== 'locked' || !isMissingLegRef(trigger.legScopeRef)) return trigger
+    hasBlockingSlots = true
+    const slot = buildLegMissingBindingSlot('trigger', trigger.id)
+    return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
+  })
+  const actions = state.actions.map((action) => {
+    const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
+    if (preStatus !== 'locked' || !isMissingLegRef(action.legScopeRef)) return action
+    hasBlockingSlots = true
+    const slot = buildLegMissingBindingSlot('action', action.id)
+    return { ...action, status: 'open' as SemanticNodeStatus, openSlots: [...(action.openSlots ?? []), slot] }
+  })
+  const risk = state.risk.map((riskItem) => {
+    const preStatus = riskStatusBeforeBinding.get(riskItem.id) ?? riskItem.status
+    if (preStatus !== 'locked' || !isMissingLegRef(riskItem.legScopeRef)) return riskItem
+    hasBlockingSlots = true
+    const slot = buildLegMissingBindingSlot('risk', riskItem.id)
+    return { ...riskItem, status: 'open' as SemanticNodeStatus, openSlots: [...(riskItem.openSlots ?? []), slot] }
+  })
+  const position = state.position
+    ? (() => {
+        const constraints = state.position?.constraints
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
+        const nextConstraints = constraints.map((constraint) => {
+          const preStatus = constraintStatusBeforeBinding.get(constraint.id) ?? constraint.status
+          if (preStatus !== 'locked' || !isMissingLegRef(constraint.legScopeRef)) return constraint
+          hasBlockingSlots = true
+          const slot = buildLegMissingBindingSlot('positionConstraint', constraint.id)
+          return { ...constraint, status: 'open' as SemanticNodeStatus, openSlots: [...(constraint.openSlots ?? []), slot] }
+        })
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
+      })()
+    : state.position
+
+  return { state: { ...state, triggers, actions, risk, position }, hasBlockingSlots }
+}
+
+/**
+ * Phase 5 S3 (#1109): timeframe scope binding fail-closed
+ *   - 与 S2/S11 ≥2 阈值不同——S3 ≥1 supported scope.timeframe locked 节点即强制 owner ref
+ *   - 同 owner 同时缺 symbolScopeRef + timeframeScopeRef 时，两个 missing_binding slot 各自单独追加（不合并）
+ *   - 通过 openSlots 检测 wasOriginallyLocked：含 symbol_missing_binding slot 即视为"原本 locked"，继续检查 tf ref
+ */
+function applyTimeframeScopeBindingFailClosed(
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
+  }
   const supportedScopeIds = new Set<string>()
   for (const node of orchestration.nodes) {
     if (
@@ -1298,13 +1424,8 @@ function applyTimeframeScopeBindingFailClosed(
 
   let hasBlockingSlots = false
 
-  function buildMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
+  function buildTfMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
     return {
-      slotKey: 'orchestration.scope.leg.missing_binding',
-      fieldPath: `${ownerLabel}[${ownerId}]`,
-      status: 'open',
-      priority: 'core',
-      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个策略腿`,
       slotKey: 'orchestration.scope.timeframe.missing_binding',
       fieldPath: `${ownerLabel}[${ownerId}]`,
       status: 'open',
@@ -1314,30 +1435,109 @@ function applyTimeframeScopeBindingFailClosed(
     }
   }
 
-  function isMissingRef(ref: unknown): boolean {
+  function isMissingTfRef(ref: unknown): boolean {
     if (typeof ref !== 'string') return true
     const trimmed = ref.trim()
     if (trimmed === '') return true
-    return !supportedLegScopeIds.has(trimmed)
-  }
-
-  const triggers = state.triggers.map((trigger) => {
-    const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
-    if (preStatus !== 'locked' || !isMissingRef(trigger.legScopeRef)) return trigger
     return !supportedScopeIds.has(trimmed)
   }
 
-  // 与 symbol binding 协同：若 owner 因 symbol_missing_binding 已被拉到 'open'，
-  // 仍应检查 timeframe ref（让两个维度的 missing_binding slot 各自单独上报）。
-  // 通过 openSlots 检测原始状态：含 'orchestration.scope.symbol.missing_binding' slot
-  // 即视为"原本 locked"，应继续检查 timeframe ref。
   function wasOriginallyLocked(node: { status: SemanticNodeStatus; openSlots?: readonly SemanticSlotState[] }): boolean {
     if (node.status === 'locked') return true
-    return (node.openSlots ?? []).some(s => s.slotKey === 'orchestration.scope.symbol.missing_binding')
+    return (node.openSlots ?? []).some(s =>
+      s.slotKey === 'orchestration.scope.symbol.missing_binding'
+      || s.slotKey === 'orchestration.scope.leg.missing_binding'
+    )
   }
 
   const triggers = state.triggers.map((trigger) => {
-    if (!wasOriginallyLocked(trigger) || !isMissingRef(trigger.timeframeScopeRef)) return trigger
+    if (!wasOriginallyLocked(trigger) || !isMissingTfRef(trigger.timeframeScopeRef)) return trigger
+    hasBlockingSlots = true
+    const slot = buildTfMissingBindingSlot('trigger', trigger.id)
+    return { ...trigger, status: 'open' as SemanticNodeStatus, openSlots: [...(trigger.openSlots ?? []), slot] }
+  })
+  const actions = state.actions.map((action) => {
+    if (!wasOriginallyLocked(action) || !isMissingTfRef(action.timeframeScopeRef)) return action
+    hasBlockingSlots = true
+    const slot = buildTfMissingBindingSlot('action', action.id)
+    return { ...action, status: 'open' as SemanticNodeStatus, openSlots: [...(action.openSlots ?? []), slot] }
+  })
+  const risk = state.risk.map((riskItem) => {
+    if (!wasOriginallyLocked(riskItem) || !isMissingTfRef(riskItem.timeframeScopeRef)) return riskItem
+    hasBlockingSlots = true
+    const slot = buildTfMissingBindingSlot('risk', riskItem.id)
+    return { ...riskItem, status: 'open' as SemanticNodeStatus, openSlots: [...(riskItem.openSlots ?? []), slot] }
+  })
+  const position = state.position
+    ? (() => {
+        const constraints = state.position?.constraints
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
+        const nextConstraints = constraints.map((constraint) => {
+          if (!wasOriginallyLocked(constraint) || !isMissingTfRef(constraint.timeframeScopeRef)) return constraint
+          hasBlockingSlots = true
+          const slot = buildTfMissingBindingSlot('positionConstraint', constraint.id)
+          return { ...constraint, status: 'open' as SemanticNodeStatus, openSlots: [...(constraint.openSlots ?? []), slot] }
+        })
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
+      })()
+    : state.position
+
+  return { state: { ...state, triggers, actions, risk, position }, hasBlockingSlots }
+}
+
+/**
+ * Phase 5 S9 (#1110): 多 dataSource scope 策略对每个 trigger/action/risk/positionConstraint 节点
+ * 进行 binding fail-closed 校验：
+ *   - supportedDataSourceScopeIds.size === 0：旧策略零侵入，不读 dataSourceScopeRef
+ *   - size ≥ 1 时：每个 status='locked' 的 owner 节点若**声明了** dataSourceScopeRef 但 trim 后空 / 不在 supported 集合：
+ *     status 降为 'open' + 加 orchestration.scope.dataSource.missing_binding open slot
+ *   - **不强制要求所有 binding 节点必须声明 dataSourceScopeRef**（dataSource 是声明性 feed 集合，不需 per-program 路由）
+ */
+function applyDataSourceScopeBindingFailClosed(
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
+  }
+  const supportedScopeIds = new Set<string>()
+  for (const node of orchestration.nodes) {
+    if (
+      node.kind === 'scope'
+      && node.key === 'scope.dataSource'
+      && node.status === 'locked'
+    ) {
+      supportedScopeIds.add(node.id)
+    }
+  }
+  if (supportedScopeIds.size === 0) {
+    return { state, hasBlockingSlots: false }
+  }
+
+  let hasBlockingSlots = false
+
+  function buildMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
+    return {
+      slotKey: 'orchestration.scope.dataSource.missing_binding',
+      fieldPath: `${ownerLabel}[${ownerId}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个 dataSource scope`,
+      affectsExecution: true,
+    }
+  }
+
+  // 仅当 owner 节点 *声明了* dataSourceScopeRef（非 undefined）才校验；空字符串与未声明等价 → 强制要求 ref ∈ supported
+  function isInvalidExplicitRef(ref: unknown): boolean {
+    if (ref === undefined || ref === null) return false   // 未声明：不读
+    if (typeof ref !== 'string') return true
+    const trimmed = ref.trim()
+    if (trimmed === '') return true
+    return !supportedScopeIds.has(trimmed)
+  }
+
+  const triggers = state.triggers.map((trigger) => {
+    if (trigger.status !== 'locked' || !isInvalidExplicitRef(trigger.dataSourceScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
     return {
@@ -1347,9 +1547,7 @@ function applyTimeframeScopeBindingFailClosed(
     }
   })
   const actions = state.actions.map((action) => {
-    const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
-    if (preStatus !== 'locked' || !isMissingRef(action.legScopeRef)) return action
-    if (!wasOriginallyLocked(action) || !isMissingRef(action.timeframeScopeRef)) return action
+    if (action.status !== 'locked' || !isInvalidExplicitRef(action.dataSourceScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
     return {
@@ -1358,17 +1556,8 @@ function applyTimeframeScopeBindingFailClosed(
       openSlots: [...(action.openSlots ?? []), slot],
     }
   })
-  const risk = state.risk.map((riskItem) => {
-    const preStatus = riskStatusBeforeBinding.get(riskItem.id) ?? riskItem.status
-    if (preStatus !== 'locked' || !isMissingRef(riskItem.legScopeRef)) return riskItem
-    hasBlockingSlots = true
-    const slot = buildMissingBindingSlot('risk', riskItem.id)
-    return {
-      ...riskItem,
-      status: 'open' as SemanticNodeStatus,
-      openSlots: [...(riskItem.openSlots ?? []), slot],
   const risk = state.risk.map((risk) => {
-    if (!wasOriginallyLocked(risk) || !isMissingRef(risk.timeframeScopeRef)) return risk
+    if (risk.status !== 'locked' || !isInvalidExplicitRef(risk.dataSourceScopeRef)) return risk
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('risk', risk.id)
     return {
@@ -1382,9 +1571,7 @@ function applyTimeframeScopeBindingFailClosed(
         const constraints = state.position?.constraints
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
-          const preStatus = constraintStatusBeforeBinding.get(constraint.id) ?? constraint.status
-          if (preStatus !== 'locked' || !isMissingRef(constraint.legScopeRef)) return constraint
-          if (!wasOriginallyLocked(constraint) || !isMissingRef(constraint.timeframeScopeRef)) return constraint
+          if (constraint.status !== 'locked' || !isInvalidExplicitRef(constraint.dataSourceScopeRef)) return constraint
           hasBlockingSlots = true
           const slot = buildMissingBindingSlot('positionConstraint', constraint.id)
           return {

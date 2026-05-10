@@ -482,6 +482,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     ],
     displayRenderer: ({ params }) => renderLegScope(params),
     clarificationRenderer: (slotKey) => renderLegScopeClarification(slotKey),
+  }),
   // Phase 5 S3 (#1109): scope.timeframe substrate
   presentation({
     key: 'scope.timeframe',
@@ -499,6 +500,24 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     ],
     displayRenderer: ({ params }) => renderTimeframeScope(params),
     clarificationRenderer: (slotKey) => renderTimeframeScopeClarification(slotKey),
+  }),
+  // Phase 5 S9 (#1110): scope.dataSource substrate
+  presentation({
+    key: 'scope.dataSource',
+    publicName: '数据源',
+    aliases: ['数据源作用域', '行情源作用域', 'data source scope', 'feed scope'],
+    positiveExamples: [
+      '主行情源 binance.spot.btcusdt 用 OHLCV',
+      '事件源 webhook tradingview.alpha 接收信号',
+      'primary feed binance.spot.ethusdt OHLCV, confirmation feed okx.spot.ethusdt orderbook',
+    ],
+    negativeExamples: ['随便选个数据源', '看市场情况', '只交易 BTC'],
+    goldenUtterances: [
+      '主行情源 binance.spot.btcusdt 同时订阅 binance.perp.btcusdt 作为确认源',
+      '事件源使用 webhook tradingview.alert',
+    ],
+    displayRenderer: ({ params }) => renderDataSourceScope(params),
+    clarificationRenderer: (slotKey) => renderDataSourceScopeClarification(slotKey),
   }),
   presentation({
     key: 'market.regime',
@@ -1434,7 +1453,7 @@ function renderSymbolScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.symbol.symbols_overlap') return '多 scope 之间标的不能重叠'
   if (slotKey === 'orchestration.scope.symbol.primary_symbol_collision') return '多 scope 主标的必须各自唯一'
   if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
-  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.timeframe'
+  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource'
   return '请补全标的范围参数'
 }
 
@@ -1479,6 +1498,8 @@ function renderLegScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.leg.direction_collision') return 'paired leg 必须方向相反（对冲腿）'
   if (slotKey === 'orchestration.scope.leg.missing_binding') return '请确认该规则绑定到哪个策略腿'
   return '请补全策略腿参数'
+}
+
 // Phase 5 S3 (#1109): scope.timeframe render
 function renderTimeframeScope(params: Record<string, unknown>): string {
   const primary = stringParam(params, 'primaryTimeframe', '')
@@ -1506,6 +1527,26 @@ function renderTimeframeScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.timeframe.unsupported_key') return '当前仅支持 scope.timeframe'
   if (slotKey === 'orchestration.scope.timeframe.scope_kind') return '请确认 scopeKind 为 timeframe'
   return '请补全周期范围参数'
+}
+
+// Phase 5 S9 (#1110): scope.dataSource render — role 直出英文 enum（与 S2 风格一致）
+function renderDataSourceScope(params: Record<string, unknown>): string {
+  const role = stringParam(params, 'role', '')
+  const feedId = stringParam(params, 'feedId', '')
+  const schema = stringParam(params, 'schemaRef', '') || stringParam(params, 'schema', '')
+  if (role === '' || feedId === '') return ''
+  return renderDisplayToken('atom.scope.dataSource.display', { role, feedId, schema })
+}
+
+function renderDataSourceScopeClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.scope.dataSource.role') return '请确认数据源角色（primary/confirmation/event）'
+  if (slotKey === 'orchestration.scope.dataSource.feed_id') return '请确认数据源 feedId（如 binance.spot.btcusdt）'
+  if (slotKey === 'orchestration.scope.dataSource.schema_ref') return '请确认数据源 schema（ohlcv/orderbook/liquidation/webhook_event）'
+  if (slotKey === 'orchestration.scope.dataSource.feed_id_overlap') return '多 scope 间 feedId 不能重复'
+  if (slotKey === 'orchestration.scope.dataSource.primary_collision') return 'primary 数据源最多一个'
+  if (slotKey === 'orchestration.scope.dataSource.missing_binding') return '请确认该规则绑定到哪个 dataSource scope'
+  if (slotKey === 'orchestration.scope.dataSource.scope_kind') return '请确认 scopeKind 为 dataSource'
+  return '请补全数据源参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

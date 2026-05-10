@@ -156,6 +156,21 @@ export class CanonicalSpecV2IrCompilerService {
     const guards: RiskGuard[] = []
     const riskPredicates: RiskPredicateDef[] = []
 
+    // Phase 5 S2/S3/S9/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
+    const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
+    const supportedSymbolScopeIds = new Set<string>(
+      specScopes.filter(s => s.scopeKind === 'symbol').map(s => s.id),
+    )
+    const supportedTimeframeScopeIds = new Set<string>(
+      specScopes.filter(s => s.scopeKind === 'timeframe').map(s => s.id),
+    )
+    const supportedDataSourceScopeIds = new Set<string>(
+      specScopes.filter(s => s.scopeKind === 'dataSource').map(s => s.id),
+    )
+    const supportedLegScopeIds = new Set<string>(
+      (input.canonicalSpec.orchestration?.legScopes ?? []).map(l => l.id),
+    )
+
     for (const rule of input.canonicalSpec.rules) {
       const riskPredicate = this.tryCompileRiskPredicate(rule, context)
       if (riskPredicate) {
@@ -185,7 +200,15 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
       this.collectPositionLifecycleRuntimeRequirements(rule, actions, context)
-      const metadata = rule.metadata ? this.toRuleBlockMetadata(rule.metadata) : undefined
+      const metadata = rule.metadata
+        ? this.toRuleBlockMetadata(
+            rule.metadata,
+            supportedSymbolScopeIds,
+            supportedLegScopeIds,
+            supportedTimeframeScopeIds,
+            supportedDataSourceScopeIds,
+          )
+        : undefined
 
       ruleBlocks.push({
         id: rule.id,
@@ -837,27 +860,37 @@ export class CanonicalSpecV2IrCompilerService {
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
   }
 
-  // Phase 5 S2 (#1104) + S3 (#1109): scope union substrate IR compile
+  // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110): scope substrate IR compile
+  // union: CanonicalOrchestrationSymbolScope | CanonicalOrchestrationTimeframeScope | CanonicalOrchestrationDataSourceScope
   private compileOrchestrationScopes(spec: CanonicalStrategySpecV2): IrOrchestrationScope[] {
     const scopes = spec.orchestration?.scopes ?? []
     return scopes.map((scope): IrOrchestrationScope => {
-      if (scope.scopeKind === 'symbol') {
-        return {
-          id: scope.id,
-          scopeKind: 'symbol',
-          symbols: [...scope.symbols].sort(),
-          ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
-            ? { primarySymbol: scope.primarySymbol.trim() }
-            : {}),
-        }
-      }
-      // Phase 5 S3 (#1109): timeframe scope
-      return {
-        id: scope.id,
-        scopeKind: 'timeframe',
-        primaryTimeframe: scope.primaryTimeframe,
-        requiredTimeframes: [...scope.requiredTimeframes],
-        alignmentPolicy: scope.alignmentPolicy,
+      switch (scope.scopeKind) {
+        case 'symbol':
+          return {
+            id: scope.id,
+            scopeKind: 'symbol',
+            symbols: [...scope.symbols].sort(),
+            ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
+              ? { primarySymbol: scope.primarySymbol.trim() }
+              : {}),
+          }
+        case 'timeframe':
+          return {
+            id: scope.id,
+            scopeKind: 'timeframe',
+            primaryTimeframe: scope.primaryTimeframe,
+            requiredTimeframes: [...scope.requiredTimeframes],
+            alignmentPolicy: scope.alignmentPolicy,
+          }
+        case 'dataSource':
+          return {
+            id: scope.id,
+            scopeKind: 'dataSource',
+            role: scope.role,
+            feedId: scope.feedId,
+            schemaRef: scope.schemaRef,
+          }
       }
     })
   }
@@ -2705,6 +2738,8 @@ export class CanonicalSpecV2IrCompilerService {
     metadata: NonNullable<CanonicalRuleV2['metadata']>,
     supportedScopeIds?: ReadonlySet<string>,
     supportedLegScopeIds?: ReadonlySet<string>,
+    supportedTimeframeScopeIds?: ReadonlySet<string>,
+    supportedDataSourceScopeIds?: ReadonlySet<string>,
   ): RuleBlock['metadata'] {
     // Phase 5 S2 (#1104): symbolScopeRef silent skip 透传
     //   仅当 ref trim 后非空且 ∈ supportedScopeIds 时透传；否则丢弃 + 让 readiness/runtime fail-closed
@@ -2717,20 +2752,16 @@ export class CanonicalSpecV2IrCompilerService {
     const legRefValid = typeof legRef === 'string'
       && legRef.trim() !== ''
       && (!supportedLegScopeIds || supportedLegScopeIds.has(legRef.trim()))
-    supportedTimeframeScopeIds?: ReadonlySet<string>,
-  ): RuleBlock['metadata'] {
-    // Phase 5 S2 (#1104): symbolScopeRef silent skip 透传
-    //   仅当 ref trim 后非空且 ∈ supportedScopeIds 时透传；否则丢弃 + 让 readiness/runtime fail-closed
-    const symbolRef = metadata.symbolScopeRef
-    const symbolRefValid = typeof symbolRef === 'string'
-      && symbolRef.trim() !== ''
-      && (!supportedScopeIds || supportedScopeIds.has(symbolRef.trim()))
-    // Phase 5 S3 (#1109): timeframeScopeRef silent skip 透传
-    //   与 symbolScopeRef 同模式；不在 supportedTimeframeScopeIds 时丢弃
+    // Phase 5 S3 (#1109): timeframeScopeRef silent skip 透传（与 symbolScopeRef 同形）
     const tfRef = metadata.timeframeScopeRef
     const tfRefValid = typeof tfRef === 'string'
       && tfRef.trim() !== ''
       && (!supportedTimeframeScopeIds || supportedTimeframeScopeIds.has(tfRef.trim()))
+    // Phase 5 S9 (#1110): dataSourceScopeRef silent skip 透传（与 symbolScopeRef 平级）
+    const dsRef = metadata.dataSourceScopeRef
+    const dsRefValid = typeof dsRef === 'string'
+      && dsRef.trim() !== ''
+      && (!supportedDataSourceScopeIds || supportedDataSourceScopeIds.has(dsRef.trim()))
     return {
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
@@ -2738,8 +2769,8 @@ export class CanonicalSpecV2IrCompilerService {
       ...(metadata.dcaSchedule ? { dcaSchedule: { ...metadata.dcaSchedule } } : {}),
       ...(refValid && typeof ref === 'string' ? { symbolScopeRef: ref.trim() } : {}),
       ...(legRefValid && typeof legRef === 'string' ? { legScopeRef: legRef.trim() } : {}),
-      ...(symbolRefValid && typeof symbolRef === 'string' ? { symbolScopeRef: symbolRef.trim() } : {}),
       ...(tfRefValid && typeof tfRef === 'string' ? { timeframeScopeRef: tfRef.trim() } : {}),
+      ...(dsRefValid && typeof dsRef === 'string' ? { dataSourceScopeRef: dsRef.trim() } : {}),
     }
   }
 

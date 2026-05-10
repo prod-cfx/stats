@@ -3,6 +3,7 @@ import type {
   SemanticAdaptiveVolatilityGridFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
+  SemanticDataSourceScopeFrame,
   SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
@@ -16,6 +17,7 @@ import type {
 } from '../types/semantic-natural-language-frame'
 import type {
   CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch,
+  CodegenSemanticOrchestrationDataSourceScopeNodePatch,
   CodegenSemanticOrchestrationDynamicGridProgramNodePatch,
   CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
@@ -69,6 +71,8 @@ export class SemanticFrameNormalizerService {
     const legScopeLegByKey = new Map<string, CodegenSemanticOrchestrationLegScopeNodePatch>()
     const timeframeScopeByKey = new Map<string, CodegenSemanticOrchestrationTimeframeScopeNodePatch>()
     const timeframeScopeFrames: SemanticTimeframeScopeFrame[] = []
+    const dataSourceScopeByKey = new Map<string, CodegenSemanticOrchestrationDataSourceScopeNodePatch>()
+    const dataSourceScopeFrames: SemanticDataSourceScopeFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -121,6 +125,9 @@ export class SemanticFrameNormalizerService {
           break
         case 'timeframe_scope':
           timeframeScopeFrames.push(frame)
+          break
+        case 'data_source_scope':
+          dataSourceScopeFrames.push(frame)
           break
       }
     }
@@ -237,12 +244,24 @@ export class SemanticFrameNormalizerService {
         if (!legScopeLegByKey.has(legDedupeKey)) {
           legScopeLegByKey.set(legDedupeKey, legNode)
         }
+      }
+    })
+
     timeframeScopeFrames.forEach((frame, index) => {
       const node = this.normalizeTimeframeScope(frame, index)
       if (node === null) return
       const dedupeKey = JSON.stringify([node.key, node.primaryTimeframe, [...node.requiredTimeframes].sort(), node.alignmentPolicy])
       if (!timeframeScopeByKey.has(dedupeKey)) {
         timeframeScopeByKey.set(dedupeKey, node)
+      }
+    })
+
+    // Phase 5 S9 (#1110): data_source_scope frame → orchestration scope node patch
+    dataSourceScopeFrames.forEach((frame, index) => {
+      const node = this.normalizeDataSourceScope(frame, index)
+      const dedupeKey = JSON.stringify([node.key, node.dataSourceRole, node.dataSourceFeedId, node.dataSourceSchemaRef])
+      if (!dataSourceScopeByKey.has(dedupeKey)) {
+        dataSourceScopeByKey.set(dedupeKey, node)
       }
     })
 
@@ -278,6 +297,7 @@ export class SemanticFrameNormalizerService {
       ...Array.from(legScopeSymbolByKey.values()),
       ...Array.from(legScopeLegByKey.values()),
       ...Array.from(timeframeScopeByKey.values()),
+      ...Array.from(dataSourceScopeByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
@@ -339,6 +359,28 @@ export class SemanticFrameNormalizerService {
       symbolScopeKind: 'symbol',
       symbols: [...frame.symbols].sort(),
       ...(frame.primarySymbol ? { primarySymbol: frame.primarySymbol } : {}),
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S9 (#1110): data_source_scope frame → orchestration scope node patch
+  private normalizeDataSourceScope(
+    frame: SemanticDataSourceScopeFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationDataSourceScopeNodePatch {
+    return {
+      id: `orchestration-scope-data-source-${index + 1}`,
+      kind: 'scope',
+      key: 'scope.dataSource',
+      params: {
+        role: frame.role,
+        feedId: frame.feedId,
+        schemaRef: frame.schemaRef,
+      },
+      dataSourceScopeKind: 'dataSource',
+      dataSourceRole: frame.role,
+      dataSourceFeedId: frame.feedId,
+      dataSourceSchemaRef: frame.schemaRef,
       evidence: this.toEvidence(frame),
     }
   }

@@ -25,7 +25,6 @@ import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { Prisma, PrismaClient, StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
-import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
 import {
   buildCompiledManifest,
   evaluateExprPool,

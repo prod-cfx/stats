@@ -13,6 +13,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticSymbolScopeFrame
   | SemanticLegScopeFrame
   | SemanticTimeframeScopeFrame
+  | SemanticDataSourceScopeFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -140,10 +141,22 @@ export interface SemanticLegScopeFrame extends SemanticFrameBase {
     }
   }>
   syncTriggerRequired?: boolean
+}
+
 // Phase 5 S3 (#1109): timeframe scope frame
 export interface SemanticTimeframeScopeFrame extends SemanticFrameBase {
   kind: 'timeframe_scope'
   primaryTimeframe: string         // execution timeframe（'1m'..'1w'）
   requiredTimeframes: readonly string[]  // 依赖周期（≥1，比 primary 粗）
   alignmentPolicy?: 'strict' | 'tolerant'  // 默认 strict（normalizer 兜底）
+}
+
+// Phase 5 S9 (#1110): data source scope frame
+//   role/feedId/schemaRef 三字段全部必填（schemaRef 在 NL 推断阶段无法定值时不写 frame，
+//   交由 readiness fail-closed 提示用户补全 — 见 plan §7.1）
+export interface SemanticDataSourceScopeFrame extends SemanticFrameBase {
+  kind: 'data_source_scope'
+  role: 'primary' | 'confirmation' | 'event'
+  feedId: string                                                  // 全小写格式（如 binance.spot.btcusdt / webhook.tradingview.alpha）
+  schemaRef: 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
 }

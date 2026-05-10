@@ -80,6 +80,8 @@ export interface DecisionProgramNode {
     legScopeRef?: string
     // Phase 5 S3 (#1109): 多周期策略中的 timeframeScopeRef 透传
     timeframeScopeRef?: string
+    // Phase 5 S9 (#1110): 多 dataSource scope 策略中的 dataSourceScopeRef 透传
+    dataSourceScopeRef?: string
   }
 }
 

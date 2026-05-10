@@ -3,6 +3,8 @@ import type {
   SemanticEvidence,
   SemanticExpression,
   SemanticNodeStatus,
+  SemanticOrchestrationDataSourceRole,
+  SemanticOrchestrationDataSourceSchema,
   SemanticOrchestrationGateEffect,
   SemanticOrchestrationGateTarget,
   SemanticOrchestrationLegSizing,
@@ -83,6 +85,7 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationSymbolScopeNodePatch
   | CodegenSemanticOrchestrationLegScopeNodePatch
   | CodegenSemanticOrchestrationTimeframeScopeNodePatch
+  | CodegenSemanticOrchestrationDataSourceScopeNodePatch
 
 // Phase 5 S2 (#1104): scope.symbol patch 节点
 export interface CodegenSemanticOrchestrationSymbolScopeNodePatch extends CodegenSemanticNodeEnvelope {
@@ -106,6 +109,8 @@ export interface CodegenSemanticOrchestrationLegScopeNodePatch extends CodegenSe
   instrumentRef: string
   legSizing?: SemanticOrchestrationLegSizing
   syncTriggerRequired?: boolean
+}
+
 // Phase 5 S3 (#1109): scope.timeframe patch 节点
 export interface CodegenSemanticOrchestrationTimeframeScopeNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'scope'
@@ -115,6 +120,17 @@ export interface CodegenSemanticOrchestrationTimeframeScopeNodePatch extends Cod
   primaryTimeframe: SemanticSupportedTimeframe
   requiredTimeframes: readonly SemanticSupportedTimeframe[]
   alignmentPolicy: SemanticOrchestrationTimeframeAlignmentPolicy
+}
+
+// Phase 5 S9 (#1110): scope.dataSource patch 节点
+export interface CodegenSemanticOrchestrationDataSourceScopeNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'scope'
+  key: 'scope.dataSource'
+  params: Record<string, unknown>
+  dataSourceScopeKind: 'dataSource'
+  dataSourceRole: SemanticOrchestrationDataSourceRole
+  dataSourceFeedId: string
+  dataSourceSchemaRef: SemanticOrchestrationDataSourceSchema
 }
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {

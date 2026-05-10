@@ -28,6 +28,8 @@ const SCOPE_LEG_KEY = 'scope.leg'
 const SCOPE_TIMEFRAME_KEY = 'scope.timeframe'
 const TIMEFRAME_REQUIRED_MIN_LENGTH = 1
 const TIMEFRAME_REQUIRED_MAX_LENGTH = 8
+// Phase 5 S9 (#1110)
+const SCOPE_DATA_SOURCE_KEY = 'scope.dataSource'
 
 const SYMBOL_FORMAT_PATTERN = /^[A-Z]{2,5}USDT$/u
 const SYMBOL_MAX_LENGTH = 32
@@ -66,6 +68,45 @@ const SCOPE_TIMEFRAME_CONTRACT: SemanticOrchestrationContract = {
       domain: 'orchestration',
       verb: 'bind',
       object: 'timeframe_scope',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+// Phase 5 S9 (#1110): scope.dataSource 校验常量
+const FEED_ID_FORMAT_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,63}$/u  // 总长 1..64
+const DATA_SOURCE_ROLES = new Set(['primary', 'confirmation', 'event'])
+const DATA_SOURCE_SCHEMAS = new Set(['ohlcv', 'orderbook', 'liquidation', 'webhook_event'])
+
+// Phase 5 S9 (#1110): scope.dataSource contract
+const SCOPE_DATA_SOURCE_CONTRACT: SemanticOrchestrationContract = {
+  id: 'scope.dataSource',
+  kind: 'scope',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'declare',
+      object: 'data_source_scope',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'route',
+      object: 'data_source_feed',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'orchestration',
+      verb: 'bind',
+      object: 'data_source_scope',
     },
   ],
   executableSinceVersion: CURRENT_SEMANTIC_VERSION,
@@ -401,6 +442,7 @@ export class SemanticOrchestrationRegistryService {
     [SCOPE_SYMBOL_KEY, SCOPE_SYMBOL_CONTRACT],
     [SCOPE_LEG_KEY, SCOPE_LEG_CONTRACT],
     [SCOPE_TIMEFRAME_KEY, SCOPE_TIMEFRAME_CONTRACT],
+    [SCOPE_DATA_SOURCE_KEY, SCOPE_DATA_SOURCE_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -420,21 +462,16 @@ export class SemanticOrchestrationRegistryService {
       if (node.key === SCOPE_LEG_KEY || node.legScopeKind === 'leg') {
         return this.validateLegScopeNode(node, siblingNodes)
       }
-      return this.validateScopeNode(node, siblingNodes)
-      // Phase 5 S3 (#1109): 按 key 路由到具体 validator；保留 unsupported_kind 兜底
-      if (node.key === SCOPE_SYMBOL_KEY) return this.validateSymbolScopeNode(node, siblingNodes)
-      if (node.key === SCOPE_TIMEFRAME_KEY) return this.validateTimeframeScopeNode(node, siblingNodes)
-      return {
-        ok: false,
-        missingSlots: [{
-          slotKey: 'orchestration.scope.unsupported_kind',
-          fieldPath: `orchestration.scope[${node.id}]`,
-          status: 'open',
-          priority: 'core',
-          questionHint: '当前仅支持 scope.symbol / scope.timeframe',
-          affectsExecution: true,
-        }],
+      // Phase 5 S9 (#1110): scope.dataSource
+      if (node.key === SCOPE_DATA_SOURCE_KEY) {
+        return this.validateDataSourceScopeNode(node, siblingNodes)
       }
+      // Phase 5 S3 (#1109): scope.timeframe
+      if (node.key === SCOPE_TIMEFRAME_KEY) {
+        return this.validateTimeframeScopeNode(node, siblingNodes)
+      }
+      // Phase 5 S2 (#1104): scope.symbol（默认 / 兜底 unsupported_kind 由 validateSymbolScopeNode 内部产出）
+      return this.validateSymbolScopeNode(node, siblingNodes)
     }
     if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_DRAWDOWN_BLOCK_KEY) {
       const thresholdPct = node.thresholdPct
@@ -824,7 +861,7 @@ export class SemanticOrchestrationRegistryService {
     }
 
     if (node.key !== SCOPE_SYMBOL_KEY) {
-      pushSlot('unsupported_kind', '当前仅支持 scope.symbol / scope.timeframe')
+      pushSlot('unsupported_kind', '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource')
       return { ok: false, missingSlots }
     }
     if (node.symbolScopeKind !== 'symbol') {
@@ -909,19 +946,6 @@ export class SemanticOrchestrationRegistryService {
    *   8) version-gate（caller 在 readiness 处理）
    */
   private validateLegScopeNode(
-   * Phase 5 S3 (#1109): scope.timeframe 节点 10 重 fail-closed
-   *   1) key === 'scope.timeframe'
-   *   2) timeframeScopeKind === 'timeframe'
-   *   3) primaryTimeframe 字符串 + 命中 vocab
-   *   4) requiredTimeframes 是数组
-   *   5) requiredTimeframes 长度 ∈ [1, 8]
-   *   6) requiredTimeframes 每项命中 vocab + 去重
-   *   7) primaryTimeframe ∉ requiredTimeframes（自引用拒绝）
-   *   8) primary 粒度严格细于所有 required（critic Round 2 C2-R2：bar-bucket 数学的隐含前提）
-   *   9) alignmentPolicy ∈ {'strict','tolerant'}
-   *   10) 与其它 locked sibling (primary, sortedRequired) 元组不重复
-   */
-  private validateTimeframeScopeNode(
     node: SemanticOrchestrationNode,
     siblingNodes: readonly SemanticOrchestrationNode[],
   ): SemanticOrchestrationValidationResult {
@@ -930,10 +954,6 @@ export class SemanticOrchestrationRegistryService {
     const pushSlot = (suffix: string, hint: string): void => {
       missingSlots.push({
         slotKey: `orchestration.scope.leg.${suffix}`,
-    const fieldPath = `orchestration.scope[${node.id}]`
-    const pushSlot = (suffix: string, hint: string): void => {
-      missingSlots.push({
-        slotKey: `orchestration.scope.timeframe.${suffix}`,
         fieldPath,
         status: 'open',
         priority: 'core',
@@ -946,7 +966,6 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('unsupported_kind', '当前仅支持 scope.leg 子类型')
       return { ok: false, missingSlots }
     }
-
     if (node.legScopeKind !== 'leg') {
       pushSlot('leg_scope_kind', '请确认 legScopeKind 为 leg')
     }
@@ -977,7 +996,6 @@ export class SemanticOrchestrationRegistryService {
       }
     }
 
-    // legId 在 leg 子集内唯一
     const otherLegNodes = siblingNodes.filter(
       (other) =>
         other.id !== node.id
@@ -993,7 +1011,6 @@ export class SemanticOrchestrationRegistryService {
       }
     }
 
-    // legSizing 校验
     const sizing = node.legSizing
     if (sizing !== undefined) {
       const modeOk = sizing.mode === 'fixed_pct' || sizing.mode === 'fixed_quote' || sizing.mode === 'fixed_ratio'
@@ -1020,6 +1037,34 @@ export class SemanticOrchestrationRegistryService {
             || (pairedNode.direction === node.direction)
           ) {
             pushSlot('direction_collision', 'paired leg 必须方向相反（对冲腿）')
+          }
+        }
+      }
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  /**
+   * Phase 5 S3 (#1109): scope.timeframe 节点 10 重 fail-closed
+   */
+  private validateTimeframeScopeNode(
+    node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[],
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.scope.timeframe[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.scope.timeframe.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
     if (node.key !== SCOPE_TIMEFRAME_KEY) {
       pushSlot('unsupported_key', '当前仅支持 scope.timeframe')
       return { ok: false, missingSlots }
@@ -1096,6 +1141,80 @@ export class SemanticOrchestrationRegistryService {
             break
           }
         }
+      }
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  /**
+   * Phase 5 S9 (#1110): scope.dataSource 节点 readiness fail-closed validate（plan §4.1 9 重 1..6）
+   *   1) dataSourceScopeKind === 'dataSource'
+   *   2) dataSourceRole ∈ {'primary','confirmation','event'}
+   *   3) dataSourceFeedId trim 后非空 + 长度 ≤ 64 + 匹配 FEED_ID_FORMAT
+   *   4) dataSourceSchemaRef ∈ DATA_SOURCE_SCHEMAS（所有 role 必填）
+   *   5) cross-node：feedId 与其它 supported scope.dataSource 不重复
+   *   6) cross-node：role='primary' 在所有 supported scope.dataSource 中最多 1 个
+   * （第 7..9 重 registry 注册 + version-gate 由 readiness layer 检查）
+   */
+  private validateDataSourceScopeNode(
+    node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[],
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.scope.dataSource[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.scope.dataSource.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    if (node.dataSourceScopeKind !== 'dataSource') {
+      pushSlot('scope_kind', '请确认 scopeKind 为 dataSource')
+    }
+    const role = node.dataSourceRole
+    if (typeof role !== 'string' || !DATA_SOURCE_ROLES.has(role)) {
+      pushSlot('role', '请确认数据源角色（primary/confirmation/event）')
+    }
+
+    const feedIdRaw = node.dataSourceFeedId
+    const feedId = typeof feedIdRaw === 'string' ? feedIdRaw.trim() : ''
+    if (feedId === '' || feedId.length > 64 || !FEED_ID_FORMAT_PATTERN.test(feedId)) {
+      pushSlot('feed_id', '请确认数据源 feedId（如 binance.spot.btcusdt）')
+    }
+
+    const schemaRef = node.dataSourceSchemaRef
+    if (typeof schemaRef !== 'string' || !DATA_SOURCE_SCHEMAS.has(schemaRef)) {
+      pushSlot('schema_ref', '请确认数据源 schema（ohlcv/orderbook/liquidation/webhook_event）')
+    }
+
+    // (5)(6) 多 scope 之间隔离检查 — 与其它 status='locked' 且 key='scope.dataSource' 节点对比
+    const otherSupportedScopes = siblingNodes.filter(
+      (other) =>
+        other.id !== node.id
+        && other.kind === 'scope'
+        && other.key === SCOPE_DATA_SOURCE_KEY
+        && other.status === 'locked',
+    )
+    if (feedId !== '') {
+      const overlap = otherSupportedScopes.some(
+        (other) => typeof other.dataSourceFeedId === 'string' && other.dataSourceFeedId.trim() === feedId,
+      )
+      if (overlap) {
+        pushSlot('feed_id_overlap', '多 scope 间 feedId 不能重复')
+      }
+    }
+    if (role === 'primary') {
+      const collision = otherSupportedScopes.some(
+        (other) => other.dataSourceRole === 'primary',
+      )
+      if (collision) {
+        pushSlot('primary_collision', 'primary 数据源最多一个')
       }
     }
 

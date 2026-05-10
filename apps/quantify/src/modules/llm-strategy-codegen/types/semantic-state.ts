@@ -30,6 +30,10 @@ export type SemanticCapabilityDomain =
   | 'orchestration'
 export type SemanticOrchestrationContractKind = 'scope' | 'gate' | 'program' | 'portfolioRisk'
 
+// Phase 5 S9 (#1110): scope.dataSource role / schema 枚举
+export type SemanticOrchestrationDataSourceRole = 'primary' | 'confirmation' | 'event'
+export type SemanticOrchestrationDataSourceSchema = 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
+
 export interface SemanticSeriesReference {
   source: 'price' | 'volume' | 'indicator' | 'memory'
   indicator?: 'ma' | 'ema' | 'rsi' | 'macd' | 'bollinger' | 'atr'
@@ -185,6 +189,9 @@ export interface SemanticTriggerState {
   // Phase 5 S3 (#1109): 多周期策略中显式声明该 trigger 归属哪个 scope.timeframe 节点
   // ≥1 scope.timeframe locked 节点存在时 readiness 强制要求
   timeframeScopeRef?: string
+  // Phase 5 S9 (#1110): 显式声明该 trigger 归属哪个 scope.dataSource 节点
+  // 0 dataSource scope 策略不读；声明但 ref 不在 supported 集合时 readiness fail-closed
+  dataSourceScopeRef?: string
 }
 
 export interface SemanticActionState {
@@ -204,6 +211,8 @@ export interface SemanticActionState {
   legScopeRef?: string
   // Phase 5 S3 (#1109): 多周期策略中显式声明该 action 归属哪个 scope.timeframe 节点
   timeframeScopeRef?: string
+  // Phase 5 S9 (#1110): 显式声明该 action 归属哪个 scope.dataSource 节点
+  dataSourceScopeRef?: string
 }
 
 export type SemanticRiskBasis =
@@ -264,6 +273,8 @@ export interface SemanticRiskState {
   legScopeRef?: string
   // Phase 5 S3 (#1109): 多周期策略中显式声明该 risk 归属哪个 scope.timeframe 节点
   timeframeScopeRef?: string
+  // Phase 5 S9 (#1110): 显式声明该 risk 归属哪个 scope.dataSource 节点
+  dataSourceScopeRef?: string
 }
 
 export type SemanticPositionSizingContract =
@@ -293,6 +304,8 @@ export interface SemanticPositionConstraintState {
   legScopeRef?: string
   // Phase 5 S3 (#1109): 多周期策略中显式声明该 position constraint 归属哪个 scope.timeframe 节点
   timeframeScopeRef?: string
+  // Phase 5 S9 (#1110): 显式声明该 position constraint 归属哪个 scope.dataSource 节点
+  dataSourceScopeRef?: string
 }
 
 export interface SemanticPositionState {
@@ -431,6 +444,12 @@ export interface SemanticOrchestrationNode {
   primaryTimeframe?: SemanticSupportedTimeframe
   requiredTimeframes?: readonly SemanticSupportedTimeframe[]
   alignmentPolicy?: SemanticOrchestrationTimeframeAlignmentPolicy
+  // scope.dataSource 节点专属（其它 kind 不读）— Phase 5 S9 (#1110)
+  // 已知 tech debt：未来 ≥3 scope kind 时考虑重构 discriminated union（follow-up issue）
+  dataSourceScopeKind?: 'dataSource'
+  dataSourceRole?: SemanticOrchestrationDataSourceRole
+  dataSourceFeedId?: string
+  dataSourceSchemaRef?: SemanticOrchestrationDataSourceSchema
   support?: SemanticAtomSupportMetadata
 }
 

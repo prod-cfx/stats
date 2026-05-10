@@ -1,7 +1,12 @@
 import type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 import type { PositionLifecycleActionMetadata } from './canonical-strategy-ir'
 import type { StrategyNormalizedIntent } from './strategy-normalized-intent'
-import type { SemanticExpressionOperand, SemanticExpressionOperator } from './semantic-state'
+import type {
+  SemanticExpressionOperand,
+  SemanticExpressionOperator,
+  SemanticOrchestrationDataSourceRole,
+  SemanticOrchestrationDataSourceSchema,
+} from './semantic-state'
 
 export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 
@@ -84,6 +89,8 @@ export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
   // Phase 5 S3 (#1109): 多周期策略中显式声明该 rule 归属哪个 scope.timeframe id
   // 仅在 spec.orchestration.scopes 含 timeframe scope 时由 builder 透传
   timeframeScopeRef?: string
+  // Phase 5 S9 (#1110): 显式声明该 rule 归属哪个 scope.dataSource id
+  dataSourceScopeRef?: string
 }
 
 export interface CanonicalRuleV2 {
@@ -218,9 +225,19 @@ export interface CanonicalOrchestrationTimeframeScope {
   alignmentPolicy: 'strict' | 'tolerant'
 }
 
+// Phase 5 S9 (#1110): scope.dataSource substrate
+export interface CanonicalOrchestrationDataSourceScope {
+  id: string
+  scopeKind: 'dataSource'
+  role: SemanticOrchestrationDataSourceRole
+  feedId: string
+  schemaRef: SemanticOrchestrationDataSourceSchema
+}
+
 export type CanonicalOrchestrationScope =
   | CanonicalOrchestrationSymbolScope
   | CanonicalOrchestrationTimeframeScope
+  | CanonicalOrchestrationDataSourceScope
 
 export interface CanonicalStrategySpecV2 {
   version: 2

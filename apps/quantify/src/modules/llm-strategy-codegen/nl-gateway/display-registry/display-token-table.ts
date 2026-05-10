@@ -244,7 +244,7 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.symbol.symbols_overlap', kind: 'slot', zh: '多 scope 之间标的不能重叠' },
   { token: 'slot.orchestration.scope.symbol.primary_symbol_collision', kind: 'slot', zh: '多 scope 主标的必须各自唯一' },
   { token: 'slot.orchestration.scope.symbol.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 symbol scope' },
-  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol' },
+  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol 与 scope.dataSource' },
 
   // Phase 5 S11 (#1112): scope.leg substrate
   { token: 'atom.scope.leg.name', kind: 'atom', zh: '策略腿' },
@@ -263,7 +263,7 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.leg.paired_leg_id', kind: 'slot', zh: 'fixed_ratio 模式必须指定 pairedLegId' },
   { token: 'slot.orchestration.scope.leg.direction_collision', kind: 'slot', zh: 'paired leg 必须方向相反（对冲腿）' },
   { token: 'slot.orchestration.scope.leg.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个策略腿' },
-  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol / scope.timeframe' },
+  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource' },
 
   // Phase 5 S3 (#1109): scope.timeframe substrate
   { token: 'atom.scope.timeframe.name', kind: 'atom', zh: '周期范围' },
@@ -280,4 +280,18 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.timeframe.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 timeframe scope（必须显式声明）' },
   { token: 'slot.orchestration.scope.timeframe.unsupported_key', kind: 'slot', zh: '当前仅支持 scope.timeframe' },
   { token: 'slot.orchestration.scope.timeframe.scope_kind', kind: 'slot', zh: '请确认 scopeKind 为 timeframe' },
+
+  // Phase 5 S9 (#1110): scope.dataSource substrate
+  { token: 'atom.scope.dataSource.name', kind: 'atom', zh: '数据源' },
+  { token: 'atom.scope.dataSource.display', kind: 'atom', zh: '数据源：{role}（{feedId} / {schema}）' },
+  { token: 'param.role', kind: 'param', zh: '数据源角色' },
+  { token: 'param.feedId', kind: 'param', zh: '数据源 feedId' },
+  { token: 'param.schema', kind: 'param', zh: '数据源 schema' },
+  { token: 'slot.orchestration.scope.dataSource.role', kind: 'slot', zh: '请确认数据源角色（primary/confirmation/event）' },
+  { token: 'slot.orchestration.scope.dataSource.feed_id', kind: 'slot', zh: '请确认数据源 feedId（如 binance.spot.btcusdt）' },
+  { token: 'slot.orchestration.scope.dataSource.schema_ref', kind: 'slot', zh: '请确认数据源 schema（ohlcv/orderbook/liquidation/webhook_event）' },
+  { token: 'slot.orchestration.scope.dataSource.feed_id_overlap', kind: 'slot', zh: '多 scope 间 feedId 不能重复' },
+  { token: 'slot.orchestration.scope.dataSource.primary_collision', kind: 'slot', zh: 'primary 数据源最多一个' },
+  { token: 'slot.orchestration.scope.dataSource.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 dataSource scope' },
+  { token: 'slot.orchestration.scope.dataSource.scope_kind', kind: 'slot', zh: '请确认 scopeKind 为 dataSource' },
 ] as const satisfies readonly DisplayToken[]

@@ -65,6 +65,8 @@ interface DecisionProgramNode {
     legScopeRef?: string
     /** Phase 5 S3 (#1109): 多周期策略下该 program 归属的 scope.timeframe id */
     timeframeScopeRef?: string
+    /** Phase 5 S9 (#1110): 多 dataSource scope 策略下该 program 归属的 scope.dataSource id */
+    dataSourceScopeRef?: string
   }
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
@@ -99,6 +101,8 @@ export interface CompiledOrchestrationLegScope {
   legSizing?: CompiledOrchestrationLegSizing
   // S11 仅声明透传，runtime 当前不读；follow-up 接入 cross-program 同步触发聚合
   syncTriggerRequired?: boolean
+}
+
 // Phase 5 S3 (#1109): scope.timeframe substrate compiled runtime
 export interface CompiledTimeframeScope {
   id: string
@@ -108,8 +112,6 @@ export interface CompiledTimeframeScope {
   alignmentPolicy: 'strict' | 'tolerant'
 }
 
-export type CompiledOrchestrationScope = CompiledSymbolScope | CompiledTimeframeScope
-
 /** Phase 5 S3 (#1109): caller 注入的 timeframe bar status entry */
 export interface TimeframeBarStatusEntry {
   /** 已收 bar 的时间戳（毫秒；与 packages/shared Bar.timestamp 同源） */
@@ -117,6 +119,23 @@ export interface TimeframeBarStatusEntry {
   /** 已收 bar 的索引（0-based；caller 可由 bars.length-1 派生） */
   lastClosedBarIndex: number
 }
+
+// Phase 5 S9 (#1110): scope.dataSource substrate compiled runtime
+export type CompiledOrchestrationDataSourceRole = 'primary' | 'confirmation' | 'event'
+export type CompiledOrchestrationDataSourceSchema = 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
+export interface CompiledOrchestrationDataSourceScope {
+  id: string
+  scopeKind: 'dataSource'
+  role: CompiledOrchestrationDataSourceRole
+  feedId: string
+  schemaRef: CompiledOrchestrationDataSourceSchema
+}
+
+export type CompiledOrchestrationScope =
+  | CompiledSymbolScope
+  | CompiledTimeframeScope
+  | CompiledOrchestrationLegScope
+  | CompiledOrchestrationDataSourceScope
 
 interface CompiledDecisionState {
   barIndex: number
@@ -181,6 +200,13 @@ export function runDecisionPrograms(
     })
   }
 
+  // Phase 5 S9 (#1110): scope.dataSource substrate fail-closed（循环外、program-agnostic 全局短路）
+  // 当 scopes 含 ≥1 个 dataSource scope 时检查；否则零侵入。
+  const dataSourceCheck = applyDataSourceScopeFailClosed(ctx, orchestrationScopes)
+  if (dataSourceCheck !== 'continue') {
+    return Object.freeze(applyOrchestrationGate(dataSourceCheck, orchestrationGateState, portfolioRiskState, ctx))
+  }
+
   const decisionIndex = new Map(programs.map(program => [program.id, program]))
   const orderedPrograms = decisionOrder
     .map(id => decisionIndex.get(id))
@@ -207,6 +233,13 @@ export function runDecisionPrograms(
     //   - scopes.length <= 1: 'continue' 走兜底（单/0 scope 旧策略零侵入）
     //   - scopes.length >= 2: 'continue' / 'skip' / 失败 decision
     //   - 失败 decision 走 applyOrchestrationGate 保留 portfolioRisk observedBreaches
+    // Phase 5 S9 (#1110): scope.dataSource program-level unbound 校验（提前于 S2 symbol routing；
+    // 多 symbol scope + 多 dataSource scope 共存时孤儿 dataSourceScopeRef 不被 S2 'skip' 绕过 — critic M3 修复）
+    const dataSourceProgramRouting = applyDataSourceScopeProgramRouting(program, orchestrationScopes)
+    if (dataSourceProgramRouting !== 'continue') {
+      return Object.freeze(applyOrchestrationGate(dataSourceProgramRouting, orchestrationGateState, portfolioRiskState, ctx))
+    }
+
     const scopeRouting = applySymbolScopeRouting(program, ctx, orchestrationScopes)
     if (scopeRouting === 'skip') continue
     if (scopeRouting !== 'continue') {
@@ -1653,7 +1686,10 @@ export function applySymbolScopeRouting(
   ctx: StrategyExecutionContextV1,
   scopes: readonly CompiledOrchestrationScope[] | undefined,
 ): 'continue' | 'skip' | StrategyDecisionV1 {
-  if (!scopes || scopes.length <= 1) return 'continue'
+  // Phase 5 S9 (#1110): 按 scopeKind 过滤 — 仅基于 symbol scope 决策路由
+  // 修复多 scope.symbol + 多 scope.dataSource 共存时被误判为 fail-closed.no_active_scope
+  const symbolScopes = (scopes ?? []).filter(s => s.scopeKind === 'symbol')
+  if (symbolScopes.length <= 1) return 'continue'
 
   const activeIdRaw = (ctx as { activeSymbolScopeId?: unknown }).activeSymbolScopeId
   const activeId = typeof activeIdRaw === 'string' ? activeIdRaw.trim() : ''
@@ -1663,7 +1699,7 @@ export function applySymbolScopeRouting(
       reason: 'compiled.orchestration.scope.fail_closed.no_active_scope',
     }
   }
-  if (!scopes.some(s => s.id === activeId)) {
+  if (!symbolScopes.some(s => s.id === activeId)) {
     return {
       action: 'NOOP',
       reason: 'compiled.orchestration.scope.fail_closed.unknown_active_scope',
@@ -1764,6 +1800,99 @@ export function applyTimeframeScopeAlignment(
       reason: `compiled.orchestration.scope.timeframe.fail_closed.${stage}`,
     }
   }
+}
+
+/**
+ * Phase 5 S9 (#1110): scope.dataSource substrate runtime fail-closed（循环外，program-agnostic 全局短路）
+ *
+ * 决策表（按短路顺序）：
+ *   scopes 不含 dataSource scope        → 'continue' （旧策略零侵入）
+ *   ctx.dataSourceFeeds 缺失            → fail-closed.feeds_unprovided
+ *   按 role 优先级 primary > confirmation > event；同 role 按 id 字典序，对每个 scope:
+ *     feedId 不在 ctx.dataSourceFeeds   → fail-closed.{role}_feed_missing
+ *     feed.permissionGranted !== true   → fail-closed.permission_denied
+ *     feed.schema !== scope.schemaRef   → fail-closed.schema_mismatch
+ *     feed.hasData !== true             → fail-closed.no_data
+ *   全部通过                             → 'continue'
+ */
+export function applyDataSourceScopeFailClosed(
+  ctx: StrategyExecutionContextV1,
+  scopes: readonly CompiledOrchestrationScope[] | undefined,
+): 'continue' | StrategyDecisionV1 {
+  const dsScopes = (scopes ?? []).filter(
+    (s): s is Extract<CompiledOrchestrationScope, { scopeKind: 'dataSource' }> => s.scopeKind === 'dataSource',
+  )
+  if (dsScopes.length === 0) return 'continue'
+
+  const feedsRaw = (ctx as { dataSourceFeeds?: unknown }).dataSourceFeeds
+  if (!feedsRaw || typeof feedsRaw !== 'object') {
+    return failClosed('feeds_unprovided')
+  }
+  const feeds = feedsRaw as Readonly<Record<string, unknown>>
+
+  const rolePriority: Record<'primary' | 'confirmation' | 'event', number> = {
+    primary: 0,
+    confirmation: 1,
+    event: 2,
+  }
+  const ordered = [...dsScopes].sort((a, b) => {
+    const diff = rolePriority[a.role] - rolePriority[b.role]
+    return diff !== 0 ? diff : a.id.localeCompare(b.id)
+  })
+
+  for (const scope of ordered) {
+    const feed = feeds[scope.feedId]
+    if (!feed || typeof feed !== 'object') {
+      return failClosed(`${scope.role}_feed_missing`)
+    }
+    const f = feed as { schema?: unknown; permissionGranted?: unknown; hasData?: unknown }
+    if (f.permissionGranted !== true) {
+      return failClosed('permission_denied')
+    }
+    if (f.schema !== scope.schemaRef) {
+      return failClosed('schema_mismatch')
+    }
+    if (f.hasData !== true) {
+      return failClosed('no_data')
+    }
+  }
+  return 'continue'
+}
+
+/**
+ * Phase 5 S9 (#1110): scope.dataSource program-level unbound 校验（循环内，per-program）
+ *
+ * 决策表：
+ *   scopes 不含 dataSource scope                                    → 'continue'
+ *   program.metadata.dataSourceScopeRef 未声明 / 显式空 string       → 'continue'（不强制绑定）
+ *   ref 不在 supported dataSource scope id 集合                     → fail-closed.unbound_program
+ *   ref ∈ supported dataSource scope id 集合                        → 'continue'
+ */
+export function applyDataSourceScopeProgramRouting(
+  program: { metadata?: { dataSourceScopeRef?: string } },
+  scopes: readonly CompiledOrchestrationScope[] | undefined,
+): 'continue' | StrategyDecisionV1 {
+  const dsScopes = (scopes ?? []).filter(
+    (s): s is Extract<CompiledOrchestrationScope, { scopeKind: 'dataSource' }> => s.scopeKind === 'dataSource',
+  )
+  if (dsScopes.length === 0) return 'continue'
+
+  const refRaw = program.metadata?.dataSourceScopeRef
+  if (typeof refRaw !== 'string') return 'continue'
+  const ref = refRaw.trim()
+  if (ref === '') return 'continue'
+
+  if (!dsScopes.some(s => s.id === ref)) {
+    return failClosed('unbound_program')
+  }
+  return 'continue'
+}
+
+function failClosed(suffix: string): StrategyDecisionV1 {
+  return Object.freeze({
+    action: 'NOOP',
+    reason: `compiled.orchestration.scope.fail_closed.${suffix}`,
+  })
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {

@@ -5,14 +5,24 @@ export { evaluateGuards } from './compiled-runtime/evaluate-guards'
 export { isNaturalSweepCombination, liquiditySweepDetector } from './compiled-runtime/liquidity-sweep-detector'
 export type { LiquiditySweepDetectorInput, LiquiditySweepDirection, LiquiditySweepReference } from './compiled-runtime/liquidity-sweep-detector'
 export { evaluateRiskPredicates } from './compiled-runtime/evaluate-risk-predicates'
-export { runDecisionPrograms, applySymbolScopeRouting, applyLegScopeRouting } from './compiled-runtime/run-decision-programs'
-export type { CompiledOrchestrationScope, CompiledOrchestrationLegScope, CompiledOrchestrationLegSizing } from './compiled-runtime/run-decision-programs'
-export { runDecisionPrograms, applySymbolScopeRouting, applyTimeframeScopeAlignment } from './compiled-runtime/run-decision-programs'
+export {
+  runDecisionPrograms,
+  applySymbolScopeRouting,
+  applyLegScopeRouting,
+  applyTimeframeScopeAlignment,
+  applyDataSourceScopeFailClosed,
+  applyDataSourceScopeProgramRouting,
+} from './compiled-runtime/run-decision-programs'
 export type {
   CompiledOrchestrationScope,
   CompiledSymbolScope,
+  CompiledOrchestrationLegScope,
+  CompiledOrchestrationLegSizing,
   CompiledTimeframeScope,
   TimeframeBarStatusEntry,
+  CompiledOrchestrationDataSourceScope,
+  CompiledOrchestrationDataSourceRole,
+  CompiledOrchestrationDataSourceSchema,
 } from './compiled-runtime/run-decision-programs'
 // Phase 5 S3 (#1109)
 export { parseTimeframeMs, SUPPORTED_TIMEFRAMES, TIMEFRAME_MS } from './compiled-runtime/parse-timeframe-ms'
