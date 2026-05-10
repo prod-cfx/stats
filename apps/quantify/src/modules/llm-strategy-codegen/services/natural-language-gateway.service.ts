@@ -12,6 +12,8 @@ import type {
   SemanticLegScopeFrame,
   SemanticNaturalLanguageFrame,
   SemanticPortfolioDrawdownFrame,
+  SemanticPortfolioSubStrategyExposureCapFrame,
+  SemanticPortfolioSymbolExposureCapFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
   SemanticSubStrategyGateFrame,
@@ -31,6 +33,8 @@ type FrameDraft =
   | CombinationFrameDraft
   | RegimeGateFrameDraft
   | PortfolioDrawdownFrameDraft
+  | PortfolioSymbolExposureCapFrameDraft
+  | PortfolioSubStrategyExposureCapFrameDraft
   | FixedGridGatedFrameDraft
   | DynamicGridFrameDraft
   | AdaptiveVolatilityGridFrameDraft
@@ -50,6 +54,8 @@ type RiskFrameDraft = Omit<SemanticRiskFrame, 'id' | 'confidence'>
 type CombinationFrameDraft = Omit<SemanticCombinationFrame, 'id' | 'confidence'>
 type RegimeGateFrameDraft = Omit<SemanticRegimeGateFrame, 'id' | 'confidence'>
 type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | 'confidence'>
+type PortfolioSymbolExposureCapFrameDraft = Omit<SemanticPortfolioSymbolExposureCapFrame, 'id' | 'confidence'>
+type PortfolioSubStrategyExposureCapFrameDraft = Omit<SemanticPortfolioSubStrategyExposureCapFrame, 'id' | 'confidence'>
 type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confidence'>
 type DynamicGridFrameDraft = Omit<SemanticDynamicGridFrame, 'id' | 'confidence'>
 type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame, 'id' | 'confidence'>
@@ -81,6 +87,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseRisk(text),
       ...this.parseRegimeGate(text),
       ...this.parsePortfolioDrawdown(text),
+      ...this.parsePortfolioExposureCap(text),
       ...this.parseDynamicGrid(text),
       ...this.parseAdaptiveVolatilityGrid(text),
       ...this.parseEventListener(text),
@@ -926,6 +933,79 @@ export class NaturalLanguageGatewayService {
         mode: 'observe',
         evidenceText: match[0].trim(),
       })
+    }
+
+    return frames
+  }
+
+  /**
+   * Phase 5 S8 (#1119): 标的/子策略敞口上限 utterance parser
+   *
+   * 双门槛：
+   *   1) 触发短语：(单)?(标的|子策略|sub[\s-]?strategy)(仓位|敞口|exposure|notional)
+   *   2) 数值：(\d+(?:\.\d+)?)\s*%
+   *
+   * scope 判定：子策略|sub-strategy → substrategy；其他 → symbol
+   * effect 判定：暂停|pause → pause_substrategy；缩|reduce|降到|降至|缩到 → reduce_exposure；其他 → block_new_entries
+   * mode 判定：仅记录|observe|观察 → observe；其他 → enforce
+   */
+  private parsePortfolioExposureCap(
+    text: string,
+  ): Array<PortfolioSymbolExposureCapFrameDraft | PortfolioSubStrategyExposureCapFrameDraft> {
+    const frames: Array<PortfolioSymbolExposureCapFrameDraft | PortfolioSubStrategyExposureCapFrameDraft> = []
+
+    const triggerPattern =
+      /(?:单\s*)?(?:(子策略|sub[\s-]?strategy)|(标的|symbol))(?:\s*(?:仓位|敞口|exposure|notional))/giu
+    const valuePattern = /(\d+(?:\.\d+)?)\s*%/u
+
+    for (const triggerMatch of text.matchAll(triggerPattern)) {
+      const isSubStrategy = triggerMatch[1] !== undefined
+
+      // Find value in nearby context (up to 80 chars after trigger)
+      const afterTrigger = text.slice(triggerMatch.index)
+      const valueMatch = valuePattern.exec(afterTrigger)
+      if (!valueMatch) continue
+
+      const notionalCapPct = Number(valueMatch[1])
+      if (notionalCapPct <= 0 || notionalCapPct > 100) continue
+
+      // Determine mode
+      const mode: 'observe' | 'enforce' = /仅记录|observe|观察/iu.test(afterTrigger) ? 'observe' : 'enforce'
+
+      const evidenceText = triggerMatch[0].trim()
+
+      if (isSubStrategy) {
+        // effect: pause_substrategy | block_new_entries
+        const effect: 'pause_substrategy' | 'block_new_entries' = /暂停|pause/iu.test(afterTrigger)
+          ? 'pause_substrategy'
+          : 'block_new_entries'
+        // Avoid duplicates for same notionalCapPct + mode + effect
+        const isDup = frames.some(
+          (f) =>
+            f.kind === 'portfolio_substrategy_exposure_cap'
+            && (f as PortfolioSubStrategyExposureCapFrameDraft).notionalCapPct === notionalCapPct
+            && (f as PortfolioSubStrategyExposureCapFrameDraft).mode === mode
+            && (f as PortfolioSubStrategyExposureCapFrameDraft).effect === effect,
+        )
+        if (!isDup) {
+          frames.push({ kind: 'portfolio_substrategy_exposure_cap', notionalCapPct, mode, effect, evidenceText })
+        }
+      } else {
+        // effect: reduce_exposure | block_new_entries
+        const effect: 'reduce_exposure' | 'block_new_entries' = /缩|reduce|降到|降至|缩到/iu.test(afterTrigger)
+          ? 'reduce_exposure'
+          : 'block_new_entries'
+        const isDup = frames.some(
+          (f) =>
+            f.kind === 'portfolio_symbol_exposure_cap'
+            && (f as PortfolioSymbolExposureCapFrameDraft).notionalCapPct === notionalCapPct
+            && (f as PortfolioSymbolExposureCapFrameDraft).mode === mode
+            && (f as PortfolioSymbolExposureCapFrameDraft).effect === effect,
+        )
+        if (!isDup) {
+          frames.push({ kind: 'portfolio_symbol_exposure_cap', notionalCapPct, mode, effect, evidenceText })
+        }
+      }
     }
 
     return frames

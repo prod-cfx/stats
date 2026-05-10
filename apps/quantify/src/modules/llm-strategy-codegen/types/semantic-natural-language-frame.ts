@@ -17,6 +17,8 @@ export type SemanticNaturalLanguageFrame =
   | SemanticDataSourceScopeFrame
   | SemanticSubStrategyScopeFrame
   | SemanticSubStrategyGateFrame
+  | SemanticPortfolioSymbolExposureCapFrame
+  | SemanticPortfolioSubStrategyExposureCapFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -202,4 +204,25 @@ export interface SemanticSubStrategyGateFrame extends SemanticFrameBase {
   subStrategyScopeRef: string                   // 该 gate 控制的 subStrategy id
   toSubStrategyScopeRef?: string                // switch 类
   effectWhenFalse: 'pause_substrategy' | 'switch_substrategy'
+}
+
+// Phase 5 S8 (#1119): portfolio symbol exposure cap frame
+//   notionalCapPct (0,100] 单标的名义敞口上限百分比
+//   mode/effect 默认值 enforce / block_new_entries（normalizer 兜底）
+//   symbolHint：utterance 中的 symbol token，binding 阶段映射 boundSymbolScopeRef
+export interface SemanticPortfolioSymbolExposureCapFrame extends SemanticFrameBase {
+  kind: 'portfolio_symbol_exposure_cap'
+  notionalCapPct: number
+  mode: 'observe' | 'enforce'
+  effect: 'block_new_entries' | 'reduce_exposure'
+  symbolHint?: string
+}
+
+// Phase 5 S8 (#1119): portfolio subStrategy exposure cap frame
+export interface SemanticPortfolioSubStrategyExposureCapFrame extends SemanticFrameBase {
+  kind: 'portfolio_substrategy_exposure_cap'
+  notionalCapPct: number
+  mode: 'observe' | 'enforce'
+  effect: 'block_new_entries' | 'pause_substrategy'
+  subStrategyHint?: string
 }

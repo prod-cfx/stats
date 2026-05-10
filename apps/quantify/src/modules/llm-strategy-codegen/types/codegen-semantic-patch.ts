@@ -8,6 +8,7 @@ import type {
   SemanticOrchestrationGateEffect,
   SemanticOrchestrationGateTarget,
   SemanticOrchestrationLegSizing,
+  SemanticOrchestrationPortfolioRiskEffect,
   SemanticOrchestrationPortfolioRiskMode,
   SemanticOrchestrationPortfolioRiskScope,
   SemanticOrchestrationProgramAnchorSide,
@@ -81,6 +82,8 @@ export interface CodegenSemanticPatch {
 export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationGateNodePatch
   | CodegenSemanticOrchestrationPortfolioRiskNodePatch
+  | CodegenSemanticOrchestrationPortfolioSymbolExposureCapNodePatch
+  | CodegenSemanticOrchestrationPortfolioSubStrategyExposureCapNodePatch
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
   | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
@@ -151,9 +154,37 @@ export interface CodegenSemanticOrchestrationPortfolioRiskNodePatch extends Code
   kind: 'portfolioRisk'
   key: 'portfolioRisk.drawdown_block'
   params: Record<string, unknown>
-  scope: SemanticOrchestrationPortfolioRiskScope
+  scope: 'portfolio'
   mode: SemanticOrchestrationPortfolioRiskMode
   thresholdPct: number
+}
+
+// Phase 5 S8 (#1119): portfolioRisk.symbol_exposure_cap patch 节点
+//   scope discriminator='symbol'；effectWhenTriggered ∈ {block_new_entries, reduce_exposure}
+//   boundSymbolScopeRef 必填，引用 status:'locked' 的 scope.symbol id
+export interface CodegenSemanticOrchestrationPortfolioSymbolExposureCapNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'portfolioRisk'
+  key: 'portfolioRisk.symbol_exposure_cap'
+  params: Record<string, unknown>
+  scope: 'symbol'
+  mode: SemanticOrchestrationPortfolioRiskMode
+  notionalCapPct: number
+  effectWhenTriggered: Extract<SemanticOrchestrationPortfolioRiskEffect, 'block_new_entries' | 'reduce_exposure'>
+  boundSymbolScopeRef?: string
+}
+
+// Phase 5 S8 (#1119): portfolioRisk.substrategy_exposure_cap patch 节点
+//   scope discriminator='subStrategy'；effectWhenTriggered ∈ {block_new_entries, pause_substrategy}
+//   boundSubStrategyScopeRef 必填，引用 status:'locked' 的 scope.subStrategy id
+export interface CodegenSemanticOrchestrationPortfolioSubStrategyExposureCapNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'portfolioRisk'
+  key: 'portfolioRisk.substrategy_exposure_cap'
+  params: Record<string, unknown>
+  scope: 'subStrategy'
+  mode: SemanticOrchestrationPortfolioRiskMode
+  notionalCapPct: number
+  effectWhenTriggered: Extract<SemanticOrchestrationPortfolioRiskEffect, 'block_new_entries' | 'pause_substrategy'>
+  boundSubStrategyScopeRef?: string
 }
 
 export interface CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch extends CodegenSemanticNodeEnvelope {

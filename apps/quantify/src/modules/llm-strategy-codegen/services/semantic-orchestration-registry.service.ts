@@ -19,6 +19,9 @@ export interface SemanticOrchestrationValidationResult {
 
 const GATE_REGIME_KEY = 'gate.regime'
 const PORTFOLIO_DRAWDOWN_BLOCK_KEY = 'portfolioRisk.drawdown_block'
+// Phase 5 S8 (#1119)
+const PORTFOLIO_SYMBOL_EXPOSURE_CAP_KEY = 'portfolioRisk.symbol_exposure_cap'
+const PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_KEY = 'portfolioRisk.substrategy_exposure_cap'
 const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
 const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
@@ -506,6 +509,90 @@ const PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT: SemanticOrchestrationContract = {
   executableSinceVersion: CURRENT_SEMANTIC_VERSION,
 }
 
+// Phase 5 S8 (#1119): portfolioRisk.symbol_exposure_cap contract
+//   capability: orchestration portfolio_risk symbol_exposure_cap
+//   runtimeRequirements: read.exposure_notional_by_symbol_scope + read.account_equity
+//   effects: guard block new_entries OR guard reduce exposure
+const PORTFOLIO_SYMBOL_EXPOSURE_CAP_CONTRACT: SemanticOrchestrationContract = {
+  id: 'portfolioRisk.symbol_exposure_cap',
+  kind: 'portfolioRisk',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'portfolio_risk',
+      object: 'symbol_exposure_cap',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'exposure_notional_by_symbol_scope',
+    },
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'account_equity',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'guard',
+      verb: 'block',
+      object: 'new_entries',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+// Phase 5 S8 (#1119): portfolioRisk.substrategy_exposure_cap contract
+//   capability: orchestration portfolio_risk substrategy_exposure_cap
+//   runtimeRequirements: read.exposure_notional_by_substrategy_scope + read.account_equity
+//   effects: guard pause sub_strategy OR guard block new_entries
+const PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_CONTRACT: SemanticOrchestrationContract = {
+  id: 'portfolioRisk.substrategy_exposure_cap',
+  kind: 'portfolioRisk',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'portfolio_risk',
+      object: 'substrategy_exposure_cap',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'exposure_notional_by_substrategy_scope',
+    },
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'account_equity',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'guard',
+      verb: 'pause',
+      object: 'sub_strategy',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
 const GATE_REGIME_CONTRACT: SemanticOrchestrationContract = {
   id: 'gate.regime',
   kind: 'gate',
@@ -545,6 +632,9 @@ export class SemanticOrchestrationRegistryService {
   private readonly contracts: ReadonlyMap<string, SemanticOrchestrationContract> = new Map([
     [GATE_REGIME_KEY, GATE_REGIME_CONTRACT],
     [PORTFOLIO_DRAWDOWN_BLOCK_KEY, PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT],
+    // Phase 5 S8 (#1119)
+    [PORTFOLIO_SYMBOL_EXPOSURE_CAP_KEY, PORTFOLIO_SYMBOL_EXPOSURE_CAP_CONTRACT],
+    [PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_KEY, PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_CONTRACT],
     [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
     [PROGRAM_DYNAMIC_GRID_KEY, PROGRAM_DYNAMIC_GRID_CONTRACT],
     [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
@@ -606,6 +696,14 @@ export class SemanticOrchestrationRegistryService {
         })
       }
       return { ok: missingSlots.length === 0, missingSlots }
+    }
+    // Phase 5 S8 (#1119): portfolioRisk.symbol_exposure_cap
+    if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_SYMBOL_EXPOSURE_CAP_KEY) {
+      return this.validateSymbolExposureCapNode(node)
+    }
+    // Phase 5 S8 (#1119): portfolioRisk.substrategy_exposure_cap
+    if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_SUBSTRATEGY_EXPOSURE_CAP_KEY) {
+      return this.validateSubStrategyExposureCapNode(node)
     }
     // Phase 5 S10 (#1111): gate 节点 phase=subStrategy 形状校验
     //   - target.phase='subStrategy' 必须与 effect ∈ {'pause_substrategy','switch_substrategy'} 配对
@@ -1575,6 +1673,114 @@ export class SemanticOrchestrationRegistryService {
       if (collision) {
         pushSlot('id_collision', '多 scope 子策略 ID 必须唯一')
       }
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  // Phase 5 S8 (#1119): validateSymbolExposureCapNode
+  private validateSymbolExposureCapNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.portfolioRisk.symbol_exposure_cap[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.portfolioRisk.symbol_exposure_cap.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    // (1) scope 必须为 'symbol'
+    if (node.scope !== 'symbol') {
+      pushSlot('scope_mismatch', 'portfolioRisk.symbol_exposure_cap scope 必须为 symbol')
+    }
+    // (2) notionalCapPct 必须为 (0, 100]
+    const cap = node.notionalCapPct
+    if (
+      cap === undefined
+      || typeof cap !== 'number'
+      || Number.isNaN(cap)
+      || cap <= 0
+      || cap > 100
+    ) {
+      pushSlot('notional_cap_pct', '请确认标的名义敞口上限百分比（0..100]）')
+    }
+    // (3) mode 必须为 observe | enforce
+    if (node.mode !== 'observe' && node.mode !== 'enforce') {
+      pushSlot('mode', '请确认护栏模式（observe/enforce）')
+    }
+    // (4) effectWhenTriggered 必须为 block_new_entries | reduce_exposure
+    if (
+      node.effectWhenTriggered !== 'block_new_entries'
+      && node.effectWhenTriggered !== 'reduce_exposure'
+    ) {
+      pushSlot('effect', 'symbol_exposure_cap 效果必须为 block_new_entries 或 reduce_exposure')
+    }
+    // (5) boundSymbolScopeRef 如存在需为非空字符串
+    if (
+      node.boundSymbolScopeRef !== undefined
+      && (typeof node.boundSymbolScopeRef !== 'string' || node.boundSymbolScopeRef.trim() === '')
+    ) {
+      pushSlot('bound_symbol_scope_ref', 'boundSymbolScopeRef 必须为非空字符串')
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  // Phase 5 S8 (#1119): validateSubStrategyExposureCapNode
+  private validateSubStrategyExposureCapNode(
+    node: SemanticOrchestrationNode,
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.portfolioRisk.substrategy_exposure_cap[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.portfolioRisk.substrategy_exposure_cap.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    // (1) scope 必须为 'subStrategy'
+    if (node.scope !== 'subStrategy') {
+      pushSlot('scope_mismatch', 'portfolioRisk.substrategy_exposure_cap scope 必须为 subStrategy')
+    }
+    // (2) notionalCapPct 必须为 (0, 100]
+    const cap = node.notionalCapPct
+    if (
+      cap === undefined
+      || typeof cap !== 'number'
+      || Number.isNaN(cap)
+      || cap <= 0
+      || cap > 100
+    ) {
+      pushSlot('notional_cap_pct', '请确认子策略名义敞口上限百分比（0..100]）')
+    }
+    // (3) mode 必须为 observe | enforce
+    if (node.mode !== 'observe' && node.mode !== 'enforce') {
+      pushSlot('mode', '请确认护栏模式（observe/enforce）')
+    }
+    // (4) effectWhenTriggered 必须为 block_new_entries | pause_substrategy
+    if (
+      node.effectWhenTriggered !== 'block_new_entries'
+      && node.effectWhenTriggered !== 'pause_substrategy'
+    ) {
+      pushSlot('effect', 'substrategy_exposure_cap 效果必须为 block_new_entries 或 pause_substrategy')
+    }
+    // (5) boundSubStrategyScopeRef 如存在需为非空字符串
+    if (
+      node.boundSubStrategyScopeRef !== undefined
+      && (typeof node.boundSubStrategyScopeRef !== 'string' || node.boundSubStrategyScopeRef.trim() === '')
+    ) {
+      pushSlot('bound_substrategy_scope_ref', 'boundSubStrategyScopeRef 必须为非空字符串')
     }
 
     return { ok: missingSlots.length === 0, missingSlots }

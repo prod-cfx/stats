@@ -425,6 +425,15 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  // Phase 5 S8 (#1119): symbol/subStrategy exposure cap 路径
+  if (isSupportedPortfolioSymbolExposureCap(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
+  if (isSupportedPortfolioSubStrategyExposureCap(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
   if (isSupportedFixedGridGated(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry)
   }
@@ -1278,6 +1287,108 @@ function isSupportedPortfolioDrawdownBlock(
   }
 
   return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * Phase 5 S8 (#1119): portfolioRisk.symbol_exposure_cap 10 重 fail-closed
+ *  1) kind === 'portfolioRisk'
+ *  2) key === 'portfolioRisk.symbol_exposure_cap'
+ *  3) scope === 'symbol'
+ *  4) mode ∈ {observe, enforce}
+ *  5) notionalCapPct 有限正数且 ∈ (0, 100]
+ *  6) effectWhenTriggered ∈ {block_new_entries, reduce_exposure}
+ *  7) boundSymbolScopeRef 非空字符串
+ *  8) registry 已注册 contract
+ *  9) version-gate：strategyVersion 存在 + atom 可执行
+ * 10) boundSymbolScopeRef ∈ siblingNodes 中 status='locked' + key='scope.symbol' + id 匹配
+ */
+function isSupportedPortfolioSymbolExposureCap(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  // (1) kind
+  if (node.kind !== 'portfolioRisk') return false
+  // (2) key
+  if (node.key !== 'portfolioRisk.symbol_exposure_cap') return false
+  // (3) scope discriminator
+  if (node.scope !== 'symbol') return false
+  // (4) mode
+  if (node.mode !== 'observe' && node.mode !== 'enforce') return false
+  // (5) notionalCapPct
+  const cap = node.notionalCapPct
+  if (cap === undefined || typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0 || cap > 100) return false
+  // (6) effectWhenTriggered
+  if (node.effectWhenTriggered !== 'block_new_entries' && node.effectWhenTriggered !== 'reduce_exposure') return false
+  // (7) boundSymbolScopeRef
+  const ref = node.boundSymbolScopeRef
+  if (typeof ref !== 'string' || ref.trim() === '') return false
+  // (8) registry
+  const contract = registry.getContractByKey('portfolioRisk.symbol_exposure_cap')
+  if (!contract) return false
+  // (9) version-gate
+  if (!strategyVersion) return false
+  if (!registry.isExecutableForStrategy(contract, strategyVersion)) return false
+  // (10) boundSymbolScopeRef ∈ locked scope.symbol sibling ids
+  const trimmedRef = ref.trim()
+  const hasMatchingScope = siblingNodes.some(
+    (s) => s.id === trimmedRef && s.kind === 'scope' && s.key === 'scope.symbol' && s.status === 'locked',
+  )
+  if (!hasMatchingScope) return false
+
+  return true
+}
+
+/**
+ * Phase 5 S8 (#1119): portfolioRisk.substrategy_exposure_cap 10 重 fail-closed
+ *  1) kind === 'portfolioRisk'
+ *  2) key === 'portfolioRisk.substrategy_exposure_cap'
+ *  3) scope === 'subStrategy'
+ *  4) mode ∈ {observe, enforce}
+ *  5) notionalCapPct 有限正数且 ∈ (0, 100]
+ *  6) effectWhenTriggered ∈ {block_new_entries, pause_substrategy}
+ *  7) boundSubStrategyScopeRef 非空字符串
+ *  8) registry 已注册 contract
+ *  9) version-gate：strategyVersion 存在 + atom 可执行
+ * 10) boundSubStrategyScopeRef ∈ siblingNodes 中 status='locked' + key='scope.subStrategy' + id 匹配
+ */
+function isSupportedPortfolioSubStrategyExposureCap(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  // (1) kind
+  if (node.kind !== 'portfolioRisk') return false
+  // (2) key
+  if (node.key !== 'portfolioRisk.substrategy_exposure_cap') return false
+  // (3) scope discriminator
+  if (node.scope !== 'subStrategy') return false
+  // (4) mode
+  if (node.mode !== 'observe' && node.mode !== 'enforce') return false
+  // (5) notionalCapPct
+  const cap = node.notionalCapPct
+  if (cap === undefined || typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0 || cap > 100) return false
+  // (6) effectWhenTriggered
+  if (node.effectWhenTriggered !== 'block_new_entries' && node.effectWhenTriggered !== 'pause_substrategy') return false
+  // (7) boundSubStrategyScopeRef
+  const ref = node.boundSubStrategyScopeRef
+  if (typeof ref !== 'string' || ref.trim() === '') return false
+  // (8) registry
+  const contract = registry.getContractByKey('portfolioRisk.substrategy_exposure_cap')
+  if (!contract) return false
+  // (9) version-gate
+  if (!strategyVersion) return false
+  if (!registry.isExecutableForStrategy(contract, strategyVersion)) return false
+  // (10) boundSubStrategyScopeRef ∈ locked scope.subStrategy sibling ids
+  const trimmedRef = ref.trim()
+  const hasMatchingScope = siblingNodes.some(
+    (s) => s.id === trimmedRef && s.kind === 'scope' && s.key === 'scope.subStrategy' && s.status === 'locked',
+  )
+  if (!hasMatchingScope) return false
+
+  return true
 }
 
 /**

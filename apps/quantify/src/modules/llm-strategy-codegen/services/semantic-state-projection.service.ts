@@ -221,6 +221,54 @@ export class SemanticStateProjectionService {
         })
         continue
       }
+      // Phase 5 S8 (#1119): symbol_exposure_cap display
+      if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.symbol_exposure_cap') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('portfolioRisk.symbol_exposure_cap')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'portfolioRisk',
+          id: `orchestration-portfolio-risk-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
+        continue
+      }
+      // Phase 5 S8 (#1119): substrategy_exposure_cap display
+      if (node.kind === 'portfolioRisk' && node.key === 'portfolioRisk.substrategy_exposure_cap') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('portfolioRisk.substrategy_exposure_cap')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'portfolioRisk',
+          id: `orchestration-portfolio-risk-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
+        continue
+      }
       if (node.kind === 'program' && node.key === 'program.fixed_grid_gated') {
         let entry
         try {

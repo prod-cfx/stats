@@ -4038,7 +4038,10 @@ describe('canonicalSpecV2IrCompilerService orchestration gates', () => {
     expect(result.ir.orchestrationPortfolioRisks).toHaveLength(1)
     expect(result.ir.orchestrationPortfolioRisks?.[0].id).toBe('portfolio-drawdown-mix')
     expect(result.ir.orchestrationPortfolioRisks?.[0].mode).toBe('enforce')
-    expect(result.ir.orchestrationPortfolioRisks?.[0].thresholdPct).toBe(15)
+    const r0 = result.ir.orchestrationPortfolioRisks?.[0]
+    if (r0?.scope === 'portfolio') {
+      expect(r0.thresholdPct).toBe(15)
+    }
   })
 
   it('compiles a program with valid activeWhenRef into IR.orchestrationPrograms with resolved activeWhenExprId', () => {

@@ -86,7 +86,11 @@ describe('signalGeneratorService portfolio risk gate (live-signal fast path)', (
     })
 
     it('调用 evaluateOrchestrationPortfolioRisks 并 fallback 到 []', () => {
-      expect(src).toMatch(/evaluateOrchestrationPortfolioRisks\([\s\S]*?orchestrationPortfolioRisks[\s\S]*?\?\?\s*\[\]/)
+      // Phase 5 S8 (#1119): evaluator 输入路径变为 filterPortfolioRisksForLiveSignal(orchestrationPortfolioRisks ?? [])
+      //   - orchestrationPortfolioRisks ?? [] 仍是 fallback 起点
+      //   - evaluateOrchestrationPortfolioRisks(...) 仍被调用
+      expect(src).toMatch(/orchestrationPortfolioRisks[\s\S]*?\?\?\s*\[\]/)
+      expect(src).toMatch(/evaluateOrchestrationPortfolioRisks\(/)
     })
 
     it('evaluator 接收 ctx.accountDrawdownPct 作为 drawdownPct 数据源', () => {

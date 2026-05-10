@@ -262,7 +262,9 @@ export class SemanticSeedStateBuilderService {
     const mode = update.mode === 'observe' || update.mode === 'enforce'
       ? update.mode
       : undefined
-    const scope = update.scope === 'portfolio' ? update.scope : undefined
+    const scope = update.scope === 'portfolio' || update.scope === 'symbol' || update.scope === 'subStrategy'
+      ? update.scope
+      : undefined
     const thresholdPct = typeof update.thresholdPct === 'number' && Number.isFinite(update.thresholdPct)
       ? update.thresholdPct
       : undefined
@@ -323,6 +325,18 @@ export class SemanticSeedStateBuilderService {
     const rebuildCooldownSec = isFiniteNumber(update.rebuildCooldownSec) ? update.rebuildCooldownSec : undefined
     const minStepPct = isFiniteNumber(update.minStepPct) ? update.minStepPct : undefined
     const maxStepPct = isFiniteNumber(update.maxStepPct) ? update.maxStepPct : undefined
+
+    // Phase 5 S8 (#1119): portfolioRisk symbol/subStrategy cap 专属字段透传
+    const notionalCapPct = isFiniteNumber(update.notionalCapPct) && (update.notionalCapPct as number) > 0 && (update.notionalCapPct as number) <= 100
+      ? update.notionalCapPct as number
+      : undefined
+    const effectWhenTriggered = update.effectWhenTriggered === 'block_new_entries'
+      || update.effectWhenTriggered === 'reduce_exposure'
+      || update.effectWhenTriggered === 'pause_substrategy'
+      ? update.effectWhenTriggered
+      : undefined
+    const boundSymbolScopeRef = this.readTrimmedString(update.boundSymbolScopeRef) ?? undefined
+    const boundSubStrategyScopeRef = this.readTrimmedString(update.boundSubStrategyScopeRef) ?? undefined
 
     // Phase 5 S2 (#1104): scope.symbol 专属字段透传
     const symbolScopeKind = update.symbolScopeKind === 'symbol' ? update.symbolScopeKind : undefined
@@ -407,6 +421,11 @@ export class SemanticSeedStateBuilderService {
       ...(dedupWindowMs !== undefined ? { dedupWindowMs } : {}),
       ...(expirationTtlMs !== undefined ? { expirationTtlMs } : {}),
       ...(expirationPolicy ? { expirationPolicy } : {}),
+      // Phase 5 S8 (#1119): portfolioRisk symbol/subStrategy cap 字段透传
+      ...(notionalCapPct !== undefined ? { notionalCapPct } : {}),
+      ...(effectWhenTriggered ? { effectWhenTriggered } : {}),
+      ...(boundSymbolScopeRef ? { boundSymbolScopeRef } : {}),
+      ...(boundSubStrategyScopeRef ? { boundSubStrategyScopeRef } : {}),
       // Phase 5 S2 (#1104): scope.symbol 字段透传
       ...(symbolScopeKind ? { symbolScopeKind } : {}),
       ...(symbols && symbols.length > 0 ? { symbols } : {}),

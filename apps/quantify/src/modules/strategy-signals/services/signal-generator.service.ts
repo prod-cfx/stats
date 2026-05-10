@@ -35,7 +35,7 @@ import {
 } from '@ai/shared/script-engine/compiled-runtime'
 import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates, type OrchestrationGateState } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
-import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
+import { evaluateOrchestrationPortfolioRisks, type CompiledOrchestrationPortfolioRisk } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
@@ -773,9 +773,23 @@ export class SignalGeneratorService {
               (projection as { orchestrationGates?: Parameters<typeof evaluateOrchestrationGates>[0] }).orchestrationGates ?? [],
               exprValues,
             )
+            // Phase 5 S8 (#1119): live signal observe-only ship for symbol/subStrategy risks
+            //   mode='enforce' symbol/subStrategy risks are silently filtered before evaluator
+            //   until follow-up issue #1120 wires live exposure feed.
+            //   Drawdown path is unchanged (no filter).
+            //   expose maps injected as undefined → enforce fail-closed / observe no-op.
+            const allPortfolioRisks = (projection as {
+              orchestrationPortfolioRisks?: Parameters<typeof evaluateOrchestrationPortfolioRisks>[0]
+            }).orchestrationPortfolioRisks ?? []
+            const livePortfolioRisks = filterPortfolioRisksForLiveSignal(allPortfolioRisks)
             const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
-              (projection as { orchestrationPortfolioRisks?: Parameters<typeof evaluateOrchestrationPortfolioRisks>[0] }).orchestrationPortfolioRisks ?? [],
-              { drawdownPct: ctx.accountDrawdownPct },
+              livePortfolioRisks,
+              {
+                drawdownPct: ctx.accountDrawdownPct,
+                accountEquity: undefined,
+                exposureNotionalBySymbolScope: undefined,
+                exposureNotionalBySubStrategyScope: undefined,
+              },
             )
             // Phase 5 S2 (#1104): scope.symbol substrate
             //   - 单/0 scope 时为空数组，runDecisionPrograms 走兜底
@@ -2770,4 +2784,22 @@ export class SignalGeneratorService {
   }): context is { currentQty: number; equity: number; markPrice: number } {
     return this.decisionStage.hasExplicitDecisionContext(context)
   }
+}
+
+/**
+ * Phase 5 S8 (#1119): live signal observe-only ship filter
+ *   mode='enforce' symbol/subStrategy risks are silently filtered until
+ *   follow-up issue #1120 wires live exposure feed.
+ *   Drawdown risks (scope='portfolio') pass through unchanged.
+ */
+function filterPortfolioRisksForLiveSignal(
+  risks: readonly CompiledOrchestrationPortfolioRisk[],
+): readonly CompiledOrchestrationPortfolioRisk[] {
+  return risks.filter((risk) => {
+    const scope = (risk as { scope?: string }).scope ?? 'portfolio'
+    if (scope === 'symbol' || scope === 'subStrategy') {
+      return risk.mode !== 'enforce'
+    }
+    return true
+  })
 }

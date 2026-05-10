@@ -756,30 +756,67 @@ export class CanonicalSpecBuilderService {
 
     const risks: CanonicalOrchestrationPortfolioRisk[] = []
     for (const node of nodes) {
-      if (node.kind !== 'portfolioRisk' || node.status !== 'locked' || node.key !== 'portfolioRisk.drawdown_block') {
-        continue
-      }
-      if (node.scope !== 'portfolio') {
+      if (node.kind !== 'portfolioRisk' || node.status !== 'locked') {
         continue
       }
       if (node.mode !== 'observe' && node.mode !== 'enforce') {
         continue
       }
-      const thresholdPct = node.thresholdPct
-      if (typeof thresholdPct !== 'number' || !Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct > 100) {
+
+      if (node.key === 'portfolioRisk.drawdown_block' && node.scope === 'portfolio') {
+        const thresholdPct = node.thresholdPct
+        if (typeof thresholdPct !== 'number' || !Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct > 100) {
+          continue
+        }
+        risks.push({
+          id: node.id,
+          scope: 'portfolio',
+          mode: node.mode,
+          thresholdPct,
+          effectWhenTriggered: 'block_new_entries',
+        })
         continue
       }
 
-      risks.push({
-        id: node.id,
-        scope: node.scope,
-        mode: node.mode,
-        thresholdPct,
-        effectWhenTriggered: 'block_new_entries',
-      })
+      // Phase 5 S8 (#1119): symbol exposure cap
+      if (node.key === 'portfolioRisk.symbol_exposure_cap' && node.scope === 'symbol') {
+        const cap = node.notionalCapPct
+        if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0 || cap > 100) continue
+        if (node.effectWhenTriggered !== 'block_new_entries' && node.effectWhenTriggered !== 'reduce_exposure') continue
+        const symbolScopeRef = node.boundSymbolScopeRef
+        if (typeof symbolScopeRef !== 'string' || symbolScopeRef.trim() === '') continue
+        risks.push({
+          id: node.id,
+          scope: 'symbol',
+          mode: node.mode,
+          notionalCapPct: cap,
+          symbolScopeRef: symbolScopeRef.trim(),
+          effectWhenTriggered: node.effectWhenTriggered,
+        })
+        continue
+      }
+
+      // Phase 5 S8 (#1119): substrategy exposure cap
+      if (node.key === 'portfolioRisk.substrategy_exposure_cap' && node.scope === 'subStrategy') {
+        const cap = node.notionalCapPct
+        if (typeof cap !== 'number' || !Number.isFinite(cap) || cap <= 0 || cap > 100) continue
+        if (node.effectWhenTriggered !== 'block_new_entries' && node.effectWhenTriggered !== 'pause_substrategy') continue
+        const subStrategyScopeRef = node.boundSubStrategyScopeRef
+        if (typeof subStrategyScopeRef !== 'string' || subStrategyScopeRef.trim() === '') continue
+        risks.push({
+          id: node.id,
+          scope: 'subStrategy',
+          mode: node.mode,
+          notionalCapPct: cap,
+          subStrategyScopeRef: subStrategyScopeRef.trim(),
+          effectWhenTriggered: node.effectWhenTriggered,
+        })
+        continue
+      }
     }
 
-    return risks
+    // Sort by id for byte-equal stability
+    return risks.sort((a, b) => a.id.localeCompare(b.id))
   }
 
   private buildOrchestrationGates(state: SemanticState): CanonicalOrchestrationGate[] {

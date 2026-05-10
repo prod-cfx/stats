@@ -11,6 +11,8 @@ import type {
   SemanticLegScopeFrame,
   SemanticNaturalLanguageFrame,
   SemanticPortfolioDrawdownFrame,
+  SemanticPortfolioSubStrategyExposureCapFrame,
+  SemanticPortfolioSymbolExposureCapFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
   SemanticSubStrategyGateFrame,
@@ -27,6 +29,8 @@ import type {
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationLegScopeNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
+  CodegenSemanticOrchestrationPortfolioSubStrategyExposureCapNodePatch,
+  CodegenSemanticOrchestrationPortfolioSymbolExposureCapNodePatch,
   CodegenSemanticOrchestrationSubStrategyGateNodePatch,
   CodegenSemanticOrchestrationSubStrategyScopeNodePatch,
   CodegenSemanticOrchestrationSymbolScopeNodePatch,
@@ -68,6 +72,17 @@ export class SemanticFrameNormalizerService {
       CodegenSemanticOrchestrationPortfolioRiskNodePatch
     >()
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
+    // Phase 5 S8 (#1119)
+    const portfolioSymbolExposureCapByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationPortfolioSymbolExposureCapNodePatch
+    >()
+    const portfolioSymbolExposureCapFrames: SemanticPortfolioSymbolExposureCapFrame[] = []
+    const portfolioSubStrategyExposureCapByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationPortfolioSubStrategyExposureCapNodePatch
+    >()
+    const portfolioSubStrategyExposureCapFrames: SemanticPortfolioSubStrategyExposureCapFrame[] = []
     const fixedGridGatedByKey = new Map<
       string,
       CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
@@ -152,6 +167,13 @@ export class SemanticFrameNormalizerService {
         case 'portfolio_drawdown':
           portfolioDrawdownFrames.push(frame)
           break
+        // Phase 5 S8 (#1119)
+        case 'portfolio_symbol_exposure_cap':
+          portfolioSymbolExposureCapFrames.push(frame)
+          break
+        case 'portfolio_substrategy_exposure_cap':
+          portfolioSubStrategyExposureCapFrames.push(frame)
+          break
         case 'fixed_grid_gated':
           fixedGridGatedFrames.push(frame)
           break
@@ -202,6 +224,23 @@ export class SemanticFrameNormalizerService {
 
       if (!portfolioDrawdownByKey.has(dedupeKey)) {
         portfolioDrawdownByKey.set(dedupeKey, node)
+      }
+    })
+
+    // Phase 5 S8 (#1119)
+    portfolioSymbolExposureCapFrames.forEach((frame, index) => {
+      const node = this.normalizePortfolioSymbolExposureCap(frame, index)
+      const dedupeKey = JSON.stringify([node.key, node.scope, node.mode, node.notionalCapPct, node.effectWhenTriggered])
+      if (!portfolioSymbolExposureCapByKey.has(dedupeKey)) {
+        portfolioSymbolExposureCapByKey.set(dedupeKey, node)
+      }
+    })
+
+    portfolioSubStrategyExposureCapFrames.forEach((frame, index) => {
+      const node = this.normalizePortfolioSubStrategyExposureCap(frame, index)
+      const dedupeKey = JSON.stringify([node.key, node.scope, node.mode, node.notionalCapPct, node.effectWhenTriggered])
+      if (!portfolioSubStrategyExposureCapByKey.has(dedupeKey)) {
+        portfolioSubStrategyExposureCapByKey.set(dedupeKey, node)
       }
     })
 
@@ -408,6 +447,9 @@ export class SemanticFrameNormalizerService {
     const orchestrationNodes = [
       ...Array.from(regimeGateByKey.values()),
       ...Array.from(portfolioDrawdownByKey.values()),
+      // Phase 5 S8 (#1119)
+      ...Array.from(portfolioSymbolExposureCapByKey.values()),
+      ...Array.from(portfolioSubStrategyExposureCapByKey.values()),
       ...Array.from(fixedGridGatedByKey.values()),
       ...Array.from(dynamicGridByKey.values()),
       ...Array.from(adaptiveByKey.values()),
@@ -626,6 +668,42 @@ export class SemanticFrameNormalizerService {
       scope: 'portfolio',
       mode: frame.mode,
       thresholdPct: frame.thresholdPct,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S8 (#1119)
+  private normalizePortfolioSymbolExposureCap(
+    frame: SemanticPortfolioSymbolExposureCapFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationPortfolioSymbolExposureCapNodePatch {
+    return {
+      id: `orchestration-portfolio-risk-symbol-cap-${index + 1}`,
+      kind: 'portfolioRisk',
+      key: 'portfolioRisk.symbol_exposure_cap',
+      params: { notionalCapPct: frame.notionalCapPct, mode: frame.mode },
+      scope: 'symbol',
+      mode: frame.mode,
+      notionalCapPct: frame.notionalCapPct,
+      effectWhenTriggered: frame.effect,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S8 (#1119)
+  private normalizePortfolioSubStrategyExposureCap(
+    frame: SemanticPortfolioSubStrategyExposureCapFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationPortfolioSubStrategyExposureCapNodePatch {
+    return {
+      id: `orchestration-portfolio-risk-substrategy-cap-${index + 1}`,
+      kind: 'portfolioRisk',
+      key: 'portfolioRisk.substrategy_exposure_cap',
+      params: { notionalCapPct: frame.notionalCapPct, mode: frame.mode },
+      scope: 'subStrategy',
+      mode: frame.mode,
+      notionalCapPct: frame.notionalCapPct,
+      effectWhenTriggered: frame.effect,
       evidence: this.toEvidence(frame),
     }
   }

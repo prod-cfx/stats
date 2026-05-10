@@ -171,9 +171,20 @@ export class BacktestStrategyAdapterService {
             (projection as { orchestrationGates?: Parameters<typeof evaluateOrchestrationGates>[0] }).orchestrationGates ?? [],
             exprValues,
           )
+          // Phase 5 S8 (#1119): inject accountEquity + exposure maps into portfolioRisk evaluator
+          //   exposure formula: |qty| * markPrice (markPrice = ctx.markPrice ?? ctx.bar.close ?? ctx.currentPrice)
+          //   single-position model: map active symbol scope id → notional exposure
+          const accountEquityForRisk = readContextEquity(ctx)
+          const exposureNotionalBySymbolScope = buildExposureNotionalBySymbolScope(ctx, orchestrationScopes)
+          const exposureNotionalBySubStrategyScope = buildExposureNotionalBySubStrategyScope(ctx, orchestrationScopes)
           const portfolioRiskState = evaluateOrchestrationPortfolioRisks(
             portfolioRisks,
-            { drawdownPct: (ctx as { accountDrawdownPct?: number }).accountDrawdownPct },
+            {
+              drawdownPct: (ctx as { accountDrawdownPct?: number }).accountDrawdownPct,
+              accountEquity: accountEquityForRisk,
+              exposureNotionalBySymbolScope,
+              exposureNotionalBySubStrategyScope,
+            },
           )
           let decision = runDecisionPrograms(
             ctx,
@@ -332,4 +343,102 @@ function readContextEquity(ctx: unknown): number | undefined {
     if (typeof equity === 'number' && Number.isFinite(equity)) return equity
   }
   return undefined
+}
+
+/**
+ * Phase 5 S8 (#1119): 按 scope.symbol scope id 聚合名义敞口（|qty| * markPrice）
+ *
+ * **substrate 边界（critic Round 1 M1 标注）**：本 adapter 当前为**单 position 模型** —
+ *   仅读 ctx.position.qty 投到单个 targetScopeId（activeSymbolScopeId 或 symbolScopes[0]）。
+ *   多 leg fan-out caller 由 follow-up（#984 multi-leg + #1120 live exposure feed）接入。
+ *   evaluator `exposureNotionalBySymbolScope` map 接口已支持 caller 端预聚合（|qty| 之和不抵消），
+ *   只是 backtest adapter 现阶段不主动 fan-out leg 维度。
+ *
+ *   markPrice = ctx.markPrice ?? ctx.bar?.close ?? ctx.currentPrice
+ *   单 symbol scope（或 0 scope）时 activeSymbolScopeId 对应单个 scope，将 ctx.position 全部聚合到该 scope
+ *   多 scope 时仅映射 activeSymbolScopeId，其余 scope 敞口上报留 follow-up
+ */
+function buildExposureNotionalBySymbolScope(
+  ctx: unknown,
+  scopes: unknown,
+): Record<string, number> | undefined {
+  if (!ctx || typeof ctx !== 'object') return undefined
+  const c = ctx as Record<string, unknown>
+  const markPrice = typeof c['markPrice'] === 'number' && Number.isFinite(c['markPrice'])
+    ? c['markPrice']
+    : typeof (c['bar'] as Record<string, unknown> | undefined)?.['close'] === 'number'
+      ? (c['bar'] as Record<string, unknown>)['close'] as number
+      : typeof c['currentPrice'] === 'number' && Number.isFinite(c['currentPrice'])
+        ? c['currentPrice'] as number
+        : undefined
+  if (markPrice === undefined || markPrice <= 0) return undefined
+
+  const pos = c['position'] as Record<string, unknown> | undefined
+  const qty = typeof pos?.['qty'] === 'number' ? Math.abs(pos['qty'] as number) : 0
+  const notional = qty * markPrice
+
+  // Determine active symbol scope ref
+  const scopesArr = Array.isArray(scopes) ? scopes : []
+  const symbolScopes = scopesArr.filter(
+    (s: Record<string, unknown>) => s['scopeKind'] === 'symbol',
+  )
+  if (symbolScopes.length === 0) return undefined
+
+  const activeId = typeof c['activeSymbolScopeId'] === 'string' ? c['activeSymbolScopeId'].trim() : ''
+  const targetScopeId = activeId !== ''
+    ? activeId
+    : (typeof (symbolScopes[0] as Record<string, unknown>)['id'] === 'string'
+        ? (symbolScopes[0] as Record<string, unknown>)['id'] as string
+        : '')
+  if (targetScopeId === '') return undefined
+
+  return { [targetScopeId]: notional }
+}
+
+/**
+ * Phase 5 S8 (#1119): 按 scope.subStrategy scope id 聚合名义敞口
+ *
+ * **substrate 边界（critic Round 1 M1 标注）**：与 buildExposureNotionalBySymbolScope 同形 —
+ *   单 position 模型，仅映射 activeSubStrategyScopeId → notional；
+ *   多 leg fan-out caller 由 follow-up（#984 multi-leg + #1120 live exposure feed）接入。
+ *   evaluator `exposureNotionalBySubStrategyScope` map 接口支持 caller 端预聚合。
+ *
+ *   单 subStrategy scope（或 0 scope）时映射 activeSubStrategyScopeId → notional
+ */
+function buildExposureNotionalBySubStrategyScope(
+  ctx: unknown,
+  scopes: unknown,
+): Record<string, number> | undefined {
+  if (!ctx || typeof ctx !== 'object') return undefined
+  const c = ctx as Record<string, unknown>
+  const markPrice = typeof c['markPrice'] === 'number' && Number.isFinite(c['markPrice'])
+    ? c['markPrice']
+    : typeof (c['bar'] as Record<string, unknown> | undefined)?.['close'] === 'number'
+      ? (c['bar'] as Record<string, unknown>)['close'] as number
+      : typeof c['currentPrice'] === 'number' && Number.isFinite(c['currentPrice'])
+        ? c['currentPrice'] as number
+        : undefined
+  if (markPrice === undefined || markPrice <= 0) return undefined
+
+  const pos = c['position'] as Record<string, unknown> | undefined
+  const qty = typeof pos?.['qty'] === 'number' ? Math.abs(pos['qty'] as number) : 0
+  const notional = qty * markPrice
+
+  const scopesArr = Array.isArray(scopes) ? scopes : []
+  const subScopes = scopesArr.filter(
+    (s: Record<string, unknown>) => s['scopeKind'] === 'subStrategy',
+  )
+  if (subScopes.length === 0) return undefined
+
+  const activeId = typeof c['activeSubStrategyScopeId'] === 'string'
+    ? c['activeSubStrategyScopeId'].trim()
+    : ''
+  const targetScopeId = activeId !== ''
+    ? activeId
+    : (typeof (subScopes[0] as Record<string, unknown>)['id'] === 'string'
+        ? (subScopes[0] as Record<string, unknown>)['id'] as string
+        : '')
+  if (targetScopeId === '') return undefined
+
+  return { [targetScopeId]: notional }
 }

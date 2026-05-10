@@ -391,6 +391,44 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderPortfolioDrawdown(params),
     clarificationRenderer: (slotKey) => renderPortfolioDrawdownClarification(slotKey),
   }),
+  // Phase 5 S8 (#1119): symbol exposure cap
+  presentation({
+    key: 'portfolioRisk.symbol_exposure_cap',
+    publicName: '标的敞口护栏',
+    aliases: ['标的敞口', 'symbol exposure cap', 'per-symbol cap', '单标的仓位限制'],
+    positiveExamples: [
+      'BTCUSDT 单标的敞口不超过 30%',
+      'BTCUSDT 仓位超 30% 时缩减敞口',
+      '标的敞口超 20% 仅记录',
+    ],
+    negativeExamples: ['感觉仓位重', '全仓', '随便买'],
+    goldenUtterances: [
+      'BTCUSDT 单标的敞口不超过 30%',
+      '标的敞口超 20% 时阻止开仓',
+      '标的敞口超 25% 时缩到上限',
+    ],
+    displayRenderer: ({ params }) => renderPortfolioSymbolExposureCap(params),
+    clarificationRenderer: (slotKey) => renderPortfolioSymbolExposureCapClarification(slotKey),
+  }),
+  // Phase 5 S8 (#1119): substrategy exposure cap（实盘 enforce 灰度中，follow-up #1120 接入 live exposure feed）
+  presentation({
+    key: 'portfolioRisk.substrategy_exposure_cap',
+    publicName: '子策略敞口护栏',
+    aliases: ['子策略敞口', 'substrategy exposure cap', 'per-substrategy cap', '子策略仓位限制'],
+    positiveExamples: [
+      '趋势子策略仓位上限 50%',
+      '震荡子策略敞口超 40% 暂停',
+      '子策略敞口超 30% 仅记录',
+    ],
+    negativeExamples: ['感觉子策略仓位重', '暂停所有', '随便'],
+    goldenUtterances: [
+      '趋势子策略仓位上限 50%',
+      '子策略敞口超 40% 时暂停',
+      '子策略敞口超 30% 时阻止开仓',
+    ],
+    displayRenderer: ({ params }) => renderPortfolioSubStrategyExposureCap(params),
+    clarificationRenderer: (slotKey) => renderPortfolioSubStrategyExposureCapClarification(slotKey),
+  }),
   presentation({
     key: 'program.dynamic_grid',
     publicName: '动态网格',
@@ -1333,6 +1371,63 @@ function renderPortfolioDrawdownClarification(slotKey: string): string {
     return '请确认账户回撤百分比阈值（0..100）'
   }
   return '请补全账户回撤护栏参数'
+}
+
+// Phase 5 S8 (#1119): symbol exposure cap render
+function renderPortfolioSymbolExposureCap(params: Record<string, unknown>): string {
+  const notionalCapPct = numberParam(params, 'notionalCapPct', 0)
+  const mode = stringParam(params, 'mode', 'enforce')
+  const effect = stringParam(params, 'effectWhenTriggered', 'block_new_entries')
+  const symbolLabel = typeof params['symbolLabel'] === 'string' && params['symbolLabel'].trim() !== ''
+    ? `${params['symbolLabel'].trim()} `
+    : ''
+  if (mode === 'observe') {
+    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.observe', { symbolLabel, notionalCapPct })
+  }
+  if (effect === 'reduce_exposure') {
+    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.enforce.reduce', { symbolLabel, notionalCapPct })
+  }
+  return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.display.enforce.block', { symbolLabel, notionalCapPct })
+}
+
+function renderPortfolioSymbolExposureCapClarification(slotKey: string): string {
+  if (slotKey.includes('notional_cap_pct')) {
+    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.notional_cap_pct', {})
+  }
+  if (slotKey.includes('bound_symbol_scope_ref')) {
+    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.bound_symbol_scope_ref', {})
+  }
+  if (slotKey.includes('effect')) {
+    return renderDisplayToken('atom.portfolioRisk.symbol_exposure_cap.clarify.effect', {})
+  }
+  return '请补全标的敞口护栏参数'
+}
+
+// Phase 5 S8 (#1119): substrategy exposure cap render
+function renderPortfolioSubStrategyExposureCap(params: Record<string, unknown>): string {
+  const notionalCapPct = numberParam(params, 'notionalCapPct', 0)
+  const mode = stringParam(params, 'mode', 'enforce')
+  const effect = stringParam(params, 'effectWhenTriggered', 'block_new_entries')
+  if (mode === 'observe') {
+    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.observe', { notionalCapPct })
+  }
+  if (effect === 'pause_substrategy') {
+    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.enforce.pause', { notionalCapPct })
+  }
+  return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.display.enforce.block', { notionalCapPct })
+}
+
+function renderPortfolioSubStrategyExposureCapClarification(slotKey: string): string {
+  if (slotKey.includes('notional_cap_pct')) {
+    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.notional_cap_pct', {})
+  }
+  if (slotKey.includes('bound_substrategy_scope_ref')) {
+    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.bound_substrategy_scope_ref', {})
+  }
+  if (slotKey.includes('effect')) {
+    return renderDisplayToken('atom.portfolioRisk.substrategy_exposure_cap.clarify.effect', {})
+  }
+  return '请补全子策略敞口护栏参数'
 }
 
 // Phase 5 S5：dynamic_grid 显式黑名单（critic round 1 M5 + critic round 2 m1）。

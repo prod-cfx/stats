@@ -285,13 +285,41 @@ export interface IrOrchestrationGate {
   effectWhenFalse: SemanticOrchestrationGateEffect
 }
 
-export interface IrOrchestrationPortfolioRisk {
+// Phase 5 S7 (#1057): drawdown_block IR —— scope='portfolio'
+export interface IrPortfolioDrawdownRisk {
   id: string
   scope: 'portfolio'
   mode: 'observe' | 'enforce'
   thresholdPct: number
   effectWhenTriggered: 'block_new_entries'
 }
+
+// Phase 5 S8 (#1119): symbol exposure cap IR —— scope='symbol'
+export interface IrPortfolioSymbolExposureCapRisk {
+  id: string
+  scope: 'symbol'
+  mode: 'observe' | 'enforce'
+  notionalCapPct: number
+  symbolScopeRef: string
+  effectWhenTriggered: 'block_new_entries' | 'reduce_exposure'
+}
+
+// Phase 5 S8 (#1119): subStrategy exposure cap IR —— scope='subStrategy'
+export interface IrPortfolioSubStrategyExposureCapRisk {
+  id: string
+  scope: 'subStrategy'
+  mode: 'observe' | 'enforce'
+  notionalCapPct: number
+  subStrategyScopeRef: string
+  effectWhenTriggered: 'block_new_entries' | 'pause_substrategy'
+}
+
+// Phase 5 S8 (#1119): IR portfolioRisk union（与 canonical 同形）
+//   关键 byte-equal 兜底：旧 IR JSON 缺 `scope` 字段时 evaluator/runtime default 'portfolio'，走 drawdown 分支与 S7 等价
+export type IrOrchestrationPortfolioRisk =
+  | IrPortfolioDrawdownRisk
+  | IrPortfolioSymbolExposureCapRisk
+  | IrPortfolioSubStrategyExposureCapRisk
 
 export interface IrOrchestrationProgramGridParams {
   anchorPrice: number

@@ -1,9 +1,9 @@
 import {
-  type CompiledOrchestrationPortfolioRisk,
+  type CompiledPortfolioDrawdownRisk,
   evaluateOrchestrationPortfolioRisks,
 } from './evaluate-orchestration-portfolio-risks'
 
-const baseRisk = (overrides: Partial<CompiledOrchestrationPortfolioRisk> = {}): CompiledOrchestrationPortfolioRisk => ({
+const baseRisk = (overrides: Partial<CompiledPortfolioDrawdownRisk> = {}): CompiledPortfolioDrawdownRisk => ({
   id: 'risk-1',
   scope: 'portfolio',
   mode: 'enforce',

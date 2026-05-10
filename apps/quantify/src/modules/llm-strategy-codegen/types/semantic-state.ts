@@ -352,7 +352,17 @@ export type SemanticOrchestrationGateEffect =
 
 export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
-export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
+// Phase 5 S8 (#1119): scope 扩 'symbol' | 'subStrategy'；旧 'portfolio' 保留 byte-equal 兼容
+export type SemanticOrchestrationPortfolioRiskScope = 'portfolio' | 'symbol' | 'subStrategy'
+
+// Phase 5 S8 (#1119): portfolioRisk 节点触发后行为
+//   - block_new_entries 三 scope 通用
+//   - reduce_exposure 仅 scope='symbol'
+//   - pause_substrategy 仅 scope='subStrategy'
+export type SemanticOrchestrationPortfolioRiskEffect =
+  | 'block_new_entries'
+  | 'reduce_exposure'
+  | 'pause_substrategy'
 
 // Phase 5 S12 (#1118): event_listener 加入 program kind 联合
 export type SemanticOrchestrationProgramKind =
@@ -483,6 +493,18 @@ export interface SemanticOrchestrationNode {
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number
   scope?: SemanticOrchestrationPortfolioRiskScope
+  // Phase 5 S8 (#1119): portfolioRisk symbol/subStrategy exposure cap 节点专属字段
+  //   - notionalCapPct (0,100] 单标的/单子策略名义敞口上限百分比
+  //   - effectWhenTriggered 三 effect（scope 限定见 SemanticOrchestrationPortfolioRiskEffect）
+  //   - boundSymbolScopeRef    portfolioRisk.symbol_exposure_cap 节点必填，引用同 state 中 status:'locked' scope.symbol id
+  //   - boundSubStrategyScopeRef portfolioRisk.substrategy_exposure_cap 节点必填，引用同 state 中 status:'locked' scope.subStrategy id
+  //   注：semantic 层用 boundSymbol/SubStrategyScopeRef（语义"portfolioRisk 节点绑哪个 scope"），
+  //   与 trigger/action 现有 symbolScopeRef/subStrategyScopeRef（语义"owner 归属哪个 scope"）字段名解耦避免歧义；
+  //   canonical/IR 层 normalize 为 symbolScopeRef/subStrategyScopeRef（与既有命名对齐）。
+  notionalCapPct?: number
+  effectWhenTriggered?: SemanticOrchestrationPortfolioRiskEffect
+  boundSymbolScopeRef?: string
+  boundSubStrategyScopeRef?: string
   // scope.symbol 节点专属（其它 kind 不读）— Phase 5 S2 (#1104)
   // 注：与 portfolioRisk 的 `scope: 'portfolio'` 命名分离（symbolScopeKind 限定 scope 子类型）
   symbolScopeKind?: 'symbol'

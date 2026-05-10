@@ -118,13 +118,42 @@ export interface CanonicalOrchestrationGate {
   effectWhenFalse: SemanticOrchestrationGateEffect
 }
 
-export interface CanonicalOrchestrationPortfolioRisk {
+// Phase 5 S7 (#1057): drawdown_block portfolioRisk —— scope='portfolio'
+export interface CanonicalPortfolioDrawdownRisk {
   id: string
   scope: 'portfolio'
   mode: 'observe' | 'enforce'
   thresholdPct: number
   effectWhenTriggered: 'block_new_entries'
 }
+
+// Phase 5 S8 (#1119): symbol exposure cap portfolioRisk —— scope='symbol'
+//   semantic 层 boundSymbolScopeRef 在 canonical 层 normalize 为 symbolScopeRef（与 trigger/action 对齐）
+export interface CanonicalPortfolioSymbolExposureCapRisk {
+  id: string
+  scope: 'symbol'
+  mode: 'observe' | 'enforce'
+  notionalCapPct: number
+  symbolScopeRef: string
+  effectWhenTriggered: 'block_new_entries' | 'reduce_exposure'
+}
+
+// Phase 5 S8 (#1119): subStrategy exposure cap portfolioRisk —— scope='subStrategy'
+export interface CanonicalPortfolioSubStrategyExposureCapRisk {
+  id: string
+  scope: 'subStrategy'
+  mode: 'observe' | 'enforce'
+  notionalCapPct: number
+  subStrategyScopeRef: string
+  effectWhenTriggered: 'block_new_entries' | 'pause_substrategy'
+}
+
+// Phase 5 S8 (#1119): union with discriminator `scope`
+//   旧 IR/spec JSON 缺 scope 字段时 reader/runtime default 'portfolio'（byte-equal 兼容 — critic C2）
+export type CanonicalOrchestrationPortfolioRisk =
+  | CanonicalPortfolioDrawdownRisk
+  | CanonicalPortfolioSymbolExposureCapRisk
+  | CanonicalPortfolioSubStrategyExposureCapRisk
 
 export interface CanonicalOrchestrationProgramGridParams {
   anchorPrice: number

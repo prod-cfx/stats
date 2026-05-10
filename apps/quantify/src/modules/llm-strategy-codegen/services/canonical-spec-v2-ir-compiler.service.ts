@@ -954,17 +954,49 @@ export class CanonicalSpecV2IrCompilerService {
     })
   }
 
+  /**
+   * Phase 5 S8 (#1119): portfolioRisk union 三变体直透传
+   *   - scope='portfolio' (drawdown_block, S7) — thresholdPct 透传
+   *   - scope='symbol'    (symbol_exposure_cap) — notionalCapPct + symbolScopeRef 透传
+   *   - scope='subStrategy' (substrategy_exposure_cap) — notionalCapPct + subStrategyScopeRef 透传
+   *
+   * byte-equal 兼容：旧 spec 仅 drawdown_block 路径输出与 S7 字面等价（无新字段污染）。
+   */
   private compileOrchestrationPortfolioRisks(
     spec: CanonicalStrategySpecV2,
   ): IrOrchestrationPortfolioRisk[] {
     const risks = spec.orchestration?.portfolioRisks ?? []
-    return risks.map((risk: CanonicalOrchestrationPortfolioRisk) => ({
-      id: risk.id,
-      scope: risk.scope,
-      mode: risk.mode,
-      thresholdPct: risk.thresholdPct,
-      effectWhenTriggered: risk.effectWhenTriggered,
-    }))
+    const result: IrOrchestrationPortfolioRisk[] = []
+    for (const risk of risks as readonly CanonicalOrchestrationPortfolioRisk[]) {
+      if (risk.scope === 'portfolio') {
+        result.push({
+          id: risk.id,
+          scope: 'portfolio',
+          mode: risk.mode,
+          thresholdPct: risk.thresholdPct,
+          effectWhenTriggered: risk.effectWhenTriggered,
+        })
+      } else if (risk.scope === 'symbol') {
+        result.push({
+          id: risk.id,
+          scope: 'symbol',
+          mode: risk.mode,
+          notionalCapPct: risk.notionalCapPct,
+          symbolScopeRef: risk.symbolScopeRef,
+          effectWhenTriggered: risk.effectWhenTriggered,
+        })
+      } else if (risk.scope === 'subStrategy') {
+        result.push({
+          id: risk.id,
+          scope: 'subStrategy',
+          mode: risk.mode,
+          notionalCapPct: risk.notionalCapPct,
+          subStrategyScopeRef: risk.subStrategyScopeRef,
+          effectWhenTriggered: risk.effectWhenTriggered,
+        })
+      }
+    }
+    return result
   }
 
   private compileOrchestrationPrograms(

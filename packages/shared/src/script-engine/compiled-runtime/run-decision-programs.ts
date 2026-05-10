@@ -269,6 +269,25 @@ export function runDecisionPrograms(
       return Object.freeze(gated)
     }
 
+    // Phase 5 S8 (#1119): portfolioRisk subStrategy exposure cap — paused/blocked scope routing
+    //   pausedSubStrategyScopeRefs: entry phase → NOOP；exit/rebalance → 放行（兜底 S10 语义）
+    //   blockedSubStrategyScopeRefs: block_new_entries → entry phase NOOP
+    if (portfolioRiskState) {
+      const programSubRef = typeof program.metadata?.subStrategyScopeRef === 'string'
+        ? program.metadata.subStrategyScopeRef.trim()
+        : ''
+      if (programSubRef !== '') {
+        const paused = portfolioRiskState.pausedSubStrategyScopeRefs
+        if (paused?.has(programSubRef) && program.phase === 'entry') {
+          continue
+        }
+        const blocked = portfolioRiskState.blockedSubStrategyScopeRefs
+        if (blocked?.has(programSubRef) && program.phase === 'entry') {
+          continue
+        }
+      }
+    }
+
     // Phase 5 S3 (#1109): scope.timeframe alignment fail-closed
     //   - 0 个 timeframe scope → 'continue'（旧策略零侵入）
     //   - ≥1 个 timeframe scope → 强制 program.metadata.timeframeScopeRef + ctx.timeframeBarStatus 对齐
@@ -306,6 +325,22 @@ export function runDecisionPrograms(
       continue
     }
 
+    // Phase 5 S8 (#1119): portfolioRisk symbol exposure cap — blocked scope + reduce factor
+    //   blockedSymbolScopeRefs: program.metadata.symbolScopeRef ∈ blocked → skip entry program
+    //   reduceFactorBySymbolScope: program.phase==='entry' → scale size.value
+    //   (Apply here, after guard checks, so exit/rebalance programs are unaffected)
+    if (portfolioRiskState && program.phase === 'entry') {
+      const progSymRef = typeof program.metadata?.symbolScopeRef === 'string'
+        ? program.metadata.symbolScopeRef.trim()
+        : ''
+      if (progSymRef !== '') {
+        const blockedSym = portfolioRiskState.blockedSymbolScopeRefs
+        if (blockedSym?.has(progSymRef)) {
+          continue
+        }
+      }
+    }
+
     const ptpMeta = program.metadata?.partialTakeProfit
     if (ptpMeta && isPartialTakeProfitTierFired(ctx, ptpMeta)) {
       continue
@@ -329,7 +364,32 @@ export function runDecisionPrograms(
     const decision = buildFirstApplicableDecision(program, ctx)
     if (!decision) continue
 
-    const gatedDecision = applyOrchestrationGate(decision, orchestrationGateState, portfolioRiskState, ctx)
+    // Phase 5 S8 (#1119): portfolioRisk symbol exposure cap — reduce_exposure factor scaling
+    //   Only for OPEN_* decisions on entry programs where symbolScopeRef is in reduceFactorBySymbolScope
+    //   size.value ≤ 0 after scaling → NOOP (reason: compiled.orchestration.portfolio_risk.symbol_reduce_zeroed)
+    let scaledDecision: typeof decision = decision
+    if (
+      portfolioRiskState
+      && program.phase === 'entry'
+      && (decision.action === 'OPEN_LONG' || decision.action === 'OPEN_SHORT')
+    ) {
+      const progSymRef = typeof program.metadata?.symbolScopeRef === 'string'
+        ? program.metadata.symbolScopeRef.trim()
+        : ''
+      if (progSymRef !== '') {
+        const factor = portfolioRiskState.reduceFactorBySymbolScope?.[progSymRef]
+        if (typeof factor === 'number' && Number.isFinite(factor) && factor < 1 && decision.size) {
+          const scaledValue = decision.size.value * factor
+          if (scaledValue <= 0) {
+            compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
+            return Object.freeze({ action: 'NOOP', reason: 'compiled.orchestration.portfolio_risk.symbol_reduce_zeroed' })
+          }
+          scaledDecision = { ...decision, size: { ...decision.size, value: scaledValue } }
+        }
+      }
+    }
+
+    const gatedDecision = applyOrchestrationGate(scaledDecision, orchestrationGateState, portfolioRiskState, ctx)
     compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
     if (ptpMeta && gatedDecision.action !== 'NOOP') {
       markPartialTakeProfitTierFired(ctx, ptpMeta)

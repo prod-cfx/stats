@@ -93,7 +93,7 @@ describe('orchestration portfolioRisk.drawdown_block — golden corpus (Phase 5 
         kind: 'portfolioRisk',
         key: 'portfolioRisk.drawdown_block',
       }))
-      if (node?.kind === 'portfolioRisk') {
+      if (node?.kind === 'portfolioRisk' && node.key === 'portfolioRisk.drawdown_block') {
         expect(node.mode).toBe('enforce')
         expect(node.thresholdPct).toBe(10)
         expect(node.scope).toBe('portfolio')

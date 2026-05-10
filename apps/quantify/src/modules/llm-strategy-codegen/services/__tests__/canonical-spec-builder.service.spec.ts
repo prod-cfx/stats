@@ -4404,7 +4404,9 @@ describe('canonicalSpecBuilderService', () => {
       expect(risk.id).toBe('portfolio-risk-drawdown-1')
       expect(risk.scope).toBe('portfolio')
       expect(risk.mode).toBe('enforce')
-      expect(risk.thresholdPct).toBe(25)
+      if (risk.scope === 'portfolio') {
+        expect(risk.thresholdPct).toBe(25)
+      }
       expect(risk.effectWhenTriggered).toBe('block_new_entries')
     })
 
@@ -4560,7 +4562,10 @@ describe('canonicalSpecBuilderService', () => {
       expect(spec.orchestration?.portfolioRisks).toBeDefined()
       expect(spec.orchestration!.portfolioRisks!).toHaveLength(1)
       expect(spec.orchestration!.portfolioRisks![0].mode).toBe('observe')
-      expect(spec.orchestration!.portfolioRisks![0].thresholdPct).toBe(10)
+      const r0 = spec.orchestration!.portfolioRisks![0]
+      if (r0.scope === 'portfolio') {
+        expect(r0.thresholdPct).toBe(10)
+      }
     })
   })
 
