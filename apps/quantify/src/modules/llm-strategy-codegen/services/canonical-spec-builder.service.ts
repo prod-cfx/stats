@@ -26,6 +26,7 @@ import type {
   StrategyNormalizedIntent,
 } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
+import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { NORMALIZED_TRIGGER_ATOM_KEYS } from '../types/strategy-normalized-intent'
 import {
@@ -538,12 +539,17 @@ export class CanonicalSpecBuilderService {
       ],
       orderPrograms,
     )
-    const requiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
+    const baseRequiredTimeframes = this.resolveSemanticStateRequiredTimeframes(rules, market.defaultTimeframe)
     const orchestrationGates = this.buildOrchestrationGates(normalizedState)
     const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
     const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
     const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
     const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
+    // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 tf 合并到 dataRequirements
+    const requiredTimeframes = this.mergeTimeframeScopeIntoDataRequirements(
+      baseRequiredTimeframes,
+      orchestrationScopes,
+    )
     const hasOrchestration = orchestrationGates.length > 0
       || orchestrationPortfolioRisks.length > 0
       || orchestrationPrograms.length > 0
@@ -623,6 +629,8 @@ export class CanonicalSpecBuilderService {
   }
 
   // Phase 5 S2 (#1104): scope.symbol substrate
+  // Phase 5 S2 (#1104) + S3 (#1109): scope union substrate
+  // 输出 status='locked' 的 scope.symbol + scope.timeframe；其他 status 不输出（open→locked 流转语义）
   private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
     const nodes = state.orchestration?.nodes
     if (!nodes || nodes.length === 0) {
@@ -630,27 +638,64 @@ export class CanonicalSpecBuilderService {
     }
     const scopes: CanonicalOrchestrationScope[] = []
     for (const node of nodes) {
-      if (
-        node.kind !== 'scope'
-        || node.status !== 'locked'
-        || node.key !== 'scope.symbol'
-        || node.symbolScopeKind !== 'symbol'
-      ) {
+      if (node.kind !== 'scope' || node.status !== 'locked') continue
+      // scope.symbol 分支
+      if (node.key === 'scope.symbol' && node.symbolScopeKind === 'symbol') {
+        const symbols = Array.isArray(node.symbols) ? node.symbols.filter((s): s is string => typeof s === 'string') : []
+        if (symbols.length === 0) continue
+        const trimmed = symbols.map((s) => s.trim())
+        const sortedSymbols = [...trimmed].sort()
+        const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : undefined
+        scopes.push({
+          id: node.id,
+          scopeKind: 'symbol',
+          symbols: sortedSymbols,
+          ...(primary && primary !== '' ? { primarySymbol: primary } : {}),
+        })
         continue
       }
-      const symbols = Array.isArray(node.symbols) ? node.symbols.filter((s): s is string => typeof s === 'string') : []
-      if (symbols.length === 0) continue
-      const trimmed = symbols.map((s) => s.trim())
-      const sortedSymbols = [...trimmed].sort()
-      const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : undefined
-      scopes.push({
-        id: node.id,
-        scopeKind: 'symbol',
-        symbols: sortedSymbols,
-        ...(primary && primary !== '' ? { primarySymbol: primary } : {}),
-      })
+      // scope.timeframe 分支（Phase 5 S3 #1109）
+      if (node.key === 'scope.timeframe' && node.timeframeScopeKind === 'timeframe') {
+        const primary = node.primaryTimeframe
+        const required = Array.isArray(node.requiredTimeframes)
+          ? node.requiredTimeframes.filter((tf): tf is string => typeof tf === 'string')
+          : []
+        if (typeof primary !== 'string' || required.length === 0) continue
+        const alignmentPolicy = node.alignmentPolicy === 'tolerant' ? 'tolerant' : 'strict'
+        // 按 timeframe ms 升序稳定排序
+        const sortedRequired = [...required].sort(
+          (a, b) => (parseTimeframeMs(a) ?? 0) - (parseTimeframeMs(b) ?? 0),
+        )
+        scopes.push({
+          id: node.id,
+          scopeKind: 'timeframe',
+          primaryTimeframe: primary,
+          requiredTimeframes: sortedRequired,
+          alignmentPolicy,
+        })
+      }
     }
     return scopes
+  }
+
+  // Phase 5 S3 (#1109): 把 scope.timeframe 声明的 (primary ∪ required) union dedup
+  // 写入 spec.dataRequirements.requiredTimeframes，让既有 backtest HTF 拉数路径自动覆盖
+  // critic Round 1 M6-R1 修正
+  private mergeTimeframeScopeIntoDataRequirements(
+    requiredTimeframes: string[],
+    scopes: readonly CanonicalOrchestrationScope[],
+  ): string[] {
+    const tfScopes = scopes.filter(
+      (s): s is CanonicalOrchestrationScope & { scopeKind: 'timeframe' } => s.scopeKind === 'timeframe',
+    )
+    if (tfScopes.length === 0) return requiredTimeframes
+    const tfSet = new Set<string>(requiredTimeframes)
+    for (const tfScope of tfScopes) {
+      tfSet.add(tfScope.primaryTimeframe)
+      tfScope.requiredTimeframes.forEach((tf) => tfSet.add(tf))
+    }
+    // 按 ms 升序稳定排序，保证 spec 输出 deterministic
+    return [...tfSet].sort((a, b) => (parseTimeframeMs(a) ?? 0) - (parseTimeframeMs(b) ?? 0))
   }
 
   private buildOrchestrationPortfolioRisks(state: SemanticState): CanonicalOrchestrationPortfolioRisk[] {

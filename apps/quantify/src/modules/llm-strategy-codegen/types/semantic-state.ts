@@ -1,4 +1,11 @@
+import { TIMEFRAME_MS } from '@ai/shared/script-engine/compiled-runtime'
 import type { SemanticAtomSupportMetadata, UnsupportedFallbackState } from './semantic-atom-support'
+
+// Phase 5 S3 (#1109): timeframe vocab 单一 source-of-truth — 派生于 packages/shared TIMEFRAME_MS
+//   critic Round 2 M2-R2：避免 quantify types 与 runtime 双 white-list drift
+export const SEMANTIC_SUPPORTED_TIMEFRAMES = Object.freeze(Object.keys(TIMEFRAME_MS)) as readonly (keyof typeof TIMEFRAME_MS)[]
+export type SemanticSupportedTimeframe = keyof typeof TIMEFRAME_MS
+export type SemanticOrchestrationTimeframeAlignmentPolicy = 'strict' | 'tolerant'
 
 export type SemanticNodeStatus = 'open' | 'locked' | 'superseded'
 export type SemanticSource = 'user_explicit' | 'inferred' | 'derived'
@@ -175,6 +182,9 @@ export interface SemanticTriggerState {
   // Phase 5 S11 (#1112): 多腿策略中显式声明该 trigger 归属哪个 scope.leg 节点
   // 单/0 leg 策略不读；多 leg 策略缺该字段 readiness fail-closed
   legScopeRef?: string
+  // Phase 5 S3 (#1109): 多周期策略中显式声明该 trigger 归属哪个 scope.timeframe 节点
+  // ≥1 scope.timeframe locked 节点存在时 readiness 强制要求
+  timeframeScopeRef?: string
 }
 
 export interface SemanticActionState {
@@ -192,6 +202,8 @@ export interface SemanticActionState {
   symbolScopeRef?: string
   // Phase 5 S11 (#1112): 多腿策略中显式声明该 action 归属哪个 scope.leg 节点
   legScopeRef?: string
+  // Phase 5 S3 (#1109): 多周期策略中显式声明该 action 归属哪个 scope.timeframe 节点
+  timeframeScopeRef?: string
 }
 
 export type SemanticRiskBasis =
@@ -250,6 +262,8 @@ export interface SemanticRiskState {
   symbolScopeRef?: string
   // Phase 5 S11 (#1112): 多腿策略中显式声明该 risk 归属哪个 scope.leg 节点
   legScopeRef?: string
+  // Phase 5 S3 (#1109): 多周期策略中显式声明该 risk 归属哪个 scope.timeframe 节点
+  timeframeScopeRef?: string
 }
 
 export type SemanticPositionSizingContract =
@@ -277,6 +291,8 @@ export interface SemanticPositionConstraintState {
   symbolScopeRef?: string
   // Phase 5 S11 (#1112): 多腿策略中显式声明该 position constraint 归属哪个 scope.leg 节点
   legScopeRef?: string
+  // Phase 5 S3 (#1109): 多周期策略中显式声明该 position constraint 归属哪个 scope.timeframe 节点
+  timeframeScopeRef?: string
 }
 
 export interface SemanticPositionState {
@@ -409,6 +425,12 @@ export interface SemanticOrchestrationNode {
   legSizing?: SemanticOrchestrationLegSizing
   // S11 仅声明透传，不在运行时强制；follow-up 落地 cross-program 同步触发聚合
   syncTriggerRequired?: boolean
+  // scope.timeframe 节点专属（其它 kind 不读）— Phase 5 S3 (#1109)
+  // 注：与 symbolScopeKind 互斥（timeframeScopeKind 限定 scope 子类型）
+  timeframeScopeKind?: 'timeframe'
+  primaryTimeframe?: SemanticSupportedTimeframe
+  requiredTimeframes?: readonly SemanticSupportedTimeframe[]
+  alignmentPolicy?: SemanticOrchestrationTimeframeAlignmentPolicy
   support?: SemanticAtomSupportMetadata
 }
 

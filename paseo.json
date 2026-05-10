@@ -1,0 +1,9 @@
+{
+  "worktree": {
+    "setup": [
+      "git config user.name \"defiyield001\"",
+      "git config user.email \"defiyield001@devbase.cloud\"",
+      "npm install"
+    ]
+  }
+}

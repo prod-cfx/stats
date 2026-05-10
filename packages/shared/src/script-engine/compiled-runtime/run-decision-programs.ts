@@ -3,6 +3,7 @@ import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 import type { OrchestrationGateState } from './evaluate-orchestration-gates'
 import type { OrchestrationPortfolioRiskState } from './evaluate-orchestration-portfolio-risks'
+import { parseTimeframeMs } from './parse-timeframe-ms'
 
 // MUST match PartialTakeProfitProgramMetadata in
 // apps/quantify/src/modules/llm-strategy-codegen/types/partial-take-profit.ts.
@@ -62,6 +63,8 @@ interface DecisionProgramNode {
     symbolScopeRef?: string
     /** Phase 5 S11 (#1112): 多 leg 策略下该 program 归属的 scope.leg id */
     legScopeRef?: string
+    /** Phase 5 S3 (#1109): 多周期策略下该 program 归属的 scope.timeframe id */
+    timeframeScopeRef?: string
   }
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
@@ -73,7 +76,7 @@ interface DecisionProgramNode {
 }
 
 // Phase 5 S2 (#1104): scope.symbol substrate compiled runtime
-export interface CompiledOrchestrationScope {
+export interface CompiledSymbolScope {
   id: string
   scopeKind: 'symbol'
   symbols: readonly string[]
@@ -96,6 +99,23 @@ export interface CompiledOrchestrationLegScope {
   legSizing?: CompiledOrchestrationLegSizing
   // S11 仅声明透传，runtime 当前不读；follow-up 接入 cross-program 同步触发聚合
   syncTriggerRequired?: boolean
+// Phase 5 S3 (#1109): scope.timeframe substrate compiled runtime
+export interface CompiledTimeframeScope {
+  id: string
+  scopeKind: 'timeframe'
+  primaryTimeframe: string
+  requiredTimeframes: readonly string[]
+  alignmentPolicy: 'strict' | 'tolerant'
+}
+
+export type CompiledOrchestrationScope = CompiledSymbolScope | CompiledTimeframeScope
+
+/** Phase 5 S3 (#1109): caller 注入的 timeframe bar status entry */
+export interface TimeframeBarStatusEntry {
+  /** 已收 bar 的时间戳（毫秒；与 packages/shared Bar.timestamp 同源） */
+  lastClosedBarTs: number
+  /** 已收 bar 的索引（0-based；caller 可由 bars.length-1 派生） */
+  lastClosedBarIndex: number
 }
 
 interface CompiledDecisionState {
@@ -191,6 +211,16 @@ export function runDecisionPrograms(
     if (scopeRouting === 'skip') continue
     if (scopeRouting !== 'continue') {
       const gated = applyOrchestrationGate(scopeRouting, orchestrationGateState, portfolioRiskState, ctx)
+      return Object.freeze(gated)
+    }
+
+    // Phase 5 S3 (#1109): scope.timeframe alignment fail-closed
+    //   - 0 个 timeframe scope → 'continue'（旧策略零侵入）
+    //   - ≥1 个 timeframe scope → 强制 program.metadata.timeframeScopeRef + ctx.timeframeBarStatus 对齐
+    //   - 失败 decision 同样走 applyOrchestrationGate 二次包裹保留 portfolioRisk observedBreaches
+    const timeframeAlignment = applyTimeframeScopeAlignment(program, ctx, orchestrationScopes)
+    if (timeframeAlignment !== 'continue') {
+      const gated = applyOrchestrationGate(timeframeAlignment, orchestrationGateState, portfolioRiskState, ctx)
       return Object.freeze(gated)
     }
 
@@ -1650,6 +1680,90 @@ export function applySymbolScopeRouting(
   }
   if (programRef !== activeId) return 'skip'
   return 'continue'
+}
+
+/**
+ * Phase 5 S3 (#1109): scope.timeframe substrate runtime alignment fail-closed
+ *
+ * 决策表：
+ *   0 个 timeframe scope（projection 中无 scopeKind='timeframe'）→ 'continue'（单周期/旧策略零侵入）
+ *   ≥1 个 timeframe scope + program 无 metadata.timeframeScopeRef → fail-closed unbound_program
+ *     （任意数量都强制显式绑定，不做 ambient 兜底；与 readiness ≥1 强制呼应）
+ *   program 已绑定 ref：
+ *     - ref 不在 scopes id 集合 → fail-closed unknown_scope
+ *     - ctx.timeframeBarStatus 缺失 → fail-closed data_unavailable
+ *     - primary tf 在 status 中缺失或 lastClosedBarTs 不是有限数 → fail-closed primary_missing
+ *     - 任一 required tf 缺失 → fail-closed required_missing
+ *     - 任一 required tf bucket diff 超限 → fail-closed alignment_lag
+ *
+ * Bar-bucket 数学（critic Round 1 C3 + Round 2 C2-R2 修正）：
+ *   bucket(ts) = floor(ts / requiredDurationMs)
+ *   strict   : primaryBucket === requiredBucket（同 required tick 内）
+ *   tolerant : primaryBucket - requiredBucket ≤ 1（required 容许落后 1 根 required bar）
+ *   前置条件（A2.4f readiness 已 fail-closed 保证）：parseTimeframeMs(primary) < parseTimeframeMs(required)
+ */
+export function applyTimeframeScopeAlignment(
+  program: { metadata?: { timeframeScopeRef?: string; [key: string]: unknown } },
+  ctx: StrategyExecutionContextV1,
+  scopes: readonly CompiledOrchestrationScope[] | undefined,
+): 'continue' | StrategyDecisionV1 {
+  const timeframeScopes = (scopes ?? []).filter(
+    (s): s is CompiledTimeframeScope => s.scopeKind === 'timeframe',
+  )
+  if (timeframeScopes.length === 0) return 'continue'
+
+  const refRaw = program.metadata?.timeframeScopeRef
+  const ref = typeof refRaw === 'string' ? refRaw.trim() : ''
+  if (ref === '') {
+    return failClosed('unbound_program')
+  }
+
+  const activeScope = timeframeScopes.find(s => s.id === ref)
+  if (!activeScope) {
+    return failClosed('unknown_scope')
+  }
+
+  const status = (ctx as { timeframeBarStatus?: Record<string, TimeframeBarStatusEntry> }).timeframeBarStatus
+  if (!status) {
+    return failClosed('data_unavailable')
+  }
+
+  const primary = status[activeScope.primaryTimeframe]
+  if (!primary || !Number.isFinite(primary.lastClosedBarTs)) {
+    return failClosed('primary_missing')
+  }
+
+  const maxBucketDiff = activeScope.alignmentPolicy === 'strict' ? 0 : 1
+
+  for (const requiredTf of activeScope.requiredTimeframes) {
+    const required = status[requiredTf]
+    if (!required || !Number.isFinite(required.lastClosedBarTs)) {
+      return failClosed('required_missing')
+    }
+    const requiredDurationMs = parseTimeframeMs(requiredTf)
+    if (requiredDurationMs === null || requiredDurationMs <= 0) {
+      return failClosed('required_missing')
+    }
+    const primaryBucket = Math.floor(primary.lastClosedBarTs / requiredDurationMs)
+    const requiredBucket = Math.floor(required.lastClosedBarTs / requiredDurationMs)
+    const bucketDiff = primaryBucket - requiredBucket
+    // fail-closed: 任何不对齐都拒绝
+    //   - bucketDiff > maxBucketDiff：required 落后超限
+    //   - bucketDiff < 0：required tf 时间戳比 primary 新（数据竞争 / feed 跑过头）—— 同样违反 alignment 主张
+    //   PR critic Round 1 M2 修正
+    if (bucketDiff < 0 || bucketDiff > maxBucketDiff) {
+      return failClosed('alignment_lag')
+    }
+  }
+
+  return 'continue'
+
+  function failClosed(stage: string): StrategyDecisionV1 {
+    return {
+      action: 'NOOP',
+      reason: `compiled.orchestration.scope.timeframe.fail_closed.${stage}`,
+    }
+  }
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {

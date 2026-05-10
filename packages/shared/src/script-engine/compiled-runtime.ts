@@ -7,5 +7,14 @@ export type { LiquiditySweepDetectorInput, LiquiditySweepDirection, LiquiditySwe
 export { evaluateRiskPredicates } from './compiled-runtime/evaluate-risk-predicates'
 export { runDecisionPrograms, applySymbolScopeRouting, applyLegScopeRouting } from './compiled-runtime/run-decision-programs'
 export type { CompiledOrchestrationScope, CompiledOrchestrationLegScope, CompiledOrchestrationLegSizing } from './compiled-runtime/run-decision-programs'
+export { runDecisionPrograms, applySymbolScopeRouting, applyTimeframeScopeAlignment } from './compiled-runtime/run-decision-programs'
+export type {
+  CompiledOrchestrationScope,
+  CompiledSymbolScope,
+  CompiledTimeframeScope,
+  TimeframeBarStatusEntry,
+} from './compiled-runtime/run-decision-programs'
+// Phase 5 S3 (#1109)
+export { parseTimeframeMs, SUPPORTED_TIMEFRAMES, TIMEFRAME_MS } from './compiled-runtime/parse-timeframe-ms'
 export { runOrderPrograms } from './compiled-runtime/run-order-programs'
 export type { ProgramLifecycleState } from './compiled-runtime/program-lifecycle-state'

@@ -115,4 +115,113 @@ describe('compiled-script-emitter — scope.symbol byte-equal snapshot (Phase 5 
       projectionNoScope.compiledManifest.structuralDigest,
     )
   })
+
+  // Phase 5 S3 (#1109): timeframe scope round-trip + structuralDigest 稳定
+  it('timeframe scope round-trip: emit → parse → projection.orchestrationScopes 等价', () => {
+    const astWithTfScope: StrategyAstV1 = {
+      ...baseAst,
+      orchestrationScopes: [
+        {
+          id: 'tf-1',
+          scopeKind: 'timeframe',
+          primaryTimeframe: '15m',
+          requiredTimeframes: ['1h', '4h'],
+          alignmentPolicy: 'strict',
+        },
+      ],
+    }
+    const script = emitter.emit({ ast: astWithTfScope, executionEnvelope: envelope })
+    expect(script).toContain('const ORCHESTRATION_SCOPES')
+    expect(script).toContain('"scopeKind":"timeframe"')
+    const projection = parser.parse(script)
+    expect(projection.orchestrationScopes).toEqual([
+      {
+        id: 'tf-1',
+        scopeKind: 'timeframe',
+        primaryTimeframe: '15m',
+        requiredTimeframes: ['1h', '4h'],
+        alignmentPolicy: 'strict',
+      },
+    ])
+  })
+
+  it('timeframe scope ast structuralDigest 与无 scope ast 相同（结构 hash 不变）', () => {
+    const projectionNoScope = emitter.buildProjection({ ast: baseAst, executionEnvelope: envelope })
+    const astWithTfScope: StrategyAstV1 = {
+      ...baseAst,
+      orchestrationScopes: [
+        {
+          id: 'tf-1',
+          scopeKind: 'timeframe',
+          primaryTimeframe: '15m',
+          requiredTimeframes: ['1h'],
+          alignmentPolicy: 'tolerant',
+        },
+      ],
+    }
+    const projectionWithTfScope = emitter.buildProjection({ ast: astWithTfScope, executionEnvelope: envelope })
+    expect(projectionWithTfScope.compiledManifest.structuralDigest).toBe(
+      projectionNoScope.compiledManifest.structuralDigest,
+    )
+  })
+
+  // PR critic Round 1 M3: decisionProgram.metadata.timeframeScopeRef round-trip 锁
+  it('decisionPrograms metadata.timeframeScopeRef emit→parse round-trip 透传', () => {
+    const astWithMetadata: StrategyAstV1 = {
+      ...baseAst,
+      topology: {
+        ...baseAst.topology,
+        decisionOrder: ['dp-1'],
+      },
+      orchestrationScopes: [
+        {
+          id: 'tf-1',
+          scopeKind: 'timeframe',
+          primaryTimeframe: '15m',
+          requiredTimeframes: ['1h'],
+          alignmentPolicy: 'strict',
+        },
+      ],
+      decisionPrograms: [
+        {
+          id: 'dp-1',
+          sourceRef: 'rule-1',
+          phase: 'entry',
+          when: 'expr-1',
+          priority: 100,
+          actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 10 } }],
+          metadata: {
+            timeframeScopeRef: 'tf-1',
+            symbolScopeRef: 's-btc',
+          },
+        },
+      ],
+    }
+    const script = emitter.emit({ ast: astWithMetadata, executionEnvelope: envelope })
+    const projection = parser.parse(script)
+    expect(projection.decisionPrograms).toHaveLength(1)
+    expect(projection.decisionPrograms[0].metadata?.timeframeScopeRef).toBe('tf-1')
+    expect(projection.decisionPrograms[0].metadata?.symbolScopeRef).toBe('s-btc')
+  })
+
+  it('混合 ast: symbol + timeframe scope 共存 → emit/parse 正常', () => {
+    const astMixed: StrategyAstV1 = {
+      ...baseAst,
+      orchestrationScopes: [
+        { id: 's-btc', scopeKind: 'symbol', symbols: ['BTCUSDT'] },
+        {
+          id: 'tf-1',
+          scopeKind: 'timeframe',
+          primaryTimeframe: '15m',
+          requiredTimeframes: ['1h'],
+          alignmentPolicy: 'strict',
+        },
+      ],
+    }
+    const script = emitter.emit({ ast: astMixed, executionEnvelope: envelope })
+    const projection = parser.parse(script)
+    expect(projection.orchestrationScopes).toHaveLength(2)
+    expect(projection.orchestrationScopes?.find(s => s.scopeKind === 'symbol')).toBeDefined()
+    expect(projection.orchestrationScopes?.find(s => s.scopeKind === 'timeframe')).toBeDefined()
+  })
 })

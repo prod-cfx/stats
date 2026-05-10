@@ -13,6 +13,7 @@ import {
 } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
 import { evaluateOrchestrationPortfolioRisks } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
+import { buildTimeframeBarStatus } from '@ai/shared/script-engine/helpers/build-timeframe-bar-status'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
@@ -99,6 +100,9 @@ export class BacktestStrategyAdapterService {
       //   - 单/0 scope 时为空数组，runDecisionPrograms 走兜底
       //   - 多 scope 时由上游 caller 设置 ctx.activeSymbolScopeId 完成 fan-out
       //   - 全 caller fan-out 循环留 follow-up issue（plan 段 N3 已声明 substrate 边界）
+      // Phase 5 S3 (#1109): scope.timeframe substrate
+      //   - 含 timeframe scope 时本 onBar 内调 buildTimeframeBarStatus 注入 ctx.timeframeBarStatus
+      //   - 0 个 timeframe scope 时 helper 返回 undefined，runtime 自动跳过 alignment 检查
       const orchestrationScopes = ((projection as {
         orchestrationScopes?: Parameters<typeof runDecisionPrograms>[7]
       }).orchestrationScopes ?? []) as Parameters<typeof runDecisionPrograms>[7]
@@ -109,6 +113,9 @@ export class BacktestStrategyAdapterService {
       const orchestrationLegScopes = ((projection as {
         orchestrationLegScopes?: Parameters<typeof runDecisionPrograms>[8]
       }).orchestrationLegScopes ?? []) as Parameters<typeof runDecisionPrograms>[8]
+      const hasTimeframeScopeInProjection = (orchestrationScopes ?? []).some(
+        (s) => s.scopeKind === 'timeframe',
+      )
 
       // peakEquity 在 build() 闭包内逐 bar 维护，与 account-strategy-view.service.ts:1970 同公式
       let peakEquity: number | undefined
@@ -130,6 +137,15 @@ export class BacktestStrategyAdapterService {
             if (peakEquity > 0) {
               ;(ctx as { accountDrawdownPct?: number }).accountDrawdownPct
                 = Math.max(0, ((peakEquity - currentEquity) / peakEquity) * 100)
+            }
+          }
+
+          // Phase 5 S3 (#1109): 含 timeframe scope 时注入 ctx.timeframeBarStatus
+          //   helper 自动从 ctx.data?.[legId]?.[tf]?.bars 派生；缺数据 tf 不写入 → runtime required_missing
+          if (hasTimeframeScopeInProjection) {
+            const tfBarStatus = buildTimeframeBarStatus(ctx, orchestrationScopes ?? [])
+            if (tfBarStatus !== undefined) {
+              ;(ctx as { timeframeBarStatus?: Record<string, { lastClosedBarTs: number; lastClosedBarIndex: number }> }).timeframeBarStatus = tfBarStatus
             }
           }
 

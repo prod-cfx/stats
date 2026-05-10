@@ -81,6 +81,9 @@ export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
   // Phase 5 S11 (#1112): 多 leg 策略中显式声明该 rule 归属哪个 scope.leg id
   // 与 symbolScopeRef 同形：依赖 LLM 直写 canonicalSpec.rules.metadata.legScopeRef
   legScopeRef?: string
+  // Phase 5 S3 (#1109): 多周期策略中显式声明该 rule 归属哪个 scope.timeframe id
+  // 仅在 spec.orchestration.scopes 含 timeframe scope 时由 builder 透传
+  timeframeScopeRef?: string
 }
 
 export interface CanonicalRuleV2 {
@@ -180,7 +183,7 @@ export type CanonicalOrchestrationProgram =
   | CanonicalAdaptiveVolatilityGridProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate
-export interface CanonicalOrchestrationScope {
+export interface CanonicalOrchestrationSymbolScope {
   id: string
   scopeKind: 'symbol'
   symbols: readonly string[]
@@ -205,6 +208,19 @@ export interface CanonicalOrchestrationLegScope {
   legSizing?: CanonicalOrchestrationLegSizing
   syncTriggerRequired?: boolean
 }
+
+// Phase 5 S3 (#1109): scope.timeframe substrate
+export interface CanonicalOrchestrationTimeframeScope {
+  id: string
+  scopeKind: 'timeframe'
+  primaryTimeframe: string
+  requiredTimeframes: readonly string[]
+  alignmentPolicy: 'strict' | 'tolerant'
+}
+
+export type CanonicalOrchestrationScope =
+  | CanonicalOrchestrationSymbolScope
+  | CanonicalOrchestrationTimeframeScope
 
 export interface CanonicalStrategySpecV2 {
   version: 2

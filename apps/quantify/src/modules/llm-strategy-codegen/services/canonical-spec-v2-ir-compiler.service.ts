@@ -837,17 +837,29 @@ export class CanonicalSpecV2IrCompilerService {
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
   }
 
-  // Phase 5 S2 (#1104): scope.symbol substrate IR compile
+  // Phase 5 S2 (#1104) + S3 (#1109): scope union substrate IR compile
   private compileOrchestrationScopes(spec: CanonicalStrategySpecV2): IrOrchestrationScope[] {
     const scopes = spec.orchestration?.scopes ?? []
-    return scopes.map((scope): IrOrchestrationScope => ({
-      id: scope.id,
-      scopeKind: 'symbol',
-      symbols: [...scope.symbols].sort(),
-      ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
-        ? { primarySymbol: scope.primarySymbol.trim() }
-        : {}),
-    }))
+    return scopes.map((scope): IrOrchestrationScope => {
+      if (scope.scopeKind === 'symbol') {
+        return {
+          id: scope.id,
+          scopeKind: 'symbol',
+          symbols: [...scope.symbols].sort(),
+          ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
+            ? { primarySymbol: scope.primarySymbol.trim() }
+            : {}),
+        }
+      }
+      // Phase 5 S3 (#1109): timeframe scope
+      return {
+        id: scope.id,
+        scopeKind: 'timeframe',
+        primaryTimeframe: scope.primaryTimeframe,
+        requiredTimeframes: [...scope.requiredTimeframes],
+        alignmentPolicy: scope.alignmentPolicy,
+      }
+    })
   }
 
   // Phase 5 S11 (#1112): scope.leg substrate IR compile
@@ -2705,6 +2717,20 @@ export class CanonicalSpecV2IrCompilerService {
     const legRefValid = typeof legRef === 'string'
       && legRef.trim() !== ''
       && (!supportedLegScopeIds || supportedLegScopeIds.has(legRef.trim()))
+    supportedTimeframeScopeIds?: ReadonlySet<string>,
+  ): RuleBlock['metadata'] {
+    // Phase 5 S2 (#1104): symbolScopeRef silent skip 透传
+    //   仅当 ref trim 后非空且 ∈ supportedScopeIds 时透传；否则丢弃 + 让 readiness/runtime fail-closed
+    const symbolRef = metadata.symbolScopeRef
+    const symbolRefValid = typeof symbolRef === 'string'
+      && symbolRef.trim() !== ''
+      && (!supportedScopeIds || supportedScopeIds.has(symbolRef.trim()))
+    // Phase 5 S3 (#1109): timeframeScopeRef silent skip 透传
+    //   与 symbolScopeRef 同模式；不在 supportedTimeframeScopeIds 时丢弃
+    const tfRef = metadata.timeframeScopeRef
+    const tfRefValid = typeof tfRef === 'string'
+      && tfRef.trim() !== ''
+      && (!supportedTimeframeScopeIds || supportedTimeframeScopeIds.has(tfRef.trim()))
     return {
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
@@ -2712,6 +2738,8 @@ export class CanonicalSpecV2IrCompilerService {
       ...(metadata.dcaSchedule ? { dcaSchedule: { ...metadata.dcaSchedule } } : {}),
       ...(refValid && typeof ref === 'string' ? { symbolScopeRef: ref.trim() } : {}),
       ...(legRefValid && typeof legRef === 'string' ? { legScopeRef: legRef.trim() } : {}),
+      ...(symbolRefValid && typeof symbolRef === 'string' ? { symbolScopeRef: symbolRef.trim() } : {}),
+      ...(tfRefValid && typeof tfRef === 'string' ? { timeframeScopeRef: tfRef.trim() } : {}),
     }
   }
 

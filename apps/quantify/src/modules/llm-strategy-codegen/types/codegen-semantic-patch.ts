@@ -15,10 +15,12 @@ import type {
   SemanticOrchestrationProgramOnDeactivate,
   SemanticOrchestrationProgramRebuildPolicy,
   SemanticOrchestrationProgramSizing,
+  SemanticOrchestrationTimeframeAlignmentPolicy,
   SemanticPositionConstraintKey,
   SemanticPositionSizingContract,
   SemanticSlotState,
   SemanticSource,
+  SemanticSupportedTimeframe,
 } from './semantic-state'
 import type { CodegenContextSlotPatchValue } from './market-instrument-symbol'
 import type { SemanticAtomSupportMetadata } from './semantic-atom-support'
@@ -80,6 +82,7 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
   | CodegenSemanticOrchestrationSymbolScopeNodePatch
   | CodegenSemanticOrchestrationLegScopeNodePatch
+  | CodegenSemanticOrchestrationTimeframeScopeNodePatch
 
 // Phase 5 S2 (#1104): scope.symbol patch 节点
 export interface CodegenSemanticOrchestrationSymbolScopeNodePatch extends CodegenSemanticNodeEnvelope {
@@ -103,6 +106,15 @@ export interface CodegenSemanticOrchestrationLegScopeNodePatch extends CodegenSe
   instrumentRef: string
   legSizing?: SemanticOrchestrationLegSizing
   syncTriggerRequired?: boolean
+// Phase 5 S3 (#1109): scope.timeframe patch 节点
+export interface CodegenSemanticOrchestrationTimeframeScopeNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'scope'
+  key: 'scope.timeframe'
+  params: Record<string, unknown>
+  timeframeScopeKind: 'timeframe'
+  primaryTimeframe: SemanticSupportedTimeframe
+  requiredTimeframes: readonly SemanticSupportedTimeframe[]
+  alignmentPolicy: SemanticOrchestrationTimeframeAlignmentPolicy
 }
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {

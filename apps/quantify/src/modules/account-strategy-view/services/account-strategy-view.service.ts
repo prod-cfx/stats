@@ -26,6 +26,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { GridRuntimeService } from '@/modules/grid-runtime/services/grid-runtime.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+// Phase 5 S3 (#1109): scope.timeframe live publication-time gate
+import { ScopeTimeframeLiveUnsupportedException } from '@/modules/llm-strategy-codegen/exceptions/scope-timeframe-live-unsupported.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -1189,6 +1191,14 @@ export class AccountStrategyViewService {
     }
 
     const resolvedDeploy = await this.resolveDeployPayload(dto)
+
+    // Phase 5 S3 (#1109): scope.timeframe live publication gate
+    //   含 timeframe scope + mode='LIVE' → 抛 ScopeTimeframeLiveUnsupportedException
+    //   backtest 路径不经过此 gate（不抛）；mode 缺失或 'TESTNET' 也不抛
+    //   live 完整接入跟进 follow-up #1110
+    if (this.snapshotHasTimeframeScope(resolvedDeploy.snapshot) && dto.mode === 'LIVE') {
+      throw new ScopeTimeframeLiveUnsupportedException({ snapshotId: resolvedDeploy.publishedSnapshotId })
+    }
 
     let deployRequest: { id: string }
     try {
@@ -2657,6 +2667,25 @@ export class AccountStrategyViewService {
     return actions.some((action) => {
       const actionRecord = this.readRecord(action)
       return !!actionRecord && !!this.readString(actionRecord, ['kind'])
+    })
+  }
+
+  /**
+   * Phase 5 S3 (#1109): 检测 published snapshot 是否含 scope.timeframe 节点
+   *
+   * 数据源：snapshot.astSnapshot.orchestrationScopes（IR/AST 透传链路；T1 union 升级后含 scopeKind 字段）
+   * 真值：任一元素 scopeKind === 'timeframe' 即触发
+   * 兜底：astSnapshot 不存在 / orchestrationScopes 不是数组 → false（不阻 deploy）
+   */
+  private snapshotHasTimeframeScope(snapshot: unknown): boolean {
+    const record = this.readRecord(snapshot)
+    const astSnapshot = this.readRecord(record?.astSnapshot)
+    const scopes = astSnapshot?.orchestrationScopes
+    if (!Array.isArray(scopes) || scopes.length === 0) return false
+    return scopes.some((scope) => {
+      if (typeof scope !== 'object' || scope === null) return false
+      const kind = (scope as Record<string, unknown>).scopeKind
+      return kind === 'timeframe'
     })
   }
 

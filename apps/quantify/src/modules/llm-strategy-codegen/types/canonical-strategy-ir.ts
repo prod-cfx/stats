@@ -208,6 +208,8 @@ export interface RuleBlock {
     symbolScopeRef?: string
     // Phase 5 S11 (#1112): 多 leg 策略中显式声明该 rule 归属哪个 scope.leg id
     legScopeRef?: string
+    // Phase 5 S3 (#1109): 多周期策略中显式声明该 rule 归属哪个 scope.timeframe id
+    timeframeScopeRef?: string
   } & PositionLifecycleActionMetadata
 }
 
@@ -349,7 +351,7 @@ export type IrOrchestrationProgram =
   | IrAdaptiveVolatilityGridProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate IR
-export interface IrOrchestrationScope {
+export interface IrOrchestrationSymbolScope {
   id: string
   scopeKind: 'symbol'
   symbols: readonly string[]
@@ -372,6 +374,19 @@ export interface IrOrchestrationLegScope {
   legSizing?: IrOrchestrationLegSizing
   syncTriggerRequired?: boolean
 }
+
+// Phase 5 S3 (#1109): scope.timeframe substrate IR
+export interface IrOrchestrationTimeframeScope {
+  id: string
+  scopeKind: 'timeframe'
+  primaryTimeframe: string
+  requiredTimeframes: readonly string[]
+  alignmentPolicy: 'strict' | 'tolerant'
+}
+
+export type IrOrchestrationScope =
+  | IrOrchestrationSymbolScope
+  | IrOrchestrationTimeframeScope
 
 export interface RiskGuard {
   id: string

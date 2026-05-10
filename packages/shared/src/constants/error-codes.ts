@@ -205,6 +205,10 @@ export enum ErrorCode {
   ATOM_VERSION_GATE_VALIDATION_FAILED = 'ATOM_VERSION_GATE_VALIDATION_FAILED',
   UTTERANCE_GOLDEN_CORPUS_PARSE_ERROR = 'UTTERANCE_GOLDEN_CORPUS_PARSE_ERROR',
 
+  // ===== Phase 5 S3 (#1109) scope.timeframe substrate =====
+  // live 部署目前不支持多周期 scope；抛出点：account-strategy-view.service.ts deployStrategy() mode='LIVE'
+  ORCHESTRATION_SCOPE_TIMEFRAME_LIVE_UNSUPPORTED = 'ORCHESTRATION_SCOPE_TIMEFRAME_LIVE_UNSUPPORTED',
+
   // ===== Position 模块 - 新增 =====
   PORTFOLIO_POSITION_CLOSE_ERROR = 'PORTFOLIO_POSITION_CLOSE_ERROR',
 

@@ -482,6 +482,23 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     ],
     displayRenderer: ({ params }) => renderLegScope(params),
     clarificationRenderer: (slotKey) => renderLegScopeClarification(slotKey),
+  // Phase 5 S3 (#1109): scope.timeframe substrate
+  presentation({
+    key: 'scope.timeframe',
+    publicName: '周期范围',
+    aliases: ['多周期范围', '多时间框架', 'timeframe scope', '周期作用域'],
+    positiveExamples: [
+      '15 分钟主周期，1 小时和 4 小时做 scope 依赖周期',
+      '执行周期 5m，参考 15m 1h 多时间框架 scope',
+      '主周期 1h，依赖 4h 1d 严格对齐',
+    ],
+    negativeExamples: ['只用 15 分钟一个周期', '随便几个周期都行'],
+    goldenUtterances: [
+      '15m 主周期 + 1h 4h 依赖周期严格对齐',
+      'Primary timeframe 15m, required timeframes 1h and 4h',
+    ],
+    displayRenderer: ({ params }) => renderTimeframeScope(params),
+    clarificationRenderer: (slotKey) => renderTimeframeScopeClarification(slotKey),
   }),
   presentation({
     key: 'market.regime',
@@ -1417,7 +1434,7 @@ function renderSymbolScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.symbol.symbols_overlap') return '多 scope 之间标的不能重叠'
   if (slotKey === 'orchestration.scope.symbol.primary_symbol_collision') return '多 scope 主标的必须各自唯一'
   if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
-  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol'
+  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.timeframe'
   return '请补全标的范围参数'
 }
 
@@ -1462,6 +1479,33 @@ function renderLegScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.leg.direction_collision') return 'paired leg 必须方向相反（对冲腿）'
   if (slotKey === 'orchestration.scope.leg.missing_binding') return '请确认该规则绑定到哪个策略腿'
   return '请补全策略腿参数'
+// Phase 5 S3 (#1109): scope.timeframe render
+function renderTimeframeScope(params: Record<string, unknown>): string {
+  const primary = stringParam(params, 'primaryTimeframe', '')
+  const requiredRaw = params.requiredTimeframes
+  const required = Array.isArray(requiredRaw)
+    ? requiredRaw.filter((tf): tf is string => typeof tf === 'string').join('、')
+    : ''
+  const alignmentPolicy = stringParam(params, 'alignmentPolicy', 'strict')
+  if (primary === '' || required === '') return ''
+  return renderDisplayToken('atom.scope.timeframe.display.with_required', {
+    primaryTimeframe: primary,
+    requiredTimeframes: required,
+    alignmentPolicy,
+  })
+}
+
+function renderTimeframeScopeClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.scope.timeframe.primary_timeframe') return '请确认执行周期（主周期）'
+  if (slotKey === 'orchestration.scope.timeframe.required_timeframes') return '请确认依赖周期列表（≥1 个，且与主周期不同）'
+  if (slotKey === 'orchestration.scope.timeframe.required_length') return '依赖周期数量必须在 1..8 之间'
+  if (slotKey === 'orchestration.scope.timeframe.primary_granularity') return '主周期粒度必须严格细于所有依赖周期'
+  if (slotKey === 'orchestration.scope.timeframe.alignment_policy') return '请确认对齐严格度（strict / tolerant）'
+  if (slotKey === 'orchestration.scope.timeframe.duplicate_definition') return '多 scope.timeframe 之间 (主周期, 依赖周期集合) 不能完全相同'
+  if (slotKey === 'orchestration.scope.timeframe.missing_binding') return '请确认该规则绑定到哪个 timeframe scope（必须显式声明）'
+  if (slotKey === 'orchestration.scope.timeframe.unsupported_key') return '当前仅支持 scope.timeframe'
+  if (slotKey === 'orchestration.scope.timeframe.scope_kind') return '请确认 scopeKind 为 timeframe'
+  return '请补全周期范围参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

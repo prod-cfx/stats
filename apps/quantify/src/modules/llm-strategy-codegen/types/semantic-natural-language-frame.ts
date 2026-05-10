@@ -12,6 +12,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticAdaptiveVolatilityGridFrame
   | SemanticSymbolScopeFrame
   | SemanticLegScopeFrame
+  | SemanticTimeframeScopeFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -139,4 +140,10 @@ export interface SemanticLegScopeFrame extends SemanticFrameBase {
     }
   }>
   syncTriggerRequired?: boolean
+// Phase 5 S3 (#1109): timeframe scope frame
+export interface SemanticTimeframeScopeFrame extends SemanticFrameBase {
+  kind: 'timeframe_scope'
+  primaryTimeframe: string         // execution timeframe（'1m'..'1w'）
+  requiredTimeframes: readonly string[]  // 依赖周期（≥1，比 primary 粗）
+  alignmentPolicy?: 'strict' | 'tolerant'  // 默认 strict（normalizer 兜底）
 }

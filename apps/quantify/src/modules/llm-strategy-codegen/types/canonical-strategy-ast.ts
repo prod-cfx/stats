@@ -78,6 +78,8 @@ export interface DecisionProgramNode {
     symbolScopeRef?: string
     // Phase 5 S11 (#1112): 多 leg 策略中的 legScopeRef 透传
     legScopeRef?: string
+    // Phase 5 S3 (#1109): 多周期策略中的 timeframeScopeRef 透传
+    timeframeScopeRef?: string
   }
 }
 

@@ -13,8 +13,10 @@ import type {
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
   SemanticSymbolScopeFrame,
+  SemanticTimeframeScopeFrame,
 } from '../types/semantic-natural-language-frame'
 import { Injectable } from '@nestjs/common'
+import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 
 type FrameDraft =
   | ContextFrameDraft
@@ -30,6 +32,7 @@ type FrameDraft =
   | AdaptiveVolatilityGridFrameDraft
   | SymbolScopeFrameDraft
   | LegScopeFrameDraft
+  | TimeframeScopeFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -44,6 +47,7 @@ type DynamicGridFrameDraft = Omit<SemanticDynamicGridFrame, 'id' | 'confidence'>
 type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame, 'id' | 'confidence'>
 type SymbolScopeFrameDraft = Omit<SemanticSymbolScopeFrame, 'id' | 'confidence'>
 type LegScopeFrameDraft = Omit<SemanticLegScopeFrame, 'id' | 'confidence'>
+type TimeframeScopeFrameDraft = Omit<SemanticTimeframeScopeFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -55,6 +59,7 @@ export class NaturalLanguageGatewayService {
       ...this.parseContext(text),
       ...this.parseSymbolScope(text),
       ...this.parseLegScope(text),
+      ...this.parseTimeframeScope(text),
       ...this.parseEmaGates(text),
       ...this.parseBoundaryTouches(text),
       ...this.parseActions(text),
@@ -569,6 +574,88 @@ export class NaturalLanguageGatewayService {
       kind: 'symbol_scope',
       symbols,
       ...(primarySymbol ? { primarySymbol } : {}),
+      evidenceText: text.slice(0, Math.min(text.length, 80)),
+    }]
+  }
+
+  /**
+   * Phase 5 S3 (#1109): scope.timeframe utterance parser
+   *
+   * 双门槛（critic Round 1 M2 / Round 2 修正）：
+   *   1. 至少 2 个 distinct timeframe vocab 命中（vocab 由 packages/shared TIMEFRAME_MS 派生）
+   *   2. 触发短语精准多 OR——锁定 scope-binding 词组，移除与 strategy.multi_timeframe atom 撞车的
+   *      "高周期"/"低周期"/"周期过滤"/"多周期"等高频汉字
+   *
+   * 默认 alignmentPolicy = 'strict'（critic Round 1 C4：与 fail-closed 主张一致）；
+   * utterance 显式 "宽松对齐"/"tolerant alignment" 才落 'tolerant'。
+   *
+   * 命中 6 fixture（plan §4.9.1）：
+   *   F1 "用 15m 主周期，1h 和 4h 做 scope 依赖周期"
+   *   F2 "Primary timeframe 15m, required timeframes 1h and 4h"
+   *   F3 "执行周期 5m，依赖周期 15m 1h 严格对齐"
+   *   F4 "主周期 1h，依赖周期 4h 1d 宽松对齐"
+   *   F5 "Multi-timeframe scope: primary 5m, required 15m + 1h"
+   *   F6 "执行 15m，多时间框架 scope 1h + 4h，strict alignment"
+   * Negative：N1 单周期 / N2 HTF filter atom utterance / N3 symbol_scope utterance 不命中
+   */
+  private parseTimeframeScope(text: string): TimeframeScopeFrameDraft[] {
+    // (1) 触发短语精准多 OR — 锁定 scope-binding 词组
+    const triggerPattern = /(主周期|执行周期|主时间框架|primary\s+timeframe|primary\s+tf|多时间框架\s*scope|multi[-\s]?timeframe\s+scope|严格对齐|strict\s+alignment|宽松对齐|tolerant\s+alignment|loose\s+alignment|require[ds]?\s+timeframes?|依赖周期)/iu
+    if (!triggerPattern.test(text)) return []
+
+    // (2) timeframe vocab 提取（与 packages/shared TIMEFRAME_MS 单一 source-of-truth）
+    const tfPattern = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)\b/giu
+    const distinctTfs = new Set<string>()
+    const orderedTfs: string[] = []
+    for (const m of text.matchAll(tfPattern)) {
+      const tf = m[1].toLowerCase()
+      if (!distinctTfs.has(tf)) {
+        distinctTfs.add(tf)
+        orderedTfs.push(tf)
+      }
+    }
+    if (distinctTfs.size < 2) return []
+
+    // (3) primary 提取：优先显式声明
+    const primaryExplicit = /(?:主周期|执行周期|主时间框架|primary\s+(?:timeframe|tf)|执行)\s*[:：是为]?\s*[（(]?\s*(1m|3m|5m|15m|30m|1h|2h|4h|6h|8h|12h|1d|3d|1w)/iu
+      .exec(text)
+    let primaryTimeframe = primaryExplicit?.[1]?.toLowerCase()
+    if (!primaryTimeframe || !distinctTfs.has(primaryTimeframe)) {
+      // 缺显式声明 → 选最细粒度（min ms）
+      let minMs = Number.POSITIVE_INFINITY
+      let candidate = ''
+      for (const tf of distinctTfs) {
+        const ms = parseTimeframeMs(tf)
+        if (ms !== null && ms < minMs) {
+          minMs = ms
+          candidate = tf
+        }
+      }
+      if (!candidate) return []
+      primaryTimeframe = candidate
+    }
+
+    // (4) requiredTimeframes = 总 set 减 primary，按 ms 升序
+    const requiredTimeframes = orderedTfs.filter((tf) => tf !== primaryTimeframe)
+    if (requiredTimeframes.length === 0) return []
+    requiredTimeframes.sort((a, b) => (parseTimeframeMs(a) ?? 0) - (parseTimeframeMs(b) ?? 0))
+
+    // (5) 粒度顺序前置（与 readiness A2.4f 一致；非法 utterance 不产 frame）
+    const primaryMs = parseTimeframeMs(primaryTimeframe)
+    if (primaryMs === null) return []
+    const minRequiredMs = Math.min(...requiredTimeframes.map((tf) => parseTimeframeMs(tf) ?? Number.POSITIVE_INFINITY))
+    if (!Number.isFinite(minRequiredMs) || primaryMs >= minRequiredMs) return []
+
+    // (6) alignmentPolicy 提取（默认 strict；utterance 显式 tolerant 才放宽）
+    const tolerantMatch = /(宽松对齐|tolerant\s+alignment|loose\s+alignment)/iu.test(text)
+    const strictMatch = /(严格对齐|strict\s+alignment)/iu.test(text)
+    const alignmentPolicy: 'strict' | 'tolerant' = tolerantMatch && !strictMatch ? 'tolerant' : 'strict'
+
+    return [{
+      kind: 'timeframe_scope',
+      primaryTimeframe,
+      requiredTimeframes,
+      alignmentPolicy,
       evidenceText: text.slice(0, Math.min(text.length, 80)),
     }]
   }

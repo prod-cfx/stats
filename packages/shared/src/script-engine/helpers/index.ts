@@ -33,3 +33,6 @@ export { candlePatternDetector } from './candle-pattern-detector'
 export type { CandlePattern, CandlePatternDetectorInput, CandlePatternDirection } from './candle-pattern-detector'
 export * as technicalIndicators from './technical-indicators'
 export type { Bar } from './technical-indicators'
+
+// Phase 5 S3 (#1109): scope.timeframe substrate caller helper
+export { buildTimeframeBarStatus } from './build-timeframe-bar-status'

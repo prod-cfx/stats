@@ -41,6 +41,13 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
    * 单/0 scope 策略时被忽略
    */
   activeSymbolScopeId?: string
+  /**
+   * Phase 5 S3 (#1109): scope.timeframe substrate 数据对齐状态
+   * key 是 timeframe identifier ('1m'|'5m'|'15m'|...)；val 是 caller 已收 bar 状态。
+   * 单周期 / 无 scope.timeframe 节点策略不注入；runtime 自动跳过 alignment 检查。
+   * 字段事实：lastClosedBarTs 是毫秒（与 packages/shared Bar.timestamp 同源）。
+   */
+  timeframeBarStatus?: Record<string, { lastClosedBarTs: number; lastClosedBarIndex: number }>
   timeframe?: string
   currentPrice?: number
   marketRegime?: string

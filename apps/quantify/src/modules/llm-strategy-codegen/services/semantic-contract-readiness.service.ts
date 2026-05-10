@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
+import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import type { StrategyVersionInfo } from '../nl-gateway/version-gate/version-gate.types'
 import type {
   SemanticAtomContract,
@@ -139,16 +140,21 @@ export class SemanticContractReadinessService {
     //   （两条 binding 各自独立 fail-closed，同一 owner 双 ref 缺失会同时落两条 missing_binding open slot）
     const { state: nextState, hasBlockingSlots: legBindingHasBlockingSlots } =
       applyLegScopeBindingFailClosed(afterSymbolBinding, baseNextState)
+    const symbolBound = applySymbolScopeBindingFailClosed(baseNextState)
+    // Phase 5 S3 (#1109): timeframe scope binding fail-closed（≥1 scope.timeframe locked 即强制）
+    const timeframeBound = applyTimeframeScopeBindingFailClosed(symbolBound.state)
 
     return {
-      state: nextState,
+      state: timeframeBound.state,
       ready: unsupportedOrUnknownOwnerKeys.size === 0
         && missingRequirements.length === 0
         && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
-        && !hasBlockingOwnerOpenSlots(nextState)
+        && !hasBlockingOwnerOpenSlots(timeframeBound.state)
         && !orchestrationResult.hasBlockingSlots
         && !symbolBindingHasBlockingSlots
         && !legBindingHasBlockingSlots,
+        && !symbolBound.hasBlockingSlots
+        && !timeframeBound.hasBlockingSlots,
       missingRequirements,
     }
   }
@@ -429,6 +435,7 @@ function applyOrchestrationReadinessForNode(
   }
 
   if (isSupportedLegScope(node, registry, strategyVersion, siblingNodes)) {
+  if (isSupportedTimeframeScope(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry, siblingNodes)
   }
 
@@ -582,6 +589,73 @@ function isProgramNode(
   node: SemanticOrchestrationNode,
 ): node is SemanticOrchestrationNode & { kind: 'program' } {
   return node.kind === 'program'
+}
+
+/**
+ * Phase 5 S3 (#1109): scope.timeframe 节点 9 重 fail-closed:
+ *   1) kind === 'scope'
+ *   2) key === 'scope.timeframe'
+ *   3) timeframeScopeKind === 'timeframe'
+ *   4) primaryTimeframe 合法（命中 vocab）
+ *   5) requiredTimeframes 非空数组 + 长度 ∈ [1,8] + 每项命中 vocab + 去重 + 不含 primary
+ *   6) primary 粒度严格细于所有 required（critic Round 2 C2-R2）
+ *   7) alignmentPolicy ∈ {'strict','tolerant'}
+ *   8) 与其它 locked sibling (primary, sortedRequired) 不重复
+ *   9) registry contract 存在 + version-gate（strategyVersion ≠ undefined + isExecutableForStrategy）
+ */
+function isSupportedTimeframeScope(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (node.kind !== 'scope') return false
+  if (node.key !== 'scope.timeframe') return false
+  if (node.timeframeScopeKind !== 'timeframe') return false
+
+  const primaryMs = parseTimeframeMs(node.primaryTimeframe)
+  if (primaryMs === null) return false
+
+  const required = node.requiredTimeframes
+  if (!Array.isArray(required) || required.length < 1 || required.length > 8) return false
+
+  const requiredMsList: number[] = []
+  const dedupedRequired = new Set<string>()
+  for (const tf of required) {
+    if (typeof tf !== 'string') return false
+    const ms = parseTimeframeMs(tf)
+    if (ms === null) return false
+    if (dedupedRequired.has(tf)) return false
+    dedupedRequired.add(tf)
+    requiredMsList.push(ms)
+  }
+  if (typeof node.primaryTimeframe !== 'string') return false
+  if (dedupedRequired.has(node.primaryTimeframe)) return false
+
+  // primary 粒度严格细于所有 required
+  if (primaryMs >= Math.min(...requiredMsList)) return false
+
+  if (node.alignmentPolicy !== 'strict' && node.alignmentPolicy !== 'tolerant') return false
+
+  // 与其它 locked sibling 不重复
+  const otherLockedScopes = siblingNodes.filter(
+    (other) =>
+      other.id !== node.id
+      && other.kind === 'scope'
+      && other.key === 'scope.timeframe'
+      && other.status === 'locked',
+  )
+  const myKey = JSON.stringify([node.primaryTimeframe, [...required].sort()])
+  for (const other of otherLockedScopes) {
+    if (typeof other.primaryTimeframe !== 'string' || !Array.isArray(other.requiredTimeframes)) continue
+    const otherKey = JSON.stringify([other.primaryTimeframe, [...other.requiredTimeframes].sort()])
+    if (otherKey === myKey) return false
+  }
+
+  const contract = registry.getContractByKey('scope.timeframe')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
 }
 
 /**
@@ -1166,6 +1240,17 @@ function applySymbolScopeBindingFailClosed(
 function applyLegScopeBindingFailClosed(
   state: SemanticState,
   preBindingState?: SemanticState,
+ * Phase 5 S3 (#1109): timeframe scope binding fail-closed
+ *
+ * 与 S2 ≥2 阈值不同——S3 ≥1 supported scope.timeframe locked 节点即强制 owner ref。
+ * 理由：timeframe alignment 是 per-program runtime 校验，必须有显式 binding；不允许 ambient 兜底。
+ * 同 owner 同时缺 symbolScopeRef + timeframeScopeRef 时，两个 missing_binding slot 各自单独追加（不合并）。
+ *
+ * open→locked 流转语义：scope 节点 status='open' 期间 supportedScopeIds 集合不含该 scope，
+ * 不强制 owner ref；status 改 'locked' 后下一轮 normalize 即 cascading 检查。
+ */
+function applyTimeframeScopeBindingFailClosed(
+  state: SemanticState,
 ): { state: SemanticState; hasBlockingSlots: boolean } {
   const orchestration = state.orchestration
   if (!orchestration) {
@@ -1197,6 +1282,20 @@ function applyLegScopeBindingFailClosed(
   for (const r of sourceState.risk) riskStatusBeforeBinding.set(r.id, r.status)
   for (const c of sourceState.position?.constraints ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
 
+  const supportedScopeIds = new Set<string>()
+  for (const node of orchestration.nodes) {
+    if (
+      node.kind === 'scope'
+      && node.key === 'scope.timeframe'
+      && node.status === 'locked'
+    ) {
+      supportedScopeIds.add(node.id)
+    }
+  }
+  if (supportedScopeIds.size < 1) {
+    return { state, hasBlockingSlots: false }
+  }
+
   let hasBlockingSlots = false
 
   function buildMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
@@ -1206,6 +1305,11 @@ function applyLegScopeBindingFailClosed(
       status: 'open',
       priority: 'core',
       questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个策略腿`,
+      slotKey: 'orchestration.scope.timeframe.missing_binding',
+      fieldPath: `${ownerLabel}[${ownerId}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个 timeframe scope（必须显式声明）`,
       affectsExecution: true,
     }
   }
@@ -1220,6 +1324,20 @@ function applyLegScopeBindingFailClosed(
   const triggers = state.triggers.map((trigger) => {
     const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
     if (preStatus !== 'locked' || !isMissingRef(trigger.legScopeRef)) return trigger
+    return !supportedScopeIds.has(trimmed)
+  }
+
+  // 与 symbol binding 协同：若 owner 因 symbol_missing_binding 已被拉到 'open'，
+  // 仍应检查 timeframe ref（让两个维度的 missing_binding slot 各自单独上报）。
+  // 通过 openSlots 检测原始状态：含 'orchestration.scope.symbol.missing_binding' slot
+  // 即视为"原本 locked"，应继续检查 timeframe ref。
+  function wasOriginallyLocked(node: { status: SemanticNodeStatus; openSlots?: readonly SemanticSlotState[] }): boolean {
+    if (node.status === 'locked') return true
+    return (node.openSlots ?? []).some(s => s.slotKey === 'orchestration.scope.symbol.missing_binding')
+  }
+
+  const triggers = state.triggers.map((trigger) => {
+    if (!wasOriginallyLocked(trigger) || !isMissingRef(trigger.timeframeScopeRef)) return trigger
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('trigger', trigger.id)
     return {
@@ -1231,6 +1349,7 @@ function applyLegScopeBindingFailClosed(
   const actions = state.actions.map((action) => {
     const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
     if (preStatus !== 'locked' || !isMissingRef(action.legScopeRef)) return action
+    if (!wasOriginallyLocked(action) || !isMissingRef(action.timeframeScopeRef)) return action
     hasBlockingSlots = true
     const slot = buildMissingBindingSlot('action', action.id)
     return {
@@ -1248,6 +1367,14 @@ function applyLegScopeBindingFailClosed(
       ...riskItem,
       status: 'open' as SemanticNodeStatus,
       openSlots: [...(riskItem.openSlots ?? []), slot],
+  const risk = state.risk.map((risk) => {
+    if (!wasOriginallyLocked(risk) || !isMissingRef(risk.timeframeScopeRef)) return risk
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('risk', risk.id)
+    return {
+      ...risk,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(risk.openSlots ?? []), slot],
     }
   })
   const position = state.position
@@ -1257,6 +1384,7 @@ function applyLegScopeBindingFailClosed(
         const nextConstraints = constraints.map((constraint) => {
           const preStatus = constraintStatusBeforeBinding.get(constraint.id) ?? constraint.status
           if (preStatus !== 'locked' || !isMissingRef(constraint.legScopeRef)) return constraint
+          if (!wasOriginallyLocked(constraint) || !isMissingRef(constraint.timeframeScopeRef)) return constraint
           hasBlockingSlots = true
           const slot = buildMissingBindingSlot('positionConstraint', constraint.id)
           return {

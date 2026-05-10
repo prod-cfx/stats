@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
+import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 import {
   CURRENT_SEMANTIC_VERSION,
   isAtomExecutableForStrategy,
@@ -23,12 +24,52 @@ const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
 const SCOPE_SYMBOL_KEY = 'scope.symbol'
 const SCOPE_LEG_KEY = 'scope.leg'
+// Phase 5 S3 (#1109)
+const SCOPE_TIMEFRAME_KEY = 'scope.timeframe'
+const TIMEFRAME_REQUIRED_MIN_LENGTH = 1
+const TIMEFRAME_REQUIRED_MAX_LENGTH = 8
 
 const SYMBOL_FORMAT_PATTERN = /^[A-Z]{2,5}USDT$/u
 const SYMBOL_MAX_LENGTH = 32
 
 // Phase 5 S11 (#1112): legId 与 node.id 是两个独立标识；legId 仅在 leg 节点子集内唯一并供 pairedLegId 引用
 const LEG_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.]{0,63}$/u
+// Phase 5 S3 (#1109): scope.timeframe contract
+//   capability: orchestration declare timeframe_scope
+//   runtimeRequirements: read.bar_status_by_timeframe (caller 注入 ctx.timeframeBarStatus)
+//   effects: orchestration bind timeframe_scope（owner 节点 timeframeScopeRef 透传）
+const SCOPE_TIMEFRAME_CONTRACT: SemanticOrchestrationContract = {
+  id: 'scope.timeframe',
+  kind: 'scope',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'declare',
+      object: 'timeframe_scope',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'bar_status_by_timeframe',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'orchestration',
+      verb: 'bind',
+      object: 'timeframe_scope',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
 
 const SCOPE_SYMBOL_CONTRACT: SemanticOrchestrationContract = {
   id: 'scope.symbol',
@@ -359,6 +400,7 @@ export class SemanticOrchestrationRegistryService {
     [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
     [SCOPE_SYMBOL_KEY, SCOPE_SYMBOL_CONTRACT],
     [SCOPE_LEG_KEY, SCOPE_LEG_CONTRACT],
+    [SCOPE_TIMEFRAME_KEY, SCOPE_TIMEFRAME_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -379,6 +421,20 @@ export class SemanticOrchestrationRegistryService {
         return this.validateLegScopeNode(node, siblingNodes)
       }
       return this.validateScopeNode(node, siblingNodes)
+      // Phase 5 S3 (#1109): 按 key 路由到具体 validator；保留 unsupported_kind 兜底
+      if (node.key === SCOPE_SYMBOL_KEY) return this.validateSymbolScopeNode(node, siblingNodes)
+      if (node.key === SCOPE_TIMEFRAME_KEY) return this.validateTimeframeScopeNode(node, siblingNodes)
+      return {
+        ok: false,
+        missingSlots: [{
+          slotKey: 'orchestration.scope.unsupported_kind',
+          fieldPath: `orchestration.scope[${node.id}]`,
+          status: 'open',
+          priority: 'core',
+          questionHint: '当前仅支持 scope.symbol / scope.timeframe',
+          affectsExecution: true,
+        }],
+      }
     }
     if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_DRAWDOWN_BLOCK_KEY) {
       const thresholdPct = node.thresholdPct
@@ -750,7 +806,7 @@ export class SemanticOrchestrationRegistryService {
    *   5) 与其它 supported scope.symbol 节点 symbols 不重叠（强制隔离）
    *   6) 与其它 supported scope.symbol primarySymbol 不冲突
    */
-  private validateScopeNode(
+  private validateSymbolScopeNode(
     node: SemanticOrchestrationNode,
     siblingNodes: readonly SemanticOrchestrationNode[],
   ): SemanticOrchestrationValidationResult {
@@ -768,7 +824,7 @@ export class SemanticOrchestrationRegistryService {
     }
 
     if (node.key !== SCOPE_SYMBOL_KEY) {
-      pushSlot('unsupported_kind', '当前仅支持 scope.symbol')
+      pushSlot('unsupported_kind', '当前仅支持 scope.symbol / scope.timeframe')
       return { ok: false, missingSlots }
     }
     if (node.symbolScopeKind !== 'symbol') {
@@ -853,6 +909,19 @@ export class SemanticOrchestrationRegistryService {
    *   8) version-gate（caller 在 readiness 处理）
    */
   private validateLegScopeNode(
+   * Phase 5 S3 (#1109): scope.timeframe 节点 10 重 fail-closed
+   *   1) key === 'scope.timeframe'
+   *   2) timeframeScopeKind === 'timeframe'
+   *   3) primaryTimeframe 字符串 + 命中 vocab
+   *   4) requiredTimeframes 是数组
+   *   5) requiredTimeframes 长度 ∈ [1, 8]
+   *   6) requiredTimeframes 每项命中 vocab + 去重
+   *   7) primaryTimeframe ∉ requiredTimeframes（自引用拒绝）
+   *   8) primary 粒度严格细于所有 required（critic Round 2 C2-R2：bar-bucket 数学的隐含前提）
+   *   9) alignmentPolicy ∈ {'strict','tolerant'}
+   *   10) 与其它 locked sibling (primary, sortedRequired) 元组不重复
+   */
+  private validateTimeframeScopeNode(
     node: SemanticOrchestrationNode,
     siblingNodes: readonly SemanticOrchestrationNode[],
   ): SemanticOrchestrationValidationResult {
@@ -861,6 +930,10 @@ export class SemanticOrchestrationRegistryService {
     const pushSlot = (suffix: string, hint: string): void => {
       missingSlots.push({
         slotKey: `orchestration.scope.leg.${suffix}`,
+    const fieldPath = `orchestration.scope[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.scope.timeframe.${suffix}`,
         fieldPath,
         status: 'open',
         priority: 'core',
@@ -947,6 +1020,80 @@ export class SemanticOrchestrationRegistryService {
             || (pairedNode.direction === node.direction)
           ) {
             pushSlot('direction_collision', 'paired leg 必须方向相反（对冲腿）')
+    if (node.key !== SCOPE_TIMEFRAME_KEY) {
+      pushSlot('unsupported_key', '当前仅支持 scope.timeframe')
+      return { ok: false, missingSlots }
+    }
+    if (node.timeframeScopeKind !== 'timeframe') {
+      pushSlot('scope_kind', '请确认 scopeKind 为 timeframe')
+    }
+
+    const primaryMs = parseTimeframeMs(node.primaryTimeframe)
+    if (primaryMs === null) {
+      pushSlot('primary_timeframe', '请确认执行周期（主周期）')
+    }
+
+    const requiredRaw = node.requiredTimeframes
+    if (!Array.isArray(requiredRaw)) {
+      pushSlot('required_timeframes', '请确认依赖周期列表（≥1 个）')
+      return { ok: false, missingSlots }
+    }
+
+    if (requiredRaw.length < TIMEFRAME_REQUIRED_MIN_LENGTH || requiredRaw.length > TIMEFRAME_REQUIRED_MAX_LENGTH) {
+      pushSlot('required_length', `依赖周期数量必须在 ${TIMEFRAME_REQUIRED_MIN_LENGTH}..${TIMEFRAME_REQUIRED_MAX_LENGTH} 之间`)
+    }
+
+    const requiredMsList: number[] = []
+    let formatInvalid = false
+    for (const tf of requiredRaw) {
+      const ms = parseTimeframeMs(tf)
+      if (ms === null) {
+        formatInvalid = true
+        continue
+      }
+      requiredMsList.push(ms)
+    }
+    if (formatInvalid) {
+      pushSlot('required_timeframes', '依赖周期需是支持的 timeframe vocab')
+    }
+
+    const dedupedRequired = new Set(requiredRaw.filter((tf): tf is string => typeof tf === 'string'))
+    if (dedupedRequired.size !== requiredRaw.length) {
+      pushSlot('required_timeframes', '依赖周期不允许重复')
+    }
+
+    if (typeof node.primaryTimeframe === 'string' && dedupedRequired.has(node.primaryTimeframe)) {
+      pushSlot('required_timeframes', '主周期不能同时出现在依赖周期列表（自引用拒绝）')
+    }
+
+    // 粒度顺序：primary < min(required)（critic Round 2 C2-R2）
+    if (primaryMs !== null && requiredMsList.length > 0) {
+      const minRequiredMs = Math.min(...requiredMsList)
+      if (primaryMs >= minRequiredMs) {
+        pushSlot('primary_granularity', '主周期粒度必须严格细于所有依赖周期')
+      }
+    }
+
+    if (node.alignmentPolicy !== 'strict' && node.alignmentPolicy !== 'tolerant') {
+      pushSlot('alignment_policy', '请确认对齐严格度（strict / tolerant）')
+    }
+
+    // 与其它 locked sibling 比较 (primaryTimeframe, sortedRequired)
+    const otherLockedScopes = siblingNodes.filter(
+      (other) =>
+        other.id !== node.id
+        && other.kind === 'scope'
+        && other.key === SCOPE_TIMEFRAME_KEY
+        && other.status === 'locked',
+    )
+    if (typeof node.primaryTimeframe === 'string' && Array.isArray(node.requiredTimeframes)) {
+      const myKey = JSON.stringify([node.primaryTimeframe, [...node.requiredTimeframes].sort()])
+      for (const other of otherLockedScopes) {
+        if (typeof other.primaryTimeframe === 'string' && Array.isArray(other.requiredTimeframes)) {
+          const otherKey = JSON.stringify([other.primaryTimeframe, [...other.requiredTimeframes].sort()])
+          if (otherKey === myKey) {
+            pushSlot('duplicate_definition', '多 scope.timeframe 之间 (主周期, 依赖周期集合) 不能完全相同')
+            break
           }
         }
       }

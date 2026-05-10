@@ -12,6 +12,7 @@ import type {
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
   SemanticSymbolScopeFrame,
+  SemanticTimeframeScopeFrame,
 } from '../types/semantic-natural-language-frame'
 import type {
   CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch,
@@ -21,10 +22,17 @@ import type {
   CodegenSemanticOrchestrationLegScopeNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
   CodegenSemanticOrchestrationSymbolScopeNodePatch,
+  CodegenSemanticOrchestrationTimeframeScopeNodePatch,
   CodegenSemanticPatch,
 } from '../types/codegen-semantic-patch'
-import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
+import type {
+  SemanticEvidence,
+  SemanticExpression,
+  SemanticExpressionOperand,
+  SemanticSupportedTimeframe,
+} from '../types/semantic-state'
 import { Injectable } from '@nestjs/common'
+import { parseTimeframeMs } from '@ai/shared/script-engine/compiled-runtime'
 
 interface SemanticCombinationMetadata {
   join: SemanticCombinationFrame['join']
@@ -59,6 +67,8 @@ export class SemanticFrameNormalizerService {
     const legScopeFrames: SemanticLegScopeFrame[] = []
     const legScopeSymbolByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
     const legScopeLegByKey = new Map<string, CodegenSemanticOrchestrationLegScopeNodePatch>()
+    const timeframeScopeByKey = new Map<string, CodegenSemanticOrchestrationTimeframeScopeNodePatch>()
+    const timeframeScopeFrames: SemanticTimeframeScopeFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -108,6 +118,9 @@ export class SemanticFrameNormalizerService {
           break
         case 'leg_scope':
           legScopeFrames.push(frame)
+          break
+        case 'timeframe_scope':
+          timeframeScopeFrames.push(frame)
           break
       }
     }
@@ -224,6 +237,12 @@ export class SemanticFrameNormalizerService {
         if (!legScopeLegByKey.has(legDedupeKey)) {
           legScopeLegByKey.set(legDedupeKey, legNode)
         }
+    timeframeScopeFrames.forEach((frame, index) => {
+      const node = this.normalizeTimeframeScope(frame, index)
+      if (node === null) return
+      const dedupeKey = JSON.stringify([node.key, node.primaryTimeframe, [...node.requiredTimeframes].sort(), node.alignmentPolicy])
+      if (!timeframeScopeByKey.has(dedupeKey)) {
+        timeframeScopeByKey.set(dedupeKey, node)
       }
     })
 
@@ -258,12 +277,50 @@ export class SemanticFrameNormalizerService {
       //   注意 scope.symbol 节点必须排在 scope.leg 之前，便于 readiness Pass 1/2 顺序处理
       ...Array.from(legScopeSymbolByKey.values()),
       ...Array.from(legScopeLegByKey.values()),
+      ...Array.from(timeframeScopeByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
     }
 
     return patch
+  }
+
+  // Phase 5 S3 (#1109): timeframe_scope frame → orchestration scope node patch
+  // 默认 alignmentPolicy = 'strict'（critic Round 1 C4：与 fail-closed 主张一致）
+  // 非法 timeframe vocab 返回 null（caller dedup loop 跳过）
+  private normalizeTimeframeScope(
+    frame: SemanticTimeframeScopeFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationTimeframeScopeNodePatch | null {
+    const primaryMs = parseTimeframeMs(frame.primaryTimeframe)
+    if (primaryMs === null) return null
+    const requiredMs: number[] = []
+    for (const tf of frame.requiredTimeframes) {
+      const ms = parseTimeframeMs(tf)
+      if (ms === null) return null
+      requiredMs.push(ms)
+    }
+    if (requiredMs.length === 0) return null
+    const sortedRequired = [...frame.requiredTimeframes].sort(
+      (a, b) => (parseTimeframeMs(a) ?? 0) - (parseTimeframeMs(b) ?? 0),
+    )
+    const alignmentPolicy = frame.alignmentPolicy === 'tolerant' ? 'tolerant' : 'strict'
+    return {
+      id: `orchestration-scope-timeframe-${index + 1}`,
+      kind: 'scope',
+      key: 'scope.timeframe',
+      params: {
+        primaryTimeframe: frame.primaryTimeframe,
+        requiredTimeframes: [...sortedRequired],
+        alignmentPolicy,
+      },
+      timeframeScopeKind: 'timeframe',
+      primaryTimeframe: frame.primaryTimeframe as SemanticSupportedTimeframe,
+      requiredTimeframes: sortedRequired as readonly SemanticSupportedTimeframe[],
+      alignmentPolicy,
+      evidence: this.toEvidence(frame),
+    }
   }
 
   // Phase 5 S2 (#1104): symbol_scope frame → orchestration scope node patch

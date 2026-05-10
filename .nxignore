@@ -1,0 +1,9 @@
+# dx managed tool metadata ignores
+.cache/
+.claude/
+.codex/
+.idea/
+.omc/
+.omx/
+.opencode/
+.pytest_cache/

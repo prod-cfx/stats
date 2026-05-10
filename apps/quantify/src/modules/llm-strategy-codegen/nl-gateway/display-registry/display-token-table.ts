@@ -263,4 +263,21 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.leg.paired_leg_id', kind: 'slot', zh: 'fixed_ratio 模式必须指定 pairedLegId' },
   { token: 'slot.orchestration.scope.leg.direction_collision', kind: 'slot', zh: 'paired leg 必须方向相反（对冲腿）' },
   { token: 'slot.orchestration.scope.leg.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个策略腿' },
+  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol / scope.timeframe' },
+
+  // Phase 5 S3 (#1109): scope.timeframe substrate
+  { token: 'atom.scope.timeframe.name', kind: 'atom', zh: '周期范围' },
+  { token: 'atom.scope.timeframe.display.with_required', kind: 'atom', zh: '周期范围：主 {primaryTimeframe}，依赖 {requiredTimeframes}（{alignmentPolicy}）' },
+  { token: 'param.primaryTimeframe', kind: 'param', zh: '执行周期（主周期）' },
+  { token: 'param.requiredTimeframes', kind: 'param', zh: '依赖周期列表' },
+  { token: 'param.alignmentPolicy', kind: 'param', zh: '对齐严格度' },
+  { token: 'slot.orchestration.scope.timeframe.primary_timeframe', kind: 'slot', zh: '请确认执行周期（主周期）' },
+  { token: 'slot.orchestration.scope.timeframe.required_timeframes', kind: 'slot', zh: '请确认依赖周期列表（≥1 个，且与主周期不同）' },
+  { token: 'slot.orchestration.scope.timeframe.required_length', kind: 'slot', zh: '依赖周期数量必须在 1..8 之间' },
+  { token: 'slot.orchestration.scope.timeframe.primary_granularity', kind: 'slot', zh: '主周期粒度必须严格细于所有依赖周期' },
+  { token: 'slot.orchestration.scope.timeframe.alignment_policy', kind: 'slot', zh: '请确认对齐严格度（strict / tolerant）' },
+  { token: 'slot.orchestration.scope.timeframe.duplicate_definition', kind: 'slot', zh: '多 scope.timeframe 之间 (主周期, 依赖周期集合) 不能完全相同' },
+  { token: 'slot.orchestration.scope.timeframe.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 timeframe scope（必须显式声明）' },
+  { token: 'slot.orchestration.scope.timeframe.unsupported_key', kind: 'slot', zh: '当前仅支持 scope.timeframe' },
+  { token: 'slot.orchestration.scope.timeframe.scope_kind', kind: 'slot', zh: '请确认 scopeKind 为 timeframe' },
 ] as const satisfies readonly DisplayToken[]
