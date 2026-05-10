@@ -2,6 +2,8 @@ import type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
 import type {
   SemanticOrchestrationDataSourceRole,
   SemanticOrchestrationDataSourceSchema,
+  SemanticOrchestrationGateEffect,
+  SemanticOrchestrationGateTarget,
 } from './semantic-state'
 
 export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
@@ -216,6 +218,8 @@ export interface RuleBlock {
     timeframeScopeRef?: string
     // Phase 5 S9 (#1110): 显式声明该 rule 归属哪个 scope.dataSource id
     dataSourceScopeRef?: string
+    // Phase 5 S10 (#1111): 多 subStrategy 策略中该 rule 归属的 scope.subStrategy id
+    subStrategyScopeRef?: string
   } & PositionLifecycleActionMetadata
 }
 
@@ -274,8 +278,10 @@ export type OrderProgram = OrderProgramDef
 export interface IrOrchestrationGate {
   id: string
   exprId: string
-  target: { phase: 'entry', sideScope?: 'long' | 'short' | 'both' }
-  effectWhenFalse: 'block_new_entries'
+  // Phase 5 S10 (#1111): target 升级为 union（entry / strategy / subStrategy）
+  target: SemanticOrchestrationGateTarget
+  // Phase 5 S10 (#1111): effect 扩 'pause_substrategy' | 'switch_substrategy'
+  effectWhenFalse: SemanticOrchestrationGateEffect
 }
 
 export interface IrOrchestrationPortfolioRisk {
@@ -357,7 +363,7 @@ export type IrOrchestrationProgram =
   | IrAdaptiveVolatilityGridProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate IR
-export interface IrOrchestrationSymbolScope {
+export interface IrSymbolScope {
   id: string
   scopeKind: 'symbol'
   symbols: readonly string[]
@@ -399,10 +405,23 @@ export interface IrOrchestrationDataSourceScope {
   schemaRef: SemanticOrchestrationDataSourceSchema
 }
 
+// Phase 5 S10 (#1111): scope.subStrategy substrate IR
+export interface IrSubStrategyScope {
+  id: string
+  scopeKind: 'subStrategy'
+  subStrategyId: string
+  subStrategyLabel?: string
+  positionHandlingOnDeactivate: 'close' | 'keep'
+  orderHandlingOnDeactivate: 'cancel' | 'keep'
+}
+
+// Phase 5 S10 (#1111): IR scope union — discriminator scopeKind
 export type IrOrchestrationScope =
-  | IrOrchestrationSymbolScope
+  | IrSymbolScope
+  | IrOrchestrationLegScope
   | IrOrchestrationTimeframeScope
   | IrOrchestrationDataSourceScope
+  | IrSubStrategyScope
 
 export interface RiskGuard {
   id: string

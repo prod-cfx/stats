@@ -628,7 +628,7 @@ export class CanonicalSpecBuilderService {
     return result
   }
 
-  // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110): scope union substrate（symbol + timeframe + dataSource）
+  // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope union substrate（symbol + timeframe + dataSource + subStrategy）
   // 输出 status='locked' scope；按 node.id 字典序，保证 byte-equal（含旧 v1 单/多 symbol scope 字节兼容）
   private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
     const nodes = state.orchestration?.nodes
@@ -698,6 +698,31 @@ export class CanonicalSpecBuilderService {
           feedId,
           schemaRef,
         })
+        continue
+      }
+
+      // S10: scope.subStrategy
+      if (node.key === 'scope.subStrategy' && node.subStrategyScopeKind === 'subStrategy') {
+        const subStrategyId = typeof node.subStrategyId === 'string' ? node.subStrategyId.trim() : ''
+        if (subStrategyId === '') continue
+        const positionHandling = node.positionHandlingOnDeactivate
+        const orderHandling = node.orderHandlingOnDeactivate
+        if (
+          (positionHandling !== 'close' && positionHandling !== 'keep')
+          || (orderHandling !== 'cancel' && orderHandling !== 'keep')
+        ) {
+          continue
+        }
+        const label = typeof node.subStrategyLabel === 'string' ? node.subStrategyLabel.trim() : undefined
+        scopes.push({
+          id: node.id,
+          scopeKind: 'subStrategy',
+          subStrategyId,
+          ...(label && label !== '' ? { subStrategyLabel: label } : {}),
+          positionHandlingOnDeactivate: positionHandling,
+          orderHandlingOnDeactivate: orderHandling,
+        })
+        continue
       }
     }
     return scopes.sort((a, b) => a.id.localeCompare(b.id))
@@ -765,7 +790,8 @@ export class CanonicalSpecBuilderService {
 
     const gates: CanonicalOrchestrationGate[] = []
     for (const node of nodes) {
-      if (node.kind !== 'gate' || node.key !== 'gate.regime' || node.status !== 'locked') {
+      // Phase 5 S10 (#1111): gate 节点支持多 phase（gate.regime 仍是 entry；新加 phase=subStrategy）
+      if (node.kind !== 'gate' || node.status !== 'locked') {
         continue
       }
       if (!node.activeWhen || !this.isValidSemanticExpression(node.activeWhen)) {
@@ -777,6 +803,29 @@ export class CanonicalSpecBuilderService {
 
       const condition = this.buildConditionFromSemanticExpression(node.activeWhen)
       if (!condition) {
+        continue
+      }
+
+      // Phase 5 S10 (#1111): phase=subStrategy 透传 target.subStrategyScopeRef + toSubStrategyScopeRef + effect
+      if (node.target.phase === 'subStrategy') {
+        const effect = node.effectWhenFalse
+        if (effect !== 'pause_substrategy' && effect !== 'switch_substrategy') {
+          continue
+        }
+        gates.push({
+          id: node.id,
+          target: node.target,
+          activeWhen: condition,
+          effectWhenFalse: effect,
+        })
+        continue
+      }
+      // phase=strategy 本 PR substrate 不支持，silent skip（留 #984 #5 strategy 子级 PR）
+      if (node.target.phase === 'strategy') {
+        continue
+      }
+      // 默认 phase=entry：保留 gate.regime 既有路径
+      if (node.key !== 'gate.regime') {
         continue
       }
 

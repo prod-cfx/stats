@@ -519,6 +519,34 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderDataSourceScope(params),
     clarificationRenderer: (slotKey) => renderDataSourceScopeClarification(slotKey),
   }),
+  // Phase 5 S10 (#1111): scope.subStrategy substrate
+  presentation({
+    key: 'scope.subStrategy',
+    publicName: '子策略范围',
+    aliases: ['多子策略', '策略切换范围', 'sub-strategy scope', 'sub strategy scope'],
+    positiveExamples: [
+      '趋势行情用趋势子策略，震荡行情用震荡子策略',
+      '上涨时跑策略 A，下跌时跑策略 B',
+      '在 BTCUSDT 上跑两套子策略，根据 ATR 切换',
+    ],
+    negativeExamples: ['只跑一个策略', '不需要切换', '策略不行'],
+    goldenUtterances: [
+      '趋势行情用趋势子策略，震荡行情用震荡子策略，切换时平掉旧仓位',
+      'Use sub-strategy A in trend regime, sub-strategy B in range',
+    ],
+    displayRenderer: ({ params }) => renderSubStrategyScope(params),
+    clarificationRenderer: (slotKey) => renderSubStrategyScopeClarification(slotKey),
+  }),
+  presentation({
+    key: 'gate.subStrategy',
+    publicName: '子策略 gate',
+    aliases: ['子策略切换', '子策略暂停', 'sub-strategy gate'],
+    positiveExamples: ['RSI > 70 切到震荡子策略，<30 切回趋势子策略', '盘整时暂停趋势子策略'],
+    negativeExamples: ['不需要切换'],
+    goldenUtterances: ['趋势成立时切到趋势子策略；震荡时切到震荡子策略'],
+    displayRenderer: ({ params }) => renderSubStrategyGate(params),
+    clarificationRenderer: (slotKey) => renderSubStrategyGateClarification(slotKey),
+  }),
   presentation({
     key: 'market.regime',
     publicName: '市场状态',
@@ -1453,7 +1481,7 @@ function renderSymbolScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.symbol.symbols_overlap') return '多 scope 之间标的不能重叠'
   if (slotKey === 'orchestration.scope.symbol.primary_symbol_collision') return '多 scope 主标的必须各自唯一'
   if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
-  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource'
+  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource / scope.subStrategy'
   return '请补全标的范围参数'
 }
 
@@ -1547,6 +1575,57 @@ function renderDataSourceScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.dataSource.missing_binding') return '请确认该规则绑定到哪个 dataSource scope'
   if (slotKey === 'orchestration.scope.dataSource.scope_kind') return '请确认 scopeKind 为 dataSource'
   return '请补全数据源参数'
+}
+
+// Phase 5 S10 (#1111): scope.subStrategy render
+function renderSubStrategyScope(params: Record<string, unknown>): string {
+  const label = stringParam(params, 'subStrategyLabel', '') || stringParam(params, 'subStrategyId', '')
+  if (label === '') return ''
+  const positionHandling = stringParam(params, 'positionHandlingOnDeactivate', '')
+  const orderHandling = stringParam(params, 'orderHandlingOnDeactivate', '')
+  if (positionHandling !== '' && orderHandling !== '') {
+    return renderDisplayToken('atom.scope.subStrategy.display.with_handling', {
+      label,
+      positionHandling,
+      orderHandling,
+    })
+  }
+  return renderDisplayToken('atom.scope.subStrategy.display.no_handling', { label })
+}
+
+function renderSubStrategyScopeClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.scope.subStrategy.scope_kind') return '请确认 scopeKind 为 subStrategy'
+  if (slotKey === 'orchestration.scope.subStrategy.substrategy_id') return '请确认子策略 ID（非空且长度 ≤ 64）'
+  if (slotKey === 'orchestration.scope.subStrategy.position_handling') return '请确认子策略切换时是否平仓（close/keep）'
+  if (slotKey === 'orchestration.scope.subStrategy.order_handling') return '请确认子策略切换时是否取消挂单（cancel/keep）'
+  if (slotKey === 'orchestration.scope.subStrategy.id_collision') return '多 scope 子策略 ID 必须唯一'
+  if (slotKey === 'orchestration.scope.subStrategy.missing_binding') return '请确认该规则绑定到哪个 sub-strategy scope'
+  return '请补全子策略范围参数'
+}
+
+// Phase 5 S10 (#1111): gate.subStrategy render
+function renderSubStrategyGate(params: Record<string, unknown>): string {
+  const effect = stringParam(params, 'effectWhenFalse', '')
+  if (effect === 'pause_substrategy') {
+    const label = stringParam(params, 'subStrategyScopeRef', '')
+    return renderDisplayToken('atom.gate.subStrategy.pause', { label })
+  }
+  if (effect === 'switch_substrategy') {
+    const toLabel = stringParam(params, 'toSubStrategyScopeRef', '')
+    return renderDisplayToken('atom.gate.subStrategy.switch', { toLabel })
+  }
+  return ''
+}
+
+function renderSubStrategyGateClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.gate.subStrategy.scope_ref_unknown') return 'gate 引用的子策略 scope 未声明'
+  if (slotKey === 'orchestration.gate.subStrategy.effect_phase_mismatch') return 'phase=subStrategy 仅支持 pause_substrategy / switch_substrategy'
+  if (slotKey === 'orchestration.gate.subStrategy.switch_target_required') return 'switch_substrategy gate 必须指定切换目标 scope'
+  if (slotKey === 'orchestration.gate.subStrategy.switch_target_self') return '切换目标不能与源 scope 相同'
+  if (slotKey === 'orchestration.gate.subStrategy.active_when') return '请确认 gate 的判定条件'
+  if (slotKey === 'orchestration.gate.unsupported_phase') return '当前不支持 phase=strategy 的 gate'
+  if (slotKey === 'orchestration.gate.regime.effect_phase_mismatch') return 'phase=entry 仅支持 block_new_entries effect'
+  return '请补全子策略 gate 参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

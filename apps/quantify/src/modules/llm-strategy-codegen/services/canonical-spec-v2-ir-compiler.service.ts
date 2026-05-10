@@ -156,7 +156,7 @@ export class CanonicalSpecV2IrCompilerService {
     const guards: RiskGuard[] = []
     const riskPredicates: RiskPredicateDef[] = []
 
-    // Phase 5 S2/S3/S9/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
+    // Phase 5 S2/S3/S9/S10/S11: 收集 supported scope id 集合，供 toRuleBlockMetadata silent-skip
     const specScopes = input.canonicalSpec.orchestration?.scopes ?? []
     const supportedSymbolScopeIds = new Set<string>(
       specScopes.filter(s => s.scopeKind === 'symbol').map(s => s.id),
@@ -166,6 +166,9 @@ export class CanonicalSpecV2IrCompilerService {
     )
     const supportedDataSourceScopeIds = new Set<string>(
       specScopes.filter(s => s.scopeKind === 'dataSource').map(s => s.id),
+    )
+    const supportedSubStrategyScopeIds = new Set<string>(
+      specScopes.filter(s => s.scopeKind === 'subStrategy').map(s => s.id),
     )
     const supportedLegScopeIds = new Set<string>(
       (input.canonicalSpec.orchestration?.legScopes ?? []).map(l => l.id),
@@ -207,6 +210,7 @@ export class CanonicalSpecV2IrCompilerService {
             supportedLegScopeIds,
             supportedTimeframeScopeIds,
             supportedDataSourceScopeIds,
+            supportedSubStrategyScopeIds,
           )
         : undefined
 
@@ -860,8 +864,8 @@ export class CanonicalSpecV2IrCompilerService {
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
   }
 
-  // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110): scope substrate IR compile
-  // union: CanonicalOrchestrationSymbolScope | CanonicalOrchestrationTimeframeScope | CanonicalOrchestrationDataSourceScope
+  // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope substrate IR compile
+  // union: CanonicalOrchestrationSymbolScope | CanonicalOrchestrationTimeframeScope | CanonicalOrchestrationDataSourceScope | CanonicalOrchestrationSubStrategyScope
   private compileOrchestrationScopes(spec: CanonicalStrategySpecV2): IrOrchestrationScope[] {
     const scopes = spec.orchestration?.scopes ?? []
     return scopes.map((scope): IrOrchestrationScope => {
@@ -890,6 +894,17 @@ export class CanonicalSpecV2IrCompilerService {
             role: scope.role,
             feedId: scope.feedId,
             schemaRef: scope.schemaRef,
+          }
+        case 'subStrategy':
+          return {
+            id: scope.id,
+            scopeKind: 'subStrategy',
+            subStrategyId: scope.subStrategyId,
+            ...(typeof scope.subStrategyLabel === 'string' && scope.subStrategyLabel.trim() !== ''
+              ? { subStrategyLabel: scope.subStrategyLabel.trim() }
+              : {}),
+            positionHandlingOnDeactivate: scope.positionHandlingOnDeactivate,
+            orderHandlingOnDeactivate: scope.orderHandlingOnDeactivate,
           }
       }
     })
@@ -2740,6 +2755,7 @@ export class CanonicalSpecV2IrCompilerService {
     supportedLegScopeIds?: ReadonlySet<string>,
     supportedTimeframeScopeIds?: ReadonlySet<string>,
     supportedDataSourceScopeIds?: ReadonlySet<string>,
+    supportedSubStrategyScopeIds?: ReadonlySet<string>,
   ): RuleBlock['metadata'] {
     // Phase 5 S2 (#1104): symbolScopeRef silent skip 透传
     //   仅当 ref trim 后非空且 ∈ supportedScopeIds 时透传；否则丢弃 + 让 readiness/runtime fail-closed
@@ -2762,6 +2778,11 @@ export class CanonicalSpecV2IrCompilerService {
     const dsRefValid = typeof dsRef === 'string'
       && dsRef.trim() !== ''
       && (!supportedDataSourceScopeIds || supportedDataSourceScopeIds.has(dsRef.trim()))
+    // Phase 5 S10 (#1111): subStrategyScopeRef silent skip 透传（与 symbolScopeRef 平行）
+    const subRef = metadata.subStrategyScopeRef
+    const subRefValid = typeof subRef === 'string'
+      && subRef.trim() !== ''
+      && (!supportedSubStrategyScopeIds || supportedSubStrategyScopeIds.has(subRef.trim()))
     return {
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
@@ -2771,6 +2792,7 @@ export class CanonicalSpecV2IrCompilerService {
       ...(legRefValid && typeof legRef === 'string' ? { legScopeRef: legRef.trim() } : {}),
       ...(tfRefValid && typeof tfRef === 'string' ? { timeframeScopeRef: tfRef.trim() } : {}),
       ...(dsRefValid && typeof dsRef === 'string' ? { dataSourceScopeRef: dsRef.trim() } : {}),
+      ...(subRefValid && typeof subRef === 'string' ? { subStrategyScopeRef: subRef.trim() } : {}),
     }
   }
 

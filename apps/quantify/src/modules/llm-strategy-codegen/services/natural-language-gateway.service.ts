@@ -13,6 +13,8 @@ import type {
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
+  SemanticSubStrategyGateFrame,
+  SemanticSubStrategyScopeFrame,
   SemanticSymbolScopeFrame,
   SemanticTimeframeScopeFrame,
 } from '../types/semantic-natural-language-frame'
@@ -35,6 +37,8 @@ type FrameDraft =
   | LegScopeFrameDraft
   | TimeframeScopeFrameDraft
   | DataSourceScopeFrameDraft
+  | SubStrategyScopeFrameDraft
+  | SubStrategyGateFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -51,6 +55,8 @@ type SymbolScopeFrameDraft = Omit<SemanticSymbolScopeFrame, 'id' | 'confidence'>
 type LegScopeFrameDraft = Omit<SemanticLegScopeFrame, 'id' | 'confidence'>
 type TimeframeScopeFrameDraft = Omit<SemanticTimeframeScopeFrame, 'id' | 'confidence'>
 type DataSourceScopeFrameDraft = Omit<SemanticDataSourceScopeFrame, 'id' | 'confidence'>
+type SubStrategyScopeFrameDraft = Omit<SemanticSubStrategyScopeFrame, 'id' | 'confidence'>
+type SubStrategyGateFrameDraft = Omit<SemanticSubStrategyGateFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -64,6 +70,8 @@ export class NaturalLanguageGatewayService {
       ...this.parseLegScope(text),
       ...this.parseTimeframeScope(text),
       ...this.parseDataSourceScope(text),
+      ...this.parseSubStrategyScope(text),
+      ...this.parseSubStrategyGate(text),
       ...this.parseEmaGates(text),
       ...this.parseBoundaryTouches(text),
       ...this.parseActions(text),
@@ -745,6 +753,108 @@ export class NaturalLanguageGatewayService {
     if (/(清算|liquidation)/iu.test(text)) return 'liquidation'
     if (role === 'event') return 'webhook_event'
     return null
+  }
+
+  /**
+   * Phase 5 S10 (#1111): parseSubStrategyScope（双门槛）
+   *   1) 触发短语命中（plan §9.1 精准多 OR + 边界 `(?<![好不太能可])策略\s?[ABab](?![的人])`）
+   *   2) ≥2 distinct subStrategyId 候选（白名单：策略A/B / 趋势子策略 / 震荡子策略 / sub-strategy A/B）
+   * 命中后 emit 一组 sub_strategy_scope frames（每个 candidate 一个）
+   * 不写默认 positionHandling/orderHandling — 缺失由 readiness fail-closed 负责
+   */
+  private parseSubStrategyScope(text: string): SubStrategyScopeFrameDraft[] {
+    // (1) 触发短语精准多 OR
+    const triggerCore = /(子策略|两套策略|分阶段策略|趋势子策略|震荡子策略|sub[\s-]?strategy|两个策略|多策略切换|策略切换)/iu
+    // 边界 — "策略 A/B" 必须无负向前缀（好/不/太/能/可）+ 无负向后缀（的/人）
+    const triggerStrategyAB = /(?<![好不太能可])策略\s?[ABab](?![的人])/u
+    if (!triggerCore.test(text) && !triggerStrategyAB.test(text)) return []
+
+    // (2) 候选收集（白名单 → stable id + label）
+    const candidates = new Map<string, { id: string; label: string }>()
+    if (/趋势子策略|趋势策略/u.test(text)) {
+      candidates.set('trend_sub', { id: 'trend_sub', label: '趋势子策略' })
+    }
+    if (/震荡子策略|震荡策略|盘整子策略/u.test(text)) {
+      candidates.set('range_sub', { id: 'range_sub', label: '震荡子策略' })
+    }
+    // 策略 A / 策略 B（边界已在上面保护）
+    if (/(?<![好不太能可])策略\s?[Aa](?![的人])/u.test(text)) {
+      candidates.set('sub_a', { id: 'sub_a', label: '策略 A' })
+    }
+    if (/(?<![好不太能可])策略\s?[Bb](?![的人])/u.test(text)) {
+      candidates.set('sub_b', { id: 'sub_b', label: '策略 B' })
+    }
+    // sub-strategy A / B（英文）
+    const enSubA = /sub[\s-]?strategy\s*A\b/iu.test(text)
+    const enSubB = /sub[\s-]?strategy\s*B\b/iu.test(text)
+    if (enSubA) candidates.set('sub_a', { id: 'sub_a', label: 'sub-strategy A' })
+    if (enSubB) candidates.set('sub_b', { id: 'sub_b', label: 'sub-strategy B' })
+
+    if (candidates.size < 2) return []
+
+    // (3) handling 字段（仅当 utterance 显式声明）
+    let positionHandling: 'close' | 'keep' | undefined
+    let orderHandling: 'cancel' | 'keep' | undefined
+    if (/(切换时|切到时)\s*(平|关闭|清).{0,4}(仓位|持仓|旧仓)/iu.test(text) || /平掉旧仓位|平掉旧仓/u.test(text)) {
+      positionHandling = 'close'
+    } else if (/(切换时|切到时)\s*(保留|不平).{0,4}(仓位|持仓)/iu.test(text)) {
+      positionHandling = 'keep'
+    }
+    if (/(切换时|切到时)\s*(取消|cancel).{0,4}(挂单|订单|order)/iu.test(text)) {
+      orderHandling = 'cancel'
+    } else if (/(切换时|切到时)\s*(保留)\s*(挂单|订单)/iu.test(text)) {
+      orderHandling = 'keep'
+    }
+
+    const frames: SubStrategyScopeFrameDraft[] = []
+    for (const cand of candidates.values()) {
+      frames.push({
+        kind: 'sub_strategy_scope',
+        subStrategyId: cand.id,
+        subStrategyLabel: cand.label,
+        ...(positionHandling ? { positionHandlingOnDeactivate: positionHandling } : {}),
+        ...(orderHandling ? { orderHandlingOnDeactivate: orderHandling } : {}),
+        evidenceText: text.slice(0, Math.min(text.length, 80)),
+      })
+    }
+    return frames
+  }
+
+  /**
+   * Phase 5 S10 (#1111): parseSubStrategyGate
+   *   utterance 含 "切换 / 切到 X 时" + "暂停 Y" → pause_substrategy
+   *   utterance 含 "X 时切到 Y" → switch_substrategy（toSubStrategyScopeRef）
+   *   不主动绑定 subStrategyScopeRef — 留 normalizer 配合上下文唯一 anaphora 兜底
+   */
+  private parseSubStrategyGate(text: string): SubStrategyGateFrameDraft[] {
+    const frames: SubStrategyGateFrameDraft[] = []
+    // pause: "暂停|停用 + 子策略 X"
+    const pausePattern = /(?:暂停|停用|关闭)\s*(?:子)?策略\s*([ABab])/u
+    const pauseMatch = pausePattern.exec(text)
+    if (pauseMatch) {
+      const refId = pauseMatch[1].toLowerCase() === 'a' ? 'sub_a' : 'sub_b'
+      frames.push({
+        kind: 'sub_strategy_gate',
+        subStrategyScopeRef: refId,
+        effectWhenFalse: 'pause_substrategy',
+        evidenceText: pauseMatch[0],
+      })
+    }
+    // switch: "切到 X" / "切换至 X"
+    const switchPattern = /(?:切到|切换至|切换到)\s*(?:子)?策略\s*([ABab])/u
+    const switchMatch = switchPattern.exec(text)
+    if (switchMatch) {
+      const toRef = switchMatch[1].toLowerCase() === 'a' ? 'sub_a' : 'sub_b'
+      const fromRef = toRef === 'sub_a' ? 'sub_b' : 'sub_a'
+      frames.push({
+        kind: 'sub_strategy_gate',
+        subStrategyScopeRef: fromRef,
+        toSubStrategyScopeRef: toRef,
+        effectWhenFalse: 'switch_substrategy',
+        evidenceText: switchMatch[0],
+      })
+    }
+    return frames
   }
 
   private parseRegimeGate(text: string): RegimeGateFrameDraft[] {

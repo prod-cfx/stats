@@ -6,6 +6,8 @@ import type {
   SemanticExpressionOperator,
   SemanticOrchestrationDataSourceRole,
   SemanticOrchestrationDataSourceSchema,
+  SemanticOrchestrationGateEffect,
+  SemanticOrchestrationGateTarget,
 } from './semantic-state'
 
 export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
@@ -91,6 +93,8 @@ export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
   timeframeScopeRef?: string
   // Phase 5 S9 (#1110): 显式声明该 rule 归属哪个 scope.dataSource id
   dataSourceScopeRef?: string
+  // Phase 5 S10 (#1111): 多 subStrategy 策略中该 rule 归属的 scope.subStrategy id
+  subStrategyScopeRef?: string
 }
 
 export interface CanonicalRuleV2 {
@@ -106,9 +110,11 @@ export interface CanonicalRuleV2 {
 
 export interface CanonicalOrchestrationGate {
   id: string
-  target: { phase: 'entry', sideScope?: 'long' | 'short' | 'both' }
+  // Phase 5 S10 (#1111): target 升级为 union（entry / strategy / subStrategy）
+  target: SemanticOrchestrationGateTarget
   activeWhen: CanonicalConditionNode
-  effectWhenFalse: 'block_new_entries'
+  // Phase 5 S10 (#1111): effect 扩 'pause_substrategy' | 'switch_substrategy'
+  effectWhenFalse: SemanticOrchestrationGateEffect
 }
 
 export interface CanonicalOrchestrationPortfolioRisk {
@@ -190,7 +196,7 @@ export type CanonicalOrchestrationProgram =
   | CanonicalAdaptiveVolatilityGridProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate
-export interface CanonicalOrchestrationSymbolScope {
+export interface CanonicalSymbolScope {
   id: string
   scopeKind: 'symbol'
   symbols: readonly string[]
@@ -234,10 +240,23 @@ export interface CanonicalOrchestrationDataSourceScope {
   schemaRef: SemanticOrchestrationDataSourceSchema
 }
 
+// Phase 5 S10 (#1111): scope.subStrategy substrate
+export interface CanonicalSubStrategyScope {
+  id: string
+  scopeKind: 'subStrategy'
+  subStrategyId: string
+  subStrategyLabel?: string
+  positionHandlingOnDeactivate: 'close' | 'keep'
+  orderHandlingOnDeactivate: 'cancel' | 'keep'
+}
+
+// Phase 5 S10 (#1111): scope union — discriminator scopeKind
 export type CanonicalOrchestrationScope =
-  | CanonicalOrchestrationSymbolScope
+  | CanonicalSymbolScope
+  | CanonicalOrchestrationLegScope
   | CanonicalOrchestrationTimeframeScope
   | CanonicalOrchestrationDataSourceScope
+  | CanonicalSubStrategyScope
 
 export interface CanonicalStrategySpecV2 {
   version: 2

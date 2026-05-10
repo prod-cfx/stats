@@ -12,6 +12,7 @@ export {
   applyTimeframeScopeAlignment,
   applyDataSourceScopeFailClosed,
   applyDataSourceScopeProgramRouting,
+  applySubStrategyScopeRouting,
 } from './compiled-runtime/run-decision-programs'
 export type {
   CompiledOrchestrationScope,
@@ -23,6 +24,7 @@ export type {
   CompiledOrchestrationDataSourceScope,
   CompiledOrchestrationDataSourceRole,
   CompiledOrchestrationDataSourceSchema,
+  CompiledSubStrategyScope,
 } from './compiled-runtime/run-decision-programs'
 // Phase 5 S3 (#1109)
 export { parseTimeframeMs, SUPPORTED_TIMEFRAMES, TIMEFRAME_MS } from './compiled-runtime/parse-timeframe-ms'

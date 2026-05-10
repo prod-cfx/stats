@@ -1,6 +1,7 @@
 import type { OrchestrationGateState } from './evaluate-orchestration-gates'
 import type { OrchestrationPortfolioRiskState } from './evaluate-orchestration-portfolio-risks'
-import { runDecisionPrograms } from './run-decision-programs'
+import type { CompiledSubStrategyScope, CompiledOrchestrationScope } from './run-decision-programs'
+import { applySubStrategyScopeRouting, runDecisionPrograms } from './run-decision-programs'
 
 type Programs = Parameters<typeof runDecisionPrograms>[1]
 type Ctx = Parameters<typeof runDecisionPrograms>[0]
@@ -268,7 +269,7 @@ describe('orchestration gate enforcement', () => {
     expect(decision.action).toBe('ADJUST_POSITION')
   })
 
-  it('W5: blockBoth with existing short position still allows CLOSE_SHORT', () => {
+  it('w5: blockBoth with existing short position still allows CLOSE_SHORT', () => {
     const ctx = makeCtx(-1)
     const decision = runDecisionPrograms(
       ctx,
@@ -446,7 +447,7 @@ describe('orchestration portfolioRisk enforcement', () => {
     expect((decision.meta as { observedBreaches?: string[] }).observedBreaches).toEqual(['risk-1'])
   })
 
-  it('W5: gate blocks + portfolio observedBreaches + existing long + CLOSE_LONG flows', () => {
+  it('w5: gate blocks + portfolio observedBreaches + existing long + CLOSE_LONG flows', () => {
     const ctx = makeCtx(1)
     const decision = runDecisionPrograms(
       ctx,
@@ -460,7 +461,7 @@ describe('orchestration portfolioRisk enforcement', () => {
     expect(decision.action).toBe('CLOSE_LONG')
   })
 
-  it('W5: portfolioRiskState.blockEntryShort=true + existing short + CLOSE_SHORT flows', () => {
+  it('w5: portfolioRiskState.blockEntryShort=true + existing short + CLOSE_SHORT flows', () => {
     const ctx = makeCtx(-1)
     const decision = runDecisionPrograms(
       ctx,
@@ -472,5 +473,223 @@ describe('orchestration portfolioRisk enforcement', () => {
       portfolioBlockBoth,
     )
     expect(decision.action).toBe('CLOSE_SHORT')
+  })
+})
+
+describe('phase 5 S10 — applySubStrategyScopeRouting (routing helper 单测)', () => {
+  function makeSub(id: string, subStrategyId: string): CompiledSubStrategyScope {
+    return {
+      id,
+      scopeKind: 'subStrategy',
+      subStrategyId,
+      positionHandlingOnDeactivate: 'close',
+      orderHandlingOnDeactivate: 'cancel',
+    }
+  }
+
+  const scopes: readonly CompiledSubStrategyScope[] = [
+    makeSub('ss-trend', 'trend'),
+    makeSub('ss-range', 'range'),
+  ]
+
+  type RoutingProgram = Parameters<typeof applySubStrategyScopeRouting>[0]
+  type RoutingCtx = Parameters<typeof applySubStrategyScopeRouting>[1]
+
+  const baseProgramEntry: RoutingProgram = {
+    phase: 'entry',
+    metadata: { subStrategyScopeRef: 'ss-trend' },
+  }
+  const baseProgramExit: RoutingProgram = {
+    phase: 'exit',
+    metadata: { subStrategyScopeRef: 'ss-trend' },
+  }
+  const baseProgramRebalance: RoutingProgram = {
+    phase: 'rebalance',
+    metadata: { subStrategyScopeRef: 'ss-trend' },
+  }
+
+  it('scopes 缺失 → continue（兜底，旧策略零侵入）', () => {
+    const result = applySubStrategyScopeRouting(baseProgramEntry, {} as RoutingCtx, undefined, undefined)
+    expect(result).toBe('continue')
+  })
+
+  it('scopes.length === 1 → continue（单 sub 走兜底）', () => {
+    const result = applySubStrategyScopeRouting(baseProgramEntry, {} as RoutingCtx, [scopes[0]], undefined)
+    expect(result).toBe('continue')
+  })
+
+  it('length>=2 + ctx.activeSubStrategyScopeId 缺 → NOOP fail_closed.no_active_scope', () => {
+    const result = applySubStrategyScopeRouting(baseProgramEntry, {} as RoutingCtx, scopes, undefined)
+    expect(typeof result).not.toBe('string')
+    if (typeof result === 'string') return
+    expect(result.action).toBe('NOOP')
+    expect(result.reason).toBe('compiled.orchestration.substrategy.fail_closed.no_active_scope')
+  })
+
+  it('activeId ∉ scopes ids → NOOP fail_closed.unknown_active_scope', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-unknown' } as unknown as RoutingCtx
+    const result = applySubStrategyScopeRouting(baseProgramEntry, ctx, scopes, undefined)
+    if (typeof result === 'string') throw new Error('expected NOOP decision, got string')
+    expect(result.reason).toBe('compiled.orchestration.substrategy.fail_closed.unknown_active_scope')
+  })
+
+  it('program.metadata.subStrategyScopeRef 缺 → NOOP fail_closed.unbound_program', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as RoutingCtx
+    const programNoRef: RoutingProgram = { phase: 'entry', metadata: {} }
+    const result = applySubStrategyScopeRouting(programNoRef, ctx, scopes, undefined)
+    if (typeof result === 'string') throw new Error('expected NOOP decision, got string')
+    expect(result.reason).toBe('compiled.orchestration.substrategy.fail_closed.unbound_program')
+  })
+
+  it('program ref ≠ activeId → skip', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-range' } as unknown as RoutingCtx
+    const result = applySubStrategyScopeRouting(baseProgramEntry, ctx, scopes, undefined)
+    expect(result).toBe('skip')
+  })
+
+  it('ref === activeId 非 paused → continue', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as RoutingCtx
+    const result = applySubStrategyScopeRouting(baseProgramEntry, ctx, scopes, undefined)
+    expect(result).toBe('continue')
+  })
+
+  it('ref === activeId paused + entry phase → NOOP paused', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as RoutingCtx
+    const gateState: OrchestrationGateState = {
+      blockEntryLong: false,
+      blockEntryShort: false,
+      pausedSubStrategyScopeIds: new Set(['ss-trend']),
+    }
+    const result = applySubStrategyScopeRouting(baseProgramEntry, ctx, scopes, gateState)
+    if (typeof result === 'string') throw new Error('expected NOOP decision, got string')
+    expect(result.action).toBe('NOOP')
+    expect(result.reason).toBe('compiled.orchestration.substrategy.paused')
+  })
+
+  it('ref === activeId paused + exit phase → continue（验收 #6 "能进就能出"）', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as RoutingCtx
+    const gateState: OrchestrationGateState = {
+      blockEntryLong: false,
+      blockEntryShort: false,
+      pausedSubStrategyScopeIds: new Set(['ss-trend']),
+    }
+    const result = applySubStrategyScopeRouting(baseProgramExit, ctx, scopes, gateState)
+    expect(result).toBe('continue')
+  })
+
+  it('ref === activeId paused + rebalance phase → continue（Missing-3 覆盖）', () => {
+    const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as RoutingCtx
+    const gateState: OrchestrationGateState = {
+      blockEntryLong: false,
+      blockEntryShort: false,
+      pausedSubStrategyScopeIds: new Set(['ss-trend']),
+    }
+    const result = applySubStrategyScopeRouting(baseProgramRebalance, ctx, scopes, gateState)
+    expect(result).toBe('continue')
+  })
+})
+
+describe('phase 5 S10 — runDecisionPrograms scope chain order (Missing-2 indirect assertion)', () => {
+  // Missing-2: 验证 symbol fail-closed 时不会触发 sub routing。
+  // 由于 applySubStrategyScopeRouting 在 runDecisionPrograms 内部以局部引用方式调用，
+  // jest.spyOn 无法重写局部引用 → 改用 indirect 断言：
+  //   - 若 symbol routing fail-closed → 返回 reason 以 'compiled.orchestration.scope.*' 开头
+  //     （而非 'compiled.orchestration.substrategy.*'），证明 sub routing 未执行
+  //   - 若 symbol routing continue + sub routing fail-closed → reason 以 substrategy.* 开头
+  const PROGRAM = {
+    id: 'program_open_long',
+    phase: 'entry' as const,
+    priority: 100,
+    when: 'pred_open',
+    metadata: {
+      symbolScopeRef: 's-btc',
+      subStrategyScopeRef: 'ss-trend',
+    },
+    actions: [{ kind: 'OPEN_LONG' as const, quantity: { mode: 'pct_equity' as const, value: 50 } }],
+  }
+  const baseGuard = { forceExit: false, blockNewEntry: false, strategyHalt: false } as Guard
+
+  function makeCtx(extras: Record<string, unknown> = {}): Ctx {
+    return {
+      position: { qty: 0 },
+      currentPrice: 100,
+      accountEquity: 10000,
+      __compiledDecisionState: { previousPositionQty: 0, lastTriggeredByProgram: {}, barIndex: 0 },
+      semanticRuntimeState: {},
+      ...extras,
+    } as unknown as Ctx
+  }
+
+  const symbolScopes: readonly CompiledOrchestrationScope[] = [
+    { id: 's-btc', scopeKind: 'symbol', symbols: ['BTCUSDT'] },
+    { id: 's-eth', scopeKind: 'symbol', symbols: ['ETHUSDT'] },
+  ]
+  const subScopes: readonly CompiledOrchestrationScope[] = [
+    {
+      id: 'ss-trend',
+      scopeKind: 'subStrategy',
+      subStrategyId: 'trend',
+      positionHandlingOnDeactivate: 'close',
+      orderHandlingOnDeactivate: 'cancel',
+    },
+    {
+      id: 'ss-range',
+      scopeKind: 'subStrategy',
+      subStrategyId: 'range',
+      positionHandlingOnDeactivate: 'close',
+      orderHandlingOnDeactivate: 'cancel',
+    },
+  ]
+
+  it('symbol routing 多 scope + 缺 activeSymbolScopeId → fail-closed reason scope.*；sub routing 未执行（reason 不是 substrategy.*）', () => {
+    const ctx = makeCtx({ activeSubStrategyScopeId: 'ss-trend' })
+    const decision = runDecisionPrograms(
+      ctx,
+      [PROGRAM] as unknown as Programs,
+      { pred_open: true },
+      baseGuard,
+      [PROGRAM.id],
+      undefined,
+      undefined,
+      [...symbolScopes, ...subScopes],
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toMatch(/^compiled\.orchestration\.scope\.fail_closed\./)
+    // 关键：必须是 symbol 系 reason，而非 substrategy.* — 证明 symbol fail-closed 短路阻止 sub 路由
+    expect(decision.reason).not.toMatch(/^compiled\.orchestration\.substrategy\./)
+  })
+
+  it('symbol routing continue（active 匹配）+ sub routing fail-closed（缺 activeSubStrategyScopeId）→ reason 为 substrategy.*', () => {
+    const ctx = makeCtx({ activeSymbolScopeId: 's-btc' })
+    const decision = runDecisionPrograms(
+      ctx,
+      [PROGRAM] as unknown as Programs,
+      { pred_open: true },
+      baseGuard,
+      [PROGRAM.id],
+      undefined,
+      undefined,
+      [...symbolScopes, ...subScopes],
+    )
+    expect(decision.action).toBe('NOOP')
+    expect(decision.reason).toMatch(/^compiled\.orchestration\.substrategy\.fail_closed\./)
+  })
+
+  it('symbol routing continue + sub routing continue → 正常 OPEN_LONG（双 chain 顺序贯通）', () => {
+    const ctx = makeCtx({
+      activeSymbolScopeId: 's-btc',
+      activeSubStrategyScopeId: 'ss-trend',
+    })
+    const decision = runDecisionPrograms(
+      ctx,
+      [PROGRAM] as unknown as Programs,
+      { pred_open: true },
+      baseGuard,
+      [PROGRAM.id],
+      undefined,
+      undefined,
+      [...symbolScopes, ...subScopes],
+    )
+    expect(decision.action).toBe('OPEN_LONG')
   })
 })

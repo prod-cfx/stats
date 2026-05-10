@@ -143,8 +143,11 @@ export class SemanticContractReadinessService {
     // Phase 5 S3 (#1109): timeframe scope binding fail-closed（≥1 scope.timeframe locked 即强制）
     const timeframeBound = applyTimeframeScopeBindingFailClosed(afterLegBinding)
     // Phase 5 S9 (#1110): 多 dataSource scope 策略 binding fail-closed（dataSourceScopeRef 声明且 ref 不在 supported 集合时降为 open + missing_binding slot）
-    const { state: nextState, hasBlockingSlots: dataSourceBindingHasBlockingSlots } =
+    const { state: afterDataSourceBinding, hasBlockingSlots: dataSourceBindingHasBlockingSlots } =
       applyDataSourceScopeBindingFailClosed(timeframeBound.state)
+    // Phase 5 S10 (#1111): 多 subStrategy 策略对 owner 加 missing_binding fail-closed（与 symbol 平行串联）
+    const { state: nextState, hasBlockingSlots: subStrategyBindingHasBlockingSlots } =
+      applySubStrategyScopeBindingFailClosed(afterDataSourceBinding)
 
     return {
       state: nextState,
@@ -156,7 +159,8 @@ export class SemanticContractReadinessService {
         && !symbolBindingHasBlockingSlots
         && !legBindingHasBlockingSlots
         && !timeframeBound.hasBlockingSlots
-        && !dataSourceBindingHasBlockingSlots,
+        && !dataSourceBindingHasBlockingSlots
+        && !subStrategyBindingHasBlockingSlots,
       missingRequirements,
     }
   }
@@ -449,6 +453,11 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry, siblingNodes)
   }
 
+  // Phase 5 S10 (#1111): scope.subStrategy 路径
+  if (isSupportedSubStrategyScope(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
   return addPhase0OrchestrationBlocker(node)
 }
 
@@ -649,6 +658,55 @@ function isSupportedDataSourceScope(
   }
 
   const contract = registry.getContractByKey('scope.dataSource')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * Phase 5 S10 (#1111): scope.subStrategy 节点 6 重 fail-closed:
+ *   1) kind === 'scope'
+ *   2) key === 'scope.subStrategy'
+ *   3) subStrategyScopeKind === 'subStrategy'
+ *   4) subStrategyId 非空 trim 后长度 ∈ [1, 64]
+ *   5) positionHandlingOnDeactivate ∈ {close,keep} + orderHandlingOnDeactivate ∈ {cancel,keep}
+ *      + 与其它 supported scope.subStrategy subStrategyId 不冲突
+ *   6) version-gate：registry 已注册 + strategyVersion 存在 + atom 对该策略可执行
+ */
+function isSupportedSubStrategyScope(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (node.kind !== 'scope') return false
+  if (node.key !== 'scope.subStrategy') return false
+  if (node.subStrategyScopeKind !== 'subStrategy') return false
+
+  const idRaw = node.subStrategyId
+  const trimmedId = typeof idRaw === 'string' ? idRaw.trim() : ''
+  if (trimmedId === '' || trimmedId.length > 64) return false
+
+  if (node.positionHandlingOnDeactivate !== 'close' && node.positionHandlingOnDeactivate !== 'keep') return false
+  if (node.orderHandlingOnDeactivate !== 'cancel' && node.orderHandlingOnDeactivate !== 'keep') return false
+
+  // (5) 与其它 status='locked' key='scope.subStrategy' 节点 subStrategyId 不冲突
+  const otherLocked = siblingNodes.filter(
+    (other) =>
+      other.id !== node.id
+      && other.kind === 'scope'
+      && other.key === 'scope.subStrategy'
+      && other.status === 'locked',
+  )
+  if (
+    otherLocked.some(
+      (other) => typeof other.subStrategyId === 'string' && other.subStrategyId.trim() === trimmedId,
+    )
+  ) {
+    return false
+  }
+
+  const contract = registry.getContractByKey('scope.subStrategy')
   if (!contract) return false
   if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)
@@ -1574,6 +1632,111 @@ function applyDataSourceScopeBindingFailClosed(
           if (constraint.status !== 'locked' || !isInvalidExplicitRef(constraint.dataSourceScopeRef)) return constraint
           hasBlockingSlots = true
           const slot = buildMissingBindingSlot('positionConstraint', constraint.id)
+          return {
+            ...constraint,
+            status: 'open' as SemanticNodeStatus,
+            openSlots: [...(constraint.openSlots ?? []), slot],
+          }
+        })
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
+      })()
+    : state.position
+
+  return {
+    state: { ...state, triggers, actions, risk, position },
+    hasBlockingSlots,
+  }
+}
+
+/**
+ * Phase 5 S10 (#1111): scope.subStrategy 多 sub fan-out binding fail-closed
+ *   - supportedSubStrategyScopeIds.size < 2：兜底，不触发检查（单/0 sub 旧策略行为不变）
+ *   - supportedSubStrategyScopeIds.size >= 2 时：每个 status='locked' 的 owner 节点必须有
+ *     subStrategyScopeRef trim 后非空且 ∈ supportedSubStrategyScopeIds，否则 status 降为 'open' +
+ *     加 orchestration.scope.subStrategy.missing_binding open slot
+ *
+ * Linus 简化注释：与 applySymbolScopeBindingFailClosed 形态完全平行；S10 plan §19.1 显式选择
+ * "并行新增独立函数，不重命名既有 S2 helper；公共 helper 抽取留 follow-up #1113"。
+ */
+function applySubStrategyScopeBindingFailClosed(
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
+  }
+  const supportedScopeIds = new Set<string>()
+  for (const node of orchestration.nodes) {
+    if (
+      node.kind === 'scope'
+      && node.key === 'scope.subStrategy'
+      && node.status === 'locked'
+    ) {
+      supportedScopeIds.add(node.id)
+    }
+  }
+  if (supportedScopeIds.size < 2) {
+    return { state, hasBlockingSlots: false }
+  }
+
+  let hasBlockingSlots = false
+
+  function buildSubStrategyMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
+    return {
+      slotKey: 'orchestration.scope.subStrategy.missing_binding',
+      fieldPath: `${ownerLabel}[${ownerId}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个 sub-strategy scope`,
+      affectsExecution: true,
+    }
+  }
+
+  function isMissingSubStrategyRef(ref: unknown): boolean {
+    if (typeof ref !== 'string') return true
+    const trimmed = ref.trim()
+    if (trimmed === '') return true
+    return !supportedScopeIds.has(trimmed)
+  }
+
+  const triggers = state.triggers.map((trigger) => {
+    if (trigger.status !== 'locked' || !isMissingSubStrategyRef(trigger.subStrategyScopeRef)) return trigger
+    hasBlockingSlots = true
+    const slot = buildSubStrategyMissingBindingSlot('trigger', trigger.id)
+    return {
+      ...trigger,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(trigger.openSlots ?? []), slot],
+    }
+  })
+  const actions = state.actions.map((action) => {
+    if (action.status !== 'locked' || !isMissingSubStrategyRef(action.subStrategyScopeRef)) return action
+    hasBlockingSlots = true
+    const slot = buildSubStrategyMissingBindingSlot('action', action.id)
+    return {
+      ...action,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(action.openSlots ?? []), slot],
+    }
+  })
+  const risk = state.risk.map((risk) => {
+    if (risk.status !== 'locked' || !isMissingSubStrategyRef(risk.subStrategyScopeRef)) return risk
+    hasBlockingSlots = true
+    const slot = buildSubStrategyMissingBindingSlot('risk', risk.id)
+    return {
+      ...risk,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(risk.openSlots ?? []), slot],
+    }
+  })
+  const position = state.position
+    ? (() => {
+        const constraints = state.position?.constraints
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
+        const nextConstraints = constraints.map((constraint) => {
+          if (constraint.status !== 'locked' || !isMissingSubStrategyRef(constraint.subStrategyScopeRef)) return constraint
+          hasBlockingSlots = true
+          const slot = buildSubStrategyMissingBindingSlot('positionConstraint', constraint.id)
           return {
             ...constraint,
             status: 'open' as SemanticNodeStatus,

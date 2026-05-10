@@ -192,6 +192,8 @@ export interface SemanticTriggerState {
   // Phase 5 S9 (#1110): 显式声明该 trigger 归属哪个 scope.dataSource 节点
   // 0 dataSource scope 策略不读；声明但 ref 不在 supported 集合时 readiness fail-closed
   dataSourceScopeRef?: string
+  // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 trigger 归属哪个 scope.subStrategy 节点
+  subStrategyScopeRef?: string
 }
 
 export interface SemanticActionState {
@@ -213,6 +215,8 @@ export interface SemanticActionState {
   timeframeScopeRef?: string
   // Phase 5 S9 (#1110): 显式声明该 action 归属哪个 scope.dataSource 节点
   dataSourceScopeRef?: string
+  // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 action 归属哪个 scope.subStrategy 节点
+  subStrategyScopeRef?: string
 }
 
 export type SemanticRiskBasis =
@@ -275,6 +279,8 @@ export interface SemanticRiskState {
   timeframeScopeRef?: string
   // Phase 5 S9 (#1110): 显式声明该 risk 归属哪个 scope.dataSource 节点
   dataSourceScopeRef?: string
+  // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 risk 归属哪个 scope.subStrategy 节点
+  subStrategyScopeRef?: string
 }
 
 export type SemanticPositionSizingContract =
@@ -306,6 +312,8 @@ export interface SemanticPositionConstraintState {
   timeframeScopeRef?: string
   // Phase 5 S9 (#1110): 显式声明该 position constraint 归属哪个 scope.dataSource 节点
   dataSourceScopeRef?: string
+  // Phase 5 S10 (#1111): 多 subStrategy 策略中显式声明该 position constraint 归属哪个 scope.subStrategy 节点
+  subStrategyScopeRef?: string
 }
 
 export interface SemanticPositionState {
@@ -322,12 +330,23 @@ export interface SemanticPositionState {
   support?: SemanticAtomSupportMetadata
 }
 
-export interface SemanticOrchestrationGateTarget {
-  phase: 'entry'
-  sideScope?: 'long' | 'short' | 'both'
-}
+// Phase 5 S10 (#1111): gate target.phase 扩 'strategy' | 'subStrategy'
+// 用 discriminated union 强约束三变体合法形态
+export type SemanticOrchestrationGatePhase = 'entry' | 'strategy' | 'subStrategy'
 
-export type SemanticOrchestrationGateEffect = 'block_new_entries'
+export type SemanticOrchestrationGateTarget =
+  | { phase: 'entry'; sideScope?: 'long' | 'short' | 'both' }
+  | { phase: 'strategy' }
+  | { phase: 'subStrategy'; subStrategyScopeRef: string; toSubStrategyScopeRef?: string }
+
+// Phase 5 S10 (#1111): effect 扩 'pause_substrategy' | 'switch_substrategy'
+//   block_new_entries 仅 phase='entry'
+//   pause_substrategy 仅 phase='subStrategy' 无 toSubStrategyScopeRef
+//   switch_substrategy 仅 phase='subStrategy' 必含 toSubStrategyScopeRef ≠ subStrategyScopeRef
+export type SemanticOrchestrationGateEffect =
+  | 'block_new_entries'
+  | 'pause_substrategy'
+  | 'switch_substrategy'
 
 export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
@@ -450,6 +469,12 @@ export interface SemanticOrchestrationNode {
   dataSourceRole?: SemanticOrchestrationDataSourceRole
   dataSourceFeedId?: string
   dataSourceSchemaRef?: SemanticOrchestrationDataSourceSchema
+  // scope.subStrategy 节点专属（其它 kind 不读）— Phase 5 S10 (#1111)
+  subStrategyScopeKind?: 'subStrategy'
+  subStrategyId?: string
+  subStrategyLabel?: string
+  positionHandlingOnDeactivate?: 'close' | 'keep'
+  orderHandlingOnDeactivate?: 'cancel' | 'keep'
   support?: SemanticAtomSupportMetadata
 }
 

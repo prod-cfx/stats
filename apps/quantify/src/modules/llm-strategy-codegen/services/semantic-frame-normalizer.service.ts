@@ -12,6 +12,8 @@ import type {
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
+  SemanticSubStrategyGateFrame,
+  SemanticSubStrategyScopeFrame,
   SemanticSymbolScopeFrame,
   SemanticTimeframeScopeFrame,
 } from '../types/semantic-natural-language-frame'
@@ -23,6 +25,8 @@ import type {
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationLegScopeNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
+  CodegenSemanticOrchestrationSubStrategyGateNodePatch,
+  CodegenSemanticOrchestrationSubStrategyScopeNodePatch,
   CodegenSemanticOrchestrationSymbolScopeNodePatch,
   CodegenSemanticOrchestrationTimeframeScopeNodePatch,
   CodegenSemanticPatch,
@@ -73,6 +77,11 @@ export class SemanticFrameNormalizerService {
     const timeframeScopeFrames: SemanticTimeframeScopeFrame[] = []
     const dataSourceScopeByKey = new Map<string, CodegenSemanticOrchestrationDataSourceScopeNodePatch>()
     const dataSourceScopeFrames: SemanticDataSourceScopeFrame[] = []
+    // Phase 5 S10 (#1111)
+    const subStrategyScopeByKey = new Map<string, CodegenSemanticOrchestrationSubStrategyScopeNodePatch>()
+    const subStrategyScopeFrames: SemanticSubStrategyScopeFrame[] = []
+    const subStrategyGateByKey = new Map<string, CodegenSemanticOrchestrationSubStrategyGateNodePatch>()
+    const subStrategyGateFrames: SemanticSubStrategyGateFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -128,6 +137,12 @@ export class SemanticFrameNormalizerService {
           break
         case 'data_source_scope':
           dataSourceScopeFrames.push(frame)
+          break
+        case 'sub_strategy_scope':
+          subStrategyScopeFrames.push(frame)
+          break
+        case 'sub_strategy_gate':
+          subStrategyGateFrames.push(frame)
           break
       }
     }
@@ -265,6 +280,31 @@ export class SemanticFrameNormalizerService {
       }
     })
 
+    // Phase 5 S10 (#1111): subStrategy scope/gate normalize + dedupe
+    subStrategyScopeFrames.forEach((frame, index) => {
+      const node = this.normalizeSubStrategyScope(frame, index)
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.subStrategyId,
+        node.positionHandlingOnDeactivate ?? null,
+        node.orderHandlingOnDeactivate ?? null,
+      ])
+      if (!subStrategyScopeByKey.has(dedupeKey)) {
+        subStrategyScopeByKey.set(dedupeKey, node)
+      }
+    })
+    subStrategyGateFrames.forEach((frame, index) => {
+      const node = this.normalizeSubStrategyGate(frame, index)
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.target,
+        node.effectWhenFalse,
+      ])
+      if (!subStrategyGateByKey.has(dedupeKey)) {
+        subStrategyGateByKey.set(dedupeKey, node)
+      }
+    })
+
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
@@ -298,6 +338,9 @@ export class SemanticFrameNormalizerService {
       ...Array.from(legScopeLegByKey.values()),
       ...Array.from(timeframeScopeByKey.values()),
       ...Array.from(dataSourceScopeByKey.values()),
+      // Phase 5 S10 (#1111)
+      ...Array.from(subStrategyScopeByKey.values()),
+      ...Array.from(subStrategyGateByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
@@ -381,6 +424,66 @@ export class SemanticFrameNormalizerService {
       dataSourceRole: frame.role,
       dataSourceFeedId: frame.feedId,
       dataSourceSchemaRef: frame.schemaRef,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S10 (#1111): sub_strategy_scope frame → orchestration scope node patch
+  private normalizeSubStrategyScope(
+    frame: SemanticSubStrategyScopeFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationSubStrategyScopeNodePatch {
+    return {
+      id: `orchestration-scope-substrategy-${index + 1}`,
+      kind: 'scope',
+      key: 'scope.subStrategy',
+      params: {
+        subStrategyId: frame.subStrategyId,
+        ...(frame.subStrategyLabel ? { subStrategyLabel: frame.subStrategyLabel } : {}),
+        ...(frame.positionHandlingOnDeactivate ? { positionHandlingOnDeactivate: frame.positionHandlingOnDeactivate } : {}),
+        ...(frame.orderHandlingOnDeactivate ? { orderHandlingOnDeactivate: frame.orderHandlingOnDeactivate } : {}),
+      },
+      subStrategyScopeKind: 'subStrategy',
+      subStrategyId: frame.subStrategyId,
+      ...(frame.subStrategyLabel ? { subStrategyLabel: frame.subStrategyLabel } : {}),
+      ...(frame.positionHandlingOnDeactivate ? { positionHandlingOnDeactivate: frame.positionHandlingOnDeactivate } : {}),
+      ...(frame.orderHandlingOnDeactivate ? { orderHandlingOnDeactivate: frame.orderHandlingOnDeactivate } : {}),
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S10 (#1111): sub_strategy_gate frame → orchestration gate node patch
+  private normalizeSubStrategyGate(
+    frame: SemanticSubStrategyGateFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationSubStrategyGateNodePatch {
+    // 占位 activeWhen — utterance 未必显式给条件，由后续 readiness fail-closed 触发 missing slot
+    const placeholderActiveWhen: SemanticExpression = {
+      kind: 'predicate',
+      op: 'EQ',
+      left: { kind: 'constant', value: true } as SemanticExpressionOperand,
+      right: { kind: 'constant', value: true } as SemanticExpressionOperand,
+    }
+    return {
+      id: `orchestration-gate-substrategy-${index + 1}`,
+      kind: 'gate',
+      key: 'gate.subStrategy',
+      params: {
+        subStrategyScopeRef: frame.subStrategyScopeRef,
+        ...(frame.toSubStrategyScopeRef ? { toSubStrategyScopeRef: frame.toSubStrategyScopeRef } : {}),
+      },
+      target: frame.effectWhenFalse === 'switch_substrategy'
+        ? {
+            phase: 'subStrategy',
+            subStrategyScopeRef: frame.subStrategyScopeRef,
+            ...(frame.toSubStrategyScopeRef ? { toSubStrategyScopeRef: frame.toSubStrategyScopeRef } : {}),
+          }
+        : {
+            phase: 'subStrategy',
+            subStrategyScopeRef: frame.subStrategyScopeRef,
+          },
+      activeWhen: placeholderActiveWhen,
+      effectWhenFalse: frame.effectWhenFalse,
       evidence: this.toEvidence(frame),
     }
   }

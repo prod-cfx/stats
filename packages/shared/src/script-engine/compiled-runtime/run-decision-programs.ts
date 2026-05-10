@@ -67,6 +67,8 @@ interface DecisionProgramNode {
     timeframeScopeRef?: string
     /** Phase 5 S9 (#1110): 多 dataSource scope 策略下该 program 归属的 scope.dataSource id */
     dataSourceScopeRef?: string
+    /** Phase 5 S10 (#1111): 多 subStrategy 策略下该 program 归属的 scope.subStrategy id */
+    subStrategyScopeRef?: string
   }
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
@@ -131,11 +133,23 @@ export interface CompiledOrchestrationDataSourceScope {
   schemaRef: CompiledOrchestrationDataSourceSchema
 }
 
+// Phase 5 S10 (#1111): scope.subStrategy substrate compiled runtime
+export interface CompiledSubStrategyScope {
+  id: string
+  scopeKind: 'subStrategy'
+  subStrategyId: string
+  subStrategyLabel?: string
+  positionHandlingOnDeactivate: 'close' | 'keep'
+  orderHandlingOnDeactivate: 'cancel' | 'keep'
+}
+
+// Phase 5 S10 (#1111): scope union — discriminator scopeKind
 export type CompiledOrchestrationScope =
   | CompiledSymbolScope
-  | CompiledTimeframeScope
   | CompiledOrchestrationLegScope
+  | CompiledTimeframeScope
   | CompiledOrchestrationDataSourceScope
+  | CompiledSubStrategyScope
 
 interface CompiledDecisionState {
   barIndex: number
@@ -244,6 +258,14 @@ export function runDecisionPrograms(
     if (scopeRouting === 'skip') continue
     if (scopeRouting !== 'continue') {
       const gated = applyOrchestrationGate(scopeRouting, orchestrationGateState, portfolioRiskState, ctx)
+      return Object.freeze(gated)
+    }
+
+    // Phase 5 S10 (#1111): subStrategy 路由（仅当 symbol routing 'continue' 才进入）
+    const subStrategyRouting = applySubStrategyScopeRouting(program, ctx, orchestrationScopes, orchestrationGateState)
+    if (subStrategyRouting === 'skip') continue
+    if (subStrategyRouting !== 'continue') {
+      const gated = applyOrchestrationGate(subStrategyRouting, orchestrationGateState, portfolioRiskState, ctx)
       return Object.freeze(gated)
     }
 
@@ -1884,6 +1906,73 @@ export function applyDataSourceScopeProgramRouting(
 
   if (!dsScopes.some(s => s.id === ref)) {
     return failClosed('unbound_program')
+  }
+  return 'continue'
+}
+
+/**
+ * Phase 5 S10 (#1111): scope.subStrategy substrate runtime fail-closed 路由
+ *
+ * 决策表（与 applySymbolScopeRouting 同返回签名 'continue' | 'skip' | StrategyDecisionV1）：
+ *   subStrategy scopes 缺失 / length <= 1 → 'continue' （单/0 sub 走兜底，旧策略零侵入）
+ *   scopes.length >= 2 时：
+ *     activeSubStrategyScopeId trim 后空 → fail-closed.no_active_scope
+ *     activeId 不在 scopes id 集合 → fail-closed.unknown_active_scope
+ *     program.metadata.subStrategyScopeRef trim 后空 → fail-closed.unbound_program
+ *     program ref ≠ activeId → 'skip'（该 program 不属当前 active sub）
+ *     program ref === activeId
+ *       且 activeId ∈ gateState.pausedSubStrategyScopeIds（active 自身被 pause）：
+ *         program.phase==='entry' → return NOOP { reason: 'compiled.orchestration.substrategy.paused' }
+ *         其它 phase（exit/rebalance）→ 'continue'（兑现验收 #6 "阻止新开仓但允许已有仓位退出"）
+ *       else → 'continue'
+ */
+export function applySubStrategyScopeRouting(
+  program: { phase: 'entry' | 'exit' | 'rebalance'; metadata?: { subStrategyScopeRef?: string } },
+  ctx: StrategyExecutionContextV1,
+  scopes: readonly CompiledOrchestrationScope[] | undefined,
+  gateState: OrchestrationGateState | undefined,
+): 'continue' | 'skip' | StrategyDecisionV1 {
+  const subScopes = (scopes ?? []).filter(
+    (s): s is CompiledSubStrategyScope => s.scopeKind === 'subStrategy',
+  )
+  if (subScopes.length <= 1) return 'continue'
+
+  const activeIdRaw = (ctx as { activeSubStrategyScopeId?: unknown }).activeSubStrategyScopeId
+  const activeId = typeof activeIdRaw === 'string' ? activeIdRaw.trim() : ''
+  if (activeId === '') {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.substrategy.fail_closed.no_active_scope',
+    }
+  }
+  if (!subScopes.some(s => s.id === activeId)) {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.substrategy.fail_closed.unknown_active_scope',
+    }
+  }
+
+  const programRefRaw = program.metadata?.subStrategyScopeRef
+  const programRef = typeof programRefRaw === 'string' ? programRefRaw.trim() : ''
+  if (programRef === '') {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.substrategy.fail_closed.unbound_program',
+    }
+  }
+  if (programRef !== activeId) return 'skip'
+
+  // active === programRef：检查 paused
+  const paused = gateState?.pausedSubStrategyScopeIds
+  if (paused && paused.has(activeId)) {
+    if (program.phase === 'entry') {
+      return {
+        action: 'NOOP',
+        reason: 'compiled.orchestration.substrategy.paused',
+      }
+    }
+    // exit/rebalance phase：放行（验收 #6 "阻止新开仓但允许已有仓位退出"）
+    return 'continue'
   }
   return 'continue'
 }

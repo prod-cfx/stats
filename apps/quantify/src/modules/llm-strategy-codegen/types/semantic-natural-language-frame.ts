@@ -14,6 +14,8 @@ export type SemanticNaturalLanguageFrame =
   | SemanticLegScopeFrame
   | SemanticTimeframeScopeFrame
   | SemanticDataSourceScopeFrame
+  | SemanticSubStrategyScopeFrame
+  | SemanticSubStrategyGateFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -159,4 +161,23 @@ export interface SemanticDataSourceScopeFrame extends SemanticFrameBase {
   role: 'primary' | 'confirmation' | 'event'
   feedId: string                                                  // 全小写格式（如 binance.spot.btcusdt / webhook.tradingview.alpha）
   schemaRef: 'ohlcv' | 'orderbook' | 'liquidation' | 'webhook_event'
+}
+
+// Phase 5 S10 (#1111): sub-strategy scope frame — 多 subStrategy 切换基建
+//   subStrategyId 必填（双门槛后填稳定 ID，如 'sub_a' / 'trend_sub'）
+//   positionHandling/orderHandling 仅当 utterance 明示时填，缺省 → readiness 触发 missing slot
+export interface SemanticSubStrategyScopeFrame extends SemanticFrameBase {
+  kind: 'sub_strategy_scope'
+  subStrategyId: string
+  subStrategyLabel?: string
+  positionHandlingOnDeactivate?: 'close' | 'keep'
+  orderHandlingOnDeactivate?: 'cancel' | 'keep'
+}
+
+// Phase 5 S10 (#1111): sub-strategy gate frame — pause / switch 决策
+export interface SemanticSubStrategyGateFrame extends SemanticFrameBase {
+  kind: 'sub_strategy_gate'
+  subStrategyScopeRef: string                   // 该 gate 控制的 subStrategy id
+  toSubStrategyScopeRef?: string                // switch 类
+  effectWhenFalse: 'pause_substrategy' | 'switch_substrategy'
 }

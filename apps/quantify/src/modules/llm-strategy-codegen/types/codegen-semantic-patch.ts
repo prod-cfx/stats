@@ -86,6 +86,8 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationLegScopeNodePatch
   | CodegenSemanticOrchestrationTimeframeScopeNodePatch
   | CodegenSemanticOrchestrationDataSourceScopeNodePatch
+  | CodegenSemanticOrchestrationSubStrategyScopeNodePatch
+  | CodegenSemanticOrchestrationSubStrategyGateNodePatch
 
 // Phase 5 S2 (#1104): scope.symbol patch 节点
 export interface CodegenSemanticOrchestrationSymbolScopeNodePatch extends CodegenSemanticNodeEnvelope {
@@ -208,3 +210,25 @@ export type CodegenSemanticOrchestrationProgramNodePatch =
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
   | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
+
+// Phase 5 S10 (#1111): scope.subStrategy patch 节点
+export interface CodegenSemanticOrchestrationSubStrategyScopeNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'scope'
+  key: 'scope.subStrategy'
+  params: Record<string, unknown>
+  subStrategyScopeKind: 'subStrategy'
+  subStrategyId: string
+  subStrategyLabel?: string
+  positionHandlingOnDeactivate?: 'close' | 'keep'
+  orderHandlingOnDeactivate?: 'cancel' | 'keep'
+}
+
+// Phase 5 S10 (#1111): gate phase=subStrategy patch 节点
+export interface CodegenSemanticOrchestrationSubStrategyGateNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'gate'
+  key: 'gate.subStrategy'
+  params: Record<string, unknown>
+  target: SemanticOrchestrationGateTarget
+  activeWhen: SemanticExpression
+  effectWhenFalse: SemanticOrchestrationGateEffect
+}

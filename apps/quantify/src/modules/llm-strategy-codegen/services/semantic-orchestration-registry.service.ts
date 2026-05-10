@@ -30,9 +30,12 @@ const TIMEFRAME_REQUIRED_MIN_LENGTH = 1
 const TIMEFRAME_REQUIRED_MAX_LENGTH = 8
 // Phase 5 S9 (#1110)
 const SCOPE_DATA_SOURCE_KEY = 'scope.dataSource'
+// Phase 5 S10 (#1111)
+const SCOPE_SUBSTRATEGY_KEY = 'scope.subStrategy'
 
 const SYMBOL_FORMAT_PATTERN = /^[A-Z]{2,5}USDT$/u
 const SYMBOL_MAX_LENGTH = 32
+const SUBSTRATEGY_ID_MAX_LENGTH = 64
 
 // Phase 5 S11 (#1112): legId 与 node.id 是两个独立标识；legId 仅在 leg 节点子集内唯一并供 pairedLegId 引用
 const LEG_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.]{0,63}$/u
@@ -174,6 +177,54 @@ const SCOPE_LEG_CONTRACT: SemanticOrchestrationContract = {
       domain: 'orchestration',
       verb: 'bind',
       object: 'leg_scope',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+// Phase 5 S10 (#1111): scope.subStrategy substrate contract
+//   capability: orchestration declare sub_strategy_scope
+//   runtimeRequirements: runtime route sub_strategy_scope_decision（与 S2 同形态，新 vocab 不入 substrate 白名单）
+//   stateRequirements: 留空（caller 在 ctx 注入 activeSubStrategyScopeId；cross-bar memory 由 follow-up #1113 承担）
+//   effects: declare → bind 子策略 scope；guard pause sub_strategy；orchestration switch sub_strategy
+const SCOPE_SUBSTRATEGY_CONTRACT: SemanticOrchestrationContract = {
+  id: 'scope.subStrategy',
+  kind: 'scope',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'declare',
+      object: 'sub_strategy_scope',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'route',
+      object: 'sub_strategy_scope_decision',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'orchestration',
+      verb: 'bind',
+      object: 'sub_strategy_scope',
+    },
+    {
+      domain: 'guard',
+      verb: 'pause',
+      object: 'sub_strategy',
+    },
+    {
+      domain: 'orchestration',
+      verb: 'switch',
+      object: 'sub_strategy',
     },
   ],
   executableSinceVersion: CURRENT_SEMANTIC_VERSION,
@@ -443,6 +494,8 @@ export class SemanticOrchestrationRegistryService {
     [SCOPE_LEG_KEY, SCOPE_LEG_CONTRACT],
     [SCOPE_TIMEFRAME_KEY, SCOPE_TIMEFRAME_CONTRACT],
     [SCOPE_DATA_SOURCE_KEY, SCOPE_DATA_SOURCE_CONTRACT],
+    // Phase 5 S10 (#1111)
+    [SCOPE_SUBSTRATEGY_KEY, SCOPE_SUBSTRATEGY_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -494,6 +547,71 @@ export class SemanticOrchestrationRegistryService {
         })
       }
       return { ok: missingSlots.length === 0, missingSlots }
+    }
+    // Phase 5 S10 (#1111): gate 节点 phase=subStrategy 形状校验
+    //   - target.phase='subStrategy' 必须与 effect ∈ {'pause_substrategy','switch_substrategy'} 配对
+    //   - effect='switch_substrategy' 必须含 toSubStrategyScopeRef ≠ subStrategyScopeRef
+    //   - target.phase='strategy' 本 PR substrate 不支持 → unsupported（readiness silent skip + evaluator silent skip 协同）
+    //   - phase=entry 兜底（gate.regime 既有逻辑）
+    if (node.kind === 'gate') {
+      const target = node.target
+      if (target?.phase === 'subStrategy') {
+        const fieldPath = `orchestration.gate.subStrategy[${node.id}]`
+        const pushSlot = (suffix: string, hint: string): void => {
+          missingSlots.push({
+            slotKey: `orchestration.gate.subStrategy.${suffix}`,
+            fieldPath,
+            status: 'open',
+            priority: 'core',
+            questionHint: hint,
+            affectsExecution: true,
+          })
+        }
+        const ref = typeof target.subStrategyScopeRef === 'string' ? target.subStrategyScopeRef.trim() : ''
+        if (ref === '') {
+          pushSlot('scope_ref_unknown', 'gate 引用的子策略 scope 未声明')
+        }
+        const effect = node.effectWhenFalse
+        if (effect !== 'pause_substrategy' && effect !== 'switch_substrategy') {
+          pushSlot('effect_phase_mismatch', 'phase=subStrategy 仅支持 pause_substrategy / switch_substrategy')
+        }
+        if (effect === 'switch_substrategy') {
+          const to = typeof target.toSubStrategyScopeRef === 'string' ? target.toSubStrategyScopeRef.trim() : ''
+          if (to === '') {
+            pushSlot('switch_target_required', 'switch_substrategy gate 必须指定切换目标 scope')
+          } else if (to === ref) {
+            pushSlot('switch_target_self', '切换目标不能与源 scope 相同')
+          }
+        }
+        if (node.activeWhen === undefined) {
+          pushSlot('active_when', '请确认 gate 的判定条件')
+        }
+        return { ok: missingSlots.length === 0, missingSlots }
+      }
+      if (target?.phase === 'strategy') {
+        // phase=strategy unsupported（留 #984 #5 strategy 子级 PR）
+        missingSlots.push({
+          slotKey: 'orchestration.gate.unsupported_phase',
+          fieldPath: `orchestration.gate[${node.id}]`,
+          status: 'open',
+          priority: 'core',
+          questionHint: '当前不支持 phase=strategy 的 gate',
+          affectsExecution: true,
+        })
+        return { ok: false, missingSlots }
+      }
+      // 误配 entry phase + non block_new_entries effect
+      if ((!target || target.phase === 'entry') && node.effectWhenFalse !== undefined && node.effectWhenFalse !== 'block_new_entries') {
+        missingSlots.push({
+          slotKey: 'orchestration.gate.regime.effect_phase_mismatch',
+          fieldPath: `orchestration.gate.regime[${node.id}]`,
+          status: 'open',
+          priority: 'core',
+          questionHint: 'phase=entry 仅支持 block_new_entries effect',
+          affectsExecution: true,
+        })
+        return { ok: false, missingSlots }
+      }
     }
     if (node.activeWhen === undefined) {
       missingSlots.push({
@@ -860,8 +978,12 @@ export class SemanticOrchestrationRegistryService {
       })
     }
 
+    // Phase 5 S10 (#1111): scope 节点按 key 分发
+    if (node.key === SCOPE_SUBSTRATEGY_KEY) {
+      return this.validateSubStrategyScopeNode(node, siblingNodes)
+    }
     if (node.key !== SCOPE_SYMBOL_KEY) {
-      pushSlot('unsupported_kind', '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource')
+      pushSlot('unsupported_kind', '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource / scope.subStrategy')
       return { ok: false, missingSlots }
     }
     if (node.symbolScopeKind !== 'symbol') {
@@ -1215,6 +1337,73 @@ export class SemanticOrchestrationRegistryService {
       )
       if (collision) {
         pushSlot('primary_collision', 'primary 数据源最多一个')
+      }
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  /**
+   * Phase 5 S10 (#1111): scope.subStrategy 节点 5 重 fail-closed:
+   *   1) key === 'scope.subStrategy'（路由前置已检）
+   *   2) subStrategyScopeKind === 'subStrategy'
+   *   3) subStrategyId 非空字符串、trim 后长度 ∈ [1, 64]
+   *   4) positionHandlingOnDeactivate ∈ {'close','keep'} + orderHandlingOnDeactivate ∈ {'cancel','keep'}
+   *   5) 与其它 status='locked' key='scope.subStrategy' 节点 subStrategyId 不冲突
+   */
+  private validateSubStrategyScopeNode(
+    node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[],
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.scope.subStrategy[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.scope.subStrategy.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    // (2) scopeKind 必须 === 'subStrategy'
+    if (node.subStrategyScopeKind !== 'subStrategy') {
+      pushSlot('scope_kind', '请确认 scopeKind 为 subStrategy')
+    }
+
+    // (3) subStrategyId 非空 + 长度
+    const idRaw = node.subStrategyId
+    const trimmedId = typeof idRaw === 'string' ? idRaw.trim() : ''
+    if (trimmedId === '' || trimmedId.length > SUBSTRATEGY_ID_MAX_LENGTH) {
+      pushSlot('substrategy_id', `请确认子策略 ID（非空且长度 ≤ ${SUBSTRATEGY_ID_MAX_LENGTH}）`)
+    }
+
+    // (4) positionHandling + orderHandling
+    const posHandling = node.positionHandlingOnDeactivate
+    if (posHandling !== 'close' && posHandling !== 'keep') {
+      pushSlot('position_handling', '请确认子策略切换时是否平仓（close/keep）')
+    }
+    const orderHandling = node.orderHandlingOnDeactivate
+    if (orderHandling !== 'cancel' && orderHandling !== 'keep') {
+      pushSlot('order_handling', '请确认子策略切换时是否取消挂单（cancel/keep）')
+    }
+
+    // (5) 与其它 supported scope.subStrategy 节点 subStrategyId 不冲突
+    if (trimmedId !== '') {
+      const otherSupported = siblingNodes.filter(
+        (other) =>
+          other.id !== node.id
+          && other.kind === 'scope'
+          && other.key === SCOPE_SUBSTRATEGY_KEY
+          && other.status === 'locked',
+      )
+      const collision = otherSupported.some(
+        (other) => typeof other.subStrategyId === 'string' && other.subStrategyId.trim() === trimmedId,
+      )
+      if (collision) {
+        pushSlot('id_collision', '多 scope 子策略 ID 必须唯一')
       }
     }
 

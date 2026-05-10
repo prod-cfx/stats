@@ -244,7 +244,7 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.symbol.symbols_overlap', kind: 'slot', zh: '多 scope 之间标的不能重叠' },
   { token: 'slot.orchestration.scope.symbol.primary_symbol_collision', kind: 'slot', zh: '多 scope 主标的必须各自唯一' },
   { token: 'slot.orchestration.scope.symbol.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 symbol scope' },
-  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol 与 scope.dataSource' },
+  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource / scope.subStrategy' },
 
   // Phase 5 S11 (#1112): scope.leg substrate
   { token: 'atom.scope.leg.name', kind: 'atom', zh: '策略腿' },
@@ -263,11 +263,10 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.leg.paired_leg_id', kind: 'slot', zh: 'fixed_ratio 模式必须指定 pairedLegId' },
   { token: 'slot.orchestration.scope.leg.direction_collision', kind: 'slot', zh: 'paired leg 必须方向相反（对冲腿）' },
   { token: 'slot.orchestration.scope.leg.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个策略腿' },
-  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol / scope.leg / scope.timeframe / scope.dataSource' },
 
   // Phase 5 S3 (#1109): scope.timeframe substrate
   { token: 'atom.scope.timeframe.name', kind: 'atom', zh: '周期范围' },
-  { token: 'atom.scope.timeframe.display.with_required', kind: 'atom', zh: '周期范围：主 {primaryTimeframe}，依赖 {requiredTimeframes}（{alignmentPolicy}）' },
+  { token: 'atom.scope.timeframe.display.with_required', kind: 'atom', zh: '周期范围:主 {primaryTimeframe}，依赖 {requiredTimeframes}（{alignmentPolicy}）' },
   { token: 'param.primaryTimeframe', kind: 'param', zh: '执行周期（主周期）' },
   { token: 'param.requiredTimeframes', kind: 'param', zh: '依赖周期列表' },
   { token: 'param.alignmentPolicy', kind: 'param', zh: '对齐严格度' },
@@ -294,4 +293,28 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.dataSource.primary_collision', kind: 'slot', zh: 'primary 数据源最多一个' },
   { token: 'slot.orchestration.scope.dataSource.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 dataSource scope' },
   { token: 'slot.orchestration.scope.dataSource.scope_kind', kind: 'slot', zh: '请确认 scopeKind 为 dataSource' },
+
+  // Phase 5 S10 (#1111): scope.subStrategy substrate + sub-strategy gate
+  { token: 'atom.scope.subStrategy.name', kind: 'atom', zh: '子策略范围' },
+  { token: 'atom.scope.subStrategy.display.with_handling', kind: 'atom', zh: '子策略：{label}（切换时仓位：{positionHandling}，挂单：{orderHandling}）' },
+  { token: 'atom.scope.subStrategy.display.no_handling', kind: 'atom', zh: '子策略：{label}' },
+  { token: 'atom.gate.subStrategy.pause', kind: 'atom', zh: '条件不成立时暂停子策略 {label}' },
+  { token: 'atom.gate.subStrategy.switch', kind: 'atom', zh: '条件成立时切换至子策略 {toLabel}' },
+  { token: 'param.subStrategyId', kind: 'param', zh: '子策略 ID' },
+  { token: 'param.subStrategyLabel', kind: 'param', zh: '子策略名' },
+  { token: 'param.positionHandling', kind: 'param', zh: '仓位处理' },
+  { token: 'param.orderHandling', kind: 'param', zh: '挂单处理' },
+  { token: 'slot.orchestration.scope.subStrategy.scope_kind', kind: 'slot', zh: '请确认 scopeKind 为 subStrategy' },
+  { token: 'slot.orchestration.scope.subStrategy.substrategy_id', kind: 'slot', zh: '请确认子策略 ID（非空且长度 ≤ 64）' },
+  { token: 'slot.orchestration.scope.subStrategy.position_handling', kind: 'slot', zh: '请确认子策略切换时是否平仓（close/keep）' },
+  { token: 'slot.orchestration.scope.subStrategy.order_handling', kind: 'slot', zh: '请确认子策略切换时是否取消挂单（cancel/keep）' },
+  { token: 'slot.orchestration.scope.subStrategy.id_collision', kind: 'slot', zh: '多 scope 子策略 ID 必须唯一' },
+  { token: 'slot.orchestration.scope.subStrategy.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 sub-strategy scope' },
+  { token: 'slot.orchestration.gate.subStrategy.scope_ref_unknown', kind: 'slot', zh: 'gate 引用的子策略 scope 未声明' },
+  { token: 'slot.orchestration.gate.subStrategy.effect_phase_mismatch', kind: 'slot', zh: 'phase=subStrategy 仅支持 pause_substrategy / switch_substrategy' },
+  { token: 'slot.orchestration.gate.subStrategy.switch_target_required', kind: 'slot', zh: 'switch_substrategy gate 必须指定切换目标 scope' },
+  { token: 'slot.orchestration.gate.subStrategy.switch_target_self', kind: 'slot', zh: '切换目标不能与源 scope 相同' },
+  { token: 'slot.orchestration.gate.subStrategy.active_when', kind: 'slot', zh: '请确认 gate 的判定条件' },
+  { token: 'slot.orchestration.gate.unsupported_phase', kind: 'slot', zh: '当前不支持 phase=strategy 的 gate' },
+  { token: 'slot.orchestration.gate.regime.effect_phase_mismatch', kind: 'slot', zh: 'phase=entry 仅支持 block_new_entries effect' },
 ] as const satisfies readonly DisplayToken[]

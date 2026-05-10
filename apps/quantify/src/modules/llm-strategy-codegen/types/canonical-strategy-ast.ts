@@ -82,6 +82,8 @@ export interface DecisionProgramNode {
     timeframeScopeRef?: string
     // Phase 5 S9 (#1110): 多 dataSource scope 策略中的 dataSourceScopeRef 透传
     dataSourceScopeRef?: string
+    // Phase 5 S10 (#1111): 多 subStrategy 策略中的 subStrategyScopeRef 透传
+    subStrategyScopeRef?: string
   }
 }
 
