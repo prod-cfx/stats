@@ -57,8 +57,11 @@ describe('signalGeneratorService orchestration gate (live-signal fast path)', ()
       expect(src).toMatch(/evaluateOrchestrationGates\([\s\S]*?orchestrationGates[\s\S]*?\?\?\s*\[\]/)
     })
 
-    it('runDecisionPrograms 接收 orchestrationGateState 作为参数', () => {
-      expect(src).toMatch(/runDecisionPrograms\([\s\S]*?orchestrationGateState[\s\S]*?\)/)
+    it('runDecisionProgramsSubStrategyFanOut 接收 orchestrationGateState 作为参数', () => {
+      // Phase 5 S10 follow-up (#1131) 之后，signal-generator 通过
+      // runDecisionProgramsSubStrategyFanOut 包装 runDecisionPrograms 调用，
+      // gate state 透传无变化，仅入口函数名变更。
+      expect(src).toMatch(/runDecisionProgramsSubStrategyFanOut\([\s\S]*?orchestrationGateState[\s\S]*?\)/)
     })
   })
 })

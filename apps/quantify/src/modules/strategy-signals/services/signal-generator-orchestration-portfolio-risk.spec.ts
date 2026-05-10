@@ -97,8 +97,11 @@ describe('signalGeneratorService portfolio risk gate (live-signal fast path)', (
       expect(src).toMatch(/drawdownPct:\s*ctx\.accountDrawdownPct/)
     })
 
-    it('runDecisionPrograms 接收 portfolioRiskState 作为第 7 参数', () => {
-      expect(src).toMatch(/runDecisionPrograms\([\s\S]*?orchestrationGateState[\s\S]*?portfolioRiskState[\s\S]*?\)/)
+    it('runDecisionProgramsSubStrategyFanOut 接收 portfolioRiskState 作为第 7 参数', () => {
+      // Phase 5 S10 follow-up (#1131) 之后，signal-generator 改走
+      // runDecisionProgramsSubStrategyFanOut 包装；portfolioRiskState 仍紧跟
+      // orchestrationGateState 之后透传，第 7 参数语义保持。
+      expect(src).toMatch(/runDecisionProgramsSubStrategyFanOut\([\s\S]*?orchestrationGateState[\s\S]*?portfolioRiskState[\s\S]*?\)/)
     })
 
     it('#1058 R3 A_new: buildPublishedStrategyContext 注入 instance.drawdownPct 直接读（无 cast）', () => {
