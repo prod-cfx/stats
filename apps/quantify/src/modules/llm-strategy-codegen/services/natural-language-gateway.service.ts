@@ -589,7 +589,12 @@ export class NaturalLanguageGatewayService {
     const symbols = [...symbolSet].sort()
 
     // (3) primarySymbol 提取（仅当 utterance 显式声明）
-    const primaryMatch = /(?:主标的|primary)\s*[:：是为]?\s*[（(]?\s*([A-Z]{2,5})USDT?/iu.exec(text)
+    //   前置形式："主标的 BTCUSDT" / "主标的：BTC" / "primary BTCUSDT"
+    //   后置形式："BTCUSDT 主标的" / "BTCUSDT 是主标的" / "BTCUSDT primary"（#1135）
+    //   两式都先后尝试，前置优先。
+    const primaryPrefix = /(?:主标的|primary)\s*[:：是为]?\s*[（(]?\s*([A-Z]{2,5})USDT?/iu
+    const primaryPostfix = /([A-Z]{2,5})USDT?\s*(?:为|是)?\s*(?:主标的|primary)/iu
+    const primaryMatch = primaryPrefix.exec(text) ?? primaryPostfix.exec(text)
     const primaryRaw = primaryMatch ? `${primaryMatch[1].toUpperCase()}USDT` : undefined
     const primarySymbol = primaryRaw && symbolSet.has(primaryRaw) ? primaryRaw : undefined
 
