@@ -1,5 +1,5 @@
 import type { StrategyAdapterV1, StrategyDecisionV1 } from '@ai/shared'
-import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
+import type { ProgramLifecycleState, SubStrategySwitchInput } from '@ai/shared/script-engine/compiled-runtime'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { createScriptEngine } from '@ai/shared/node'
@@ -9,7 +9,7 @@ import {
   evaluateGuards,
   evaluateRiskPredicates,
   runDecisionPrograms,
-  runDecisionProgramsFanOut,
+  runDecisionProgramsSubStrategyFanOut,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
@@ -126,6 +126,13 @@ export class BacktestStrategyAdapterService {
       // S0a fixed_grid_gated 仅写 placeholder；S5/S6 在此 map 上维护 dynamic_grid / adaptive_volatility_grid 实状态。
       const programLifecycleStateBySymbol = new Map<string, Record<string, ProgramLifecycleState>>()
 
+      // Phase 5 S10 follow-up (#1113): scope.subStrategy 跨 bar 状态（独立于 #1081 lifecycle map）。
+      //   - previousActiveScopeId：上一根 bar 的 active sub；undefined 表示首次（fan-out wrapper 兜底 sub[0]）
+      //   - lastSwitchBarIndex：上一次切换的 bar 索引；用于 cooldown（默认 1 bar）
+      // 单/0 sub 策略时该 state 始终空闲，wrapper 透传 runDecisionProgramsFanOut。
+      const subStrategyState: { previousActiveScopeId?: string; lastSwitchBarIndex?: number } = {}
+      let backtestBarIndex = 0
+
       return {
         protocolVersion: 'v1',
         onBar(ctx) {
@@ -187,10 +194,24 @@ export class BacktestStrategyAdapterService {
               exposureNotionalBySubStrategyScope,
             },
           )
-          // Phase 5 S2 follow-up (#1108): scope.symbol fan-out caller — 多 scope 时循环每个 scope
-          //   per-scope ctx 克隆由 buildScopeIteration 构造（activeSymbolScopeId + symbol + 可选 position）
-          //   单/0 scope 透传，旧策略字节兼容；多 scope 时 decision.meta.scopeDecisions 携带 per-scope 副本
-          let decision = runDecisionProgramsFanOut(
+          // Phase 5 S2 follow-up (#1108) + S10 follow-up (#1113): scope fan-out caller
+          //   单/0 sub + 单/0 symbol → 透传 runDecisionPrograms（旧策略字节兼容）
+          //   ≥2 symbol → symbol 维度循环每个 scope（meta.scopeDecisions 携带 per-scope 副本）
+          //   ≥2 sub    → 单 active sub iteration（cross-bar state machine + cooldown + 切换时按 contract close/cancel）
+          //   sub + symbol 共存：sub 维度先解析（一根 bar 选一个 active sub），再走 symbol fan-out
+          //
+          // backtestBarIndex 由 onBar 闭包递增（用于切换 cooldown）；与 #1081 lifecycle state map 隔离
+          const subFanOutInvocation: { subStrategyState: SubStrategySwitchInput } = {
+            subStrategyState: {
+              previousActiveScopeId: subStrategyState.previousActiveScopeId,
+              currentBarIndex: backtestBarIndex,
+              lastSwitchBarIndex: subStrategyState.lastSwitchBarIndex,
+              // critic Round 1 修复：cooldownBars=1 等价无防抖（switch T → T+1 即可再切）；
+              // 默认 2 真正强制 1 bar 间隔，避免单 bar 抖动。
+              cooldownBars: 2,
+            },
+          }
+          const subFanOut = runDecisionProgramsSubStrategyFanOut(
             ctx,
             decisionPrograms,
             exprValues,
@@ -200,7 +221,17 @@ export class BacktestStrategyAdapterService {
             portfolioRiskState,
             orchestrationScopes,
             orchestrationLegScopes,
+            subFanOutInvocation,
           )
+          let decision = subFanOut.decision
+          // 持久化 active sub id（即使本 bar 未发生切换，也要写回兜底 sub[0]）
+          if (subFanOut.switchOutcome.nextActiveScopeId !== '') {
+            subStrategyState.previousActiveScopeId = subFanOut.switchOutcome.nextActiveScopeId
+          }
+          if (subFanOut.switchOutcome.didSwitch && typeof subFanOut.switchBarIndex === 'number') {
+            subStrategyState.lastSwitchBarIndex = subFanOut.switchBarIndex
+          }
+          backtestBarIndex += 1
           // Phase 5 S0a: 取本 symbol 上一根 K 线的 lifecycle state，传入 runOrderPrograms 第 8 参。
           const symbolKey = readContextSymbol(ctx)
           const lifecycleStateForCurrentBar = symbolKey

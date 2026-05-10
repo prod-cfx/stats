@@ -31,10 +31,10 @@ import {
   evaluateGuards,
   evaluateRiskPredicates,
   runDecisionPrograms,
-  runDecisionProgramsFanOut,
+  runDecisionProgramsSubStrategyFanOut,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
-import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
+import type { ProgramLifecycleState, SubStrategySwitchInput } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates, type OrchestrationGateState } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
 import { evaluateOrchestrationPortfolioRisks, type CompiledOrchestrationPortfolioRisk } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import {
@@ -174,6 +174,18 @@ export class SignalGeneratorService {
   private readonly programLifecycleStateByStrategyInstanceId = new Map<
     string,
     Readonly<Record<string, ProgramLifecycleState>>
+  >()
+
+  /**
+   * Phase 5 S10 follow-up (#1113): scope.subStrategy 跨 onBar active id state map（独立于 #1081 lifecycle map）。
+   *   - previousActiveScopeId：上一根 bar 该实例的 active sub scope id；undefined 表示首次（fan-out wrapper 兜底 sub[0]）
+   *   - lastSwitchBarIndex：上一次切换的 bar 索引；用于 cooldown（默认 1 bar）
+   *   - barIndex：实例累计 onBar 次数（live cooldown 不依赖外部 ts，只看 onBar 调用序列）
+   * cleanup 由 cleanupProgramLifecycleState 同 instanceId 一起清空（见下方 cleanup 方法）。
+   */
+  private readonly activeSubStrategyByStrategyInstanceId = new Map<
+    string,
+    { previousActiveScopeId?: string; lastSwitchBarIndex?: number; barIndex: number }
   >()
 
   constructor(
@@ -734,6 +746,8 @@ export class SignalGeneratorService {
    */
   cleanupProgramLifecycleState(strategyInstanceId: string): void {
     this.programLifecycleStateByStrategyInstanceId.delete(strategyInstanceId)
+    // Phase 5 S10 follow-up (#1113): 同步清理 active sub state（防 map 泄漏）
+    this.activeSubStrategyByStrategyInstanceId.delete(strategyInstanceId)
   }
 
   private buildCompiledRuntimeAdapter(scriptCode: string, strategyInstanceId?: string): CompiledRuntimeAdapterResult {
@@ -747,6 +761,8 @@ export class SignalGeneratorService {
       const orderPrograms = projection.orderPrograms as Parameters<typeof runOrderPrograms>[1]
       // Phase 5 S5：捕获 service-level lifecycle state map 给 onBar 闭包使用
       const lifecycleStateMap = this.programLifecycleStateByStrategyInstanceId
+      // Phase 5 S10 follow-up (#1113): 捕获 sub active id state map（独立于 lifecycle map，与 #1081 隔离）
+      const subStrategyActiveMap = this.activeSubStrategyByStrategyInstanceId
 
       return {
         adapter: {
@@ -805,10 +821,28 @@ export class SignalGeneratorService {
             const orchestrationLegScopes = (projection as {
               orchestrationLegScopes?: Parameters<typeof runDecisionPrograms>[8]
             }).orchestrationLegScopes ?? []
-            // Phase 5 S2 follow-up (#1108): scope.symbol fan-out caller — 多 scope 时 per-scope 循环
-            //   单/0 scope 透传；多 scope 时 decision.meta.scopeDecisions 携带 per-scope 副本
-            //   不动 lifecycle state map（与 #1081 隔离）：lifecycleStateIn 仍按 strategyInstanceId 单条
-            const decision = runDecisionProgramsFanOut(
+            // Phase 5 S2 follow-up (#1108) + S10 follow-up (#1113): scope fan-out caller
+            //   单/0 sub + 单/0 symbol → 透传 runDecisionPrograms（旧策略字节兼容）
+            //   ≥2 symbol → symbol 维度循环 per-scope（meta.scopeDecisions 携带副本）
+            //   ≥2 sub    → 单 active sub iteration（cross-onBar state machine + cooldown + 切换时按 contract close/cancel）
+            //   sub + symbol 共存：sub 维度先解析（每根 bar 选一个 active sub），再走 symbol fan-out
+            //
+            //   subStrategyActiveMap 独立于 lifecycleStateMap（与 #1081 隔离）
+            //   instance 缺 id 时不持久化（透传无切换；状态机退化为单 bar 局部）
+            const subState = strategyInstanceId
+              ? (subStrategyActiveMap.get(strategyInstanceId) ?? { barIndex: 0 })
+              : { barIndex: 0 }
+            const subFanOutInvocation: { subStrategyState: SubStrategySwitchInput } = {
+              subStrategyState: {
+                previousActiveScopeId: subState.previousActiveScopeId,
+                currentBarIndex: subState.barIndex,
+                lastSwitchBarIndex: subState.lastSwitchBarIndex,
+                // critic Round 1 修复：cooldownBars=1 等价无防抖（switch T → T+1 即可再切）；
+                // 默认 2 真正强制 1 bar 间隔，避免单 bar 抖动。
+                cooldownBars: 2,
+              },
+            }
+            const subFanOut = runDecisionProgramsSubStrategyFanOut(
               ctx,
               decisionPrograms,
               exprValues,
@@ -818,7 +852,22 @@ export class SignalGeneratorService {
               portfolioRiskState,
               orchestrationScopes,
               orchestrationLegScopes,
+              subFanOutInvocation,
             )
+            const decision = subFanOut.decision
+            // 持久化 active sub id（含 first-bar 兜底 sub[0]）+ 切换 bar 索引
+            if (strategyInstanceId) {
+              const next: { previousActiveScopeId?: string; lastSwitchBarIndex?: number; barIndex: number } = {
+                previousActiveScopeId: subFanOut.switchOutcome.nextActiveScopeId !== ''
+                  ? subFanOut.switchOutcome.nextActiveScopeId
+                  : subState.previousActiveScopeId,
+                lastSwitchBarIndex: subFanOut.switchOutcome.didSwitch && typeof subFanOut.switchBarIndex === 'number'
+                  ? subFanOut.switchBarIndex
+                  : subState.lastSwitchBarIndex,
+                barIndex: subState.barIndex + 1,
+              }
+              subStrategyActiveMap.set(strategyInstanceId, next)
+            }
             // Phase 5 S4 T13 — 注入 orchestrationPrograms 第 7 参数。
             // live closeProgramIds 真实合成 close decision 留 follow-up issue
             // （与 S7 live drawdown 同范式）：当前 live 端的 close 由现有

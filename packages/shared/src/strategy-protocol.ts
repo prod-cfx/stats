@@ -49,6 +49,19 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
    */
   positionsBySymbolScope?: Record<string, StrategyExecutionContextV1['position']>
   /**
+   * Phase 5 S10 (#1111) + follow-up (#1113): 多 scope.subStrategy 策略中当前激活的 sub scope id
+   * 由 backtest-strategy-adapter / signal-generator 的 sub fan-out wrapper（按 cross-bar state）注入
+   * 单/0 sub 策略时被忽略
+   */
+  activeSubStrategyScopeId?: string
+  /**
+   * Phase 5 S10 follow-up (#1113): per-sub 仓位映射（caller 端可选注入）
+   *   key = sub scope.id；value = 该 sub 当前持仓视图
+   *   buildSubStrategyScopeIteration 优先消费此字段覆盖 ctx.position；缺失时沿用 ctx.position
+   *   live 端实时 per-sub position feed 由 follow-up 接入；当前 substrate 接口先就绪
+   */
+  positionsBySubStrategyScope?: Record<string, StrategyExecutionContextV1['position']>
+  /**
    * Phase 5 S3 (#1109): scope.timeframe substrate 数据对齐状态
    * key 是 timeframe identifier ('1m'|'5m'|'15m'|...)；val 是 caller 已收 bar 状态。
    * 单周期 / 无 scope.timeframe 节点策略不注入；runtime 自动跳过 alignment 检查。

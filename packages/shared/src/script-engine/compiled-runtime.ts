@@ -39,3 +39,18 @@ export type {
   ScopeFanOutDecisionEntry,
   SymbolScopeIterationInput,
 } from './compiled-runtime/apply-symbol-scope-fanout'
+// Phase 5 S10 follow-up (#1113): scope.subStrategy fan-out caller wrapper
+export {
+  buildSubStrategyScopeIteration,
+  resolveSubStrategySwitch,
+  runDecisionProgramsSubStrategyFanOut,
+  synthesizeSubStrategyDeactivationDecision,
+} from './compiled-runtime/apply-substrategy-scope-fanout'
+export type {
+  SubStrategyDeactivationMeta,
+  SubStrategyFanOutInvocation,
+  SubStrategyFanOutResult,
+  SubStrategyScopeIterationInput,
+  SubStrategySwitchInput,
+  SubStrategySwitchOutcome,
+} from './compiled-runtime/apply-substrategy-scope-fanout'

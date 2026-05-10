@@ -1,7 +1,12 @@
 import type { CompiledOrchestrationScope, CompiledSubStrategyScope } from '@ai/shared/script-engine/compiled-runtime'
+import type { CompiledGuardState } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
 import type { OrchestrationGateState } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
+import type { OrchestrationPortfolioRiskState } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-portfolio-risks'
 import type { StrategyDecisionV1, StrategyExecutionContextV1 } from '@ai/shared'
-import { applySubStrategyScopeRouting } from '@ai/shared/script-engine/compiled-runtime'
+import {
+  applySubStrategyScopeRouting,
+  runDecisionProgramsSubStrategyFanOut,
+} from '@ai/shared/script-engine/compiled-runtime'
 
 import type { SemanticOrchestrationNode, SemanticState } from '../../types/semantic-state'
 import type { StrategyVersionInfo } from '../../nl-gateway/version-gate/version-gate.types'
@@ -371,6 +376,105 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
       const programNoRef = { phase: 'entry' as const, metadata: {} }
       const result = applySubStrategyScopeRouting(programNoRef, ctx, scopes, undefined)
       expect((result as StrategyDecisionV1).reason).toBe('compiled.orchestration.substrategy.fail_closed.unbound_program')
+    })
+  })
+
+  // ============================================================
+  // Section F: caller fan-out + switch close/cancel (Phase 5 S10 follow-up #1113)
+  // ============================================================
+  describe('Section F: caller fan-out + switch close/cancel (#1113)', () => {
+    function makeSubStrategyScope(
+      id: string,
+      subStrategyId: string,
+      overrides: Partial<CompiledSubStrategyScope> = {},
+    ): CompiledSubStrategyScope {
+      return {
+        id,
+        scopeKind: 'subStrategy',
+        subStrategyId,
+        positionHandlingOnDeactivate: 'close',
+        orderHandlingOnDeactivate: 'cancel',
+        ...overrides,
+      }
+    }
+    const fanOutSubScopes: readonly CompiledOrchestrationScope[] = [
+      makeSubStrategyScope('ss-trend', 'trend'),
+      makeSubStrategyScope('ss-range', 'range'),
+    ]
+    const noopGuardF: CompiledGuardState = {
+      blockNewEntry: false, forceExit: false, strategyHalt: false,
+      cancelOrderPrograms: false, triggered: [],
+    }
+    const noopGateF: OrchestrationGateState = { blockEntryLong: false, blockEntryShort: false }
+    const noopPortfolioF: OrchestrationPortfolioRiskState = {
+      blockEntryLong: false, blockEntryShort: false, observedBreaches: [],
+    }
+    const exprValuesF = { expr_true: true } as const
+    function entryProgramF(id: string, scopeRef: string) {
+      return {
+        id,
+        phase: 'entry' as const,
+        priority: 1,
+        when: 'expr_true',
+        metadata: { subStrategyScopeRef: scopeRef } as { subStrategyScopeRef?: string },
+        actions: [{ kind: 'OPEN_LONG' as const, quantity: { mode: 'pct_equity' as const, value: 100 } }],
+      }
+    }
+
+    it('F1 双 sub first-bar 兜底 sub[0] → 路由到 ss-trend program 并发出 OPEN_LONG', () => {
+      const programs = [entryProgramF('p1', 'ss-trend'), entryProgramF('p2', 'ss-range')]
+      const ctx: StrategyExecutionContextV1 = {}
+      const result = runDecisionProgramsSubStrategyFanOut(
+        ctx, programs, exprValuesF, noopGuardF, ['p1', 'p2'],
+        noopGateF, noopPortfolioF, fanOutSubScopes, undefined,
+        { subStrategyState: { currentBarIndex: 0 } },
+      )
+      expect(result.switchOutcome.nextActiveScopeId).toBe('ss-trend')
+      expect(result.decision.action).toBe('OPEN_LONG')
+    })
+
+    it('F2 switch_substrategy gate 触发 + close handling + 持仓 → CLOSE_* 主 decision + meta', () => {
+      const gateSwitch: OrchestrationGateState = {
+        ...noopGateF,
+        switchToSubStrategyScopeId: 'ss-range',
+      }
+      const programs = [entryProgramF('p1', 'ss-trend'), entryProgramF('p2', 'ss-range')]
+      const ctx: StrategyExecutionContextV1 = { position: { qty: 5, side: 'long' } }
+      const result = runDecisionProgramsSubStrategyFanOut(
+        ctx, programs, exprValuesF, noopGuardF, ['p1', 'p2'],
+        gateSwitch, noopPortfolioF, fanOutSubScopes, undefined,
+        { subStrategyState: { previousActiveScopeId: 'ss-trend', currentBarIndex: 10 } },
+      )
+      expect(result.decision.action).toBe('CLOSE_LONG')
+      expect(result.decision.reason).toBe('compiled.orchestration.substrategy.deactivation.close')
+      const meta = result.decision.meta?.subStrategyDeactivation as { outgoingScopeId: string; cancelOrders: boolean }
+      expect(meta.outgoingScopeId).toBe('ss-trend')
+      expect(meta.cancelOrders).toBe(true)
+    })
+
+    it('F3 cooldown 命中 → 透传 baseline sub baseDecision，不切换', () => {
+      const gateSwitch: OrchestrationGateState = {
+        ...noopGateF,
+        switchToSubStrategyScopeId: 'ss-range',
+      }
+      const programs = [entryProgramF('p1', 'ss-trend'), entryProgramF('p2', 'ss-range')]
+      const ctx: StrategyExecutionContextV1 = { position: { qty: 5, side: 'long' } }
+      const result = runDecisionProgramsSubStrategyFanOut(
+        ctx, programs, exprValuesF, noopGuardF, ['p1', 'p2'],
+        gateSwitch, noopPortfolioF, fanOutSubScopes, undefined,
+        {
+          subStrategyState: {
+            previousActiveScopeId: 'ss-trend',
+            currentBarIndex: 5,
+            lastSwitchBarIndex: 5,
+            cooldownBars: 1,
+          },
+        },
+      )
+      expect(result.switchOutcome.didSwitch).toBe(false)
+      expect(result.switchOutcome.cooldownBlocked).toBe(true)
+      expect(result.decision.action).toBe('OPEN_LONG')
+      expect(result.decision.meta?.subStrategyDeactivation).toBeUndefined()
     })
   })
 })
