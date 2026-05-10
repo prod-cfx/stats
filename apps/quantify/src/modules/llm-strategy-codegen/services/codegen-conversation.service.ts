@@ -765,7 +765,11 @@ export class CodegenConversationService {
       messages: [{ role: 'assistant', content: recoveryAssistantMessage }],
     })
 
-    return this.toConversationResponse(conversation)
+    const conversationResponse = await this.toConversationResponse(conversation)
+    return {
+      ...conversationResponse,
+      semanticGraph: semanticGraph as Record<string, unknown>,
+    }
   }
 
   private buildEditRecoveryAssistantMessage(semanticState: SemanticState): string {

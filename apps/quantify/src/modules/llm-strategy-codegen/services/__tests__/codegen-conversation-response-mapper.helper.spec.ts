@@ -95,7 +95,7 @@ describe('codegenConversationResponseMapperHelper', () => {
     expect(JSON.stringify(result.unsupportedFallback)).not.toContain('patch')
   })
 
-  it('projects rule condition text by stable rule id and exposes public risk params', () => {
+  it('projects rule condition text by stable rule id and renders risk rule text inline', () => {
     const result = helper.finalizeSessionResponse({
       id: 's4',
       status: 'CONFIRM_GATE',
@@ -137,8 +137,10 @@ describe('codegenConversationResponseMapperHelper', () => {
         { id: 'entry-1', condition: { text: '3m 内下跌 1% 买入' } },
         { id: 'risk-1', condition: { text: '亏损达到 5%' } },
       ],
-      riskRules: { stopLossPct: 5 },
     })
+    // Phase 5 公开契约：specDesc 不暴露 legacy riskRules 字段
+    // （e2e original-strategy-flow LEGACY_CHECKLIST_FIELD_NAMES 全局禁用）
+    expect(result.specDesc).not.toHaveProperty('riskRules')
     expect(JSON.stringify(result.specDesc)).not.toContain('condition.kind')
     expect(JSON.stringify(result.specDesc)).not.toContain('triggerKeys')
   })

@@ -6,7 +6,10 @@ export const BASE_INTERNAL_IDENTIFIERS = [
 
 export const PUBLIC_RESPONSE_INTERNAL_IDENTIFIERS = [
   'condition.kind',
-  'condition.key',
+  // condition.key 已从路径扫描中移除：canonical rule key（如 ma.golden_cross）
+  // 需要经由 toPublicRule 暴露给前端。atom key 值（如 indicator.cross_over）仍由
+  // atomRegistry 驱动的值扫描（collectFinding）拦截，path-scan 层面的防护在此
+  // surface 是过度保守的。
   'condition.expression',
   'risk.condition_expression',
   'price.previous_extrema.kind',

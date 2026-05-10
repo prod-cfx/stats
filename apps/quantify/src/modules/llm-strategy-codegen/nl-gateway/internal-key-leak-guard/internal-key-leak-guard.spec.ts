@@ -63,11 +63,14 @@ describe('internalKeyLeakGuardService', () => {
       surface: 'test.public-output',
     })).toThrow('semantic_presentation_internal_key_leak:condition.kind')
 
+    // condition.key 已从 PUBLIC_RESPONSE_INTERNAL_IDENTIFIERS 移除：
+    // canonical rule key（如 ma.golden_cross）需经 toPublicRule 暴露；
+    // atom key 值（如 indicator.cross_over）仍由 atomRegistry 值扫描拦截。
     expect(() => guard.assertNoLeaks({
       path: 'rules[0].condition.key',
     }, {
       surface: 'test.public-output',
-    })).toThrow('semantic_presentation_internal_key_leak:condition.key')
+    })).not.toThrow()
 
     expect(() => guard.assertNoLeaks({
       path: 'public.condition.expression',

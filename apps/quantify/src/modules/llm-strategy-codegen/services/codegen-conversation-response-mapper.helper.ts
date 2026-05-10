@@ -284,7 +284,9 @@ export class CodegenConversationResponseMapperHelper {
       // displayLogicGraph 块 / 节点 / item 的 `id` 字段按 contract 内嵌 canonical
       // action 或 atom key 做跨投影稳定标识（见 semantic-state-projection
       // 中 `action-${trigger.id}-${actionKey}` 形式），不是用户可见 prose。
-      ignoreValueAtKeys: ['id'],
+      // `key` 字段（如 condition.key）由 cluster-1 contract 明确对外暴露 canonical
+      // atom key，leak guard 的值扫描不应拦截此字段。
+      ignoreValueAtKeys: ['id', 'key'],
     })
     return publicSpecDesc
   }
@@ -341,17 +343,16 @@ function omitInternalSpecDescFields(specDesc: Record<string, unknown>): Record<s
     canonicalSnapshot: _canonicalSnapshot,
     specSnapshot: _specSnapshot,
     semanticState: _semanticState,
+    consistencyReport: _consistencyReport,
     ...publicSpecDesc
   } = specDesc
   const conditionTextByRuleId = readDisplayConditionTextByRuleId(publicSpecDesc.displayLogicGraph)
-  const publicRiskRules = Array.isArray(rules) ? toPublicRiskRules(rules) : null
 
   return {
     ...publicSpecDesc,
     ...(Array.isArray(rules)
       ? { rules: rules.map(rule => toPublicRule(rule, conditionTextByRuleId)).filter(isRecord) }
       : {}),
-    ...(publicRiskRules && Object.keys(publicRiskRules).length > 0 ? { riskRules: publicRiskRules } : {}),
     ...(isRecord(canonicalSpec) ? { canonicalSpec: toPublicCanonicalSpec(canonicalSpec) } : {}),
   }
 }
@@ -375,6 +376,26 @@ function toPublicRule(
   const conditionText = readRuleConditionText(rule, conditionTextByRuleId)
   if (conditionText) {
     publicRule.condition = { text: conditionText }
+  } else {
+    const condition = isRecord(rule.condition) ? rule.condition : null
+    if (condition && typeof condition.key === 'string') {
+      const publicCondition: Record<string, unknown> = { key: condition.key }
+      if (isRecord(condition.params)) {
+        publicCondition.params = condition.params
+      }
+      publicRule.condition = publicCondition
+    }
+  }
+
+  const metadata = isRecord(rule.metadata) ? rule.metadata : null
+  if (metadata) {
+    const publicMetadata: Record<string, unknown> = {}
+    if (isRecord(metadata.partialTakeProfit)) {
+      publicMetadata.partialTakeProfit = metadata.partialTakeProfit
+    }
+    if (Object.keys(publicMetadata).length > 0) {
+      publicRule.metadata = publicMetadata
+    }
   }
 
   return publicRule
