@@ -10,6 +10,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticFixedGridGatedFrame
   | SemanticDynamicGridFrame
   | SemanticAdaptiveVolatilityGridFrame
+  | SemanticSymbolScopeFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -112,4 +113,11 @@ export interface SemanticAdaptiveVolatilityGridFrame extends SemanticFrameBase {
   sizing: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
   atrDriftPct?: number
   rebuildCooldownSec?: number
+}
+
+// Phase 5 S2 (#1104): symbol scope frame
+export interface SemanticSymbolScopeFrame extends SemanticFrameBase {
+  kind: 'symbol_scope'
+  symbols: readonly string[]      // 大写规范化（BTCUSDT, ETHUSDT, ...）
+  primarySymbol?: string           // 仅当 utterance 显式声明
 }

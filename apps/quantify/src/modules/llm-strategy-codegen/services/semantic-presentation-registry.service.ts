@@ -445,6 +445,25 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderAdaptiveVolatilityGrid(params),
     clarificationRenderer: (slotKey) => renderAdaptiveVolatilityGridClarification(slotKey),
   }),
+  // Phase 5 S2 (#1104): scope.symbol substrate
+  presentation({
+    key: 'scope.symbol',
+    publicName: '标的范围',
+    aliases: ['多标的范围', '多币种作用域', '标的作用域', 'symbol scope'],
+    positiveExamples: [
+      'BTCUSDT 和 ETHUSDT 同时跑相同策略',
+      '在 BTC 和 ETH 上挂网格',
+      'BTCUSDT、ETHUSDT、SOLUSDT 多个标的同时跑',
+    ],
+    negativeExamples: ['只交易 BTCUSDT', '感觉多个币都行', '随便几个币'],
+    goldenUtterances: [
+      'BTCUSDT 和 ETHUSDT 同时跑相同策略，均线金叉开多',
+      '在 BTC 和 ETH 上挂网格',
+      'BTCUSDT 主标的，ETHUSDT 跟随，均线金叉',
+    ],
+    displayRenderer: ({ params }) => renderSymbolScope(params),
+    clarificationRenderer: (slotKey) => renderSymbolScopeClarification(slotKey),
+  }),
   presentation({
     key: 'market.regime',
     publicName: '市场状态',
@@ -1357,6 +1376,30 @@ function renderAdaptiveVolatilityGridClarification(slotKey: string): string {
   if (slotKey === 'orchestration.program.adaptive_volatility_grid.sizing') return '请确认每档下单数量'
   if (slotKey === 'orchestration.program.adaptive_volatility_grid.active_when_ref') return '请确认网格启用/失活条件（引用哪个趋势过滤）'
   return '请补全自适应网格参数'
+}
+
+// Phase 5 S2 (#1104): scope.symbol render
+function renderSymbolScope(params: Record<string, unknown>): string {
+  const symbolsRaw = params.symbols
+  const symbols = Array.isArray(symbolsRaw)
+    ? symbolsRaw.filter((s): s is string => typeof s === 'string').join('、')
+    : ''
+  if (symbols === '') return ''
+  const primary = stringParam(params, 'primarySymbol', '')
+  if (primary !== '') {
+    return renderDisplayToken('atom.scope.symbol.display.with_primary', { symbols, primarySymbol: primary })
+  }
+  return renderDisplayToken('atom.scope.symbol.display.no_primary', { symbols })
+}
+
+function renderSymbolScopeClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.scope.symbol.symbols') return '请确认要绑定的标的列表'
+  if (slotKey === 'orchestration.scope.symbol.primary_symbol') return '主标的必须在标的列表中'
+  if (slotKey === 'orchestration.scope.symbol.symbols_overlap') return '多 scope 之间标的不能重叠'
+  if (slotKey === 'orchestration.scope.symbol.primary_symbol_collision') return '多 scope 主标的必须各自唯一'
+  if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
+  if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol'
+  return '请补全标的范围参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

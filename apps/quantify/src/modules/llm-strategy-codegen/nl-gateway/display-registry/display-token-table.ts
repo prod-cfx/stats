@@ -232,4 +232,17 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.program.fixed_grid_gated.gridParams', kind: 'slot', zh: '网格区间、档数、步长' },
   { token: 'slot.orchestration.program.fixed_grid_gated.activeWhenRef', kind: 'slot', zh: '网格启用/失活条件引用' },
   { token: 'slot.orchestration.program.fixed_grid_gated.sizing', kind: 'slot', zh: '每档下单数量' },
+
+  // Phase 5 S2 (#1104): scope.symbol substrate
+  { token: 'atom.scope.symbol.name', kind: 'atom', zh: '标的范围' },
+  { token: 'atom.scope.symbol.display.with_primary', kind: 'atom', zh: '标的范围：{symbols}（主：{primarySymbol}）' },
+  { token: 'atom.scope.symbol.display.no_primary', kind: 'atom', zh: '标的范围：{symbols}' },
+  { token: 'param.symbols', kind: 'param', zh: '标的列表' },
+  { token: 'param.primarySymbol', kind: 'param', zh: '主标的' },
+  { token: 'slot.orchestration.scope.symbol.symbols', kind: 'slot', zh: '请确认要绑定的标的列表' },
+  { token: 'slot.orchestration.scope.symbol.primary_symbol', kind: 'slot', zh: '主标的必须在标的列表中' },
+  { token: 'slot.orchestration.scope.symbol.symbols_overlap', kind: 'slot', zh: '多 scope 之间标的不能重叠' },
+  { token: 'slot.orchestration.scope.symbol.primary_symbol_collision', kind: 'slot', zh: '多 scope 主标的必须各自唯一' },
+  { token: 'slot.orchestration.scope.symbol.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 symbol scope' },
+  { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol' },
 ] as const satisfies readonly DisplayToken[]

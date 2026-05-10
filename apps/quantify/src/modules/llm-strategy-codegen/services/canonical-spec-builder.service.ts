@@ -1,4 +1,4 @@
-import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrchestrationProgram, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrchestrationProgram, CanonicalOrchestrationScope, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
 import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
@@ -542,9 +542,11 @@ export class CanonicalSpecBuilderService {
     const orchestrationGates = this.buildOrchestrationGates(normalizedState)
     const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
     const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
+    const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
     const hasOrchestration = orchestrationGates.length > 0
       || orchestrationPortfolioRisks.length > 0
       || orchestrationPrograms.length > 0
+      || orchestrationScopes.length > 0
 
     return {
       version: 2,
@@ -570,10 +572,42 @@ export class CanonicalSpecBuilderService {
               ...(orchestrationGates.length > 0 ? { gates: orchestrationGates } : {}),
               ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
               ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
+              ...(orchestrationScopes.length > 0 ? { scopes: orchestrationScopes } : {}),
             },
           }
         : {}),
     }
+  }
+
+  // Phase 5 S2 (#1104): scope.symbol substrate
+  private buildOrchestrationScopes(state: SemanticState): CanonicalOrchestrationScope[] {
+    const nodes = state.orchestration?.nodes
+    if (!nodes || nodes.length === 0) {
+      return []
+    }
+    const scopes: CanonicalOrchestrationScope[] = []
+    for (const node of nodes) {
+      if (
+        node.kind !== 'scope'
+        || node.status !== 'locked'
+        || node.key !== 'scope.symbol'
+        || node.symbolScopeKind !== 'symbol'
+      ) {
+        continue
+      }
+      const symbols = Array.isArray(node.symbols) ? node.symbols.filter((s): s is string => typeof s === 'string') : []
+      if (symbols.length === 0) continue
+      const trimmed = symbols.map((s) => s.trim())
+      const sortedSymbols = [...trimmed].sort()
+      const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : undefined
+      scopes.push({
+        id: node.id,
+        scopeKind: 'symbol',
+        symbols: sortedSymbols,
+        ...(primary && primary !== '' ? { primarySymbol: primary } : {}),
+      })
+    }
+    return scopes
   }
 
   private buildOrchestrationPortfolioRisks(state: SemanticState): CanonicalOrchestrationPortfolioRisk[] {

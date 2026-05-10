@@ -21,6 +21,43 @@ const PORTFOLIO_DRAWDOWN_BLOCK_KEY = 'portfolioRisk.drawdown_block'
 const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
 const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
+const SCOPE_SYMBOL_KEY = 'scope.symbol'
+
+const SYMBOL_FORMAT_PATTERN = /^[A-Z]{2,5}USDT$/u
+const SYMBOL_MAX_LENGTH = 32
+
+const SCOPE_SYMBOL_CONTRACT: SemanticOrchestrationContract = {
+  id: 'scope.symbol',
+  kind: 'scope',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'declare',
+      object: 'symbol_scope',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'route',
+      object: 'symbol_scope_decision',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'orchestration',
+      verb: 'bind',
+      object: 'symbol_scope',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
 
 const PROGRAM_FIXED_GRID_GATED_CONTRACT: SemanticOrchestrationContract = {
   id: 'program.fixed_grid_gated',
@@ -282,16 +319,23 @@ export class SemanticOrchestrationRegistryService {
     [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
     [PROGRAM_DYNAMIC_GRID_KEY, PROGRAM_DYNAMIC_GRID_CONTRACT],
     [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
+    [SCOPE_SYMBOL_KEY, SCOPE_SYMBOL_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
     return this.contracts.get(key) ?? null
   }
 
-  validate(node: SemanticOrchestrationNode): SemanticOrchestrationValidationResult {
+  validate(
+    node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[] = [],
+  ): SemanticOrchestrationValidationResult {
     const missingSlots: SemanticSlotState[] = []
     if (node.kind === 'program') {
       return this.validateProgramNode(node)
+    }
+    if (node.kind === 'scope') {
+      return this.validateScopeNode(node, siblingNodes)
     }
     if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_DRAWDOWN_BLOCK_KEY) {
       const thresholdPct = node.thresholdPct
@@ -652,5 +696,105 @@ export class SemanticOrchestrationRegistryService {
     strategy: StrategyVersionInfo,
   ): boolean {
     return isAtomExecutableForStrategy(contract, strategy)
+  }
+
+  /**
+   * Phase 5 S2 (#1104): scope.symbol 节点 6 重 fail-closed:
+   *   1) key === 'scope.symbol'（其它 scope kind 仍 unsupported）
+   *   2) symbolScopeKind === 'symbol'
+   *   3) symbols 是非空字符串数组、去重、每项匹配 ^[A-Z]{2,5}USDT$、长度 ≤ 32
+   *   4) primarySymbol（若提供）必须 ∈ symbols
+   *   5) 与其它 supported scope.symbol 节点 symbols 不重叠（强制隔离）
+   *   6) 与其它 supported scope.symbol primarySymbol 不冲突
+   */
+  private validateScopeNode(
+    node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[],
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.scope[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.scope.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    if (node.key !== SCOPE_SYMBOL_KEY) {
+      pushSlot('unsupported_kind', '当前仅支持 scope.symbol')
+      return { ok: false, missingSlots }
+    }
+    if (node.symbolScopeKind !== 'symbol') {
+      pushSlot('symbol.scope_kind', '请确认 scopeKind 为 symbol')
+    }
+
+    const symbols = node.symbols
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      pushSlot('symbol.symbols', '请确认要绑定的标的列表')
+      return { ok: false, missingSlots }
+    }
+
+    const trimmedSymbols: string[] = []
+    let formatInvalid = false
+    for (const raw of symbols) {
+      if (typeof raw !== 'string') {
+        formatInvalid = true
+        continue
+      }
+      const trimmed = raw.trim()
+      if (trimmed.length === 0 || trimmed.length > SYMBOL_MAX_LENGTH || !SYMBOL_FORMAT_PATTERN.test(trimmed)) {
+        formatInvalid = true
+        continue
+      }
+      trimmedSymbols.push(trimmed)
+    }
+    if (formatInvalid) {
+      pushSlot('symbol.symbols', '标的需符合 ^[A-Z]{2,5}USDT$ 格式（如 BTCUSDT）')
+    }
+    const dedupedSet = new Set(trimmedSymbols)
+    if (dedupedSet.size !== trimmedSymbols.length) {
+      pushSlot('symbol.symbols', '标的列表不允许重复')
+    }
+
+    if (node.primarySymbol !== undefined) {
+      const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+      if (primary === '' || !dedupedSet.has(primary)) {
+        pushSlot('symbol.primary_symbol', '主标的必须在标的列表中')
+      }
+    }
+
+    // (5)(6) 多 scope 隔离检查 — 与其它 status='locked' 且 key='scope.symbol' 节点对比
+    const otherSupportedScopes = siblingNodes.filter(
+      (other) =>
+        other.id !== node.id
+        && other.kind === 'scope'
+        && other.key === SCOPE_SYMBOL_KEY
+        && other.status === 'locked',
+    )
+    for (const other of otherSupportedScopes) {
+      const otherSymbols = Array.isArray(other.symbols) ? other.symbols : []
+      const overlap = otherSymbols.some(
+        (s) => typeof s === 'string' && dedupedSet.has(s.trim()),
+      )
+      if (overlap) {
+        pushSlot('symbol.symbols_overlap', '多 scope 之间标的不能重叠')
+        break
+      }
+    }
+    const myPrimary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+    if (myPrimary !== '') {
+      const collision = otherSupportedScopes.some(
+        (other) => typeof other.primarySymbol === 'string' && other.primarySymbol.trim() === myPrimary,
+      )
+      if (collision) {
+        pushSlot('symbol.primary_symbol_collision', '多 scope 主标的必须各自唯一')
+      }
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
   }
 }

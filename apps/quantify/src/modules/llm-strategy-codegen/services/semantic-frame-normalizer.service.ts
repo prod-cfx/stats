@@ -10,6 +10,7 @@ import type {
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
+  SemanticSymbolScopeFrame,
 } from '../types/semantic-natural-language-frame'
 import type {
   CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch,
@@ -17,6 +18,7 @@ import type {
   CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
+  CodegenSemanticOrchestrationSymbolScopeNodePatch,
   CodegenSemanticPatch,
 } from '../types/codegen-semantic-patch'
 import type { SemanticEvidence, SemanticExpression, SemanticExpressionOperand } from '../types/semantic-state'
@@ -48,6 +50,8 @@ export class SemanticFrameNormalizerService {
     const dynamicGridFrames: SemanticDynamicGridFrame[] = []
     const adaptiveByKey = new Map<string, CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch>()
     const adaptiveFrames: SemanticAdaptiveVolatilityGridFrame[] = []
+    const symbolScopeByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
+    const symbolScopeFrames: SemanticSymbolScopeFrame[] = []
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -91,6 +95,9 @@ export class SemanticFrameNormalizerService {
           break
         case 'adaptive_volatility_grid':
           adaptiveFrames.push(frame)
+          break
+        case 'symbol_scope':
+          symbolScopeFrames.push(frame)
           break
       }
     }
@@ -158,6 +165,14 @@ export class SemanticFrameNormalizerService {
       }
     })
 
+    symbolScopeFrames.forEach((frame, index) => {
+      const node = this.normalizeSymbolScope(frame, index)
+      const dedupeKey = JSON.stringify([node.key, [...node.symbols].sort(), node.primarySymbol ?? null])
+      if (!symbolScopeByKey.has(dedupeKey)) {
+        symbolScopeByKey.set(dedupeKey, node)
+      }
+    })
+
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
@@ -184,12 +199,33 @@ export class SemanticFrameNormalizerService {
       ...Array.from(fixedGridGatedByKey.values()),
       ...Array.from(dynamicGridByKey.values()),
       ...Array.from(adaptiveByKey.values()),
+      ...Array.from(symbolScopeByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }
     }
 
     return patch
+  }
+
+  // Phase 5 S2 (#1104): symbol_scope frame → orchestration scope node patch
+  private normalizeSymbolScope(
+    frame: SemanticSymbolScopeFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationSymbolScopeNodePatch {
+    return {
+      id: `orchestration-scope-symbol-${index + 1}`,
+      kind: 'scope',
+      key: 'scope.symbol',
+      params: {
+        symbols: [...frame.symbols],
+        ...(frame.primarySymbol ? { primarySymbol: frame.primarySymbol } : {}),
+      },
+      symbolScopeKind: 'symbol',
+      symbols: [...frame.symbols].sort(),
+      ...(frame.primarySymbol ? { primarySymbol: frame.primarySymbol } : {}),
+      evidence: this.toEvidence(frame),
+    }
   }
 
   private normalizeRegimeGate(frame: SemanticRegimeGateFrame, index: number): CodegenSemanticOrchestrationGateNodePatch {

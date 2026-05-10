@@ -169,6 +169,9 @@ export interface SemanticTriggerState {
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
   support?: SemanticAtomSupportMetadata
+  // Phase 5 S2 (#1104): 多标的策略中显式声明该 trigger 归属哪个 scope.symbol 节点
+  // 单/0 scope 策略不读；多 scope 策略缺该字段 readiness fail-closed
+  symbolScopeRef?: string
 }
 
 export interface SemanticActionState {
@@ -182,6 +185,8 @@ export interface SemanticActionState {
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
   support?: SemanticAtomSupportMetadata
+  // Phase 5 S2 (#1104): 多标的策略中显式声明该 action 归属哪个 scope.symbol 节点
+  symbolScopeRef?: string
 }
 
 export type SemanticRiskBasis =
@@ -236,6 +241,8 @@ export interface SemanticRiskState {
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
   support?: SemanticAtomSupportMetadata
+  // Phase 5 S2 (#1104): 多标的策略中显式声明该 risk 归属哪个 scope.symbol 节点
+  symbolScopeRef?: string
 }
 
 export type SemanticPositionSizingContract =
@@ -259,6 +266,8 @@ export interface SemanticPositionConstraintState {
   supersedes?: string[]
   contracts?: SemanticAtomContract[]
   support?: SemanticAtomSupportMetadata
+  // Phase 5 S2 (#1104): 多标的策略中显式声明该 position constraint 归属哪个 scope.symbol 节点
+  symbolScopeRef?: string
 }
 
 export interface SemanticPositionState {
@@ -376,6 +385,11 @@ export interface SemanticOrchestrationNode {
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number
   scope?: SemanticOrchestrationPortfolioRiskScope
+  // scope.symbol 节点专属（其它 kind 不读）— Phase 5 S2 (#1104)
+  // 注：与 portfolioRisk 的 `scope: 'portfolio'` 命名分离（symbolScopeKind 限定 scope 子类型）
+  symbolScopeKind?: 'symbol'
+  symbols?: readonly string[]
+  primarySymbol?: string
   support?: SemanticAtomSupportMetadata
 }
 

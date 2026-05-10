@@ -77,6 +77,17 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
   | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
+  | CodegenSemanticOrchestrationSymbolScopeNodePatch
+
+// Phase 5 S2 (#1104): scope.symbol patch 节点
+export interface CodegenSemanticOrchestrationSymbolScopeNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'scope'
+  key: 'scope.symbol'
+  params: Record<string, unknown>
+  symbolScopeKind: 'symbol'
+  symbols: readonly string[]
+  primarySymbol?: string
+}
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {
   kind: 'gate'

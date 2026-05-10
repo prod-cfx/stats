@@ -75,6 +75,9 @@ export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
   [key: string]: unknown
   normalized?: CanonicalRuleNormalizedMetadata
   partialTakeProfit?: PartialTakeProfitProgramMetadata
+  // Phase 5 S2 (#1104): 多 scope 策略中显式声明该 rule 归属哪个 scope.symbol id
+  // 仅在 spec.orchestration.scopes.length >= 1 时由 builder 透传；单/0 scope 不输出
+  symbolScopeRef?: string
 }
 
 export interface CanonicalRuleV2 {
@@ -173,6 +176,14 @@ export type CanonicalOrchestrationProgram =
   | CanonicalDynamicGridProgram
   | CanonicalAdaptiveVolatilityGridProgram
 
+// Phase 5 S2 (#1104): scope.symbol substrate
+export interface CanonicalOrchestrationScope {
+  id: string
+  scopeKind: 'symbol'
+  symbols: readonly string[]
+  primarySymbol?: string
+}
+
 export interface CanonicalStrategySpecV2 {
   version: 2
   market: {
@@ -204,6 +215,8 @@ export interface CanonicalStrategySpecV2 {
     gates?: CanonicalOrchestrationGate[]
     portfolioRisks?: CanonicalOrchestrationPortfolioRisk[]
     programs?: CanonicalOrchestrationProgram[]
+    // Phase 5 S2 (#1104)
+    scopes?: CanonicalOrchestrationScope[]
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata

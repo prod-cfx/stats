@@ -103,6 +103,7 @@ export type {
   CanonicalOrchestrationProgram,
   CanonicalOrchestrationProgramGridParams,
   CanonicalOrchestrationProgramSizing,
+  CanonicalOrchestrationScope,
   CanonicalRiskRuleSideScope,
   CanonicalRuleAction,
   CanonicalRuleActionType,

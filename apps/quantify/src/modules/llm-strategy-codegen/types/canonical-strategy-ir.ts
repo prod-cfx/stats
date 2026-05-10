@@ -81,6 +81,8 @@ export interface CanonicalStrategyIrV1 {
   orchestrationGates?: IrOrchestrationGate[]
   orchestrationPortfolioRisks?: IrOrchestrationPortfolioRisk[]
   orchestrationPrograms?: IrOrchestrationProgram[]
+  // Phase 5 S2 (#1104): scope.symbol substrate
+  orchestrationScopes?: IrOrchestrationScope[]
   riskPolicy: {
     guards: RiskGuard[]
     riskPredicates?: RiskPredicateDef[]
@@ -200,6 +202,8 @@ export interface RuleBlock {
   actions: ActionDef[]
   metadata?: {
     partialTakeProfit?: PartialTakeProfitProgramMetadata
+    // Phase 5 S2 (#1104): 多 scope 策略中显式声明该 rule 归属哪个 scope.symbol id
+    symbolScopeRef?: string
   } & PositionLifecycleActionMetadata
 }
 
@@ -339,6 +343,14 @@ export type IrOrchestrationProgram =
   | IrFixedGridGatedProgram
   | IrDynamicGridProgram
   | IrAdaptiveVolatilityGridProgram
+
+// Phase 5 S2 (#1104): scope.symbol substrate IR
+export interface IrOrchestrationScope {
+  id: string
+  scopeKind: 'symbol'
+  symbols: readonly string[]
+  primarySymbol?: string
+}
 
 export interface RiskGuard {
   id: string

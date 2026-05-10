@@ -35,6 +35,12 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
   paramsNormalized?: StrategyParamsNormalized
   params?: Record<string, unknown> | null
   symbol?: string
+  /**
+   * Phase 5 S2 (#1104): 多 scope.symbol 策略中当前激活的 scope id
+   * 由 backtest-strategy-adapter / signal-generator fan-out wrapper 注入
+   * 单/0 scope 策略时被忽略
+   */
+  activeSymbolScopeId?: string
   timeframe?: string
   currentPrice?: number
   marketRegime?: string

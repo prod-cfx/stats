@@ -11,6 +11,7 @@ import type {
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
   SemanticRiskFrame,
+  SemanticSymbolScopeFrame,
 } from '../types/semantic-natural-language-frame'
 import { Injectable } from '@nestjs/common'
 
@@ -26,6 +27,7 @@ type FrameDraft =
   | FixedGridGatedFrameDraft
   | DynamicGridFrameDraft
   | AdaptiveVolatilityGridFrameDraft
+  | SymbolScopeFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -38,6 +40,7 @@ type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | '
 type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confidence'>
 type DynamicGridFrameDraft = Omit<SemanticDynamicGridFrame, 'id' | 'confidence'>
 type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame, 'id' | 'confidence'>
+type SymbolScopeFrameDraft = Omit<SemanticSymbolScopeFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -47,6 +50,7 @@ export class NaturalLanguageGatewayService {
 
     const drafts: FrameDraft[] = [
       ...this.parseContext(text),
+      ...this.parseSymbolScope(text),
       ...this.parseEmaGates(text),
       ...this.parseBoundaryTouches(text),
       ...this.parseActions(text),
@@ -349,6 +353,68 @@ export class NaturalLanguageGatewayService {
         evidenceText: match[0],
       },
     ]
+  }
+
+  /**
+   * Phase 5 S2 (#1104): 多标的 scope.symbol utterance parser
+   *
+   * 双门槛：
+   *   1. ≥2 个 distinct symbol（USDT 后缀正则 + 中文别名白名单）
+   *   2. 触发短语精准多 OR 命中（避免"和"/"与"高频汉字误命中）
+   *
+   * 命中表（plan T7 step 3）：
+   *   - "BTCUSDT 和 ETHUSDT 同时跑相同策略" → "同时" + "跑相同"
+   *   - "在 BTC 和 ETH 上挂网格" → "挂网格"
+   *   - "BTCUSDT、ETHUSDT、SOLUSDT 多个标的同时跑" → "多个标的" + "同时"
+   *   - "BTCUSDT 主标的，ETHUSDT 跟随" → "主标的" + "跟随"
+   *   - "Run BTCUSDT and ETHUSDT in parallel" → "in parallel"
+   *   - "跨标的（BTC/ETH/BNB）均挂网格" → "跨标的" + "挂网格"
+   */
+  private parseSymbolScope(text: string): SymbolScopeFrameDraft[] {
+    // (1) 触发短语精准多 OR
+    const triggerPattern = /(同时|分别|各自|都挂|都跑|都用|挂网格|跑相同|跟随|主标的|多个标的|跨标的|多币种|in parallel|simultaneously|both)/iu
+    if (!triggerPattern.test(text)) return []
+
+    // (2) symbol 提取
+    const aliasMap: Record<string, string> = {
+      BTC: 'BTCUSDT',
+      ETH: 'ETHUSDT',
+      SOL: 'SOLUSDT',
+      BNB: 'BNBUSDT',
+      MATIC: 'MATICUSDT',
+      AVAX: 'AVAXUSDT',
+      DOGE: 'DOGEUSDT',
+      XRP: 'XRPUSDT',
+    }
+    const symbolSet = new Set<string>()
+    // 显式 USDT 后缀（要求完整 USDT；BTCUS 不命中）
+    const explicit = /\b([A-Z]{2,5})USDT\b/gu
+    for (const m of text.matchAll(explicit)) {
+      const symbol = `${m[1]}USDT`.toUpperCase()
+      symbolSet.add(symbol)
+    }
+    // 中文别名白名单（避免与显式 USDT 命中冲突）
+    const alias = /(?<![A-Za-z])(BTC|ETH|SOL|BNB|MATIC|AVAX|DOGE|XRP)(?![A-Za-z])/giu
+    for (const m of text.matchAll(alias)) {
+      const upper = m[1].toUpperCase()
+      const mapped = aliasMap[upper]
+      if (mapped) symbolSet.add(mapped)
+    }
+
+    if (symbolSet.size < 2) return []
+    const symbols = [...symbolSet].sort()
+
+    // (3) primarySymbol 提取（仅当 utterance 显式声明）
+    const primaryMatch = /(?:主标的|primary)\s*[:：是为]?\s*[（(]?\s*([A-Z]{2,5})USDT?/iu.exec(text)
+    const primaryRaw = primaryMatch ? `${primaryMatch[1].toUpperCase()}USDT` : undefined
+    const primarySymbol = primaryRaw && symbolSet.has(primaryRaw) ? primaryRaw : undefined
+
+    return [{
+      kind: 'symbol_scope',
+      symbols,
+      ...(primarySymbol ? { primarySymbol } : {}),
+      evidenceText: text.slice(0, Math.min(text.length, 80)),
+    }]
   }
 
   private parseRegimeGate(text: string): RegimeGateFrameDraft[] {

@@ -4,6 +4,7 @@ import type {
   IrOrchestrationGate,
   IrOrchestrationPortfolioRisk,
   IrOrchestrationProgram,
+  IrOrchestrationScope,
   OrderProgram,
   PredicateDef,
   RiskGuard,
@@ -21,6 +22,7 @@ import type {
   CanonicalOrchestrationGate,
   CanonicalOrchestrationPortfolioRisk,
   CanonicalOrchestrationProgram,
+  CanonicalOrchestrationScope,
   CanonicalOrderProgramIntent,
   CanonicalRuleAction,
   CanonicalRuleSideScope,
@@ -194,6 +196,7 @@ export class CanonicalSpecV2IrCompilerService {
       })
     }
 
+    const orchestrationScopes = this.compileOrchestrationScopes(input.canonicalSpec)
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
     const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
@@ -244,6 +247,7 @@ export class CanonicalSpecV2IrCompilerService {
       orchestrationGates,
       orchestrationPortfolioRisks,
       orchestrationPrograms,
+      ...(orchestrationScopes.length > 0 ? { orchestrationScopes } : {}),
       riskPolicy: {
         guards,
         riskPredicates,
@@ -827,6 +831,19 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error('codegen.canonical_spec_v2_condition_unsupported')
+  }
+
+  // Phase 5 S2 (#1104): scope.symbol substrate IR compile
+  private compileOrchestrationScopes(spec: CanonicalStrategySpecV2): IrOrchestrationScope[] {
+    const scopes = spec.orchestration?.scopes ?? []
+    return scopes.map((scope): IrOrchestrationScope => ({
+      id: scope.id,
+      scopeKind: 'symbol',
+      symbols: [...scope.symbols].sort(),
+      ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
+        ? { primarySymbol: scope.primarySymbol.trim() }
+        : {}),
+    }))
   }
 
   private compileOrchestrationGates(
@@ -2644,12 +2661,22 @@ export class CanonicalSpecV2IrCompilerService {
       )
   }
 
-  private toRuleBlockMetadata(metadata: NonNullable<CanonicalRuleV2['metadata']>): RuleBlock['metadata'] {
+  private toRuleBlockMetadata(
+    metadata: NonNullable<CanonicalRuleV2['metadata']>,
+    supportedScopeIds?: ReadonlySet<string>,
+  ): RuleBlock['metadata'] {
+    // Phase 5 S2 (#1104): symbolScopeRef silent skip 透传
+    //   仅当 ref trim 后非空且 ∈ supportedScopeIds 时透传；否则丢弃 + 让 readiness/runtime fail-closed
+    const ref = metadata.symbolScopeRef
+    const refValid = typeof ref === 'string'
+      && ref.trim() !== ''
+      && (!supportedScopeIds || supportedScopeIds.has(ref.trim()))
     return {
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
       ...(metadata.addPosition ? { addPosition: { ...metadata.addPosition } } : {}),
       ...(metadata.dcaSchedule ? { dcaSchedule: { ...metadata.dcaSchedule } } : {}),
+      ...(refValid && typeof ref === 'string' ? { symbolScopeRef: ref.trim() } : {}),
     }
   }
 

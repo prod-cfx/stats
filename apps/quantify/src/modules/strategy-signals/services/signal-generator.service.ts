@@ -778,6 +778,13 @@ export class SignalGeneratorService {
               (projection as { orchestrationPortfolioRisks?: Parameters<typeof evaluateOrchestrationPortfolioRisks>[0] }).orchestrationPortfolioRisks ?? [],
               { drawdownPct: ctx.accountDrawdownPct },
             )
+            // Phase 5 S2 (#1104): scope.symbol substrate
+            //   - 单/0 scope 时为空数组，runDecisionPrograms 走兜底
+            //   - 多 scope 时 ctx.activeSymbolScopeId 由上游注入，runtime 路由到正确 program
+            //   - lifecycle state map / cooldown 锁不动（避免与 #1103 (S5) 冲突）
+            const orchestrationScopes = (projection as {
+              orchestrationScopes?: Parameters<typeof runDecisionPrograms>[7]
+            }).orchestrationScopes ?? []
             const decision = runDecisionPrograms(
               ctx,
               decisionPrograms,
@@ -786,6 +793,7 @@ export class SignalGeneratorService {
               projection.topology.decisionOrder,
               orchestrationGateState,
               portfolioRiskState,
+              orchestrationScopes,
             )
             // Phase 5 S4 T13 — 注入 orchestrationPrograms 第 7 参数。
             // live closeProgramIds 真实合成 close decision 留 follow-up issue

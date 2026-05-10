@@ -58,6 +58,8 @@ interface DecisionProgramNode {
     addPosition?: AddPositionMeta
     reversePosition?: ReversePositionMeta
     dcaSchedule?: DcaScheduleMeta
+    /** Phase 5 S2 (#1104): 多 scope 策略下该 program 归属的 scope.symbol id */
+    symbolScopeRef?: string
   }
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
@@ -66,6 +68,14 @@ interface DecisionProgramNode {
       value: number
     }
   }>
+}
+
+// Phase 5 S2 (#1104): scope.symbol substrate compiled runtime
+export interface CompiledOrchestrationScope {
+  id: string
+  scopeKind: 'symbol'
+  symbols: readonly string[]
+  primarySymbol?: string
 }
 
 interface CompiledDecisionState {
@@ -94,6 +104,8 @@ export function runDecisionPrograms(
   decisionOrder: readonly string[],
   orchestrationGateState?: OrchestrationGateState,
   portfolioRiskState?: OrchestrationPortfolioRiskState,
+  // Phase 5 S2 (#1104): scope.symbol substrate fail-closed
+  orchestrationScopes?: readonly CompiledOrchestrationScope[],
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
   compiledState.barIndex = readCurrentBarIndex(ctx, compiledState.barIndex)
@@ -139,6 +151,17 @@ export function runDecisionPrograms(
     })
 
   for (const program of orderedPrograms) {
+    // Phase 5 S2 (#1104): 多 scope 策略 fail-closed 路由
+    //   - scopes.length <= 1: 'continue' 走兜底（单/0 scope 旧策略零侵入）
+    //   - scopes.length >= 2: 'continue' / 'skip' / 失败 decision
+    //   - 失败 decision 走 applyOrchestrationGate 保留 portfolioRisk observedBreaches
+    const scopeRouting = applySymbolScopeRouting(program, ctx, orchestrationScopes)
+    if (scopeRouting === 'skip') continue
+    if (scopeRouting !== 'continue') {
+      const gated = applyOrchestrationGate(scopeRouting, orchestrationGateState, portfolioRiskState, ctx)
+      return Object.freeze(gated)
+    }
+
     if (program.phase === 'entry' && guardState.blockNewEntry) {
       continue
     }
@@ -1503,6 +1526,52 @@ function resolveAdjustedEntrySide(
   const currentSide = currentQty > 0 ? 'long' : currentQty < 0 ? 'short' : null
   const targetSide = targetQty > 0 ? 'long' : targetQty < 0 ? 'short' : null
   return targetSide !== null && targetSide !== currentSide ? targetSide : null
+}
+
+/**
+ * Phase 5 S2 (#1104): scope.symbol substrate runtime fail-closed 路由
+ *
+ * 决策表：
+ *   scopes 缺失 / length <= 1 → 'continue' （单/0 scope 走兜底）
+ *   scopes.length >= 2 时：
+ *     activeSymbolScopeId trim 后空 → fail-closed.no_active_scope
+ *     activeId 不在 scopes id 集合 → fail-closed.unknown_active_scope
+ *     program.metadata.symbolScopeRef trim 后空 → fail-closed.unbound_program
+ *     program ref ≠ activeId → 'skip' （该 program 不属当前 scope，下个 program）
+ *     program ref === activeId → 'continue' （正常进入决策）
+ */
+export function applySymbolScopeRouting(
+  program: { metadata?: { symbolScopeRef?: string } },
+  ctx: StrategyExecutionContextV1,
+  scopes: readonly CompiledOrchestrationScope[] | undefined,
+): 'continue' | 'skip' | StrategyDecisionV1 {
+  if (!scopes || scopes.length <= 1) return 'continue'
+
+  const activeIdRaw = (ctx as { activeSymbolScopeId?: unknown }).activeSymbolScopeId
+  const activeId = typeof activeIdRaw === 'string' ? activeIdRaw.trim() : ''
+  if (activeId === '') {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.scope.fail_closed.no_active_scope',
+    }
+  }
+  if (!scopes.some(s => s.id === activeId)) {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.scope.fail_closed.unknown_active_scope',
+    }
+  }
+
+  const programRefRaw = program.metadata?.symbolScopeRef
+  const programRef = typeof programRefRaw === 'string' ? programRefRaw.trim() : ''
+  if (programRef === '') {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.scope.fail_closed.unbound_program',
+    }
+  }
+  if (programRef !== activeId) return 'skip'
+  return 'continue'
 }
 
 function readEquity(ctx: StrategyExecutionContextV1): number {

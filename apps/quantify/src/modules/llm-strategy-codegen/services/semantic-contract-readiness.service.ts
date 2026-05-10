@@ -117,7 +117,7 @@ export class SemanticContractReadinessService {
       buildContractOpenSlotMap(supportedOwners),
       buildAddPositionConstraintRelationshipSlots(state),
     )
-    const nextState: SemanticState = {
+    const baseNextState: SemanticState = {
       ...state,
       triggers: state.triggers.map(trigger =>
         mergeOwnerOpenSlots(trigger, slotsByOwnerKey.get(ownerKey('trigger', trigger.id))),
@@ -131,6 +131,9 @@ export class SemanticContractReadinessService {
       position: mergePositionOpenSlots(state.position, slotsByOwnerKey),
       orchestration: orchestrationResult.state,
     }
+    // Phase 5 S2 (#1104): 多 scope 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
+    const { state: nextState, hasBlockingSlots: bindingHasBlockingSlots } =
+      applySymbolScopeBindingFailClosed(baseNextState)
 
     return {
       state: nextState,
@@ -138,7 +141,8 @@ export class SemanticContractReadinessService {
         && missingRequirements.length === 0
         && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
         && !hasBlockingOwnerOpenSlots(nextState)
-        && !orchestrationResult.hasBlockingSlots,
+        && !orchestrationResult.hasBlockingSlots
+        && !bindingHasBlockingSlots,
       missingRequirements,
     }
   }
@@ -385,7 +389,80 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  if (isSupportedSymbolScope(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
   return addPhase0OrchestrationBlocker(node)
+}
+
+/**
+ * Phase 5 S2 (#1104): scope.symbol 节点 6 重 fail-closed:
+ *   1) kind === 'scope'
+ *   2) key === 'scope.symbol'
+ *   3) symbolScopeKind === 'symbol'
+ *   4) symbols 非空 + 去重 + 每项匹配 ^[A-Z]{2,5}USDT$
+ *   5) primarySymbol 若提供 ∈ symbols；与其它 supported scope 间 symbols 不重叠 + primarySymbol 不冲突
+ *   6) version-gate：registry 已注册 + strategyVersion 存在 + atom 对该策略可执行
+ */
+function isSupportedSymbolScope(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (node.kind !== 'scope') return false
+  if (node.key !== 'scope.symbol') return false
+  if (node.symbolScopeKind !== 'symbol') return false
+
+  const symbols = node.symbols
+  if (!Array.isArray(symbols) || symbols.length === 0) return false
+
+  const SYMBOL_FORMAT = /^[A-Z]{2,5}USDT$/u
+  const trimmed: string[] = []
+  for (const raw of symbols) {
+    if (typeof raw !== 'string') return false
+    const t = raw.trim()
+    if (t.length === 0 || t.length > 32 || !SYMBOL_FORMAT.test(t)) return false
+    trimmed.push(t)
+  }
+  const dedupedSet = new Set(trimmed)
+  if (dedupedSet.size !== trimmed.length) return false
+
+  if (node.primarySymbol !== undefined) {
+    const primary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+    if (primary === '' || !dedupedSet.has(primary)) return false
+  }
+
+  // (5) 与其它 status='locked' 且 key='scope.symbol' 节点对比 — symbols 不重叠 + primarySymbol 不冲突
+  const otherLockedScopes = siblingNodes.filter(
+    (other) =>
+      other.id !== node.id
+      && other.kind === 'scope'
+      && other.key === 'scope.symbol'
+      && other.status === 'locked',
+  )
+  for (const other of otherLockedScopes) {
+    const otherSymbols = Array.isArray(other.symbols) ? other.symbols : []
+    if (otherSymbols.some((s) => typeof s === 'string' && dedupedSet.has(s.trim()))) {
+      return false
+    }
+  }
+  const myPrimary = typeof node.primarySymbol === 'string' ? node.primarySymbol.trim() : ''
+  if (myPrimary !== '') {
+    if (
+      otherLockedScopes.some(
+        (other) => typeof other.primarySymbol === 'string' && other.primarySymbol.trim() === myPrimary,
+      )
+    ) {
+      return false
+    }
+  }
+
+  const contract = registry.getContractByKey('scope.symbol')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
 }
 
 function isProgramNode(
@@ -838,8 +915,9 @@ function isSupportedRegimeGate(
 function applyRegistryDrivenReadiness(
   node: SemanticOrchestrationNode,
   registry: SemanticOrchestrationRegistryService,
+  siblingNodes: readonly SemanticOrchestrationNode[] = [],
 ): SemanticOrchestrationNode {
-  const validation = registry.validate(node)
+  const validation = registry.validate(node, siblingNodes)
   if (validation.ok) {
     return node
   }
@@ -858,6 +936,109 @@ function applyRegistryDrivenReadiness(
     ...node,
     status: 'open',
     openSlots: merged,
+  }
+}
+
+/**
+ * Phase 5 S2 (#1104): 多 scope.symbol 策略对每个 trigger/action/risk/positionConstraint 节点
+ * 进行 binding fail-closed 校验：
+ *   - supportedScopeIds.size < 2：兜底，不触发检查（单/0 scope 旧策略行为不变）
+ *   - supportedScopeIds.size >= 2 时：每个 status='locked' 的 owner 节点必须有
+ *     symbolScopeRef trim 后非空且 ∈ supportedScopeIds，否则 status 降为 'open' +
+ *     加 orchestration.scope.symbol.missing_binding open slot
+ */
+function applySymbolScopeBindingFailClosed(
+  state: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
+  }
+  const supportedScopeIds = new Set<string>()
+  for (const node of orchestration.nodes) {
+    if (
+      node.kind === 'scope'
+      && node.key === 'scope.symbol'
+      && node.status === 'locked'
+    ) {
+      supportedScopeIds.add(node.id)
+    }
+  }
+  if (supportedScopeIds.size < 2) {
+    return { state, hasBlockingSlots: false }
+  }
+
+  let hasBlockingSlots = false
+
+  function buildMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
+    return {
+      slotKey: 'orchestration.scope.symbol.missing_binding',
+      fieldPath: `${ownerLabel}[${ownerId}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个 symbol scope`,
+      affectsExecution: true,
+    }
+  }
+
+  function isMissingRef(ref: unknown): boolean {
+    if (typeof ref !== 'string') return true
+    const trimmed = ref.trim()
+    if (trimmed === '') return true
+    return !supportedScopeIds.has(trimmed)
+  }
+
+  const triggers = state.triggers.map((trigger) => {
+    if (trigger.status !== 'locked' || !isMissingRef(trigger.symbolScopeRef)) return trigger
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('trigger', trigger.id)
+    return {
+      ...trigger,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(trigger.openSlots ?? []), slot],
+    }
+  })
+  const actions = state.actions.map((action) => {
+    if (action.status !== 'locked' || !isMissingRef(action.symbolScopeRef)) return action
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('action', action.id)
+    return {
+      ...action,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(action.openSlots ?? []), slot],
+    }
+  })
+  const risk = state.risk.map((risk) => {
+    if (risk.status !== 'locked' || !isMissingRef(risk.symbolScopeRef)) return risk
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('risk', risk.id)
+    return {
+      ...risk,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(risk.openSlots ?? []), slot],
+    }
+  })
+  const position = state.position
+    ? (() => {
+        const constraints = state.position?.constraints
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
+        const nextConstraints = constraints.map((constraint) => {
+          if (constraint.status !== 'locked' || !isMissingRef(constraint.symbolScopeRef)) return constraint
+          hasBlockingSlots = true
+          const slot = buildMissingBindingSlot('positionConstraint', constraint.id)
+          return {
+            ...constraint,
+            status: 'open' as SemanticNodeStatus,
+            openSlots: [...(constraint.openSlots ?? []), slot],
+          }
+        })
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
+      })()
+    : state.position
+
+  return {
+    state: { ...state, triggers, actions, risk, position },
+    hasBlockingSlots,
   }
 }
 
