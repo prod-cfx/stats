@@ -127,9 +127,6 @@ importers:
       '@nx/webpack':
         specifier: 19.8.14
         version: 19.8.14(@babel/traverse@7.28.5)(@types/node@22.19.1)(nx@19.8.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.2)
-      '@ranger1/dx':
-        specifier: 0.1.99
-        version: 0.1.99
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
@@ -3944,11 +3941,6 @@ packages:
 
   '@radix-ui/rect@1.1.1':
     resolution: {integrity: sha512-HPwpGIzkl28mWyZqG52jiqDJ12waP11Pa1lGoiyUkIEuMLBP0oeK/C89esbXrxsky5we7dfd8U58nm0SgAWpVw==}
-
-  '@ranger1/dx@0.1.99':
-    resolution: {integrity: sha512-TcRHtHDToWW3eEKfyTmhxPGAJbQ64duEHzt927tLP55IlQLgk3iuc5qXP5aaL5ehurHQXPydqXPLa6If3SNPsQ==}
-    engines: {node: '>=20.11.0'}
-    hasBin: true
 
   '@rc-component/async-validator@5.0.4':
     resolution: {integrity: sha512-qgGdcVIF604M9EqjNF0hbUTz42bz/RDtxWdWuU5EQe3hi7M8ob54B6B35rOsvX5eSvIHIzT9iH1R3n+hk3CGfg==}
@@ -10722,10 +10714,6 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
-  strip-json-comments@5.0.3:
-    resolution: {integrity: sha512-1tB5mhVo7U+ETBKNf92xT4hrQa3pm0MZ0PQvuDnWgAAGHDsfp4lPSpiS6psrSiet87wyGPh9ft6wmhOMQ0hDiw==}
-    engines: {node: '>=14.16'}
-
   strong-log-transformer@2.1.0:
     resolution: {integrity: sha512-B3Hgul+z0L9a236FAUC9iZsL+nVHgoCJnqCbN588DjYxvGXaXaaFbfmQ/JhvKjZwsOukuR72XbHv71Qkug0HxA==}
     engines: {node: '>=4'}
@@ -15469,11 +15457,6 @@ snapshots:
   '@radix-ui/rect@1.1.0': {}
 
   '@radix-ui/rect@1.1.1': {}
-
-  '@ranger1/dx@0.1.99':
-    dependencies:
-      strip-json-comments: 5.0.3
-      yaml: 2.8.4
 
   '@rc-component/async-validator@5.0.4':
     dependencies:
@@ -23640,8 +23623,6 @@ snapshots:
   strip-json-comments@2.0.1: {}
 
   strip-json-comments@3.1.1: {}
-
-  strip-json-comments@5.0.3: {}
 
   strong-log-transformer@2.1.0:
     dependencies:

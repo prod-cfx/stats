@@ -22,9 +22,3 @@ for (const appPath of ['apps/backend/package.json', 'apps/quantify/package.json'
     assert.doesNotMatch(pkg.scripts.dev, /^tsx watch /)
   })
 }
-
-test('root dx dependency supports current dx/config schema', () => {
-  const pkg = readPackageJson('package.json')
-
-  assert.equal(pkg.devDependencies['@ranger1/dx'], '0.1.99')
-})
