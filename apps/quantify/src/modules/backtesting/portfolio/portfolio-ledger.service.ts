@@ -1,4 +1,4 @@
-import type { Fill, PortfolioState, Position } from '../types/backtesting.types'
+import type { Fill, PortfolioState, Position, Timeframe } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
 
 interface TradeLifecycleEvent {
@@ -10,6 +10,7 @@ interface TradeLifecycleEvent {
   qty: number
   fee: number
   pnl?: number
+  entryTimeframe?: Timeframe
 }
 
 export class PortfolioLedgerService {
@@ -35,6 +36,13 @@ export class PortfolioLedgerService {
     }
   }
 
+  /**
+   * entryTimeframe 语义（与 live `PositionsService.applyIncrease` 一致）：
+   * - 仅在「0 → 非 0」与「反向翻仓」两类首次入场写入；
+   * - 同向加仓不刷新（保留首次入场时间框架）；
+   * - 全平时随仓位一起被丢弃。
+   * fill.entryTimeframe 在产生 CLOSE-only 时被忽略；它只在生成 OPEN 事件时生效。
+   */
   applyFill(fill: Fill): TradeLifecycleEvent[] {
     const events: TradeLifecycleEvent[] = []
     const prev = this.getPosition(fill.symbol)
@@ -53,6 +61,7 @@ export class PortfolioLedgerService {
       next.qty = prev.qty + signedQty
 
       if (prev.qty === 0 && next.qty !== 0) {
+        next.entryTimeframe = fill.entryTimeframe
         events.push({
           type: 'OPEN',
           symbol: fill.symbol,
@@ -61,6 +70,7 @@ export class PortfolioLedgerService {
           price: fill.price,
           qty: Math.abs(next.qty),
           fee: fill.fee,
+          ...(fill.entryTimeframe ? { entryTimeframe: fill.entryTimeframe } : {}),
         })
       }
     } else {
@@ -88,6 +98,7 @@ export class PortfolioLedgerService {
       if (remainder > 0) {
         next.qty = Math.sign(signedQty) * remainder
         next.avgEntryPrice = fill.price
+        next.entryTimeframe = fill.entryTimeframe
         events.push({
           type: 'OPEN',
           symbol: fill.symbol,
@@ -96,6 +107,7 @@ export class PortfolioLedgerService {
           price: fill.price,
           qty: Math.abs(next.qty),
           fee: 0,
+          ...(fill.entryTimeframe ? { entryTimeframe: fill.entryTimeframe } : {}),
         })
       } else {
         next.qty = 0

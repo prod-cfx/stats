@@ -342,6 +342,7 @@ export class BacktestRunnerService {
       qty: pos.qty,
       avgEntryPrice: pos.avgEntryPrice,
       unrealizedPnl: pos.unrealizedPnl,
+      ...(pos.entryTimeframe ? { entryTimeframe: pos.entryTimeframe } : {}),
     }))
     const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
 
@@ -406,6 +407,7 @@ export class BacktestRunnerService {
           fee: event.fee,
           reason: input.reason,
           reasonSource: input.reasonSource,
+          ...(event.entryTimeframe ? { entryTimeframe: event.entryTimeframe } : {}),
         })
         return
       }
@@ -689,6 +691,7 @@ export class BacktestRunnerService {
       notional,
       fee: notional * (input.execution.feeBps / 10000),
       reason: input.reason,
+      entryTimeframe: input.bar.timeframe,
     }
   }
 

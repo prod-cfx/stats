@@ -24,6 +24,7 @@ export class TheoreticalExecutionModel {
       notional,
       fee,
       reason,
+      entryTimeframe: bar.timeframe,
     }
   }
 }

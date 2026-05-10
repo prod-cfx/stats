@@ -254,6 +254,71 @@ describe('backtestRunnerService', () => {
     expect(report.openPositions?.[0]?.qty).toBeCloseTo(1)
   })
 
+  it('persists entryTimeframe on open position and trade record from base timeframe (#1022)', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-entry-tf',
+        params: {},
+        fn: ({ ts }) => (ts === 1
+          ? { type: 'OPEN_LONG', qty: 1 }
+          : { type: 'NOOP' }),
+      },
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 2, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '15m', closeTime: 3, open: 100, close: 100 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      entryTimeframe: '15m',
+    }))
+  })
+
+  it('records entryTimeframe on closed trade record (#1022)', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-entry-tf-close',
+        params: {},
+        fn: ({ ts }) => {
+          if (ts === 1) return { type: 'OPEN_LONG', qty: 1 }
+          if (ts === 2) return { type: 'CLOSE' }
+          return { type: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 110, close: 110 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 120, close: 120 }),
+      ],
+    })
+
+    expect(report.trades[0]).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      side: 'LONG',
+      entryTimeframe: '5m',
+    }))
+  })
+
   it('should accept llm signal payload and open long by positionSizeRatio', async () => {
     const runner = createRunner()
 

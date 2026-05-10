@@ -122,6 +122,7 @@ export interface Fill {
   notional: number
   fee: number
   reason?: string
+  entryTimeframe?: Timeframe
 }
 
 export interface Position {
@@ -130,6 +131,7 @@ export interface Position {
   avgEntryPrice: number
   realizedPnl: number
   unrealizedPnl: number
+  entryTimeframe?: Timeframe
 }
 
 export interface PortfolioState {
@@ -146,6 +148,7 @@ export interface TradeRecord {
   side: 'LONG' | 'SHORT'
   entryTs: number
   entryPrice: number
+  entryTimeframe?: Timeframe
   exitTs: number
   exitPrice: number
   qty: number
@@ -183,7 +186,7 @@ export interface BacktestReport {
   trades: TradeRecord[]
   markers: TradeMarker[]
   bySymbol: Array<{ symbol: string; pnl: number; trades: number; winRate: number }>
-  openPositions?: Array<{ symbol: string; qty: number; avgEntryPrice: number; unrealizedPnl: number }>
+  openPositions?: Array<{ symbol: string; qty: number; avgEntryPrice: number; unrealizedPnl: number; entryTimeframe?: Timeframe }>
   pendingSignals?: Array<{ symbol: string; ts: number; deltaQty: number; reason?: string; reasonSource: BacktestReasonSource }>
 }
 
