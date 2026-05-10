@@ -30,3 +30,12 @@ export type {
 export { parseTimeframeMs, SUPPORTED_TIMEFRAMES, TIMEFRAME_MS } from './compiled-runtime/parse-timeframe-ms'
 export { runOrderPrograms } from './compiled-runtime/run-order-programs'
 export type { ProgramLifecycleState } from './compiled-runtime/program-lifecycle-state'
+// Phase 5 S2 follow-up (#1108): scope.symbol fan-out caller wrapper
+export {
+  buildScopeIteration,
+  runDecisionProgramsFanOut,
+} from './compiled-runtime/apply-symbol-scope-fanout'
+export type {
+  ScopeFanOutDecisionEntry,
+  SymbolScopeIterationInput,
+} from './compiled-runtime/apply-symbol-scope-fanout'

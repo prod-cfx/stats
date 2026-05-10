@@ -31,6 +31,7 @@ import {
   evaluateGuards,
   evaluateRiskPredicates,
   runDecisionPrograms,
+  runDecisionProgramsFanOut,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
 import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
@@ -804,7 +805,10 @@ export class SignalGeneratorService {
             const orchestrationLegScopes = (projection as {
               orchestrationLegScopes?: Parameters<typeof runDecisionPrograms>[8]
             }).orchestrationLegScopes ?? []
-            const decision = runDecisionPrograms(
+            // Phase 5 S2 follow-up (#1108): scope.symbol fan-out caller — 多 scope 时 per-scope 循环
+            //   单/0 scope 透传；多 scope 时 decision.meta.scopeDecisions 携带 per-scope 副本
+            //   不动 lifecycle state map（与 #1081 隔离）：lifecycleStateIn 仍按 strategyInstanceId 单条
+            const decision = runDecisionProgramsFanOut(
               ctx,
               decisionPrograms,
               exprValues,

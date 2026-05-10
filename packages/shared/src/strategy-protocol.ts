@@ -42,6 +42,13 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
    */
   activeSymbolScopeId?: string
   /**
+   * Phase 5 S2 follow-up (#1108): per-scope 仓位映射（caller 端可选注入）
+   *   key = scope.id；value = 该 scope 当前的 position 视图
+   *   buildScopeIteration 优先消费此字段覆盖 ctx.position；缺失时沿用 ctx.position
+   *   live 端实时 per-scope position feed 由 follow-up 接入；当前 substrate 接口先就绪
+   */
+  positionsBySymbolScope?: Record<string, StrategyExecutionContextV1['position']>
+  /**
    * Phase 5 S3 (#1109): scope.timeframe substrate 数据对齐状态
    * key 是 timeframe identifier ('1m'|'5m'|'15m'|...)；val 是 caller 已收 bar 状态。
    * 单周期 / 无 scope.timeframe 节点策略不注入；runtime 自动跳过 alignment 检查。

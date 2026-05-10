@@ -9,6 +9,7 @@ import {
   evaluateGuards,
   evaluateRiskPredicates,
   runDecisionPrograms,
+  runDecisionProgramsFanOut,
   runOrderPrograms,
 } from '@ai/shared/script-engine/compiled-runtime'
 import { evaluateOrchestrationGates } from '@ai/shared/script-engine/compiled-runtime/evaluate-orchestration-gates'
@@ -186,7 +187,10 @@ export class BacktestStrategyAdapterService {
               exposureNotionalBySubStrategyScope,
             },
           )
-          let decision = runDecisionPrograms(
+          // Phase 5 S2 follow-up (#1108): scope.symbol fan-out caller — 多 scope 时循环每个 scope
+          //   per-scope ctx 克隆由 buildScopeIteration 构造（activeSymbolScopeId + symbol + 可选 position）
+          //   单/0 scope 透传，旧策略字节兼容；多 scope 时 decision.meta.scopeDecisions 携带 per-scope 副本
+          let decision = runDecisionProgramsFanOut(
             ctx,
             decisionPrograms,
             exprValues,
