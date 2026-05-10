@@ -48,6 +48,8 @@ export class CanonicalStrategyAstCompilerService {
       ...((ir.orchestrationPrograms ?? []).length > 0 ? { orchestrationPrograms: ir.orchestrationPrograms } : {}),
       // Phase 5 S2 (#1104): scope.symbol substrate
       ...((ir.orchestrationScopes ?? []).length > 0 ? { orchestrationScopes: ir.orchestrationScopes } : {}),
+      // Phase 5 S11 (#1112): scope.leg substrate
+      ...((ir.orchestrationLegScopes ?? []).length > 0 ? { orchestrationLegScopes: ir.orchestrationLegScopes } : {}),
       topology,
     }
   }

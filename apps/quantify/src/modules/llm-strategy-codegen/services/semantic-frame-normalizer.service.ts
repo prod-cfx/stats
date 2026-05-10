@@ -6,6 +6,7 @@ import type {
   SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
+  SemanticLegScopeFrame,
   SemanticNaturalLanguageFrame,
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
@@ -17,6 +18,7 @@ import type {
   CodegenSemanticOrchestrationDynamicGridProgramNodePatch,
   CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
+  CodegenSemanticOrchestrationLegScopeNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
   CodegenSemanticOrchestrationSymbolScopeNodePatch,
   CodegenSemanticPatch,
@@ -52,6 +54,11 @@ export class SemanticFrameNormalizerService {
     const adaptiveFrames: SemanticAdaptiveVolatilityGridFrame[] = []
     const symbolScopeByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
     const symbolScopeFrames: SemanticSymbolScopeFrame[] = []
+    // Phase 5 S11 (#1112): leg_scope 同 utterance 命中时由 NL gateway 已 suppress symbol_scope
+    //   normalizer 在 case 'leg_scope' 分支按 leg.instrumentSymbol 各自创建独立 scope.symbol node
+    const legScopeFrames: SemanticLegScopeFrame[] = []
+    const legScopeSymbolByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
+    const legScopeLegByKey = new Map<string, CodegenSemanticOrchestrationLegScopeNodePatch>()
 
     for (const frame of frames) {
       switch (frame.kind) {
@@ -98,6 +105,9 @@ export class SemanticFrameNormalizerService {
           break
         case 'symbol_scope':
           symbolScopeFrames.push(frame)
+          break
+        case 'leg_scope':
+          legScopeFrames.push(frame)
           break
       }
     }
@@ -173,6 +183,50 @@ export class SemanticFrameNormalizerService {
       }
     })
 
+    // Phase 5 S11 (#1112): leg_scope frame → N 个 scope.symbol + N 个 scope.leg
+    legScopeFrames.forEach((frame) => {
+      for (const leg of frame.legs) {
+        const symbolNodeId = `orchestration-scope-symbol-from-leg-${leg.legId}`
+        const symbolNode: CodegenSemanticOrchestrationSymbolScopeNodePatch = {
+          id: symbolNodeId,
+          kind: 'scope',
+          key: 'scope.symbol',
+          params: { symbols: [leg.instrumentSymbol], primarySymbol: leg.instrumentSymbol },
+          symbolScopeKind: 'symbol',
+          symbols: [leg.instrumentSymbol],
+          primarySymbol: leg.instrumentSymbol,
+          evidence: this.toEvidence(frame),
+        }
+        const symbolDedupeKey = JSON.stringify(['scope.symbol', [leg.instrumentSymbol], leg.instrumentSymbol, leg.legId])
+        if (!legScopeSymbolByKey.has(symbolDedupeKey)) {
+          legScopeSymbolByKey.set(symbolDedupeKey, symbolNode)
+        }
+
+        const legNode: CodegenSemanticOrchestrationLegScopeNodePatch = {
+          id: `orchestration-scope-leg-${leg.legId}`,
+          kind: 'scope',
+          key: 'scope.leg',
+          params: {
+            legId: leg.legId,
+            direction: leg.direction,
+            instrumentSymbol: leg.instrumentSymbol,
+            ...(leg.sizing ? { legSizing: leg.sizing } : {}),
+          },
+          legScopeKind: 'leg',
+          legId: leg.legId,
+          direction: leg.direction,
+          instrumentRef: symbolNodeId,
+          ...(leg.sizing ? { legSizing: leg.sizing } : {}),
+          ...(frame.syncTriggerRequired === true ? { syncTriggerRequired: true } : {}),
+          evidence: this.toEvidence(frame),
+        }
+        const legDedupeKey = JSON.stringify(['scope.leg', leg.legId])
+        if (!legScopeLegByKey.has(legDedupeKey)) {
+          legScopeLegByKey.set(legDedupeKey, legNode)
+        }
+      }
+    })
+
     const gateTriggers = Array.from(indicatorCompareGroups.values()).map(group =>
       this.normalizeIndicatorCompareGroup(group.groupId, group.frames, combinationByKey),
     )
@@ -200,6 +254,10 @@ export class SemanticFrameNormalizerService {
       ...Array.from(dynamicGridByKey.values()),
       ...Array.from(adaptiveByKey.values()),
       ...Array.from(symbolScopeByKey.values()),
+      // Phase 5 S11 (#1112): leg_scope frame 扩展出的 scope.symbol + scope.leg 节点
+      //   注意 scope.symbol 节点必须排在 scope.leg 之前，便于 readiness Pass 1/2 顺序处理
+      ...Array.from(legScopeSymbolByKey.values()),
+      ...Array.from(legScopeLegByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
       patch.orchestration = { nodes: orchestrationNodes }

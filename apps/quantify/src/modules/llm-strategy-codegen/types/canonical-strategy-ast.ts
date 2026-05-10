@@ -1,4 +1,4 @@
-import type { ActionDef, IrOrchestrationProgram, IrOrchestrationScope, LevelSetDef, OrderProgram, PositionLifecycleActionMetadata, RiskGuard, RiskPredicateDef, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
+import type { ActionDef, IrOrchestrationLegScope, IrOrchestrationProgram, IrOrchestrationScope, LevelSetDef, OrderProgram, PositionLifecycleActionMetadata, RiskGuard, RiskPredicateDef, RuntimeRequirements, SeriesDef, PredicateDef } from './canonical-strategy-ir'
 
 export interface StrategyAstV1 {
   astVersion: 'csa.v1'
@@ -34,6 +34,8 @@ export interface StrategyAstV1 {
   orchestrationPrograms?: IrOrchestrationProgram[]
   // Phase 5 S2 (#1104): scope.symbol substrate
   orchestrationScopes?: IrOrchestrationScope[]
+  // Phase 5 S11 (#1112): scope.leg substrate
+  orchestrationLegScopes?: IrOrchestrationLegScope[]
   topology: {
     exprOrder: string[]
     guardOrder: string[]
@@ -74,6 +76,8 @@ export interface DecisionProgramNode {
   metadata?: PositionLifecycleActionMetadata & {
     // Phase 5 S2 (#1104): 多 scope 策略中的 symbolScopeRef 透传
     symbolScopeRef?: string
+    // Phase 5 S11 (#1112): 多 leg 策略中的 legScopeRef 透传
+    legScopeRef?: string
   }
 }
 

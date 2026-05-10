@@ -2,6 +2,7 @@ import type {
   ActionDef,
   CanonicalStrategyIrV1,
   IrOrchestrationGate,
+  IrOrchestrationLegScope,
   IrOrchestrationPortfolioRisk,
   IrOrchestrationProgram,
   IrOrchestrationScope,
@@ -20,6 +21,7 @@ import type {
   CanonicalConditionNode,
   CanonicalExpressionCondition,
   CanonicalOrchestrationGate,
+  CanonicalOrchestrationLegScope,
   CanonicalOrchestrationPortfolioRisk,
   CanonicalOrchestrationProgram,
   CanonicalOrchestrationScope,
@@ -197,6 +199,7 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     const orchestrationScopes = this.compileOrchestrationScopes(input.canonicalSpec)
+    const orchestrationLegScopes = this.compileOrchestrationLegScopes(input.canonicalSpec)
     const orchestrationGates = this.compileOrchestrationGates(input.canonicalSpec, context)
     const orchestrationPortfolioRisks = this.compileOrchestrationPortfolioRisks(input.canonicalSpec)
     const orchestrationPrograms = this.compileOrchestrationPrograms(input.canonicalSpec, orchestrationGates)
@@ -248,6 +251,7 @@ export class CanonicalSpecV2IrCompilerService {
       orchestrationPortfolioRisks,
       orchestrationPrograms,
       ...(orchestrationScopes.length > 0 ? { orchestrationScopes } : {}),
+      ...(orchestrationLegScopes.length > 0 ? { orchestrationLegScopes } : {}),
       riskPolicy: {
         guards,
         riskPredicates,
@@ -843,6 +847,30 @@ export class CanonicalSpecV2IrCompilerService {
       ...(typeof scope.primarySymbol === 'string' && scope.primarySymbol.trim() !== ''
         ? { primarySymbol: scope.primarySymbol.trim() }
         : {}),
+    }))
+  }
+
+  // Phase 5 S11 (#1112): scope.leg substrate IR compile
+  private compileOrchestrationLegScopes(spec: CanonicalStrategySpecV2): IrOrchestrationLegScope[] {
+    const legScopes = spec.orchestration?.legScopes ?? []
+    return legScopes.map((leg: CanonicalOrchestrationLegScope): IrOrchestrationLegScope => ({
+      id: leg.id,
+      scopeKind: 'leg',
+      legId: leg.legId,
+      direction: leg.direction,
+      instrumentRef: leg.instrumentRef,
+      ...(leg.legSizing
+        ? {
+            legSizing: {
+              mode: leg.legSizing.mode,
+              value: leg.legSizing.value,
+              ...(typeof leg.legSizing.pairedLegId === 'string' && leg.legSizing.pairedLegId.trim() !== ''
+                ? { pairedLegId: leg.legSizing.pairedLegId.trim() }
+                : {}),
+            },
+          }
+        : {}),
+      ...(leg.syncTriggerRequired === true ? { syncTriggerRequired: true } : {}),
     }))
   }
 
@@ -2664,6 +2692,7 @@ export class CanonicalSpecV2IrCompilerService {
   private toRuleBlockMetadata(
     metadata: NonNullable<CanonicalRuleV2['metadata']>,
     supportedScopeIds?: ReadonlySet<string>,
+    supportedLegScopeIds?: ReadonlySet<string>,
   ): RuleBlock['metadata'] {
     // Phase 5 S2 (#1104): symbolScopeRef silent skip 透传
     //   仅当 ref trim 后非空且 ∈ supportedScopeIds 时透传；否则丢弃 + 让 readiness/runtime fail-closed
@@ -2671,12 +2700,18 @@ export class CanonicalSpecV2IrCompilerService {
     const refValid = typeof ref === 'string'
       && ref.trim() !== ''
       && (!supportedScopeIds || supportedScopeIds.has(ref.trim()))
+    // Phase 5 S11 (#1112): legScopeRef silent skip 透传（与 symbolScopeRef 同形）
+    const legRef = metadata.legScopeRef
+    const legRefValid = typeof legRef === 'string'
+      && legRef.trim() !== ''
+      && (!supportedLegScopeIds || supportedLegScopeIds.has(legRef.trim()))
     return {
       ...(metadata.partialTakeProfit ? { partialTakeProfit: { ...metadata.partialTakeProfit } } : {}),
       ...(metadata.reversePosition ? { reversePosition: { ...metadata.reversePosition } } : {}),
       ...(metadata.addPosition ? { addPosition: { ...metadata.addPosition } } : {}),
       ...(metadata.dcaSchedule ? { dcaSchedule: { ...metadata.dcaSchedule } } : {}),
       ...(refValid && typeof ref === 'string' ? { symbolScopeRef: ref.trim() } : {}),
+      ...(legRefValid && typeof legRef === 'string' ? { legScopeRef: legRef.trim() } : {}),
     }
   }
 

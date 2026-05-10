@@ -132,8 +132,13 @@ export class SemanticContractReadinessService {
       orchestration: orchestrationResult.state,
     }
     // Phase 5 S2 (#1104): 多 scope 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
-    const { state: nextState, hasBlockingSlots: bindingHasBlockingSlots } =
+    const { state: afterSymbolBinding, hasBlockingSlots: symbolBindingHasBlockingSlots } =
       applySymbolScopeBindingFailClosed(baseNextState)
+    // Phase 5 S11 (#1112): 多 leg 策略对 trigger/action/risk/positionConstraint 加 missing_binding fail-closed
+    //   leg binding 第二参 baseNextState 用作 pre-binding 原始 status：避免被 symbol binding 链式降级后误跳过判断
+    //   （两条 binding 各自独立 fail-closed，同一 owner 双 ref 缺失会同时落两条 missing_binding open slot）
+    const { state: nextState, hasBlockingSlots: legBindingHasBlockingSlots } =
+      applyLegScopeBindingFailClosed(afterSymbolBinding, baseNextState)
 
     return {
       state: nextState,
@@ -142,7 +147,8 @@ export class SemanticContractReadinessService {
         && !hasOpenSlots(providerNormalization.shapeSlotsByOwnerKey)
         && !hasBlockingOwnerOpenSlots(nextState)
         && !orchestrationResult.hasBlockingSlots
-        && !bindingHasBlockingSlots,
+        && !symbolBindingHasBlockingSlots
+        && !legBindingHasBlockingSlots,
       missingRequirements,
     }
   }
@@ -343,18 +349,47 @@ function normalizePhase0Orchestration(
     return { state: orchestration, hasBlockingSlots: false }
   }
 
+  // Phase 5 S11 (#1112): 多 pass readiness 解决 cross-node 反向引用顺序依赖
+  //   Pass 1: scope.symbol 节点先收敛 status（leg.instrumentRef 校验依赖）
+  //   Pass 2: scope.leg 节点首轮（instrumentRef 见 Pass 1 状态）
+  //   Pass 3: scope.leg 节点二轮（pairedLegId 见 Pass 2 leg 状态）
+  //   Pass 4: gate/program/portfolioRisk 维持 S2 原 single-pass 行为
+  const initialNodes = orchestration.nodes
+  const isLegScopeNode = (n: SemanticOrchestrationNode): boolean =>
+    n.kind === 'scope' && (n.key === 'scope.leg' || n.legScopeKind === 'leg')
+  const isSymbolScopeNode = (n: SemanticOrchestrationNode): boolean =>
+    n.kind === 'scope' && n.key === 'scope.symbol' && !isLegScopeNode(n)
+
+  const afterSymbol = initialNodes.map((node) =>
+    isSymbolScopeNode(node)
+      ? applyOrchestrationReadinessForNode(node, registry, strategyVersion, initialNodes)
+      : node,
+  )
+  const afterLegPass1 = afterSymbol.map((node) =>
+    isLegScopeNode(node)
+      ? applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterSymbol)
+      : node,
+  )
+  const afterLegPass2 = afterLegPass1.map((node) =>
+    isLegScopeNode(node)
+      ? applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass1)
+      : node,
+  )
+  const finalNodes = afterLegPass2.map((node) =>
+    node.kind === 'scope'
+      ? node
+      : applyOrchestrationReadinessForNode(node, registry, strategyVersion, afterLegPass2),
+  )
+
   let changed = false
   let hasBlockingSlots = false
-  const siblingNodes = orchestration.nodes
-  const nodes = orchestration.nodes.map((node) => {
-    const nextNode = applyOrchestrationReadinessForNode(node, registry, strategyVersion, siblingNodes)
-    changed ||= nextNode !== node
-    hasBlockingSlots ||= ownerHasOpenSlot(nextNode)
-    return nextNode
-  })
+  for (let i = 0; i < initialNodes.length; i += 1) {
+    if (finalNodes[i] !== initialNodes[i]) changed = true
+    if (ownerHasOpenSlot(finalNodes[i])) hasBlockingSlots = true
+  }
 
   return {
-    state: changed ? { ...orchestration, nodes } : orchestration,
+    state: changed ? { ...orchestration, nodes: finalNodes } : orchestration,
     hasBlockingSlots,
   }
 }
@@ -390,6 +425,10 @@ function applyOrchestrationReadinessForNode(
   }
 
   if (isSupportedSymbolScope(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry, siblingNodes)
+  }
+
+  if (isSupportedLegScope(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry, siblingNodes)
   }
 
@@ -460,6 +499,80 @@ function isSupportedSymbolScope(
   }
 
   const contract = registry.getContractByKey('scope.symbol')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * Phase 5 S11 (#1112): scope.leg 节点 8 重 fail-closed:
+ *   1) kind === 'scope'
+ *   2) key === 'scope.leg'
+ *   3) legScopeKind === 'leg'（且与 symbolScopeKind='symbol' 互斥）
+ *   4) legId 非空、匹配 ^[a-zA-Z][a-zA-Z0-9_.]{0,63}$、与同 state 其它 leg 节点 legId 不重复
+ *   5) direction ∈ {'long','short'}
+ *   6) instrumentRef trim 非空、引用同 state 中 status:'locked' 的 scope.symbol 节点 id
+ *   7) legSizing 缺失允许；若提供：mode 合法 + value > 0；mode='fixed_ratio' 时 pairedLegId 非空、引用 supported leg 的 legId、且 direction 互反
+ *   8) version-gate（registry 已注册 + strategyVersion 存在 + atom 对该策略可执行）
+ */
+const LEG_ID_PATTERN_READINESS = /^[a-zA-Z][a-zA-Z0-9_.]{0,63}$/u
+
+function isSupportedLegScope(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (node.kind !== 'scope') return false
+  if (node.key !== 'scope.leg') return false
+  if (node.legScopeKind !== 'leg') return false
+  if (node.symbolScopeKind === 'symbol') return false  // 互斥
+
+  const legId = typeof node.legId === 'string' ? node.legId.trim() : ''
+  if (legId === '' || !LEG_ID_PATTERN_READINESS.test(legId)) return false
+  if (node.direction !== 'long' && node.direction !== 'short') return false
+
+  const instrumentRef = typeof node.instrumentRef === 'string' ? node.instrumentRef.trim() : ''
+  if (instrumentRef === '') return false
+  const referenced = siblingNodes.find((n) => n.id === instrumentRef)
+  if (
+    !referenced
+    || referenced.kind !== 'scope'
+    || referenced.key !== 'scope.symbol'
+    || referenced.status !== 'locked'
+  ) {
+    return false
+  }
+
+  // legId 在 leg 子集内唯一
+  const otherLegNodes = siblingNodes.filter(
+    (other) =>
+      other.id !== node.id
+      && other.kind === 'scope'
+      && other.key === 'scope.leg',
+  )
+  if (otherLegNodes.some((other) => typeof other.legId === 'string' && other.legId.trim() === legId)) {
+    return false
+  }
+
+  // legSizing
+  const sizing = node.legSizing
+  if (sizing !== undefined) {
+    if (sizing.mode !== 'fixed_pct' && sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_ratio') return false
+    if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return false
+    if (sizing.mode === 'fixed_ratio') {
+      const paired = typeof sizing.pairedLegId === 'string' ? sizing.pairedLegId.trim() : ''
+      if (paired === '' || paired === legId) return false
+      const pairedNode = otherLegNodes.find(
+        (other) => typeof other.legId === 'string' && other.legId.trim() === paired,
+      )
+      if (!pairedNode) return false
+      if (pairedNode.status !== 'locked') return false
+      if (pairedNode.direction === undefined || pairedNode.direction === node.direction) return false
+    }
+  }
+
+  const contract = registry.getContractByKey('scope.leg')
   if (!contract) return false
   if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)
@@ -1024,6 +1137,126 @@ function applySymbolScopeBindingFailClosed(
         if (!Array.isArray(constraints) || constraints.length === 0) return state.position
         const nextConstraints = constraints.map((constraint) => {
           if (constraint.status !== 'locked' || !isMissingRef(constraint.symbolScopeRef)) return constraint
+          hasBlockingSlots = true
+          const slot = buildMissingBindingSlot('positionConstraint', constraint.id)
+          return {
+            ...constraint,
+            status: 'open' as SemanticNodeStatus,
+            openSlots: [...(constraint.openSlots ?? []), slot],
+          }
+        })
+        return { ...state.position, constraints: nextConstraints } as typeof state.position
+      })()
+    : state.position
+
+  return {
+    state: { ...state, triggers, actions, risk, position },
+    hasBlockingSlots,
+  }
+}
+
+/**
+ * Phase 5 S11 (#1112): 多 scope.leg 策略对每个 trigger/action/risk/positionConstraint 节点
+ * 进行 binding fail-closed 校验（与 S2 applySymbolScopeBindingFailClosed 平行）：
+ *   - supportedLegScopeIds.size < 2：兜底，不触发检查（单/0 leg 旧策略行为不变）
+ *   - supportedLegScopeIds.size >= 2 时：每个 status='locked' 的 owner 节点必须有
+ *     legScopeRef trim 后非空且 ∈ supportedLegScopeIds，否则 status 降为 'open' +
+ *     加 orchestration.scope.leg.missing_binding open slot
+ */
+function applyLegScopeBindingFailClosed(
+  state: SemanticState,
+  preBindingState?: SemanticState,
+): { state: SemanticState; hasBlockingSlots: boolean } {
+  const orchestration = state.orchestration
+  if (!orchestration) {
+    return { state, hasBlockingSlots: false }
+  }
+  const supportedLegScopeIds = new Set<string>()
+  for (const node of orchestration.nodes) {
+    if (
+      node.kind === 'scope'
+      && node.key === 'scope.leg'
+      && node.status === 'locked'
+    ) {
+      supportedLegScopeIds.add(node.id)
+    }
+  }
+  if (supportedLegScopeIds.size < 2) {
+    return { state, hasBlockingSlots: false }
+  }
+
+  // Phase 5 S11 (#1112): leg binding 与 symbol binding 独立判断
+  //   依据 preBindingState 的 owner 原始 status（避免被 symbol binding 链式降级后跳过判断）
+  const triggerStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
+  const actionStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
+  const riskStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
+  const constraintStatusBeforeBinding = new Map<string, SemanticNodeStatus>()
+  const sourceState = preBindingState ?? state
+  for (const t of sourceState.triggers) triggerStatusBeforeBinding.set(t.id, t.status)
+  for (const a of sourceState.actions) actionStatusBeforeBinding.set(a.id, a.status)
+  for (const r of sourceState.risk) riskStatusBeforeBinding.set(r.id, r.status)
+  for (const c of sourceState.position?.constraints ?? []) constraintStatusBeforeBinding.set(c.id, c.status)
+
+  let hasBlockingSlots = false
+
+  function buildMissingBindingSlot(ownerLabel: string, ownerId: string): SemanticSlotState {
+    return {
+      slotKey: 'orchestration.scope.leg.missing_binding',
+      fieldPath: `${ownerLabel}[${ownerId}]`,
+      status: 'open',
+      priority: 'core',
+      questionHint: `请确认该 ${ownerLabel}（${ownerId}）绑定到哪个策略腿`,
+      affectsExecution: true,
+    }
+  }
+
+  function isMissingRef(ref: unknown): boolean {
+    if (typeof ref !== 'string') return true
+    const trimmed = ref.trim()
+    if (trimmed === '') return true
+    return !supportedLegScopeIds.has(trimmed)
+  }
+
+  const triggers = state.triggers.map((trigger) => {
+    const preStatus = triggerStatusBeforeBinding.get(trigger.id) ?? trigger.status
+    if (preStatus !== 'locked' || !isMissingRef(trigger.legScopeRef)) return trigger
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('trigger', trigger.id)
+    return {
+      ...trigger,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(trigger.openSlots ?? []), slot],
+    }
+  })
+  const actions = state.actions.map((action) => {
+    const preStatus = actionStatusBeforeBinding.get(action.id) ?? action.status
+    if (preStatus !== 'locked' || !isMissingRef(action.legScopeRef)) return action
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('action', action.id)
+    return {
+      ...action,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(action.openSlots ?? []), slot],
+    }
+  })
+  const risk = state.risk.map((riskItem) => {
+    const preStatus = riskStatusBeforeBinding.get(riskItem.id) ?? riskItem.status
+    if (preStatus !== 'locked' || !isMissingRef(riskItem.legScopeRef)) return riskItem
+    hasBlockingSlots = true
+    const slot = buildMissingBindingSlot('risk', riskItem.id)
+    return {
+      ...riskItem,
+      status: 'open' as SemanticNodeStatus,
+      openSlots: [...(riskItem.openSlots ?? []), slot],
+    }
+  })
+  const position = state.position
+    ? (() => {
+        const constraints = state.position?.constraints
+        if (!Array.isArray(constraints) || constraints.length === 0) return state.position
+        const nextConstraints = constraints.map((constraint) => {
+          const preStatus = constraintStatusBeforeBinding.get(constraint.id) ?? constraint.status
+          if (preStatus !== 'locked' || !isMissingRef(constraint.legScopeRef)) return constraint
           hasBlockingSlots = true
           const slot = buildMissingBindingSlot('positionConstraint', constraint.id)
           return {

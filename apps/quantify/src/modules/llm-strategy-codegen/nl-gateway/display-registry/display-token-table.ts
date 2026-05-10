@@ -245,4 +245,22 @@ export const DISPLAY_TOKENS = [
   { token: 'slot.orchestration.scope.symbol.primary_symbol_collision', kind: 'slot', zh: '多 scope 主标的必须各自唯一' },
   { token: 'slot.orchestration.scope.symbol.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个 symbol scope' },
   { token: 'slot.orchestration.scope.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.symbol' },
+
+  // Phase 5 S11 (#1112): scope.leg substrate
+  { token: 'atom.scope.leg.name', kind: 'atom', zh: '策略腿' },
+  { token: 'atom.scope.leg.display.long', kind: 'atom', zh: '多头腿（{instrument}）' },
+  { token: 'atom.scope.leg.display.short', kind: 'atom', zh: '空头腿（{instrument}）' },
+  { token: 'atom.scope.leg.display.hedge', kind: 'atom', zh: '对冲组合：{legs}' },
+  { token: 'param.legId', kind: 'param', zh: '腿标识' },
+  { token: 'param.direction', kind: 'param', zh: '腿方向' },
+  { token: 'slot.orchestration.scope.leg.unsupported_kind', kind: 'slot', zh: '当前仅支持 scope.leg 子类型' },
+  { token: 'slot.orchestration.scope.leg.leg_scope_kind', kind: 'slot', zh: '请确认 legScopeKind 为 leg' },
+  { token: 'slot.orchestration.scope.leg.leg_id', kind: 'slot', zh: '请确认腿 id（字母开头、字母数字下划线点、长度 ≤ 64）' },
+  { token: 'slot.orchestration.scope.leg.direction', kind: 'slot', zh: '请确认腿方向（long/short）' },
+  { token: 'slot.orchestration.scope.leg.instrument_ref', kind: 'slot', zh: '该腿引用的 scope.symbol 节点必须已存在且 readiness 已通过' },
+  { token: 'slot.orchestration.scope.leg.leg_sizing.mode', kind: 'slot', zh: '请确认 legSizing.mode（fixed_pct/fixed_quote/fixed_ratio）' },
+  { token: 'slot.orchestration.scope.leg.leg_sizing.value', kind: 'slot', zh: '请确认 legSizing.value（>0 有限数）' },
+  { token: 'slot.orchestration.scope.leg.paired_leg_id', kind: 'slot', zh: 'fixed_ratio 模式必须指定 pairedLegId' },
+  { token: 'slot.orchestration.scope.leg.direction_collision', kind: 'slot', zh: 'paired leg 必须方向相反（对冲腿）' },
+  { token: 'slot.orchestration.scope.leg.missing_binding', kind: 'slot', zh: '请确认该规则绑定到哪个策略腿' },
 ] as const satisfies readonly DisplayToken[]

@@ -102,6 +102,13 @@ export class BacktestStrategyAdapterService {
       const orchestrationScopes = ((projection as {
         orchestrationScopes?: Parameters<typeof runDecisionPrograms>[7]
       }).orchestrationScopes ?? []) as Parameters<typeof runDecisionPrograms>[7]
+      // Phase 5 S11 (#1112): scope.leg substrate（与 S2 同形）
+      //   - 单/0 leg 时为空数组，runDecisionPrograms 走兜底（'continue'）
+      //   - 多 leg 时由上游 caller 设置 ctx.activeLegScopeId 完成 fan-out
+      //   - leg fan-out caller 循环留 follow-up（与 S2 一致）
+      const orchestrationLegScopes = ((projection as {
+        orchestrationLegScopes?: Parameters<typeof runDecisionPrograms>[8]
+      }).orchestrationLegScopes ?? []) as Parameters<typeof runDecisionPrograms>[8]
 
       // peakEquity 在 build() 闭包内逐 bar 维护，与 account-strategy-view.service.ts:1970 同公式
       let peakEquity: number | undefined
@@ -161,6 +168,7 @@ export class BacktestStrategyAdapterService {
             orchestrationGateState,
             portfolioRiskState,
             orchestrationScopes,
+            orchestrationLegScopes,
           )
           // Phase 5 S0a: 取本 symbol 上一根 K 线的 lifecycle state，传入 runOrderPrograms 第 8 参。
           const symbolKey = readContextSymbol(ctx)

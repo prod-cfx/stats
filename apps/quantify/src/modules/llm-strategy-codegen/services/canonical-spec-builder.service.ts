@@ -1,4 +1,4 @@
-import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationPortfolioRisk, CanonicalOrchestrationProgram, CanonicalOrchestrationScope, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalOrchestrationGate, CanonicalOrchestrationLegScope, CanonicalOrchestrationPortfolioRisk, CanonicalOrchestrationProgram, CanonicalOrchestrationScope, CanonicalOrderProgramIntent, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { PositionLifecycleActionMetadata } from '../types/canonical-strategy-ir'
 import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
@@ -543,10 +543,12 @@ export class CanonicalSpecBuilderService {
     const orchestrationPortfolioRisks = this.buildOrchestrationPortfolioRisks(normalizedState)
     const orchestrationPrograms = this.buildOrchestrationPrograms(normalizedState)
     const orchestrationScopes = this.buildOrchestrationScopes(normalizedState)
+    const orchestrationLegScopes = this.buildOrchestrationLegScopes(normalizedState)
     const hasOrchestration = orchestrationGates.length > 0
       || orchestrationPortfolioRisks.length > 0
       || orchestrationPrograms.length > 0
       || orchestrationScopes.length > 0
+      || orchestrationLegScopes.length > 0
 
     return {
       version: 2,
@@ -573,10 +575,51 @@ export class CanonicalSpecBuilderService {
               ...(orchestrationPortfolioRisks.length > 0 ? { portfolioRisks: orchestrationPortfolioRisks } : {}),
               ...(orchestrationPrograms.length > 0 ? { programs: orchestrationPrograms } : {}),
               ...(orchestrationScopes.length > 0 ? { scopes: orchestrationScopes } : {}),
+              ...(orchestrationLegScopes.length > 0 ? { legScopes: orchestrationLegScopes } : {}),
             },
           }
         : {}),
     }
+  }
+
+  // Phase 5 S11 (#1112): scope.leg substrate
+  private buildOrchestrationLegScopes(state: SemanticState): CanonicalOrchestrationLegScope[] {
+    const nodes = state.orchestration?.nodes
+    if (!nodes || nodes.length === 0) return []
+    const result: CanonicalOrchestrationLegScope[] = []
+    for (const node of nodes) {
+      if (
+        node.kind !== 'scope'
+        || node.status !== 'locked'
+        || node.key !== 'scope.leg'
+        || node.legScopeKind !== 'leg'
+      ) continue
+      const legId = typeof node.legId === 'string' ? node.legId.trim() : ''
+      if (legId === '') continue
+      if (node.direction !== 'long' && node.direction !== 'short') continue
+      const instrumentRef = typeof node.instrumentRef === 'string' ? node.instrumentRef.trim() : ''
+      if (instrumentRef === '') continue
+      const sizing = node.legSizing
+      const legSizing = sizing
+        ? {
+            mode: sizing.mode,
+            value: sizing.value,
+            ...(typeof sizing.pairedLegId === 'string' && sizing.pairedLegId.trim() !== ''
+              ? { pairedLegId: sizing.pairedLegId.trim() }
+              : {}),
+          }
+        : undefined
+      result.push({
+        id: node.id,
+        scopeKind: 'leg',
+        legId,
+        direction: node.direction,
+        instrumentRef,
+        ...(legSizing ? { legSizing } : {}),
+        ...(node.syncTriggerRequired === true ? { syncTriggerRequired: true } : {}),
+      })
+    }
+    return result
   }
 
   // Phase 5 S2 (#1104): scope.symbol substrate

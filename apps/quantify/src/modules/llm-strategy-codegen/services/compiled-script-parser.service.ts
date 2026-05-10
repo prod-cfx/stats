@@ -41,6 +41,8 @@ export class CompiledScriptParserService {
     values.set('ORCHESTRATION_PROGRAMS', this.readOptionalConst(lines, 'ORCHESTRATION_PROGRAMS'))
     // Phase 5 S2 (#1104): scope.symbol substrate — optional const，旧 v1 脚本无该 const 走兜底
     values.set('ORCHESTRATION_SCOPES', this.readOptionalConst(lines, 'ORCHESTRATION_SCOPES'))
+    // Phase 5 S11 (#1112): scope.leg substrate — 紧跟 ORCHESTRATION_SCOPES 之后；旧 v1 脚本无该 const 走兜底
+    values.set('ORCHESTRATION_LEG_SCOPES', this.readOptionalConst(lines, 'ORCHESTRATION_LEG_SCOPES'))
     values.set('TOPOLOGY', this.readRequiredConst(lines, 'TOPOLOGY'))
 
     const spacer = lines.shift()
@@ -65,6 +67,8 @@ export class CompiledScriptParserService {
       ...this.optionalProjectionField('orchestrationPrograms', values.get('ORCHESTRATION_PROGRAMS')),
       // Phase 5 S2 (#1104): scope.symbol substrate
       ...this.optionalProjectionField('orchestrationScopes', values.get('ORCHESTRATION_SCOPES')),
+      // Phase 5 S11 (#1112): scope.leg substrate
+      ...this.optionalProjectionField('orchestrationLegScopes', values.get('ORCHESTRATION_LEG_SCOPES')),
       topology: values.get('TOPOLOGY') as CompiledScriptProjection['topology'],
     }
 
@@ -96,7 +100,7 @@ export class CompiledScriptParserService {
     return projection
   }
 
-  private optionalProjectionField<K extends 'runtimeRequirements' | 'riskPredicates' | 'orchestrationPrograms' | 'orchestrationScopes'>(
+  private optionalProjectionField<K extends 'runtimeRequirements' | 'riskPredicates' | 'orchestrationPrograms' | 'orchestrationScopes' | 'orchestrationLegScopes'>(
     key: K,
     value: unknown,
   ): Pick<CompiledScriptProjection, K> | Record<string, never> {

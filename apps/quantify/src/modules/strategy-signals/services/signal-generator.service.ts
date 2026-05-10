@@ -785,6 +785,12 @@ export class SignalGeneratorService {
             const orchestrationScopes = (projection as {
               orchestrationScopes?: Parameters<typeof runDecisionPrograms>[7]
             }).orchestrationScopes ?? []
+            // Phase 5 S11 (#1112): scope.leg substrate（与 S2 同形 substrate）
+            //   - 单/0 leg 走兜底；多 leg 时 ctx.activeLegScopeId 由上游注入
+            //   - leg fan-out caller 循环留 follow-up（与 S2 一致）
+            const orchestrationLegScopes = (projection as {
+              orchestrationLegScopes?: Parameters<typeof runDecisionPrograms>[8]
+            }).orchestrationLegScopes ?? []
             const decision = runDecisionPrograms(
               ctx,
               decisionPrograms,
@@ -794,6 +800,7 @@ export class SignalGeneratorService {
               orchestrationGateState,
               portfolioRiskState,
               orchestrationScopes,
+              orchestrationLegScopes,
             )
             // Phase 5 S4 T13 — 注入 orchestrationPrograms 第 7 参数。
             // live closeProgramIds 真实合成 close decision 留 follow-up issue

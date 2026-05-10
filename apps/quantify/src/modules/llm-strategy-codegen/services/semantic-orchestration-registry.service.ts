@@ -22,9 +22,13 @@ const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
 const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
 const SCOPE_SYMBOL_KEY = 'scope.symbol'
+const SCOPE_LEG_KEY = 'scope.leg'
 
 const SYMBOL_FORMAT_PATTERN = /^[A-Z]{2,5}USDT$/u
 const SYMBOL_MAX_LENGTH = 32
+
+// Phase 5 S11 (#1112): legId 与 node.id 是两个独立标识；legId 仅在 leg 节点子集内唯一并供 pairedLegId 引用
+const LEG_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_.]{0,63}$/u
 
 const SCOPE_SYMBOL_CONTRACT: SemanticOrchestrationContract = {
   id: 'scope.symbol',
@@ -54,6 +58,40 @@ const SCOPE_SYMBOL_CONTRACT: SemanticOrchestrationContract = {
       domain: 'orchestration',
       verb: 'bind',
       object: 'symbol_scope',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
+// Phase 5 S11 (#1112): scope.leg contract — 6 字段齐全
+const SCOPE_LEG_CONTRACT: SemanticOrchestrationContract = {
+  id: 'scope.leg',
+  kind: 'scope',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'declare',
+      object: 'leg_scope',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'route',
+      object: 'leg_scope_decision',
+    },
+  ],
+  stateRequirements: [],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'orchestration',
+      verb: 'bind',
+      object: 'leg_scope',
     },
   ],
   executableSinceVersion: CURRENT_SEMANTIC_VERSION,
@@ -320,6 +358,7 @@ export class SemanticOrchestrationRegistryService {
     [PROGRAM_DYNAMIC_GRID_KEY, PROGRAM_DYNAMIC_GRID_CONTRACT],
     [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
     [SCOPE_SYMBOL_KEY, SCOPE_SYMBOL_CONTRACT],
+    [SCOPE_LEG_KEY, SCOPE_LEG_CONTRACT],
   ])
 
   getContractByKey(key: string): SemanticOrchestrationContract | null {
@@ -335,6 +374,10 @@ export class SemanticOrchestrationRegistryService {
       return this.validateProgramNode(node)
     }
     if (node.kind === 'scope') {
+      // Phase 5 S11 (#1112): scope kind 路由到 symbol vs leg 子类型
+      if (node.key === SCOPE_LEG_KEY || node.legScopeKind === 'leg') {
+        return this.validateLegScopeNode(node, siblingNodes)
+      }
       return this.validateScopeNode(node, siblingNodes)
     }
     if (node.kind === 'portfolioRisk' && node.key === PORTFOLIO_DRAWDOWN_BLOCK_KEY) {
@@ -792,6 +835,120 @@ export class SemanticOrchestrationRegistryService {
       )
       if (collision) {
         pushSlot('symbol.primary_symbol_collision', '多 scope 主标的必须各自唯一')
+      }
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  /**
+   * Phase 5 S11 (#1112): scope.leg 节点 8 重 fail-closed:
+   *   1) kind === 'scope'
+   *   2) key === 'scope.leg'
+   *   3) legScopeKind === 'leg'（且与 symbolScopeKind='symbol' 互斥）
+   *   4) legId 非空、匹配 ^[a-zA-Z][a-zA-Z0-9_.]{0,63}$、与同 state 其它 leg 节点 legId 不重复
+   *   5) direction ∈ {'long','short'}
+   *   6) instrumentRef trim 非空、引用同 state 中 status:'locked' 的 scope.symbol 节点 id
+   *   7) legSizing 缺失允许；若提供：mode 合法 + value > 0；mode='fixed_ratio' 时 pairedLegId 非空、引用其它 leg 的 legId、且 direction 互反
+   *   8) version-gate（caller 在 readiness 处理）
+   */
+  private validateLegScopeNode(
+    node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[],
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.scope.leg[${node.id}]`
+    const pushSlot = (suffix: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.scope.leg.${suffix}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    if (node.key !== SCOPE_LEG_KEY) {
+      pushSlot('unsupported_kind', '当前仅支持 scope.leg 子类型')
+      return { ok: false, missingSlots }
+    }
+
+    if (node.legScopeKind !== 'leg') {
+      pushSlot('leg_scope_kind', '请确认 legScopeKind 为 leg')
+    }
+    if (node.symbolScopeKind === 'symbol') {
+      pushSlot('leg_scope_kind', 'scope.leg 节点不可同时持有 symbolScopeKind="symbol"')
+    }
+
+    const legId = typeof node.legId === 'string' ? node.legId.trim() : ''
+    if (legId === '' || !LEG_ID_PATTERN.test(legId)) {
+      pushSlot('leg_id', '请确认 legId（字母开头、字母数字下划线点、长度 ≤ 64）')
+    }
+
+    if (node.direction !== 'long' && node.direction !== 'short') {
+      pushSlot('direction', '请确认腿方向（long/short）')
+    }
+
+    const instrumentRef = typeof node.instrumentRef === 'string' ? node.instrumentRef.trim() : ''
+    if (instrumentRef === '') {
+      pushSlot('instrument_ref', '请确认该腿绑定的 scope.symbol 节点 id')
+    } else {
+      const referenced = siblingNodes.find((other) => other.id === instrumentRef)
+      const referencedOk = referenced !== undefined
+        && referenced.kind === 'scope'
+        && referenced.key === SCOPE_SYMBOL_KEY
+        && referenced.status === 'locked'
+      if (!referencedOk) {
+        pushSlot('instrument_ref', '该腿引用的 scope.symbol 节点必须已存在且 readiness 已通过')
+      }
+    }
+
+    // legId 在 leg 子集内唯一
+    const otherLegNodes = siblingNodes.filter(
+      (other) =>
+        other.id !== node.id
+        && other.kind === 'scope'
+        && other.key === SCOPE_LEG_KEY,
+    )
+    if (legId !== '') {
+      const dup = otherLegNodes.some(
+        (other) => typeof other.legId === 'string' && other.legId.trim() === legId,
+      )
+      if (dup) {
+        pushSlot('leg_id', 'legId 在策略内必须唯一')
+      }
+    }
+
+    // legSizing 校验
+    const sizing = node.legSizing
+    if (sizing !== undefined) {
+      const modeOk = sizing.mode === 'fixed_pct' || sizing.mode === 'fixed_quote' || sizing.mode === 'fixed_ratio'
+      if (!modeOk) {
+        pushSlot('leg_sizing.mode', '请确认 legSizing.mode（fixed_pct/fixed_quote/fixed_ratio）')
+      }
+      if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) {
+        pushSlot('leg_sizing.value', '请确认 legSizing.value（>0 有限数）')
+      }
+      if (sizing.mode === 'fixed_ratio') {
+        const paired = typeof sizing.pairedLegId === 'string' ? sizing.pairedLegId.trim() : ''
+        if (paired === '') {
+          pushSlot('paired_leg_id', 'fixed_ratio 模式必须指定 pairedLegId')
+        } else if (paired === legId) {
+          pushSlot('paired_leg_id', 'pairedLegId 不可指向自身')
+        } else {
+          const pairedNode = otherLegNodes.find(
+            (other) => typeof other.legId === 'string' && other.legId.trim() === paired,
+          )
+          if (!pairedNode) {
+            pushSlot('paired_leg_id', 'pairedLegId 必须引用同 state 中其它 supported leg')
+          } else if (
+            pairedNode.direction === undefined
+            || (pairedNode.direction === node.direction)
+          ) {
+            pushSlot('direction_collision', 'paired leg 必须方向相反（对冲腿）')
+          }
+        }
       }
     }
 

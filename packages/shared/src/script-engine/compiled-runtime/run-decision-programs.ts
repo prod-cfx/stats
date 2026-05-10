@@ -60,6 +60,8 @@ interface DecisionProgramNode {
     dcaSchedule?: DcaScheduleMeta
     /** Phase 5 S2 (#1104): 多 scope 策略下该 program 归属的 scope.symbol id */
     symbolScopeRef?: string
+    /** Phase 5 S11 (#1112): 多 leg 策略下该 program 归属的 scope.leg id */
+    legScopeRef?: string
   }
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT' | 'ADD_LONG' | 'ADD_SHORT'
@@ -76,6 +78,24 @@ export interface CompiledOrchestrationScope {
   scopeKind: 'symbol'
   symbols: readonly string[]
   primarySymbol?: string
+}
+
+// Phase 5 S11 (#1112): scope.leg substrate compiled runtime
+export interface CompiledOrchestrationLegSizing {
+  mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+  value: number
+  pairedLegId?: string
+}
+
+export interface CompiledOrchestrationLegScope {
+  id: string
+  scopeKind: 'leg'
+  legId: string
+  direction: 'long' | 'short'
+  instrumentRef: string
+  legSizing?: CompiledOrchestrationLegSizing
+  // S11 仅声明透传，runtime 当前不读；follow-up 接入 cross-program 同步触发聚合
+  syncTriggerRequired?: boolean
 }
 
 interface CompiledDecisionState {
@@ -106,6 +126,8 @@ export function runDecisionPrograms(
   portfolioRiskState?: OrchestrationPortfolioRiskState,
   // Phase 5 S2 (#1104): scope.symbol substrate fail-closed
   orchestrationScopes?: readonly CompiledOrchestrationScope[],
+  // Phase 5 S11 (#1112): scope.leg substrate fail-closed
+  orchestrationLegScopes?: readonly CompiledOrchestrationLegScope[],
 ): Readonly<StrategyDecisionV1> {
   const compiledState = ensureCompiledDecisionState(ctx)
   compiledState.barIndex = readCurrentBarIndex(ctx, compiledState.barIndex)
@@ -151,6 +173,16 @@ export function runDecisionPrograms(
     })
 
   for (const program of orderedPrograms) {
+    // Phase 5 S11 (#1112): 多 leg 策略 fail-closed 路由 — 先于 symbol 路由
+    //   - legScopes.length <= 1: 'continue' 走兜底（单/0 leg 旧策略零侵入）
+    //   - legScopes.length >= 2: 'continue' / 'skip' / 失败 decision
+    //   - 'skip' = per-program continue（program-A skip 不影响 program-B 执行）
+    const legRouting = applyLegScopeRouting(program, ctx, orchestrationLegScopes)
+    if (legRouting === 'skip') continue
+    if (legRouting !== 'continue') {
+      const gated = applyOrchestrationGate(legRouting, orchestrationGateState, portfolioRiskState, ctx)
+      return Object.freeze(gated)
+    }
     // Phase 5 S2 (#1104): 多 scope 策略 fail-closed 路由
     //   - scopes.length <= 1: 'continue' 走兜底（单/0 scope 旧策略零侵入）
     //   - scopes.length >= 2: 'continue' / 'skip' / 失败 decision
@@ -1526,6 +1558,52 @@ function resolveAdjustedEntrySide(
   const currentSide = currentQty > 0 ? 'long' : currentQty < 0 ? 'short' : null
   const targetSide = targetQty > 0 ? 'long' : targetQty < 0 ? 'short' : null
   return targetSide !== null && targetSide !== currentSide ? targetSide : null
+}
+
+/**
+ * Phase 5 S11 (#1112): scope.leg substrate runtime fail-closed 路由（与 applySymbolScopeRouting 严格同形）
+ *
+ * 决策表：
+ *   legScopes 缺失 / length <= 1 → 'continue' （单/0 leg 走兜底）
+ *   legScopes.length >= 2 时：
+ *     activeLegScopeId trim 后空 → fail-closed.no_active_leg
+ *     activeId 不在 legScopes id 集合 → fail-closed.unknown_active_leg
+ *     program.metadata.legScopeRef trim 后空 → fail-closed.unbound_program
+ *     program ref ≠ activeId → 'skip' （该 program 不属当前 leg，下个 program）
+ *     program ref === activeId → 'continue' （正常进入决策）
+ */
+export function applyLegScopeRouting(
+  program: { metadata?: { legScopeRef?: string } },
+  ctx: StrategyExecutionContextV1,
+  legScopes: readonly CompiledOrchestrationLegScope[] | undefined,
+): 'continue' | 'skip' | StrategyDecisionV1 {
+  if (!legScopes || legScopes.length <= 1) return 'continue'
+
+  const activeIdRaw = (ctx as { activeLegScopeId?: unknown }).activeLegScopeId
+  const activeId = typeof activeIdRaw === 'string' ? activeIdRaw.trim() : ''
+  if (activeId === '') {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.leg.fail_closed.no_active_leg',
+    }
+  }
+  if (!legScopes.some(l => l.id === activeId)) {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.leg.fail_closed.unknown_active_leg',
+    }
+  }
+
+  const programRefRaw = program.metadata?.legScopeRef
+  const programRef = typeof programRefRaw === 'string' ? programRefRaw.trim() : ''
+  if (programRef === '') {
+    return {
+      action: 'NOOP',
+      reason: 'compiled.orchestration.leg.fail_closed.unbound_program',
+    }
+  }
+  if (programRef !== activeId) return 'skip'
+  return 'continue'
 }
 
 /**

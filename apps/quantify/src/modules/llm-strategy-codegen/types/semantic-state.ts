@@ -172,6 +172,9 @@ export interface SemanticTriggerState {
   // Phase 5 S2 (#1104): 多标的策略中显式声明该 trigger 归属哪个 scope.symbol 节点
   // 单/0 scope 策略不读；多 scope 策略缺该字段 readiness fail-closed
   symbolScopeRef?: string
+  // Phase 5 S11 (#1112): 多腿策略中显式声明该 trigger 归属哪个 scope.leg 节点
+  // 单/0 leg 策略不读；多 leg 策略缺该字段 readiness fail-closed
+  legScopeRef?: string
 }
 
 export interface SemanticActionState {
@@ -187,6 +190,8 @@ export interface SemanticActionState {
   support?: SemanticAtomSupportMetadata
   // Phase 5 S2 (#1104): 多标的策略中显式声明该 action 归属哪个 scope.symbol 节点
   symbolScopeRef?: string
+  // Phase 5 S11 (#1112): 多腿策略中显式声明该 action 归属哪个 scope.leg 节点
+  legScopeRef?: string
 }
 
 export type SemanticRiskBasis =
@@ -243,6 +248,8 @@ export interface SemanticRiskState {
   support?: SemanticAtomSupportMetadata
   // Phase 5 S2 (#1104): 多标的策略中显式声明该 risk 归属哪个 scope.symbol 节点
   symbolScopeRef?: string
+  // Phase 5 S11 (#1112): 多腿策略中显式声明该 risk 归属哪个 scope.leg 节点
+  legScopeRef?: string
 }
 
 export type SemanticPositionSizingContract =
@@ -268,6 +275,8 @@ export interface SemanticPositionConstraintState {
   support?: SemanticAtomSupportMetadata
   // Phase 5 S2 (#1104): 多标的策略中显式声明该 position constraint 归属哪个 scope.symbol 节点
   symbolScopeRef?: string
+  // Phase 5 S11 (#1112): 多腿策略中显式声明该 position constraint 归属哪个 scope.leg 节点
+  legScopeRef?: string
 }
 
 export interface SemanticPositionState {
@@ -390,7 +399,27 @@ export interface SemanticOrchestrationNode {
   symbolScopeKind?: 'symbol'
   symbols?: readonly string[]
   primarySymbol?: string
+  // scope.leg 节点专属（其它 kind / 其它 sub-kind 不读）— Phase 5 S11 (#1112)
+  // 与 symbolScopeKind 互斥；同时持有由 readiness validateLegScopeNode fail-closed
+  legScopeKind?: 'leg'
+  legId?: string
+  direction?: 'long' | 'short'
+  // 必须引用同 state.orchestration.nodes[] 中 status:'locked' 的 scope.symbol 节点 id
+  instrumentRef?: string
+  legSizing?: SemanticOrchestrationLegSizing
+  // S11 仅声明透传，不在运行时强制；follow-up 落地 cross-program 同步触发聚合
+  syncTriggerRequired?: boolean
   support?: SemanticAtomSupportMetadata
+}
+
+// Phase 5 S11 (#1112): scope.leg sizing 描述
+//   mode='fixed_ratio' 时 pairedLegId 必填，并由 readiness 校验 paired direction 互反
+export type SemanticOrchestrationLegSizingMode = 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+
+export interface SemanticOrchestrationLegSizing {
+  mode: SemanticOrchestrationLegSizingMode
+  value: number
+  pairedLegId?: string
 }
 
 export interface SemanticOrchestrationState {

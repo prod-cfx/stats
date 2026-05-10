@@ -464,6 +464,25 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderSymbolScope(params),
     clarificationRenderer: (slotKey) => renderSymbolScopeClarification(slotKey),
   }),
+  // Phase 5 S11 (#1112): scope.leg substrate
+  presentation({
+    key: 'scope.leg',
+    publicName: '策略腿',
+    aliases: ['对冲腿', '多空腿', 'hedge legs', 'strategy legs', '腿'],
+    positiveExamples: [
+      '做多 BTC 同时做空 ETH，等比对冲',
+      '三条腿：多 BTC、多 ETH、空 SOL',
+      'BTCUSDT 多头腿、ETHUSDT 空头腿，1:2 对冲',
+    ],
+    negativeExamples: ['做多 BTCUSDT 和 ETHUSDT', '随便对冲一下'],
+    goldenUtterances: [
+      '做多 BTC 同时做空 ETH，等比对冲',
+      '对冲组合：BTC 做多 1000U、ETH 做空 500U',
+      'delta neutral：BTC 多 ETH 空 等比',
+    ],
+    displayRenderer: ({ params }) => renderLegScope(params),
+    clarificationRenderer: (slotKey) => renderLegScopeClarification(slotKey),
+  }),
   presentation({
     key: 'market.regime',
     publicName: '市场状态',
@@ -1400,6 +1419,49 @@ function renderSymbolScopeClarification(slotKey: string): string {
   if (slotKey === 'orchestration.scope.symbol.missing_binding') return '请确认该规则绑定到哪个 symbol scope'
   if (slotKey === 'orchestration.scope.unsupported_kind') return '当前仅支持 scope.symbol'
   return '请补全标的范围参数'
+}
+
+// Phase 5 S11 (#1112): scope.leg render
+function renderLegScope(params: Record<string, unknown>): string {
+  const direction = stringParam(params, 'direction', '')
+  const instrument = stringParam(params, 'instrumentSymbol', '') || stringParam(params, 'instrumentRef', '')
+  if (direction === 'long' && instrument !== '') {
+    return renderDisplayToken('atom.scope.leg.display.long', { instrument })
+  }
+  if (direction === 'short' && instrument !== '') {
+    return renderDisplayToken('atom.scope.leg.display.short', { instrument })
+  }
+  // 多 leg 聚合渲染
+  const legsRaw = params.legs
+  if (Array.isArray(legsRaw)) {
+    const parts: string[] = []
+    for (const item of legsRaw) {
+      if (typeof item !== 'object' || item === null) continue
+      const r = item as Record<string, unknown>
+      const d = typeof r.direction === 'string' ? r.direction : ''
+      const sym = typeof r.instrumentSymbol === 'string' ? r.instrumentSymbol : ''
+      if (sym === '') continue
+      parts.push(d === 'short' ? `空 ${sym}` : `多 ${sym}`)
+    }
+    if (parts.length > 0) {
+      return renderDisplayToken('atom.scope.leg.display.hedge', { legs: parts.join('、') })
+    }
+  }
+  return ''
+}
+
+function renderLegScopeClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.scope.leg.unsupported_kind') return '当前仅支持 scope.leg 子类型'
+  if (slotKey === 'orchestration.scope.leg.leg_scope_kind') return '请确认 legScopeKind 为 leg'
+  if (slotKey === 'orchestration.scope.leg.leg_id') return '请确认腿 id（字母开头、字母数字下划线点、长度 ≤ 64）'
+  if (slotKey === 'orchestration.scope.leg.direction') return '请确认腿方向（long/short）'
+  if (slotKey === 'orchestration.scope.leg.instrument_ref') return '该腿引用的 scope.symbol 节点必须已存在且 readiness 已通过'
+  if (slotKey === 'orchestration.scope.leg.leg_sizing.mode') return '请确认 legSizing.mode（fixed_pct/fixed_quote/fixed_ratio）'
+  if (slotKey === 'orchestration.scope.leg.leg_sizing.value') return '请确认 legSizing.value（>0 有限数）'
+  if (slotKey === 'orchestration.scope.leg.paired_leg_id') return 'fixed_ratio 模式必须指定 pairedLegId'
+  if (slotKey === 'orchestration.scope.leg.direction_collision') return 'paired leg 必须方向相反（对冲腿）'
+  if (slotKey === 'orchestration.scope.leg.missing_binding') return '请确认该规则绑定到哪个策略腿'
+  return '请补全策略腿参数'
 }
 
 function objectParam(params: Record<string, unknown>, key: string): Record<string, unknown> {

@@ -322,6 +322,21 @@ export class SemanticSeedStateBuilderService {
     const minStepPct = isFiniteNumber(update.minStepPct) ? update.minStepPct : undefined
     const maxStepPct = isFiniteNumber(update.maxStepPct) ? update.maxStepPct : undefined
 
+    // Phase 5 S2 (#1104): scope.symbol 专属字段透传
+    const symbolScopeKind = update.symbolScopeKind === 'symbol' ? update.symbolScopeKind : undefined
+    const symbols = Array.isArray(update.symbols)
+      ? update.symbols.filter((s): s is string => typeof s === 'string' && s.trim() !== '')
+      : undefined
+    const primarySymbol = this.readTrimmedString(update.primarySymbol) ?? undefined
+
+    // Phase 5 S11 (#1112): scope.leg 专属字段透传
+    const legScopeKind = update.legScopeKind === 'leg' ? update.legScopeKind : undefined
+    const legId = this.readTrimmedString(update.legId) ?? undefined
+    const direction = update.direction === 'long' || update.direction === 'short' ? update.direction : undefined
+    const instrumentRef = this.readTrimmedString(update.instrumentRef) ?? undefined
+    const legSizing = this.isRecord(update.legSizing) ? this.normalizeLegSizing(update.legSizing) : undefined
+    const syncTriggerRequired = update.syncTriggerRequired === true ? true : undefined
+
     return {
       id: this.readTrimmedString(update.id) ?? `orchestration-${kind}-${index + 1}`,
       kind,
@@ -358,6 +373,30 @@ export class SemanticSeedStateBuilderService {
       ...(minStepPct !== undefined ? { minStepPct } : {}),
       ...(maxStepPct !== undefined ? { maxStepPct } : {}),
       ...(levelCount !== undefined ? { levelCount } : {}),
+      // Phase 5 S2 (#1104): scope.symbol 字段透传
+      ...(symbolScopeKind ? { symbolScopeKind } : {}),
+      ...(symbols && symbols.length > 0 ? { symbols } : {}),
+      ...(primarySymbol ? { primarySymbol } : {}),
+      // Phase 5 S11 (#1112): scope.leg 字段透传
+      ...(legScopeKind ? { legScopeKind } : {}),
+      ...(legId ? { legId } : {}),
+      ...(direction ? { direction } : {}),
+      ...(instrumentRef ? { instrumentRef } : {}),
+      ...(legSizing ? { legSizing } : {}),
+      ...(syncTriggerRequired === true ? { syncTriggerRequired: true } : {}),
+    }
+  }
+
+  // Phase 5 S11 (#1112): scope.leg sizing 透传
+  private normalizeLegSizing(value: SemanticPatchRecord): SemanticOrchestrationNode['legSizing'] | undefined {
+    const mode = value.mode
+    if (mode !== 'fixed_pct' && mode !== 'fixed_quote' && mode !== 'fixed_ratio') return undefined
+    if (typeof value.value !== 'number' || !Number.isFinite(value.value) || value.value <= 0) return undefined
+    const pairedLegId = this.readTrimmedString(value.pairedLegId) ?? undefined
+    return {
+      mode,
+      value: value.value,
+      ...(pairedLegId ? { pairedLegId } : {}),
     }
   }
 

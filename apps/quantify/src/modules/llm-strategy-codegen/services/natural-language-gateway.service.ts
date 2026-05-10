@@ -7,6 +7,7 @@ import type {
   SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
+  SemanticLegScopeFrame,
   SemanticNaturalLanguageFrame,
   SemanticPortfolioDrawdownFrame,
   SemanticRegimeGateFrame,
@@ -28,6 +29,7 @@ type FrameDraft =
   | DynamicGridFrameDraft
   | AdaptiveVolatilityGridFrameDraft
   | SymbolScopeFrameDraft
+  | LegScopeFrameDraft
 
 type ContextFrameDraft = Omit<SemanticContextFrame, 'id' | 'confidence'>
 type IndicatorCompareFrameDraft = Omit<SemanticIndicatorCompareFrame, 'id' | 'confidence'>
@@ -41,6 +43,7 @@ type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confid
 type DynamicGridFrameDraft = Omit<SemanticDynamicGridFrame, 'id' | 'confidence'>
 type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame, 'id' | 'confidence'>
 type SymbolScopeFrameDraft = Omit<SemanticSymbolScopeFrame, 'id' | 'confidence'>
+type LegScopeFrameDraft = Omit<SemanticLegScopeFrame, 'id' | 'confidence'>
 
 @Injectable()
 export class NaturalLanguageGatewayService {
@@ -51,6 +54,7 @@ export class NaturalLanguageGatewayService {
     const drafts: FrameDraft[] = [
       ...this.parseContext(text),
       ...this.parseSymbolScope(text),
+      ...this.parseLegScope(text),
       ...this.parseEmaGates(text),
       ...this.parseBoundaryTouches(text),
       ...this.parseActions(text),
@@ -62,11 +66,163 @@ export class NaturalLanguageGatewayService {
       ...this.parseFixedGridGated(text),
     ]
 
-    return drafts.map((draft, index) => ({
+    // Phase 5 S11 (#1112): leg_scope 命中时 suppress 同 utterance 的 symbol_scope frame
+    //   - leg_scope 已隐含双 symbol 维度（每 leg 自带 instrumentSymbol），无需 symbol_scope 重复表达
+    //   - normalizer 会按 leg.instrumentSymbol 各自创建独立 scope.symbol node
+    const hasLegFrame = drafts.some((d) => d.kind === 'leg_scope')
+    const filtered = hasLegFrame
+      ? drafts.filter((d) => d.kind !== 'symbol_scope')
+      : drafts
+
+    return filtered.map((draft, index) => ({
       ...draft,
       id: `natural-language-frame-${index + 1}`,
       confidence: 0.9,
     }))
+  }
+
+  /**
+   * Phase 5 S11 (#1112): 多腿 scope.leg utterance parser
+   *
+   * 双门槛：
+   *   1) 触发短语精准多 OR：对冲/多空/做多.做空/做空.做多/hedge/long.short/short.long/多腿/腿/leg
+   *   2) ≥2 distinct (direction, symbol) 对（单方向多 symbol 不命中 leg；归 S2 symbol scope 兜底）
+   *
+   * 命中表（plan §3.6 锁定）：F1-F6 + 1 negative
+   */
+  private parseLegScope(text: string): LegScopeFrameDraft[] {
+    const triggerPattern = /(对冲|多空|做多.{0,16}做空|做空.{0,16}做多|hedge|long.{0,8}short|short.{0,8}long|多腿|腿|leg)/iu
+    if (!triggerPattern.test(text)) return []
+
+    const aliasMap: Record<string, string> = {
+      BTC: 'BTCUSDT',
+      ETH: 'ETHUSDT',
+      SOL: 'SOLUSDT',
+      BNB: 'BNBUSDT',
+      MATIC: 'MATICUSDT',
+      AVAX: 'AVAXUSDT',
+      DOGE: 'DOGEUSDT',
+      XRP: 'XRPUSDT',
+    }
+
+    interface ParsedLeg {
+      direction: 'long' | 'short'
+      symbol: string
+      pos: number  // direction keyword 在原 text 中的起点位置
+      sizing?: { mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'; value: number }
+    }
+
+    // direction keyword 全文扫描：位置 + 方向
+    const directionPattern = /(做多|开多|多头|多\s|long\b|做空|开空|空头|空\s|short\b)/giu
+    const directionHits: Array<{ pos: number; direction: 'long' | 'short' }> = []
+    for (const m of text.matchAll(directionPattern)) {
+      const matched = (m[1] ?? '').trim().toLowerCase()
+      let direction: 'long' | 'short' | null = null
+      if (matched === '做多' || matched === '开多' || matched === '多头' || matched === '多' || matched === 'long') direction = 'long'
+      else if (matched === '做空' || matched === '开空' || matched === '空头' || matched === '空' || matched === 'short') direction = 'short'
+      if (direction !== null && m.index !== undefined) {
+        directionHits.push({ pos: m.index, direction })
+      }
+    }
+    if (directionHits.length === 0) return []
+
+    // 全文扫描所有 symbol 候选：显式 USDT + alias，记录位置
+    const symbolHits: Array<{ pos: number; symbol: string }> = []
+    for (const m of text.matchAll(/\b([A-Z]{2,5})USDT\b/giu)) {
+      if (m.index !== undefined) symbolHits.push({ pos: m.index, symbol: `${m[1]}USDT`.toUpperCase() })
+    }
+    for (const m of text.matchAll(/(?<![A-Za-z])(BTC|ETH|SOL|BNB|MATIC|AVAX|DOGE|XRP)(?![A-Za-z])/giu)) {
+      if (m.index === undefined) continue
+      const upper = m[1].toUpperCase()
+      const mapped = aliasMap[upper]
+      if (!mapped) continue
+      // 跳过已被显式 USDT 命中覆盖的 alias 位置
+      if (symbolHits.some((s) => Math.abs(s.pos - m.index!) < 4)) continue
+      symbolHits.push({ pos: m.index, symbol: mapped })
+    }
+    if (symbolHits.length === 0) return []
+
+    // 每个 direction 命中向后查找最邻近的 symbol（窗口 ≤ 30 字符；若无则向前找）
+    const usedSymbolPositions = new Set<number>()
+    const legs: ParsedLeg[] = []
+    for (const dh of directionHits) {
+      // 优先向后找未占用的最近 symbol
+      const forward = symbolHits
+        .filter((s) => !usedSymbolPositions.has(s.pos) && s.pos >= dh.pos && s.pos - dh.pos <= 30)
+        .sort((a, b) => (a.pos - dh.pos) - (b.pos - dh.pos))[0]
+      let pick = forward
+      if (!pick) {
+        // 向前找
+        const backward = symbolHits
+          .filter((s) => !usedSymbolPositions.has(s.pos) && s.pos < dh.pos && dh.pos - s.pos <= 30)
+          .sort((a, b) => (dh.pos - a.pos) - (dh.pos - b.pos))[0]
+        pick = backward
+      }
+      if (!pick) continue
+      usedSymbolPositions.add(pick.pos)
+
+      // sizing：在 ±30 字符窗口内查找 quote/pct
+      const winStart = Math.max(0, Math.min(dh.pos, pick.pos) - 5)
+      const winEnd = Math.min(text.length, Math.max(dh.pos, pick.pos) + 30)
+      const window = text.slice(winStart, winEnd)
+      const quoteMatch = /(\d+(?:\.\d+)?)\s*(?:U|USDT|usdt)\b/iu.exec(window)
+      const pctMatch = /(\d+(?:\.\d+)?)\s*(?:%|％|百分点)/iu.exec(window)
+      let sizing: ParsedLeg['sizing']
+      if (quoteMatch) {
+        const value = Number(quoteMatch[1])
+        if (Number.isFinite(value) && value > 0) sizing = { mode: 'fixed_quote', value }
+      } else if (pctMatch) {
+        const value = Number(pctMatch[1])
+        if (Number.isFinite(value) && value > 0) sizing = { mode: 'fixed_pct', value }
+      }
+
+      legs.push({ direction: dh.direction, symbol: pick.symbol, pos: dh.pos, ...(sizing ? { sizing } : {}) })
+    }
+
+    // 双门槛 #2：≥2 distinct (direction, symbol) 对
+    const distinctKeys = new Set(legs.map((l) => `${l.direction}|${l.symbol}`))
+    if (distinctKeys.size < 2) return []
+
+    // 等比对冲检测：trigger 含"等比对冲"且 leg 中存在 long+short 对 → fixed_ratio 1:1
+    const hasEqualRatioHedge = /(?:等比对冲|delta\s*neutral|1\s*:\s*1)/iu.test(text)
+    const hasExplicitRatio = /(\d+)\s*:\s*(\d+)/u.exec(text)
+    const ratioPair = hasExplicitRatio
+      ? { a: Number(hasExplicitRatio[1]), b: Number(hasExplicitRatio[2]) }
+      : undefined
+
+    const finalLegs: SemanticLegScopeFrame['legs'][number][] = legs.map((leg, idx) => {
+      const legId = `leg.${leg.direction}.${leg.symbol.replace(/USDT$/iu, '').toLowerCase()}`
+      const base: SemanticLegScopeFrame['legs'][number] = {
+        legId,
+        direction: leg.direction,
+        instrumentSymbol: leg.symbol,
+      }
+      if (leg.sizing) {
+        return { ...base, sizing: leg.sizing }
+      }
+      // 等比对冲：long/short 各一时给 fixed_ratio
+      if ((hasEqualRatioHedge || ratioPair) && legs.length === 2) {
+        const otherIdx = idx === 0 ? 1 : 0
+        const other = legs[otherIdx]
+        if (other.direction !== leg.direction) {
+          const otherLegId = `leg.${other.direction}.${other.symbol.replace(/USDT$/iu, '').toLowerCase()}`
+          const value = ratioPair
+            ? (idx === 0 ? ratioPair.a / Math.max(ratioPair.b, 1) : ratioPair.b / Math.max(ratioPair.a, 1))
+            : 1
+          return {
+            ...base,
+            sizing: { mode: 'fixed_ratio', value, pairedLegId: otherLegId },
+          }
+        }
+      }
+      return base
+    })
+
+    return [{
+      kind: 'leg_scope',
+      legs: finalLegs,
+      evidenceText: text.slice(0, Math.min(text.length, 80)),
+    }]
   }
 
   private normalizeInput(input?: string): string {

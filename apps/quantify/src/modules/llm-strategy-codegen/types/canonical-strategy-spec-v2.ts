@@ -78,6 +78,9 @@ export interface CanonicalRuleMetadata extends PositionLifecycleActionMetadata {
   // Phase 5 S2 (#1104): 多 scope 策略中显式声明该 rule 归属哪个 scope.symbol id
   // 仅在 spec.orchestration.scopes.length >= 1 时由 builder 透传；单/0 scope 不输出
   symbolScopeRef?: string
+  // Phase 5 S11 (#1112): 多 leg 策略中显式声明该 rule 归属哪个 scope.leg id
+  // 与 symbolScopeRef 同形：依赖 LLM 直写 canonicalSpec.rules.metadata.legScopeRef
+  legScopeRef?: string
 }
 
 export interface CanonicalRuleV2 {
@@ -184,6 +187,25 @@ export interface CanonicalOrchestrationScope {
   primarySymbol?: string
 }
 
+// Phase 5 S11 (#1112): scope.leg substrate
+export type CanonicalOrchestrationLegSizingMode = 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+
+export interface CanonicalOrchestrationLegSizing {
+  mode: CanonicalOrchestrationLegSizingMode
+  value: number
+  pairedLegId?: string
+}
+
+export interface CanonicalOrchestrationLegScope {
+  id: string
+  scopeKind: 'leg'
+  legId: string
+  direction: 'long' | 'short'
+  instrumentRef: string
+  legSizing?: CanonicalOrchestrationLegSizing
+  syncTriggerRequired?: boolean
+}
+
 export interface CanonicalStrategySpecV2 {
   version: 2
   market: {
@@ -217,6 +239,8 @@ export interface CanonicalStrategySpecV2 {
     programs?: CanonicalOrchestrationProgram[]
     // Phase 5 S2 (#1104)
     scopes?: CanonicalOrchestrationScope[]
+    // Phase 5 S11 (#1112)
+    legScopes?: CanonicalOrchestrationLegScope[]
   }
   metadata?: {
     normalized?: CanonicalStrategySpecNormalizedMetadata

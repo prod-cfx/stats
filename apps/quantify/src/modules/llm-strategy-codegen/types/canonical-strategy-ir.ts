@@ -83,6 +83,8 @@ export interface CanonicalStrategyIrV1 {
   orchestrationPrograms?: IrOrchestrationProgram[]
   // Phase 5 S2 (#1104): scope.symbol substrate
   orchestrationScopes?: IrOrchestrationScope[]
+  // Phase 5 S11 (#1112): scope.leg substrate
+  orchestrationLegScopes?: IrOrchestrationLegScope[]
   riskPolicy: {
     guards: RiskGuard[]
     riskPredicates?: RiskPredicateDef[]
@@ -204,6 +206,8 @@ export interface RuleBlock {
     partialTakeProfit?: PartialTakeProfitProgramMetadata
     // Phase 5 S2 (#1104): 多 scope 策略中显式声明该 rule 归属哪个 scope.symbol id
     symbolScopeRef?: string
+    // Phase 5 S11 (#1112): 多 leg 策略中显式声明该 rule 归属哪个 scope.leg id
+    legScopeRef?: string
   } & PositionLifecycleActionMetadata
 }
 
@@ -350,6 +354,23 @@ export interface IrOrchestrationScope {
   scopeKind: 'symbol'
   symbols: readonly string[]
   primarySymbol?: string
+}
+
+// Phase 5 S11 (#1112): scope.leg substrate IR
+export interface IrOrchestrationLegSizing {
+  mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+  value: number
+  pairedLegId?: string
+}
+
+export interface IrOrchestrationLegScope {
+  id: string
+  scopeKind: 'leg'
+  legId: string
+  direction: 'long' | 'short'
+  instrumentRef: string
+  legSizing?: IrOrchestrationLegSizing
+  syncTriggerRequired?: boolean
 }
 
 export interface RiskGuard {

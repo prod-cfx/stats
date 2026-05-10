@@ -11,6 +11,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticDynamicGridFrame
   | SemanticAdaptiveVolatilityGridFrame
   | SemanticSymbolScopeFrame
+  | SemanticLegScopeFrame
 
 export interface SemanticFrameBase {
   id: string
@@ -120,4 +121,22 @@ export interface SemanticSymbolScopeFrame extends SemanticFrameBase {
   kind: 'symbol_scope'
   symbols: readonly string[]      // 大写规范化（BTCUSDT, ETHUSDT, ...）
   primarySymbol?: string           // 仅当 utterance 显式声明
+}
+
+// Phase 5 S11 (#1112): scope.leg frame
+//   每条 leg 至少 legId / direction / instrumentSymbol；sizing 与 syncTriggerRequired 可选
+//   parseLegScope 命中时由 NL gateway parse() 末尾合流步骤 suppress 同 utterance 的 symbol_scope frame（leg 优先）
+export interface SemanticLegScopeFrame extends SemanticFrameBase {
+  kind: 'leg_scope'
+  legs: ReadonlyArray<{
+    legId: string
+    direction: 'long' | 'short'
+    instrumentSymbol: string       // 大写规范化
+    sizing?: {
+      mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+      value: number
+      pairedLegId?: string         // mode='fixed_ratio' 时必选
+    }
+  }>
+  syncTriggerRequired?: boolean
 }

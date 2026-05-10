@@ -5,6 +5,7 @@ import type {
   SemanticNodeStatus,
   SemanticOrchestrationGateEffect,
   SemanticOrchestrationGateTarget,
+  SemanticOrchestrationLegSizing,
   SemanticOrchestrationPortfolioRiskMode,
   SemanticOrchestrationPortfolioRiskScope,
   SemanticOrchestrationProgramAnchorSide,
@@ -78,6 +79,7 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
   | CodegenSemanticOrchestrationSymbolScopeNodePatch
+  | CodegenSemanticOrchestrationLegScopeNodePatch
 
 // Phase 5 S2 (#1104): scope.symbol patch 节点
 export interface CodegenSemanticOrchestrationSymbolScopeNodePatch extends CodegenSemanticNodeEnvelope {
@@ -87,6 +89,20 @@ export interface CodegenSemanticOrchestrationSymbolScopeNodePatch extends Codege
   symbolScopeKind: 'symbol'
   symbols: readonly string[]
   primarySymbol?: string
+}
+
+// Phase 5 S11 (#1112): scope.leg patch 节点
+//   与 symbolScopeKind 互斥；instrumentRef 必引用同 patch 中 status:'locked' 的 scope.symbol 节点 id
+export interface CodegenSemanticOrchestrationLegScopeNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'scope'
+  key: 'scope.leg'
+  params: Record<string, unknown>
+  legScopeKind: 'leg'
+  legId: string
+  direction: 'long' | 'short'
+  instrumentRef: string
+  legSizing?: SemanticOrchestrationLegSizing
+  syncTriggerRequired?: boolean
 }
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {

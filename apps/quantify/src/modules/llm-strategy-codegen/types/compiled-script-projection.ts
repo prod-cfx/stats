@@ -1,5 +1,5 @@
 import type { StrategyAstV1 } from './canonical-strategy-ast'
-import type { HashString, IrOrchestrationProgram, IrOrchestrationScope } from './canonical-strategy-ir'
+import type { HashString, IrOrchestrationLegScope, IrOrchestrationProgram, IrOrchestrationScope } from './canonical-strategy-ir'
 
 export interface CompiledScriptExecutionEnvelope {
   positionMode: 'long_only' | 'short_only' | 'long_short'
@@ -33,5 +33,7 @@ export interface CompiledScriptProjection {
   orchestrationPrograms?: IrOrchestrationProgram[]
   // Phase 5 S2 (#1104): scope.symbol substrate
   orchestrationScopes?: IrOrchestrationScope[]
+  // Phase 5 S11 (#1112): scope.leg substrate
+  orchestrationLegScopes?: IrOrchestrationLegScope[]
   topology: StrategyAstV1['topology']
 }
