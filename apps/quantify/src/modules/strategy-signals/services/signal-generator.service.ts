@@ -25,6 +25,7 @@ import type { ExchangeId, MarketType } from '@/modules/trading/core/types'
 import type { Prisma, PrismaClient, StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
+import type { ProgramLifecycleState } from '@ai/shared/script-engine/compiled-runtime'
 import {
   buildCompiledManifest,
   evaluateExprPool,
@@ -162,19 +163,17 @@ export class SignalGeneratorService {
   private readonly lastGroupIndexByInstance = new Map<string, number>()
 
   /**
-   * Phase 5 S6 (#984) — live programLifecycleState 跨调用持久化（按
+   * Phase 5 S5/S6 (#984) — live programLifecycleState 跨调用持久化（按
    * strategy instance id 分桶）。
    *
-   * 与 backtest 的 lifecycleStateBySymbol 不同，live 端按 instance.id 索引，
-   * 因为同一实例跨多次 onBar 调用之间需要持续 state（adaptive ATR rebuild
-   * cooldown / drift 比较 / ladder 透传）。
-   *
-   * cleanup 由 stopStrategyInstance / 实例下线流程触发（follow-up issue：
-   * 跨进程持久化与 Redis 替代）。
+   * runOrderPrograms 第 8 参（programLifecycleStateIn）从此 map 取，输出
+   * programLifecycleStateNext 写回此 map。
+   * cleanup 由 strategy-instances.service 在 deleteInstance 时触发，防止 state map 泄漏。
+   * 跨进程持久化（Redis 等）留 follow-up issue。
    */
   private readonly programLifecycleStateByStrategyInstanceId = new Map<
     string,
-    Record<string, ProgramLifecycleState>
+    Readonly<Record<string, ProgramLifecycleState>>
   >()
 
   constructor(
@@ -212,6 +211,18 @@ export class SignalGeneratorService {
       this.logger,
     )
     this.registerCronJob()
+    // Phase 5 S5（#984）：strategy-instance.{deleted,stopped} 事件均触发清理 lifecycle map
+    // 部分 spec 注入的 EventEmitter mock 不实现 .on()，因此此处做容错（unit spec 中
+    // 不依赖 cleanup 路径；live 真实 EventEmitter2 始终具备 .on()）。
+    if (typeof this.eventEmitter?.on === 'function') {
+      const onLifecycleEvent = (payload: { strategyInstanceId?: string }) => {
+        if (payload?.strategyInstanceId) {
+          this.cleanupProgramLifecycleState(payload.strategyInstanceId)
+        }
+      }
+      this.eventEmitter.on('strategy-instance.deleted', onLifecycleEvent)
+      this.eventEmitter.on('strategy-instance.stopped', onLifecycleEvent)
+    }
   }
 
   private registerCronJob() {
@@ -717,19 +728,15 @@ export class SignalGeneratorService {
   }
 
   /**
-   * Phase 5 S6 (#984) — 清空指定策略实例的 program lifecycle state。
+   * Phase 5 S5/S6 (#984) — 清理指定策略实例的 program lifecycle state。
    * 应在实例停止 / 下线 / 重置时调用，防止 state map 泄漏。
+   * 由 strategy-instances.service 在 deleteInstance 时触发（EventEmitter2 或直接调用）。
    */
-  clearProgramLifecycleStateForInstance(instanceId: string): void {
-    this.programLifecycleStateByStrategyInstanceId.delete(instanceId)
+  cleanupProgramLifecycleState(strategyInstanceId: string): void {
+    this.programLifecycleStateByStrategyInstanceId.delete(strategyInstanceId)
   }
 
-  private buildCompiledRuntimeAdapter(
-    scriptCode: string,
-    instanceId?: string,
-  ): CompiledRuntimeAdapterResult {
-    // Capture class-level state map into closure for the adapter
-    const programLifecycleStateByStrategyInstanceId = this.programLifecycleStateByStrategyInstanceId
+  private buildCompiledRuntimeAdapter(scriptCode: string, strategyInstanceId?: string): CompiledRuntimeAdapterResult {
     try {
       const projection = this.compiledScriptParser.parse(scriptCode)
       const exprPool = projection.exprPool as Parameters<typeof evaluateExprPool>[1]
@@ -738,6 +745,8 @@ export class SignalGeneratorService {
       const riskPredicates = projection.riskPredicates as Parameters<typeof evaluateRiskPredicates>[1]
       const decisionPrograms = projection.decisionPrograms as Parameters<typeof runDecisionPrograms>[1]
       const orderPrograms = projection.orderPrograms as Parameters<typeof runOrderPrograms>[1]
+      // Phase 5 S5：捕获 service-level lifecycle state map 给 onBar 闭包使用
+      const lifecycleStateMap = this.programLifecycleStateByStrategyInstanceId
 
       return {
         adapter: {
@@ -783,12 +792,10 @@ export class SignalGeneratorService {
             // （与 S7 live drawdown 同范式）：当前 live 端的 close 由现有
             // working-order 协议处理，本 wiring 仅让 orderState 能携带 closeProgramIds
             // 让 follow-up 消费。
-            //
-            // Phase 5 S6 (#984) — 第 8 参 programLifecycleStateIn：
-            //   live 端按 instance.id 维护跨 onBar 持久化 state map；
-            //   adapter 闭包持有 instanceId（buildCompiledRuntimeAdapter 第 2 参）。
-            const programLifecycleStateIn = instanceId
-              ? programLifecycleStateByStrategyInstanceId.get(instanceId)
+            // Phase 5 S5/S6 (#984) — 第 8 参 programLifecycleStateIn：
+            //   live 端按 strategyInstanceId 维护跨 onBar 持久化 state map。
+            const lifecycleStateIn = strategyInstanceId
+              ? lifecycleStateMap.get(strategyInstanceId)
               : undefined
             const orderState = runOrderPrograms(
               ctx,
@@ -798,14 +805,11 @@ export class SignalGeneratorService {
               projection.topology.orderProgramOrder,
               executionModel,
               ((projection as { orchestrationPrograms?: unknown }).orchestrationPrograms ?? []) as Parameters<typeof runOrderPrograms>[6],
-              programLifecycleStateIn,
+              lifecycleStateIn,
             )
-            // 回写 next state 到 map（关联 instance.id）；无 instanceId 时不持久化
-            if (instanceId) {
-              programLifecycleStateByStrategyInstanceId.set(
-                instanceId,
-                { ...orderState.programLifecycleStateNext },
-              )
+            // 回写 next state 到 map（关联 strategyInstanceId）；无 id 时不持久化
+            if (strategyInstanceId) {
+              lifecycleStateMap.set(strategyInstanceId, orderState.programLifecycleStateNext)
             }
 
             return buildCompiledManifest(

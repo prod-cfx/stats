@@ -244,6 +244,30 @@ export class SemanticStateProjectionService {
         })
         continue
       }
+      // Phase 5 S5 (#984)
+      if (node.kind === 'program' && node.key === 'program.dynamic_grid') {
+        let entry
+        try {
+          entry = this.presentationRegistry.getEntry('program.dynamic_grid')
+        }
+        catch {
+          continue
+        }
+        if (!entry) {
+          continue
+        }
+        const text = entry.displayRenderer({ params: node.params })
+        if (!text) {
+          continue
+        }
+        items.push({
+          kind: 'program',
+          id: `orchestration-program-${node.id}`,
+          publicName: entry.publicName,
+          text,
+        })
+        continue
+      }
       // Phase 5 S6 (#984)
       if (node.kind === 'program' && node.key === 'program.adaptive_volatility_grid') {
         let entry
@@ -253,9 +277,13 @@ export class SemanticStateProjectionService {
         catch {
           continue
         }
-        if (!entry) continue
+        if (!entry) {
+          continue
+        }
         const text = entry.displayRenderer({ params: node.params })
-        if (!text) continue
+        if (!text) {
+          continue
+        }
         items.push({
           kind: 'program',
           id: `orchestration-program-${node.id}`,

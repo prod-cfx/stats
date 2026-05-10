@@ -660,6 +660,13 @@ export class CanonicalSpecBuilderService {
         continue
       }
 
+      // Phase 5 S5 (#984)
+      if (node.key === 'program.dynamic_grid') {
+        const program = this.buildDynamicGridProgram(node)
+        if (program) programs.push(program)
+        continue
+      }
+
       // Phase 5 S6 (#984)
       if (node.key === 'program.adaptive_volatility_grid') {
         const program = this.buildAdaptiveVolatilityGridProgram(node)
@@ -708,6 +715,50 @@ export class CanonicalSpecBuilderService {
         stepPct,
         ...(lowerBound !== undefined ? { lowerBound } : {}),
         ...(upperBound !== undefined ? { upperBound } : {}),
+      },
+      sizing: { mode: sizing.mode, value: sizing.value },
+    }
+  }
+
+  private buildDynamicGridProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
+    if (node.programKind !== 'dynamic_grid') return null
+    if (node.rebuildPolicy !== 'anchor_on_state_change') return null
+    if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep' && node.onDeactivate !== 'close') return null
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) return null
+
+    const lookback = node.anchorLookbackBars
+    if (typeof lookback !== 'number' || !Number.isInteger(lookback) || lookback < 10 || lookback > 1000) return null
+    if (node.anchorSide !== 'high' && node.anchorSide !== 'low' && node.anchorSide !== 'mid') return null
+    const driftPct = node.anchorDriftPct
+    if (typeof driftPct !== 'number' || !Number.isFinite(driftPct) || driftPct <= 0 || driftPct > 100) return null
+    const minInterval = node.rebuildMinIntervalSec
+    if (typeof minInterval !== 'number' || !Number.isInteger(minInterval) || minInterval < 60) return null
+
+    const step = node.dynamicGridStep
+    if (!step || (step.mode !== 'pct' && step.mode !== 'absolute')) return null
+    if (typeof step.value !== 'number' || !Number.isFinite(step.value) || step.value <= 0) return null
+
+    const levelCount = node.levelCount
+    if (typeof levelCount !== 'number' || !Number.isInteger(levelCount) || levelCount < 2 || levelCount > 100) return null
+
+    const sizing = node.sizing
+    if (!sizing) return null
+    if (sizing.mode !== 'fixed_quote' && sizing.mode !== 'fixed_base' && sizing.mode !== 'fixed_pct') return null
+    if (typeof sizing.value !== 'number' || !Number.isFinite(sizing.value) || sizing.value <= 0) return null
+
+    return {
+      id: node.id,
+      programKind: 'dynamic_grid',
+      activeWhenRef: node.activeWhenRef,
+      onDeactivate: node.onDeactivate,
+      rebuildPolicy: 'anchor_on_state_change',
+      dynamicGridParams: {
+        anchorLookbackBars: lookback,
+        anchorSide: node.anchorSide,
+        anchorDriftPct: driftPct,
+        rebuildMinIntervalSec: minInterval,
+        levelCount,
+        step: { mode: step.mode, value: step.value },
       },
       sizing: { mode: sizing.mode, value: sizing.value },
     }

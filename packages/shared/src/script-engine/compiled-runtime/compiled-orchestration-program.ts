@@ -1,17 +1,21 @@
 /**
- * Orchestration program contract type (Phase 5 S4 + S6, issue #984).
+ * Orchestration program contract type (Phase 5 S4 + S5 + S6, issue #984).
  *
  * 判别联合 by `programKind`：
  *
  * - `fixed_grid_gated`（S4）：通过 activeWhenExprId 引用 gate.regime，
  *   失活按 onDeactivate 行为；rebuildPolicy 'static'，ladder 在 IR 阶段一次生成。
  *
+ * - `dynamic_grid`（S5）：rebuildPolicy 'anchor_on_state_change'，
+ *   anchor 跟随 lookback 窗口 high/low/mid 漂移触发 ladder rebuild；
+ *   跨 K 线状态由 ProgramLifecycleState 透传 (lastBuildAnchor/lastBuildAt/lastBuildLadder)。
+ *
  * - `adaptive_volatility_grid`（S6）：rebuildPolicy 'atr_window'，
  *   runtime 内联读 ctx.bars + atr() 计算 step/range，触发 ladder rebuild +
  *   [minStepPct, maxStepPct] 钳制；跨 K 线状态由 ProgramLifecycleState 透传。
  *
- * 与 evaluate-orchestration-gates.ts / evaluate-orchestration-portfolio-risks.ts
- * 同目录，由 runOrderPrograms 第 7 参数消费。
+ * 由 runOrderPrograms 第 7 参 (orchestrationPrograms) 消费；lifecycle 状态由第 8 参 + 返回
+ * `programLifecycleStateNext` 透传（详见 ProgramLifecycleState）。
  */
 
 export interface CompiledOrchestrationProgramGridParams {
@@ -25,6 +29,20 @@ export interface CompiledOrchestrationProgramGridParams {
 export interface CompiledOrchestrationProgramSizing {
   mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'
   value: number
+}
+
+export interface CompiledOrchestrationProgramDynamicGridStep {
+  mode: 'pct' | 'absolute'
+  value: number
+}
+
+export interface CompiledOrchestrationProgramDynamicGridParams {
+  anchorLookbackBars: number
+  anchorSide: 'high' | 'low' | 'mid'
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  step: CompiledOrchestrationProgramDynamicGridStep
 }
 
 export interface CompiledOrchestrationProgramAdaptiveGridParams {
@@ -48,6 +66,16 @@ export interface CompiledFixedGridGatedProgram {
   sizing: CompiledOrchestrationProgramSizing
 }
 
+export interface CompiledDynamicGridProgram {
+  id: string
+  programKind: 'dynamic_grid'
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'anchor_on_state_change'
+  dynamicGridParams: CompiledOrchestrationProgramDynamicGridParams
+  sizing: CompiledOrchestrationProgramSizing
+}
+
 export interface CompiledAdaptiveVolatilityGridProgram {
   id: string
   programKind: 'adaptive_volatility_grid'
@@ -60,12 +88,63 @@ export interface CompiledAdaptiveVolatilityGridProgram {
 
 export type CompiledOrchestrationProgram =
   | CompiledFixedGridGatedProgram
+  | CompiledDynamicGridProgram
   | CompiledAdaptiveVolatilityGridProgram
+
+export function isFixedGridGatedProgram(
+  program: CompiledOrchestrationProgram,
+): program is CompiledFixedGridGatedProgram {
+  return program.programKind === 'fixed_grid_gated'
+}
+
+export function isDynamicGridProgram(
+  program: CompiledOrchestrationProgram,
+): program is CompiledDynamicGridProgram {
+  return program.programKind === 'dynamic_grid'
+}
 
 export function isAdaptiveVolatilityGridProgram(
   program: CompiledOrchestrationProgram,
 ): program is CompiledAdaptiveVolatilityGridProgram {
   return program.programKind === 'adaptive_volatility_grid'
+}
+
+/**
+ * dynamic_grid 8 fail-closed 守卫的 runtime 副本（plan Acceptance Runtime path 1 / Task 13）。
+ * 失败 → 进 cancelledProgramIds 并写 dynamic_grid 占位 lifecycle state。
+ *
+ * rebuildMinIntervalSec 硬下限 60（runtime 锁，与 readiness 一致）。
+ */
+export const DYNAMIC_GRID_MIN_INTERVAL_SEC = 60
+
+export function isValidDynamicGrid(
+  program: CompiledDynamicGridProgram,
+): boolean {
+  if (typeof program.activeWhenExprId !== 'string' || program.activeWhenExprId.length === 0) return false
+  if (program.rebuildPolicy !== 'anchor_on_state_change') return false
+  if (
+    program.onDeactivate !== 'cancel'
+    && program.onDeactivate !== 'keep'
+    && program.onDeactivate !== 'close'
+  ) {
+    return false
+  }
+  const p = program.dynamicGridParams
+  if (!p) return false
+  if (!Number.isInteger(p.anchorLookbackBars) || p.anchorLookbackBars < 10 || p.anchorLookbackBars > 1000) return false
+  if (p.anchorSide !== 'high' && p.anchorSide !== 'low' && p.anchorSide !== 'mid') return false
+  if (!Number.isFinite(p.anchorDriftPct) || p.anchorDriftPct <= 0 || p.anchorDriftPct > 100) return false
+  if (!Number.isInteger(p.rebuildMinIntervalSec) || p.rebuildMinIntervalSec < DYNAMIC_GRID_MIN_INTERVAL_SEC) return false
+  if (!Number.isInteger(p.levelCount) || p.levelCount < 2 || p.levelCount > 100) return false
+  const step = p.step
+  if (!step) return false
+  if (step.mode !== 'pct' && step.mode !== 'absolute') return false
+  if (!Number.isFinite(step.value) || step.value <= 0) return false
+  const s = program.sizing
+  if (!s) return false
+  if (s.mode !== 'fixed_quote' && s.mode !== 'fixed_base' && s.mode !== 'fixed_pct') return false
+  if (!Number.isFinite(s.value) || s.value <= 0) return false
+  return true
 }
 
 /**

@@ -116,6 +116,16 @@ export interface CanonicalOrchestrationProgramSizing {
   value: number
 }
 
+// Phase 5 S5 (#984): dynamic_grid program param block
+export interface CanonicalOrchestrationProgramDynamicGridParams {
+  anchorLookbackBars: number
+  anchorSide: 'high' | 'low' | 'mid'
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  step: { mode: 'pct' | 'absolute'; value: number }
+}
+
 // Phase 5 S6 (#984): adaptive_volatility_grid program param block
 export interface CanonicalOrchestrationProgramAdaptiveGridParams {
   atrPeriod: number
@@ -138,6 +148,16 @@ export interface CanonicalFixedGridGatedProgram {
   sizing: CanonicalOrchestrationProgramSizing
 }
 
+export interface CanonicalDynamicGridProgram {
+  id: string
+  programKind: 'dynamic_grid'
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep' | 'close'
+  rebuildPolicy: 'anchor_on_state_change'
+  dynamicGridParams: CanonicalOrchestrationProgramDynamicGridParams
+  sizing: CanonicalOrchestrationProgramSizing
+}
+
 export interface CanonicalAdaptiveVolatilityGridProgram {
   id: string
   programKind: 'adaptive_volatility_grid'
@@ -150,6 +170,7 @@ export interface CanonicalAdaptiveVolatilityGridProgram {
 
 export type CanonicalOrchestrationProgram =
   | CanonicalFixedGridGatedProgram
+  | CanonicalDynamicGridProgram
   | CanonicalAdaptiveVolatilityGridProgram
 
 export interface CanonicalStrategySpecV2 {

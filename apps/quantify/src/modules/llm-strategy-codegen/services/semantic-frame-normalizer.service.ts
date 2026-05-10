@@ -3,6 +3,7 @@ import type {
   SemanticAdaptiveVolatilityGridFrame,
   SemanticBoundaryTouchFrame,
   SemanticCombinationFrame,
+  SemanticDynamicGridFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticNaturalLanguageFrame,
@@ -12,6 +13,7 @@ import type {
 } from '../types/semantic-natural-language-frame'
 import type {
   CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch,
+  CodegenSemanticOrchestrationDynamicGridProgramNodePatch,
   CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationPortfolioRiskNodePatch,
@@ -42,6 +44,8 @@ export class SemanticFrameNormalizerService {
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
     const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch>()
     const fixedGridGatedFrames: SemanticFixedGridGatedFrame[] = []
+    const dynamicGridByKey = new Map<string, CodegenSemanticOrchestrationDynamicGridProgramNodePatch>()
+    const dynamicGridFrames: SemanticDynamicGridFrame[] = []
     const adaptiveByKey = new Map<string, CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch>()
     const adaptiveFrames: SemanticAdaptiveVolatilityGridFrame[] = []
 
@@ -82,6 +86,9 @@ export class SemanticFrameNormalizerService {
         case 'fixed_grid_gated':
           fixedGridGatedFrames.push(frame)
           break
+        case 'dynamic_grid':
+          dynamicGridFrames.push(frame)
+          break
         case 'adaptive_volatility_grid':
           adaptiveFrames.push(frame)
           break
@@ -112,6 +119,23 @@ export class SemanticFrameNormalizerService {
 
       if (!fixedGridGatedByKey.has(dedupeKey)) {
         fixedGridGatedByKey.set(dedupeKey, node)
+      }
+    })
+
+    dynamicGridFrames.forEach((frame, index) => {
+      const node = this.normalizeDynamicGrid(frame, index)
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.activeWhenRef,
+        node.anchorLookbackBars,
+        node.anchorSide,
+        node.dynamicGridStep,
+        node.levelCount,
+        node.onDeactivate,
+      ])
+
+      if (!dynamicGridByKey.has(dedupeKey)) {
+        dynamicGridByKey.set(dedupeKey, node)
       }
     })
 
@@ -158,6 +182,7 @@ export class SemanticFrameNormalizerService {
       ...Array.from(regimeGateByKey.values()),
       ...Array.from(portfolioDrawdownByKey.values()),
       ...Array.from(fixedGridGatedByKey.values()),
+      ...Array.from(dynamicGridByKey.values()),
       ...Array.from(adaptiveByKey.values()),
     ]
     if (orchestrationNodes.length > 0) {
@@ -247,6 +272,40 @@ export class SemanticFrameNormalizerService {
       onDeactivate: frame.onDeactivate,
       rebuildPolicy: 'static',
       gridParams,
+      sizing: frame.sizing,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S5 (#984): dynamic_grid frame → patch
+  private normalizeDynamicGrid(
+    frame: SemanticDynamicGridFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationDynamicGridProgramNodePatch {
+    return {
+      id: `orchestration-program-dynamic-grid-${index + 1}`,
+      kind: 'program',
+      key: 'program.dynamic_grid',
+      params: {
+        anchorLookbackBars: frame.anchorLookbackBars,
+        anchorSide: frame.anchorSide,
+        levelCount: frame.levelCount,
+        step: frame.step,
+        anchorDriftPct: frame.anchorDriftPct,
+        rebuildMinIntervalSec: frame.rebuildMinIntervalSec,
+        onDeactivate: frame.onDeactivate,
+        sizing: frame.sizing,
+      },
+      programKind: 'dynamic_grid',
+      activeWhenRef: frame.activeWhenRef,
+      onDeactivate: frame.onDeactivate,
+      rebuildPolicy: 'anchor_on_state_change',
+      anchorLookbackBars: frame.anchorLookbackBars,
+      anchorSide: frame.anchorSide,
+      anchorDriftPct: frame.anchorDriftPct,
+      rebuildMinIntervalSec: frame.rebuildMinIntervalSec,
+      levelCount: frame.levelCount,
+      dynamicGridStep: frame.step,
       sizing: frame.sizing,
       evidence: this.toEvidence(frame),
     }

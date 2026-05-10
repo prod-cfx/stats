@@ -286,13 +286,17 @@ export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
 export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
 
-export type SemanticOrchestrationProgramKind = 'fixed_grid_gated' | 'adaptive_volatility_grid'
+export type SemanticOrchestrationProgramKind = 'fixed_grid_gated' | 'dynamic_grid' | 'adaptive_volatility_grid'
 
 export type SemanticOrchestrationProgramOnDeactivate = 'cancel' | 'keep' | 'close'
 
-export type SemanticOrchestrationProgramRebuildPolicy = 'static' | 'atr_window'
+export type SemanticOrchestrationProgramRebuildPolicy = 'static' | 'anchor_on_state_change' | 'atr_window'
 
 export type SemanticOrchestrationProgramSizingMode = 'fixed_quote' | 'fixed_base' | 'fixed_pct'
+
+export type SemanticOrchestrationProgramAnchorSide = 'high' | 'low' | 'mid'
+
+export type SemanticOrchestrationProgramDynamicGridStepMode = 'pct' | 'absolute'
 
 export interface SemanticOrchestrationProgramSizing {
   mode: SemanticOrchestrationProgramSizingMode
@@ -305,6 +309,11 @@ export interface SemanticOrchestrationProgramGridParams {
   stepPct: number
   lowerBound?: number
   upperBound?: number
+}
+
+export interface SemanticOrchestrationProgramDynamicGridStep {
+  mode: SemanticOrchestrationProgramDynamicGridStepMode
+  value: number
 }
 
 export interface SemanticOrchestrationContract {
@@ -344,6 +353,13 @@ export interface SemanticOrchestrationNode {
   rebuildPolicy?: SemanticOrchestrationProgramRebuildPolicy
   gridParams?: SemanticOrchestrationProgramGridParams
   sizing?: SemanticOrchestrationProgramSizing
+  // dynamic_grid 节点专属（其它 programKind 不读）— Phase 5 S5 (#984)
+  // 与 S4 gridParams 平级；不与 fixed_grid_gated 共用结构，便于 type narrowing。
+  anchorLookbackBars?: number
+  anchorSide?: SemanticOrchestrationProgramAnchorSide
+  anchorDriftPct?: number
+  rebuildMinIntervalSec?: number
+  dynamicGridStep?: SemanticOrchestrationProgramDynamicGridStep
   // adaptive_volatility_grid 专属（其它 programKind 不读）— Phase 5 S6 (#984)
   // 注：levelCount 单列于此而非复用 gridParams.levelCount，因为 gridParams
   // 还含 anchorPrice / stepPct（fixed_grid_gated 必填，不应渗到 adaptive）
@@ -354,6 +370,7 @@ export interface SemanticOrchestrationNode {
   rebuildCooldownSec?: number
   minStepPct?: number
   maxStepPct?: number
+  // dynamic_grid 节点的档位数（与 fixed_grid_gated 的 gridParams.levelCount 互斥）
   levelCount?: number
   // portfolioRisk 节点专属（其它 kind 不读）
   mode?: SemanticOrchestrationPortfolioRiskMode

@@ -7,6 +7,8 @@ import type {
   SemanticOrchestrationGateTarget,
   SemanticOrchestrationPortfolioRiskMode,
   SemanticOrchestrationPortfolioRiskScope,
+  SemanticOrchestrationProgramAnchorSide,
+  SemanticOrchestrationProgramDynamicGridStep,
   SemanticOrchestrationProgramGridParams,
   SemanticOrchestrationProgramKind,
   SemanticOrchestrationProgramOnDeactivate,
@@ -73,6 +75,7 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationGateNodePatch
   | CodegenSemanticOrchestrationPortfolioRiskNodePatch
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+  | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
 
 export interface CodegenSemanticOrchestrationGateNodePatch extends CodegenSemanticNodeEnvelope {
@@ -97,11 +100,29 @@ export interface CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch exte
   kind: 'program'
   key: 'program.fixed_grid_gated'
   params: Record<string, unknown>
-  programKind: 'fixed_grid_gated'
+  programKind: Extract<SemanticOrchestrationProgramKind, 'fixed_grid_gated'>
   activeWhenRef: string
   onDeactivate: SemanticOrchestrationProgramOnDeactivate
-  rebuildPolicy: 'static'
+  rebuildPolicy: Extract<SemanticOrchestrationProgramRebuildPolicy, 'static'>
   gridParams: SemanticOrchestrationProgramGridParams
+  sizing: SemanticOrchestrationProgramSizing
+}
+
+// Phase 5 S5 (#984): dynamic_grid program patch 变体
+export interface CodegenSemanticOrchestrationDynamicGridProgramNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'program'
+  key: 'program.dynamic_grid'
+  params: Record<string, unknown>
+  programKind: Extract<SemanticOrchestrationProgramKind, 'dynamic_grid'>
+  activeWhenRef: string
+  onDeactivate: SemanticOrchestrationProgramOnDeactivate
+  rebuildPolicy: Extract<SemanticOrchestrationProgramRebuildPolicy, 'anchor_on_state_change'>
+  anchorLookbackBars: number
+  anchorSide: SemanticOrchestrationProgramAnchorSide
+  anchorDriftPct: number
+  rebuildMinIntervalSec: number
+  levelCount: number
+  dynamicGridStep: SemanticOrchestrationProgramDynamicGridStep
   sizing: SemanticOrchestrationProgramSizing
 }
 
@@ -130,4 +151,5 @@ export interface CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePa
  */
 export type CodegenSemanticOrchestrationProgramNodePatch =
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+  | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch

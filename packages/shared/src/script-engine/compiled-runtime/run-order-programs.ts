@@ -2,6 +2,7 @@ import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import { atr } from '../helpers/technical-indicators'
 import type {
   CompiledAdaptiveVolatilityGridProgram,
+  CompiledDynamicGridProgram,
   CompiledFixedGridGatedProgram,
   CompiledOrchestrationProgram,
 } from './compiled-orchestration-program'
@@ -26,7 +27,7 @@ export interface CompiledOrderState {
   activeProgramIds: readonly string[]
   cancelledProgramIds: readonly string[]
   closeProgramIds: readonly string[]
-  // Phase 5 S0a: program lifecycle 跨 K 线状态通道；S6 adaptive_volatility_grid 写入深 freeze entry。
+  // Phase 5 S0a: program lifecycle 跨 K 线状态通道；S5 dynamic_grid + S6 adaptive_volatility_grid 写入深 freeze entry。
   programLifecycleStateNext: Readonly<Record<string, ProgramLifecycleState>>
 }
 
@@ -45,9 +46,11 @@ export function runOrderPrograms(
   _executionModel?: Record<string, unknown>,
   orchestrationPrograms?: readonly CompiledOrchestrationProgram[],
   // Phase 5 S0a: 第 8 参 — 上一根 K 线产出的 lifecycle 状态（按 program.id 索引）。
+  // S5 dynamic_grid 消费 prev anchor / lastBuildAt / lastBuildLadder 用于 throttle / drift 判定。
+  // S6 adaptive_volatility_grid 消费 prev ATR / lastBuildAt / lastBuildLadder。
   programLifecycleStateIn?: Readonly<Record<string, ProgramLifecycleState>>,
 ): Readonly<CompiledOrderState> {
-  // ---------- Orchestration program lifecycle (Phase 5 S4 T11 + S6 adaptive) ----------
+  // ---------- Orchestration program lifecycle (Phase 5 S4 T11 + S5 dynamic_grid + S6 adaptive) ----------
   const orchWorkingOrders: Array<{
     id: string
     sourceRef: string
@@ -67,6 +70,21 @@ export function runOrderPrograms(
           program,
           exprValues,
           guardState,
+          orchWorkingOrders,
+          orchActiveIds,
+          orchCancelledIds,
+          orchCloseIds,
+          programLifecycleStateNext,
+        })
+        continue
+      }
+      if (program.programKind === 'dynamic_grid') {
+        runDynamicGridProgram({
+          ctx,
+          program,
+          exprValues,
+          guardState,
+          programLifecycleStateIn,
           orchWorkingOrders,
           orchActiveIds,
           orchCancelledIds,
@@ -218,6 +236,251 @@ function buildFixedGridGatedWorkingOrder(program: CompiledFixedGridGatedProgram)
   }
 }
 
+// ----------- dynamic_grid 分支（S5，7 路径） -----------
+//
+// 7 路径（plan v3 Acceptance Runtime）：
+//   1) fail-closed: isValidDynamicGrid === false → cancelled + 占位 entry
+//   2) K 线不足（bars < anchorLookbackBars）→ NOOP；prev 存在保留旧 ladder；无 prev → cancel
+//   3) anchor 计算（bars.slice(-anchorLookbackBars) 取 high/low；mid = (high+low)/2）
+//   4) anchor invalid（NaN/<=0）→ NOOP；prev 存在保留旧 ladder；无 prev → cancel
+//   5) active 状态判断
+//   6) inactive × onDeactivate 三模式（cancel/keep/close）
+//   7) active + rebuild 决策（drift < threshold → keep prev；drift >= 但限速 → throttled；否则 rebuild）
+
+interface DynamicGridRunArgs {
+  ctx: StrategyExecutionContextV1
+  program: CompiledDynamicGridProgram
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>
+  guardState: Readonly<CompiledGuardState>
+  programLifecycleStateIn?: Readonly<Record<string, ProgramLifecycleState>>
+  orchWorkingOrders: Array<{
+    id: string
+    sourceRef: string
+    payload?: Record<string, unknown>
+    levels?: readonly number[]
+  }>
+  orchActiveIds: string[]
+  orchCancelledIds: string[]
+  orchCloseIds: string[]
+  programLifecycleStateNext: Record<string, ProgramLifecycleState>
+}
+
+function runDynamicGridProgram(args: DynamicGridRunArgs): void {
+  const {
+    ctx, program, exprValues, guardState, programLifecycleStateIn,
+    orchWorkingOrders, orchActiveIds, orchCancelledIds, orchCloseIds,
+    programLifecycleStateNext,
+  } = args
+  const prev = readPrevDynamicGridState(programLifecycleStateIn?.[program.id])
+
+  // M4: cancelOrderPrograms guard pass-through dynamic_grid lifecycle
+  if (guardState.cancelOrderPrograms) {
+    orchCancelledIds.push(program.id)
+    if (prev) {
+      programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+    }
+    // 无 prev → key 缺席（与 S0a substrate adapter map merge 视为 eviction）
+    return
+  }
+
+  // 路径 1：fail-closed validator
+  if (!isValidDynamicGrid(program)) {
+    orchCancelledIds.push(program.id)
+    programLifecycleStateNext[program.id] = freezeDynamicGridEntry({
+      kind: 'dynamic_grid',
+      lastBuildAnchor: 0,
+      lastBuildAt: 0,
+      lastBuildLadder: [],
+    })
+    return
+  }
+
+  const params = program.dynamicGridParams
+  const bars = ctx.bars
+
+  // 路径 2：K 线不足
+  if (!bars || bars.length < params.anchorLookbackBars) {
+    if (prev) {
+      // 有 prev → 保留旧 ladder，不进 cancelled
+      orchWorkingOrders.push(buildDynamicGridWorkingOrder(program, prev.lastBuildLadder.map(entry => entry.level)))
+      orchActiveIds.push(program.id)
+      programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+    }
+    else {
+      // 无 prev → cancel，reason=insufficient_kline_window
+      orchCancelledIds.push(program.id)
+    }
+    return
+  }
+
+  // 路径 3：anchor 计算
+  const window = bars.slice(-params.anchorLookbackBars)
+  let periodHigh = window[0].high
+  let periodLow = window[0].low
+  for (let i = 1; i < window.length; i++) {
+    if (window[i].high > periodHigh) periodHigh = window[i].high
+    if (window[i].low < periodLow) periodLow = window[i].low
+  }
+  let currentAnchor: number
+  switch (params.anchorSide) {
+    case 'high':
+      currentAnchor = periodHigh
+      break
+    case 'low':
+      currentAnchor = periodLow
+      break
+    case 'mid':
+      // 锁公式：mid = (periodHigh + periodLow) / 2
+      currentAnchor = (periodHigh + periodLow) / 2
+      break
+  }
+
+  // 路径 4：anchor invalid
+  if (!Number.isFinite(currentAnchor) || currentAnchor <= 0) {
+    if (prev) {
+      orchWorkingOrders.push(buildDynamicGridWorkingOrder(program, prev.lastBuildLadder.map(entry => entry.level)))
+      orchActiveIds.push(program.id)
+      programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+    }
+    else {
+      orchCancelledIds.push(program.id)
+    }
+    return
+  }
+
+  // 路径 5：active 状态
+  const isActive = exprValues[program.activeWhenExprId] === true
+
+  // 路径 6：inactive 分支（onDeactivate 三模式）
+  if (!isActive) {
+    switch (program.onDeactivate) {
+      case 'cancel':
+        orchCancelledIds.push(program.id)
+        if (prev) programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+        break
+      case 'keep':
+        if (prev) {
+          orchWorkingOrders.push(buildDynamicGridWorkingOrder(program, prev.lastBuildLadder.map(entry => entry.level)))
+          orchActiveIds.push(program.id)
+          programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+        }
+        else {
+          // 无 prev 且 inactive=keep → 无 ladder 可保留，进 cancel
+          orchCancelledIds.push(program.id)
+        }
+        break
+      case 'close':
+        orchCloseIds.push(program.id)
+        if (prev) programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+        break
+    }
+    return
+  }
+
+  // 路径 7：active + rebuild 决策
+  // now 来源确定性派生；禁止 Date.now() 回退
+  const now = ctx.timestamp ?? bars[bars.length - 1].timestamp
+
+  if (prev) {
+    const driftPctActual = Math.abs(currentAnchor - prev.lastBuildAnchor) / prev.lastBuildAnchor * 100
+    if (driftPctActual < params.anchorDriftPct) {
+      // 不漂移：keep prev ladder + 透传 prev state
+      orchWorkingOrders.push(buildDynamicGridWorkingOrder(program, prev.lastBuildLadder.map(entry => entry.level)))
+      orchActiveIds.push(program.id)
+      programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+      return
+    }
+    // 漂移达标：再判限速
+    if ((now - prev.lastBuildAt) / 1000 < params.rebuildMinIntervalSec) {
+      // 限速 NOOP：保留旧 ladder + 透传 prev state，reason=rebuild_throttled
+      orchWorkingOrders.push(buildDynamicGridWorkingOrder(program, prev.lastBuildLadder.map(entry => entry.level)))
+      orchActiveIds.push(program.id)
+      programLifecycleStateNext[program.id] = freezeDynamicGridEntry(prev)
+      return
+    }
+  }
+
+  // rebuild：生成新 ladder
+  const step = params.step.mode === 'pct'
+    ? params.step.value / 100
+    : params.step.value / currentAnchor
+  const decay = 1 - step
+  const newLevels: number[] = []
+  for (let i = 0; i < params.levelCount; i++) {
+    newLevels.push(round2(currentAnchor * decay ** (i + 1)))
+  }
+
+  orchWorkingOrders.push(buildDynamicGridWorkingOrder(program, newLevels))
+  orchActiveIds.push(program.id)
+  programLifecycleStateNext[program.id] = freezeDynamicGridEntry({
+    kind: 'dynamic_grid',
+    lastBuildAnchor: currentAnchor,
+    lastBuildAt: now,
+    lastBuildLadder: newLevels.map((level, i) => ({ id: `${program.id}:${i}`, level })),
+  })
+}
+
+function isValidDynamicGrid(program: CompiledDynamicGridProgram): boolean {
+  if (typeof program.activeWhenExprId !== 'string' || program.activeWhenExprId.length === 0) return false
+  const params = program.dynamicGridParams
+  if (!params) return false
+  if (!Number.isInteger(params.anchorLookbackBars) || params.anchorLookbackBars < 10) return false
+  if (params.anchorSide !== 'high' && params.anchorSide !== 'low' && params.anchorSide !== 'mid') return false
+  if (!Number.isFinite(params.anchorDriftPct) || params.anchorDriftPct <= 0) return false
+  if (!Number.isInteger(params.rebuildMinIntervalSec) || params.rebuildMinIntervalSec < 60) return false
+  if (!params.step) return false
+  if (params.step.mode !== 'pct' && params.step.mode !== 'absolute') return false
+  if (!Number.isFinite(params.step.value) || params.step.value <= 0) return false
+  if (!Number.isInteger(params.levelCount) || params.levelCount < 2) return false
+  const { sizing } = program
+  if (!sizing || !Number.isFinite(sizing.value) || sizing.value <= 0) return false
+  return true
+}
+
+function buildDynamicGridWorkingOrder(
+  program: CompiledDynamicGridProgram,
+  levels: readonly number[],
+): {
+  id: string
+  sourceRef: string
+  payload?: Record<string, unknown>
+  levels?: readonly number[]
+} {
+  return {
+    id: program.id,
+    sourceRef: 'orchestration:program.dynamic_grid',
+    payload: {
+      activeWhen: program.activeWhenExprId,
+      dynamicGridParams: {
+        ...program.dynamicGridParams,
+        step: { ...program.dynamicGridParams.step },
+      },
+      sizing: { ...program.sizing },
+    },
+    levels: Object.freeze([...levels]),
+  }
+}
+
+// 深 freeze 写入：entry 顶层 + lastBuildLadder 数组都需 frozen。
+function freezeDynamicGridEntry(entry: {
+  readonly kind: 'dynamic_grid'
+  readonly lastBuildAnchor: number
+  readonly lastBuildAt: number
+  readonly lastBuildLadder: readonly { readonly id: string; readonly level: number }[]
+}): ProgramLifecycleState {
+  Object.freeze(entry.lastBuildLadder)
+  return Object.freeze(entry)
+}
+
+function readPrevDynamicGridState(
+  state: ProgramLifecycleState | undefined,
+): Extract<ProgramLifecycleState, { kind: 'dynamic_grid' }> | null {
+  if (!state || state.kind !== 'dynamic_grid') return null
+  // 排除空 placeholder（fail-closed validator 写的 lastBuildAnchor=0 / ladder=[]）
+  if (state.lastBuildAnchor <= 0 || state.lastBuildLadder.length === 0) return null
+  return state
+}
+
 // ----------- adaptive_volatility_grid 分支（S6 八路径） -----------
 //
 // 8 路径（plan v3 Acceptance Runtime）：
@@ -267,7 +530,7 @@ function runAdaptiveVolatilityGridProgram(args: AdaptiveRunArgs): void {
     return
   }
 
-  // Path 1: 16 fail-closed
+  // Path 1: fail-closed
   if (!isValidAdaptiveVolatilityGrid(program)) {
     orchCancelledIds.push(program.id)
     return

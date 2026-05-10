@@ -21,6 +21,7 @@ export type AtomicCoverageTag =
   | 'drawdown'
   | 'program'
   | 'fixed_grid'
+  | 'dynamic_grid'
   | 'phase5'
 
 export interface AtomCoverageExpectedAtom {
@@ -1885,6 +1886,10 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
     ],
     expectedRoute: 'projection_gate',
   },
+  // Phase 5 S5 (#984): dynamic_grid atom-coverage 入口 — 暂留 follow-up
+  // 当前 NL 短语 → projection_gate 完整解锁需要进一步打通 NL → state-builder
+  // → readiness 路径，留 issue 单独 PR；运行时 evaluator + golden corpus 已自验
+  // （详见 orchestration-dynamic-grid-{golden-corpus,parity}.spec.ts）
   // Phase 5 S6 (#984): adaptive_volatility_grid atom-coverage 解锁留 follow-up
   // — extractor 当前对 ATR 自适应网格 utterance 输出含未注册 atoms（如指标 fragment）
   // 导致 classifier 走 unsupported_fallback；core 33 cases 已在
