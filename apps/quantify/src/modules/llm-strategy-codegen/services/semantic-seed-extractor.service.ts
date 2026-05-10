@@ -4732,7 +4732,7 @@ export class SemanticSeedExtractorService {
     if (/伦敦时间|London\s*Time|BST|GMT/iu.test(text)) return 'Europe/London'
     // Plain "UTC"
     if (/\bUTC\b/iu.test(text)) return 'UTC'
-    // critic round 1 Major #3 修复：UTC offset 转换为 IANA 兼容的 Etc/GMT 格式
+    // critic round 1 Major item 3 修复：UTC offset 转换为 IANA 兼容的 Etc/GMT 格式
     // （IANA Etc/GMT 符号反转：UTC+8 = Etc/GMT-8），避免 runtime helper 用 IANA name 解析时抛错
     const offsetMatch = text.match(/([+-])(\d{2}):?(\d{2})/)
     if (offsetMatch) {

@@ -94,20 +94,12 @@
     "parallelWeb": {
       "development": {
         "concurrent": true,
-        "commands": [
-          "build.shared",
-          "build.front.development",
-          "build.admin.development"
-        ],
+        "commands": ["build.shared", "build.front.development", "build.admin.development"],
         "description": "并行构建 Web（shared/front/admin 开发环境）"
       },
       "production": {
         "concurrent": true,
-        "commands": [
-          "build.shared",
-          "build.front.production",
-          "build.admin.production"
-        ],
+        "commands": ["build.shared", "build.front.production", "build.admin.production"],
         "description": "并行构建 Web（shared/front/admin 生产环境）"
       },
       "help": {
@@ -286,27 +278,32 @@
   "test": {
     "e2e": {
       "backend": {
-        "command": "npx nx test:e2e backend",
+        "command": "bash -lc 'echo \"E2E 必须指定文件或目录，例如：dx test e2e backend apps/backend/e2e/health.e2e-spec.ts\" >&2; exit 1'",
         "app": "backend",
         "requiresPath": true,
-        "fileCommand": "npx nx test:e2e backend -- {TEST_PATH}",
-        "description": "运行后端E2E测试"
+        "fileCommand": "bash -lc 'path=\"${1#apps/backend/}\"; shift; pnpm --dir apps/backend run test:e2e:file \"$path\" \"$@\"' _ {TEST_PATH}",
+        "description": "运行后端 E2E 测试（推荐传文件或目录）"
       },
       "quantify": {
-        "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run test:e2e",
+        "command": "bash -lc 'echo \"E2E 必须指定文件或目录，例如：dx test e2e quantify apps/quantify/e2e/health\" >&2; exit 1'",
         "app": "quantify",
         "description": "运行 Quantify E2E 测试",
         "requiresPath": true,
-        "fileCommand": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run test:e2e:file {TEST_PATH}",
+        "fileCommand": "node scripts/dx/quantify-launcher.cjs bash -lc 'path=\"${1#apps/quantify/}\"; shift; pnpm --dir apps/quantify run test:e2e:file \"$path\" \"$@\"' _ {TEST_PATH}",
         "skipEnvValidation": true
       },
       "all": {
-        "command": "npx nx test:e2e backend",
-        "app": "backend",
-        "description": "保留占位；CLI 层已禁止 E2E 全量聚合执行"
+        "command": "bash -lc 'echo \"E2E 必须指定 target 和文件/目录，例如：dx test e2e backend apps/backend/e2e/health.e2e-spec.ts\" >&2; exit 1'",
+        "skipEnvValidation": true,
+        "description": "禁止 E2E 全量聚合执行"
       }
     },
     "unit": {
+      "all": {
+        "command": "bash -lc 'set -euo pipefail; dx test unit backend; dx test unit quantify; dx test unit front; dx test unit admin; dx test unit shared; dx test unit config; dx test unit scripts'",
+        "skipEnvValidation": true,
+        "description": "运行全部单元/配置/脚本测试"
+      },
       "front": {
         "command": "npx nx test front",
         "app": "front",
@@ -326,6 +323,22 @@
         "command": "node scripts/dx/quantify-launcher.cjs npx nx test quantify",
         "app": "quantify",
         "description": "运行 Quantify 单元测试",
+        "skipEnvValidation": true
+      },
+      "shared": {
+        "command": "npx nx test shared",
+        "app": "shared",
+        "description": "运行共享包单元测试",
+        "skipEnvValidation": true
+      },
+      "scripts": {
+        "command": "pnpm run test:scripts:contracts",
+        "description": "运行仓库脚本契约测试",
+        "skipEnvValidation": true
+      },
+      "config": {
+        "command": "node --test dx/config/commands.test.mjs",
+        "description": "运行 DX 配置契约测试",
         "skipEnvValidation": true
       }
     }
@@ -353,9 +366,7 @@
       "development": {
         "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run dev",
         "app": "quantify",
-        "ports": [
-          3010
-        ],
+        "ports": [3010],
         "skipEnvValidation": true,
         "description": "启动 Quantify 开发服务"
       },
@@ -370,9 +381,7 @@
       "development": {
         "command": "npx nx dev front",
         "app": "front",
-        "ports": [
-          3001
-        ],
+        "ports": [3001],
         "description": "启动前端开发服务"
       },
       "production": {
@@ -385,9 +394,7 @@
       "development": {
         "command": "npx nx dev admin-front",
         "app": "admin-front",
-        "ports": [
-          3500
-        ],
+        "ports": [3500],
         "description": "启动管理后台开发服务"
       },
       "production": {
@@ -419,20 +426,10 @@
       "stack": {
         "ecosystemConfig": "ecosystem.config.cjs",
         "pm2Bin": "pnpm pm2",
-        "services": [
-          "backend",
-          "front",
-          "admin",
-          "quantify"
-        ],
+        "services": ["backend", "front", "admin", "quantify"],
         "preflight": {
           "pm2Reset": true,
-          "killPorts": [
-            3000,
-            3001,
-            3500,
-            3010
-          ],
+          "killPorts": [3000, 3001, 3500, 3010],
           "forcePortCleanup": true,
           "cleanPaths": [
             "apps/front/.next",
@@ -445,34 +442,24 @@
             "apps/quantify/.eslintcache"
           ],
           "cleanTsBuildInfo": true,
-          "cleanTsBuildInfoDirs": [
-            "apps/front",
-            "apps/admin-front",
-            "apps/quantify"
-          ]
+          "cleanTsBuildInfoDirs": ["apps/front", "apps/admin-front", "apps/quantify"]
         }
       }
     },
     "stagewise-front": {
       "command": "npx stagewise@latest -b -a 3001 -p 3002 -w ./apps/front",
       "description": "Stagewise 桥接 front (3001→3002)",
-      "ports": [
-        3002
-      ]
+      "ports": [3002]
     },
     "stagewise-admin": {
       "command": "npx stagewise@latest -b -s -a 3500 -p 3501 -w ./apps/admin-front",
       "description": "Stagewise 桥接 admin-front (3500→3501)",
-      "ports": [
-        3501
-      ]
+      "ports": [3501]
     },
     "mock": {
       "command": "pnpm --filter @ai/front run dev:mock",
       "app": "front",
-      "ports": [
-        3001
-      ],
+      "ports": [3001],
       "description": "启动前端开发服务(Mock后端)"
     }
   },
@@ -637,33 +624,23 @@
     "summary": "stats dx 配置",
     "globalOptions": [
       {
-        "flags": [
-          "--dev"
-        ],
+        "flags": ["--dev"],
         "description": "使用 development 环境"
       },
       {
-        "flags": [
-          "--staging"
-        ],
+        "flags": ["--staging"],
         "description": "使用 staging 环境"
       },
       {
-        "flags": [
-          "--prod"
-        ],
+        "flags": ["--prod"],
         "description": "使用 production 环境"
       },
       {
-        "flags": [
-          "--test"
-        ],
+        "flags": ["--test"],
         "description": "使用 test 环境"
       },
       {
-        "flags": [
-          "--e2e"
-        ],
+        "flags": ["--e2e"],
         "description": "使用 e2e 环境"
       }
     ],
@@ -677,6 +654,14 @@
         "description": "构建所有应用"
       },
       {
+        "command": "dx test unit backend apps/backend/src/app.service.spec.ts",
+        "description": "运行指定后端单测文件"
+      },
+      {
+        "command": "dx test e2e quantify apps/quantify/e2e/health",
+        "description": "运行指定 Quantify E2E 目录"
+      },
+      {
         "command": "dx deploy backend --prod",
         "description": "部署 backend 制品"
       }
@@ -684,9 +669,7 @@
     "commands": {
       "start": {
         "summary": "启动服务或开发套件",
-        "notes": [
-          "未指定 service 时默认使用开发套件，仅允许 --dev"
-        ],
+        "notes": ["未指定 service 时默认使用开发套件，仅允许 --dev"],
         "examples": [
           {
             "command": "dx start backend --dev",
@@ -713,6 +696,33 @@
           {
             "command": "dx db migrate --dev --name init-stats-table",
             "description": "创建开发环境迁移"
+          }
+        ]
+      },
+      "test": {
+        "summary": "运行测试；unit 允许 all 全量执行，E2E 禁止全量聚合且必须指定文件或目录",
+        "notes": [
+          "单元测试入口：front、admin、backend、quantify、shared、scripts、config、all",
+          "unit 测试可以执行 dx test unit all；E2E 测试不允许 all 全量跑",
+          "E2E 测试入口：backend、quantify；必须传 root-relative 文件或目录路径",
+          "根脚本 pnpm test 也会转发到 dx test unit all"
+        ],
+        "examples": [
+          {
+            "command": "dx test unit backend apps/backend/src/app.service.spec.ts",
+            "description": "运行指定后端单测文件"
+          },
+          {
+            "command": "dx test unit shared packages/shared/src/script-engine/compiled-runtime/run-decision-programs.spec.ts",
+            "description": "运行指定共享包单测文件"
+          },
+          {
+            "command": "dx test e2e backend apps/backend/e2e/health.e2e-spec.ts -t \"health\"",
+            "description": "运行指定后端 E2E 用例"
+          },
+          {
+            "command": "dx test e2e quantify apps/quantify/e2e/health",
+            "description": "运行 Quantify health E2E 目录"
           }
         ]
       },

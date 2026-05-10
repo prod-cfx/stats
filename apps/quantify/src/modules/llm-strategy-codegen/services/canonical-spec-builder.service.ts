@@ -820,7 +820,7 @@ export class CanonicalSpecBuilderService {
         })
         continue
       }
-      // phase=strategy 本 PR substrate 不支持，silent skip（留 #984 #5 strategy 子级 PR）
+      // phase=strategy 本 PR substrate 不支持，silent skip（留 issue #984 的第 5 项 strategy 子级 PR）
       if (node.target.phase === 'strategy') {
         continue
       }

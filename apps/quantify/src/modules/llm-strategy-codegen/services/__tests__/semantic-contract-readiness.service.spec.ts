@@ -2571,7 +2571,7 @@ describe('SemanticContractReadinessService', () => {
       }
     }
 
-    it('S6 #1 完整 adaptive + valid gate ref + 新策略 → 不注入 phase0 slot', () => {
+    it('S6 case 1 完整 adaptive + valid gate ref + 新策略 → 不注入 phase0 slot', () => {
       const state = createSemanticState({
         orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
       })
@@ -2583,7 +2583,7 @@ describe('SemanticContractReadinessService', () => {
       }))
     })
 
-    it('S6 #2-5 各 16 fail-closed (key/programKind/onDeactivate/rebuildPolicy)', () => {
+    it('S6 cases 2-5 各 16 fail-closed (key/programKind/onDeactivate/rebuildPolicy)', () => {
       const variations: Array<Partial<SemanticOrchestrationNode>> = [
         { key: 'program.unknown' },
         { programKind: 'fixed_grid_gated' },
@@ -2602,7 +2602,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #6 atrPeriod 越界 (1 / 201 / 非整数) → fail-closed', () => {
+    it('S6 case 6 atrPeriod 越界 (1 / 201 / 非整数) → fail-closed', () => {
       for (const atrPeriod of [1, 201, 14.5]) {
         const state = createSemanticState({
           orchestration: { nodes: [regimeGateNode(), adaptiveNode({ atrPeriod })], contracts: [] },
@@ -2615,7 +2615,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #7-8 atrMultiplier / rangeMultiplier <= 0 → fail-closed', () => {
+    it('S6 cases 7-8 atrMultiplier / rangeMultiplier <= 0 → fail-closed', () => {
       for (const overrides of [{ atrMultiplier: 0 }, { rangeMultiplier: -1 }, { atrMultiplier: NaN }]) {
         const state = createSemanticState({
           orchestration: { nodes: [regimeGateNode(), adaptiveNode(overrides)], contracts: [] },
@@ -2628,7 +2628,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #9 atrDriftPct 越界 (0 / 101) → fail-closed', () => {
+    it('S6 case 9 atrDriftPct 越界 (0 / 101) → fail-closed', () => {
       for (const atrDriftPct of [0, 101]) {
         const state = createSemanticState({
           orchestration: { nodes: [regimeGateNode(), adaptiveNode({ atrDriftPct })], contracts: [] },
@@ -2641,7 +2641,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #10 rebuildCooldownSec=299（硬下限 300 不达）→ fail-closed', () => {
+    it('S6 case 10 rebuildCooldownSec=299（硬下限 300 不达）→ fail-closed', () => {
       const state = createSemanticState({
         orchestration: { nodes: [regimeGateNode(), adaptiveNode({ rebuildCooldownSec: 299 })], contracts: [] },
       })
@@ -2652,7 +2652,7 @@ describe('SemanticContractReadinessService', () => {
       }))
     })
 
-    it('S6 #11-13 minStepPct / maxStepPct / max < min → fail-closed', () => {
+    it('S6 cases 11-13 minStepPct / maxStepPct / max < min → fail-closed', () => {
       for (const overrides of [{ minStepPct: 0 }, { maxStepPct: 0 }, { minStepPct: 2, maxStepPct: 1 }]) {
         const state = createSemanticState({
           orchestration: { nodes: [regimeGateNode(), adaptiveNode(overrides)], contracts: [] },
@@ -2665,7 +2665,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #14 levelCount 越界 (1 / 101 / 非整数) → fail-closed', () => {
+    it('S6 case 14 levelCount 越界 (1 / 101 / 非整数) → fail-closed', () => {
       for (const levelCount of [1, 101, 5.5]) {
         const state = createSemanticState({
           orchestration: { nodes: [regimeGateNode(), adaptiveNode({ levelCount })], contracts: [] },
@@ -2678,7 +2678,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #15 sizing 非法 → fail-closed', () => {
+    it('S6 case 15 sizing 非法 → fail-closed', () => {
       for (const sizing of [
         { mode: 'unknown' as never, value: 100 },
         { mode: 'fixed_quote' as const, value: 0 },
@@ -2694,7 +2694,7 @@ describe('SemanticContractReadinessService', () => {
       }
     })
 
-    it('S6 #16a activeWhenRef 引用不存在节点 → fail-closed', () => {
+    it('S6 case 16a activeWhenRef 引用不存在节点 → fail-closed', () => {
       const state = createSemanticState({
         orchestration: { nodes: [regimeGateNode(), adaptiveNode({ activeWhenRef: 'no-such-id' })], contracts: [] },
       })
@@ -2705,7 +2705,7 @@ describe('SemanticContractReadinessService', () => {
       }))
     })
 
-    it('S6 #16b 老策略 (deployedAtSemanticVersion=null) → fail-closed', () => {
+    it('S6 case 16b 老策略 (deployedAtSemanticVersion=null) → fail-closed', () => {
       const state = createSemanticState({
         orchestration: { nodes: [regimeGateNode(), adaptiveNode()], contracts: [] },
       })
@@ -2717,7 +2717,7 @@ describe('SemanticContractReadinessService', () => {
       }))
     })
 
-    it('S6 #17 fixed_grid_gated + adaptive_volatility_grid 共存互不干扰', () => {
+    it('S6 case 17 fixed_grid_gated + adaptive_volatility_grid 共存互不干扰', () => {
       const state = createSemanticState({
         orchestration: { nodes: [regimeGateNode(), fixedGridGatedNode(), adaptiveNode()], contracts: [] },
       })

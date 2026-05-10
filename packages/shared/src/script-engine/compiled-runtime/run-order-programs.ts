@@ -605,7 +605,7 @@ function runAdaptiveVolatilityGridProgram(args: AdaptiveRunArgs): void {
       programLifecycleStateNext[program.id] = prev
       return
     }
-    // Path B: 无 prev → cancelled + key 缺席（critic round 2 Major #2）
+    // Path B: 无 prev → cancelled + key 缺席（critic round 2 Major item 2）
     orchCancelledIds.push(program.id)
     return
   }
@@ -722,7 +722,7 @@ function tryRebuild(args: RebuildArgs): RebuildResult | null {
   const rebuildClamped = rawStepPct < params.minStepPct || rawStepPct > params.maxStepPct
   const range = params.rangeMultiplier * currentATR
 
-  // 切分（critic round 2 Major #1）：lower=floor(N/2), upper=N-lower
+  // 切分（critic round 2 Major item 1）：lower=floor(N/2), upper=N-lower
   const lowerCount = Math.floor(params.levelCount / 2)
   const upperCount = params.levelCount - lowerCount
 

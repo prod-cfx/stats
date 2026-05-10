@@ -130,22 +130,22 @@ describe('orchestration program.adaptive_volatility_grid — golden corpus (Phas
   // ============ Section B — Readiness 16 fail-closed ============
   describe('Section B: 16 readiness fail-closed', () => {
     const variations: Array<[string, Partial<SemanticOrchestrationNode>]> = [
-      ['#1 kind != program', { kind: 'gate' as never }],
-      ['#2 key 错误', { key: 'program.unknown' as never }],
-      ['#3 programKind 不匹配', { programKind: 'fixed_grid_gated' }],
-      ['#4 onDeactivate 非法', { onDeactivate: 'pause' as never }],
-      ['#5 rebuildPolicy 非 atr_window', { rebuildPolicy: 'static' }],
-      ['#6 atrPeriod 越界', { atrPeriod: 1 }],
-      ['#7 atrMultiplier <= 0', { atrMultiplier: 0 }],
-      ['#8 rangeMultiplier <= 0', { rangeMultiplier: -1 }],
-      ['#9 atrDriftPct 越界', { atrDriftPct: 0 }],
-      ['#10 rebuildCooldownSec < 300（硬下限）', { rebuildCooldownSec: 299 }],
-      ['#11 minStepPct <= 0', { minStepPct: 0 }],
-      ['#12 maxStepPct <= 0', { maxStepPct: 0 }],
-      ['#13 max < min（配置矛盾）', { minStepPct: 2, maxStepPct: 1 }],
-      ['#14 levelCount 越界', { levelCount: 1 }],
-      ['#15 sizing.value <= 0', { sizing: { mode: 'fixed_quote', value: 0 } }],
-      ['#16 activeWhenRef 缺失', { activeWhenRef: undefined }],
+      ['case 1 kind != program', { kind: 'gate' as never }],
+      ['case 2 key 错误', { key: 'program.unknown' as never }],
+      ['case 3 programKind 不匹配', { programKind: 'fixed_grid_gated' }],
+      ['case 4 onDeactivate 非法', { onDeactivate: 'pause' as never }],
+      ['case 5 rebuildPolicy 非 atr_window', { rebuildPolicy: 'static' }],
+      ['case 6 atrPeriod 越界', { atrPeriod: 1 }],
+      ['case 7 atrMultiplier <= 0', { atrMultiplier: 0 }],
+      ['case 8 rangeMultiplier <= 0', { rangeMultiplier: -1 }],
+      ['case 9 atrDriftPct 越界', { atrDriftPct: 0 }],
+      ['case 10 rebuildCooldownSec < 300（硬下限）', { rebuildCooldownSec: 299 }],
+      ['case 11 minStepPct <= 0', { minStepPct: 0 }],
+      ['case 12 maxStepPct <= 0', { maxStepPct: 0 }],
+      ['case 13 max < min（配置矛盾）', { minStepPct: 2, maxStepPct: 1 }],
+      ['case 14 levelCount 越界', { levelCount: 1 }],
+      ['case 15 sizing.value <= 0', { sizing: { mode: 'fixed_quote', value: 0 } }],
+      ['case 16 activeWhenRef 缺失', { activeWhenRef: undefined }],
     ]
     for (const [name, override] of variations) {
       it(name, () => {

@@ -5,16 +5,16 @@
  *   - exprValues 缺失（undefined）/ 非裸 boolean true（包括 number 1 / 'true' / null /
  *     { levels: [] }）一律视为 false
  *   - phase='entry'：gate=false → blockEntryLong/Short（按 sideScope long/short/both）
- *   - phase='strategy'：本 PR substrate 不支持，silent skip（留 #984 #5 strategy 子级 PR）
+ *   - phase='strategy'：本 PR substrate 不支持，silent skip（留 issue #984 的第 5 项 strategy 子级 PR）
  *   - phase='subStrategy'：
  *     * effectWhenFalse='pause_substrategy'：gate=false 时 pausedSubStrategyScopeIds.add(target.subStrategyScopeRef)
  *     * effectWhenFalse='switch_substrategy'：gate=true 时收集 target.toSubStrategyScopeRef 进 switchCandidates
  *       - 0 候选 → switchToSubStrategyScopeId 不写值
  *       - 1 候选 → switchToSubStrategyScopeId = candidate
- *       - ≥2 候选 → fail-closed（不写值；caller 视同未切换 → NOOP，对应验收 #9 "条件不明确 fail-closed"）
+ *       - ≥2 候选 → fail-closed（不写值；caller 视同未切换 → NOOP，对应验收项 9 "条件不明确 fail-closed"）
  *
  * 仅作用于 OPEN_* 决策（在 runDecisionPrograms 末端 emit 处套）；CLOSE_* /
- * REDUCE_* / forceExit 不受影响（issue #984 bullet #6 安全保证："能进就能出"）。
+ * REDUCE_* / forceExit 不受影响（issue #984 第 6 条安全保证："能进就能出"）。
  */
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 
@@ -66,7 +66,7 @@ export function evaluateOrchestrationGates(
         break
       }
       case 'strategy': {
-        // 本 PR substrate 不支持 — silent skip（留 #984 #5 strategy 子级 PR）
+        // 本 PR substrate 不支持 — silent skip（留 issue #984 的第 5 项 strategy 子级 PR）
         // Defense in depth：readiness 已 unsupported，万一透传到 runtime 仍跳过不污染输出
         break
       }
@@ -97,7 +97,7 @@ export function evaluateOrchestrationGates(
   if (switchCandidates.length === 1) {
     switchToSubStrategyScopeId = switchCandidates[0]
   }
-  // 0 或 ≥2 → 不写值（≥2 fail-closed 兑现验收 #9 "条件不明确 fail-closed"）
+  // 0 或 ≥2 → 不写值（≥2 fail-closed 兑现验收项 9 "条件不明确 fail-closed"）
 
   const state: OrchestrationGateState = {
     blockEntryLong: blockLong,

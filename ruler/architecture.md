@@ -23,10 +23,10 @@ dx/
 - 运行时基线：Node.js `>=20.19.0`，pnpm `10.28.2`
 - Monorepo / 构建编排：Nx `19.8.14`
 - 语言与工程化：TypeScript `5.9.2`、ESLint `9.32.x`、Prettier `3.6.2`
-- 后端主服务：NestJS `11.1.x`、Prisma `7.4.2`、PostgreSQL、Redis、Swagger/OpenAPI、Socket.IO
-- 用户端：Next.js `16.1.6`、React `19.2.4`、Redux Toolkit、Radix UI、Tailwind CSS 4
-- 管理端：Next.js `16.1.6`、React `19.2.4`、Ant Design `5.26.7`、Zustand
-- 量化服务：NestJS `11.1.x`、Prisma `7.4.2`、Bull、策略/回测/消息总线相关模块
+- 后端主服务：NestJS `11.1.x`、Prisma `7.8.0`、PostgreSQL、Redis、Swagger/OpenAPI、Socket.IO
+- 用户端：Next.js `16.2.3`、React `19.2.4`、Redux Toolkit、Radix UI、Tailwind CSS 4
+- 管理端：Next.js `16.2.3`、React `19.2.4`、Ant Design `5.26.7`、Zustand
+- 量化服务：NestJS `11.1.x`、Prisma `7.8.0`、Bull、Mastra、AI SDK、策略/回测/消息总线相关模块
 
 ## 应用边界
 
@@ -46,6 +46,8 @@ dx/
 - 市场与行情：`markets`、`kline`、`aggregated-orderbook`、`aggregated-liquidation`、`open-interest`、`liquidation-heatmap`、`polymarket`
 - 数据同步：`data-sync`、`crypto-stock-quotes`、`whale-alert`、`whale-holdings`、`whale-tracking`
 - 通知与配置：`whale-notification`、`settings`、`meta`、`exchange-config`、`trades-config`、`orderbook-config`
+- Quantify 桥接：`ai-quant-proxy`、`account-exchange-accounts`
+- 辅助能力：`beta-code`
 - 基础设施：`health`
 
 ### `apps/quantify`
@@ -55,16 +57,16 @@ dx/
 - 账户与交易所账户管理
 - 市场数据、指标、仓位与交易能力
 - 回测、策略模板、策略订阅、策略实例
-- LLM 策略生成与相关 AI 能力
+- LLM 策略生成、Mastra 与相关 AI 能力
 - message bus 与 outbox 相关基础设施
 
 主要模块（`apps/quantify/src/modules/*`）：
 
 - 账户与配置：`accounts`、`exchange-accounts`、`settings`
 - 数据与分析：`market-data`、`indicators`、`backtesting`
-- 策略系统：`strategy-templates`、`strategy-subscriptions`、`strategy-instances`、`strategy-signals`
-- AI / LLM：`ai`、`llm-strategies`、`llm-strategy-codegen`、`llm-strategy-subscriptions`
-- 交易与基础设施：`positions`、`trading`、`message-bus`、`health`
+- 策略系统：`strategy-templates`、`strategy-subscriptions`、`strategy-instances`、`strategy-signals`、`strategy-plaza`、`strategy-runtime`
+- AI / LLM：`ai`、`mastra`、`llm-strategies`、`llm-strategy-codegen`、`llm-strategy-subscriptions`
+- 交易与基础设施：`positions`、`trading`、`trading-execution`、`grid-runtime`、`message-bus`、`health`
 
 ### `apps/front`
 
@@ -74,6 +76,7 @@ dx/
 - 用户认证与 Telegram 登录/绑定流程
 - 鲸鱼预警相关交互
 - AI Quant 相关页面与前端状态管理
+- Strategy Plaza、清算地图、聚合盘口等交易数据页面
 
 ### `apps/admin-front`
 
@@ -90,7 +93,8 @@ dx/
   - 通过 `./node` 暴露 Node 专属导出，供服务端按需使用
 - `packages/api-contracts`
   - 由 `backend:swagger` + `quantify:swagger` 以及对应的 contracts 生成脚本产出
-  - 为前端与管理端提供类型安全的接口模型与客户端
+  - 同时导出 backend 与 quantify 的 Zod schemas、Zodios endpoints 与 `createApiClient`
+  - 默认导出 backend；quantify 通过 `createQuantifyApiClient` / `quantifySchemas` 访问
 - `packages/config`
   - 封装环境变量加载、展开与 zod 校验
   - 与 `dx/config/env-policy.jsonc` 一起构成环境治理边界
@@ -113,10 +117,11 @@ dx/
 - `dx start all` 当前启动 `backend`、`front`、`admin`
 - `quantify` 通过 `dx start quantify --dev` 单独启动，或使用 `dx start stack` 纳入 PM2 服务栈
 - 构建可直接按目标执行：`dx build backend --dev`、`dx build quantify --dev`、`dx build front --dev`、`dx build admin --dev`
+- API 合约生成统一执行：`dx build contracts`
 
 ## 关键约定速记
 
-- 分页基类：`apps/backend/src/common/dto/base-pagination.request.dto.ts`、`apps/backend/src/common/dto/base-pagination.response.dto.ts`
+- 分页基类：`apps/backend/src/common/dto/base-pagination.*.dto.ts`、`apps/quantify/src/common/dto/base-pagination.*.dto.ts`
 - 统一错误码：`packages/shared/src/constants/error-codes.ts`
-- 统一业务异常基类：`apps/backend/src/common/exceptions/domain.exception.ts`
+- 统一业务异常基类：`apps/backend/src/common/exceptions/domain.exception.ts`、`apps/quantify/src/common/exceptions/domain.exception.ts`
 - 固定端口：backend=`3000`，front=`3001`，admin=`3500`，quantify=`3010`

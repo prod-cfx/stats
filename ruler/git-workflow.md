@@ -12,8 +12,19 @@
 
 - Conventional Commits：`feat:` / `fix:` / `docs:` / `refactor:` ...
 - 末尾必须带：`Refs: #123` 或 `Closes: #123`
+- Commit message 必须同时遵守 Lore 协议：首行写“为什么改”，正文按需说明约束与取舍，并用 git trailer 记录验证证据
+- 推荐 trailer：`Constraint:`、`Rejected:`、`Confidence:`、`Scope-risk:`、`Directive:`、`Tested:`、`Not-tested:`
+- `Tested:` 必须写实际执行过的验证；未验证的风险写入 `Not-tested:`
 
-## 3) Heredoc（强制）
+## 3) GitHub 文案编号（强制）
+
+- 在 Issue、PR、评论、提交说明等 GitHub 会渲染 Markdown 的地方，禁止用 `#1`、`#2` 这类格式表示“第 1 个问题 / 第 2 个问题”
+- 测试名、代码注释、文档片段如果可能被复制到 Issue/PR/Review，也不要用裸 `#1`、`#2` 表示普通序号
+- 原因：GitHub 会把 `#1` 自动解析为仓库 Issue/PR 编号，容易造成错误引用和沟通混乱
+- 可用替代格式：`问题 1`、`问题 2`、`第 1 点`、`第 2 点`、`1.` / `2.`、`(1)` / `(2)`、`[1]` / `[2]`
+- 只有在明确引用 GitHub Issue/PR 时，才使用 `#123`
+
+## 4) Heredoc（强制）
 
 说明：不要在参数里写 `\n`（只会产生字面量）。
 
@@ -38,7 +49,7 @@ Closes: #123
 MSG
 ```
 
-## 4) 认证与账号
+## 5) 认证与账号
 
 - Git/gh 统一走 SSH key
 - gh 权限问题：先 `gh auth status`，需要时用 `gh auth switch` / `gh auth login`

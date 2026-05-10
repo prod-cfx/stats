@@ -10,7 +10,7 @@
  *   - observe 触发 → observedBreaches 含该 risk.id（不阻挡）
  *
  * 仅作用于 OPEN_* 决策（与 gate.regime 同链路；运行时聚合在 run-decision-programs 实现）；
- * CLOSE_* / REDUCE_* / forceExit 不受影响（issue #984 bullet #6 安全保证）。
+ * CLOSE_* / REDUCE_* / forceExit 不受影响（issue #984 第 6 条安全保证）。
  */
 import type { OrchestrationGateState } from './evaluate-orchestration-gates'
 

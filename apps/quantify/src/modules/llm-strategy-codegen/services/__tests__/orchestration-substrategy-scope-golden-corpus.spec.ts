@@ -343,7 +343,7 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
       expect(result).toBe('continue')
     })
 
-    it('E6 paused active + entry phase → NOOP (验收 #6)', () => {
+    it('E6 paused active + entry phase → NOOP (验收项 6)', () => {
       const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as StrategyExecutionContextV1
       const gateState: OrchestrationGateState = {
         blockEntryLong: false,
@@ -355,7 +355,7 @@ describe('orchestration scope.subStrategy — golden corpus (Phase 5 S10 #1111)'
       expect((result as StrategyDecisionV1).reason).toBe('compiled.orchestration.substrategy.paused')
     })
 
-    it('E7 paused active + exit phase → continue (验收 #6 "能进就能出")', () => {
+    it('E7 paused active + exit phase → continue (验收项 6 "能进就能出")', () => {
       const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as StrategyExecutionContextV1
       const gateState: OrchestrationGateState = {
         blockEntryLong: false,

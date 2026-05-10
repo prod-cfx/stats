@@ -648,7 +648,7 @@ export class SemanticOrchestrationRegistryService {
         return { ok: missingSlots.length === 0, missingSlots }
       }
       if (target?.phase === 'strategy') {
-        // phase=strategy unsupported（留 #984 #5 strategy 子级 PR）
+        // phase=strategy unsupported（留 issue #984 的第 5 项 strategy 子级 PR）
         missingSlots.push({
           slotKey: 'orchestration.gate.unsupported_phase',
           fieldPath: `orchestration.gate[${node.id}]`,

@@ -1923,7 +1923,7 @@ export function applyDataSourceScopeProgramRouting(
  *     program ref === activeId
  *       且 activeId ∈ gateState.pausedSubStrategyScopeIds（active 自身被 pause）：
  *         program.phase==='entry' → return NOOP { reason: 'compiled.orchestration.substrategy.paused' }
- *         其它 phase（exit/rebalance）→ 'continue'（兑现验收 #6 "阻止新开仓但允许已有仓位退出"）
+ *         其它 phase（exit/rebalance）→ 'continue'（兑现验收项 6 "阻止新开仓但允许已有仓位退出"）
  *       else → 'continue'
  */
 export function applySubStrategyScopeRouting(
@@ -1971,7 +1971,7 @@ export function applySubStrategyScopeRouting(
         reason: 'compiled.orchestration.substrategy.paused',
       }
     }
-    // exit/rebalance phase：放行（验收 #6 "阻止新开仓但允许已有仓位退出"）
+    // exit/rebalance phase：放行（验收项 6 "阻止新开仓但允许已有仓位退出"）
     return 'continue'
   }
   return 'continue'

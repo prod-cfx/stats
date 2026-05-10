@@ -206,7 +206,7 @@ describe('phase 5 S10 — subStrategy gates', () => {
     expect(state.switchToSubStrategyScopeId).toBeUndefined()
   })
 
-  it('switch_substrategy ≥2 候选都 gate=true → switchToSubStrategyScopeId === undefined（M1 验收 #9 fail-closed）', () => {
+  it('switch_substrategy ≥2 候选都 gate=true → switchToSubStrategyScopeId === undefined（M1 验收项 9 fail-closed）', () => {
     const gates = [
       switchGate({ id: 'g1', exprId: 'eA', from: 'ss-A', to: 'ss-B' }),
       switchGate({ id: 'g2', exprId: 'eB', from: 'ss-A', to: 'ss-C' }),

@@ -51,25 +51,43 @@ interface SemanticCombinationMetadata {
 export class SemanticFrameNormalizerService {
   normalize(frames: readonly SemanticNaturalLanguageFrame[]): CodegenSemanticPatch {
     const patch: CodegenSemanticPatch = {}
-    const indicatorCompareGroups = new Map<string, {
-      groupId: string
-      frames: SemanticIndicatorCompareFrame[]
-    }>()
+    const indicatorCompareGroups = new Map<
+      string,
+      {
+        groupId: string
+        frames: SemanticIndicatorCompareFrame[]
+      }
+    >()
     const combinationByKey = new Map<string, SemanticCombinationMetadata>()
     const actionsByKey = new Map<SemanticActionFrame['actionKey'], SemanticActionFrame>()
     const riskByKey = new Map<string, NonNullable<CodegenSemanticPatch['risk']>[number]>()
     const regimeGateByKey = new Map<string, CodegenSemanticOrchestrationGateNodePatch>()
     const regimeGateFrames: SemanticRegimeGateFrame[] = []
-    const portfolioDrawdownByKey = new Map<string, CodegenSemanticOrchestrationPortfolioRiskNodePatch>()
+    const portfolioDrawdownByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationPortfolioRiskNodePatch
+    >()
     const portfolioDrawdownFrames: SemanticPortfolioDrawdownFrame[] = []
-    const fixedGridGatedByKey = new Map<string, CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch>()
+    const fixedGridGatedByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
+    >()
     const fixedGridGatedFrames: SemanticFixedGridGatedFrame[] = []
-    const dynamicGridByKey = new Map<string, CodegenSemanticOrchestrationDynamicGridProgramNodePatch>()
+    const dynamicGridByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationDynamicGridProgramNodePatch
+    >()
     const dynamicGridFrames: SemanticDynamicGridFrame[] = []
-    const adaptiveByKey = new Map<string, CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch>()
+    const adaptiveByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
+    >()
     const adaptiveFrames: SemanticAdaptiveVolatilityGridFrame[] = []
     // Phase 5 S12 (#1118): event_listener
-    const eventListenerByKey = new Map<string, CodegenSemanticOrchestrationEventListenerProgramNodePatch>()
+    const eventListenerByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationEventListenerProgramNodePatch
+    >()
     const eventListenerFrames: SemanticEventListenerFrame[] = []
     const symbolScopeByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
     const symbolScopeFrames: SemanticSymbolScopeFrame[] = []
@@ -78,14 +96,26 @@ export class SemanticFrameNormalizerService {
     const legScopeFrames: SemanticLegScopeFrame[] = []
     const legScopeSymbolByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
     const legScopeLegByKey = new Map<string, CodegenSemanticOrchestrationLegScopeNodePatch>()
-    const timeframeScopeByKey = new Map<string, CodegenSemanticOrchestrationTimeframeScopeNodePatch>()
+    const timeframeScopeByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationTimeframeScopeNodePatch
+    >()
     const timeframeScopeFrames: SemanticTimeframeScopeFrame[] = []
-    const dataSourceScopeByKey = new Map<string, CodegenSemanticOrchestrationDataSourceScopeNodePatch>()
+    const dataSourceScopeByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationDataSourceScopeNodePatch
+    >()
     const dataSourceScopeFrames: SemanticDataSourceScopeFrame[] = []
     // Phase 5 S10 (#1111)
-    const subStrategyScopeByKey = new Map<string, CodegenSemanticOrchestrationSubStrategyScopeNodePatch>()
+    const subStrategyScopeByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationSubStrategyScopeNodePatch
+    >()
     const subStrategyScopeFrames: SemanticSubStrategyScopeFrame[] = []
-    const subStrategyGateByKey = new Map<string, CodegenSemanticOrchestrationSubStrategyGateNodePatch>()
+    const subStrategyGateByKey = new Map<
+      string,
+      CodegenSemanticOrchestrationSubStrategyGateNodePatch
+    >()
     const subStrategyGateFrames: SemanticSubStrategyGateFrame[] = []
 
     for (const frame of frames) {
@@ -177,7 +207,12 @@ export class SemanticFrameNormalizerService {
 
     fixedGridGatedFrames.forEach((frame, index) => {
       const node = this.normalizeFixedGridGated(frame, index)
-      const dedupeKey = JSON.stringify([node.key, node.activeWhenRef, node.gridParams, node.onDeactivate])
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.activeWhenRef,
+        node.gridParams,
+        node.onDeactivate,
+      ])
 
       if (!fixedGridGatedByKey.has(dedupeKey)) {
         fixedGridGatedByKey.set(dedupeKey, node)
@@ -242,14 +277,18 @@ export class SemanticFrameNormalizerService {
 
     symbolScopeFrames.forEach((frame, index) => {
       const node = this.normalizeSymbolScope(frame, index)
-      const dedupeKey = JSON.stringify([node.key, [...node.symbols].sort(), node.primarySymbol ?? null])
+      const dedupeKey = JSON.stringify([
+        node.key,
+        [...node.symbols].sort(),
+        node.primarySymbol ?? null,
+      ])
       if (!symbolScopeByKey.has(dedupeKey)) {
         symbolScopeByKey.set(dedupeKey, node)
       }
     })
 
     // Phase 5 S11 (#1112): leg_scope frame → N 个 scope.symbol + N 个 scope.leg
-    legScopeFrames.forEach((frame) => {
+    legScopeFrames.forEach(frame => {
       for (const leg of frame.legs) {
         const symbolNodeId = `orchestration-scope-symbol-from-leg-${leg.legId}`
         const symbolNode: CodegenSemanticOrchestrationSymbolScopeNodePatch = {
@@ -262,7 +301,12 @@ export class SemanticFrameNormalizerService {
           primarySymbol: leg.instrumentSymbol,
           evidence: this.toEvidence(frame),
         }
-        const symbolDedupeKey = JSON.stringify(['scope.symbol', [leg.instrumentSymbol], leg.instrumentSymbol, leg.legId])
+        const symbolDedupeKey = JSON.stringify([
+          'scope.symbol',
+          [leg.instrumentSymbol],
+          leg.instrumentSymbol,
+          leg.legId,
+        ])
         if (!legScopeSymbolByKey.has(symbolDedupeKey)) {
           legScopeSymbolByKey.set(symbolDedupeKey, symbolNode)
         }
@@ -295,7 +339,12 @@ export class SemanticFrameNormalizerService {
     timeframeScopeFrames.forEach((frame, index) => {
       const node = this.normalizeTimeframeScope(frame, index)
       if (node === null) return
-      const dedupeKey = JSON.stringify([node.key, node.primaryTimeframe, [...node.requiredTimeframes].sort(), node.alignmentPolicy])
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.primaryTimeframe,
+        [...node.requiredTimeframes].sort(),
+        node.alignmentPolicy,
+      ])
       if (!timeframeScopeByKey.has(dedupeKey)) {
         timeframeScopeByKey.set(dedupeKey, node)
       }
@@ -304,7 +353,12 @@ export class SemanticFrameNormalizerService {
     // Phase 5 S9 (#1110): data_source_scope frame → orchestration scope node patch
     dataSourceScopeFrames.forEach((frame, index) => {
       const node = this.normalizeDataSourceScope(frame, index)
-      const dedupeKey = JSON.stringify([node.key, node.dataSourceRole, node.dataSourceFeedId, node.dataSourceSchemaRef])
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.dataSourceRole,
+        node.dataSourceFeedId,
+        node.dataSourceSchemaRef,
+      ])
       if (!dataSourceScopeByKey.has(dedupeKey)) {
         dataSourceScopeByKey.set(dedupeKey, node)
       }
@@ -325,11 +379,7 @@ export class SemanticFrameNormalizerService {
     })
     subStrategyGateFrames.forEach((frame, index) => {
       const node = this.normalizeSubStrategyGate(frame, index)
-      const dedupeKey = JSON.stringify([
-        node.key,
-        node.target,
-        node.effectWhenFalse,
-      ])
+      const dedupeKey = JSON.stringify([node.key, node.target, node.effectWhenFalse])
       if (!subStrategyGateByKey.has(dedupeKey)) {
         subStrategyGateByKey.set(dedupeKey, node)
       }
@@ -471,14 +521,22 @@ export class SemanticFrameNormalizerService {
       params: {
         subStrategyId: frame.subStrategyId,
         ...(frame.subStrategyLabel ? { subStrategyLabel: frame.subStrategyLabel } : {}),
-        ...(frame.positionHandlingOnDeactivate ? { positionHandlingOnDeactivate: frame.positionHandlingOnDeactivate } : {}),
-        ...(frame.orderHandlingOnDeactivate ? { orderHandlingOnDeactivate: frame.orderHandlingOnDeactivate } : {}),
+        ...(frame.positionHandlingOnDeactivate
+          ? { positionHandlingOnDeactivate: frame.positionHandlingOnDeactivate }
+          : {}),
+        ...(frame.orderHandlingOnDeactivate
+          ? { orderHandlingOnDeactivate: frame.orderHandlingOnDeactivate }
+          : {}),
       },
       subStrategyScopeKind: 'subStrategy',
       subStrategyId: frame.subStrategyId,
       ...(frame.subStrategyLabel ? { subStrategyLabel: frame.subStrategyLabel } : {}),
-      ...(frame.positionHandlingOnDeactivate ? { positionHandlingOnDeactivate: frame.positionHandlingOnDeactivate } : {}),
-      ...(frame.orderHandlingOnDeactivate ? { orderHandlingOnDeactivate: frame.orderHandlingOnDeactivate } : {}),
+      ...(frame.positionHandlingOnDeactivate
+        ? { positionHandlingOnDeactivate: frame.positionHandlingOnDeactivate }
+        : {}),
+      ...(frame.orderHandlingOnDeactivate
+        ? { orderHandlingOnDeactivate: frame.orderHandlingOnDeactivate }
+        : {}),
       evidence: this.toEvidence(frame),
     }
   }
@@ -501,25 +559,33 @@ export class SemanticFrameNormalizerService {
       key: 'gate.subStrategy',
       params: {
         subStrategyScopeRef: frame.subStrategyScopeRef,
-        ...(frame.toSubStrategyScopeRef ? { toSubStrategyScopeRef: frame.toSubStrategyScopeRef } : {}),
+        ...(frame.toSubStrategyScopeRef
+          ? { toSubStrategyScopeRef: frame.toSubStrategyScopeRef }
+          : {}),
       },
-      target: frame.effectWhenFalse === 'switch_substrategy'
-        ? {
-            phase: 'subStrategy',
-            subStrategyScopeRef: frame.subStrategyScopeRef,
-            ...(frame.toSubStrategyScopeRef ? { toSubStrategyScopeRef: frame.toSubStrategyScopeRef } : {}),
-          }
-        : {
-            phase: 'subStrategy',
-            subStrategyScopeRef: frame.subStrategyScopeRef,
-          },
+      target:
+        frame.effectWhenFalse === 'switch_substrategy'
+          ? {
+              phase: 'subStrategy',
+              subStrategyScopeRef: frame.subStrategyScopeRef,
+              ...(frame.toSubStrategyScopeRef
+                ? { toSubStrategyScopeRef: frame.toSubStrategyScopeRef }
+                : {}),
+            }
+          : {
+              phase: 'subStrategy',
+              subStrategyScopeRef: frame.subStrategyScopeRef,
+            },
       activeWhen: placeholderActiveWhen,
       effectWhenFalse: frame.effectWhenFalse,
       evidence: this.toEvidence(frame),
     }
   }
 
-  private normalizeRegimeGate(frame: SemanticRegimeGateFrame, index: number): CodegenSemanticOrchestrationGateNodePatch {
+  private normalizeRegimeGate(
+    frame: SemanticRegimeGateFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationGateNodePatch {
     const indicatorName = frame.indicator === 'ma' ? 'sma' : frame.indicator
     const activeWhen: SemanticExpression = {
       kind: 'predicate',
@@ -714,7 +780,7 @@ export class SemanticFrameNormalizerService {
   }
 
   private appendIndicatorCompareGroup(
-    groups: Map<string, { groupId: string, frames: SemanticIndicatorCompareFrame[] }>,
+    groups: Map<string, { groupId: string; frames: SemanticIndicatorCompareFrame[] }>,
     frame: SemanticIndicatorCompareFrame,
   ): void {
     const groupKey = this.toIndicatorCompareGroupKey(frame)
@@ -728,11 +794,15 @@ export class SemanticFrameNormalizerService {
     return [frame.groupId, frame.sideScope, frame.operator, frame.indicator].join(':')
   }
 
-  private toCombinationEvidenceKey(frame: Pick<SemanticCombinationFrame, 'groupId' | 'sideScope'>): string {
+  private toCombinationEvidenceKey(
+    frame: Pick<SemanticCombinationFrame, 'groupId' | 'sideScope'>,
+  ): string {
     return [frame.groupId, frame.sideScope].join(':')
   }
 
-  private normalizeBoundaryTouch(frame: SemanticBoundaryTouchFrame): NonNullable<CodegenSemanticPatch['triggers']>[number] {
+  private normalizeBoundaryTouch(
+    frame: SemanticBoundaryTouchFrame,
+  ): NonNullable<CodegenSemanticPatch['triggers']>[number] {
     return {
       key: 'price.detect.indicator_boundary',
       phase: frame.phase,
@@ -753,7 +823,9 @@ export class SemanticFrameNormalizerService {
   ): NonNullable<CodegenSemanticPatch['triggers']>[number] {
     const sortedFrames = [...frames].sort((left, right) => left.period - right.period)
     const firstFrame = sortedFrames[0]
-    const combination = firstFrame ? combinationByKey.get(this.toCombinationEvidenceKey(firstFrame)) : undefined
+    const combination = firstFrame
+      ? combinationByKey.get(this.toCombinationEvidenceKey(firstFrame))
+      : undefined
     const join = combination?.join ?? 'AND'
 
     return {
@@ -800,7 +872,8 @@ export class SemanticFrameNormalizerService {
     frames: readonly SemanticIndicatorCompareFrame[],
     join: SemanticCombinationFrame['join'],
   ): string {
-    const indicatorName = frames[0]?.indicator === 'ma' ? 'MA' : (frames[0]?.indicator ?? 'ema').toUpperCase()
+    const indicatorName =
+      frames[0]?.indicator === 'ma' ? 'MA' : (frames[0]?.indicator ?? 'ema').toUpperCase()
     const periods = frames.map(frame => `${indicatorName}${frame.period}`).join('、')
     const directionText = frames[0]?.operator === 'LT' ? '下方' : '上方'
     const joinText = join === 'OR' ? '任一' : '同时'
@@ -813,13 +886,17 @@ export class SemanticFrameNormalizerService {
     frames: readonly SemanticIndicatorCompareFrame[],
     combination: SemanticCombinationMetadata | undefined,
   ): SemanticEvidence {
-    return combination?.evidence ?? {
-      text: frames.map(frame => frame.evidenceText).join(' '),
-      source: 'user_explicit',
-    }
+    return (
+      combination?.evidence ?? {
+        text: frames.map(frame => frame.evidenceText).join(' '),
+        source: 'user_explicit',
+      }
+    )
   }
 
-  private normalizeRisk(frame: SemanticRiskFrame): NonNullable<CodegenSemanticPatch['risk']>[number] {
+  private normalizeRisk(
+    frame: SemanticRiskFrame,
+  ): NonNullable<CodegenSemanticPatch['risk']>[number] {
     return {
       key: 'risk.stop_loss_pct',
       params: {

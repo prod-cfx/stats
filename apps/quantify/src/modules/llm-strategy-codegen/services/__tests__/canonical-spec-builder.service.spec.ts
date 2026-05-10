@@ -2,9 +2,15 @@ import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2ValidatorService } from '../canonical-spec-v2-validator.service'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
-import type { SemanticAtomContract, SemanticExpression, SemanticExpressionOperator, SemanticPositionSizingContract, SemanticState } from '../../types/semantic-state'
+import type {
+  SemanticAtomContract,
+  SemanticExpression,
+  SemanticExpressionOperator,
+  SemanticPositionSizingContract,
+  SemanticState,
+} from '../../types/semantic-state'
 
-type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY', value: number, asset?: string }
+type ExpectedCanonicalSizing = { mode: 'RATIO' | 'QUOTE' | 'QTY'; value: number; asset?: string }
 
 function closeOpenPredicate(op: SemanticExpressionOperator): SemanticExpression {
   return {
@@ -63,7 +69,9 @@ function createSemanticState(input: {
   }
 }
 
-function createLockedPositionWithSizing(sizing: SemanticPositionSizingContract): NonNullable<SemanticState['position']> {
+function createLockedPositionWithSizing(
+  sizing: SemanticPositionSizingContract,
+): NonNullable<SemanticState['position']> {
   if (sizing.kind === 'ratio') {
     return {
       sizing,
@@ -233,49 +241,55 @@ describe('canonicalSpecBuilderService', () => {
       defaultTimeframe: '1m',
     })
     expect(spec.sizing).toEqual({ mode: 'QUOTE', value: 10, asset: 'USDT' })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'semantic-entry-1',
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          kind: 'expression',
-          op: 'GT',
-          left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
-          right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'semantic-entry-1',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            kind: 'expression',
+            op: 'GT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          }),
+          actions: [
+            expect.objectContaining({
+              type: 'OPEN_LONG',
+              sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
+            }),
+          ],
         }),
-        actions: [expect.objectContaining({
-          type: 'OPEN_LONG',
-          sizing: { mode: 'QUOTE', value: 10, asset: 'USDT' },
-        })],
-      }),
-      expect.objectContaining({
-        id: 'semantic-exit-1',
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          kind: 'expression',
-          op: 'LT',
-          left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
-          right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+        expect.objectContaining({
+          id: 'semantic-exit-1',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            kind: 'expression',
+            op: 'LT',
+            left: { kind: 'series', source: 'bar', field: 'close', offsetBars: 0 },
+            right: { kind: 'series', source: 'bar', field: 'open', offsetBars: 0 },
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'gate',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          kind: 'atom',
-          key: 'position.has_position',
-          op: 'EQ',
-          value: false,
+        expect.objectContaining({
+          phase: 'gate',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            kind: 'atom',
+            key: 'position.has_position',
+            op: 'EQ',
+            value: false,
+          }),
+          actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
         }),
-        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+      ]),
+    )
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(
+      expect.objectContaining({
+        status: 'VALID',
       }),
-    ]))
-    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
-      status: 'VALID',
-    }))
+    )
   })
 
   it('keeps independent same-side entry triggers as separate rule blocks', () => {
@@ -303,9 +317,7 @@ describe('canonicalSpecBuilderService', () => {
           params: { expression: closeOpenPredicate('LT') },
         },
       ],
-      actions: [
-        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-      ],
+      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
     })
 
     const spec = service.buildFromSemanticState(state)
@@ -316,9 +328,11 @@ describe('canonicalSpecBuilderService', () => {
       expect.objectContaining({ kind: 'expression', op: 'GT' }),
       expect.objectContaining({ kind: 'expression', op: 'LT' }),
     ])
-    expect(entryRules).not.toContainEqual(expect.objectContaining({
-      condition: expect.objectContaining({ kind: 'AND' }),
-    }))
+    expect(entryRules).not.toContainEqual(
+      expect.objectContaining({
+        condition: expect.objectContaining({ kind: 'AND' }),
+      }),
+    )
   })
 
   it('does not build trading rules from locked triggers without matching locked actions', () => {
@@ -368,26 +382,26 @@ describe('canonicalSpecBuilderService', () => {
           source: 'user_explicit',
           openSlots: [],
           params: { indicator: 'ema', 'reference.period': period },
-          contracts: [{
-            id: 'contract-entry-ema-stack',
-            kind: 'trigger',
-            capabilities: [],
-            requires: [],
-            params: {
-              groupId: 'entry-ema-stack',
-              join: 'AND',
-              actionKey: 'open_long',
-              actionBinding: 'single_action',
+          contracts: [
+            {
+              id: 'contract-entry-ema-stack',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'entry-ema-stack',
+                join: 'AND',
+                actionKey: 'open_long',
+                actionBinding: 'single_action',
+              },
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
             },
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          ],
         })),
-        actions: [
-          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-        ],
+        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
       })
 
       const spec = service.buildFromSemanticState(state)
@@ -410,22 +424,24 @@ describe('canonicalSpecBuilderService', () => {
             source: 'user_explicit',
             openSlots: [],
             params: { indicator: 'ma', 'reference.period': 100 },
-            contracts: [{
-              id: 'contract-exit-ma100-macd',
-              kind: 'trigger',
-              capabilities: [],
-              requires: [],
-              params: {
-                groupId: 'exit-ma100-macd',
-                join: 'OR',
-                actionKey: 'close_long',
-                actionBinding: 'single_action',
+            contracts: [
+              {
+                id: 'contract-exit-ma100-macd',
+                kind: 'trigger',
+                capabilities: [],
+                requires: [],
+                params: {
+                  groupId: 'exit-ma100-macd',
+                  join: 'OR',
+                  actionKey: 'close_long',
+                  actionBinding: 'single_action',
+                },
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
               },
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
+            ],
           },
           {
             id: 'exit-macd-death',
@@ -436,22 +452,24 @@ describe('canonicalSpecBuilderService', () => {
             source: 'user_explicit',
             openSlots: [],
             params: { indicator: 'macd' },
-            contracts: [{
-              id: 'contract-exit-ma100-macd',
-              kind: 'trigger',
-              capabilities: [],
-              requires: [],
-              params: {
-                groupId: 'exit-ma100-macd',
-                join: 'OR',
-                actionKey: 'close_long',
-                actionBinding: 'single_action',
+            contracts: [
+              {
+                id: 'contract-exit-ma100-macd',
+                kind: 'trigger',
+                capabilities: [],
+                requires: [],
+                params: {
+                  groupId: 'exit-ma100-macd',
+                  join: 'OR',
+                  actionKey: 'close_long',
+                  actionBinding: 'single_action',
+                },
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
               },
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
+            ],
           },
         ],
         actions: [
@@ -489,40 +507,44 @@ describe('canonicalSpecBuilderService', () => {
             source: 'user_explicit',
             openSlots: [],
             params: { indicator: 'rsi', value: 50 },
-            contracts: [{
-              id: 'contract-entry-rsi',
-              kind: 'trigger',
-              capabilities: [],
-              requires: [],
-              params: {
-                groupId: 'entry-rsi',
-                join: 'AND',
-                actionKey: 'open_long',
-                actionBinding: 'single_action',
+            contracts: [
+              {
+                id: 'contract-entry-rsi',
+                kind: 'trigger',
+                capabilities: [],
+                requires: [],
+                params: {
+                  groupId: 'entry-rsi',
+                  join: 'AND',
+                  actionKey: 'open_long',
+                  actionBinding: 'single_action',
+                },
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
               },
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
+            ],
           },
         ],
-        actions: [
-          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-        ],
+        actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
       })
 
       const spec = service.buildFromSemanticState(state)
-      const openRules = spec.rules.filter(rule => rule.actions.some(action => action.type === 'OPEN_LONG'))
+      const openRules = spec.rules.filter(rule =>
+        rule.actions.some(action => action.type === 'OPEN_LONG'),
+      )
 
       expect(openRules).toHaveLength(1)
-      expect(openRules[0]?.condition).toEqual(expect.objectContaining({
-        kind: 'AND',
-        children: expect.arrayContaining([
-          expect.objectContaining({ key: 'rsi.cross_over' }),
-          expect.objectContaining({ kind: 'expression', op: 'GT' }),
-        ]),
-      }))
+      expect(openRules[0]?.condition).toEqual(
+        expect.objectContaining({
+          kind: 'AND',
+          children: expect.arrayContaining([
+            expect.objectContaining({ key: 'rsi.cross_over' }),
+            expect.objectContaining({ kind: 'expression', op: 'GT' }),
+          ]),
+        }),
+      )
       expect(spec.rules.filter(rule => rule.phase === 'gate')).toHaveLength(0)
     })
 
@@ -562,9 +584,13 @@ describe('canonicalSpecBuilderService', () => {
 
       expect(entryRules).toHaveLength(1)
       expect(exitRules).toHaveLength(1)
-      expect(entryRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'expression', op: 'GT' }))
+      expect(entryRules[0]?.condition).toEqual(
+        expect.objectContaining({ kind: 'expression', op: 'GT' }),
+      )
       expect(entryRules[0]?.actions).toEqual([expect.objectContaining({ type: 'OPEN_LONG' })])
-      expect(exitRules[0]?.condition).toEqual(expect.objectContaining({ kind: 'expression', op: 'LT' }))
+      expect(exitRules[0]?.condition).toEqual(
+        expect.objectContaining({ kind: 'expression', op: 'LT' }),
+      )
       expect(exitRules[0]?.actions).toEqual([expect.objectContaining({ type: 'CLOSE_LONG' })])
     })
 
@@ -580,22 +606,24 @@ describe('canonicalSpecBuilderService', () => {
             source: 'user_explicit',
             openSlots: [],
             params: {},
-            contracts: [{
-              id: 'contract-entry-on-start-with-filter',
-              kind: 'trigger',
-              capabilities: [],
-              requires: [],
-              params: {
-                groupId: 'entry-on-start-with-filter',
-                join: 'AND',
-                actionKey: 'open_long',
-                actionBinding: 'single_action',
+            contracts: [
+              {
+                id: 'contract-entry-on-start-with-filter',
+                kind: 'trigger',
+                capabilities: [],
+                requires: [],
+                params: {
+                  groupId: 'entry-on-start-with-filter',
+                  join: 'AND',
+                  actionKey: 'open_long',
+                  actionBinding: 'single_action',
+                },
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
               },
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
+            ],
           },
           {
             id: 'entry-filter',
@@ -606,22 +634,24 @@ describe('canonicalSpecBuilderService', () => {
             source: 'user_explicit',
             openSlots: [],
             params: { expression: closeOpenPredicate('GT') },
-            contracts: [{
-              id: 'contract-entry-on-start-with-filter',
-              kind: 'trigger',
-              capabilities: [],
-              requires: [],
-              params: {
-                groupId: 'entry-on-start-with-filter',
-                join: 'AND',
-                actionKey: 'open_long',
-                actionBinding: 'single_action',
+            contracts: [
+              {
+                id: 'contract-entry-on-start-with-filter',
+                kind: 'trigger',
+                capabilities: [],
+                requires: [],
+                params: {
+                  groupId: 'entry-on-start-with-filter',
+                  join: 'AND',
+                  actionKey: 'open_long',
+                  actionBinding: 'single_action',
+                },
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
               },
-              runtimeRequirements: [],
-              stateRequirements: [],
-              orderRequirements: [],
-              openSlots: [],
-            }],
+            ],
           },
         ],
         actions: [],
@@ -656,14 +686,16 @@ describe('canonicalSpecBuilderService', () => {
       const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
 
       expect(exitRules).toHaveLength(1)
-      expect(exitRules[0]).toEqual(expect.objectContaining({
-        sideScope: 'both',
-        condition: expect.objectContaining({ kind: 'expression', op: 'LT' }),
-        actions: expect.arrayContaining([
-          expect.objectContaining({ type: 'CLOSE_LONG' }),
-          expect.objectContaining({ type: 'CLOSE_SHORT' }),
-        ]),
-      }))
+      expect(exitRules[0]).toEqual(
+        expect.objectContaining({
+          sideScope: 'both',
+          condition: expect.objectContaining({ kind: 'expression', op: 'LT' }),
+          actions: expect.arrayContaining([
+            expect.objectContaining({ type: 'CLOSE_LONG' }),
+            expect.objectContaining({ type: 'CLOSE_SHORT' }),
+          ]),
+        }),
+      )
     })
 
     it('keeps legacy grouped both-side entry split into long and short rules when actionKey is implicit', () => {
@@ -767,14 +799,16 @@ describe('canonicalSpecBuilderService', () => {
       const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
 
       expect(exitRules).toHaveLength(1)
-      expect(exitRules[0]).toEqual(expect.objectContaining({
-        sideScope: 'both',
-        condition: expect.objectContaining({ kind: 'OR' }),
-        actions: expect.arrayContaining([
-          expect.objectContaining({ type: 'CLOSE_LONG' }),
-          expect.objectContaining({ type: 'CLOSE_SHORT' }),
-        ]),
-      }))
+      expect(exitRules[0]).toEqual(
+        expect.objectContaining({
+          sideScope: 'both',
+          condition: expect.objectContaining({ kind: 'OR' }),
+          actions: expect.arrayContaining([
+            expect.objectContaining({ type: 'CLOSE_LONG' }),
+            expect.objectContaining({ type: 'CLOSE_SHORT' }),
+          ]),
+        }),
+      )
     })
   })
 
@@ -790,29 +824,33 @@ describe('canonicalSpecBuilderService', () => {
           source: 'user_explicit',
           openSlots: [],
           params: {},
-          contracts: [{
-            id: 'contract-price-levels',
-            kind: 'trigger' as const,
-            capabilities: [{
-              domain: 'price',
-              verb: 'define',
-              object: 'level_set',
-              shape: {
-                lower: 60000,
-                upper: 80000,
-                gridIntervals: 10,
-                gridCount: 11,
-                absoluteSpacing: 2000,
-                spacingMode: 'arithmetic',
-              },
-            }],
-            requires: [],
-            params: {},
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          contracts: [
+            {
+              id: 'contract-price-levels',
+              kind: 'trigger' as const,
+              capabilities: [
+                {
+                  domain: 'price',
+                  verb: 'define',
+                  object: 'level_set',
+                  shape: {
+                    lower: 60000,
+                    upper: 80000,
+                    gridIntervals: 10,
+                    gridCount: 11,
+                    absoluteSpacing: 2000,
+                    spacingMode: 'arithmetic',
+                  },
+                },
+              ],
+              requires: [],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            },
+          ],
         },
       ],
       actions: [
@@ -821,56 +859,66 @@ describe('canonicalSpecBuilderService', () => {
           key: 'contract.limit_ladder',
           status: 'locked',
           source: 'user_explicit',
-          contracts: [{
-            id: 'contract-limit-ladder',
-            kind: 'action',
-            capabilities: [{
-              domain: 'order_program',
-              verb: 'maintain',
-              object: 'limit_ladder',
-              shape: {
-                orderType: 'limit',
-                timeInForce: 'gtc',
-                recycleOnFill: true,
-              },
-            }],
-            requires: [
-              { domain: 'price', verb: 'define', object: 'level_set' },
-              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
-              { domain: 'exposure', verb: 'set', object: 'position_mode' },
-            ],
-            params: {},
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          contracts: [
+            {
+              id: 'contract-limit-ladder',
+              kind: 'action',
+              capabilities: [
+                {
+                  domain: 'order_program',
+                  verb: 'maintain',
+                  object: 'limit_ladder',
+                  shape: {
+                    orderType: 'limit',
+                    timeInForce: 'gtc',
+                    recycleOnFill: true,
+                  },
+                },
+              ],
+              requires: [
+                { domain: 'price', verb: 'define', object: 'level_set' },
+                { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+                { domain: 'exposure', verb: 'set', object: 'position_mode' },
+              ],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            },
+          ],
         },
       ],
-      risk: [{
-        id: 'contract-exposure',
-        key: 'contract.exposure',
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-        params: {},
-        contracts: [{
+      risk: [
+        {
           id: 'contract-exposure',
-          kind: 'risk',
-          capabilities: [{
-            domain: 'exposure',
-            verb: 'set',
-            object: 'position_mode',
-            shape: { mode: 'neutral' },
-          }],
-          requires: [],
-          params: {},
-          runtimeRequirements: [],
-          stateRequirements: [],
-          orderRequirements: [],
+          key: 'contract.exposure',
+          status: 'locked',
+          source: 'user_explicit',
           openSlots: [],
-        }],
-      }],
+          params: {},
+          contracts: [
+            {
+              id: 'contract-exposure',
+              kind: 'risk',
+              capabilities: [
+                {
+                  domain: 'exposure',
+                  verb: 'set',
+                  object: 'position_mode',
+                  shape: { mode: 'neutral' },
+                },
+              ],
+              requires: [],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            },
+          ],
+        },
+      ],
       position: {
         mode: 'fixed_quote',
         value: 20,
@@ -879,22 +927,26 @@ describe('canonicalSpecBuilderService', () => {
         source: 'user_explicit',
         openSlots: [],
         sizing: { kind: 'quote', value: 20, asset: 'USDT' },
-        contracts: [{
-          id: 'contract-capital',
-          kind: 'position',
-          capabilities: [{
-            domain: 'capital',
-            verb: 'allocate',
-            object: 'per_order_budget',
-            shape: { value: 20, asset: 'USDT' },
-          }],
-          requires: [],
-          params: {},
-          runtimeRequirements: [],
-          stateRequirements: [],
-          orderRequirements: [],
-          openSlots: [],
-        }],
+        contracts: [
+          {
+            id: 'contract-capital',
+            kind: 'position',
+            capabilities: [
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 20, asset: 'USDT' },
+              },
+            ],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          },
+        ],
       },
     })
     state.contextSlots.exchange = {
@@ -950,25 +1002,31 @@ describe('canonicalSpecBuilderService', () => {
         timeInForce: 'gtc',
       }),
     ])
-    expect(canonicalSpec.orderPrograms[0]).toEqual(expect.objectContaining({
-      levelSet: {
-        lower: 60000,
-        upper: 80000,
-        gridIntervals: 10,
-        gridCount: 11,
-        absoluteSpacing: 2000,
-        spacingMode: 'arithmetic',
-      },
-      budget: {
-        mode: 'per_order_quote',
-        value: 20,
-        asset: 'USDT',
-      },
-      recycleOnFill: true,
-      cancelOnStop: true,
-    }))
-    expect(canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))).not.toContain('OPEN_LONG')
-    expect(canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type))).not.toContain('CLOSE_LONG')
+    expect(canonicalSpec.orderPrograms[0]).toEqual(
+      expect.objectContaining({
+        levelSet: {
+          lower: 60000,
+          upper: 80000,
+          gridIntervals: 10,
+          gridCount: 11,
+          absoluteSpacing: 2000,
+          spacingMode: 'arithmetic',
+        },
+        budget: {
+          mode: 'per_order_quote',
+          value: 20,
+          asset: 'USDT',
+        },
+        recycleOnFill: true,
+        cancelOnStop: true,
+      }),
+    )
+    expect(
+      canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type)),
+    ).not.toContain('OPEN_LONG')
+    expect(
+      canonicalSpec.rules.flatMap(rule => rule.actions.map(action => action.type)),
+    ).not.toContain('CLOSE_LONG')
   })
 
   it('projects centered-percent contract order programs without requiring numeric bounds', () => {
@@ -983,30 +1041,34 @@ describe('canonicalSpecBuilderService', () => {
           source: 'user_explicit',
           openSlots: [],
           params: {},
-          contracts: [{
-            id: 'contract-centered-price-levels',
-            kind: 'trigger',
-            capabilities: [{
-              domain: 'price',
-              verb: 'define',
-              object: 'level_set',
-              shape: {
-                mode: 'centered_percent_range',
-                centerTiming: 'deployment',
-                centerSource: 'last_price',
-                totalRangePct: 0.8,
-                gridIntervals: 10,
-                gridCount: 11,
-                spacingMode: 'arithmetic',
-              },
-            }],
-            requires: [],
-            params: {},
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          contracts: [
+            {
+              id: 'contract-centered-price-levels',
+              kind: 'trigger',
+              capabilities: [
+                {
+                  domain: 'price',
+                  verb: 'define',
+                  object: 'level_set',
+                  shape: {
+                    mode: 'centered_percent_range',
+                    centerTiming: 'deployment',
+                    centerSource: 'last_price',
+                    totalRangePct: 0.8,
+                    gridIntervals: 10,
+                    gridCount: 11,
+                    spacingMode: 'arithmetic',
+                  },
+                },
+              ],
+              requires: [],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            },
+          ],
         },
       ],
       actions: [
@@ -1015,30 +1077,34 @@ describe('canonicalSpecBuilderService', () => {
           key: 'contract.limit_ladder',
           status: 'locked',
           source: 'user_explicit',
-          contracts: [{
-            id: 'contract-limit-ladder',
-            kind: 'action',
-            capabilities: [{
-              domain: 'order_program',
-              verb: 'maintain',
-              object: 'limit_ladder',
-              shape: {
-                orderType: 'limit',
-                timeInForce: 'gtc',
-                recycleOnFill: true,
-                cancelOnStop: true,
-              },
-            }],
-            requires: [
-              { domain: 'price', verb: 'define', object: 'level_set' },
-              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
-            ],
-            params: {},
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          contracts: [
+            {
+              id: 'contract-limit-ladder',
+              kind: 'action',
+              capabilities: [
+                {
+                  domain: 'order_program',
+                  verb: 'maintain',
+                  object: 'limit_ladder',
+                  shape: {
+                    orderType: 'limit',
+                    timeInForce: 'gtc',
+                    recycleOnFill: true,
+                    cancelOnStop: true,
+                  },
+                },
+              ],
+              requires: [
+                { domain: 'price', verb: 'define', object: 'level_set' },
+                { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+              ],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            },
+          ],
         },
       ],
       position: {
@@ -1049,22 +1115,26 @@ describe('canonicalSpecBuilderService', () => {
         source: 'user_explicit',
         openSlots: [],
         sizing: { kind: 'quote', value: 10, asset: 'USDT' },
-        contracts: [{
-          id: 'contract-capital',
-          kind: 'position',
-          capabilities: [{
-            domain: 'capital',
-            verb: 'allocate',
-            object: 'per_order_budget',
-            shape: { value: 10, asset: 'USDT' },
-          }],
-          requires: [],
-          params: {},
-          runtimeRequirements: [],
-          stateRequirements: [],
-          orderRequirements: [],
-          openSlots: [],
-        }],
+        contracts: [
+          {
+            id: 'contract-capital',
+            kind: 'position',
+            capabilities: [
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { value: 10, asset: 'USDT' },
+              },
+            ],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          },
+        ],
       },
     })
     state.contextSlots.exchange = {
@@ -1098,27 +1168,29 @@ describe('canonicalSpecBuilderService', () => {
     const canonicalSpec = service.buildFromSemanticState(state)
 
     expect(canonicalSpec.orderPrograms).toHaveLength(1)
-    expect(canonicalSpec.orderPrograms[0]).toEqual(expect.objectContaining({
-      kind: 'contract_order_program',
-      mode: 'spot',
-      levelSet: {
-        mode: 'centered_percent_range',
-        centerTiming: 'deployment',
-        centerSource: 'last_price',
-        halfRangePct: 0.4,
-        gridIntervals: 10,
-        gridCount: 11,
-        spacingMode: 'arithmetic',
-      },
-      budget: {
-        mode: 'per_order_quote',
-        value: 10,
-        asset: 'USDT',
-      },
-      orderType: 'limit',
-      recycleOnFill: true,
-      cancelOnStop: true,
-    }))
+    expect(canonicalSpec.orderPrograms[0]).toEqual(
+      expect.objectContaining({
+        kind: 'contract_order_program',
+        mode: 'spot',
+        levelSet: {
+          mode: 'centered_percent_range',
+          centerTiming: 'deployment',
+          centerSource: 'last_price',
+          halfRangePct: 0.4,
+          gridIntervals: 10,
+          gridCount: 11,
+          spacingMode: 'arithmetic',
+        },
+        budget: {
+          mode: 'per_order_quote',
+          value: 10,
+          asset: 'USDT',
+        },
+        orderType: 'limit',
+        recycleOnFill: true,
+        cancelOnStop: true,
+      }),
+    )
   })
 
   it.each([
@@ -1139,136 +1211,169 @@ describe('canonicalSpecBuilderService', () => {
     [
       'different absolute spacing',
       [
-        { lower: 60000, upper: 80000, gridCount: 11, absoluteSpacing: 2000, spacingMode: 'arithmetic' },
-        { lower: 60000, upper: 80000, gridCount: 11, absoluteSpacing: 2500, spacingMode: 'arithmetic' },
+        {
+          lower: 60000,
+          upper: 80000,
+          gridCount: 11,
+          absoluteSpacing: 2000,
+          spacingMode: 'arithmetic',
+        },
+        {
+          lower: 60000,
+          upper: 80000,
+          gridCount: 11,
+          absoluteSpacing: 2500,
+          spacingMode: 'arithmetic',
+        },
       ],
     ],
-  ])('rejects conflicting duplicate contract order programs level sets in %s', (_, levelSetShapes) => {
-    const service = new CanonicalSpecBuilderService()
-    const state = createSemanticState({
-      triggers: [
-        {
-          id: 'contract-price-levels',
-          key: 'contract.price_levels',
-          phase: 'entry',
-          status: 'locked',
-          source: 'user_explicit',
-          openSlots: [],
-          params: {},
-          contracts: levelSetShapes.map((shape, index): SemanticAtomContract => ({
-            id: `contract-price-levels-${index + 1}`,
-            kind: 'trigger',
-            capabilities: [{
-              domain: 'price',
-              verb: 'define',
-              object: 'level_set',
-              shape,
-            }],
-            requires: [],
-            params: {},
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
+  ])(
+    'rejects conflicting duplicate contract order programs level sets in %s',
+    (_, levelSetShapes) => {
+      const service = new CanonicalSpecBuilderService()
+      const state = createSemanticState({
+        triggers: [
+          {
+            id: 'contract-price-levels',
+            key: 'contract.price_levels',
+            phase: 'entry',
+            status: 'locked',
+            source: 'user_explicit',
             openSlots: [],
-          })),
-        },
-      ],
-      actions: [
-        {
-          id: 'contract-limit-ladder',
-          key: 'contract.limit_ladder',
-          status: 'locked',
-          source: 'user_explicit',
-          contracts: [{
+            params: {},
+            contracts: levelSetShapes.map(
+              (shape, index): SemanticAtomContract => ({
+                id: `contract-price-levels-${index + 1}`,
+                kind: 'trigger',
+                capabilities: [
+                  {
+                    domain: 'price',
+                    verb: 'define',
+                    object: 'level_set',
+                    shape,
+                  },
+                ],
+                requires: [],
+                params: {},
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
+              }),
+            ),
+          },
+        ],
+        actions: [
+          {
             id: 'contract-limit-ladder',
-            kind: 'action',
-            capabilities: [{
-              domain: 'order_program',
-              verb: 'maintain',
-              object: 'limit_ladder',
-              shape: {
-                orderType: 'limit',
-                timeInForce: 'gtc',
-                recycleOnFill: true,
+            key: 'contract.limit_ladder',
+            status: 'locked',
+            source: 'user_explicit',
+            contracts: [
+              {
+                id: 'contract-limit-ladder',
+                kind: 'action',
+                capabilities: [
+                  {
+                    domain: 'order_program',
+                    verb: 'maintain',
+                    object: 'limit_ladder',
+                    shape: {
+                      orderType: 'limit',
+                      timeInForce: 'gtc',
+                      recycleOnFill: true,
+                    },
+                  },
+                ],
+                requires: [
+                  { domain: 'price', verb: 'define', object: 'level_set' },
+                  { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+                  { domain: 'exposure', verb: 'set', object: 'position_mode' },
+                ],
+                params: {},
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
               },
-            }],
-            requires: [
-              { domain: 'price', verb: 'define', object: 'level_set' },
-              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
-              { domain: 'exposure', verb: 'set', object: 'position_mode' },
             ],
-            params: {},
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
+          },
+        ],
+        risk: [
+          {
+            id: 'contract-exposure',
+            key: 'contract.exposure',
+            status: 'locked',
+            source: 'user_explicit',
             openSlots: [],
-          }],
+            params: {},
+            contracts: [
+              {
+                id: 'contract-exposure',
+                kind: 'risk',
+                capabilities: [
+                  {
+                    domain: 'exposure',
+                    verb: 'set',
+                    object: 'position_mode',
+                    shape: { mode: 'neutral' },
+                  },
+                ],
+                requires: [],
+                params: {},
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
+              },
+            ],
+          },
+        ],
+        position: {
+          mode: 'fixed_quote',
+          value: 20,
+          positionMode: 'neutral',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          sizing: { kind: 'quote', value: 20, asset: 'USDT' },
+          contracts: [
+            {
+              id: 'contract-capital',
+              kind: 'position',
+              capabilities: [
+                {
+                  domain: 'capital',
+                  verb: 'allocate',
+                  object: 'per_order_budget',
+                  shape: { value: 20, asset: 'USDT' },
+                },
+              ],
+              requires: [],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            },
+          ],
         },
-      ],
-      risk: [{
-        id: 'contract-exposure',
-        key: 'contract.exposure',
+      })
+      state.contextSlots.marketType = {
+        slotKey: 'context.marketType',
+        fieldPath: 'marketType',
+        value: 'perp',
         status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-        params: {},
-        contracts: [{
-          id: 'contract-exposure',
-          kind: 'risk',
-          capabilities: [{
-            domain: 'exposure',
-            verb: 'set',
-            object: 'position_mode',
-            shape: { mode: 'neutral' },
-          }],
-          requires: [],
-          params: {},
-          runtimeRequirements: [],
-          stateRequirements: [],
-          orderRequirements: [],
-          openSlots: [],
-        }],
-      }],
-      position: {
-        mode: 'fixed_quote',
-        value: 20,
-        positionMode: 'neutral',
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-        sizing: { kind: 'quote', value: 20, asset: 'USDT' },
-        contracts: [{
-          id: 'contract-capital',
-          kind: 'position',
-          capabilities: [{
-            domain: 'capital',
-            verb: 'allocate',
-            object: 'per_order_budget',
-            shape: { value: 20, asset: 'USDT' },
-          }],
-          requires: [],
-          params: {},
-          runtimeRequirements: [],
-          stateRequirements: [],
-          orderRequirements: [],
-          openSlots: [],
-        }],
-      },
-    })
-    state.contextSlots.marketType = {
-      slotKey: 'context.marketType',
-      fieldPath: 'marketType',
-      value: 'perp',
-      status: 'locked',
-      priority: 'context',
-      questionHint: '市场类型',
-      affectsExecution: true,
-    }
+        priority: 'context',
+        questionHint: '市场类型',
+        affectsExecution: true,
+      }
 
-    const canonicalSpec = service.buildFromSemanticState(state)
+      const canonicalSpec = service.buildFromSemanticState(state)
 
-    expect(canonicalSpec.orderPrograms).toEqual([])
-  })
+      expect(canonicalSpec.orderPrograms).toEqual([])
+    },
+  )
 
   it('attaches generic semantic gates to entry rules without blocking exits', () => {
     const service = new CanonicalSpecBuilderService()
@@ -1314,17 +1419,21 @@ describe('canonicalSpecBuilderService', () => {
     const entryRule = spec.rules.find(rule => rule.phase === 'entry')
     const exitRule = spec.rules.find(rule => rule.phase === 'exit')
 
-    expect(entryRule?.condition).toEqual(expect.objectContaining({
-      kind: 'AND',
-      children: expect.arrayContaining([
-        expect.objectContaining({ kind: 'expression', op: 'GT' }),
-        expect.objectContaining({ key: 'market.regime', value: 'range' }),
-      ]),
-    }))
-    expect(exitRule?.condition).toEqual(expect.objectContaining({
-      kind: 'expression',
-      op: 'LT',
-    }))
+    expect(entryRule?.condition).toEqual(
+      expect.objectContaining({
+        kind: 'AND',
+        children: expect.arrayContaining([
+          expect.objectContaining({ kind: 'expression', op: 'GT' }),
+          expect.objectContaining({ key: 'market.regime', value: 'range' }),
+        ]),
+      }),
+    )
+    expect(exitRule?.condition).toEqual(
+      expect.objectContaining({
+        kind: 'expression',
+        op: 'LT',
+      }),
+    )
     expect(JSON.stringify(exitRule?.condition)).not.toContain('market.regime')
   })
 
@@ -1365,17 +1474,21 @@ describe('canonicalSpecBuilderService', () => {
         actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
       }),
     ])
-    expect(entryRules).not.toEqual(expect.arrayContaining([
+    expect(entryRules).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actions: expect.arrayContaining([
+            expect.objectContaining({ type: 'OPEN_LONG' }),
+            expect.objectContaining({ type: 'OPEN_SHORT' }),
+          ]),
+        }),
+      ]),
+    )
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(
       expect.objectContaining({
-        actions: expect.arrayContaining([
-          expect.objectContaining({ type: 'OPEN_LONG' }),
-          expect.objectContaining({ type: 'OPEN_SHORT' }),
-        ]),
+        status: 'VALID',
       }),
-    ]))
-    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
-      status: 'VALID',
-    }))
+    )
   })
 
   it('does not attach directional gates to explicit both-side entry rules', () => {
@@ -1391,22 +1504,24 @@ describe('canonicalSpecBuilderService', () => {
           source: 'user_explicit',
           openSlots: [],
           params: { expression: closeOpenPredicate('GT') },
-          contracts: [{
-            id: 'entry-both-combination',
-            kind: 'trigger',
-            capabilities: [],
-            requires: [],
-            params: {
-              groupId: 'entry-both-combination',
-              sideScope: 'both',
-              actionKey: 'open_long',
-              actionKeySource: 'user_explicit',
+          contracts: [
+            {
+              id: 'entry-both-combination',
+              kind: 'trigger',
+              capabilities: [],
+              requires: [],
+              params: {
+                groupId: 'entry-both-combination',
+                sideScope: 'both',
+                actionKey: 'open_long',
+                actionKeySource: 'user_explicit',
+              },
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
             },
-            runtimeRequirements: [],
-            stateRequirements: [],
-            orderRequirements: [],
-            openSlots: [],
-          }],
+          ],
         },
         {
           id: 'long-gate',
@@ -1429,9 +1544,7 @@ describe('canonicalSpecBuilderService', () => {
           params: { expression: closeOpenPredicate('LT') },
         },
       ],
-      actions: [
-        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-      ],
+      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
     })
 
     const spec = service.buildFromSemanticState(state)
@@ -1467,35 +1580,39 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'risk',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          kind: 'atom',
-          key: 'position_loss_pct',
-          semanticScope: 'position',
-          op: 'GTE',
-          value: 0.05,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'risk',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            kind: 'atom',
+            key: 'position_loss_pct',
+            semanticScope: 'position',
+            op: 'GTE',
+            value: 0.05,
+          }),
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
         }),
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
-      }),
-      expect.objectContaining({
-        phase: 'risk',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          kind: 'atom',
-          key: 'risk.take_profit_pct',
-          semanticScope: 'position',
-          op: 'GTE',
-          value: 0.1,
+        expect.objectContaining({
+          phase: 'risk',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            kind: 'atom',
+            key: 'risk.take_profit_pct',
+            semanticScope: 'position',
+            op: 'GTE',
+            value: 0.1,
+          }),
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
         }),
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+      ]),
+    )
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(
+      expect.objectContaining({
+        status: 'VALID',
       }),
-    ]))
-    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
-      status: 'VALID',
-    }))
+    )
   })
 
   it('keeps both-side ATR take-profit actions faithful to long and short position contracts', () => {
@@ -1517,18 +1634,20 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromSemanticState(state)
     const riskRule = spec.rules.find(rule => rule.id === 'semantic-atr-take-profit')
 
-    expect(riskRule).toEqual(expect.objectContaining({
-      phase: 'risk',
-      sideScope: 'both',
-      condition: expect.objectContaining({
-        key: 'risk.atr_multiple_take_profit',
-        params: { multiple: 3 },
+    expect(riskRule).toEqual(
+      expect.objectContaining({
+        phase: 'risk',
+        sideScope: 'both',
+        condition: expect.objectContaining({
+          key: 'risk.atr_multiple_take_profit',
+          params: { multiple: 3 },
+        }),
+        actions: [
+          expect.objectContaining({ type: 'CLOSE_LONG' }),
+          expect.objectContaining({ type: 'CLOSE_SHORT' }),
+        ],
       }),
-      actions: [
-        expect.objectContaining({ type: 'CLOSE_LONG' }),
-        expect.objectContaining({ type: 'CLOSE_SHORT' }),
-      ],
-    }))
+    )
   })
 
   it('projects normalized semantic risk basis to legacy riskRules compatibility output', () => {
@@ -1548,14 +1667,16 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).toContainEqual(expect.objectContaining({
-      phase: 'risk',
-      condition: expect.objectContaining({
-        kind: 'atom',
-        key: 'position_loss_pct',
-        params: { basis: 'entry_avg_price' },
+    expect(spec.rules).toContainEqual(
+      expect.objectContaining({
+        phase: 'risk',
+        condition: expect.objectContaining({
+          kind: 'atom',
+          key: 'position_loss_pct',
+          params: { basis: 'entry_avg_price' },
+        }),
       }),
-    }))
+    )
   })
 
   it('builds SemanticState canonical risk expression rules', () => {
@@ -1585,19 +1706,23 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).toContainEqual(expect.objectContaining({
-      id: 'semantic-daily-loss-halt',
-      phase: 'risk',
-      condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
-      actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
-      metadata: expect.objectContaining({
-        semanticKey: 'risk.condition_expression',
-        capabilityStatus: 'supported',
+    expect(spec.rules).toContainEqual(
+      expect.objectContaining({
+        id: 'semantic-daily-loss-halt',
+        phase: 'risk',
+        condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
+        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
+        metadata: expect.objectContaining({
+          semanticKey: 'risk.condition_expression',
+          capabilityStatus: 'supported',
+        }),
       }),
-    }))
-    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(expect.objectContaining({
-      status: 'VALID',
-    }))
+    )
+    expect(new CanonicalSpecV2ValidatorService().validate(spec)).toEqual(
+      expect.objectContaining({
+        status: 'VALID',
+      }),
+    )
   })
 
   it('does not build executable rules for recognized unsupported risk expressions', () => {
@@ -1628,11 +1753,13 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'semantic-daily-loss-halt',
-      }),
-    ]))
+    expect(spec.rules).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'semantic-daily-loss-halt',
+        }),
+      ]),
+    )
   })
 
   it('uses risk expression scope when building side-specific risk rules', () => {
@@ -1670,48 +1797,57 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).toContainEqual(expect.objectContaining({
-      id: 'semantic-short-loss-close',
-      sideScope: 'short',
-      actions: [{ type: 'FORCE_EXIT' }],
-    }))
+    expect(spec.rules).toContainEqual(
+      expect.objectContaining({
+        id: 'semantic-short-loss-close',
+        sideScope: 'short',
+        actions: [{ type: 'FORCE_EXIT' }],
+      }),
+    )
   })
 
   it('builds supported risk expressions from normalized intent', () => {
     const service = new CanonicalSpecBuilderService()
-    const spec = service.buildFromNormalizedIntent({
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-    } as any, {
-      families: ['single-leg'],
-      triggers: [],
-      actions: [],
-      risk: [{
-        key: 'risk.condition_expression',
-        params: {
-          condition: {
-            kind: 'predicate',
-            op: 'LTE',
-            left: { kind: 'position', field: 'pnl_pct' },
-            right: { kind: 'constant', value: -4, unit: 'percent' },
+    const spec = service.buildFromNormalizedIntent(
+      {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      } as any,
+      {
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [
+          {
+            key: 'risk.condition_expression',
+            params: {
+              condition: {
+                kind: 'predicate',
+                op: 'LTE',
+                left: { kind: 'position', field: 'pnl_pct' },
+                right: { kind: 'constant', value: -4, unit: 'percent' },
+              },
+              effect: { type: 'close_position' },
+              scope: 'current_position',
+              capabilityStatus: 'supported',
+            },
           },
-          effect: { type: 'close_position' },
-          scope: 'current_position',
-          capabilityStatus: 'supported',
-        },
-      }],
-      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
-      unresolved: [],
-      normalizationNotes: [],
-    } as any)
+        ],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
+        unresolved: [],
+        normalizationNotes: [],
+      } as any,
+    )
 
-    expect(spec.rules).toContainEqual(expect.objectContaining({
-      id: 'risk-condition-expression',
-      phase: 'risk',
-      condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
-      actions: [{ type: 'FORCE_EXIT' }],
-    }))
+    expect(spec.rules).toContainEqual(
+      expect.objectContaining({
+        id: 'risk-condition-expression',
+        phase: 'risk',
+        condition: expect.objectContaining({ kind: 'expression', op: 'LTE' }),
+        actions: [{ type: 'FORCE_EXIT' }],
+      }),
+    )
   })
 
   it('keeps non-executable non-default risk basis out of SemanticState canonical risk rules', () => {
@@ -1731,12 +1867,14 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).not.toContainEqual(expect.objectContaining({
-      phase: 'risk',
-      condition: expect.objectContaining({
-        key: 'position_loss_pct',
+    expect(spec.rules).not.toContainEqual(
+      expect.objectContaining({
+        phase: 'risk',
+        condition: expect.objectContaining({
+          key: 'position_loss_pct',
+        }),
       }),
-    }))
+    )
   })
 
   it('builds SemanticState canonical condition groups from logical expressions', () => {
@@ -1767,25 +1905,25 @@ describe('canonicalSpecBuilderService', () => {
           },
         },
       ],
-      actions: [
-        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-      ],
+      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
     })
 
     const spec = service.buildFromSemanticState(state)
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'semantic-entry-1',
-        condition: {
-          kind: 'AND',
-          children: [
-            expect.objectContaining({ kind: 'expression', op: 'GT' }),
-            expect.objectContaining({ kind: 'expression', op: 'LT' }),
-          ],
-        },
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'semantic-entry-1',
+          condition: {
+            kind: 'AND',
+            children: [
+              expect.objectContaining({ kind: 'expression', op: 'GT' }),
+              expect.objectContaining({ kind: 'expression', op: 'LT' }),
+            ],
+          },
+        }),
+      ]),
+    )
   })
 
   it('bridges StrategyIR back into canonical spec v2 through the migration entry point', () => {
@@ -1828,28 +1966,30 @@ describe('canonicalSpecBuilderService', () => {
       marketType: 'perp',
       defaultTimeframe: '15m',
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'entry-grid-range-rebalance-long',
-        phase: 'entry',
-      }),
-      expect.objectContaining({
-        id: 'entry-grid-range-rebalance-short',
-        phase: 'entry',
-      }),
-      expect.objectContaining({
-        id: 'exit-grid-range-rebalance-long',
-        phase: 'exit',
-      }),
-      expect.objectContaining({
-        id: 'exit-grid-range-rebalance-short',
-        phase: 'exit',
-      }),
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        phase: 'risk',
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'entry-grid-range-rebalance-long',
+          phase: 'entry',
+        }),
+        expect.objectContaining({
+          id: 'entry-grid-range-rebalance-short',
+          phase: 'entry',
+        }),
+        expect.objectContaining({
+          id: 'exit-grid-range-rebalance-long',
+          phase: 'exit',
+        }),
+        expect.objectContaining({
+          id: 'exit-grid-range-rebalance-short',
+          phase: 'exit',
+        }),
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          phase: 'risk',
+        }),
+      ]),
+    )
   })
 
   it('builds stable sma crossover rules from normalized intent through the migration path', () => {
@@ -1868,19 +2008,22 @@ describe('canonicalSpecBuilderService', () => {
       },
     } as any).normalizedIntent
 
-    const spec = service.buildFromNormalizedIntent({
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-      entryRules: ['EMA7 上穿 EMA21 做多'],
-      exitRules: ['EMA7 下穿 EMA21 平多'],
-      riskRules: {
-        exchange: 'okx',
-        marketType: 'perp',
-        positionPct: 10,
-        stopLossPct: 5,
-        stopLossBasis: 'entry_avg_price',
-      },
-    } as any, normalizedIntent)
+    const spec = service.buildFromNormalizedIntent(
+      {
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+        },
+      } as any,
+      normalizedIntent,
+    )
 
     expect(spec.market).toEqual({
       exchange: 'okx',
@@ -1888,76 +2031,83 @@ describe('canonicalSpecBuilderService', () => {
       marketType: 'perp',
       defaultTimeframe: '1h',
     })
-    expect(spec.indicators).toEqual([
-      { kind: 'ema', params: { fastPeriod: 7, slowPeriod: 21 } },
-    ])
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'ma.golden_cross',
-          op: 'CROSS_OVER',
-          params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
-        }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } })],
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            source: 'normalized-intent',
-            family: 'single-leg',
+    expect(spec.indicators).toEqual([{ kind: 'ema', params: { fastPeriod: 7, slowPeriod: 21 } }])
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'ma.golden_cross',
+            op: 'CROSS_OVER',
+            params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+          }),
+          actions: [
+            expect.objectContaining({ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }),
+          ],
+          metadata: expect.objectContaining({
+            normalized: expect.objectContaining({
+              source: 'normalized-intent',
+              family: 'single-leg',
+            }),
           }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'ma.death_cross',
-          op: 'CROSS_UNDER',
-          params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'ma.death_cross',
+            op: 'CROSS_UNDER',
+            params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          phase: 'risk',
+          condition: expect.objectContaining({
+            key: 'position_loss_pct',
+            value: 0.05,
+            params: { basis: 'entry_avg_price' },
+          }),
+        }),
+      ]),
+    )
+    expect(spec.metadata).toEqual(
       expect.objectContaining({
-        id: 'risk-stop-loss',
-        phase: 'risk',
-        condition: expect.objectContaining({
-          key: 'position_loss_pct',
-          value: 0.05,
-          params: { basis: 'entry_avg_price' },
+        normalized: expect.objectContaining({
+          source: 'normalized-intent',
         }),
       }),
-    ]))
-    expect(spec.metadata).toEqual(expect.objectContaining({
-      normalized: expect.objectContaining({
-        source: 'normalized-intent',
-      }),
-    }))
+    )
   })
 
   it('builds canonical spec directly from normalized semantic intent without compatibility checklist projection', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.buildFromNormalizedIntent({
-      market: { exchange: 'okx', marketType: 'perp', defaultTimeframe: '15m' },
-    }, {
-      families: ['single-leg'],
-      triggers: [
-        {
-          key: 'bollinger.touch_upper',
-          phase: 'entry',
-          sideScope: 'short',
-          params: { period: 20, stdDev: 2, confirmationMode: 'touch' },
-          closureStatus: 'closed',
-          unresolvedSlots: [],
-        },
-      ],
-      actions: [{ key: 'open_short' }],
-      risk: [],
-      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'short_only' },
-      unresolved: [],
-      normalizationNotes: [],
-    })
+    const spec = service.buildFromNormalizedIntent(
+      {
+        market: { exchange: 'okx', marketType: 'perp', defaultTimeframe: '15m' },
+      },
+      {
+        families: ['single-leg'],
+        triggers: [
+          {
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+            params: { period: 20, stdDev: 2, confirmationMode: 'touch' },
+            closureStatus: 'closed',
+            unresolvedSlots: [],
+          },
+        ],
+        actions: [{ key: 'open_short' }],
+        risk: [],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'short_only' },
+        unresolved: [],
+        normalizationNotes: [],
+      },
+    )
 
     expect(spec.market).toEqual({
       exchange: 'okx',
@@ -1965,16 +2115,18 @@ describe('canonicalSpecBuilderService', () => {
       marketType: 'perp',
       defaultTimeframe: '15m',
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'bollinger.upper_break',
-          op: 'GTE',
-          params: { confirmationMode: 'touch' },
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'bollinger.upper_break',
+            op: 'GTE',
+            params: { confirmationMode: 'touch' },
+          }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('preserves per-trigger timeframes for multi-timeframe indicator compare triggers', () => {
@@ -2004,22 +2156,27 @@ describe('canonicalSpecBuilderService', () => {
       normalizationNotes: [],
     }
 
-    const spec = service.buildFromNormalizedIntent({
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-    } as any, normalizedIntent as any)
+    const spec = service.buildFromNormalizedIntent(
+      {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      } as any,
+      normalizedIntent as any,
+    )
     const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
 
     expect(entryRules).toHaveLength(1)
-    expect(entryRules[0]?.condition).toEqual(expect.objectContaining({
-      kind: 'AND',
-      children: [
-        expect.objectContaining({ params: expect.objectContaining({ timeframe: '15m' }) }),
-        expect.objectContaining({ params: expect.objectContaining({ timeframe: '1h' }) }),
-        expect.objectContaining({ params: expect.objectContaining({ timeframe: '4h' }) }),
-      ],
-    }))
+    expect(entryRules[0]?.condition).toEqual(
+      expect.objectContaining({
+        kind: 'AND',
+        children: [
+          expect.objectContaining({ params: expect.objectContaining({ timeframe: '15m' }) }),
+          expect.objectContaining({ params: expect.objectContaining({ timeframe: '1h' }) }),
+          expect.objectContaining({ params: expect.objectContaining({ timeframe: '4h' }) }),
+        ],
+      }),
+    )
     expect(spec.market.timeframes).toEqual(expect.arrayContaining(['15m', '1h', '4h']))
   })
 
@@ -2096,23 +2253,38 @@ describe('canonicalSpecBuilderService', () => {
     const exitRules = spec.rules.filter(rule => rule.phase === 'exit')
 
     expect(entryRules).toHaveLength(1)
-    expect(entryRules[0]).toEqual(expect.objectContaining({
-      actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      condition: expect.objectContaining({
-        kind: 'AND',
-        children: [
-          expect.objectContaining({ key: 'indicator.above', params: expect.objectContaining({ timeframe: '5m' }) }),
-          expect.objectContaining({ key: 'indicator.above', params: expect.objectContaining({ timeframe: '1h' }) }),
-          expect.objectContaining({ key: 'indicator.above', params: expect.objectContaining({ timeframe: '4h' }) }),
-        ],
+    expect(entryRules[0]).toEqual(
+      expect.objectContaining({
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        condition: expect.objectContaining({
+          kind: 'AND',
+          children: [
+            expect.objectContaining({
+              key: 'indicator.above',
+              params: expect.objectContaining({ timeframe: '5m' }),
+            }),
+            expect.objectContaining({
+              key: 'indicator.above',
+              params: expect.objectContaining({ timeframe: '1h' }),
+            }),
+            expect.objectContaining({
+              key: 'indicator.above',
+              params: expect.objectContaining({ timeframe: '4h' }),
+            }),
+          ],
+        }),
       }),
-    }))
+    )
     expect(exitRules).toHaveLength(1)
-    expect(exitRules[0]?.condition).toEqual(expect.objectContaining({
-      key: 'indicator.below',
-      params: expect.objectContaining({ timeframe: '15m' }),
-    }))
-    expect(spec.dataRequirements.requiredTimeframes).toEqual(expect.arrayContaining(['15m', '5m', '1h', '4h']))
+    expect(exitRules[0]?.condition).toEqual(
+      expect.objectContaining({
+        key: 'indicator.below',
+        params: expect.objectContaining({ timeframe: '15m' }),
+      }),
+    )
+    expect(spec.dataRequirements.requiredTimeframes).toEqual(
+      expect.arrayContaining(['15m', '5m', '1h', '4h']),
+    )
   })
 
   it('does not treat a bare asset symbol as a canonical market symbol', () => {
@@ -2137,144 +2309,154 @@ describe('canonicalSpecBuilderService', () => {
   it('builds canonical spec from generic execution triggers without falling back to compatibility placeholders', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.buildFromNormalizedIntent({
-      market: { exchange: 'okx', marketType: 'spot', defaultTimeframe: '1h' },
-      symbols: ['ORDIUSDT'],
-      timeframes: ['1h'],
-    }, {
-      families: ['single-leg'],
-      triggers: [
-        {
-          key: 'execution.on_start',
+    const spec = service.buildFromNormalizedIntent(
+      {
+        market: { exchange: 'okx', marketType: 'spot', defaultTimeframe: '1h' },
+        symbols: ['ORDIUSDT'],
+        timeframes: ['1h'],
+      },
+      {
+        families: ['single-leg'],
+        triggers: [
+          {
+            key: 'execution.on_start',
+            phase: 'entry',
+            sideScope: 'long',
+            params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+            closureStatus: 'closed',
+            unresolvedSlots: [],
+          },
+          {
+            key: 'price.percent_change',
+            phase: 'exit',
+            sideScope: 'long',
+            params: { valuePct: 1, basis: 'prev_close', window: '1h' },
+            closureStatus: 'closed',
+            unresolvedSlots: [],
+          },
+        ],
+        actions: [{ key: 'open_long' }, { key: 'close_long' }],
+        risk: [],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+        unresolved: [],
+        normalizationNotes: [],
+      },
+    )
+
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
           phase: 'entry',
           sideScope: 'long',
-          params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
-          closureStatus: 'closed',
-          unresolvedSlots: [],
-        },
-        {
-          key: 'price.percent_change',
+          condition: expect.objectContaining({
+            key: 'execution.on_start',
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
           phase: 'exit',
           sideScope: 'long',
-          params: { valuePct: 1, basis: 'prev_close', window: '1h' },
-          closureStatus: 'closed',
-          unresolvedSlots: [],
-        },
-      ],
-      actions: [{ key: 'open_long' }, { key: 'close_long' }],
-      risk: [],
-      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
-      unresolved: [],
-      normalizationNotes: [],
-    })
-
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'execution.on_start',
+          condition: expect.objectContaining({
+            key: 'price.change_pct',
+            op: 'GTE',
+            value: 0.01,
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'price.change_pct',
-          op: 'GTE',
-          value: 0.01,
-        }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('preserves price-vs-single-ma breakout semantics for indicator.above/below normalized triggers', () => {
     const service = new CanonicalSpecBuilderService()
 
-    const spec = service.buildFromNormalizedIntent({
-      market: { exchange: 'okx', marketType: 'perp', defaultTimeframe: '1h' },
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-    }, {
-      families: ['single-leg'],
-      triggers: [
-        {
-          key: 'indicator.above',
-          phase: 'entry',
-          params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 50 },
-          closureStatus: 'closed',
-          unresolvedSlots: [],
-        },
-        {
-          key: 'indicator.below',
-          phase: 'exit',
-          params: { indicator: 'ma', referenceRole: 'short_term', 'reference.period': 20 },
-          closureStatus: 'closed',
-          unresolvedSlots: [],
-        },
-      ],
-      actions: [{ key: 'open_long' }, { key: 'close_long' }],
-      risk: [],
-      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
-      unresolved: [],
-      normalizationNotes: [],
-    })
+    const spec = service.buildFromNormalizedIntent(
+      {
+        market: { exchange: 'okx', marketType: 'perp', defaultTimeframe: '1h' },
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+      },
+      {
+        families: ['single-leg'],
+        triggers: [
+          {
+            key: 'indicator.above',
+            phase: 'entry',
+            params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 50 },
+            closureStatus: 'closed',
+            unresolvedSlots: [],
+          },
+          {
+            key: 'indicator.below',
+            phase: 'exit',
+            params: { indicator: 'ma', referenceRole: 'short_term', 'reference.period': 20 },
+            closureStatus: 'closed',
+            unresolvedSlots: [],
+          },
+        ],
+        actions: [{ key: 'open_long' }, { key: 'close_long' }],
+        risk: [],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+        unresolved: [],
+        normalizationNotes: [],
+      },
+    )
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({
-          key: 'indicator.above',
-          op: 'GTE',
-          params: expect.objectContaining({
-            indicator: 'ma',
-            referenceRole: 'long_term',
-            'reference.period': 50,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          condition: expect.objectContaining({
+            key: 'indicator.above',
+            op: 'GTE',
+            params: expect.objectContaining({
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              'reference.period': 50,
+            }),
           }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({
-          key: 'indicator.below',
-          op: 'LTE',
-          params: expect.objectContaining({
-            indicator: 'ma',
-            referenceRole: 'short_term',
-            'reference.period': 20,
+        expect.objectContaining({
+          phase: 'exit',
+          condition: expect.objectContaining({
+            key: 'indicator.below',
+            op: 'LTE',
+            params: expect.objectContaining({
+              indicator: 'ma',
+              referenceRole: 'short_term',
+              'reference.period': 20,
+            }),
           }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('normalizes single-trade sizing language into semantic position sizing', () => {
     const extractor = new SemanticSeedExtractorService()
 
-    const semanticPatch = extractor.extract(
-      '在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金',
-    )
+    const semanticPatch = extractor.extract('在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金')
 
-    expect(semanticPatch.position).toEqual(expect.objectContaining({
-      mode: 'fixed_ratio',
-      value: 0.1,
-      sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
-      positionMode: 'long_only',
-      contracts: expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'position',
-          capabilities: expect.arrayContaining([
-            expect.objectContaining({
-              domain: 'capital',
-              verb: 'allocate',
-              object: 'position_sizing',
-            }),
-          ]),
-        }),
-      ]),
-    }))
+    expect(semanticPatch.position).toEqual(
+      expect.objectContaining({
+        mode: 'fixed_ratio',
+        value: 0.1,
+        sizing: { kind: 'ratio', value: 0.1, unit: 'ratio' },
+        positionMode: 'long_only',
+        contracts: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'position',
+            capabilities: expect.arrayContaining([
+              expect.objectContaining({
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'position_sizing',
+              }),
+            ]),
+          }),
+        ]),
+      }),
+    )
   })
 
   it('fills default entry-price basis for stop-loss and take-profit when checklist omits them', () => {
@@ -2294,22 +2476,24 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        condition: expect.objectContaining({
-          params: expect.objectContaining({ basis: 'entry_avg_price' }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          condition: expect.objectContaining({
+            params: expect.objectContaining({ basis: 'entry_avg_price' }),
+          }),
+          metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
         }),
-        metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
-      }),
-      expect.objectContaining({
-        id: 'risk-take-profit',
-        condition: expect.objectContaining({
-          params: expect.objectContaining({ basis: 'entry_avg_price' }),
+        expect.objectContaining({
+          id: 'risk-take-profit',
+          condition: expect.objectContaining({
+            params: expect.objectContaining({ basis: 'entry_avg_price' }),
+          }),
+          metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
         }),
-        metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('preserves executable clarified stop-loss basis and compiles position-pnl take-profit as an expression', () => {
@@ -2331,27 +2515,31 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        condition: expect.objectContaining({
-          params: expect.objectContaining({ basis: 'entry_avg_price' }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          condition: expect.objectContaining({
+            params: expect.objectContaining({ basis: 'entry_avg_price' }),
+          }),
+          metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
         }),
-        metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
-      }),
-    ]))
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-take-profit',
-        condition: expect.objectContaining({
-          kind: 'expression',
-          op: 'GTE',
-          left: { kind: 'position', field: 'pnl_pct' },
-          right: { kind: 'constant', value: 10, unit: 'percent' },
+      ]),
+    )
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-take-profit',
+          condition: expect.objectContaining({
+            kind: 'expression',
+            op: 'GTE',
+            left: { kind: 'position', field: 'pnl_pct' },
+            right: { kind: 'constant', value: 10, unit: 'percent' },
+          }),
+          metadata: expect.objectContaining({ basis: 'position_pnl' }),
         }),
-        metadata: expect.objectContaining({ basis: 'position_pnl' }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('emits canonical default timeframe and per-rule timeframe params for multi-timeframe strategies', () => {
@@ -2362,8 +2550,18 @@ describe('canonicalSpecBuilderService', () => {
       timeframes: ['3m', '15m'],
       entryRules: ['3m 内下跌 1% 买入'],
       exitRules: ['15m 内上涨 2% 卖出'],
-      entryRuleDrafts: [{ id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' }],
-      exitRuleDrafts: [{ id: 'exit-1', phase: 'exit', text: '15m 内上涨 2% 卖出', timeframe: '15m', basis: 'entry_avg_price' }],
+      entryRuleDrafts: [
+        { id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' },
+      ],
+      exitRuleDrafts: [
+        {
+          id: 'exit-1',
+          phase: 'exit',
+          text: '15m 内上涨 2% 卖出',
+          timeframe: '15m',
+          basis: 'entry_avg_price',
+        },
+      ],
       riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10, stopLossPct: 5 },
     })
 
@@ -2374,20 +2572,22 @@ describe('canonicalSpecBuilderService', () => {
       defaultTimeframe: '3m',
     })
     expect(spec.dataRequirements.requiredTimeframes).toEqual(['3m', '15m'])
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'entry-price-change-1',
-        condition: expect.objectContaining({
-          params: expect.objectContaining({ timeframe: '3m' }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'entry-price-change-1',
+          condition: expect.objectContaining({
+            params: expect.objectContaining({ timeframe: '3m' }),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'exit-price-change-1',
-        condition: expect.objectContaining({
-          params: expect.objectContaining({ timeframe: '15m' }),
+        expect.objectContaining({
+          id: 'exit-price-change-1',
+          condition: expect.objectContaining({
+            params: expect.objectContaining({ timeframe: '15m' }),
+          }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds explicit position-pnl risk rules as canonical expressions', () => {
@@ -2409,28 +2609,30 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        phase: 'risk',
-        condition: expect.objectContaining({
-          kind: 'expression',
-          op: 'LTE',
-          left: { kind: 'position', field: 'pnl_pct' },
-          right: { kind: 'constant', value: -5, unit: 'percent' },
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          phase: 'risk',
+          condition: expect.objectContaining({
+            kind: 'expression',
+            op: 'LTE',
+            left: { kind: 'position', field: 'pnl_pct' },
+            right: { kind: 'constant', value: -5, unit: 'percent' },
+          }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'risk-take-profit',
-        phase: 'risk',
-        condition: expect.objectContaining({
-          kind: 'expression',
-          op: 'GTE',
-          left: { kind: 'position', field: 'pnl_pct' },
-          right: { kind: 'constant', value: 10, unit: 'percent' },
+        expect.objectContaining({
+          id: 'risk-take-profit',
+          phase: 'risk',
+          condition: expect.objectContaining({
+            kind: 'expression',
+            op: 'GTE',
+            left: { kind: 'position', field: 'pnl_pct' },
+            right: { kind: 'constant', value: 10, unit: 'percent' },
+          }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('does not inject sma when clarified bollinger middle-band semantics use a moving-average alias', () => {
@@ -2449,12 +2651,10 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.indicators).toEqual([
-      expect.objectContaining({ kind: 'bollingerBands' }),
-    ])
-    expect(spec.indicators).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'sma' }),
-    ]))
+    expect(spec.indicators).toEqual([expect.objectContaining({ kind: 'bollingerBands' })])
+    expect(spec.indicators).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'sma' })]),
+    )
   })
 
   it('builds independent Bollinger rules for upper-short, lower-long, middle-close, and outside-band full close', () => {
@@ -2463,13 +2663,8 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
-      entryRules: [
-        '突破布林带上轨做空',
-        '突破布林带下轨做多',
-      ],
-      exitRules: [
-        '价格回到布林带中轨平仓',
-      ],
+      entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+      exitRules: ['价格回到布林带中轨平仓'],
       riskRules: {
         stopLossPct: 5,
         earlyStop: '价格连续3根K线在轨外时提前全平',
@@ -2478,30 +2673,32 @@ describe('canonicalSpecBuilderService', () => {
     })
 
     expect(spec.version).toBe(2)
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'both',
-        actions: expect.arrayContaining([
-          expect.objectContaining({ type: 'CLOSE_LONG' }),
-          expect.objectContaining({ type: 'CLOSE_SHORT' }),
-        ]),
-      }),
-      expect.objectContaining({
-        phase: 'risk',
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'both',
+          actions: expect.arrayContaining([
+            expect.objectContaining({ type: 'CLOSE_LONG' }),
+            expect.objectContaining({ type: 'CLOSE_SHORT' }),
+          ]),
+        }),
+        expect.objectContaining({
+          phase: 'risk',
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+        }),
+      ]),
+    )
 
     const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
     expect(entryRules).toHaveLength(2)
@@ -2524,52 +2721,54 @@ describe('canonicalSpecBuilderService', () => {
         takeProfitBasis: 'entry_avg_price',
       },
     }
-    const normalizedIntent = new StrategyIntentNormalizerService().normalize(checklist as any).normalizedIntent
+    const normalizedIntent = new StrategyIntentNormalizerService().normalize(
+      checklist as any,
+    ).normalizedIntent
 
     const spec = service.buildFromNormalizedIntent(checklist, normalizedIntent)
 
-    expect(spec.indicators).toEqual([
-      { kind: 'bollingerBands', params: { period: 20, stdDev: 2 } },
-    ])
-    expect(spec.indicators).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'sma' }),
-    ]))
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'bollinger.upper_break',
-          op: 'CROSS_OVER',
+    expect(spec.indicators).toEqual([{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }])
+    expect(spec.indicators).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'sma' })]),
+    )
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'bollinger.upper_break',
+            op: 'CROSS_OVER',
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'bollinger.lower_break',
-          op: 'CROSS_UNDER',
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'bollinger.lower_break',
+            op: 'CROSS_UNDER',
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'bollinger.middle_revert',
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'bollinger.middle_revert',
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        phase: 'risk',
-      }),
-      expect.objectContaining({
-        id: 'risk-take-profit',
-        phase: 'risk',
-      }),
-    ]))
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          phase: 'risk',
+        }),
+        expect.objectContaining({
+          id: 'risk-take-profit',
+          phase: 'risk',
+        }),
+      ]),
+    )
   })
 
   it('falls back to exit sideScope from normalized bollinger actions when sideScope is omitted', () => {
@@ -2611,24 +2810,26 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromNormalizedIntent(checklist as any, normalizedIntent as any)
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'bollinger.middle_revert',
-        }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            source: 'normalized-intent',
-            triggerKeys: ['bollinger.touch_middle'],
-            actionKeys: ['CLOSE_LONG'],
-            family: 'single-leg',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'bollinger.middle_revert',
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+          metadata: expect.objectContaining({
+            normalized: expect.objectContaining({
+              source: 'normalized-intent',
+              triggerKeys: ['bollinger.touch_middle'],
+              actionKeys: ['CLOSE_LONG'],
+              family: 'single-leg',
+            }),
           }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('keeps entry sideScope unset when normalized intent omits it', () => {
@@ -2670,15 +2871,17 @@ describe('canonicalSpecBuilderService', () => {
 
     const spec = service.buildFromNormalizedIntent(checklist as any, normalizedIntent as any)
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({
-          key: 'bollinger.upper_break',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          condition: expect.objectContaining({
+            key: 'bollinger.upper_break',
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-    ]))
+      ]),
+    )
     expect(spec.rules.find(rule => rule.phase === 'entry')?.sideScope).toBeUndefined()
   })
 
@@ -2688,13 +2891,8 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
-      entryRules: [
-        '突破布林带上轨做空',
-        '突破布林带下轨做多',
-      ],
-      exitRules: [
-        '价格回到布林带中轨平仓',
-      ],
+      entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+      exitRules: ['价格回到布林带中轨平仓'],
       riskRules: {
         exchange: 'okx',
         marketType: 'perp',
@@ -2710,19 +2908,21 @@ describe('canonicalSpecBuilderService', () => {
       marketType: 'perp',
       defaultTimeframe: '15m',
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-outside-band-3-bars',
-        phase: 'risk',
-        condition: expect.objectContaining({
-          key: 'bollinger.bars_outside',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-outside-band-3-bars',
+          phase: 'risk',
+          condition: expect.objectContaining({
+            key: 'bollinger.bars_outside',
+          }),
+          actions: expect.arrayContaining([
+            expect.objectContaining({ type: 'REDUCE_LONG' }),
+            expect.objectContaining({ type: 'REDUCE_SHORT' }),
+          ]),
         }),
-        actions: expect.arrayContaining([
-          expect.objectContaining({ type: 'REDUCE_LONG' }),
-          expect.objectContaining({ type: 'REDUCE_SHORT' }),
-        ]),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('treats direct close wording as full exit for outside-band risk', () => {
@@ -2731,13 +2931,8 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
-      entryRules: [
-        '突破布林带上轨做空',
-        '突破布林带下轨做多',
-      ],
-      exitRules: [
-        '价格回到布林带中轨平仓',
-      ],
+      entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+      exitRules: ['价格回到布林带中轨平仓'],
       riskRules: {
         exchange: 'okx',
         marketType: 'perp',
@@ -2747,16 +2942,18 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-outside-band-3-bars',
-        phase: 'risk',
-        condition: expect.objectContaining({
-          key: 'bollinger.bars_outside',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-outside-band-3-bars',
+          phase: 'risk',
+          condition: expect.objectContaining({
+            key: 'bollinger.bars_outside',
+          }),
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
         }),
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds outside-band full close from exitRules without requiring riskRules.earlyStop', () => {
@@ -2765,14 +2962,8 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
-      entryRules: [
-        '突破布林带上轨做空',
-        '突破布林带下轨做多',
-      ],
-      exitRules: [
-        '价格回到布林带中轨平仓',
-        '价格连续3根K线在轨外时直接平仓',
-      ],
+      entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+      exitRules: ['价格回到布林带中轨平仓', '价格连续3根K线在轨外时直接平仓'],
       riskRules: {
         exchange: 'okx',
         marketType: 'perp',
@@ -2781,22 +2972,24 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'exit-middle-1',
-        phase: 'exit',
-      }),
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        phase: 'risk',
-      }),
-      expect.objectContaining({
-        id: 'risk-outside-band-3-bars',
-        phase: 'risk',
-        metadata: { source: 'exitRules' },
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'exit-middle-1',
+          phase: 'exit',
+        }),
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          phase: 'risk',
+        }),
+        expect.objectContaining({
+          id: 'risk-outside-band-3-bars',
+          phase: 'risk',
+          metadata: { source: 'exitRules' },
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+        }),
+      ]),
+    )
   })
 
   it('prefers clarified exitRules over stale earlyStop text for outside-band action semantics', () => {
@@ -2805,14 +2998,8 @@ describe('canonicalSpecBuilderService', () => {
     const spec = service.buildFromLegacyChecklistForTestsOnly({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
-      entryRules: [
-        '突破布林带上轨做空',
-        '突破布林带下轨做多',
-      ],
-      exitRules: [
-        '价格回到布林带中轨平仓',
-        '价格连续3根K线在轨外时直接平仓',
-      ],
+      entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+      exitRules: ['价格回到布林带中轨平仓', '价格连续3根K线在轨外时直接平仓'],
       riskRules: {
         exchange: 'okx',
         marketType: 'perp',
@@ -2822,13 +3009,15 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'risk-outside-band-3-bars',
-        metadata: { source: 'exitRules' },
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'risk-outside-band-3-bars',
+          metadata: { source: 'exitRules' },
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+        }),
+      ]),
+    )
   })
 
   it('emits empty v2 rules when checklist has no recognizable trigger patterns', () => {
@@ -2839,12 +3028,14 @@ describe('canonicalSpecBuilderService', () => {
       exitRules: ['根据主观判断离场'],
     })
 
-    expect(spec).toEqual(expect.objectContaining({
-      version: 2,
-      rules: [],
-      indicators: [],
-      sizing: null,
-    }))
+    expect(spec).toEqual(
+      expect.objectContaining({
+        version: 2,
+        rules: [],
+        indicators: [],
+        sizing: null,
+      }),
+    )
   })
 
   it('does not inject implicit market/sizing/sma defaults when checklist is missing them', () => {
@@ -2881,18 +3072,20 @@ describe('canonicalSpecBuilderService', () => {
       kind: 'sma',
       params: { period: 20 },
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+        }),
+      ]),
+    )
   })
 
   it('uses checklist riskRules.exchange as canonical market exchange when provided', () => {
@@ -2933,20 +3126,22 @@ describe('canonicalSpecBuilderService', () => {
       kind: 'rsi',
       params: { period: 14 },
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ key: 'rsi.threshold_lte', value: 30 }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({ key: 'rsi.threshold_gte', value: 70 }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({ key: 'rsi.threshold_lte', value: 30 }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({ key: 'rsi.threshold_gte', value: 70 }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+        }),
+      ]),
+    )
   })
 
   it('builds MACD cross entry and exit rules into canonical spec v2', () => {
@@ -2964,20 +3159,22 @@ describe('canonicalSpecBuilderService', () => {
       kind: 'macd',
       params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ key: 'macd.golden_cross' }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({ key: 'macd.death_cross' }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({ key: 'macd.golden_cross' }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({ key: 'macd.death_cross' }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+        }),
+      ]),
+    )
   })
 
   it('builds MA 6/48 crossover periods into canonical spec v2', () => {
@@ -2995,26 +3192,28 @@ describe('canonicalSpecBuilderService', () => {
       kind: 'sma',
       params: { fastPeriod: 6, slowPeriod: 48 },
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'ma.golden_cross',
-          params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'ma.golden_cross',
+            params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'ma.death_cross',
-          params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'ma.death_cross',
+            params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds grid entry and exit rules into canonical spec v2', () => {
@@ -3032,32 +3231,34 @@ describe('canonicalSpecBuilderService', () => {
       kind: 'custom',
       params: { compatibilityFamilyHint: 'grid' },
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          params: expect.objectContaining({
-            rangeMin: 60000,
-            rangeMax: 80000,
-            stepPct: 1,
-            levelCount: 21,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            params: expect.objectContaining({
+              rangeMin: 60000,
+              rangeMax: 80000,
+              stepPct: 1,
+              levelCount: 21,
+            }),
           }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          params: expect.objectContaining({
-            rangeMin: 60000,
-            rangeMax: 80000,
-            stepPct: 1,
-            levelCount: 21,
+        expect.objectContaining({
+          phase: 'exit',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            params: expect.objectContaining({
+              rangeMin: 60000,
+              rangeMax: 80000,
+              stepPct: 1,
+              levelCount: 21,
+            }),
           }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('normalizes per-mille grid steps into percent while keeping grid params explicit', () => {
@@ -3071,32 +3272,34 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10 },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          params: expect.objectContaining({
-            rangeMin: 60000,
-            rangeMax: 80000,
-            stepPct: 0.5,
-            levelCount: 21,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            params: expect.objectContaining({
+              rangeMin: 60000,
+              rangeMax: 80000,
+              stepPct: 0.5,
+              levelCount: 21,
+            }),
           }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          params: expect.objectContaining({
-            rangeMin: 60000,
-            rangeMax: 80000,
-            stepPct: 0.5,
-            levelCount: 21,
+        expect.objectContaining({
+          phase: 'exit',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            params: expect.objectContaining({
+              rangeMin: 60000,
+              rangeMax: 80000,
+              stepPct: 0.5,
+              levelCount: 21,
+            }),
           }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds short-grid entry and exit rules into canonical spec v2', () => {
@@ -3110,26 +3313,28 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10, marketType: 'perp' as any },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'GTE',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            op: 'GTE',
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'LTE',
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            op: 'LTE',
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds bidirectional grid rules into canonical spec v2', () => {
@@ -3142,21 +3347,34 @@ describe('canonicalSpecBuilderService', () => {
         '在 60000-80000 固定区间按步长 1% 共 21 格执行区间网格买入',
         '在 60000-80000 固定区间按步长 1% 共 21 格执行上方网格做空',
       ],
-      exitRules: [
-        '价格触达上方网格卖出',
-        '价格回落触达下方网格买回平空',
-      ],
+      exitRules: ['价格触达上方网格卖出', '价格回落触达下方网格买回平空'],
       riskRules: { positionPct: 10, marketType: 'perp' as any },
     })
 
-    expect(spec.rules.filter(rule => rule.phase === 'entry')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sideScope: 'long', actions: [expect.objectContaining({ type: 'OPEN_LONG' })] }),
-      expect.objectContaining({ sideScope: 'short', actions: [expect.objectContaining({ type: 'OPEN_SHORT' })] }),
-    ]))
-    expect(spec.rules.filter(rule => rule.phase === 'exit')).toEqual(expect.arrayContaining([
-      expect.objectContaining({ sideScope: 'long', actions: [expect.objectContaining({ type: 'CLOSE_LONG' })] }),
-      expect.objectContaining({ sideScope: 'short', actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })] }),
-    ]))
+    expect(spec.rules.filter(rule => rule.phase === 'entry')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sideScope: 'long',
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+      ]),
+    )
+    expect(spec.rules.filter(rule => rule.phase === 'exit')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sideScope: 'long',
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+        }),
+        expect.objectContaining({
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+        }),
+      ]),
+    )
   })
 
   it('builds stable bidirectional grid rules from normalized intent through the migration path', () => {
@@ -3173,66 +3391,70 @@ describe('canonicalSpecBuilderService', () => {
         stopLossPct: 5,
       },
     }
-    const normalizedIntent = new StrategyIntentNormalizerService().normalize(checklist as any).normalizedIntent
+    const normalizedIntent = new StrategyIntentNormalizerService().normalize(
+      checklist as any,
+    ).normalizedIntent
 
     const spec = service.buildFromNormalizedIntent(checklist, normalizedIntent)
 
     expect(spec.indicators).toEqual([
       { kind: 'custom', params: { compatibilityFamilyHint: 'grid' } },
     ])
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'entry-grid-range-rebalance-long',
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'LTE',
-          params: expect.objectContaining({
-            rangeMin: 60000,
-            rangeMax: 80000,
-            stepPct: 0.5,
-            timeframe: '15m',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'entry-grid-range-rebalance-long',
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            op: 'LTE',
+            params: expect.objectContaining({
+              rangeMin: 60000,
+              rangeMax: 80000,
+              stepPct: 0.5,
+              timeframe: '15m',
+            }),
+          }),
+          metadata: expect.objectContaining({
+            normalized: expect.objectContaining({
+              family: 'grid.range_rebalance',
+            }),
           }),
         }),
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            family: 'grid.range_rebalance',
+        expect.objectContaining({
+          id: 'entry-grid-range-rebalance-short',
+          phase: 'entry',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            op: 'GTE',
           }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'entry-grid-range-rebalance-short',
-        phase: 'entry',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'GTE',
+        expect.objectContaining({
+          id: 'exit-grid-range-rebalance-long',
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            op: 'GTE',
+          }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'exit-grid-range-rebalance-long',
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'GTE',
+        expect.objectContaining({
+          id: 'exit-grid-range-rebalance-short',
+          phase: 'exit',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'grid.range_rebalance',
+            op: 'LTE',
+          }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'exit-grid-range-rebalance-short',
-        phase: 'exit',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'LTE',
+        expect.objectContaining({
+          id: 'risk-stop-loss',
+          phase: 'risk',
         }),
-      }),
-      expect.objectContaining({
-        id: 'risk-stop-loss',
-        phase: 'risk',
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('expands bidirectional grid normalized intent into four directional rules', () => {
@@ -3276,42 +3498,46 @@ describe('canonicalSpecBuilderService', () => {
     }
 
     const spec = service.buildFromNormalizedIntent(checklist as any, normalizedIntent as any)
-    const gridRules = spec.rules.filter(rule => rule.metadata?.normalized?.family === 'grid.range_rebalance')
+    const gridRules = spec.rules.filter(
+      rule => rule.metadata?.normalized?.family === 'grid.range_rebalance',
+    )
 
     expect(gridRules).toHaveLength(4)
-    expect(gridRules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'entry-grid-range-rebalance-long',
-        phase: 'entry',
-        sideScope: 'long',
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            triggerKeys: ['grid.range_rebalance'],
-            actionKeys: ['OPEN_LONG'],
-            family: 'grid.range_rebalance',
+    expect(gridRules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'entry-grid-range-rebalance-long',
+          phase: 'entry',
+          sideScope: 'long',
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+          metadata: expect.objectContaining({
+            normalized: expect.objectContaining({
+              triggerKeys: ['grid.range_rebalance'],
+              actionKeys: ['OPEN_LONG'],
+              family: 'grid.range_rebalance',
+            }),
           }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'exit-grid-range-rebalance-long',
-        phase: 'exit',
-        sideScope: 'long',
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-      expect.objectContaining({
-        id: 'entry-grid-range-rebalance-short',
-        phase: 'entry',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        id: 'exit-grid-range-rebalance-short',
-        phase: 'exit',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
-      }),
-    ]))
+        expect.objectContaining({
+          id: 'exit-grid-range-rebalance-long',
+          phase: 'exit',
+          sideScope: 'long',
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+        }),
+        expect.objectContaining({
+          id: 'entry-grid-range-rebalance-short',
+          phase: 'entry',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+        expect.objectContaining({
+          id: 'exit-grid-range-rebalance-short',
+          phase: 'exit',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+        }),
+      ]),
+    )
   })
 
   it('builds breakout, take-profit, trailing-stop and time-stop rules into canonical spec v2', () => {
@@ -3325,37 +3551,39 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10 },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        cooldownBars: 5,
-        condition: expect.objectContaining({
-          key: 'breakout.channel_high_break',
-          params: expect.objectContaining({ period: 20 }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          cooldownBars: 5,
+          condition: expect.objectContaining({
+            key: 'breakout.channel_high_break',
+            params: expect.objectContaining({ period: 20 }),
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'risk',
-        condition: expect.objectContaining({
-          key: 'risk.take_profit_pct',
-          value: 0.05,
+        expect.objectContaining({
+          phase: 'risk',
+          condition: expect.objectContaining({
+            key: 'risk.take_profit_pct',
+            value: 0.05,
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'risk',
-        condition: expect.objectContaining({
-          key: 'risk.trailing_stop_pct',
-          value: 0.1,
+        expect.objectContaining({
+          phase: 'risk',
+          condition: expect.objectContaining({
+            key: 'risk.trailing_stop_pct',
+            value: 0.1,
+          }),
         }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({
-          key: 'risk.time_stop_bars',
-          value: 12,
+        expect.objectContaining({
+          phase: 'exit',
+          condition: expect.objectContaining({
+            key: 'risk.time_stop_bars',
+            value: 12,
+          }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds Donchian breakout aliases into canonical spec v2', () => {
@@ -3369,16 +3597,18 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10 },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({ key: 'breakout.channel_high_break' }),
-      }),
-      expect.objectContaining({
-        phase: 'entry',
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({ key: 'breakout.channel_high_break' }),
+        }),
+        expect.objectContaining({
+          phase: 'entry',
+        }),
+      ]),
+    )
   })
 
   it('builds short breakout and short-side trade management rules into canonical spec v2', () => {
@@ -3392,45 +3622,47 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10, marketType: 'perp' as any },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        cooldownBars: 5,
-        condition: expect.objectContaining({
-          key: 'breakout.channel_low_break',
-          params: expect.objectContaining({ period: 20 }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          cooldownBars: 5,
+          condition: expect.objectContaining({
+            key: 'breakout.channel_low_break',
+            params: expect.objectContaining({ period: 20 }),
+          }),
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'risk',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'risk.take_profit_pct',
-          value: 0.05,
+        expect.objectContaining({
+          phase: 'risk',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'risk.take_profit_pct',
+            value: 0.05,
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'risk',
-        sideScope: 'both',
-        condition: expect.objectContaining({
-          key: 'risk.trailing_stop_pct',
-          value: 0.1,
+        expect.objectContaining({
+          phase: 'risk',
+          sideScope: 'both',
+          condition: expect.objectContaining({
+            key: 'risk.trailing_stop_pct',
+            value: 0.1,
+          }),
+          actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
         }),
-        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'short',
-        condition: expect.objectContaining({
-          key: 'risk.time_stop_bars',
-          value: 12,
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'risk.time_stop_bars',
+            value: 12,
+          }),
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds partial take-profit rules into canonical spec v2 using reduce actions', () => {
@@ -3444,19 +3676,21 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10 },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'risk',
-        condition: expect.objectContaining({
-          key: 'risk.take_profit_pct',
-          value: 0.05,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'risk',
+          condition: expect.objectContaining({
+            key: 'risk.take_profit_pct',
+            value: 0.05,
+          }),
+          actions: expect.arrayContaining([
+            expect.objectContaining({ type: 'REDUCE_LONG' }),
+            expect.objectContaining({ type: 'REDUCE_SHORT' }),
+          ]),
         }),
-        actions: expect.arrayContaining([
-          expect.objectContaining({ type: 'REDUCE_LONG' }),
-          expect.objectContaining({ type: 'REDUCE_SHORT' }),
-        ]),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds partial take-profit rules with explicit reduce ratio', () => {
@@ -3470,26 +3704,28 @@ describe('canonicalSpecBuilderService', () => {
       riskRules: { positionPct: 10 },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'risk',
-        sideScope: 'both',
-        condition: expect.objectContaining({
-          key: 'risk.take_profit_pct',
-          value: 0.05,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'risk',
+          sideScope: 'both',
+          condition: expect.objectContaining({
+            key: 'risk.take_profit_pct',
+            value: 0.05,
+          }),
+          actions: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'REDUCE_LONG',
+              sizing: { mode: 'RATIO', value: 0.3 },
+            }),
+            expect.objectContaining({
+              type: 'REDUCE_SHORT',
+              sizing: { mode: 'RATIO', value: 0.3 },
+            }),
+          ]),
         }),
-        actions: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'REDUCE_LONG',
-            sizing: { mode: 'RATIO', value: 0.3 },
-          }),
-          expect.objectContaining({
-            type: 'REDUCE_SHORT',
-            sizing: { mode: 'RATIO', value: 0.3 },
-          }),
-        ]),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds price-change entry and exit rules from buy/sell wording', () => {
@@ -3507,34 +3743,36 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'price.change_pct',
-          op: 'LTE',
-          value: -0.01,
-          params: expect.objectContaining({
-            timeframe: '3m',
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'price.change_pct',
+            op: 'LTE',
+            value: -0.01,
+            params: expect.objectContaining({
+              timeframe: '3m',
+            }),
           }),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'long',
-        condition: expect.objectContaining({
-          key: 'price.change_pct',
-          op: 'GTE',
-          value: 0.02,
-          params: expect.objectContaining({
-            timeframe: '15m',
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'price.change_pct',
+            op: 'GTE',
+            value: 0.02,
+            params: expect.objectContaining({
+              timeframe: '15m',
+            }),
           }),
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('preserves explicit Bollinger parameters from rule text', () => {
@@ -3579,16 +3817,18 @@ describe('canonicalSpecBuilderService', () => {
         slowPeriod: 20,
       },
     })
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+        }),
+      ]),
+    )
   })
 
   it('builds price-change rules from raw Chinese minute and percent wording', () => {
@@ -3606,25 +3846,27 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'entry-price-change-1',
-        condition: expect.objectContaining({
-          key: 'price.change_pct',
-          params: expect.objectContaining({ timeframe: '3m' }),
-          value: -0.01,
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'entry-price-change-1',
+          condition: expect.objectContaining({
+            key: 'price.change_pct',
+            params: expect.objectContaining({ timeframe: '3m' }),
+            value: -0.01,
+          }),
         }),
-      }),
-      expect.objectContaining({
-        id: 'exit-price-change-1',
-        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
-        condition: expect.objectContaining({
-          key: 'price.change_pct',
-          params: expect.objectContaining({ timeframe: '15m' }),
-          value: 0.02,
+        expect.objectContaining({
+          id: 'exit-price-change-1',
+          actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+          condition: expect.objectContaining({
+            key: 'price.change_pct',
+            params: expect.objectContaining({ timeframe: '15m' }),
+            value: 0.02,
+          }),
         }),
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds canonical gate rule for volume.threshold trigger', () => {
@@ -3642,25 +3884,25 @@ describe('canonicalSpecBuilderService', () => {
           params: { metric: 'base_volume', operator: 'GT', value: 100 },
         },
       ],
-      actions: [
-        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-      ],
+      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
     })
 
     const spec = service.buildFromSemanticState(state)
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'gate',
-        condition: expect.objectContaining({
-          kind: 'atom',
-          key: 'volume.threshold',
-          op: 'GT',
-          value: 100,
-          params: expect.objectContaining({ metric: 'base_volume' }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'gate',
+          condition: expect.objectContaining({
+            kind: 'atom',
+            key: 'volume.threshold',
+            op: 'GT',
+            value: 100,
+            params: expect.objectContaining({ metric: 'base_volume' }),
+          }),
+          actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
         }),
-        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds canonical gate rule for volatility.atr_threshold trigger', () => {
@@ -3678,25 +3920,25 @@ describe('canonicalSpecBuilderService', () => {
           params: { period: 14, operator: 'GT', threshold: 1, thresholdUnit: 'percent_of_close' },
         },
       ],
-      actions: [
-        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-      ],
+      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
     })
 
     const spec = service.buildFromSemanticState(state)
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'gate',
-        condition: expect.objectContaining({
-          kind: 'atom',
-          key: 'volatility.atr_threshold',
-          op: 'GT',
-          value: 1,
-          params: expect.objectContaining({ period: 14, thresholdUnit: 'percent_of_close' }),
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'gate',
+          condition: expect.objectContaining({
+            kind: 'atom',
+            key: 'volatility.atr_threshold',
+            op: 'GT',
+            value: 1,
+            params: expect.objectContaining({ period: 14, thresholdUnit: 'percent_of_close' }),
+          }),
+          actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
         }),
-        actions: [expect.objectContaining({ type: 'BLOCK_NEW_ENTRY' })],
-      }),
-    ]))
+      ]),
+    )
   })
 
   it('builds canonical gate rule for strategy.time_window trigger', () => {
@@ -3715,20 +3957,20 @@ describe('canonicalSpecBuilderService', () => {
           params: { timezone: 'Asia/Shanghai', windows },
         },
       ],
-      actions: [
-        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
-      ],
+      actions: [{ id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
     })
 
     const spec = service.buildFromSemanticState(state)
     const gateRule = spec.rules.find(rule => rule.phase === 'gate')
     expect(gateRule).toBeDefined()
-    expect(gateRule!.condition).toEqual(expect.objectContaining({
-      kind: 'atom',
-      key: 'strategy.time_window',
-      op: 'EQ',
-      value: 1,
-    }))
+    expect(gateRule!.condition).toEqual(
+      expect.objectContaining({
+        kind: 'atom',
+        key: 'strategy.time_window',
+        op: 'EQ',
+        value: 1,
+      }),
+    )
     const condition = gateRule!.condition as { params?: Record<string, unknown> }
     expect(condition.params?.timezone).toBe('Asia/Shanghai')
     expect(JSON.parse(condition.params?.windows as string)).toEqual(windows)
@@ -3750,18 +3992,20 @@ describe('canonicalSpecBuilderService', () => {
       },
     })
 
-    expect(spec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        sideScope: 'short',
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
-      }),
-    ]))
+    expect(spec.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'short',
+          actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+        }),
+      ]),
+    )
   })
 
   describe('partial take profit canonical rules', () => {
@@ -3809,33 +4053,38 @@ describe('canonicalSpecBuilderService', () => {
       })
 
       const spec = service.buildFromSemanticState(state)
-      const ptpRules = spec.rules.filter(rule =>
-        rule.phase === 'risk'
-        && rule.metadata
-        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      const ptpRules = spec.rules.filter(
+        rule =>
+          rule.phase === 'risk' &&
+          rule.metadata &&
+          (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
       )
 
       expect(ptpRules).toHaveLength(2)
       expect(ptpRules[0].id).toBe('semantic-risk-ptp-partial_tp_abc12345-tier-0')
       expect(ptpRules[1].id).toBe('semantic-risk-ptp-partial_tp_abc12345-tier-1')
 
-      expect(ptpRules[0].condition).toEqual(expect.objectContaining({
-        kind: 'atom',
-        key: 'risk.partial_take_profit',
-        semanticScope: 'position',
-        op: 'GTE',
-        value: 5,
-        params: expect.objectContaining({
-          tierIndex: 0,
-          totalTiers: 2,
-          memoryKey: 'partial_tp_abc12345',
-          basis: 'pnl_pct',
+      expect(ptpRules[0].condition).toEqual(
+        expect.objectContaining({
+          kind: 'atom',
+          key: 'risk.partial_take_profit',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: 5,
+          params: expect.objectContaining({
+            tierIndex: 0,
+            totalTiers: 2,
+            memoryKey: 'partial_tp_abc12345',
+            basis: 'pnl_pct',
+          }),
         }),
-      }))
-      expect(ptpRules[1].condition).toEqual(expect.objectContaining({
-        value: 10,
-        params: expect.objectContaining({ tierIndex: 1, totalTiers: 2 }),
-      }))
+      )
+      expect(ptpRules[1].condition).toEqual(
+        expect.objectContaining({
+          value: 10,
+          params: expect.objectContaining({ tierIndex: 1, totalTiers: 2 }),
+        }),
+      )
 
       const tier0Sizing = ptpRules[0].actions[0].sizing
       const tier1Sizing = ptpRules[1].actions[0].sizing
@@ -3872,10 +4121,11 @@ describe('canonicalSpecBuilderService', () => {
       })
 
       const spec = service.buildFromSemanticState(state)
-      const ptpRules = spec.rules.filter(rule =>
-        rule.phase === 'risk'
-        && rule.metadata
-        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      const ptpRules = spec.rules.filter(
+        rule =>
+          rule.phase === 'risk' &&
+          rule.metadata &&
+          (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
       )
 
       expect(ptpRules).toHaveLength(3)
@@ -3901,10 +4151,11 @@ describe('canonicalSpecBuilderService', () => {
       })
 
       const spec = service.buildFromSemanticState(state)
-      const ptpRules = spec.rules.filter(rule =>
-        rule.phase === 'risk'
-        && rule.metadata
-        && (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
+      const ptpRules = spec.rules.filter(
+        rule =>
+          rule.phase === 'risk' &&
+          rule.metadata &&
+          (rule.metadata as { partialTakeProfit?: unknown }).partialTakeProfit !== undefined,
       )
 
       expect(ptpRules).toHaveLength(3)
@@ -3922,39 +4173,63 @@ describe('canonicalSpecBuilderService', () => {
 
       const longState = makePartialTakeProfitSemanticState({
         memoryKey: 'partial_tp_long',
-        tiers: [{ threshold: 5, reduceRatio: 0.5 }, { threshold: 10, reduceRatio: 0.5 }],
+        tiers: [
+          { threshold: 5, reduceRatio: 0.5 },
+          { threshold: 10, reduceRatio: 0.5 },
+        ],
         sideScope: 'long',
         positionMode: 'long_only',
       })
-      const longRules = service.buildFromSemanticState(longState).rules.filter(rule =>
-        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
-      )
+      const longRules = service
+        .buildFromSemanticState(longState)
+        .rules.filter(
+          rule =>
+            rule.phase === 'risk' &&
+            (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+        )
       expect(longRules[0].sideScope).toBe('long')
       expect(longRules[0].actions.map(action => action.type)).toEqual(['REDUCE_LONG'])
 
       const shortState = makePartialTakeProfitSemanticState({
         memoryKey: 'partial_tp_short',
-        tiers: [{ threshold: 5, reduceRatio: 0.5 }, { threshold: 10, reduceRatio: 0.5 }],
+        tiers: [
+          { threshold: 5, reduceRatio: 0.5 },
+          { threshold: 10, reduceRatio: 0.5 },
+        ],
         sideScope: 'short',
         positionMode: 'short_only',
       })
-      const shortRules = service.buildFromSemanticState(shortState).rules.filter(rule =>
-        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
-      )
+      const shortRules = service
+        .buildFromSemanticState(shortState)
+        .rules.filter(
+          rule =>
+            rule.phase === 'risk' &&
+            (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+        )
       expect(shortRules[0].sideScope).toBe('short')
       expect(shortRules[0].actions.map(action => action.type)).toEqual(['REDUCE_SHORT'])
 
       const bothState = makePartialTakeProfitSemanticState({
         memoryKey: 'partial_tp_both',
-        tiers: [{ threshold: 5, reduceRatio: 0.5 }, { threshold: 10, reduceRatio: 0.5 }],
+        tiers: [
+          { threshold: 5, reduceRatio: 0.5 },
+          { threshold: 10, reduceRatio: 0.5 },
+        ],
         sideScope: 'both',
         positionMode: 'long_short',
       })
-      const bothRules = service.buildFromSemanticState(bothState).rules.filter(rule =>
-        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
-      )
+      const bothRules = service
+        .buildFromSemanticState(bothState)
+        .rules.filter(
+          rule =>
+            rule.phase === 'risk' &&
+            (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+        )
       expect(bothRules[0].sideScope).toBe('both')
-      expect(bothRules[0].actions.map(action => action.type)).toEqual(['REDUCE_LONG', 'REDUCE_SHORT'])
+      expect(bothRules[0].actions.map(action => action.type)).toEqual([
+        'REDUCE_LONG',
+        'REDUCE_SHORT',
+      ])
     })
 
     it('does not affect spec output when no partial_take_profit atom is present', () => {
@@ -3973,8 +4248,10 @@ describe('canonicalSpecBuilderService', () => {
       })
 
       const spec = service.buildFromSemanticState(state)
-      const ptpRules = spec.rules.filter(rule =>
-        rule.phase === 'risk' && (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
+      const ptpRules = spec.rules.filter(
+        rule =>
+          rule.phase === 'risk' &&
+          (rule.metadata as { partialTakeProfit?: unknown })?.partialTakeProfit !== undefined,
       )
       expect(ptpRules).toHaveLength(0)
     })
@@ -4018,9 +4295,10 @@ describe('canonicalSpecBuilderService', () => {
       const [gate] = spec.orchestration!.gates!
       expect(gate.id).toBe('gate-regime-long-1')
       expect(gate.target.phase).toBe('entry')
-      if (gate.target.phase === 'entry') {
-        expect(gate.target.sideScope).toBe('long')
+      if (gate.target.phase !== 'entry') {
+        throw new Error(`expected entry gate target, received ${gate.target.phase}`)
       }
+      expect(gate.target.sideScope).toBe('long')
       expect(gate.effectWhenFalse).toBe('block_new_entries')
       expect(gate.activeWhen).toEqual({
         kind: 'expression',
@@ -4327,7 +4605,8 @@ describe('canonicalSpecBuilderService', () => {
       expect(spec.orchestration?.programs).toBeDefined()
       expect(spec.orchestration!.programs!).toHaveLength(1)
       const [program] = spec.orchestration!.programs!
-      if (program.programKind !== 'fixed_grid_gated') throw new Error('expected fixed_grid_gated program')
+      if (program.programKind !== 'fixed_grid_gated')
+        throw new Error('expected fixed_grid_gated program')
       expect(program.id).toBe('program-fixed-grid-1')
       expect(program.programKind).toBe('fixed_grid_gated')
       expect(program.activeWhenRef).toBe('gate-regime-long-1')

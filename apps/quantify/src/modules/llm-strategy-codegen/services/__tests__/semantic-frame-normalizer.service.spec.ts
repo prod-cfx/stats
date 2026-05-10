@@ -13,58 +13,86 @@ describe('SemanticFrameNormalizerService', () => {
     )
     const patch = normalizer.normalize(frames)
 
-    expect(patch.contextSlots).toEqual(expect.objectContaining({
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      marketType: 'perp',
-      timeframe: '15m',
-    }))
-    expect(patch.triggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'long' }),
-      expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'short' }),
+    expect(patch.contextSlots).toEqual(
       expect.objectContaining({
-        key: 'price.detect.indicator_boundary',
-        phase: 'entry',
-        sideScope: 'long',
-        params: expect.objectContaining({ boundaryRole: 'lower' }),
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
       }),
-      expect.objectContaining({
-        key: 'price.detect.indicator_boundary',
-        phase: 'entry',
-        sideScope: 'short',
-        params: expect.objectContaining({ boundaryRole: 'upper' }),
-      }),
-    ]))
-    expect(patch.actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'open_long' }),
-      expect.objectContaining({ key: 'open_short' }),
-    ]))
+    )
+    expect(patch.triggers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'long' }),
+        expect.objectContaining({ key: 'condition.expression', phase: 'gate', sideScope: 'short' }),
+        expect.objectContaining({
+          key: 'price.detect.indicator_boundary',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({ boundaryRole: 'lower' }),
+        }),
+        expect.objectContaining({
+          key: 'price.detect.indicator_boundary',
+          phase: 'entry',
+          sideScope: 'short',
+          params: expect.objectContaining({ boundaryRole: 'upper' }),
+        }),
+      ]),
+    )
+    expect(patch.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'open_short' }),
+      ]),
+    )
     expect(patch.risk).toEqual([
-      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 5 }),
+      }),
     ])
     expect(JSON.stringify(patch)).not.toMatch(/generic_boundary|indicator\.above|indicator\.below/u)
 
-    expectConditionExpression(patch.triggers?.find(
-      trigger => trigger.key === 'condition.expression' && trigger.sideScope === 'long',
-    )?.params?.expression, 'GT')
-    expectConditionExpression(patch.triggers?.find(
-      trigger => trigger.key === 'condition.expression' && trigger.sideScope === 'short',
-    )?.params?.expression, 'LT')
+    expectConditionExpression(
+      patch.triggers?.find(
+        trigger => trigger.key === 'condition.expression' && trigger.sideScope === 'long',
+      )?.params?.expression,
+      'GT',
+    )
+    expectConditionExpression(
+      patch.triggers?.find(
+        trigger => trigger.key === 'condition.expression' && trigger.sideScope === 'short',
+      )?.params?.expression,
+      'LT',
+    )
   })
 
   it('splits indicator compare frames with the same group id into internally consistent gates', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      indicatorCompareFrame({ id: 'compare-long-20', operator: 'GT', sideScope: 'long', period: 20 }),
-      indicatorCompareFrame({ id: 'compare-short-20', operator: 'LT', sideScope: 'short', period: 20 }),
+      indicatorCompareFrame({
+        id: 'compare-long-20',
+        operator: 'GT',
+        sideScope: 'long',
+        period: 20,
+      }),
+      indicatorCompareFrame({
+        id: 'compare-short-20',
+        operator: 'LT',
+        sideScope: 'short',
+        period: 20,
+      }),
     ]
 
     const patch = normalizer.normalize(frames)
-    const gateTriggers = patch.triggers?.filter(trigger => trigger.key === 'condition.expression') ?? []
+    const gateTriggers =
+      patch.triggers?.filter(trigger => trigger.key === 'condition.expression') ?? []
 
-    expect(gateTriggers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ phase: 'gate', sideScope: 'long' }),
-      expect.objectContaining({ phase: 'gate', sideScope: 'short' }),
-    ]))
+    expect(gateTriggers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: 'gate', sideScope: 'long' }),
+        expect.objectContaining({ phase: 'gate', sideScope: 'short' }),
+      ]),
+    )
     expect(gateTriggers).toHaveLength(2)
     for (const trigger of gateTriggers) {
       const expression = trigger.params?.expression
@@ -76,7 +104,10 @@ describe('SemanticFrameNormalizerService', () => {
 
       for (const child of expression.children) {
         expect(child).toEqual(
-          expect.objectContaining({ kind: 'predicate', op: trigger.sideScope === 'long' ? 'GT' : 'LT' }),
+          expect.objectContaining({
+            kind: 'predicate',
+            op: trigger.sideScope === 'long' ? 'GT' : 'LT',
+          }),
         )
       }
     }
@@ -92,8 +123,14 @@ describe('SemanticFrameNormalizerService', () => {
     const patch = normalizer.normalize(frames)
 
     expect(patch.risk).toEqual([
-      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 5 }) }),
-      expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 7 }) }),
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 5 }),
+      }),
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 7 }),
+      }),
     ])
   })
 
@@ -143,21 +180,34 @@ describe('SemanticFrameNormalizerService', () => {
 
   it('normalizes a single regime_gate frame into an orchestration node patch', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      regimeGateFrame({
+        id: 'regime-1',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
     ]
 
     const patch = normalizer.normalize(frames)
     const nodes = patch.orchestration?.nodes ?? []
 
     expect(nodes).toHaveLength(1)
-    expect(nodes[0]).toEqual(expect.objectContaining({
-      id: 'orchestration-gate-regime-1',
-      kind: 'gate',
-      key: 'gate.regime',
-      params: expect.objectContaining({ sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
-      target: { phase: 'entry', sideScope: 'long' },
-      effectWhenFalse: 'block_new_entries',
-    }))
+    expect(nodes[0]).toEqual(
+      expect.objectContaining({
+        id: 'orchestration-gate-regime-1',
+        kind: 'gate',
+        key: 'gate.regime',
+        params: expect.objectContaining({
+          sideScope: 'long',
+          indicator: 'ema',
+          period: 50,
+          operator: 'GT',
+        }),
+        target: { phase: 'entry', sideScope: 'long' },
+        effectWhenFalse: 'block_new_entries',
+      }),
+    )
     const firstNode = nodes[0]
     if (firstNode?.kind === 'gate') {
       expect(firstNode.activeWhen).toEqual({
@@ -173,8 +223,20 @@ describe('SemanticFrameNormalizerService', () => {
 
   it('produces distinct orchestration nodes for distinct regime_gate frames', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      regimeGateFrame({ id: 'regime-long', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
-      regimeGateFrame({ id: 'regime-short', sideScope: 'short', indicator: 'ema', period: 60, operator: 'LT' }),
+      regimeGateFrame({
+        id: 'regime-long',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
+      regimeGateFrame({
+        id: 'regime-short',
+        sideScope: 'short',
+        indicator: 'ema',
+        period: 60,
+        operator: 'LT',
+      }),
     ]
 
     const patch = normalizer.normalize(frames)
@@ -188,8 +250,20 @@ describe('SemanticFrameNormalizerService', () => {
 
   it('deduplicates structurally identical regime_gate frames', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
-      regimeGateFrame({ id: 'regime-2', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      regimeGateFrame({
+        id: 'regime-1',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
+      regimeGateFrame({
+        id: 'regime-2',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
     ]
 
     const patch = normalizer.normalize(frames)
@@ -206,14 +280,16 @@ describe('SemanticFrameNormalizerService', () => {
     const nodes = patch.orchestration?.nodes ?? []
 
     expect(nodes).toHaveLength(1)
-    expect(nodes[0]).toEqual(expect.objectContaining({
-      id: 'orchestration-portfolio-risk-drawdown-1',
-      kind: 'portfolioRisk',
-      key: 'portfolioRisk.drawdown_block',
-      scope: 'portfolio',
-      mode: 'enforce',
-      thresholdPct: 10,
-    }))
+    expect(nodes[0]).toEqual(
+      expect.objectContaining({
+        id: 'orchestration-portfolio-risk-drawdown-1',
+        kind: 'portfolioRisk',
+        key: 'portfolioRisk.drawdown_block',
+        scope: 'portfolio',
+        mode: 'enforce',
+        thresholdPct: 10,
+      }),
+    )
   })
 
   it('produces distinct portfolioRisk nodes for distinct portfolio_drawdown frames', () => {
@@ -241,7 +317,13 @@ describe('SemanticFrameNormalizerService', () => {
 
   it('merges regime_gate and portfolio_drawdown into a single orchestration.nodes array', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      regimeGateFrame({
+        id: 'regime-1',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
       portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
     ]
 
@@ -253,19 +335,19 @@ describe('SemanticFrameNormalizerService', () => {
   })
 
   it('normalizes a single fixed_grid_gated frame into a program orchestration node', () => {
-    const frames: SemanticNaturalLanguageFrame[] = [
-      fixedGridGatedFrame({ id: 'fgg-1' }),
-    ]
+    const frames: SemanticNaturalLanguageFrame[] = [fixedGridGatedFrame({ id: 'fgg-1' })]
 
     const patch = normalizer.normalize(frames)
     const nodes = patch.orchestration?.nodes ?? []
 
     expect(nodes).toHaveLength(1)
     const node = nodes[0]
-    expect(node).toEqual(expect.objectContaining({
-      kind: 'program',
-      key: 'program.fixed_grid_gated',
-    }))
+    expect(node).toEqual(
+      expect.objectContaining({
+        kind: 'program',
+        key: 'program.fixed_grid_gated',
+      }),
+    )
     if (node?.kind !== 'program' || node.key !== 'program.fixed_grid_gated') {
       throw new Error('expected fixed_grid_gated program node')
     }
@@ -308,19 +390,19 @@ describe('SemanticFrameNormalizerService', () => {
   })
 
   it('normalizes a single adaptive_volatility_grid frame into a program orchestration node', () => {
-    const frames: SemanticNaturalLanguageFrame[] = [
-      adaptiveVolatilityGridFrame({ id: 'adv-1' }),
-    ]
+    const frames: SemanticNaturalLanguageFrame[] = [adaptiveVolatilityGridFrame({ id: 'adv-1' })]
 
     const patch = normalizer.normalize(frames)
     const nodes = patch.orchestration?.nodes ?? []
 
     expect(nodes).toHaveLength(1)
     const node = nodes[0]
-    expect(node).toEqual(expect.objectContaining({
-      kind: 'program',
-      key: 'program.adaptive_volatility_grid',
-    }))
+    expect(node).toEqual(
+      expect.objectContaining({
+        kind: 'program',
+        key: 'program.adaptive_volatility_grid',
+      }),
+    )
     if (node?.kind !== 'program' || node.key !== 'program.adaptive_volatility_grid') {
       throw new Error('expected adaptive program node')
     }
@@ -358,7 +440,13 @@ describe('SemanticFrameNormalizerService', () => {
 
   it('merges regime_gate, portfolio_drawdown and fixed_grid_gated into a single orchestration.nodes array', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      regimeGateFrame({ id: 'regime-1', sideScope: 'long', indicator: 'ema', period: 50, operator: 'GT' }),
+      regimeGateFrame({
+        id: 'regime-1',
+        sideScope: 'long',
+        indicator: 'ema',
+        period: 50,
+        operator: 'GT',
+      }),
       portfolioDrawdownFrame({ id: 'pdd-1', thresholdPct: 10, mode: 'enforce' }),
       fixedGridGatedFrame({ id: 'fgg-1' }),
     ]
@@ -384,8 +472,20 @@ describe('SemanticFrameNormalizerService', () => {
 
   it('joins compare frame evidence when group combination evidence is unavailable', () => {
     const frames: SemanticNaturalLanguageFrame[] = [
-      indicatorCompareFrame({ id: 'compare-20', operator: 'GT', sideScope: 'long', period: 20, evidenceText: 'ema20' }),
-      indicatorCompareFrame({ id: 'compare-60', operator: 'GT', sideScope: 'long', period: 60, evidenceText: 'ema60' }),
+      indicatorCompareFrame({
+        id: 'compare-20',
+        operator: 'GT',
+        sideScope: 'long',
+        period: 20,
+        evidenceText: 'ema20',
+      }),
+      indicatorCompareFrame({
+        id: 'compare-60',
+        operator: 'GT',
+        sideScope: 'long',
+        period: 60,
+        evidenceText: 'ema60',
+      }),
     ]
 
     const patch = normalizer.normalize(frames)
@@ -397,15 +497,20 @@ describe('SemanticFrameNormalizerService', () => {
   })
 })
 
-function expectConditionExpression(expression: SemanticExpression | undefined, op: 'GT' | 'LT'): void {
-  expect(expression).toEqual(expect.objectContaining({
-    kind: 'AND',
-    children: expect.arrayContaining([
-      emaClosePredicate(op, 20),
-      emaClosePredicate(op, 60),
-      emaClosePredicate(op, 144),
-    ]),
-  }))
+function expectConditionExpression(
+  expression: SemanticExpression | undefined,
+  op: 'GT' | 'LT',
+): void {
+  expect(expression).toEqual(
+    expect.objectContaining({
+      kind: 'AND',
+      children: expect.arrayContaining([
+        emaClosePredicate(op, 20),
+        emaClosePredicate(op, 60),
+        emaClosePredicate(op, 144),
+      ]),
+    }),
+  )
 
   if (!expression || expression.kind !== 'AND') {
     throw new Error('Expected an AND semantic expression')
@@ -481,7 +586,7 @@ function fixedGridGatedFrame(input: {
   upperBound?: number
   activeWhenRef?: string
   onDeactivate?: 'cancel' | 'keep' | 'close'
-  sizing?: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct', value: number }
+  sizing?: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
   evidenceText?: string
 }): SemanticNaturalLanguageFrame {
   return {
@@ -500,7 +605,11 @@ function fixedGridGatedFrame(input: {
   }
 }
 
-function riskFrame(input: { id: string, valuePct: number, evidenceText: string }): SemanticNaturalLanguageFrame {
+function riskFrame(input: {
+  id: string
+  valuePct: number
+  evidenceText: string
+}): SemanticNaturalLanguageFrame {
   return {
     kind: 'risk',
     riskKey: 'risk.stop_loss_pct',
@@ -539,6 +648,8 @@ function adaptiveVolatilityGridFrame(input: {
     onDeactivate: input.onDeactivate ?? 'cancel',
     sizing: input.sizing ?? { mode: 'fixed_quote', value: 50 },
     ...(input.atrDriftPct !== undefined ? { atrDriftPct: input.atrDriftPct } : {}),
-    ...(input.rebuildCooldownSec !== undefined ? { rebuildCooldownSec: input.rebuildCooldownSec } : {}),
+    ...(input.rebuildCooldownSec !== undefined
+      ? { rebuildCooldownSec: input.rebuildCooldownSec }
+      : {}),
   }
 }

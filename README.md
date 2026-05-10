@@ -111,6 +111,8 @@ dx test unit front
 dx test unit admin
 dx test unit backend
 dx test unit quantify
+dx test unit shared
+dx test unit all
 
 dx cache clear
 ```
@@ -118,8 +120,9 @@ dx cache clear
 补充说明：
 
 - `dx lint` 当前是全仓 lint 入口
-- DX 升级后，`quantify` 的 E2E 属于 guarded target，必须传测试路径；推荐最小校验命令：`dx test e2e quantify apps/quantify/e2e/health`
-- 前端项目支持 `dx test unit front` / `dx test unit admin`；如需聚焦单个文件，可直接在对应 app 目录下执行 `jest --config ... <file> -t "<case>"`
+- `unit` 测试可以全量执行：`dx test unit all` 是根 `pnpm test` 的统一入口；共享包与脚本契约测试也通过 `dx test unit shared` / `dx test unit scripts` 收口
+- 只有 E2E 禁止全量聚合执行，必须传测试路径；最小校验命令：`dx test e2e quantify apps/quantify/e2e/health`
+- 前端项目支持 `dx test unit front` / `dx test unit admin`；聚焦单个文件时也优先追加到对应 `dx test unit ... <file>` 后执行
 - 后端 DTO / OpenAPI 变更后，需要执行 `dx build contracts --dev`
 
 ## 当前架构概览

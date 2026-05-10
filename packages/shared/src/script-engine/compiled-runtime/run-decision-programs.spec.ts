@@ -566,7 +566,7 @@ describe('phase 5 S10 — applySubStrategyScopeRouting (routing helper 单测)',
     expect(result.reason).toBe('compiled.orchestration.substrategy.paused')
   })
 
-  it('ref === activeId paused + exit phase → continue（验收 #6 "能进就能出"）', () => {
+  it('ref === activeId paused + exit phase → continue（验收项 6 "能进就能出"）', () => {
     const ctx = { activeSubStrategyScopeId: 'ss-trend' } as unknown as RoutingCtx
     const gateState: OrchestrationGateState = {
       blockEntryLong: false,
