@@ -12,7 +12,9 @@ import type {
   SemanticOrchestrationPortfolioRiskScope,
   SemanticOrchestrationProgramAnchorSide,
   SemanticOrchestrationProgramDynamicGridStep,
+  SemanticOrchestrationProgramExpirationPolicy,
   SemanticOrchestrationProgramGridParams,
+  SemanticOrchestrationProgramIdempotencyKey,
   SemanticOrchestrationProgramKind,
   SemanticOrchestrationProgramOnDeactivate,
   SemanticOrchestrationProgramRebuildPolicy,
@@ -82,6 +84,7 @@ export type CodegenSemanticOrchestrationNodePatch =
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
   | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
+  | CodegenSemanticOrchestrationEventListenerProgramNodePatch
   | CodegenSemanticOrchestrationSymbolScopeNodePatch
   | CodegenSemanticOrchestrationLegScopeNodePatch
   | CodegenSemanticOrchestrationTimeframeScopeNodePatch
@@ -203,6 +206,27 @@ export interface CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePa
   sizing: SemanticOrchestrationProgramSizing
 }
 
+// Phase 5 S12 (#1118): event_listener program patch 变体
+//   eventSchemaRef 锁定 'webhook_event'；其它 schema 在 readiness fail-closed
+//   sourceRef cross-node 引用 scope.dataSource role='event'，readiness 链式校验
+export interface CodegenSemanticOrchestrationEventListenerProgramNodePatch extends CodegenSemanticNodeEnvelope {
+  kind: 'program'
+  key: 'program.event_listener'
+  params: Record<string, unknown>
+  programKind: Extract<SemanticOrchestrationProgramKind, 'event_listener'>
+  activeWhenRef: string
+  // event_listener 路径仅 'cancel' / 'keep' 合法（readiness fail-closed 拒收 'close'）
+  onDeactivate: SemanticOrchestrationProgramOnDeactivate
+  rebuildPolicy: Extract<SemanticOrchestrationProgramRebuildPolicy, 'static' | 'on_schema_version_bump'>
+  eventSchemaRef: SemanticOrchestrationDataSourceSchema
+  sourceRef: string
+  permissionScope: string
+  idempotencyKey: SemanticOrchestrationProgramIdempotencyKey
+  dedupWindowMs: number
+  expirationTtlMs: number
+  expirationPolicy: SemanticOrchestrationProgramExpirationPolicy
+}
+
 /**
  * @deprecated 历史别名，保留以兼容外部调用方；新代码用 CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
  */
@@ -210,6 +234,7 @@ export type CodegenSemanticOrchestrationProgramNodePatch =
   | CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch
   | CodegenSemanticOrchestrationDynamicGridProgramNodePatch
   | CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch
+  | CodegenSemanticOrchestrationEventListenerProgramNodePatch
 
 // Phase 5 S10 (#1111): scope.subStrategy patch 节点
 export interface CodegenSemanticOrchestrationSubStrategyScopeNodePatch extends CodegenSemanticNodeEnvelope {

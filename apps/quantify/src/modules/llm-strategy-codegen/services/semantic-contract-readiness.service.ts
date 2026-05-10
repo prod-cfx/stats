@@ -437,6 +437,11 @@ function applyOrchestrationReadinessForNode(
     return applyRegistryDrivenReadiness(node, registry)
   }
 
+  // Phase 5 S12 (#1118): event_listener
+  if (isSupportedEventListener(node, registry, strategyVersion, siblingNodes)) {
+    return applyRegistryDrivenReadiness(node, registry)
+  }
+
   if (isSupportedSymbolScope(node, registry, strategyVersion, siblingNodes)) {
     return applyRegistryDrivenReadiness(node, registry, siblingNodes)
   }
@@ -1120,6 +1125,100 @@ function isSupportedAdaptiveVolatilityGrid(
   if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) return false
 
   const contract = registry.getContractByKey('program.adaptive_volatility_grid')
+  if (!contract) return false
+  if (!strategyVersion) return false
+  return registry.isExecutableForStrategy(contract, strategyVersion)
+}
+
+/**
+ * Phase 5 S12 (#1118): 判断 program.event_listener node 是否可走 registry 驱动的 readiness 路径。
+ *
+ * 16 重 fail-closed 检查：
+ * 1) kind === 'program'
+ * 2) key === 'program.event_listener'
+ * 3) programKind === 'event_listener'
+ * 4) onDeactivate ∈ {'cancel','keep'}（fail-closed 拒收 'close'）
+ * 5) rebuildPolicy ∈ {'static','on_schema_version_bump'}
+ * 6) eventSchemaRef === 'webhook_event'
+ * 7) permissionScope 匹配 EVENT_LISTENER_PERMISSION_SCOPE_PATTERN
+ * 8) idempotencyKey.fieldPath 匹配 EVENT_LISTENER_FIELD_PATH_PATTERN（仅 0-1 层 `.`）
+ * 9) dedupWindowMs 整数 ∈ [100, 3600000]
+ * 10) expirationTtlMs 整数 ∈ [100, 86400000]
+ * 11) expirationTtlMs > dedupWindowMs（严格大于）
+ * 12) expirationPolicy ∈ {'drop','escalate'}
+ * 13) cross-node sourceRef 检查：trim 非空 + 引用 status='locked' + key='scope.dataSource' + role='event' 的节点 + 通过 isSupportedDataSourceScope
+ * 14) cross-node activeWhenRef 检查：与 S4/S5/S6 同模式（gate.regime locked + 通过 isSupportedRegimeGate）
+ * 15) registry.getContractByKey('program.event_listener') 不为 null
+ * 16) version-gate：strategyVersion 存在 + atom 对该策略可执行
+ */
+const EVENT_LISTENER_PERMISSION_SCOPE_PATTERN_READINESS = /^[a-z][a-z0-9_:]{2,63}$/u
+const EVENT_LISTENER_FIELD_PATH_PATTERN_READINESS = /^[a-zA-Z][a-zA-Z0-9_]{0,63}(\.[a-zA-Z][a-zA-Z0-9_]{0,63})?$/u
+
+function isSupportedEventListener(
+  node: SemanticOrchestrationNode,
+  registry: SemanticOrchestrationRegistryService,
+  strategyVersion: StrategyVersionInfo | undefined,
+  siblingNodes: readonly SemanticOrchestrationNode[],
+): boolean {
+  if (!isProgramNode(node)) return false
+  if (node.key !== 'program.event_listener') return false
+  if (node.programKind !== 'event_listener') return false
+  if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep') return false
+  if (node.rebuildPolicy !== 'static' && node.rebuildPolicy !== 'on_schema_version_bump') return false
+  if (node.eventSchemaRef !== 'webhook_event') return false
+
+  const permissionScope = typeof node.permissionScope === 'string' ? node.permissionScope.trim() : ''
+  if (permissionScope === '' || !EVENT_LISTENER_PERMISSION_SCOPE_PATTERN_READINESS.test(permissionScope)) return false
+
+  const idempotency = node.idempotencyKey
+  const fieldPath = idempotency && typeof idempotency.fieldPath === 'string' ? idempotency.fieldPath.trim() : ''
+  if (fieldPath === '' || !EVENT_LISTENER_FIELD_PATH_PATTERN_READINESS.test(fieldPath)) return false
+
+  const dedupWindowMs = node.dedupWindowMs
+  if (
+    typeof dedupWindowMs !== 'number'
+    || !Number.isFinite(dedupWindowMs)
+    || !Number.isInteger(dedupWindowMs)
+    || dedupWindowMs < 100
+    || dedupWindowMs > 3_600_000
+  ) {
+    return false
+  }
+
+  const expirationTtlMs = node.expirationTtlMs
+  if (
+    typeof expirationTtlMs !== 'number'
+    || !Number.isFinite(expirationTtlMs)
+    || !Number.isInteger(expirationTtlMs)
+    || expirationTtlMs < 100
+    || expirationTtlMs > 86_400_000
+  ) {
+    return false
+  }
+  if (expirationTtlMs <= dedupWindowMs) return false
+
+  if (node.expirationPolicy !== 'drop' && node.expirationPolicy !== 'escalate') return false
+
+  // (13) cross-node sourceRef → scope.dataSource role='event' locked + supported
+  const sourceRef = typeof node.sourceRef === 'string' ? node.sourceRef.trim() : ''
+  if (sourceRef === '') return false
+  const sourceNode = siblingNodes.find(n => n.id === sourceRef)
+  if (!sourceNode) return false
+  if (sourceNode.kind !== 'scope' || sourceNode.key !== 'scope.dataSource') return false
+  if (sourceNode.status !== 'locked') return false
+  if (sourceNode.dataSourceRole !== 'event') return false
+  if (!isSupportedDataSourceScope(sourceNode, registry, strategyVersion, siblingNodes)) return false
+
+  // (14) cross-node activeWhenRef → gate.regime locked + supported
+  if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') return false
+  const referenced = siblingNodes.find(n => n.id === node.activeWhenRef)
+  if (!referenced) return false
+  if (referenced.kind !== 'gate' || referenced.key !== 'gate.regime') return false
+  if (referenced.status !== 'locked') return false
+  if (!isSupportedRegimeGate(referenced, registry, strategyVersion, siblingNodes)) return false
+
+  // (15)(16) registry + version-gate
+  const contract = registry.getContractByKey('program.event_listener')
   if (!contract) return false
   if (!strategyVersion) return false
   return registry.isExecutableForStrategy(contract, strategyVersion)

@@ -10,6 +10,7 @@ export type SemanticNaturalLanguageFrame =
   | SemanticFixedGridGatedFrame
   | SemanticDynamicGridFrame
   | SemanticAdaptiveVolatilityGridFrame
+  | SemanticEventListenerFrame
   | SemanticSymbolScopeFrame
   | SemanticLegScopeFrame
   | SemanticTimeframeScopeFrame
@@ -118,6 +119,27 @@ export interface SemanticAdaptiveVolatilityGridFrame extends SemanticFrameBase {
   sizing: { mode: 'fixed_quote' | 'fixed_base' | 'fixed_pct'; value: number }
   atrDriftPct?: number
   rebuildCooldownSec?: number
+}
+
+// Phase 5 S12 (#1118): event_listener program frame
+//   触发：`事件监听 / webhook 监听 / 订阅外部事件 / event listener` 锚词 + 信号语义
+//   provider 占位由 sourceRef 引用 scope.dataSource role='event' 节点 id（缺失保 slot）
+//   permissionScope 命名空间格式 `(tradingview|discord|telegram|webhook):<topic>`
+//   idempotencyKey.fieldPath 仅允许 0-1 层 `.`
+//   expirationPolicy ∈ {'drop','escalate'}
+//   onDeactivate ∈ {'cancel','keep'}（NL gateway 不映射 'close'）
+export interface SemanticEventListenerFrame extends SemanticFrameBase {
+  kind: 'event_listener'
+  eventSchemaRef: 'webhook_event'
+  sourceRef: string
+  permissionScope: string
+  idempotencyKey: { fieldPath: string }
+  dedupWindowMs: number
+  expirationTtlMs: number
+  expirationPolicy: 'drop' | 'escalate'
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep'
+  rebuildPolicy: 'static' | 'on_schema_version_bump'
 }
 
 // Phase 5 S2 (#1104): symbol scope frame

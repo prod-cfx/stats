@@ -273,6 +273,7 @@ export class SemanticSeedStateBuilderService {
     const programKind = update.programKind === 'fixed_grid_gated'
       || update.programKind === 'dynamic_grid'
       || update.programKind === 'adaptive_volatility_grid'
+      || update.programKind === 'event_listener'
       ? update.programKind
       : undefined
     const activeWhenRef = this.readTrimmedString(update.activeWhenRef) ?? undefined
@@ -284,6 +285,7 @@ export class SemanticSeedStateBuilderService {
     const rebuildPolicy = update.rebuildPolicy === 'static'
       || update.rebuildPolicy === 'anchor_on_state_change'
       || update.rebuildPolicy === 'atr_window'
+      || update.rebuildPolicy === 'on_schema_version_bump'
       ? update.rebuildPolicy
       : undefined
     const gridParams = this.isRecord(update.gridParams)
@@ -329,6 +331,30 @@ export class SemanticSeedStateBuilderService {
       : undefined
     const primarySymbol = this.readTrimmedString(update.primarySymbol) ?? undefined
 
+    // Phase 5 S12 (#1118): event_listener 专属字段透传
+    const eventSchemaRef = update.eventSchemaRef === 'webhook_event'
+      || update.eventSchemaRef === 'ohlcv'
+      || update.eventSchemaRef === 'orderbook'
+      || update.eventSchemaRef === 'liquidation'
+      ? update.eventSchemaRef
+      : undefined
+    const sourceRef = this.readTrimmedString(update.sourceRef) ?? undefined
+    const permissionScope = this.readTrimmedString(update.permissionScope) ?? undefined
+    const idempotencyKey = this.isRecord(update.idempotencyKey)
+      && typeof update.idempotencyKey.fieldPath === 'string'
+      && update.idempotencyKey.fieldPath.trim().length > 0
+      ? { fieldPath: update.idempotencyKey.fieldPath.trim() }
+      : undefined
+    const dedupWindowMs = isFiniteNumber(update.dedupWindowMs) && Number.isInteger(update.dedupWindowMs)
+      ? update.dedupWindowMs
+      : undefined
+    const expirationTtlMs = isFiniteNumber(update.expirationTtlMs) && Number.isInteger(update.expirationTtlMs)
+      ? update.expirationTtlMs
+      : undefined
+    const expirationPolicy = update.expirationPolicy === 'drop' || update.expirationPolicy === 'escalate'
+      ? update.expirationPolicy
+      : undefined
+
     // Phase 5 S11 (#1112): scope.leg 专属字段透传
     const legScopeKind = update.legScopeKind === 'leg' ? update.legScopeKind : undefined
     const legId = this.readTrimmedString(update.legId) ?? undefined
@@ -373,6 +399,14 @@ export class SemanticSeedStateBuilderService {
       ...(minStepPct !== undefined ? { minStepPct } : {}),
       ...(maxStepPct !== undefined ? { maxStepPct } : {}),
       ...(levelCount !== undefined ? { levelCount } : {}),
+      // Phase 5 S12 (#1118): event_listener 字段透传
+      ...(eventSchemaRef ? { eventSchemaRef } : {}),
+      ...(sourceRef ? { sourceRef } : {}),
+      ...(permissionScope ? { permissionScope } : {}),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      ...(dedupWindowMs !== undefined ? { dedupWindowMs } : {}),
+      ...(expirationTtlMs !== undefined ? { expirationTtlMs } : {}),
+      ...(expirationPolicy ? { expirationPolicy } : {}),
       // Phase 5 S2 (#1104): scope.symbol 字段透传
       ...(symbolScopeKind ? { symbolScopeKind } : {}),
       ...(symbols && symbols.length > 0 ? { symbols } : {}),

@@ -6,6 +6,7 @@ import type {
   SemanticContextFrame,
   SemanticDataSourceScopeFrame,
   SemanticDynamicGridFrame,
+  SemanticEventListenerFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticLegScopeFrame,
@@ -33,6 +34,7 @@ type FrameDraft =
   | FixedGridGatedFrameDraft
   | DynamicGridFrameDraft
   | AdaptiveVolatilityGridFrameDraft
+  | EventListenerFrameDraft
   | SymbolScopeFrameDraft
   | LegScopeFrameDraft
   | TimeframeScopeFrameDraft
@@ -51,6 +53,7 @@ type PortfolioDrawdownFrameDraft = Omit<SemanticPortfolioDrawdownFrame, 'id' | '
 type FixedGridGatedFrameDraft = Omit<SemanticFixedGridGatedFrame, 'id' | 'confidence'>
 type DynamicGridFrameDraft = Omit<SemanticDynamicGridFrame, 'id' | 'confidence'>
 type AdaptiveVolatilityGridFrameDraft = Omit<SemanticAdaptiveVolatilityGridFrame, 'id' | 'confidence'>
+type EventListenerFrameDraft = Omit<SemanticEventListenerFrame, 'id' | 'confidence'>
 type SymbolScopeFrameDraft = Omit<SemanticSymbolScopeFrame, 'id' | 'confidence'>
 type LegScopeFrameDraft = Omit<SemanticLegScopeFrame, 'id' | 'confidence'>
 type TimeframeScopeFrameDraft = Omit<SemanticTimeframeScopeFrame, 'id' | 'confidence'>
@@ -80,6 +83,7 @@ export class NaturalLanguageGatewayService {
       ...this.parsePortfolioDrawdown(text),
       ...this.parseDynamicGrid(text),
       ...this.parseAdaptiveVolatilityGrid(text),
+      ...this.parseEventListener(text),
       ...this.parseFixedGridGated(text),
     ]
 
@@ -1243,5 +1247,108 @@ export class NaturalLanguageGatewayService {
     if (!m) return null
     const value = Number(m[1])
     return Number.isInteger(value) && value > 0 ? value : null
+  }
+
+  /**
+   * Phase 5 S12 (#1118): event_listener 解析。
+   *
+   * 双门槛触发（critic-anticipated B2 防误触）：
+   *   1) 锚词集合：事件监听 / webhook 监听 / webhook listener / 订阅外部事件 /
+   *      监听外部信号 / event listener / listen for / 订阅 (tradingview|discord|telegram|webhook) 事件
+   *   2) 信号语义：信号 / event / webhook / 触发
+   * 缺一不命中 → 不抽 frame（避免与 fixed_grid_gated / dynamic_grid / adaptive_volatility_grid 锚词重叠）。
+   *
+   * 字段抽取（缺失保 open slot — 由 readiness fail-closed）：
+   *   - eventSchemaRef：固定 'webhook_event'
+   *   - sourceRef     ：默认 'orchestration-scope-data-source-1'（由 normalizer 透传到 cross-node ref）
+   *   - permissionScope：从锚词上下文匹配 `(tradingview|discord|telegram|webhook):.*`，否则空（slot）
+   *   - idempotencyKey.fieldPath：默认 'signalId'；显式 `按 (字段名)` 改写（仅 0-1 层 `.`）
+   *   - dedupWindowMs ：正则 `(\d+)\s*(秒|s|ms)` → ms（默认 5000）
+   *   - expirationTtlMs：正则 `过期\s*(\d+)` → ms（默认 60000）
+   *   - expirationPolicy：`(丢弃|drop)→'drop'` / `(上报|escalate)→'escalate'`（默认 'drop'）
+   *   - onDeactivate  ：'cancel' / 'keep'（NL gateway 不映射 'close'；'close' 默认走 'cancel'）
+   *   - rebuildPolicy ：默认 'static'；显式 `schema 版本变更|schema version bump` → 'on_schema_version_bump'
+   */
+  private parseEventListener(text: string): EventListenerFrameDraft[] {
+    const anchorRe = /(事件监听|webhook\s*监听|webhook\s*listener|订阅外部事件|监听外部信号|event\s*listener|listen\s+for|订阅\s*(?:tradingview|discord|telegram|webhook)\s*事件)/iu
+    const semanticRe = /(信号|event|webhook|触发)/iu
+    if (!anchorRe.test(text)) return []
+    if (!semanticRe.test(text)) return []
+
+    const provider = this.detectEventProvider(text)
+    const permissionScope = this.detectPermissionScope(text, provider)
+    const fieldPath = this.detectIdempotencyFieldPath(text)
+    const dedupWindowMs = this.detectDedupWindowMs(text)
+    const expirationTtlMs = this.detectExpirationTtlMs(text)
+    const expirationPolicy = this.detectExpirationPolicy(text)
+    const explicitDeactivate = this.detectOnDeactivate(text)
+    const onDeactivate: SemanticEventListenerFrame['onDeactivate'] =
+      explicitDeactivate === 'keep' ? 'keep' : 'cancel' // 'close' 不映射 → 默认 cancel
+    const rebuildPolicy: SemanticEventListenerFrame['rebuildPolicy'] =
+      /schema\s*(?:版本变更|version\s*bump)/iu.test(text) ? 'on_schema_version_bump' : 'static'
+
+    const frame: EventListenerFrameDraft = {
+      kind: 'event_listener',
+      eventSchemaRef: 'webhook_event',
+      sourceRef: 'orchestration-scope-data-source-1',
+      permissionScope,
+      idempotencyKey: { fieldPath },
+      dedupWindowMs,
+      expirationTtlMs,
+      expirationPolicy,
+      activeWhenRef: 'orchestration-gate-regime-1',
+      onDeactivate,
+      rebuildPolicy,
+      evidenceText: text.slice(0, 120),
+    }
+    return [frame]
+  }
+
+  private detectEventProvider(text: string): string {
+    if (/tradingview/iu.test(text)) return 'tradingview'
+    if (/discord/iu.test(text)) return 'discord'
+    if (/telegram/iu.test(text)) return 'telegram'
+    if (/webhook/iu.test(text)) return 'webhook'
+    return ''
+  }
+
+  private detectPermissionScope(text: string, provider: string): string {
+    const scoped = /(tradingview|discord|telegram|webhook)\s*:\s*([a-z0-9_]+)/iu.exec(text)
+    if (scoped) return `${scoped[1].toLowerCase()}:${scoped[2].toLowerCase()}`
+    if (provider !== '') return `${provider}:default`
+    return ''
+  }
+
+  private detectIdempotencyFieldPath(text: string): string {
+    const m = /按\s*(?:字段|key)?\s*([a-zA-Z][a-zA-Z0-9_]{0,63}(?:\.[a-zA-Z][a-zA-Z0-9_]{0,63})?)/u.exec(text)
+    if (m) return m[1]
+    return 'signalId'
+  }
+
+  private detectDedupWindowMs(text: string): number {
+    const m = /(?:去重|dedup)\s*(\d+(?:\.\d+)?)\s*(秒|s|ms|毫秒)/iu.exec(text)
+    if (m) {
+      const value = Number(m[1])
+      const unit = m[2].toLowerCase()
+      if (unit === 'ms' || unit === '毫秒') return Math.round(value)
+      return Math.round(value * 1000)
+    }
+    return 5000
+  }
+
+  private detectExpirationTtlMs(text: string): number {
+    const m = /过期\s*(\d+(?:\.\d+)?)\s*(秒|s|ms|毫秒)?/u.exec(text)
+    if (m) {
+      const value = Number(m[1])
+      const unit = (m[2] ?? '秒').toLowerCase()
+      if (unit === 'ms' || unit === '毫秒') return Math.round(value)
+      return Math.round(value * 1000)
+    }
+    return 60000
+  }
+
+  private detectExpirationPolicy(text: string): SemanticEventListenerFrame['expirationPolicy'] {
+    if (/(?:上报|escalate|告警)/iu.test(text)) return 'escalate'
+    return 'drop'
   }
 }

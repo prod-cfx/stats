@@ -86,10 +86,29 @@ export interface CompiledAdaptiveVolatilityGridProgram {
   sizing: CompiledOrchestrationProgramSizing
 }
 
+// Phase 5 S12 (#1118): event_listener compiled 形态（IR 同形）
+export interface CompiledEventListenerProgram {
+  id: string
+  programKind: 'event_listener'
+  activeWhenExprId: string
+  // event_listener 路径 fail-closed 拒收 'close'（无持仓语义）
+  onDeactivate: 'cancel' | 'keep'
+  rebuildPolicy: 'static' | 'on_schema_version_bump'
+  // S12 锁定 webhook_event；其他 schema 由 readiness 拒入
+  eventSchemaRef: 'webhook_event' | 'ohlcv' | 'orderbook' | 'liquidation'
+  sourceFeedId: string
+  permissionScope: string
+  idempotencyKey: { fieldPath: string }
+  dedupWindowMs: number
+  expirationTtlMs: number
+  expirationPolicy: 'drop' | 'escalate'
+}
+
 export type CompiledOrchestrationProgram =
   | CompiledFixedGridGatedProgram
   | CompiledDynamicGridProgram
   | CompiledAdaptiveVolatilityGridProgram
+  | CompiledEventListenerProgram
 
 export function isFixedGridGatedProgram(
   program: CompiledOrchestrationProgram,
@@ -107,6 +126,72 @@ export function isAdaptiveVolatilityGridProgram(
   program: CompiledOrchestrationProgram,
 ): program is CompiledAdaptiveVolatilityGridProgram {
   return program.programKind === 'adaptive_volatility_grid'
+}
+
+export function isEventListenerProgram(
+  program: CompiledOrchestrationProgram,
+): program is CompiledEventListenerProgram {
+  return program.programKind === 'event_listener'
+}
+
+/**
+ * Phase 5 S12 (#1118) — event_listener 12 fail-closed 守卫的 runtime 副本（plan A10 #2）。
+ * 与 readiness 16 重去掉 cross-node sourceRef/activeWhenRef 与 version-gate 双门 = 12 重。
+ *   1) activeWhenExprId 非空字符串
+ *   2) programKind === 'event_listener'
+ *   3) onDeactivate ∈ {'cancel','keep'}
+ *   4) rebuildPolicy ∈ {'static','on_schema_version_bump'}
+ *   5) eventSchemaRef === 'webhook_event'
+ *   6) sourceFeedId 非空字符串（IR 已固化）
+ *   7) permissionScope 匹配 PERMISSION_SCOPE_PATTERN
+ *   8) idempotencyKey.fieldPath 匹配 FIELD_PATH_PATTERN（0-1 个 `.`）
+ *   9) dedupWindowMs 整数 ∈ [100, 3600000]
+ *   10) expirationTtlMs 整数 ∈ [100, 86400000]
+ *   11) expirationTtlMs > dedupWindowMs（严格大于）
+ *   12) expirationPolicy ∈ {'drop','escalate'}
+ *
+ * 失败 → runtime 进 cancelledProgramIds + 占位 lifecycle state。
+ */
+export const EVENT_LISTENER_PERMISSION_SCOPE_PATTERN = /^[a-z][a-z0-9_:]{2,63}$/u
+export const EVENT_LISTENER_FIELD_PATH_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,63}(\.[a-zA-Z][a-zA-Z0-9_]{0,63})?$/u
+export const EVENT_LISTENER_DEDUP_WINDOW_MIN_MS = 100
+export const EVENT_LISTENER_DEDUP_WINDOW_MAX_MS = 3_600_000
+export const EVENT_LISTENER_EXPIRATION_TTL_MIN_MS = 100
+export const EVENT_LISTENER_EXPIRATION_TTL_MAX_MS = 86_400_000
+export const EVENT_LISTENER_DEDUP_BUFFER_CAPACITY = 1024
+
+export function isValidEventListener(
+  program: CompiledEventListenerProgram,
+): boolean {
+  if (typeof program.activeWhenExprId !== 'string' || program.activeWhenExprId.length === 0) return false
+  if (program.programKind !== 'event_listener') return false
+  if (program.onDeactivate !== 'cancel' && program.onDeactivate !== 'keep') return false
+  if (program.rebuildPolicy !== 'static' && program.rebuildPolicy !== 'on_schema_version_bump') return false
+  if (program.eventSchemaRef !== 'webhook_event') return false
+  if (typeof program.sourceFeedId !== 'string' || program.sourceFeedId.length === 0) return false
+  if (typeof program.permissionScope !== 'string' || !EVENT_LISTENER_PERMISSION_SCOPE_PATTERN.test(program.permissionScope)) {
+    return false
+  }
+  const idempotency = program.idempotencyKey
+  if (!idempotency || typeof idempotency.fieldPath !== 'string') return false
+  if (!EVENT_LISTENER_FIELD_PATH_PATTERN.test(idempotency.fieldPath)) return false
+  if (
+    !Number.isInteger(program.dedupWindowMs)
+    || program.dedupWindowMs < EVENT_LISTENER_DEDUP_WINDOW_MIN_MS
+    || program.dedupWindowMs > EVENT_LISTENER_DEDUP_WINDOW_MAX_MS
+  ) {
+    return false
+  }
+  if (
+    !Number.isInteger(program.expirationTtlMs)
+    || program.expirationTtlMs < EVENT_LISTENER_EXPIRATION_TTL_MIN_MS
+    || program.expirationTtlMs > EVENT_LISTENER_EXPIRATION_TTL_MAX_MS
+  ) {
+    return false
+  }
+  if (program.expirationTtlMs <= program.dedupWindowMs) return false
+  if (program.expirationPolicy !== 'drop' && program.expirationPolicy !== 'escalate') return false
+  return true
 }
 
 /**

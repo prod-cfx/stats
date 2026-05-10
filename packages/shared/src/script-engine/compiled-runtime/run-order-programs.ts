@@ -1,12 +1,18 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import { atr } from '../helpers/technical-indicators'
+import { canonicalSerialize } from './canonical-serialize'
 import type {
   CompiledAdaptiveVolatilityGridProgram,
   CompiledDynamicGridProgram,
+  CompiledEventListenerProgram,
   CompiledFixedGridGatedProgram,
   CompiledOrchestrationProgram,
 } from './compiled-orchestration-program'
-import { isValidAdaptiveVolatilityGrid } from './compiled-orchestration-program'
+import {
+  EVENT_LISTENER_DEDUP_BUFFER_CAPACITY,
+  isValidAdaptiveVolatilityGrid,
+  isValidEventListener,
+} from './compiled-orchestration-program'
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 import type { CompiledGuardState } from './evaluate-guards'
 import type { ProgramLifecycleState } from './program-lifecycle-state'
@@ -104,6 +110,20 @@ export function runOrderPrograms(
           orchActiveIds,
           orchCancelledIds,
           orchCloseIds,
+          programLifecycleStateNext,
+        })
+        continue
+      }
+      // Phase 5 S12 (#1118): event_listener — 不发 working order；不进 closeProgramIds（W5 守护）
+      if (program.programKind === 'event_listener') {
+        runEventListenerProgram({
+          ctx,
+          program,
+          exprValues,
+          guardState,
+          programLifecycleStateIn,
+          orchActiveIds,
+          orchCancelledIds,
           programLifecycleStateNext,
         })
         continue
@@ -822,4 +842,179 @@ function readStringProperty(payload: unknown, key: string): string | undefined {
   const record = readPayloadRecord(payload)
   const value = record?.[key]
   return typeof value === 'string' ? value : undefined
+}
+
+// ----------- event_listener 分支（Phase 5 S12, #1118） -----------
+//
+// 设计要点（plan A10 / Round 1 全部修复点）：
+//   - 永不 push workingOrders；永不进 closeProgramIds（onDeactivate enum 已删 'close'，W5 守护）
+//   - lifecycle state 按 program.id 索引（per-program 隔离 G1）
+//   - dedup 半开区间 (now - dedupWindowMs, now]，严格 `>`；硬上限 1024 LRU（M2）
+//   - dedup 命中事件不更新 lastEvent*（G3）
+//   - 事件 payload canonicalSerialize 落 lastEventPayloadJson（G4）
+//   - runtime 内 stable-sort by ts（G2）
+//   - now = ctx.timestamp ?? bars[last].timestamp ?? 0；禁 Date.now()（C1）
+//   - prev kind 不匹配走降级路径（视为初始 state）
+
+const EVENT_LISTENER_PLACEHOLDER: ProgramLifecycleState = Object.freeze({
+  kind: 'event_listener',
+  lastEventAt: 0,
+  lastEventId: null,
+  lastEventPayloadJson: null,
+  dedupBuffer: Object.freeze([]),
+  schemaVersion: 0,
+  escalateCount: 0,
+})
+
+interface EventListenerRunArgs {
+  ctx: StrategyExecutionContextV1
+  program: CompiledEventListenerProgram
+  exprValues: Readonly<Record<string, CompiledRuntimeValue>>
+  guardState: Readonly<CompiledGuardState>
+  programLifecycleStateIn?: Readonly<Record<string, ProgramLifecycleState>>
+  orchActiveIds: string[]
+  orchCancelledIds: string[]
+  programLifecycleStateNext: Record<string, ProgramLifecycleState>
+}
+
+function runEventListenerProgram(args: EventListenerRunArgs): void {
+  const {
+    ctx, program, exprValues, guardState, programLifecycleStateIn,
+    orchActiveIds, orchCancelledIds, programLifecycleStateNext,
+  } = args
+
+  // 1) cancelOrderPrograms guard：进 cancelled + 占位 lifecycle
+  if (guardState.cancelOrderPrograms) {
+    orchCancelledIds.push(program.id)
+    programLifecycleStateNext[program.id] = EVENT_LISTENER_PLACEHOLDER
+    return
+  }
+
+  // 2) fail-closed validator
+  if (!isValidEventListener(program)) {
+    orchCancelledIds.push(program.id)
+    programLifecycleStateNext[program.id] = EVENT_LISTENER_PLACEHOLDER
+    return
+  }
+
+  // 3) prev lifecycle（kind 不匹配走降级 = 视为初始）
+  const prevEntry = programLifecycleStateIn?.[program.id]
+  const prev: Extract<ProgramLifecycleState, { kind: 'event_listener' }> | null =
+    prevEntry && prevEntry.kind === 'event_listener' ? prevEntry : null
+
+  // 4) activeWhen
+  const isActive = exprValues[program.activeWhenExprId] === true
+
+  // 5) inactive 路径
+  if (!isActive) {
+    if (program.onDeactivate === 'cancel') {
+      // 清空 dedupBuffer，lastEvent 字段全清；保 schemaVersion / escalateCount 为占位
+      orchCancelledIds.push(program.id)
+      programLifecycleStateNext[program.id] = EVENT_LISTENER_PLACEHOLDER
+      return
+    }
+    // onDeactivate === 'keep'：透传 prev（不读 ctx.eventInbox）
+    orchActiveIds.push(program.id)
+    programLifecycleStateNext[program.id] = prev ?? EVENT_LISTENER_PLACEHOLDER
+    return
+  }
+
+  // 6) active 路径
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  const lastBar = bars[bars.length - 1]
+  const now = typeof ctx.timestamp === 'number' && Number.isFinite(ctx.timestamp)
+    ? ctx.timestamp
+    : (typeof lastBar?.timestamp === 'number' && Number.isFinite(lastBar.timestamp) ? lastBar.timestamp : 0)
+
+  const inbox = ctx.eventInbox?.[program.sourceFeedId]
+  const events = Array.isArray(inbox) ? [...inbox].sort((a, b) => a.ts - b.ts) : []
+
+  // schemaVersion 检测（在事件遍历前）
+  let schemaVersion = prev?.schemaVersion ?? 0
+  const dedupCutoff = now - program.dedupWindowMs
+  let dedupBuffer: Array<{ key: string; ts: number }> = prev
+    ? prev.dedupBuffer.filter(entry => entry.ts > dedupCutoff).map(entry => ({ key: entry.key, ts: entry.ts }))
+    : []
+
+  if (program.rebuildPolicy === 'on_schema_version_bump') {
+    const ctxVersion = ctx.eventSchemaVersion?.[program.sourceFeedId]
+    if (typeof ctxVersion === 'number' && Number.isFinite(ctxVersion) && ctxVersion > schemaVersion) {
+      // bump：清空过滤后的 buffer，更新 schemaVersion
+      dedupBuffer = []
+      schemaVersion = ctxVersion
+    }
+  }
+
+  let lastEventAt = prev?.lastEventAt ?? 0
+  let lastEventId = prev?.lastEventId ?? null
+  let lastEventPayloadJson = prev?.lastEventPayloadJson ?? null
+  let escalateCount = prev?.escalateCount ?? 0
+
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue
+    if (typeof event.ts !== 'number' || !Number.isFinite(event.ts)) continue
+    if (typeof event.id !== 'string' || event.id.length === 0) continue
+    const payload = event.payload
+    if (!payload || typeof payload !== 'object') continue
+
+    // 提取 idempotencyKey（fieldPath 0-1 层 `.`；readiness/runtime validator 已守门）
+    const fieldPath = program.idempotencyKey.fieldPath
+    const dotIndex = fieldPath.indexOf('.')
+    let raw: unknown
+    if (dotIndex === -1) {
+      raw = (payload as Record<string, unknown>)[fieldPath]
+    }
+    else {
+      const head = fieldPath.slice(0, dotIndex)
+      const tail = fieldPath.slice(dotIndex + 1)
+      const nested = (payload as Record<string, unknown>)[head]
+      raw = nested && typeof nested === 'object'
+        ? (nested as Record<string, unknown>)[tail]
+        : undefined
+    }
+    if (typeof raw !== 'string' || raw.length === 0) {
+      // 取值失败：fail 该事件 + 计入 escalate
+      escalateCount += 1
+      continue
+    }
+    const key = raw
+
+    // 过期判定（先于 dedup）
+    if (now - event.ts > program.expirationTtlMs) {
+      if (program.expirationPolicy === 'escalate') {
+        escalateCount += 1
+      }
+      continue
+    }
+
+    // dedup 判定：命中 → 跳过且不更新 lastEvent*
+    if (dedupBuffer.some(entry => entry.key === key)) {
+      continue
+    }
+
+    // 通过：更新 lastEvent + 写入 dedupBuffer
+    lastEventAt = event.ts
+    lastEventId = event.id
+    lastEventPayloadJson = canonicalSerialize(payload)
+    dedupBuffer.push({ key, ts: event.ts })
+    // LRU 上限：超出按时间最早丢出（dedupBuffer 来自 prev 已 ts > cutoff，且按事件循环顺序追加，
+    // 综合 stable-sort by ts 与 prev 顺序，从头丢即最早）
+    if (dedupBuffer.length > EVENT_LISTENER_DEDUP_BUFFER_CAPACITY) {
+      dedupBuffer = dedupBuffer.slice(dedupBuffer.length - EVENT_LISTENER_DEDUP_BUFFER_CAPACITY)
+    }
+  }
+
+  orchActiveIds.push(program.id)
+  // 深 freeze entry
+  const frozenBuffer = Object.freeze(dedupBuffer.map(entry => Object.freeze({ key: entry.key, ts: entry.ts })))
+  programLifecycleStateNext[program.id] = Object.freeze({
+    kind: 'event_listener' as const,
+    lastEventAt,
+    lastEventId,
+    lastEventPayloadJson,
+    dedupBuffer: frozenBuffer,
+    schemaVersion,
+    escalateCount,
+  })
+
 }

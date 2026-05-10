@@ -60,6 +60,23 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
     permissionGranted: boolean
     hasData: boolean
   }>>
+  /**
+   * Phase 5 S12 (#1118): event_listener program 事件入口（按 feedId 索引）。
+   * - backtest：fixture 显式注入预录事件流；上层不保证 ts 排序，runtime 内做 stable-sort（plan G2）
+   * - live：S12 read-only — 字段全程 undefined（视为空数组），真实 webhook ingestion follow-up
+   * - 与 ctx.dataSourceFeeds 一致性：runtime 不做交叉校验（permission/schema 在 readiness 已守门）
+   */
+  eventInbox?: Readonly<Record<string, ReadonlyArray<{
+    readonly id: string
+    readonly ts: number
+    readonly payload: Readonly<Record<string, unknown>>
+  }>>>
+  /**
+   * Phase 5 S12 (#1118): event_listener schemaVersion 通道（按 feedId 索引）。
+   * 单调递增整数；caller 在 schema 升级时 bump（live config 路径或 fixture 显式）。
+   * runtime 仅与 prev.schemaVersion 比 `>`；S12 不主动 bump，live 路径 follow-up。
+   */
+  eventSchemaVersion?: Readonly<Record<string, number>>
   timeframe?: string
   currentPrice?: number
   marketRegime?: string

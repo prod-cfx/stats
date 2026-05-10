@@ -181,9 +181,9 @@ describe('SemanticFrameNormalizerService', () => {
 
     expect(patch.orchestration?.nodes).toHaveLength(2)
     const gateNodes = patch.orchestration?.nodes?.filter(node => node.kind === 'gate') ?? []
-    expect(gateNodes.map(node => node.target.sideScope)).toEqual(
-      expect.arrayContaining(['long', 'short']),
-    )
+    expect(
+      gateNodes.map(node => (node.target.phase === 'entry' ? node.target.sideScope : undefined)),
+    ).toEqual(expect.arrayContaining(['long', 'short']))
   })
 
   it('deduplicates structurally identical regime_gate frames', () => {

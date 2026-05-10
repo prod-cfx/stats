@@ -22,6 +22,14 @@ const PORTFOLIO_DRAWDOWN_BLOCK_KEY = 'portfolioRisk.drawdown_block'
 const PROGRAM_FIXED_GRID_GATED_KEY = 'program.fixed_grid_gated'
 const PROGRAM_DYNAMIC_GRID_KEY = 'program.dynamic_grid'
 const PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY = 'program.adaptive_volatility_grid'
+// Phase 5 S12 (#1118): event_listener
+const PROGRAM_EVENT_LISTENER_KEY = 'program.event_listener'
+const EVENT_LISTENER_PERMISSION_SCOPE_PATTERN = /^[a-z][a-z0-9_:]{2,63}$/u
+const EVENT_LISTENER_FIELD_PATH_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]{0,63}(\.[a-zA-Z][a-zA-Z0-9_]{0,63})?$/u
+const EVENT_LISTENER_DEDUP_WINDOW_MIN_MS = 100
+const EVENT_LISTENER_DEDUP_WINDOW_MAX_MS = 3_600_000
+const EVENT_LISTENER_EXPIRATION_TTL_MIN_MS = 100
+const EVENT_LISTENER_EXPIRATION_TTL_MAX_MS = 86_400_000
 const SCOPE_SYMBOL_KEY = 'scope.symbol'
 const SCOPE_LEG_KEY = 'scope.leg'
 // Phase 5 S3 (#1109)
@@ -415,6 +423,56 @@ const PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT: SemanticOrchestrationContract =
   executableSinceVersion: CURRENT_SEMANTIC_VERSION,
 }
 
+// Phase 5 S12 (#1118): event_listener contract
+//   capability: orchestration ingest external_event
+//   runtimeRequirements: subscribe/event_source + read/event_inbox（S12 首次引入 vocab；
+//     形式化收口由 future vocabulary registry follow-up issue 接管）
+//   stateRequirements: read_write/program_lifecycle（与 S5/S6 同模式）
+//   orderRequirements: 无（关键差异 — 不发限价单）
+const PROGRAM_EVENT_LISTENER_CONTRACT: SemanticOrchestrationContract = {
+  id: 'program.event_listener',
+  kind: 'program',
+  capabilities: [
+    {
+      domain: 'orchestration',
+      verb: 'ingest',
+      object: 'external_event',
+      shape: {},
+    },
+  ],
+  requires: [],
+  params: {},
+  runtimeRequirements: [
+    {
+      domain: 'runtime',
+      verb: 'subscribe',
+      object: 'event_source',
+    },
+    {
+      domain: 'runtime',
+      verb: 'read',
+      object: 'event_inbox',
+    },
+  ],
+  stateRequirements: [
+    {
+      domain: 'state',
+      verb: 'read_write',
+      object: 'program_lifecycle',
+    },
+  ],
+  orderRequirements: [],
+  openSlots: [],
+  effects: [
+    {
+      domain: 'data',
+      verb: 'ingest',
+      object: 'external_event',
+    },
+  ],
+  executableSinceVersion: CURRENT_SEMANTIC_VERSION,
+}
+
 const PORTFOLIO_DRAWDOWN_BLOCK_CONTRACT: SemanticOrchestrationContract = {
   id: 'portfolioRisk.drawdown_block',
   kind: 'portfolioRisk',
@@ -490,6 +548,7 @@ export class SemanticOrchestrationRegistryService {
     [PROGRAM_FIXED_GRID_GATED_KEY, PROGRAM_FIXED_GRID_GATED_CONTRACT],
     [PROGRAM_DYNAMIC_GRID_KEY, PROGRAM_DYNAMIC_GRID_CONTRACT],
     [PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY, PROGRAM_ADAPTIVE_VOLATILITY_GRID_CONTRACT],
+    [PROGRAM_EVENT_LISTENER_KEY, PROGRAM_EVENT_LISTENER_CONTRACT],
     [SCOPE_SYMBOL_KEY, SCOPE_SYMBOL_CONTRACT],
     [SCOPE_LEG_KEY, SCOPE_LEG_CONTRACT],
     [SCOPE_TIMEFRAME_KEY, SCOPE_TIMEFRAME_CONTRACT],
@@ -508,7 +567,7 @@ export class SemanticOrchestrationRegistryService {
   ): SemanticOrchestrationValidationResult {
     const missingSlots: SemanticSlotState[] = []
     if (node.kind === 'program') {
-      return this.validateProgramNode(node)
+      return this.validateProgramNode(node, siblingNodes)
     }
     if (node.kind === 'scope') {
       // Phase 5 S11 (#1112): scope kind 路由到 symbol vs leg 子类型
@@ -628,12 +687,17 @@ export class SemanticOrchestrationRegistryService {
 
   private validateProgramNode(
     node: SemanticOrchestrationNode,
+    siblingNodes: readonly SemanticOrchestrationNode[],
   ): SemanticOrchestrationValidationResult {
     if (node.key === PROGRAM_DYNAMIC_GRID_KEY) {
       return this.validateDynamicGridProgramNode(node)
     }
     if (node.key === PROGRAM_ADAPTIVE_VOLATILITY_GRID_KEY) {
       return this.validateAdaptiveVolatilityGridNode(node)
+    }
+    // Phase 5 S12 (#1118): event_listener
+    if (node.key === PROGRAM_EVENT_LISTENER_KEY) {
+      return this.validateEventListenerProgramNode(node, siblingNodes)
     }
     return this.validateFixedGridGatedNode(node)
   }
@@ -655,7 +719,7 @@ export class SemanticOrchestrationRegistryService {
     }
 
     if (node.key !== PROGRAM_FIXED_GRID_GATED_KEY) {
-      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated / program.dynamic_grid / program.adaptive_volatility_grid）')
+      pushSlot('program_kind', '请确认 program 节点的 key（仅支持 program.fixed_grid_gated / program.dynamic_grid / program.adaptive_volatility_grid / program.event_listener）')
       return { ok: false, missingSlots }
     }
 
@@ -936,6 +1000,112 @@ export class SemanticOrchestrationRegistryService {
       pushSlot('sizing', '请确认仓位模式（fixed_quote/fixed_base/fixed_pct）')
     } else if (!isPositiveFinite(sizing.value)) {
       pushSlot('sizing', '请确认仓位数值（>0 有限数）')
+    }
+
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {
+      pushSlot('active_when_ref', '请确认 active_when_ref 引用的 gate 节点 id')
+    }
+
+    return { ok: missingSlots.length === 0, missingSlots }
+  }
+
+  /**
+   * Phase 5 S12 (#1118): event_listener 节点 13 fail-closed open slot 输出。
+   *   1) node.key === 'program.event_listener'（路由前置已守门）
+   *   2) programKind === 'event_listener'
+   *   3) onDeactivate ∈ {'cancel','keep'}（'close' fail-closed — 无持仓语义；W5 守护）
+   *   4) rebuildPolicy ∈ {'static','on_schema_version_bump'}
+   *   5) eventSchemaRef === 'webhook_event'（S12 MVP 锁定）
+   *   6) sourceRef trim 非空（cross-node ref check 在 readiness）
+   *   7) permissionScope trim 非空 + 匹配 EVENT_LISTENER_PERMISSION_SCOPE_PATTERN
+   *   8) idempotencyKey.fieldPath trim 非空 + 匹配 0-1 层 `.` regex
+   *   9) dedupWindowMs 整数 ∈ [100, 3600000]
+   *   10) expirationTtlMs 整数 ∈ [100, 86400000]
+   *   11) expirationTtlMs > dedupWindowMs（严格大于）
+   *   12) expirationPolicy ∈ {'drop','escalate'}
+   *   13) activeWhenRef trim 非空（cross-node ref check 在 readiness）
+   */
+  private validateEventListenerProgramNode(
+    node: SemanticOrchestrationNode,
+    _siblingNodes: readonly SemanticOrchestrationNode[],
+  ): SemanticOrchestrationValidationResult {
+    const missingSlots: SemanticSlotState[] = []
+    const fieldPath = `orchestration.program.event_listener[${node.id}]`
+    const pushSlot = (field: string, hint: string): void => {
+      missingSlots.push({
+        slotKey: `orchestration.program.event_listener.${field}`,
+        fieldPath,
+        status: 'open',
+        priority: 'core',
+        questionHint: hint,
+        affectsExecution: true,
+      })
+    }
+
+    if (node.programKind !== 'event_listener') {
+      pushSlot('program_kind', '请确认 programKind 为 event_listener')
+    }
+
+    if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep') {
+      pushSlot('on_deactivate', '请确认停用时行为（cancel/keep；event_listener 不支持 close）')
+    }
+
+    if (node.rebuildPolicy !== 'static' && node.rebuildPolicy !== 'on_schema_version_bump') {
+      pushSlot('rebuild_policy', '请确认重建策略（static / on_schema_version_bump）')
+    }
+
+    if (node.eventSchemaRef !== 'webhook_event') {
+      pushSlot('event_schema_ref', '请确认事件 schema（仅支持 webhook_event）')
+    }
+
+    const sourceRef = typeof node.sourceRef === 'string' ? node.sourceRef.trim() : ''
+    if (sourceRef === '') {
+      pushSlot('source_ref', '请确认事件源数据节点 id（引用 scope.dataSource role=event）')
+    }
+
+    const permissionScope = typeof node.permissionScope === 'string' ? node.permissionScope.trim() : ''
+    if (permissionScope === '' || !EVENT_LISTENER_PERMISSION_SCOPE_PATTERN.test(permissionScope)) {
+      pushSlot('permission_scope', '请确认权限命名空间（小写字母开头，3-64 字符；如 tradingview:alpha）')
+    }
+
+    const idempotency = node.idempotencyKey
+    const idempotencyPath = idempotency && typeof idempotency.fieldPath === 'string' ? idempotency.fieldPath.trim() : ''
+    if (idempotencyPath === '' || !EVENT_LISTENER_FIELD_PATH_PATTERN.test(idempotencyPath)) {
+      pushSlot('idempotency_key.field_path', '请确认幂等键 fieldPath（仅允许 0-1 层 "."，多层下钻不支持）')
+    }
+
+    const dedupWindowMs = node.dedupWindowMs
+    if (
+      typeof dedupWindowMs !== 'number'
+      || !Number.isFinite(dedupWindowMs)
+      || !Number.isInteger(dedupWindowMs)
+      || dedupWindowMs < EVENT_LISTENER_DEDUP_WINDOW_MIN_MS
+      || dedupWindowMs > EVENT_LISTENER_DEDUP_WINDOW_MAX_MS
+    ) {
+      pushSlot('dedup_window_ms', '请确认去重窗口毫秒（100..3600000 整数）')
+    }
+
+    const expirationTtlMs = node.expirationTtlMs
+    const expirationValid =
+      typeof expirationTtlMs === 'number'
+      && Number.isFinite(expirationTtlMs)
+      && Number.isInteger(expirationTtlMs)
+      && expirationTtlMs >= EVENT_LISTENER_EXPIRATION_TTL_MIN_MS
+      && expirationTtlMs <= EVENT_LISTENER_EXPIRATION_TTL_MAX_MS
+    if (!expirationValid) {
+      pushSlot('expiration_ttl_ms', '请确认事件过期 TTL 毫秒（100..86400000 整数）')
+    }
+    if (
+      expirationValid
+      && typeof dedupWindowMs === 'number'
+      && Number.isFinite(dedupWindowMs)
+      && expirationTtlMs! <= dedupWindowMs
+    ) {
+      pushSlot('expiration_ttl_ms', '请确认 expirationTtlMs 必须严格大于 dedupWindowMs')
+    }
+
+    if (node.expirationPolicy !== 'drop' && node.expirationPolicy !== 'escalate') {
+      pushSlot('expiration_policy', '请确认过期事件处理策略（drop / escalate）')
     }
 
     if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.trim() === '') {

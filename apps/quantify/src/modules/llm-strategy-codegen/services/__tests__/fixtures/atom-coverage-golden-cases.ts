@@ -1894,6 +1894,12 @@ export const atomCoverageGoldenCases: AtomCoverageGoldenCase[] = [
   // — extractor 当前对 ATR 自适应网格 utterance 输出含未注册 atoms（如指标 fragment）
   // 导致 classifier 走 unsupported_fallback；core 33 cases 已在
   // orchestration-adaptive-volatility-grid-golden-corpus.spec.ts 全覆盖
+  //
+  // Phase 5 S12 (#1118): event_listener atom-coverage 解锁同样留 follow-up
+  // — NL gateway parseEventListener 当前抽 webhook_event 锁定 sourceRef='orchestration-scope-data-source-1'，
+  //   atom-coverage classifier 上游链路尚未做事件 utterance 的端到端解析；
+  //   完整 NL→readiness→spec 链已在 orchestration-event-listener-golden-corpus.spec.ts +
+  //   run-order-programs.spec.ts (event_listener 17 case) 全覆盖
   ...phase3MtfCases,
   ...phase3PreviousExtremaCases,
 ]

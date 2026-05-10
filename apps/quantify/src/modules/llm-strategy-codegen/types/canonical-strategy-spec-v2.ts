@@ -8,6 +8,7 @@ import type {
   SemanticOrchestrationDataSourceSchema,
   SemanticOrchestrationGateEffect,
   SemanticOrchestrationGateTarget,
+  SemanticOrchestrationProgramExpirationPolicy,
 } from './semantic-state'
 
 export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
@@ -190,10 +191,29 @@ export interface CanonicalAdaptiveVolatilityGridProgram {
   sizing: CanonicalOrchestrationProgramSizing
 }
 
+// Phase 5 S12 (#1118): event_listener canonical 形态
+//   不发限价单 → 无 sizing（与其他 program 区别）
+//   onDeactivate ∈ {'cancel','keep'}（readiness fail-closed 拒收 'close'）
+export interface CanonicalEventListenerProgram {
+  id: string
+  programKind: 'event_listener'
+  activeWhenRef: string
+  onDeactivate: 'cancel' | 'keep'
+  rebuildPolicy: 'static' | 'on_schema_version_bump'
+  eventSchemaRef: SemanticOrchestrationDataSourceSchema
+  sourceRef: string
+  permissionScope: string
+  idempotencyKey: { fieldPath: string }
+  dedupWindowMs: number
+  expirationTtlMs: number
+  expirationPolicy: SemanticOrchestrationProgramExpirationPolicy
+}
+
 export type CanonicalOrchestrationProgram =
   | CanonicalFixedGridGatedProgram
   | CanonicalDynamicGridProgram
   | CanonicalAdaptiveVolatilityGridProgram
+  | CanonicalEventListenerProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate
 export interface CanonicalSymbolScope {

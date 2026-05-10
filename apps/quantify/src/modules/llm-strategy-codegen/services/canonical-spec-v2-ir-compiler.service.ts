@@ -1021,6 +1021,34 @@ export class CanonicalSpecV2IrCompilerService {
           adaptiveGridParams: { ...program.adaptiveGridParams },
           sizing: { ...program.sizing },
         })
+        continue
+      }
+      // Phase 5 S12 (#1118)
+      if (program.programKind === 'event_listener') {
+        // 解引用 sourceRef → spec.orchestration.scopes[].feedId（找 scope.dataSource role='event'）
+        const scopes = spec.orchestration?.scopes ?? []
+        const dataSourceScope = scopes.find(
+          (s): s is Extract<typeof s, { scopeKind: 'dataSource' }> =>
+            s.scopeKind === 'dataSource' && s.id === program.sourceRef,
+        )
+        if (!dataSourceScope) continue
+        if (dataSourceScope.role !== 'event') continue
+        if (typeof dataSourceScope.feedId !== 'string' || dataSourceScope.feedId.length === 0) continue
+        result.push({
+          id: program.id,
+          programKind: 'event_listener',
+          activeWhenExprId: exprId,
+          onDeactivate: program.onDeactivate,
+          rebuildPolicy: program.rebuildPolicy,
+          eventSchemaRef: program.eventSchemaRef,
+          sourceFeedId: dataSourceScope.feedId,
+          permissionScope: program.permissionScope,
+          idempotencyKey: { fieldPath: program.idempotencyKey.fieldPath },
+          dedupWindowMs: program.dedupWindowMs,
+          expirationTtlMs: program.expirationTtlMs,
+          expirationPolicy: program.expirationPolicy,
+        })
+        continue
       }
     }
     return result

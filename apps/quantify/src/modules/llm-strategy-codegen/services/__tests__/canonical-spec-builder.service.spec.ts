@@ -4018,7 +4018,9 @@ describe('canonicalSpecBuilderService', () => {
       const [gate] = spec.orchestration!.gates!
       expect(gate.id).toBe('gate-regime-long-1')
       expect(gate.target.phase).toBe('entry')
-      expect(gate.target.sideScope).toBe('long')
+      if (gate.target.phase === 'entry') {
+        expect(gate.target.sideScope).toBe('long')
+      }
       expect(gate.effectWhenFalse).toBe('block_new_entries')
       expect(gate.activeWhen).toEqual({
         kind: 'expression',

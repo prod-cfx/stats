@@ -321,6 +321,15 @@ const EXTERNAL_SIGNAL_OPEN_SLOTS: SemanticAtomOpenSlotSpec[] = [
     priority: 'risk',
     questionHint: '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。',
   },
+  // Phase 5 S12 (#1118): 可选 slot — 关联到事件监听 program.event_listener 节点 id
+  //   priority='context' 不阻断；core 三 slot 不变（保 P4-5 已 ship 行为）
+  //   真正"atom 读 lifecycle 触发"close-loop 留 follow-up issue
+  {
+    slotKey: 'external.signal.programLifecycleStateRef',
+    fieldPath: 'trigger.params.programLifecycleStateRef',
+    priority: 'context',
+    questionHint: '可选：关联到事件监听 program 节点 id，未填则保持独立 trigger 行为。',
+  },
 ]
 
 function externalSignalSubstrate(): SemanticAtomContractSubstrate {

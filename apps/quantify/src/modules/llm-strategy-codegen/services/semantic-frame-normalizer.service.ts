@@ -5,6 +5,7 @@ import type {
   SemanticCombinationFrame,
   SemanticDataSourceScopeFrame,
   SemanticDynamicGridFrame,
+  SemanticEventListenerFrame,
   SemanticFixedGridGatedFrame,
   SemanticIndicatorCompareFrame,
   SemanticLegScopeFrame,
@@ -21,6 +22,7 @@ import type {
   CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch,
   CodegenSemanticOrchestrationDataSourceScopeNodePatch,
   CodegenSemanticOrchestrationDynamicGridProgramNodePatch,
+  CodegenSemanticOrchestrationEventListenerProgramNodePatch,
   CodegenSemanticOrchestrationFixedGridGatedProgramNodePatch,
   CodegenSemanticOrchestrationGateNodePatch,
   CodegenSemanticOrchestrationLegScopeNodePatch,
@@ -66,6 +68,9 @@ export class SemanticFrameNormalizerService {
     const dynamicGridFrames: SemanticDynamicGridFrame[] = []
     const adaptiveByKey = new Map<string, CodegenSemanticOrchestrationAdaptiveVolatilityGridProgramNodePatch>()
     const adaptiveFrames: SemanticAdaptiveVolatilityGridFrame[] = []
+    // Phase 5 S12 (#1118): event_listener
+    const eventListenerByKey = new Map<string, CodegenSemanticOrchestrationEventListenerProgramNodePatch>()
+    const eventListenerFrames: SemanticEventListenerFrame[] = []
     const symbolScopeByKey = new Map<string, CodegenSemanticOrchestrationSymbolScopeNodePatch>()
     const symbolScopeFrames: SemanticSymbolScopeFrame[] = []
     // Phase 5 S11 (#1112): leg_scope 同 utterance 命中时由 NL gateway 已 suppress symbol_scope
@@ -126,6 +131,9 @@ export class SemanticFrameNormalizerService {
         case 'adaptive_volatility_grid':
           adaptiveFrames.push(frame)
           break
+        case 'event_listener':
+          eventListenerFrames.push(frame)
+          break
         case 'symbol_scope':
           symbolScopeFrames.push(frame)
           break
@@ -149,7 +157,9 @@ export class SemanticFrameNormalizerService {
 
     regimeGateFrames.forEach((frame, index) => {
       const node = this.normalizeRegimeGate(frame, index)
-      const dedupeKey = JSON.stringify([node.key, node.target.sideScope, node.activeWhen])
+      // Phase 5 S10 (#1117) follow-up：target 升级为 discriminated union 后 sideScope 仅存在于 phase='entry' 分支
+      const targetSideScope = node.target.phase === 'entry' ? node.target.sideScope : undefined
+      const dedupeKey = JSON.stringify([node.key, targetSideScope, node.activeWhen])
 
       if (!regimeGateByKey.has(dedupeKey)) {
         regimeGateByKey.set(dedupeKey, node)
@@ -207,6 +217,26 @@ export class SemanticFrameNormalizerService {
 
       if (!adaptiveByKey.has(dedupeKey)) {
         adaptiveByKey.set(dedupeKey, node)
+      }
+    })
+
+    // Phase 5 S12 (#1118): event_listener
+    eventListenerFrames.forEach((frame, index) => {
+      const node = this.normalizeEventListener(frame, index)
+      const dedupeKey = JSON.stringify([
+        node.key,
+        node.activeWhenRef,
+        node.sourceRef,
+        node.permissionScope,
+        node.idempotencyKey.fieldPath,
+        node.dedupWindowMs,
+        node.expirationTtlMs,
+        node.expirationPolicy,
+        node.onDeactivate,
+        node.rebuildPolicy,
+      ])
+      if (!eventListenerByKey.has(dedupeKey)) {
+        eventListenerByKey.set(dedupeKey, node)
       }
     })
 
@@ -331,6 +361,7 @@ export class SemanticFrameNormalizerService {
       ...Array.from(fixedGridGatedByKey.values()),
       ...Array.from(dynamicGridByKey.values()),
       ...Array.from(adaptiveByKey.values()),
+      ...Array.from(eventListenerByKey.values()),
       ...Array.from(symbolScopeByKey.values()),
       // Phase 5 S11 (#1112): leg_scope frame 扩展出的 scope.symbol + scope.leg 节点
       //   注意 scope.symbol 节点必须排在 scope.leg 之前，便于 readiness Pass 1/2 顺序处理
@@ -641,6 +672,43 @@ export class SemanticFrameNormalizerService {
       maxStepPct: frame.maxStepPct,
       levelCount: frame.levelCount,
       sizing: frame.sizing,
+      evidence: this.toEvidence(frame),
+    }
+  }
+
+  // Phase 5 S12 (#1118): event_listener frame → patch
+  //   sourceRef / activeWhenRef 由 frame 透传；cross-node ref 解引用在 readiness Pass
+  //   permissionScope 即使空也透传（readiness fail-closed）
+  private normalizeEventListener(
+    frame: SemanticEventListenerFrame,
+    index: number,
+  ): CodegenSemanticOrchestrationEventListenerProgramNodePatch {
+    return {
+      id: `orchestration-program-event-listener-${index + 1}`,
+      kind: 'program',
+      key: 'program.event_listener',
+      params: {
+        eventSchemaRef: frame.eventSchemaRef,
+        sourceRef: frame.sourceRef,
+        permissionScope: frame.permissionScope,
+        idempotencyKey: { fieldPath: frame.idempotencyKey.fieldPath },
+        dedupWindowMs: frame.dedupWindowMs,
+        expirationTtlMs: frame.expirationTtlMs,
+        expirationPolicy: frame.expirationPolicy,
+        onDeactivate: frame.onDeactivate,
+        rebuildPolicy: frame.rebuildPolicy,
+      },
+      programKind: 'event_listener',
+      activeWhenRef: frame.activeWhenRef,
+      onDeactivate: frame.onDeactivate,
+      rebuildPolicy: frame.rebuildPolicy,
+      eventSchemaRef: frame.eventSchemaRef,
+      sourceRef: frame.sourceRef,
+      permissionScope: frame.permissionScope,
+      idempotencyKey: { fieldPath: frame.idempotencyKey.fieldPath },
+      dedupWindowMs: frame.dedupWindowMs,
+      expirationTtlMs: frame.expirationTtlMs,
+      expirationPolicy: frame.expirationPolicy,
       evidence: this.toEvidence(frame),
     }
   }

@@ -445,6 +445,25 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => renderAdaptiveVolatilityGrid(params),
     clarificationRenderer: (slotKey) => renderAdaptiveVolatilityGridClarification(slotKey),
   }),
+  // Phase 5 S12 (#1118): event_listener
+  presentation({
+    key: 'program.event_listener',
+    publicName: '事件监听',
+    aliases: ['事件监听', 'webhook 监听', '外部事件订阅', 'event listener'],
+    positiveExamples: [
+      'OKX 合约 BTCUSDT 15m，订阅 binance webhook 事件源，趋势上涨时启用 tradingview 喊单监听',
+      'discord 事件监听，按 signalId 去重 5 秒，过期 60 秒丢弃',
+      'telegram 信号监听，每 10 秒去重，过期 60 秒上报告警',
+    ],
+    negativeExamples: ['挂个网格策略', '随便接 webhook'],
+    goldenUtterances: [
+      'OKX BTCUSDT 15m 订阅 tradingview 事件源，趋势上涨时启用事件监听，按 signalId 去重 5 秒',
+      'discord 事件监听 webhook 信号触发，过期 60 秒丢弃',
+      'telegram 信号监听，按字段 data.signalId 去重 10 秒，过期 60 秒上报',
+    ],
+    displayRenderer: ({ params }) => renderEventListener(params),
+    clarificationRenderer: (slotKey) => renderEventListenerClarification(slotKey),
+  }),
   // Phase 5 S2 (#1104): scope.symbol substrate
   presentation({
     key: 'scope.symbol',
@@ -1445,6 +1464,76 @@ function renderAdaptiveVolatilityGrid(params: Record<string, unknown>): string {
     `ATR(${atrPeriod}) 的 ${atrMultiplier} 倍为步长、${rangeMultiplier} 倍为区间的自适应网格，`
     + `${levelCount} 档，每档 ${minStepPct}%-${maxStepPct}% 钳制，失活时${deactivateLabel[onDeactivate] ?? '撤单'}`
   )
+}
+
+// Phase 5 S12 (#1118): event_listener 显式黑名单（plan A16）。
+//   用户可见 display 文本绝不能出现这些字面量；publicName 用中文 "事件监听 / 数据源 / 命名空间"。
+const EVENT_LISTENER_DISPLAY_BLACKLIST = [
+  'program.event_listener',
+  'event_listener',
+  'webhook_event',
+  'on_schema_version_bump',
+  'dedupWindowMs',
+  'expirationTtlMs',
+  'permissionScope',
+] as const
+
+function renderEventListener(params: Record<string, unknown>): string {
+  const inner = objectParam(params, 'params')
+  const source = Object.keys(inner).length > 0 ? inner : params
+  const permissionScope = stringParam(source, 'permissionScope', '')
+  // permissionScope 形如 `tradingview:alpha`；只露 provider 段
+  const provider = permissionScope.split(':')[0] || '外部信号'
+  const providerLabel: Record<string, string> = {
+    tradingview: 'TradingView 喊单',
+    discord: 'Discord 喊单',
+    telegram: 'Telegram 喊单',
+    webhook: 'Webhook 信号',
+  }
+  const text = `事件监听 — ${providerLabel[provider] ?? '外部事件'}`
+  for (const banned of EVENT_LISTENER_DISPLAY_BLACKLIST) {
+    if (text.includes(banned)) {
+      throw new Error(`event_listener display leaked blacklisted token: ${banned}`)
+    }
+  }
+  return text
+}
+
+function renderEventListenerClarification(slotKey: string): string {
+  if (slotKey === 'orchestration.program.event_listener.event_schema_ref') {
+    return '请确认事件 schema（仅支持 webhook 事件）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.source_ref') {
+    return '请确认事件源数据节点 id（引用一个 role=event 的数据源）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.permission_scope') {
+    return '请确认事件权限命名空间（如 tradingview:alpha；小写字母开头，3-64 字符）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.idempotency_key.field_path') {
+    return '请确认幂等字段名（仅允许 0-1 层路径，如 signalId 或 data.signalId）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.dedup_window_ms') {
+    return '请确认去重窗口毫秒（100..3600000 整数）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.expiration_ttl_ms') {
+    return '请确认事件过期时长毫秒（100..86400000 整数；必须严格大于去重窗口）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.expiration_policy') {
+    return '请确认过期事件处理策略（丢弃 / 上报）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.on_deactivate') {
+    return '请确认停用时行为（撤单 / 保留监听）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.active_when_ref') {
+    return '请确认事件监听的启用/失活条件（引用哪个趋势/状态过滤）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.rebuild_policy') {
+    return '请确认重建策略（始终保留 / schema 版本变更时清空）'
+  }
+  if (slotKey === 'orchestration.program.event_listener.program_kind') {
+    return '请确认 programKind 为事件监听类型'
+  }
+  return '请补全事件监听参数'
 }
 
 function renderAdaptiveVolatilityGridClarification(slotKey: string): string {

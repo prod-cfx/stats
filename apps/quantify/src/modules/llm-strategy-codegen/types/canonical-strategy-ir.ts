@@ -4,6 +4,7 @@ import type {
   SemanticOrchestrationDataSourceSchema,
   SemanticOrchestrationGateEffect,
   SemanticOrchestrationGateTarget,
+  SemanticOrchestrationProgramExpirationPolicy,
 } from './semantic-state'
 
 export type { PartialTakeProfitProgramMetadata } from './partial-take-profit'
@@ -357,10 +358,29 @@ export interface IrAdaptiveVolatilityGridProgram {
   sizing: IrOrchestrationProgramSizing
 }
 
+// Phase 5 S12 (#1118): event_listener IR 形态
+//   sourceFeedId — IR 阶段固化 scope.dataSource role='event' 的 feedId 字面量（与 S4 同模式）
+//   不带 sizing — 不发限价单
+export interface IrEventListenerProgram {
+  id: string
+  programKind: 'event_listener'
+  activeWhenExprId: string
+  onDeactivate: 'cancel' | 'keep'
+  rebuildPolicy: 'static' | 'on_schema_version_bump'
+  eventSchemaRef: SemanticOrchestrationDataSourceSchema
+  sourceFeedId: string
+  permissionScope: string
+  idempotencyKey: { fieldPath: string }
+  dedupWindowMs: number
+  expirationTtlMs: number
+  expirationPolicy: SemanticOrchestrationProgramExpirationPolicy
+}
+
 export type IrOrchestrationProgram =
   | IrFixedGridGatedProgram
   | IrDynamicGridProgram
   | IrAdaptiveVolatilityGridProgram
+  | IrEventListenerProgram
 
 // Phase 5 S2 (#1104): scope.symbol substrate IR
 export interface IrSymbolScope {

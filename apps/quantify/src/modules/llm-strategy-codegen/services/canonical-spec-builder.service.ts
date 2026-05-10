@@ -869,6 +869,13 @@ export class CanonicalSpecBuilderService {
         if (program) programs.push(program)
         continue
       }
+
+      // Phase 5 S12 (#1118)
+      if (node.key === 'program.event_listener') {
+        const program = this.buildEventListenerProgram(node)
+        if (program) programs.push(program)
+        continue
+      }
     }
 
     return programs
@@ -1013,6 +1020,41 @@ export class CanonicalSpecBuilderService {
         levelCount: node.levelCount,
       },
       sizing: { mode: sizing.mode, value: sizing.value },
+    }
+  }
+
+  // Phase 5 S12 (#1118): event_listener canonical builder
+  //   readiness 已守门 16 重；builder 这里再做一遍轻量类型守卫确保 null-safe
+  private buildEventListenerProgram(node: SemanticOrchestrationNode): CanonicalOrchestrationProgram | null {
+    if (node.programKind !== 'event_listener') return null
+    if (node.rebuildPolicy !== 'static' && node.rebuildPolicy !== 'on_schema_version_bump') return null
+    if (node.onDeactivate !== 'cancel' && node.onDeactivate !== 'keep') return null
+    if (typeof node.activeWhenRef !== 'string' || node.activeWhenRef.length === 0) return null
+
+    if (node.eventSchemaRef !== 'webhook_event') return null
+    if (typeof node.sourceRef !== 'string' || node.sourceRef.trim() === '') return null
+    if (typeof node.permissionScope !== 'string' || node.permissionScope.trim() === '') return null
+
+    const idempotency = node.idempotencyKey
+    if (!idempotency || typeof idempotency.fieldPath !== 'string' || idempotency.fieldPath.trim() === '') return null
+
+    if (typeof node.dedupWindowMs !== 'number' || !Number.isInteger(node.dedupWindowMs)) return null
+    if (typeof node.expirationTtlMs !== 'number' || !Number.isInteger(node.expirationTtlMs)) return null
+    if (node.expirationPolicy !== 'drop' && node.expirationPolicy !== 'escalate') return null
+
+    return {
+      id: node.id,
+      programKind: 'event_listener',
+      activeWhenRef: node.activeWhenRef,
+      onDeactivate: node.onDeactivate,
+      rebuildPolicy: node.rebuildPolicy,
+      eventSchemaRef: node.eventSchemaRef,
+      sourceRef: node.sourceRef.trim(),
+      permissionScope: node.permissionScope.trim(),
+      idempotencyKey: { fieldPath: idempotency.fieldPath.trim() },
+      dedupWindowMs: node.dedupWindowMs,
+      expirationTtlMs: node.expirationTtlMs,
+      expirationPolicy: node.expirationPolicy,
     }
   }
 

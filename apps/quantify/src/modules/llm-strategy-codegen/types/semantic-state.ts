@@ -28,6 +28,8 @@ export type SemanticCapabilityDomain =
   | 'order'
   | 'portfolio'
   | 'orchestration'
+  // Phase 5 S12 (#1118): event_listener effects domain
+  | 'data'
 export type SemanticOrchestrationContractKind = 'scope' | 'gate' | 'program' | 'portfolioRisk'
 
 // Phase 5 S9 (#1110): scope.dataSource role / schema 枚举
@@ -352,11 +354,35 @@ export type SemanticOrchestrationPortfolioRiskMode = 'observe' | 'enforce'
 
 export type SemanticOrchestrationPortfolioRiskScope = 'portfolio'
 
-export type SemanticOrchestrationProgramKind = 'fixed_grid_gated' | 'dynamic_grid' | 'adaptive_volatility_grid'
+// Phase 5 S12 (#1118): event_listener 加入 program kind 联合
+export type SemanticOrchestrationProgramKind =
+  | 'fixed_grid_gated'
+  | 'dynamic_grid'
+  | 'adaptive_volatility_grid'
+  | 'event_listener'
 
+// 全局保留 'close'（fixed_grid_gated / dynamic_grid / adaptive_volatility_grid 仍合法）；
+// event_listener 路径 readiness fail-closed 拒收 'close'（无持仓语义）
 export type SemanticOrchestrationProgramOnDeactivate = 'cancel' | 'keep' | 'close'
 
-export type SemanticOrchestrationProgramRebuildPolicy = 'static' | 'anchor_on_state_change' | 'atr_window'
+// Phase 5 S12 (#1118): event_listener 仅在 ctx 显式 bump schemaVersion 时清空 dedupBuffer
+export type SemanticOrchestrationProgramRebuildPolicy =
+  | 'static'
+  | 'anchor_on_state_change'
+  | 'atr_window'
+  | 'on_schema_version_bump'
+
+// Phase 5 S12 (#1118): event_listener 过期事件处理策略
+//   'drop'     — 静默丢弃过期事件
+//   'escalate' — 跳过过期事件 + 在 lifecycle state 累计 escalateCount（告警链路 follow-up）
+export type SemanticOrchestrationProgramExpirationPolicy = 'drop' | 'escalate'
+
+// Phase 5 S12 (#1118): event_listener 幂等键
+//   fieldPath：仅允许 0-1 层 `.`，多层下钻 readiness fail-closed
+//   严格 regex `^[a-zA-Z][a-zA-Z0-9_]{0,63}(\.[a-zA-Z][a-zA-Z0-9_]{0,63})?$`
+export interface SemanticOrchestrationProgramIdempotencyKey {
+  fieldPath: string
+}
 
 export type SemanticOrchestrationProgramSizingMode = 'fixed_quote' | 'fixed_base' | 'fixed_pct'
 
@@ -438,6 +464,21 @@ export interface SemanticOrchestrationNode {
   maxStepPct?: number
   // dynamic_grid 节点的档位数（与 fixed_grid_gated 的 gridParams.levelCount 互斥）
   levelCount?: number
+  // event_listener 节点专属（其它 programKind 不读）— Phase 5 S12 (#1118)
+  //   eventSchemaRef     — webhook_event；其他 schema 在 readiness fail-closed
+  //   sourceRef          — cross-node 引用 scope.dataSource role='event' 节点 id
+  //   permissionScope    — `(tradingview|discord|telegram|webhook):.*` 等命名空间占位（runtime 不读，readiness 守门）
+  //   idempotencyKey     — 幂等键 fieldPath（仅 0-1 层 `.`）
+  //   dedupWindowMs      — 去重窗口 [100, 3600000]
+  //   expirationTtlMs    — 过期 TTL [100, 86400000]，且严格 > dedupWindowMs
+  //   expirationPolicy   — 'drop' / 'escalate'
+  eventSchemaRef?: SemanticOrchestrationDataSourceSchema
+  sourceRef?: string
+  permissionScope?: string
+  idempotencyKey?: SemanticOrchestrationProgramIdempotencyKey
+  dedupWindowMs?: number
+  expirationTtlMs?: number
+  expirationPolicy?: SemanticOrchestrationProgramExpirationPolicy
   // portfolioRisk 节点专属（其它 kind 不读）
   mode?: SemanticOrchestrationPortfolioRiskMode
   thresholdPct?: number

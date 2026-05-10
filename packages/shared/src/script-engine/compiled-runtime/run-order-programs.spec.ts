@@ -1,9 +1,11 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type {
   CompiledAdaptiveVolatilityGridProgram,
+  CompiledEventListenerProgram,
   CompiledFixedGridGatedProgram,
   CompiledOrchestrationProgram,
 } from './compiled-orchestration-program'
+import { canonicalSerialize } from './canonical-serialize'
 import type { CompiledGuardState } from './evaluate-guards'
 import type { ProgramLifecycleState } from './program-lifecycle-state'
 import { runOrderPrograms } from './run-order-programs'
@@ -1111,5 +1113,456 @@ describe('runOrderPrograms — adaptive_volatility_grid (Phase 5 S6)', () => {
     )
     expect(state.cancelledProgramIds).toContain(program.id)
     expect(state.programLifecycleStateNext).not.toHaveProperty(program.id)
+  })
+})
+
+// Phase 5 S12 (#1118): event_listener
+function makeEventListenerProgram(
+  overrides: Partial<CompiledEventListenerProgram> = {},
+): CompiledEventListenerProgram {
+  return {
+    id: 'orch_event_listener_1',
+    programKind: 'event_listener',
+    activeWhenExprId: 'expr_gate_regime',
+    onDeactivate: 'cancel',
+    rebuildPolicy: 'static',
+    eventSchemaRef: 'webhook_event',
+    sourceFeedId: 'webhook.tradingview.alpha',
+    permissionScope: 'tradingview:alpha',
+    idempotencyKey: { fieldPath: 'signalId' },
+    dedupWindowMs: 5_000,
+    expirationTtlMs: 60_000,
+    expirationPolicy: 'drop',
+    ...overrides,
+  }
+}
+
+function eventCtx(
+  feedEvents: ReadonlyArray<{ id: string; ts: number; payload: Readonly<Record<string, unknown>> }>,
+  now: number,
+  feedId = 'webhook.tradingview.alpha',
+  schemaVersion?: number,
+): StrategyExecutionContextV1 {
+  return {
+    timestamp: now,
+    eventInbox: { [feedId]: feedEvents },
+    ...(typeof schemaVersion === 'number' ? { eventSchemaVersion: { [feedId]: schemaVersion } } : {}),
+  } as StrategyExecutionContextV1
+}
+
+describe('runOrderPrograms — event_listener (Phase 5 S12)', () => {
+  it('active=true 收事件 → lastEventId / payloadJson 写入；workingOrders/closeProgramIds=0', () => {
+    const program = makeEventListenerProgram()
+    const events = [
+      { id: 'e1', ts: 1_700_000_000_000, payload: { signalId: 'A1', side: 'long' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_000_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    expect(state.workingOrders).toEqual([])
+    expect(state.closeProgramIds).toEqual([])
+    expect(state.activeProgramIds).toEqual([program.id])
+    const entry = state.programLifecycleStateNext[program.id]
+    expect(entry?.kind).toBe('event_listener')
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBe('e1')
+      expect(entry.lastEventPayloadJson).toBe(canonicalSerialize({ signalId: 'A1', side: 'long' }))
+      expect(entry.dedupBuffer).toEqual([{ key: 'A1', ts: 1_700_000_000_000 }])
+      expect(entry.escalateCount).toBe(0)
+    }
+  })
+
+  it('inactive cancel → cancelledProgramIds + 占位 lifecycle (dedupBuffer 清空)', () => {
+    const program = makeEventListenerProgram({ onDeactivate: 'cancel' })
+    const prev: ProgramLifecycleState = Object.freeze({
+      kind: 'event_listener' as const,
+      lastEventAt: 1_700_000_000_000,
+      lastEventId: 'e_prev',
+      lastEventPayloadJson: '{"x":1}',
+      dedupBuffer: Object.freeze([{ key: 'A1', ts: 1_700_000_000_000 }]),
+      schemaVersion: 0,
+      escalateCount: 0,
+    })
+    const state = runOrderPrograms(
+      eventCtx([], 1_700_000_001_000),
+      [],
+      { expr_gate_regime: false },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    expect(state.cancelledProgramIds).toContain(program.id)
+    const entry = state.programLifecycleStateNext[program.id]
+    expect(entry?.kind).toBe('event_listener')
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBeNull()
+      expect(entry.dedupBuffer).toEqual([])
+    }
+  })
+
+  it('inactive keep 透传 prev lifecycle 且不读 inbox', () => {
+    const program = makeEventListenerProgram({ onDeactivate: 'keep' })
+    const prev: ProgramLifecycleState = Object.freeze({
+      kind: 'event_listener' as const,
+      lastEventAt: 1_700_000_000_000,
+      lastEventId: 'e_prev',
+      lastEventPayloadJson: '{"x":1}',
+      dedupBuffer: Object.freeze([{ key: 'KEEP', ts: 1_700_000_000_000 }]),
+      schemaVersion: 0,
+      escalateCount: 2,
+    })
+    const fresh = [{ id: 'e_new', ts: 1_700_000_002_000, payload: { signalId: 'NEW' } }]
+    const state = runOrderPrograms(
+      eventCtx(fresh, 1_700_000_002_000),
+      [],
+      { expr_gate_regime: false },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    expect(state.activeProgramIds).toEqual([program.id])
+    expect(state.programLifecycleStateNext[program.id]).toBe(prev)
+  })
+
+  it('dedup 命中 → 跳过 + 不更新 lastEvent*', () => {
+    const program = makeEventListenerProgram()
+    const prev: ProgramLifecycleState = Object.freeze({
+      kind: 'event_listener' as const,
+      lastEventAt: 1_700_000_000_000,
+      lastEventId: 'e_old',
+      lastEventPayloadJson: '{"old":true}',
+      dedupBuffer: Object.freeze([{ key: 'A1', ts: 1_700_000_000_000 }]),
+      schemaVersion: 0,
+      escalateCount: 0,
+    })
+    const events = [
+      { id: 'e_dup', ts: 1_700_000_001_000, payload: { signalId: 'A1' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_001_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    expect(entry?.kind).toBe('event_listener')
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBe('e_old')
+      expect(entry.lastEventPayloadJson).toBe('{"old":true}')
+    }
+  })
+
+  it('dedup 窗外重新接收 → 旧 key 滚出，新事件写入', () => {
+    const program = makeEventListenerProgram()
+    // prev 内 ts 为 t-10s（在 5s 窗口外）
+    const prev: ProgramLifecycleState = Object.freeze({
+      kind: 'event_listener' as const,
+      lastEventAt: 1_700_000_000_000,
+      lastEventId: 'e_old',
+      lastEventPayloadJson: '{}',
+      dedupBuffer: Object.freeze([{ key: 'A1', ts: 1_700_000_000_000 }]),
+      schemaVersion: 0,
+      escalateCount: 0,
+    })
+    const events = [
+      { id: 'e_new', ts: 1_700_000_010_000, payload: { signalId: 'A1' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_010_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    expect(entry?.kind).toBe('event_listener')
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBe('e_new')
+      expect(entry.dedupBuffer).toEqual([{ key: 'A1', ts: 1_700_000_010_000 }])
+    }
+  })
+
+  it('dedup 边界严格 `>`：ts === now-dedupWindowMs 滚出', () => {
+    const program = makeEventListenerProgram({ dedupWindowMs: 5_000 })
+    const prev: ProgramLifecycleState = Object.freeze({
+      kind: 'event_listener' as const,
+      lastEventAt: 1_700_000_000_000,
+      lastEventId: 'e_old',
+      lastEventPayloadJson: '{}',
+      // ts 等于 cutoff
+      dedupBuffer: Object.freeze([{ key: 'A1', ts: 1_700_000_000_000 }]),
+      schemaVersion: 0,
+      escalateCount: 0,
+    })
+    const events = [
+      { id: 'e_new', ts: 1_700_000_005_000, payload: { signalId: 'A1' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_005_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      // 旧条目滚出 → 新事件写入
+      expect(entry.lastEventId).toBe('e_new')
+      expect(entry.dedupBuffer).toEqual([{ key: 'A1', ts: 1_700_000_005_000 }])
+    }
+  })
+
+  it('同 ts 同 key 两个事件 → 第二个 dedup 命中（先到先得）', () => {
+    const program = makeEventListenerProgram()
+    const events = [
+      { id: 'e1', ts: 1_700_000_000_000, payload: { signalId: 'A1' } },
+      { id: 'e2', ts: 1_700_000_000_000, payload: { signalId: 'A1' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_000_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBe('e1')
+      expect(entry.dedupBuffer).toEqual([{ key: 'A1', ts: 1_700_000_000_000 }])
+    }
+  })
+
+  it('dedupBuffer 容量 LRU：注入 1025 唯一 key → buffer ≤ 1024', () => {
+    // dedupWindowMs 设大覆盖所有事件；expirationTtlMs 必须严格大于 dedupWindowMs
+    const program = makeEventListenerProgram({ dedupWindowMs: 3_600_000, expirationTtlMs: 86_400_000 })
+    const events = Array.from({ length: 1025 }, (_, i) => ({
+      id: `e${i}`,
+      ts: 1_700_000_000_000 + i,
+      payload: { signalId: `K${i}` },
+    }))
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_001_500),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.dedupBuffer.length).toBe(1024)
+      // 最早条目（K0）已滚出
+      expect(entry.dedupBuffer[0].key).toBe('K1')
+    }
+  })
+
+  it('TTL drop：过期事件不写 lastEvent / 不计 escalate', () => {
+    const program = makeEventListenerProgram({ expirationTtlMs: 1_000, dedupWindowMs: 500 })
+    const events = [
+      // ts now-2000 → 过期 1000ms
+      { id: 'e_old', ts: 1_700_000_000_000, payload: { signalId: 'OLD' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_002_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBeNull()
+      expect(entry.escalateCount).toBe(0)
+      expect(entry.dedupBuffer).toEqual([])
+    }
+  })
+
+  it('TTL escalate：过期事件 escalateCount += 1 累计', () => {
+    const program = makeEventListenerProgram({
+      expirationPolicy: 'escalate',
+      expirationTtlMs: 1_000,
+      dedupWindowMs: 500,
+    })
+    const events = [
+      { id: 'e1', ts: 1_700_000_000_000, payload: { signalId: 'A' } },
+      { id: 'e2', ts: 1_700_000_000_500, payload: { signalId: 'B' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_002_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.escalateCount).toBe(2)
+      expect(entry.lastEventId).toBeNull()
+    }
+  })
+
+  it('schemaVersion bump：rebuildPolicy=on_schema_version_bump 时清空 dedupBuffer', () => {
+    const program = makeEventListenerProgram({ rebuildPolicy: 'on_schema_version_bump' })
+    const prev: ProgramLifecycleState = Object.freeze({
+      kind: 'event_listener' as const,
+      lastEventAt: 1_700_000_000_000,
+      lastEventId: 'e_old',
+      lastEventPayloadJson: '{}',
+      dedupBuffer: Object.freeze([{ key: 'OLD', ts: 1_700_000_000_000 }]),
+      schemaVersion: 1,
+      escalateCount: 0,
+    })
+    // 触发 bump：ctx.eventSchemaVersion[feedId] = 2
+    const events = [
+      { id: 'e_new', ts: 1_700_000_001_000, payload: { signalId: 'OLD' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_001_000, 'webhook.tradingview.alpha', 2),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.schemaVersion).toBe(2)
+      // bump 后 prev OLD 条目被清空 → 同 key 新事件可写入
+      expect(entry.lastEventId).toBe('e_new')
+      expect(entry.dedupBuffer).toEqual([{ key: 'OLD', ts: 1_700_000_001_000 }])
+    }
+  })
+
+  it('多事件按 ts 升序 stable-sort（输入乱序也 deterministic）', () => {
+    const program = makeEventListenerProgram()
+    const events = [
+      { id: 'e3', ts: 1_700_000_000_300, payload: { signalId: 'C' } },
+      { id: 'e1', ts: 1_700_000_000_100, payload: { signalId: 'A' } },
+      { id: 'e2', ts: 1_700_000_000_200, payload: { signalId: 'B' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_000_500),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      // 按 ts 排序 → 最后写入应为 ts 最大的事件 e3
+      expect(entry.lastEventId).toBe('e3')
+      expect(entry.dedupBuffer.map(e => e.key)).toEqual(['A', 'B', 'C'])
+    }
+  })
+
+  it('kind 不匹配 prev lifecycle → 降级路径（视为初始 state）', () => {
+    const program = makeEventListenerProgram()
+    const prev: ProgramLifecycleState = { kind: 'fixed_grid_gated' }
+    const events = [
+      { id: 'e1', ts: 1_700_000_000_000, payload: { signalId: 'A1' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_000_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+      { [program.id]: prev },
+    )
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBe('e1')
+      expect(entry.dedupBuffer).toEqual([{ key: 'A1', ts: 1_700_000_000_000 }])
+    }
+  })
+
+  it('cancelOrderPrograms guard：进 cancelledProgramIds + 占位 lifecycle', () => {
+    const program = makeEventListenerProgram()
+    const events = [
+      { id: 'e1', ts: 1_700_000_000_000, payload: { signalId: 'A1' } },
+    ]
+    const state = runOrderPrograms(
+      eventCtx(events, 1_700_000_000_000),
+      [],
+      { expr_gate_regime: true },
+      guardCancelAll,
+      [],
+      undefined,
+      [program],
+    )
+    expect(state.cancelledProgramIds).toContain(program.id)
+    const entry = state.programLifecycleStateNext[program.id]
+    if (entry?.kind === 'event_listener') {
+      expect(entry.lastEventId).toBeNull()
+      expect(entry.dedupBuffer).toEqual([])
+    }
+  })
+
+  it('isValidEventListener fail-closed：缺 sourceFeedId → cancelled', () => {
+    const program = makeEventListenerProgram({ sourceFeedId: '' })
+    const state = runOrderPrograms(
+      eventCtx([], 1_700_000_000_000),
+      [],
+      { expr_gate_regime: true },
+      guard,
+      [],
+      undefined,
+      [program],
+    )
+    expect(state.cancelledProgramIds).toContain(program.id)
+  })
+
+  it('永不 push closeProgramIds — W5 不变量回归', () => {
+    const matrix: Array<{ active: boolean; deact: 'cancel' | 'keep' }> = [
+      { active: true, deact: 'cancel' },
+      { active: false, deact: 'cancel' },
+      { active: false, deact: 'keep' },
+    ]
+    for (const m of matrix) {
+      const p = makeEventListenerProgram({ onDeactivate: m.deact })
+      const state = runOrderPrograms(
+        eventCtx([], 1_700_000_000_000),
+        [],
+        { expr_gate_regime: m.active },
+        guard,
+        [],
+        undefined,
+        [p],
+      )
+      expect(state.closeProgramIds).toEqual([])
+    }
   })
 })
