@@ -281,6 +281,10 @@ export class CodegenConversationResponseMapperHelper {
     this.internalKeyLeakGuard.assertNoLeaks(publicSpecDesc, {
       surface: 'codegen.session.specDesc',
       scanPaths: true,
+      // displayLogicGraph 块 / 节点 / item 的 `id` 字段按 contract 内嵌 canonical
+      // action 或 atom key 做跨投影稳定标识（见 semantic-state-projection
+      // 中 `action-${trigger.id}-${actionKey}` 形式），不是用户可见 prose。
+      ignoreValueAtKeys: ['id'],
     })
     return publicSpecDesc
   }

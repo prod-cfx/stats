@@ -10,6 +10,11 @@ import {
   PUBLIC_RESPONSE_INTERNAL_IDENTIFIERS,
 } from './internal-key-identifiers'
 
+// 默认 fail-closed：不对任何字段名做值扫描豁免，由 caller 在调用点显式列出
+// 哪些 contract 字段属于"结构性 ID 内嵌 canonical key"例外（如 displayLogicGraph
+// 块 ID），把例外语义编码在调用点旁边，避免未来新增 surface 隐式继承豁免。
+const DEFAULT_IGNORE_VALUE_AT_KEYS: readonly string[] = []
+
 const INTERNAL_KEY_SUGGESTIONS: Record<string, string> = {
   generic_boundary: '用可读边界名称替代，例如“上边界 / 下边界 / 中线”。',
   'condition.kind': '不要暴露 canonical condition 字段路径；改为展示条件类型的可读文案。',
@@ -61,6 +66,16 @@ export class InternalKeyLeakGuardService {
     findings: InternalKeyLeakGuardFinding[],
   ): void {
     if (typeof value === 'string') {
+      const ignoreValueAtKeys = options.ignoreValueAtKeys ?? DEFAULT_IGNORE_VALUE_AT_KEYS
+      const lastKey = keyPath.length > 0 ? keyPath[keyPath.length - 1] : undefined
+      if (lastKey !== undefined && ignoreValueAtKeys.includes(lastKey)) {
+        // 当 caller 在 ignoreValueAtKeys 中列出此父键时，跳过 value-pattern 扫描；
+        // 用于 contract 上"内嵌 canonical key 做稳定标识"的结构性字段（如 React key）。
+        // 默认空数组 = fail-closed：caller 必须显式承认例外。
+        // 注意：豁免仅作用于 string-leaf；嵌套对象/数组的子节点 lastKey 会更新，
+        // 不会沿 keyPath 向下穿透豁免。
+        return
+      }
       this.collectFinding(value, path, findings)
       return
     }

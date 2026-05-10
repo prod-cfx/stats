@@ -136,4 +136,119 @@ describe('internalKeyLeakGuardService', () => {
       scanPaths: true,
     })
   })
+
+  it('default ignoreValueAtKeys is empty: structural id with canonical key still triggers leak (fail-closed)', () => {
+    // 默认 fail-closed：caller 不显式声明 ignoreValueAtKeys 时，结构性 ID
+    // 字段值仍参与 leak 扫描。例外语义必须由调用点旁的 ignoreValueAtKeys 显式声明，
+    // 避免未来新增 surface 隐式继承豁免。
+    try {
+      guard.assertNoLeaks({
+        displayLogicGraph: {
+          blocks: [{ items: [{ id: 'action-entry-ma-open_long' }] }],
+        },
+      }, {
+        surface: 'test.default-fail-closed',
+        scanPaths: true,
+      })
+      throw new Error('expected internal key leak')
+    }
+    catch (err) {
+      expect((err as Error).message).toBe('semantic_presentation_internal_key_leak:open_long')
+    }
+  })
+
+  it('caller can opt-in to skip leak scan on structural id fields via ignoreValueAtKeys (#1133)', () => {
+    // caller 显式列出 'id'：表示该 surface 上的 contract 允许 id 字段值内嵌 canonical key
+    // (例如 displayLogicGraph.blocks[*].items[*].id 形如 `action-entry-ma-open_long`)。
+    expect(() => {
+      guard.assertNoLeaks({
+        displayLogicGraph: {
+          blocks: [{ items: [{ id: 'action-entry-ma-open_long' }] }],
+        },
+      }, {
+        surface: 'test.structural-id-explicit',
+        scanPaths: true,
+        ignoreValueAtKeys: ['id'],
+      })
+    }).not.toThrow()
+  })
+
+  it('still catches leak pattern in non-id prose fields when same canonical key embedded', () => {
+    // 同一 canonical key 出现在 prose 字段（如 label/text）仍触发 leak guard，
+    // 证明 ignoreValueAtKeys 是 key-name 级开关而非全局放宽。
+    try {
+      guard.assertNoLeaks({
+        displayLogicGraph: {
+          blocks: [{
+            items: [{
+              id: 'action-entry-ma-open_long',
+              label: '触发 open_long',
+            }],
+          }],
+        },
+      }, {
+        surface: 'test.prose-leak-vs-id',
+        scanPaths: true,
+        ignoreValueAtKeys: ['id'],
+      })
+      throw new Error('expected internal key leak')
+    }
+    catch (err) {
+      expect((err as Error).message).toBe('semantic_presentation_internal_key_leak:open_long')
+      expect((err as { args?: { details?: string } }).args?.details).toContain('path=$.displayLogicGraph.blocks[0].items[0].label')
+    }
+  })
+
+  it('does not let id exemption bleed into nested objects under the id key', () => {
+    // 反向断言（Reviewer A_4）：豁免只对 string-leaf 生效；如果某 contract
+    // 错把对象塞进 id 字段，子节点的 lastKey 会更新为子键名，不再继承豁免。
+    try {
+      guard.assertNoLeaks({
+        item: {
+          id: { label: '触发 open_long' },
+        },
+      }, {
+        surface: 'test.id-exemption-no-bleed',
+        scanPaths: true,
+        ignoreValueAtKeys: ['id'],
+      })
+      throw new Error('expected internal key leak')
+    }
+    catch (err) {
+      expect((err as Error).message).toBe('semantic_presentation_internal_key_leak:open_long')
+      expect((err as { args?: { details?: string } }).args?.details).toContain('path=$.item.id.label')
+    }
+  })
+
+  it('exempts string elements inside an array directly under an ignored key (Reviewer B_M1)', () => {
+    // 数组分支不更新 keyPath，所以 `{ id: ['...'] }` 形态下数组元素的 lastKey
+    // 仍是 'id'，按 contract 视为同一字段的多值；显式锁定此行为以防 walk 重构回归。
+    expect(() => {
+      guard.assertNoLeaks({
+        item: { id: ['action-entry-ma-open_long', 'action-exit-ma-close_long'] },
+      }, {
+        surface: 'test.array-id-element-exempt',
+        scanPaths: true,
+        ignoreValueAtKeys: ['id'],
+      })
+    }).not.toThrow()
+  })
+
+  it('keeps path scan effective even when value scan on id is exempted (Reviewer B_M2)', () => {
+    // 即便 caller 在 ignoreValueAtKeys 里豁免 id 值，scanPaths 仍能拦下
+    // keyPath 中含 internalKey 的错误字段命名（如把 `condition.kind` 当 record key）。
+    try {
+      guard.assertNoLeaks({
+        'condition.kind': { id: 'safe-id' },
+      }, {
+        surface: 'test.path-scan-still-effective',
+        scanPaths: true,
+        ignoreValueAtKeys: ['id'],
+      })
+      throw new Error('expected internal key leak')
+    }
+    catch (err) {
+      expect((err as Error).message).toBe('semantic_presentation_internal_key_leak:condition.kind')
+    }
+  })
 })
