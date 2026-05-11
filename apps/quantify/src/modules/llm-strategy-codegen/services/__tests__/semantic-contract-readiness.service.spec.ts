@@ -476,6 +476,8 @@ describe('SemanticContractReadinessService', () => {
         domain: 'capital',
         verb: 'allocate',
         object: 'per_order_budget',
+        // #1186 PR3: per_order_budget missing entries 一律携带 READINESS_PER_ORDER_BUDGET_MISSING
+        errorCode: 'READINESS_PER_ORDER_BUDGET_MISSING',
       },
     ])
     expect(result.state.actions[0].openSlots).toEqual([
@@ -3245,6 +3247,165 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
       r => r.domain === 'capital' && r.verb === 'allocate' && r.object === 'per_order_budget',
     )
     expect(capitalMissing.length).toBeGreaterThan(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// #1186 PR3 — multi-leg per-leg anchored gating (decision 选项 A)
+// ---------------------------------------------------------------------------
+// 决策: docs/decisions/2026-05-11-multi-leg-budget-readiness.md
+// 多腿场景下，per_order_budget requirement 满足判定改为：每条 leg 各自 capability 都 anchored 才 satisfied。
+// executable_legs 来源统一调 resolver.getExecutableLegScopes()（critic C3）。
+// ---------------------------------------------------------------------------
+
+describe('#1186 PR3 — multi-leg per_order_budget per-leg anchored', () => {
+    function buildMultiLegConsumer() {
+      // action.grid_ladder は registered atom で per_order_budget を requires する既知キー
+      return {
+        id: 'action-consumer',
+        key: 'action.grid_ladder',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' as const },
+        contracts: [{
+          id: 'contract-consumer',
+          kind: 'action' as const,
+          capabilities: [{
+            domain: 'order_program' as const,
+            verb: 'maintain' as const,
+            object: 'limit_ladder' as const,
+            shape: { timeInForce: 'gtc' },
+          }],
+          requires: [
+            { domain: 'capital' as const, verb: 'allocate' as const, object: 'per_order_budget' as const },
+          ],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }
+    }
+
+    function buildAnchoredLeg(id: string, value: number) {
+      return {
+        id,
+        key: 'open_long',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+        support: { supportStatus: 'supported_executable' as const },
+        contracts: [{
+          id: `contract-${id}`,
+          kind: 'action' as const,
+          capabilities: [{
+            domain: 'capital' as const,
+            verb: 'allocate' as const,
+            object: 'per_order_budget' as const,
+            shape: { kind: 'quote', value, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }
+    }
+
+    function buildOpenLeg(id: string) {
+      // 同 capability shape 但 owner status=open（缺 anchored）
+      return {
+        id,
+        key: 'open_long',
+        status: 'open' as const,
+        source: 'user_explicit' as const,
+        openSlots: [{
+          slotKey: 'position.dca_schedule.per_order_sizing',
+          fieldPath: `actions[${id}].sizing`,
+          status: 'open' as const,
+          priority: 'risk' as const,
+          questionHint: '请确认每次补仓多少。',
+          affectsExecution: true,
+        }],
+        support: { supportStatus: 'supported_executable' as const },
+        contracts: [{
+          id: `contract-${id}`,
+          kind: 'action' as const,
+          capabilities: [{
+            domain: 'capital' as const,
+            verb: 'allocate' as const,
+            object: 'per_order_budget' as const,
+            shape: { kind: 'quote', value: 200, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }
+    }
+
+    // case A：multi-leg + 双 anchored → satisfied=true（per_order_budget 不在 missingRequirements）
+    it('case A — multi-leg + 双 leg 各自 anchored → per_order_budget 判 satisfied', () => {
+      const state = createSemanticState({
+        isMultiLeg: true,
+        actions: [
+          buildMultiLegConsumer(),
+          buildAnchoredLeg('action-leg-a', 100),
+          buildAnchoredLeg('action-leg-b', 200),
+        ],
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state)
+
+      const capitalMissing = result.missingRequirements.filter(
+        r => r.domain === 'capital' && r.verb === 'allocate' && r.object === 'per_order_budget',
+      )
+      expect(capitalMissing).toHaveLength(0)
+    })
+
+    // case B：multi-leg + leg-B 缺 anchor → satisfied=false + mismatch entry 含 READINESS_PER_ORDER_BUDGET_MISSING
+    it('case B — multi-leg + 单 leg 缺 anchored → per_order_budget mismatch + errorCode READINESS_PER_ORDER_BUDGET_MISSING', () => {
+      const state = createSemanticState({
+        isMultiLeg: true,
+        actions: [
+          buildMultiLegConsumer(),
+          buildAnchoredLeg('action-leg-a', 100),
+          buildOpenLeg('action-leg-b'),
+        ],
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state)
+
+      const capitalMissing = result.missingRequirements.filter(
+        r => r.domain === 'capital' && r.verb === 'allocate' && r.object === 'per_order_budget',
+      )
+      expect(capitalMissing.length).toBeGreaterThan(0)
+      expect(capitalMissing.every(r => r.errorCode === 'READINESS_PER_ORDER_BUDGET_MISSING')).toBe(true)
+    })
+
+    // case C（回归）：单腿 + 单 anchor → satisfied=true（等价 #1175 行为）
+    it('case C — 单腿（isMultiLeg 缺省）+ 单 anchor → 行为零变更（satisfied）', () => {
+      const state = createSemanticState({
+        actions: [
+          buildMultiLegConsumer(),
+          buildAnchoredLeg('action-leg-only', 100),
+        ],
+      })
+
+      const result = new SemanticContractReadinessService().normalize(state)
+
+      const capitalMissing = result.missingRequirements.filter(
+        r => r.domain === 'capital' && r.verb === 'allocate' && r.object === 'per_order_budget',
+      )
+      expect(capitalMissing).toHaveLength(0)
+    })
   })
 })
 

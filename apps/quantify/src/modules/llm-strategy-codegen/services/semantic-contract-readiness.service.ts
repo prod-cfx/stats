@@ -24,6 +24,7 @@ import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
+import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
@@ -84,6 +85,8 @@ export class SemanticContractReadinessService {
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
     private readonly orchestrationRegistry: SemanticOrchestrationRegistryService = new SemanticOrchestrationRegistryService(),
+    // #1186 PR3 (decision 选项 A): multi-leg per_order_budget 判定共用 PR2 落地的 getExecutableLegScopes()
+    private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
   ) {}
 
   normalize(
@@ -237,6 +240,13 @@ export class SemanticContractReadinessService {
             domain: requirement.domain,
             verb: requirement.verb,
             object: requirement.object,
+            // #1186 PR3: per_order_budget missing 一律带 READINESS_PER_ORDER_BUDGET_MISSING
+            // 让上游能区分 multi-leg per-leg 缺 anchor 与 timeframe mismatch 等其他失败模式。
+            ...(requirement.domain === 'capital'
+              && requirement.verb === 'allocate'
+              && requirement.object === 'per_order_budget'
+              ? { errorCode: 'READINESS_PER_ORDER_BUDGET_MISSING' }
+              : {}),
           })),
       ),
     )
@@ -293,6 +303,18 @@ export class SemanticContractReadinessService {
       const evidences = CapabilityEvidenceIndex.build(state)
         .byKey('capital', 'allocate', 'per_order_budget')
         .filter(e => e.ownerStatus === 'locked')
+      // #1186 PR3 (decision 选项 A): multi-leg 路径 per-leg anchored gating —
+      // 每条 executable leg 各自需有 anchored evidence 才算满足。executable_legs 来源
+      // 统一调 PR2 已 land 的 PerTradeSizingResolver.getExecutableLegScopes()（critic C3：
+      // 禁止独立计算）。单仓路径保留原 some 语义、行为零变更。
+      if (state.isMultiLeg === true) {
+        const executableScopes = this.sizingResolver.getExecutableLegScopes(state)
+        if (executableScopes.length < 2) return false
+        const validAnchored = evidences.filter(
+          e => this.hasRequiredCapabilityShape(e.capability, requirement),
+        ).length
+        return validAnchored === executableScopes.length
+      }
       return evidences.some(e => this.hasRequiredCapabilityShape(e.capability, requirement))
     }
     return capabilities.some(capability =>

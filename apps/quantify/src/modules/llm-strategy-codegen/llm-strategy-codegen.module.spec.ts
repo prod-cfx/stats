@@ -10,6 +10,7 @@ import { SemanticEventFrameProjectorService } from './services/semantic-event-fr
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
+import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 
 describe('LlmStrategyCodegenModule', () => {
   it('registers providers required by the canonical spec v2 IR compiler constructor', () => {
@@ -62,5 +63,15 @@ describe('LlmStrategyCodegenModule', () => {
     const dependencies = Reflect.getMetadata('design:paramtypes', SemanticContractReadinessService)
 
     expect(dependencies).toContain(SemanticAtomContractService)
+  })
+
+  // #1186 PR3 (decision 选项 A): readiness service multi-leg per_order_budget 判定共用 resolver；
+  // 哨兵：DI 元数据中必须含 PerTradeSizingResolver，且 module providers 注册了同一实例。
+  it('wires PerTradeSizingResolver into the semantic contract readiness service', () => {
+    const dependencies = Reflect.getMetadata('design:paramtypes', SemanticContractReadinessService)
+    const providers = Reflect.getMetadata(MODULE_METADATA.PROVIDERS, LlmStrategyCodegenModule)
+
+    expect(dependencies).toContain(PerTradeSizingResolver)
+    expect(providers).toContain(PerTradeSizingResolver)
   })
 })
