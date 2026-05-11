@@ -53,5 +53,18 @@ export const riskPartialTakeProfitUtterances = [
       openSlotKeys: [],
     },
   },
+  {
+    id: 'risk-partial-take-profit-zh-locked-two-tier-user-real',
+    atomKey: 'risk.partial_take_profit',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，单笔 10%，盈利 5% 平 50%，盈利 10% 平 50%。',
+    expected: {
+      owner: 'risk',
+      key: 'risk.partial_take_profit',
+      status: 'locked',
+      openSlotKeys: [],
+    },
+  },
 ] satisfies readonly UtteranceCorpusCase[]
 

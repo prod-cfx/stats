@@ -2043,7 +2043,7 @@ export class SemanticSeedExtractorService {
       })
     }
 
-    const takeProfit = this.extractPercent(text, [
+    const takeProfitPatterns = [
       /盈利\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
       /盈利(?:达到|达|到)?\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
       /盈利\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
@@ -2051,22 +2051,40 @@ export class SemanticSeedExtractorService {
       /止盈\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止盈|盈利)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
-    ])
-    if (takeProfit !== null) {
-      const riskContext = this.resolveRiskClauseContext(text, 'take_profit')
-      const basis = this.resolveRiskBasis(riskContext)
-      const basisSource = this.resolveRiskBasisSource(riskContext, basis)
-      risk.push({
-        key: 'risk.take_profit_pct',
-        params: {
-          valuePct: takeProfit,
-          direction: 'profit',
-          basis,
-          basisSource,
-          effect: 'close_position',
-          scope: 'current_position',
-        },
+    ]
+    // INVARIANT-B1 guard：partial_take_profit 触发短语是 utterance 级语义，含 partial 则全文跳过单值止盈
+    const hasPartialTakeProfitPhrase =
+      this.partialTakeProfitPhraseRe.test(text)
+      || /盈利\s*\d+(?:\.\d+)?\s*%\s*平\s*(?:\d+\s*%|一半|半)/u.test(text)
+    if (!hasPartialTakeProfitPhrase) {
+      // INVARIANT-B2 guard：加仓触发上下文中的"盈利 N% 后加仓"是触发阈值，按子句作用域排除
+      //   防止复合 utterance "盈利 2% 后加仓 ... 止盈 10%" 中合法的 10% 被一并误杀
+      const addPositionTriggerPhrase = /盈利\s*\d+(?:\.\d+)?\s*%\s*(?:之后|后|再|则)\s*加仓/u
+      const addPositionTriggerEn = /(?:scale\s*in|\badd\b|pyramid)[^.,;。，；]{0,20}(?:when|if|after)\s+profit/iu
+      const takeProfitClause = this.splitRiskClauses(text).find((clause) => {
+        if (this.extractPercent(clause, takeProfitPatterns) === null) return false
+        if (addPositionTriggerPhrase.test(clause) || addPositionTriggerEn.test(clause)) return false
+        return true
       })
+      if (takeProfitClause) {
+        const takeProfit = this.extractPercent(takeProfitClause, takeProfitPatterns)
+        if (takeProfit !== null) {
+          const riskContext = this.resolveRiskClauseContext(takeProfitClause, 'take_profit')
+          const basis = this.resolveRiskBasis(riskContext)
+          const basisSource = this.resolveRiskBasisSource(riskContext, basis)
+          risk.push({
+            key: 'risk.take_profit_pct',
+            params: {
+              valuePct: takeProfit,
+              direction: 'profit',
+              basis,
+              basisSource,
+              effect: 'close_position',
+              scope: 'current_position',
+            },
+          })
+        }
+      }
     }
 
     const trailingStop = this.extractPercent(text, [
@@ -5273,7 +5291,14 @@ export class SemanticSeedExtractorService {
   private isRsiThresholdAliasClause(clause: string, segment: string): boolean {
     if (!/RSI/iu.test(segment)) return false
     if (/\b(?:MA|EMA)\s*\d{1,4}/iu.test(clause)) return false
-    return /(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)\s*\d+(?:\.\d+)?/u.test(clause)
+    // INVARIANT-C 防跨子句污染：含货币单位/仓位/账户语境的子句不属于 RSI 阈值
+    // 覆盖：货币单位、资金语义、仓位/账户语义、notional/equity 等英文同义词
+    if (/USDT|USDC|\bUSD\b|投入|本金|资金|capital|\bcap\b|持仓|仓位|总仓|账户|余额|\bbalance\b|\bequity\b|\bnotional\b|\bnet\s*worth\b/iu.test(clause)) return false
+    const match = clause.match(/(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)\s*(\d+(?:\.\d+)?)/u)
+    if (!match) return false
+    const value = Number(match[1])
+    // RSI 物理范围 0-100 fail-closed：超出范围的数值不会是 RSI 阈值
+    return value >= 0 && value <= 100
   }
 
   private extractMacdParams(text: string): { fastPeriod: number; slowPeriod: number; signalPeriod: number } | null {

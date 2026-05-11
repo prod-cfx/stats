@@ -84,4 +84,18 @@ export const actionAddPositionUtterances = [
       openSlotKeys: ['action.add_position.constraint'],
     },
   },
+  {
+    id: 'action-add-position-zh-locked-profit-pct-user-real',
+    atomKey: 'action.add_position',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 合约 BTCUSDT 15m，MA20 上穿 MA50 开多，盈利 2% 后加仓，每次加仓 20%，最多加仓 3 次，单笔 10%。',
+    expected: {
+      owner: 'action',
+      key: 'action.add_position',
+      status: 'locked',
+      params: { addMode: 'profit_pct', addRatio: 0.2 },
+      openSlotKeys: [],
+    },
+  },
 ] satisfies readonly UtteranceCorpusCase[]

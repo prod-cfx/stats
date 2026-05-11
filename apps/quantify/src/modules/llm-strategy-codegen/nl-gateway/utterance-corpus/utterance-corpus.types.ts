@@ -2,7 +2,12 @@ export type UtteranceCorpusLocale = 'zh' | 'en' | 'mixed'
 
 export type UtteranceCorpusCoverage = 'locked' | 'open-slot' | 'missing-default' | 'negative'
 
-export type UtteranceCorpusOwner = 'trigger' | 'action' | 'risk' | 'positionConstraint'
+export type UtteranceCorpusOwner =
+  | 'trigger'
+  | 'action'
+  | 'risk'
+  | 'positionConstraint'
+  | 'orchestrationPortfolioRisk'
 
 export type SupportedExecutableUtteranceAtom =
   | 'volume.threshold'
@@ -18,6 +23,7 @@ export type SupportedExecutableUtteranceAtom =
   | 'price.candle_pattern'
   | 'price.chart_pattern'
   | 'liquidity.sweep'
+  | 'portfolioRisk.drawdown_block'
 
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner
