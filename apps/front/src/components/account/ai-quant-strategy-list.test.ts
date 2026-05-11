@@ -2,6 +2,7 @@
 
 import type { Root } from 'react-dom/client'
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -233,8 +234,61 @@ describe('AiQuantStrategyList primary summary', () => {
     }
   }
 
-  it('keeps the running strategy action as a functional stop button with confirmation', async () => {
+  function detailItem(overrides: Partial<AccountAiQuantStrategyDetail> = {}): AccountAiQuantStrategyDetail {
+    return {
+      id: 'stg-list-1',
+      name: 'List Strategy',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'DOGEUSDT',
+      timeframe: '1h',
+      positionPct: 10,
+      isSubscribed: true,
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '1h',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'hash-1',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+      openOrdersCount: 0,
+      runtimeSemanticSummary: null,
+      ...overrides,
+    }
+  }
+
+  it('loads latest detail and shows a simple stop confirmation when no holdings or orders exist', async () => {
     mockPerformAccountAiQuantStrategyAction.mockResolvedValue({})
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(detailItem())
 
     await renderStrategyListWithItems([listItem()])
 
@@ -247,11 +301,14 @@ describe('AiQuantStrategyList primary summary', () => {
       stopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
 
-    expect(mockFetchAccountAiQuantStrategyDetail).not.toHaveBeenCalled()
-    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
+    expect(mockFetchAccountAiQuantStrategyDetail).toHaveBeenCalledWith('stg-list-1', 'user-1')
+    expect(container.textContent).toContain('确认停止策略？')
+    expect(container.textContent).toContain('确认停止')
+    expect(container.textContent).not.toContain('当前策略仍有持仓或挂单')
+    expect(container.textContent).not.toContain('平仓并停止')
 
     await act(async () => {
-      container.querySelector('[data-testid="stop-only-strategy"]')?.dispatchEvent(
+      container.querySelector('[data-testid="confirm-stop-strategy"]')?.dispatchEvent(
         new MouseEvent('click', { bubbles: true, cancelable: true }),
       )
     })
@@ -264,6 +321,15 @@ describe('AiQuantStrategyList primary summary', () => {
 
   it('calls liquidate_and_stop from the list stop dialog when user chooses liquidation', async () => {
     mockPerformAccountAiQuantStrategyAction.mockResolvedValue({})
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(detailItem({
+      positionOverview: {
+        openPositionsCount: 1,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 12,
+      },
+      openOrdersCount: 1,
+    }))
 
     await renderStrategyListWithItems([listItem()])
 
@@ -272,6 +338,9 @@ describe('AiQuantStrategyList primary summary', () => {
     await act(async () => {
       stopButton?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
     })
+    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
+    expect(container.textContent).toContain('平仓并停止')
+
     await act(async () => {
       container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
         new MouseEvent('click', { bubbles: true, cancelable: true }),
