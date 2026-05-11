@@ -81,8 +81,31 @@ export class StrategySummaryObservationService {
       if (leftSizing !== rightSizing) {
         issues.push(`${leftLabel}.sizing=${leftSizing} != ${rightLabel}.sizing=${rightSizing}`)
       }
+      else if (left.sizing.mode === 'MULTI_LEG' && right.sizing.mode === 'MULTI_LEG') {
+        // #1186 PR5: 双侧多腿 → 比对 legs[] 逐项摘要
+        const leftLegs = this.serializeLegs(left.sizing.legs)
+        const rightLegs = this.serializeLegs(right.sizing.legs)
+        if (leftLegs !== rightLegs) {
+          issues.push(`${leftLabel}.sizing.legs=${leftLegs} != ${rightLabel}.sizing.legs=${rightLegs}`)
+        }
+      }
     }
 
     return issues
+  }
+
+  // #1186 PR5: legs 序列化用稳定 key 排序，避免 JSON.stringify 的字段顺序敏感。
+  private serializeLegs(legs: ReadonlyArray<{
+    legId: string
+    mode: string
+    value: number
+    asset?: string
+    scopeKey: string
+  }> | undefined): string {
+    if (!legs || legs.length === 0) return '[]'
+    return [...legs]
+      .map(leg => `${leg.legId}:${leg.mode}:${leg.value}:${leg.asset ?? ''}`)
+      .sort()
+      .join('|')
   }
 }

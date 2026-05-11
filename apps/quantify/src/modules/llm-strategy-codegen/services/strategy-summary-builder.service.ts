@@ -1,6 +1,15 @@
-import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { CanonicalSizingMode, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type {
+  CanonicalOrchestrationLegScope,
+  CanonicalOrchestrationLegSizingMode,
+} from '../types/canonical-strategy-spec-v2'
 import type { StrategySemanticProfile } from '../types/strategy-semantic-profile'
-import type { StrategySummary, StrategySummaryIndicator } from '../types/strategy-summary'
+import type {
+  StrategySummary,
+  StrategySummaryIndicator,
+  StrategySummarySizing,
+  StrategySummarySizingLeg,
+} from '../types/strategy-summary'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
@@ -88,9 +97,55 @@ export class StrategySummaryBuilderService {
         ),
         marketType: this.normalizeMarketType(spec.market.marketType),
       }),
-      sizing: spec.sizing
-        ? { mode: spec.sizing.mode, evidence: 'explicit' }
-        : null,
+      sizing: this.resolveSpecSizing(spec),
+    }
+  }
+
+  // #1186 PR5: spec.orchestration.legScopes 含 legSizing 时走多腿分支；单腿沿用 spec.sizing。
+  // 互斥语义由 PR2 builder 保证（isMultiLeg=true ⇒ spec.sizing===null + legScopes 反填）。
+  private resolveSpecSizing(spec: CanonicalStrategySpec): StrategySummarySizing | null {
+    if (spec.version === 2) {
+      const legScopes = spec.orchestration?.legScopes ?? []
+      const legsWithSizing = legScopes.filter(
+        (leg): leg is CanonicalOrchestrationLegScope & { legSizing: NonNullable<CanonicalOrchestrationLegScope['legSizing']> } =>
+          leg.legSizing != null,
+      )
+      if (legsWithSizing.length > 0) {
+        return {
+          mode: 'MULTI_LEG',
+          evidence: 'explicit',
+          legs: legsWithSizing.map(leg => this.buildSummarySizingLeg(leg)),
+        }
+      }
+    }
+    return spec.sizing
+      ? { mode: spec.sizing.mode, evidence: 'explicit' }
+      : null
+  }
+
+  private buildSummarySizingLeg(leg: CanonicalOrchestrationLegScope & {
+    legSizing: NonNullable<CanonicalOrchestrationLegScope['legSizing']>
+  }): StrategySummarySizingLeg {
+    return {
+      legId: leg.legId,
+      mode: this.mapLegSizingModeToCanonical(leg.legSizing.mode),
+      value: leg.legSizing.value,
+      ...(leg.legSizing.asset !== undefined ? { asset: leg.legSizing.asset } : {}),
+      scopeKey: leg.id,
+    }
+  }
+
+  // legSizing.mode (`fixed_*`) → CanonicalSizingMode (`RATIO`/`QUOTE`/`QTY`)
+  // 这是 summary 层渲染契约；fixed_pct/fixed_ratio → RATIO，fixed_quote → QUOTE，fixed_base → QTY。
+  private mapLegSizingModeToCanonical(mode: CanonicalOrchestrationLegSizingMode): CanonicalSizingMode {
+    switch (mode) {
+      case 'fixed_quote':
+        return 'QUOTE'
+      case 'fixed_base':
+        return 'QTY'
+      case 'fixed_pct':
+      case 'fixed_ratio':
+        return 'RATIO'
     }
   }
 

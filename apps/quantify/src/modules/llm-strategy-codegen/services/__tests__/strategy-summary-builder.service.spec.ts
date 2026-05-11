@@ -1,3 +1,4 @@
+import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec-v2'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
@@ -208,5 +209,141 @@ strategy
     expect(summary.strategyType).toBe('bollinger')
     expect(summary.indicators).toEqual(['bollingerBands'])
     expect(summary.exitRule).toBe('bollinger.middle_revert')
+  })
+
+  // ---------------------------------------------------------------------------
+  // #1186 PR5: multi-leg sizing rendering
+  // ---------------------------------------------------------------------------
+
+  function makeMultiLegSpec(legs: ReadonlyArray<{
+    id: string
+    direction: 'long' | 'short'
+    mode: 'fixed_quote' | 'fixed_pct' | 'fixed_base' | 'fixed_ratio'
+    value: number
+    asset?: string
+  }>): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        defaultTimeframe: '15m',
+      },
+      indicators: [],
+      sizing: null,
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['15m'] },
+      rules: [],
+      orchestration: {
+        legScopes: legs.map(leg => ({
+          id: `scope-leg-${leg.id}`,
+          scopeKind: 'leg',
+          legId: leg.id,
+          direction: leg.direction,
+          instrumentRef: 'scope-symbol-btcusdt',
+          legSizing: {
+            mode: leg.mode,
+            value: leg.value,
+            asset: leg.asset,
+          },
+        })),
+      },
+    } as unknown as CanonicalStrategySpecV2
+  }
+
+  it('renders multi-leg sizing.legs[] when spec.orchestration.legScopes carries legSizing', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const spec = makeMultiLegSpec([
+      { id: 'leg-1', direction: 'long', mode: 'fixed_quote', value: 100, asset: 'USDT' },
+      { id: 'leg-2', direction: 'short', mode: 'fixed_quote', value: 200, asset: 'USDT' },
+    ])
+
+    const summary = service.buildStrategySummary(spec)
+
+    expect(summary.sizing).not.toBeNull()
+    expect(summary.sizing?.mode).toBe('MULTI_LEG')
+    expect(summary.sizing?.evidence).toBe('explicit')
+    expect(summary.sizing?.value).toBeUndefined()
+    expect(summary.sizing?.asset).toBeUndefined()
+    expect(summary.sizing?.legs).toHaveLength(2)
+    expect(summary.sizing?.legs?.[0]).toEqual({
+      legId: 'leg-1',
+      mode: 'QUOTE',
+      value: 100,
+      asset: 'USDT',
+      scopeKey: 'scope-leg-leg-1',
+    })
+    expect(summary.sizing?.legs?.[1]).toEqual({
+      legId: 'leg-2',
+      mode: 'QUOTE',
+      value: 200,
+      asset: 'USDT',
+      scopeKey: 'scope-leg-leg-2',
+    })
+  })
+
+  it('renders heterogeneous multi-leg sizing modes (fixed_quote + fixed_pct + fixed_base)', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const spec = makeMultiLegSpec([
+      { id: 'leg-1', direction: 'long', mode: 'fixed_quote', value: 100, asset: 'USDT' },
+      { id: 'leg-2', direction: 'short', mode: 'fixed_pct', value: 0.1 },
+      { id: 'leg-3', direction: 'long', mode: 'fixed_base', value: 0.001, asset: 'BTC' },
+    ])
+
+    const summary = service.buildStrategySummary(spec)
+
+    expect(summary.sizing?.mode).toBe('MULTI_LEG')
+    expect(summary.sizing?.legs).toHaveLength(3)
+    expect(summary.sizing?.legs?.[0].mode).toBe('QUOTE')
+    expect(summary.sizing?.legs?.[1].mode).toBe('RATIO')
+    expect(summary.sizing?.legs?.[1].asset).toBeUndefined()
+    expect(summary.sizing?.legs?.[2].mode).toBe('QTY')
+    expect(summary.sizing?.legs?.[2].asset).toBe('BTC')
+  })
+
+  it('falls back to single-position sizing rendering when legScopes is empty (single-leg byte regression)', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const summary = service.buildStrategySummary({
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '3m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['3m'] },
+      rules: [],
+    } as any)
+
+    expect(summary.sizing).toEqual({ mode: 'RATIO', evidence: 'explicit' })
+    expect(summary.sizing?.legs).toBeUndefined()
+  })
+
+  it('treats legScopes without any legSizing as single-position path (互斥 sentinel)', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const spec = {
+      version: 2,
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', defaultTimeframe: '15m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 100 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['15m'] },
+      rules: [],
+      orchestration: {
+        legScopes: [
+          { id: 'scope-leg-1', scopeKind: 'leg', legId: 'leg-1', direction: 'long', instrumentRef: 'sym' },
+        ],
+      },
+    } as unknown as CanonicalStrategySpecV2
+
+    const summary = service.buildStrategySummary(spec)
+
+    expect(summary.sizing).toEqual({ mode: 'QUOTE', evidence: 'explicit' })
+    expect(summary.sizing?.legs).toBeUndefined()
   })
 })
