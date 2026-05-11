@@ -530,7 +530,7 @@ export function AiQuantStrategyDetail({
                       void openStopDialogWithLatestDetail()
                     }}
                     disabled={runtimeActionDisabled}
-                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
+                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-red-500/20 bg-red-500/10 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
                   >
                     停止策略
                   </button>

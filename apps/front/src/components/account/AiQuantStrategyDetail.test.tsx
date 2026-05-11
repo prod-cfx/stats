@@ -930,7 +930,10 @@ describe('AiQuantStrategyDetail', () => {
     expect(returnLink?.className).toContain('border')
     expect(stopButton?.className).toContain('h-9')
     expect(stopButton?.className).toContain('min-w-max')
-    expect(stopButton?.className).not.toContain('rose')
+    expect(stopButton?.className).toContain('border-red-500/20')
+    expect(stopButton?.className).toContain('bg-red-500/10')
+    expect(stopButton?.className).toContain('text-red-600')
+    expect(stopButton?.className).toContain('dark:text-red-400')
     expect(actions?.textContent).not.toContain('平仓并停止')
   })
 
