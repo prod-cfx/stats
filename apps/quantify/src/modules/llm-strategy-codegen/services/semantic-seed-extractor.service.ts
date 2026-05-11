@@ -591,36 +591,41 @@ export class SemanticSeedExtractorService {
   ): Map<number, TriggerCombinationContractInput> {
     const result = new Map<number, TriggerCombinationContractInput>()
 
-    // 按 sideScope 收集候选：phase=entry、无显式 combination marker、非 logical.any_of、未被 MA stack 命中
-    const buckets = new Map<string, Array<{ index: number, trigger: SeedTrigger }>>()
+    // 1) 按 [。；;] 切分原文为子句，记录每个子句的字符 range
+    const clauses = this.splitIntoClauses(text)
+    if (clauses.length === 0) return result
+
+    // 2) 收集候选 entry trigger，按 (clauseIndex, sideScope) 双键归桶
+    type Member = { index: number, trigger: SeedTrigger }
+    const buckets = new Map<string, Member[]>()
     triggers.forEach((trigger, index) => {
       if (trigger.phase !== 'entry') return
       if (trigger.key === 'logical.any_of') return
       if (this.readTriggerGroupMarker(trigger) !== null) return
       if (trigger.contracts?.some(c => this.isTriggerCombinationLikeContract(c))) return
-      // M1：MA stack 已识别为 AND 组的 trigger 不重复挂 hetero AND 组（避免静默吞并）
+      // M1：MA stack 已识别为 AND 组的 trigger 不重复挂 hetero AND 组
       if (movingAverageStackGroups.has(index)) return
 
+      const clauseIndex = this.locateTriggerClause(trigger, text, clauses)
+      if (clauseIndex < 0) return
+
       const sideScope = trigger.sideScope ?? 'long'
-      const bucket = buckets.get(sideScope) ?? []
+      const bucketKey = `${clauseIndex}::${sideScope}`
+      const bucket = buckets.get(bucketKey) ?? []
       bucket.push({ index, trigger })
-      buckets.set(sideScope, bucket)
+      buckets.set(bucketKey, bucket)
     })
 
-    for (const [sideScope, members] of buckets) {
-      // 至少 2 个 trigger 才需要合并
+    // 3) 每桶独立判定：≥2 个 trigger 且子句仅含 AND 连词 → 挂同一 groupId
+    for (const [bucketKey, members] of buckets) {
       if (members.length < 2) continue
 
-      // 桶子句窗口：找出所有 trigger 在原文中的 evidence 位置，取最小覆盖子串
-      const windowText = this.resolveBucketClauseWindow(text, members.map(m => m.trigger))
-      if (!windowText) continue
+      const [clauseIndexStr, sideScope] = bucketKey.split('::')
+      const clauseIndex = Number(clauseIndexStr)
+      const clauseText = clauses[clauseIndex]?.text ?? ''
+      if (!this.hasConjunctiveAndOnly(clauseText)) continue
 
-      // 仅对窗口判定 AND/OR — 跨子句的「或」不会污染本桶
-      if (!this.hasConjunctiveAndOnly(windowText)) continue
-
-      // 生成稳定 groupId：phase + sideScope + 各 trigger key 去重排序短 hash
       const groupId = `entry-and-${sideScope}-${this.shortHashOfKeys(members.map(m => m.trigger.key))}`
-
       for (const { index } of members) {
         result.set(index, { groupId, join: 'AND' })
       }
@@ -630,37 +635,52 @@ export class SemanticSeedExtractorService {
   }
 
   /**
-   * 取 bucket 内所有 trigger 在原文中 evidence.text 命中位置的最小覆盖窗口。
-   * 若某 trigger 无 evidence.text 或无法在 text 中定位，则 fallback 使用 trigger.key 子串。
-   * 找不到任何 trigger 位置 → 返回 null（不判定 AND）。
+   * 按 [。；;] 切分文本为子句，返回每个子句的文本与字符 range（含分隔符前的部分）。
+   * 不按「，」切分以避免误把「A 且 B，开多」拆开。
    */
-  private resolveBucketClauseWindow(text: string, triggers: SeedTrigger[]): string | null {
-    let min = Number.POSITIVE_INFINITY
-    let max = Number.NEGATIVE_INFINITY
-
-    for (const trigger of triggers) {
-      const evText = trigger.evidence?.text
-      let pos = -1
-      let len = 0
-      if (typeof evText === 'string' && evText.length > 0) {
-        pos = text.indexOf(evText)
-        len = evText.length
+  private splitIntoClauses(text: string): Array<{ text: string, start: number, end: number }> {
+    const result: Array<{ text: string, start: number, end: number }> = []
+    const re = /[。；;]/gu
+    let lastEnd = 0
+    let match: RegExpExecArray | null
+    // eslint-disable-next-line no-cond-assign
+    while ((match = re.exec(text)) !== null) {
+      const segText = text.slice(lastEnd, match.index)
+      if (segText.length > 0) {
+        result.push({ text: segText, start: lastEnd, end: match.index })
       }
-      if (pos < 0) {
-        // fallback：trigger.key 中点号后的简短关键词
-        const fallback = trigger.key.split('.').pop() ?? ''
-        if (fallback.length > 0) {
-          pos = text.indexOf(fallback)
-          len = fallback.length
-        }
-      }
-      if (pos < 0) continue
-      if (pos < min) min = pos
-      if (pos + len > max) max = pos + len
+      lastEnd = match.index + 1
     }
+    if (lastEnd < text.length) {
+      result.push({ text: text.slice(lastEnd), start: lastEnd, end: text.length })
+    }
+    return result
+  }
 
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min >= max) return null
-    return text.slice(min, max)
+  /**
+   * 通过 evidence.text 在 text 中的命中位置，把 trigger 归到子句索引；
+   * 无 evidence 或定位失败 → 返回 -1（跳过该 trigger，不参与 hetero AND）。
+   */
+  private locateTriggerClause(
+    trigger: SeedTrigger,
+    text: string,
+    clauses: Array<{ start: number, end: number }>,
+  ): number {
+    const evText = trigger.evidence?.text
+    let pos = -1
+    if (typeof evText === 'string' && evText.length > 0) {
+      pos = text.indexOf(evText)
+    }
+    if (pos < 0) return -1
+    for (let i = 0; i < clauses.length; i++) {
+      const { start, end } = clauses[i]!
+      if (pos >= start && pos < end) return i
+    }
+    // 命中点恰好落在分隔符上（罕见）→ 归到下一个子句
+    for (let i = 0; i < clauses.length; i++) {
+      if (pos < clauses[i]!.start) return i
+    }
+    return clauses.length - 1
   }
 
   /**
