@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
-import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
@@ -110,14 +110,20 @@ export class SemanticStateProjectionService {
     const positionSummary = this.buildPositionSummary(state.position)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
+    // #1152 contract parity：orchestration locked 节点必须计入 deterministic 判定与 summary，
+    // 否则纯 orchestration-only utterance（如纯账户回撤）会被视作"空状态"通过 projection_gate
+    const lockedOrchestrationNodes = (state.orchestration?.nodes ?? [])
+      .filter(node => node.status === 'locked')
+    const orchestrationSummary = this.buildOrchestrationSummary(lockedOrchestrationNodes)
     const hasDeterministicSemantics = this.hasDeterministicSemantics({
       triggers: deterministicTriggers,
       actions: deterministicActions,
       risk: deterministicRisk,
       position: state.position,
       hasGridIntent: deterministicSignals.hasGridIntent,
+      lockedOrchestrationCount: lockedOrchestrationNodes.length,
     })
-    const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary]
+    const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary, orchestrationSummary]
       .filter(item => item.length > 0)
 
     return {
@@ -2292,6 +2298,7 @@ export class SemanticStateProjectionService {
       risk: SemanticState['risk']
       position: SemanticState['position']
       hasGridIntent: boolean
+      lockedOrchestrationCount: number
     },
   ): boolean {
     return input.triggers.length > 0
@@ -2299,6 +2306,31 @@ export class SemanticStateProjectionService {
       || input.risk.length > 0
       || this.hasValidLockedPosition(input.position)
       || input.hasGridIntent
+      || input.lockedOrchestrationCount > 0
+  }
+
+  // #1152：orchestration locked 节点摘要。优先 presentationRegistry（与 buildDisplayOrchestrationBlock 共用入口）；
+  //   未注册 publicName 则 fallback 到 node.key，确保 deterministic 路径不静默丢失。
+  private buildOrchestrationSummary(nodes: readonly SemanticOrchestrationNode[]): string {
+    if (nodes.length === 0) {
+      return ''
+    }
+    const parts: string[] = []
+    for (const node of nodes) {
+      if (!node.key) {
+        continue
+      }
+      let publicName: string | undefined
+      try {
+        const entry = this.presentationRegistry.getEntry(node.key)
+        publicName = entry?.publicName
+      }
+      catch {
+        publicName = undefined
+      }
+      parts.push(publicName ?? node.key)
+    }
+    return parts.length > 0 ? `orchestration：${parts.join('、')}` : ''
   }
 
   private compareTriggers(left: SemanticState['triggers'][number], right: SemanticState['triggers'][number]): number {

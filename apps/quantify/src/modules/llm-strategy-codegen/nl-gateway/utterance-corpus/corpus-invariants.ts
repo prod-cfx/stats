@@ -11,7 +11,11 @@
  */
 
 import type { SemanticNaturalLanguageFrame } from '../../types/semantic-natural-language-frame'
-import type { SemanticOrchestrationNode, SemanticState } from '../../types/semantic-state'
+import type {
+  SemanticOrchestrationContractKind,
+  SemanticOrchestrationNode,
+  SemanticState,
+} from '../../types/semantic-state'
 import type { SupportedExecutableUtteranceAtom } from './utterance-corpus.types'
 
 // =========================================================
@@ -149,6 +153,22 @@ export function splitClauses(utterance: string): readonly string[] {
   // 中英标点 + 换行；英文句号 `.` 与冒号 `:` 暂未加入（易与小数点 / "BTCUSDT: 15m" 等合法 token 冲突）
   // —— 多行 utterance 的精细切分作为 follow-up
   return utterance.split(/[，,；;。\n]/u).map(s => s.trim()).filter(s => s.length > 0)
+}
+
+// =========================================================
+// 不变量 D — Orchestration → classifier 全量识别（#1152）
+//
+// 每个 locked SemanticOrchestrationNode（kind ∈ scope/gate/program/portfolioRisk）
+// 都必须经 SemanticOrchestrationRegistryService 解析；classifier 输出 unknownAtoms
+// 中不得含其 key。任何 SemanticOrchestrationContractKind 新增 kind 而未在此声明
+// support 来源，TS exhaustive 编译失败。
+// =========================================================
+
+export const ORCHESTRATION_KIND_TO_REGISTRY_LOOKUP: Record<SemanticOrchestrationContractKind, 'orchestration_registry'> = {
+  scope: 'orchestration_registry',
+  gate: 'orchestration_registry',
+  program: 'orchestration_registry',
+  portfolioRisk: 'orchestration_registry',
 }
 
 export function readParamPath(obj: unknown, path: readonly string[]): unknown {

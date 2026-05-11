@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common'
 import type {
   SemanticSlotIdentity,
   SemanticActionState,
+  SemanticOrchestrationContractKind,
+  SemanticOrchestrationNode,
   SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
@@ -21,6 +23,7 @@ import type {
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { isAtomExecutableForStrategy } from '../nl-gateway/version-gate/version-gate'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
+import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 
 export type SemanticSupportRoute =
   | 'projection_gate'
@@ -44,9 +47,22 @@ export interface SemanticSupportClassification {
 
 type ResolvedSemanticAtom = ReturnType<SemanticAtomRegistryService['resolve']>
 
+// 不变量 D — orchestration 节点的 support 判定必须经 orchestration registry
+//   当前所有 SemanticOrchestrationContractKind 都走 orchestrationRegistry.getContractByKey；
+//   未来若需要按 atom registry 解析某 kind，此处改为 union 即可，TS exhaustive 会守住。
+const ORCHESTRATION_KIND_SUPPORT_SOURCE: Record<SemanticOrchestrationContractKind, 'orchestration_registry'> = {
+  scope: 'orchestration_registry',
+  gate: 'orchestration_registry',
+  program: 'orchestration_registry',
+  portfolioRisk: 'orchestration_registry',
+}
+
 @Injectable()
 export class SemanticSupportClassifierService {
-  constructor(private readonly registry: SemanticAtomRegistryService) {}
+  constructor(
+    private readonly registry: SemanticAtomRegistryService,
+    private readonly orchestrationRegistry?: SemanticOrchestrationRegistryService,
+  ) {}
 
   classify(state: SemanticState, strategyVersion?: StrategyVersionInfo): SemanticSupportClassification {
     const unsupportedAtoms: SemanticSupportClassification['unsupportedAtoms'] = []
@@ -90,12 +106,17 @@ export class SemanticSupportClassifierService {
       return withRegistryOpenSlots(withSupportMetadata(riskState, resolved), resolved)
     })
 
+    const orchestrationNodes = this.classifyOrchestrationNodes(state, unknownAtoms)
+
     const nextState: SemanticState = {
       ...state,
       triggers,
       actions,
       risk,
       position,
+      ...(state.orchestration
+        ? { orchestration: { ...state.orchestration, nodes: orchestrationNodes } }
+        : {}),
     }
 
     if (unknownAtoms.length > 0) {
@@ -175,6 +196,34 @@ export class SemanticSupportClassifierService {
       ...withRegistryOpenSlots(withSupportMetadata(position, resolved), resolved),
       ...(constraints ? { constraints } : {}),
     }
+  }
+
+  // INVARIANT-D：orchestration 节点必须由 classifier 全量遍历
+  //   仅对 status==='locked' 的节点判 unknown；非 locked 节点透传不进 unknownAtoms
+  //   （open slot 走 collectOpenSlots 分支；superseded/pending 不参与 support 判定）。
+  //   未来新增 SemanticOrchestrationContractKind 由 TS exhaustive 静态守住。
+  private classifyOrchestrationNodes(
+    state: SemanticState,
+    unknownAtoms: string[],
+  ): readonly SemanticOrchestrationNode[] {
+    const nodes = state.orchestration?.nodes ?? []
+    if (!this.orchestrationRegistry || nodes.length === 0) {
+      return nodes
+    }
+    for (const node of nodes) {
+      if (node.status !== 'locked' || !node.key) {
+        continue
+      }
+      const source = ORCHESTRATION_KIND_SUPPORT_SOURCE[node.kind]
+      if (source !== 'orchestration_registry') {
+        continue
+      }
+      const contract = this.orchestrationRegistry.getContractByKey(node.key)
+      if (contract === null) {
+        unknownAtoms.push(node.key)
+      }
+    }
+    return nodes
   }
 
   private resolveTriggerSupport(trigger: SemanticTriggerState): ResolvedSemanticAtom {
@@ -466,6 +515,9 @@ function collectOpenSlots(state: SemanticState): SemanticSlotState[] {
     ...state.risk.flatMap(risk => readNodeOpenSlots(risk)),
     ...readNodeOpenSlots(state.position),
     ...(state.position?.constraints ?? []).flatMap(constraint => readNodeOpenSlots(constraint)),
+    ...(state.orchestration?.nodes ?? []).flatMap(node =>
+      node.status === 'superseded' ? [] : node.openSlots.filter(isOpenSlot),
+    ),
     ...Object.values(state.contextSlots).filter(isOpenSlot),
   ]
 }

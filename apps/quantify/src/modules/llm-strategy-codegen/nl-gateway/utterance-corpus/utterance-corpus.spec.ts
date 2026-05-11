@@ -9,6 +9,7 @@ import type {
 import type { SupportedExecutableUtteranceAtom, UtteranceCorpusCase } from './utterance-corpus.types'
 import { NaturalLanguageGatewayService } from '../../services/natural-language-gateway.service'
 import { SemanticAtomRegistryService } from '../../services/semantic-atom-registry.service'
+import { SemanticOrchestrationRegistryService } from '../../services/semantic-orchestration-registry.service'
 import { SemanticSeedExtractorService } from '../../services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../../services/semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from '../../services/semantic-support-classifier.service'
@@ -16,6 +17,7 @@ import {
   ATOM_MUTEX,
   CLAUSE_BOUND_PARAM_CHECKS,
   FRAME_KIND_TO_STATE_LOOKUP,
+  ORCHESTRATION_KIND_TO_REGISTRY_LOOKUP,
   PHRASE_CONTEXT_MUTEX,
   readParamPath,
   splitClauses,
@@ -38,7 +40,10 @@ describe('utterance corpus baseline', () => {
   const extractor = new SemanticSeedExtractorService()
   const seedStateBuilder = new SemanticSeedStateBuilderService()
   const atomRegistry = new SemanticAtomRegistryService()
-  const supportClassifier = new SemanticSupportClassifierService(atomRegistry)
+  const orchestrationRegistry = new SemanticOrchestrationRegistryService()
+  // #1152 INVARIANT-D：classifier 必须经 orchestrationRegistry 解析 orchestration.nodes，
+  //   故显式注入第二参数；其他 invariant 仍能复用同一实例（其逻辑对兼容签名缺省路径无依赖）。
+  const supportClassifier = new SemanticSupportClassifierService(atomRegistry, orchestrationRegistry)
   const gateway = new NaturalLanguageGatewayService()
 
   it('covers the current supported executable utterance atom set with at least 60 cases', () => {
@@ -217,6 +222,60 @@ describe('utterance corpus baseline', () => {
             hostClauseFound: true,
           })
         }
+      }
+    },
+  )
+
+  // #1152 INVARIANT-D corpus sanity：必须始终至少 1 条 locked utterance 产出 orchestration locked 节点，
+  //   防止 corpus 退化导致 INVARIANT-D 在所有 case 早 return → "47 个假绿"漏报回归
+  it('[INVARIANT-D sanity] locked corpus 必须至少 1 条触发 orchestration locked 节点', () => {
+    const lockedHits = lockedCases.filter((item) => {
+      const state = seedStateBuilder.build(extractor.extract(item.utterance))
+      return (state?.orchestration?.nodes ?? []).some(node => node.status === 'locked' && typeof node.key === 'string')
+    })
+    expect(lockedHits.length).toBeGreaterThan(0)
+  })
+
+  // =========================================================
+  // 不变量 D — Orchestration → classifier 全量识别（#1152）
+  //   每条 locked utterance 的 SemanticOrchestrationNode（status==='locked'）
+  //   必须经 SemanticOrchestrationRegistryService 解析；classifier 输出
+  //   unknownAtoms 不得含其 key；节点必须在 enriched nextState 中保留。
+  // =========================================================
+  it.each(lockedCases)(
+    '$id [INVARIANT-D] locked orchestration 节点必须被 classifier 识别且 key 透传',
+    (item) => {
+      const state = seedStateBuilder.build(extractor.extract(item.utterance))
+      expect(state).not.toBeNull()
+      if (!state) return
+
+      const lockedOrchestrationNodes = (state.orchestration?.nodes ?? [])
+        .filter(node => node.status === 'locked' && typeof node.key === 'string')
+      if (lockedOrchestrationNodes.length === 0) return
+
+      const classification = supportClassifier.classify(state)
+      const enrichedKeys = new Set(
+        (classification.state.orchestration?.nodes ?? [])
+          .filter(node => node.status === 'locked')
+          .map(node => node.key),
+      )
+
+      for (const node of lockedOrchestrationNodes) {
+        // 静态 exhaustive：未来新增 SemanticOrchestrationContractKind 必须在 LOOKUP 中声明
+        expect(ORCHESTRATION_KIND_TO_REGISTRY_LOOKUP[node.kind]).toBe('orchestration_registry')
+        expect({
+          caseId: item.id,
+          kind: node.kind,
+          key: node.key,
+          unknownHit: classification.unknownAtoms.includes(node.key!),
+          preserved: enrichedKeys.has(node.key),
+        }).toEqual({
+          caseId: item.id,
+          kind: node.kind,
+          key: node.key,
+          unknownHit: false,
+          preserved: true,
+        })
       }
     },
   )
