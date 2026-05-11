@@ -1,6 +1,6 @@
 'use client'
 
-import { Send } from 'lucide-react'
+import { Check, Send } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
@@ -12,6 +12,11 @@ interface TelegramLoginButtonsProps {
   intent?: 'login' | 'bind'
   redirect?: string
   betaCode?: string
+  variant?: 'default' | 'compact'
+  onAvailabilityChange?: (availability: {
+    webAvailable: boolean
+    desktopAvailable: boolean
+  }) => void
 }
 
 interface TelegramConfigResponse {
@@ -24,7 +29,14 @@ function getTelegramDesktopBetaCodeKey(intentId: string) {
   return `auth:telegram:desktop:${intentId}:betaCode`
 }
 
-export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode }: TelegramLoginButtonsProps) {
+export function TelegramLoginButtons({
+  lng,
+  intent = 'login',
+  redirect,
+  betaCode,
+  variant = 'default',
+  onAvailabilityChange,
+}: TelegramLoginButtonsProps) {
   const { t } = useTranslation()
   const [showDesktopEntry, setShowDesktopEntry] = useState(false)
   const [showWebAppEntry, setShowWebAppEntry] = useState(false)
@@ -64,13 +76,24 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
     }
   }, [])
 
+  const webAvailable = false
+  const desktopAvailable = showDesktopEntry && Boolean(botName)
+
+  useEffect(() => {
+    onAvailabilityChange?.({ webAvailable, desktopAvailable })
+  }, [desktopAvailable, onAvailabilityChange, webAvailable])
+
   const buttonClassName = 'flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-black transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white'
+  const compactAvailableButtonClassName = 'inline-flex h-9 items-center justify-center gap-1.5 rounded-full border border-violet-500/30 bg-transparent px-3.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-violet-500/5 disabled:opacity-50'
+  const compactUnavailableButtonClassName = 'inline-flex h-9 items-center justify-center rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3.5 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-[color:var(--cf-surface-hover)] disabled:opacity-50'
   const showBotDomainHint = Boolean(statusMessage && /bot domain invalid/i.test(statusMessage))
   const loginBetaCode = intent === 'login' ? betaCode?.trim() : undefined
+  const webButtonClassName = variant === 'compact' ? compactUnavailableButtonClassName : buttonClassName
+  const desktopButtonClassName = variant === 'compact' ? compactAvailableButtonClassName : buttonClassName
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className={variant === 'compact' ? 'space-y-2' : 'space-y-3'}>
+      <div className={variant === 'compact' ? 'flex flex-wrap justify-end gap-2' : 'grid grid-cols-1 gap-3 sm:grid-cols-2'}>
         <button
           type="button"
           disabled={webBusy}
@@ -93,7 +116,7 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
               setWebBusy(false)
             }
           }}
-          className={buttonClassName}
+          className={webButtonClassName}
         >
           {t('auth.telegramWeb')}
         </button>
@@ -127,9 +150,13 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
                 setDesktopBusy(false)
               }
             }}
-            className={buttonClassName}
+            className={desktopButtonClassName}
           >
-            <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+            {variant === 'compact' ? (
+              <Check className="h-4 w-4 rounded-full bg-emerald-500/10 p-0.5 text-emerald-500" />
+            ) : (
+              <Send className="h-4 w-4 text-violet-500 dark:text-violet-400" />
+            )}
             {t('auth.telegramDesktop')}
           </button>
         )}

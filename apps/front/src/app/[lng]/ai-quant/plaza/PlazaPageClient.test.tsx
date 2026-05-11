@@ -143,6 +143,33 @@ describe('AiQuantPlazaPageClient', () => {
     container.remove()
   })
 
+  it('renders a page-level back link to account AI Quant when there is no source page', async () => {
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+
+    expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
+  })
+
+  it('renders a page-level back link to the same-origin source page', async () => {
+    Object.defineProperty(document, 'referrer', {
+      configurable: true,
+      value: 'http://localhost/zh/ai-quant',
+    })
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+
+    expect(backLink?.getAttribute('href')).toBe('/zh/ai-quant')
+  })
+
   it('lets guests browse plaza templates and stores plaza-run intent before login', async () => {
     mockSession = null
 
@@ -212,7 +239,7 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
   })
 
   it('keeps loaded templates visible and passes action error when run fails', async () => {
@@ -298,6 +325,6 @@ describe('AiQuantPlazaPageClient', () => {
 
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=settings&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
   })
 })

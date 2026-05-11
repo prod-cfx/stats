@@ -2,12 +2,14 @@
 
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyPlazaTemplate } from '@/lib/api'
+import { ArrowLeft } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
+import { getSameOriginReturnHref } from '@/components/navigation/return-href'
 import { useAuth } from '@/hooks/use-auth'
 import {
   createStrategyPlazaRunRequestId,
@@ -32,6 +34,8 @@ export function AiQuantPlazaPageClient() {
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
   const { session, isLoading } = useAuth()
+  const defaultReturnHref = `/${lng}/account?tab=ai-quant`
+  const [returnHref, setReturnHref] = useState(defaultReturnHref)
   const [templates, setTemplates] = useState<StrategyPlazaTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -44,6 +48,10 @@ export function AiQuantPlazaPageClient() {
     setIntent(intent)
     router.push(`/${lng}/auth/login?redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}`)
   }
+
+  useEffect(() => {
+    setReturnHref(getSameOriginReturnHref(defaultReturnHref))
+  }, [defaultReturnHref])
 
   useEffect(() => {
     let cancelled = false
@@ -86,7 +94,7 @@ export function AiQuantPlazaPageClient() {
     } catch (error) {
       if (error instanceof ApiError && error.code === OKX_DEMO_API_KEY_REQUIRED_CODE) {
         setIntent({ type: 'plaza-run', templateId })
-        router.push(`/${lng}/account?tab=ai-quant&redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}#exchange-api`)
+        router.push(`/${lng}/account?tab=settings&redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}#exchange-api`)
         return
       }
       setActionError(getErrorMessage(error, '运行策略广场模板失败'))
@@ -139,17 +147,19 @@ export function AiQuantPlazaPageClient() {
 
   return (
     <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
-      <div className="flex items-center justify-between gap-3">
+      <Link
+        href={returnHref}
+        className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span>{lng === 'en' ? 'Back' : '返回'}</span>
+      </Link>
+
+      <div>
         <div>
           <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{t('aiQuant.plaza')}</h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.plazaSubtitle')}</p>
         </div>
-        <Link
-          href={`/${lng}/ai-quant`}
-          className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
-        >
-          {t('aiQuant.title')}
-        </Link>
       </div>
 
       {!isLoading && !session && (

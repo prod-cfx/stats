@@ -1760,4 +1760,118 @@ describe('SemanticSeedStateBuilderService', () => {
       expect(ptpRisk?.params.memoryKey).toBe(existingKey)
     })
   })
+
+  // PR3.7 派生投影：单锚时回写 state.position.sizing
+  it('PR3.7: projects single executionAnchored action budget into state.position.sizing', () => {
+    const state = service.build({
+      triggers: [{
+        id: 'entry-rsi',
+        key: 'indicator.rsi_oversold',
+        phase: 'entry',
+        sideScope: 'long',
+        status: 'locked',
+        source: 'user_explicit',
+        params: { period: 14, threshold: 30 },
+        openSlots: [],
+      }],
+      actions: [{
+        id: 'open-long-dca',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'action-budget-contract',
+          kind: 'action',
+          capabilities: [{
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: { kind: 'quote', value: 100, asset: 'USDT' },
+          }],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+    })
+
+    // anchored 时 state.position 应由 projectSingleAnchorToPosition 填充 sizing
+    expect(state?.position?.sizing).toEqual({ kind: 'quote', value: 100, asset: 'USDT' })
+    expect(state?.position?.status).toBe('locked')
+    expect(state?.position?.source).toBe('derived')
+    // 没有 openSlots 占位
+    expect(state?.position?.openSlots).toEqual([])
+  })
+
+  // PR3.9: 多锚时标记 isMultiLeg=true 并跳过 sizing 投影
+  it('PR3.9: marks isMultiLeg=true and skips sizing projection when two actions each have per_order_budget', () => {
+    const state = service.build({
+      triggers: [{
+        id: 'entry-on-start',
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        status: 'locked',
+        source: 'user_explicit',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        openSlots: [],
+      }],
+      actions: [
+        {
+          id: 'open-long-leg1',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-leg1',
+            kind: 'action',
+            capabilities: [{
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: { kind: 'quote', value: 50, asset: 'USDT' },
+            }],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+        {
+          id: 'open-long-leg2',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: 'contract-leg2',
+            kind: 'action',
+            capabilities: [{
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: { kind: 'quote', value: 80, asset: 'USDT' },
+            }],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+      ],
+    })
+
+    // 多锚：不投影 sizing，isMultiLeg=true
+    expect(state?.position?.sizing).toBeUndefined()
+    expect(state?.isMultiLeg).toBe(true)
+  })
 })

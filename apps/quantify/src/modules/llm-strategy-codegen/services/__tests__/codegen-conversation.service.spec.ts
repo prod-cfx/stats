@@ -29,6 +29,12 @@ import { StrategySummaryBuilderService } from '../strategy-summary-builder.servi
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
 import { buildSemanticSlotId } from '../../types/semantic-state'
 import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
+import { SemanticAtomRegistryService } from '../semantic-atom-registry.service'
+import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
+import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+import { PerTradeSizingResolver } from '../per-trade-sizing-resolver.service'
+import type { SemanticState as SemanticStateType } from '../../types/semantic-state'
+import { MULTI_LEG_CASE_A, MULTI_LEG_CASE_B } from './fixtures/multi-leg-with-per-order-budget'
 
 jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
   PublishedStrategySnapshotsRepository: class PublishedStrategySnapshotsRepository {},
@@ -15641,4 +15647,256 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
 
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR3test: sizing 守门端到端回归 (Issue #1175)
+//
+// 验证 PerTradeSizingResolver 切换后的行为类验收标准 EC1-EC5：
+//   EC1 正向：完整 RSI+DCA utterance → 无 position.sizing open slot
+//   EC2 负回归：去掉 "每次 100 USDT" → position.sizing 重新出现
+//   EC3 DCA perOrderSizing locked、capitalCap 未填 → 有 dca_schedule.capital_cap slot，无 position.sizing
+//   EC4 主仓 sizing locked、DCA perOrderSizing 未填 → 有 dca_schedule.per_order_sizing slot，无 position.sizing
+//   EC5 多腿：CASE_A 双腿 locked → 无追问；CASE_B 一腿缺 → 只问缺那一腿
+//
+// 不依赖 HTTP 层（不用 mockAi / mockRepo），走 extractor → seedBuilder → classifier 直通链路。
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('PR3test: sizing 守门端到端回归 (Issue #1175)', () => {
+  const registry = new SemanticAtomRegistryService()
+  const extractor = new SemanticSeedExtractorService()
+  const seedBuilder = new SemanticSeedStateBuilderService()
+  const classifier = new SemanticSupportClassifierService(registry)
+  const sizingResolver = new PerTradeSizingResolver()
+
+  /** 完整 RSI+DCA utterance（含 perOrderSizing 100 USDT） */
+  const FULL_RSI_DCA_UTTERANCE
+    = 'OKX 现货 BTCUSDT 1h，RSI14 低于 30 开始 DCA，价格每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，RSI14 高于 70 卖出。'
+
+  /** 去掉 "每次 100 USDT" 的 utterance，perOrderSizing 缺失 */
+  const RSI_DCA_WITHOUT_PER_ORDER
+    = 'OKX 现货 BTCUSDT 1h，RSI14 低于 30 开始 DCA，价格每跌 5% 补仓一次，最多 4 次，总投入不超过 500 USDT，RSI14 高于 70 卖出。'
+
+  // ─── helpers ──────────────────────────────────────────────────────────────
+
+  function slotKeys(utterance: string): string[] {
+    const patch = extractor.extract(utterance)
+    const state = seedBuilder.build(patch)
+    if (!state) return []
+    const classified = classifier.classify(state)
+    return classified.openSlots.map(s => s.slotKey)
+  }
+
+  function slotKeysFromState(state: SemanticStateType): string[] {
+    const classified = classifier.classify(state)
+    return classified.openSlots.map(s => s.slotKey)
+  }
+
+  // ─── EC1 ──────────────────────────────────────────────────────────────────
+
+  it('EC1 正向：完整 RSI+DCA utterance（含 perOrderSizing）→ 无 position.sizing open slot', () => {
+    const keys = slotKeys(FULL_RSI_DCA_UTTERANCE)
+    expect(keys).not.toContain('position.sizing')
+  })
+
+  // ─── EC2 ──────────────────────────────────────────────────────────────────
+
+  it('EC2 负回归：去掉 "每次 100 USDT" 的 utterance → sizing 相关 open slot 重新出现（position.sizing 或 dca_schedule.per_order_sizing）', () => {
+    const keys = slotKeys(RSI_DCA_WITHOUT_PER_ORDER)
+    // perOrderSizing 未提供时 DCA 锚点不满足，守门路径之一产生 sizing 追问：
+    //   - classifier 层：DCA constraint 的 per_order_sizing open slot 被收集
+    //   - 对话服务层（ensurePositionSizingSlot）：anyAnchored=false → position.sizing slot 追加
+    // 两者均表示"sizing 未确认"，断言至少其一出现
+    // TODO(PR4): 收紧为精确单一 slot key 断言（拿 ground truth 决定哪条路径）
+    const hasSizingQuestion = keys.includes('position.sizing') || keys.includes('position.dca_schedule.per_order_sizing')
+    expect(hasSizingQuestion).toBe(true)
+  })
+
+  // ─── EC3 ──────────────────────────────────────────────────────────────────
+
+  it('EC3 DCA perOrderSizing locked、capitalCap 未填 → 包含 position.dca_schedule.capital_cap slot，不含 position.sizing', () => {
+    // 构造 DCA 约束：perOrderSizing 已填（locked），capitalCap 缺失（openSlot）
+    const dcaOpenSlot = {
+      slotKey: 'position.dca_schedule.capital_cap',
+      fieldPath: 'position.constraints[position.dca_schedule].params.capitalCap',
+      status: 'open' as const,
+      priority: 'risk' as const,
+      questionHint: '请确认 DCA 总投入上限（例如 500 USDT）。',
+      affectsExecution: true,
+    }
+
+    const state: SemanticStateType = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'constraint_only',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+        constraints: [
+          {
+            id: 'dca-ec3',
+            key: 'position.dca_schedule',
+            params: {
+              maxCount: 4,
+              triggerMode: 'price_interval',
+              priceIntervalPct: 5,
+              perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' },
+              // capitalCap 故意不填
+            },
+            status: 'open' as const,
+            source: 'user_explicit' as const,
+            openSlots: [dcaOpenSlot],
+            contracts: [
+              {
+                id: 'contract-dca-ec3',
+                kind: 'position',
+                capabilities: [
+                  {
+                    domain: 'capital',
+                    verb: 'allocate',
+                    object: 'per_order_budget',
+                    shape: { kind: 'quote', value: 100, asset: 'USDT' },
+                  },
+                ],
+                requires: [],
+                params: {},
+                runtimeRequirements: [],
+                stateRequirements: [],
+                orderRequirements: [],
+                openSlots: [],
+              },
+            ],
+          },
+        ],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-11T00:00:00.000Z',
+    }
+
+    const keys = slotKeysFromState(state)
+
+    // perOrderSizing 已锚定（capability present）→ sizing 守门不追问
+    expect(keys).not.toContain('position.sizing')
+    // capitalCap open slot 应被收集
+    expect(keys).toContain('position.dca_schedule.capital_cap')
+  })
+
+  // ─── EC4 ──────────────────────────────────────────────────────────────────
+
+  it('EC4 主仓 sizing locked、DCA perOrderSizing 未填 → 包含 dca_schedule.per_order_sizing slot，不含 position.sizing', () => {
+    // 主仓 position sizing 已填（locked），DCA perOrderSizing 缺失
+    const dcaPerOrderOpenSlot = {
+      slotKey: 'position.dca_schedule.per_order_sizing',
+      fieldPath: 'position.constraints[position.dca_schedule].params.perOrderSizing',
+      status: 'open' as const,
+      priority: 'risk' as const,
+      questionHint: '请确认每次 DCA 补仓多少（例如 100 USDT）。',
+      affectsExecution: true,
+    }
+
+    const state: SemanticStateType = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'fixed_quote',
+        value: 200,
+        positionMode: 'long_only',
+        sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+        constraints: [
+          {
+            id: 'dca-ec4',
+            key: 'position.dca_schedule',
+            params: {
+              maxCount: 4,
+              triggerMode: 'price_interval',
+              priceIntervalPct: 5,
+              capitalCap: { kind: 'quote', value: 500, asset: 'USDT' },
+              // perOrderSizing 故意不填
+            },
+            status: 'open' as const,
+            source: 'user_explicit' as const,
+            openSlots: [dcaPerOrderOpenSlot],
+            contracts: [],
+          },
+        ],
+      },
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-11T00:00:00.000Z',
+    }
+
+    const keys = slotKeysFromState(state)
+
+    // 主仓 sizing 已 locked → sizing 守门不再追问
+    expect(keys).not.toContain('position.sizing')
+    // DCA perOrderSizing open slot 应被收集
+    expect(keys).toContain('position.dca_schedule.per_order_sizing')
+  })
+
+  // ─── EC5 ──────────────────────────────────────────────────────────────────
+  // EC5 使用 PerTradeSizingResolver 直接断言（classifier 对未知 action key 会走
+  // unknown_unsupported 分支并短路 openSlots，因此多腿守门行为在 resolver 层校验）
+  // TODO(PR4): 改 fixture 用 registry 注册的合法 action key，让 EC5 也走 classifier 真链路
+
+  describe('EC5 多腿 sizing 守门', () => {
+    it('CASE_A 双腿均 locked（各含 per_order_budget capability）→ sizingResolver 产生双锚且均 executionAnchored', () => {
+      const anchors = sizingResolver.resolve(MULTI_LEG_CASE_A, {})
+      expect(anchors.size).toBeGreaterThanOrEqual(2)
+      const allAnchored = [...anchors.values()].every(a => a.executionAnchored)
+      expect(allAnchored).toBe(true)
+      // 双腿均已锚定，任意腿不应产生 position.sizing 追问
+      const anyAnchored = [...anchors.values()].some(a => a.executionAnchored)
+      expect(anyAnchored).toBe(true)
+    })
+
+    it('CASE_B 一腿缺 per_order_budget → sizingResolver 只锚定 leg-1，不含 leg-2 anchor', () => {
+      const anchors = sizingResolver.resolve(MULTI_LEG_CASE_B, {})
+      // leg-1 已锚定（含 per_order_budget capability）
+      const leg1Key = 'action:leg-1'
+      expect(anchors.has(leg1Key)).toBe(true)
+      expect(anchors.get(leg1Key)!.executionAnchored).toBe(true)
+      // leg-2 无锚（缺 per_order_budget capability）→ resolver 不产生该 anchor 条目
+      // 断言写宽：兼容"未产生条目" OR "产生但 executionAnchored=false"
+      const leg2Key = 'action:leg-2'
+      expect(anchors.get(leg2Key)?.executionAnchored).not.toBe(true)
+      // 整体仍有至少一个 executionAnchored（leg-1），守门不追问 position.sizing
+      const anyAnchored = [...anchors.values()].some(a => a.executionAnchored)
+      expect(anyAnchored).toBe(true)
+    })
+  })
+
+  // ─── sizing resolver 直接断言 ──────────────────────────────────────────────
+
+  it('EC1 regression: PerTradeSizingResolver 对完整 RSI+DCA utterance 产生至少一个 executionAnchored 锚点', () => {
+    const patch = extractor.extract(FULL_RSI_DCA_UTTERANCE)
+    const state = seedBuilder.build(patch)
+    expect(state).not.toBeNull()
+    if (!state) return
+    const anchors = sizingResolver.resolve(state, {})
+    const anyAnchored = [...anchors.values()].some(a => a.executionAnchored)
+    expect(anyAnchored).toBe(true)
+  })
+
+  it('EC2 regression: PerTradeSizingResolver 对缺 perOrderSizing utterance 无 executionAnchored 锚点', () => {
+    const patch = extractor.extract(RSI_DCA_WITHOUT_PER_ORDER)
+    const state = seedBuilder.build(patch)
+    expect(state).not.toBeNull()
+    if (!state) return
+    const anchors = sizingResolver.resolve(state, {})
+    const anyAnchored = [...anchors.values()].some(a => a.executionAnchored)
+    expect(anyAnchored).toBe(false)
+  })
 })

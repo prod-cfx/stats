@@ -1375,7 +1375,7 @@ export class SemanticPresentationRegistryService {
 }
 
 function presentation(
-  metadata: Omit<SemanticPresentationMetadata, 'clarificationRenderer' | 'displayRenderer'> & {
+  metadata: Omit<SemanticPresentationMetadata, 'clarificationRenderer' | 'displayRenderer' | 'hasExplicitDisplayRenderer'> & {
     clarificationRenderer?: SemanticPresentationMetadata['clarificationRenderer']
     displayRenderer?: SemanticPresentationMetadata['displayRenderer']
   },

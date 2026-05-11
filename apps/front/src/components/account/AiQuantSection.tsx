@@ -17,10 +17,10 @@ export function AiQuantSection({ lng }: { lng: 'zh' | 'en' }) {
         </div>
         <div className="flex gap-3">
           <Link
-            href={`/${lng}/account?tab=ai-quant#exchange-api`}
+            href={`/${lng}/ai-quant/plaza`}
             className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
-            {t('aiQuant.configApi')}
+            {t('aiQuant.plaza')}
           </Link>
           <Link
             href={`/${lng}/ai-quant`}
