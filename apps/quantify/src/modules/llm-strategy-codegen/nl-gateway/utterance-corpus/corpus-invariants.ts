@@ -188,7 +188,14 @@ export function readParamPath(obj: unknown, path: readonly string[]): unknown {
 // 新增需要渲染完整性保障的 atom 只需在此表声明，spec 会自动驱动断言。
 // =========================================================
 
-export const RENDER_CONTRACT_ATOM_FIELDS: Partial<Record<SupportedExecutableUtteranceAtom, ReadonlyArray<{
+// #1160：RENDER_CONTRACT_ATOM_FIELDS 允许声明 atom 不属于 corpus 顶层 SupportedExecutableUtteranceAtom
+//   联合（如 position.pyramiding_limit 通过 action.add_position 子句触发，无独立 atomKey fixture）。
+//   故引入 RenderContractAtomKey 超集类型，保持类型守门的同时容纳此类间接渲染原子。
+export type RenderContractAtomKey =
+  | SupportedExecutableUtteranceAtom
+  | 'position.pyramiding_limit'
+
+export const RENDER_CONTRACT_ATOM_FIELDS: Partial<Record<RenderContractAtomKey, ReadonlyArray<{
   field: string
   mustAppearIn: 'summary' | 'riskSummary' | 'positionSummary'
 }>>> = {
