@@ -10,7 +10,6 @@ import { AiQuantConversationsRepository } from './repositories/ai-quant-conversa
 import { CodegenSessionsRepository } from './repositories/codegen-sessions.repository'
 import { PublishedStrategySnapshotsRepository } from './repositories/published-strategy-snapshots.repository'
 import { CallerIdentityService } from './services/caller-identity.service'
-import { CapabilityEvidenceIndex } from './services/capability-evidence-index.service'
 import { CanonicalSpecBuilderService } from './services/canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from './services/canonical-spec-v2-digest.service'
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
@@ -65,6 +64,7 @@ import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canoni
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 import { UnsupportedFallbackService } from './services/unsupported-fallback.service'
+import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
 
 @Module({
@@ -129,7 +129,7 @@ import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
     NaturalLanguageGatewayService,
     SemanticFrameNormalizerService,
     UnsupportedFallbackService,
-    CapabilityEvidenceIndex,
+    PerTradeSizingResolver,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })

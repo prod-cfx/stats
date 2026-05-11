@@ -1,5 +1,3 @@
-import { Injectable } from '@nestjs/common'
-
 import type { SemanticCapability, SemanticState } from '../types/semantic-state'
 import type { SemanticNodeStatus } from '../types/semantic-state'
 
@@ -16,8 +14,7 @@ export interface CapabilityEvidence {
 
 const FROZEN_EMPTY: readonly CapabilityEvidence[] = Object.freeze([])
 
-/** @pure 无 IO 无事务边界 */
-@Injectable()
+/** @pure 无 IO 无事务边界 — static factory only, not a DI provider */
 export class CapabilityEvidenceIndex {
   private readonly byKeyMap: Map<string, CapabilityEvidence[]>
   private readonly byMountMap: Map<CapabilityMountKind, CapabilityEvidence[]>
