@@ -84,6 +84,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['突破最近 20 根 K 线高点'],
     negativeExamples: ['只是靠近近期高点'],
     goldenUtterances: ['突破最近 20 根 K 线最高价时入场'],
+    displayRenderer: ({ params }) => renderRollingExtremaBreakoutCondition(params),
   }),
   presentation({
     key: 'price.range_position_lte',
@@ -117,6 +118,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['先突破再回踩确认'],
     negativeExamples: ['两个条件没有先后关系'],
     goldenUtterances: ['先站上 EMA60，再回踩不破时开多'],
+    displayRenderer: ({ params }) => renderSequenceCondition(params),
   }),
   presentation({
     key: 'confirmation.rebound',
@@ -125,6 +127,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['触及下轨后收阳确认'],
     negativeExamples: ['继续单边下跌'],
     goldenUtterances: ['回踩后出现反弹确认再入场'],
+    displayRenderer: ({ params }) => renderReboundConfirmationCondition(params),
   }),
   presentation({
     key: 'logical.any_of',
@@ -133,6 +136,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['EMA20 上方或 RSI 低位反弹任一满足'],
     negativeExamples: ['所有条件必须同时满足'],
     goldenUtterances: ['只要突破前高或站上 EMA60 就开多'],
+    displayRenderer: ({ params }) => renderLogicalAnyOfCondition(params),
   }),
   presentation({
     key: 'volume.relative_average',
@@ -141,6 +145,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['成交量超过 20 根均量的 2 倍'],
     negativeExamples: ['只比较价格位置'],
     goldenUtterances: ['成交量大于近期均量 1.5 倍时确认突破'],
+    displayRenderer: ({ params }) => renderRelativeVolumeCondition(params),
   }),
   presentation({
     key: 'volume.threshold',
@@ -265,6 +270,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['MA20 上穿 MA60'],
     negativeExamples: ['MA20 一直在 MA60 上方'],
     goldenUtterances: ['EMA20 上穿 EMA60 时开多'],
+    displayRenderer: ({ params }) => renderCrossCondition(params, '上穿'),
   }),
   presentation({
     key: 'indicator.cross_under',
@@ -273,6 +279,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['MA20 下穿 MA60'],
     negativeExamples: ['MA20 一直在 MA60 下方'],
     goldenUtterances: ['EMA20 下穿 EMA60 时开空'],
+    displayRenderer: ({ params }) => renderCrossCondition(params, '下穿'),
   }),
   presentation({
     key: 'indicator.threshold_gte',
@@ -314,6 +321,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['触及 BOLL 上轨'],
     negativeExamples: ['触及布林下轨'],
     goldenUtterances: ['价格触及布林带上轨时止盈'],
+    displayRenderer: ({ params }) => renderBollingerTouchCondition(params, '上轨'),
   }),
   presentation({
     key: 'bollinger.touch_lower',
@@ -322,6 +330,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['触及 BOLL 下轨'],
     negativeExamples: ['触及布林上轨'],
     goldenUtterances: ['价格触及布林带下轨时开多'],
+    displayRenderer: ({ params }) => renderBollingerTouchCondition(params, '下轨'),
   }),
   presentation({
     key: 'bollinger.touch_middle',
@@ -330,6 +339,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['触及 BOLL 中轨'],
     negativeExamples: ['突破布林上轨'],
     goldenUtterances: ['回踩布林带中轨不破时加仓'],
+    displayRenderer: ({ params }) => renderBollingerTouchCondition(params, '中轨'),
   }),
   presentation({
     key: 'oscillator.rsi_gte',
@@ -341,7 +351,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const period = typeof params?.period === 'number' ? params.period : 14
       const value = typeof params?.value === 'number' ? params.value : null
-      return value !== null ? `RSI${period} ≥ ${value}` : `RSI${period} 高于阈值`
+      return value !== null ? `RSI${period} 高于或等于 ${value}` : `RSI${period} 高于或等于阈值`
     },
     clarificationRenderer: (_slotKey, _params) =>
       '请补充 RSI 阈值（0-100，常用：超卖 30 / 超买 70）。',
@@ -356,7 +366,7 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     displayRenderer: ({ params }) => {
       const period = typeof params?.period === 'number' ? params.period : 14
       const value = typeof params?.value === 'number' ? params.value : null
-      return value !== null ? `RSI${period} ≤ ${value}` : `RSI${period} 低于阈值`
+      return value !== null ? `RSI${period} 低于或等于 ${value}` : `RSI${period} 低于或等于阈值`
     },
     clarificationRenderer: (_slotKey, _params) =>
       '请补充 RSI 阈值（0-100，常用：超卖 30 / 超买 70）。',
@@ -368,6 +378,12 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['只在上升趋势做多'],
     negativeExamples: ['无视趋势方向'],
     goldenUtterances: ['趋势向上时只开多不做空'],
+    displayRenderer: ({ params }) => {
+      const direction = typeof params?.direction === 'string' ? params.direction : ''
+      if (direction === 'up' || direction === 'bullish') return '趋势向上'
+      if (direction === 'down' || direction === 'bearish') return '趋势向下'
+      return '趋势方向过滤'
+    },
   }),
   presentation({
     key: 'gate.regime',
@@ -625,6 +641,13 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['震荡行情使用网格'],
     negativeExamples: ['只描述单个价格条件'],
     goldenUtterances: ['震荡行情中启用区间交易'],
+    displayRenderer: ({ params }) => {
+      const regime = typeof params?.regime === 'string' ? params.regime : ''
+      if (regime === 'trending' || regime === 'trend') return '趋势市场'
+      if (regime === 'ranging' || regime === 'range') return '震荡市场'
+      if (regime === 'volatile') return '高波动市场'
+      return '市场状态过滤'
+    },
   }),
   presentation({
     key: 'volatility.state',
@@ -633,6 +656,12 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['高波动时降低仓位'],
     negativeExamples: ['成交量放大但波动不变'],
     goldenUtterances: ['波动率过高时暂停加仓'],
+    displayRenderer: ({ params }) => {
+      const state = typeof params?.state === 'string' ? params.state : ''
+      if (state === 'high') return '高波动率状态'
+      if (state === 'low') return '低波动率状态'
+      return '波动率状态过滤'
+    },
   }),
   presentation({
     key: 'market.volatility_state',
@@ -1294,6 +1323,16 @@ export class SemanticPresentationRegistryService {
     return this.guardPublicText(key, output)
   }
 
+  /**
+   * Issue #1179：暴露"是否显式声明 displayRenderer"给 inline-condition 调用方。
+   * 默认 displayRenderer 只输出 publicName（来自 token 表），不是条件文案；调用方需要据此
+   * 决定是否走"未显式渲染 → placeholder fallback"路径，避免 publicName 误用作条件 inline。
+   */
+  hasExplicitDisplayRenderer(key: string): boolean {
+    const metadata = this.presentations.get(key)
+    return metadata?.hasExplicitDisplayRenderer ?? false
+  }
+
   renderClarification(key: string, slotKey: string, params: Record<string, unknown>): string {
     const output = this.get(key).clarificationRenderer(slotKey, params)
     return this.guardPublicText(key, output)
@@ -1341,10 +1380,12 @@ function presentation(
     displayRenderer?: SemanticPresentationMetadata['displayRenderer']
   },
 ): SemanticPresentationMetadata {
+  const hasExplicitDisplayRenderer = typeof metadata.displayRenderer === 'function'
   return {
     ...metadata,
     displayRenderer: metadata.displayRenderer
       ?? (() => renderDisplayToken(`atom.${metadata.key}.name`)),
+    hasExplicitDisplayRenderer,
     clarificationRenderer: metadata.clarificationRenderer
       ?? ((slotKey, params) => defaultClarificationRenderer(metadata.publicName, slotKey, params)),
   }
@@ -1897,4 +1938,220 @@ function formatPercentLikeValue(value: number): number {
 
 function buildSemanticPresentationInternalIdentifierPattern(atomRegistry: SemanticAtomRegistryService): RegExp {
   return buildInternalIdentifierPattern(buildInternalIdentifierKeys(atomRegistry))
+}
+
+// ── 新增纯函数：由 service 私有 ad-hoc renderer 迁移而来（Issue #1179）──
+
+function renderCrossCondition(params: Record<string, unknown>, direction: '上穿' | '下穿'): string {
+  const indicator = typeof params.indicator === 'string' ? params.indicator.trim().toLowerCase() : ''
+
+  if (indicator === 'macd') {
+    const fast = typeof params.fastPeriod === 'number' ? params.fastPeriod : 12
+    const slow = typeof params.slowPeriod === 'number' ? params.slowPeriod : 26
+    const signal = typeof params.signalPeriod === 'number' ? params.signalPeriod : 9
+    return `MACD ${fast}/${slow}/${signal} ${direction === '上穿' ? '金叉' : '死叉'}`
+  }
+
+  if (indicator === 'rsi') {
+    const period = typeof params.period === 'number' ? params.period : 14
+    const value = typeof params.value === 'number' ? params.value : null
+    return value === null ? `RSI${period} ${direction}阈值` : `RSI${period} ${direction} ${value}`
+  }
+
+  const label = indicator === 'ema' ? 'EMA' : 'MA'
+  const fast = typeof params.fastPeriod === 'number' ? params.fastPeriod : null
+  const slow = typeof params.slowPeriod === 'number' ? params.slowPeriod : null
+  const fastLabel = fast === null ? `${label}短周期` : `${label}${fast}`
+  const slowLabel = slow === null ? `${label}长周期` : `${label}${slow}`
+  return `${fastLabel} ${direction} ${slowLabel}`
+}
+
+function renderBollingerTouchCondition(params: Record<string, unknown>, band: '上轨' | '下轨' | '中轨'): string {
+  const period = typeof params.period === 'number' ? params.period : null
+  const stdDev = typeof params.stdDev === 'number' ? params.stdDev : null
+  if (period !== null && stdDev !== null) {
+    return `触及布林带 ${period} 周期 ${stdDev} 倍标准差${band}`
+  }
+  return `触及 ${period === null ? '周期待补充' : `MA${period}`} 的布林带${band}`
+}
+
+function renderRollingExtremaBreakoutCondition(params: Record<string, unknown>): string {
+  const extrema = typeof params.extrema === 'string' && params.extrema === 'low' ? 'low' : 'high'
+  const lookbackBars = typeof params.lookbackBars === 'number' && Number.isFinite(params.lookbackBars)
+    ? params.lookbackBars
+    : null
+  const lookbackText = lookbackBars === null ? '过去若干根 K 线' : `过去 ${lookbackBars} 根 K 线`
+  const timeframe = typeof params.timeframe === 'string' && params.timeframe.trim().length > 0
+    ? params.timeframe.trim()
+    : ''
+  const prefix = timeframe ? `${timeframe} ` : ''
+  return extrema === 'low'
+    ? `${prefix}跌破${lookbackText}最低价`
+    : `${prefix}突破${lookbackText}最高价`
+}
+
+function renderRelativeVolumeCondition(params: Record<string, unknown>): string {
+  const lookbackBars = typeof params.lookbackBars === 'number' && Number.isFinite(params.lookbackBars)
+    ? params.lookbackBars
+    : null
+  const multiplier = typeof params.multiplier === 'number' && Number.isFinite(params.multiplier)
+    ? params.multiplier
+    : null
+  if (lookbackBars === null || multiplier === null) {
+    const event = typeof params.event === 'string' ? params.event : ''
+    return event === 'spike' ? '成交量放大' : ''
+  }
+  const comparator = typeof params.comparator === 'string' ? params.comparator : ''
+  const direction = comparator === 'lt' || comparator === 'lte' ? '低于' : '高于'
+  const inclusive = comparator === 'gte' || comparator === 'lte' ? '或等于' : ''
+  return `成交量${direction}${inclusive}过去 ${lookbackBars} 根均量的 ${multiplier} 倍`
+}
+
+function renderReboundConfirmationCondition(params: Record<string, unknown>): string {
+  const definition = typeof params.definition === 'string' && params.definition.trim().length > 0
+    ? params.definition.trim()
+    : ''
+  if (definition) return `反弹确认（${definition}）`
+
+  const windowBars = typeof params.windowBars === 'number' && Number.isFinite(params.windowBars)
+    ? params.windowBars
+    : typeof params.nextBars === 'number' && Number.isFinite(params.nextBars)
+      ? params.nextBars
+      : null
+  if (windowBars !== null) return `${windowBars} 根 K 线内反弹确认`
+  return '反弹确认'
+}
+
+function renderSequenceCondition(params: Record<string, unknown>): string {
+  const sequenceKind = typeof params.sequenceKind === 'string' ? params.sequenceKind : ''
+  if (!sequenceKind) return ''
+
+  const lookbackWindow = typeof params.lookbackWindow === 'string' && params.lookbackWindow.trim().length > 0
+    ? `（${params.lookbackWindow.trim()} 内）`
+    : typeof params.lookbackBars === 'number' && Number.isFinite(params.lookbackBars)
+      ? `（${params.lookbackBars} 根 K 线内）`
+      : ''
+  const memoryKey = typeof params.memoryKey === 'string' && params.memoryKey.trim().length > 0
+    ? `，记录位 ${params.memoryKey.trim()}`
+    : ''
+
+  if (sequenceKind === 'breakout_retest') {
+    return `突破后回踩确认${lookbackWindow}${memoryKey}`
+  }
+  if (sequenceKind === 'pullback_reclaim') {
+    const reference = params.reference
+    let refText = '关键位'
+    if (reference && typeof reference === 'object' && !Array.isArray(reference)) {
+      const rec = reference as Record<string, unknown>
+      const ind = typeof rec.indicator === 'string' ? rec.indicator.toUpperCase() : ''
+      const period = typeof rec.period === 'number' && Number.isFinite(rec.period) ? rec.period : null
+      if (ind) refText = `${ind}${period === null ? '' : period}`
+    }
+    return `回踩${refText}后重新站上${lookbackWindow}${memoryKey}`
+  }
+  if (sequenceKind === 'rsi_reclaim') {
+    const threshold = typeof params.threshold === 'number' && Number.isFinite(params.threshold)
+      ? params.threshold
+      : null
+    return `RSI 回落后重新站上${threshold === null ? '阈值' : ` ${threshold}`}${lookbackWindow}${memoryKey}`
+  }
+  if (sequenceKind === 'consecutive_candles') {
+    const count = typeof params.count === 'number' && Number.isFinite(params.count) ? params.count : null
+    const dir = typeof params.direction === 'string' && params.direction === 'down' ? '收跌' : '收涨'
+    return `连续 ${count === null ? '多' : count} 根 K 线${dir}${lookbackWindow}${memoryKey}`
+  }
+  return `序列条件 ${sequenceKind}${lookbackWindow}${memoryKey}`
+}
+
+function renderLogicalAnyOfCondition(params: Record<string, unknown>): string {
+  const items = Array.isArray(params.items) ? params.items : []
+  const childTexts = items
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return ''
+      const rec = item as Record<string, unknown>
+      const key = typeof rec.key === 'string' ? rec.key : ''
+      if (!key || key === 'logical.any_of') return ''
+      const childParams = rec.params && typeof rec.params === 'object' && !Array.isArray(rec.params)
+        ? rec.params as Record<string, unknown>
+        : {}
+      // 递归渲染子条件（仅支持 cross/bollinger/rsi 等简单情形，复杂嵌套退化为 publicName）
+      return renderLogicalAnyOfItemCondition(key, childParams)
+    })
+    .filter(text => text.length > 0)
+  return childTexts.length > 0 ? `任一条件：${childTexts.join(' 或 ')}` : ''
+}
+
+/**
+ * price.detect.indicator_boundary の裸条件文案（Issue #1179）：
+ *   字面对齐旧 formatIndicatorBoundaryTriggerSummary 的条件部分（不含 phase 前缀和 action 后缀）。
+ *   bollinger → "触及布林带 20 周期 2 倍标准差下轨" 或 "收盘确认突破布林带 20 周期 2 倍标准差下轨"
+ *   其他      → "触及 <name>下轨"
+ */
+function renderIndicatorBoundaryDetectCondition(params: Record<string, unknown>): string {
+  const indicatorRaw = params.indicator
+  if (!indicatorRaw || typeof indicatorRaw !== 'object' || Array.isArray(indicatorRaw)) return ''
+  const indicatorObj = indicatorRaw as Record<string, unknown>
+  const name = typeof indicatorObj.name === 'string' ? indicatorObj.name.trim().toLowerCase() : ''
+  if (!name) return ''
+
+  const boundaryRole = typeof params.boundaryRole === 'string' ? params.boundaryRole : ''
+  const boundaryText = boundaryRole === 'upper' ? '上轨' : boundaryRole === 'lower' ? '下轨' : '中轨'
+  const actionText = params.confirmationMode === 'close_confirm' ? '收盘确认突破' : '触及'
+
+  if (name === 'bollinger') {
+    const period = typeof indicatorObj.period === 'number' && Number.isFinite(indicatorObj.period) ? indicatorObj.period : undefined
+    const stdDev = typeof indicatorObj.stdDev === 'number' && Number.isFinite(indicatorObj.stdDev) ? indicatorObj.stdDev : undefined
+    let periodStdDev = ''
+    if (period !== undefined && stdDev !== undefined) {
+      periodStdDev = `${period} 周期 ${stdDev} 倍标准差`
+    }
+    else if (period !== undefined) {
+      periodStdDev = `${period} 周期`
+    }
+    return `${actionText}布林带 ${periodStdDev}${boundaryText}`
+  }
+
+  return `${actionText}${name}${boundaryText}`
+}
+
+function renderLogicalAnyOfItemCondition(key: string, params: Record<string, unknown>): string {
+  if (key === 'indicator.cross_over') return renderCrossCondition(params, '上穿')
+  if (key === 'indicator.cross_under') return renderCrossCondition(params, '下穿')
+  if (key === 'indicator.above') return renderIndicatorCompareCondition(params, 'above')
+  if (key === 'indicator.below') return renderIndicatorCompareCondition(params, 'below')
+  if (key === 'bollinger.touch_upper') return renderBollingerTouchCondition(params, '上轨')
+  if (key === 'bollinger.touch_lower') return renderBollingerTouchCondition(params, '下轨')
+  if (key === 'bollinger.touch_middle') return renderBollingerTouchCondition(params, '中轨')
+  if (key === 'price.rolling_extrema_breakout') return renderRollingExtremaBreakoutCondition(params)
+  if (key === 'volume.relative_average') return renderRelativeVolumeCondition(params)
+  if (key === 'confirmation.rebound') return renderReboundConfirmationCondition(params)
+  if (key === 'price.detect.indicator_boundary' || key === 'indicator.boundary_touch') {
+    return renderIndicatorBoundaryDetectCondition(params)
+  }
+  if (key === 'oscillator.rsi_gte') {
+    const period = typeof params.period === 'number' ? params.period : 14
+    const value = typeof params.value === 'number' ? params.value : null
+    return value !== null ? `RSI${period} 高于或等于 ${value}` : `RSI${period} 高于或等于阈值`
+  }
+  if (key === 'oscillator.rsi_lte') {
+    const period = typeof params.period === 'number' ? params.period : 14
+    const value = typeof params.value === 'number' ? params.value : null
+    return value !== null ? `RSI${period} 低于或等于 ${value}` : `RSI${period} 低于或等于阈值`
+  }
+  return ''
+}
+
+function renderIndicatorCompareCondition(params: Record<string, unknown>, direction: 'above' | 'below'): string {
+  const period = typeof params['reference.period'] === 'number'
+    ? params['reference.period']
+    : typeof params['reference.period'] === 'string'
+      ? params['reference.period']
+      : ''
+  const indicator = typeof params.indicator === 'string' && params.indicator.trim().length > 0
+    ? params.indicator.trim().toUpperCase()
+    : 'MA'
+  const reference = `${indicator}${period}`
+  return direction === 'above'
+    ? `价格在 ${reference} 上方`
+    : `价格低于 ${reference}`
 }
