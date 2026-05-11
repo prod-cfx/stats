@@ -834,6 +834,11 @@ export class SemanticStateProjectionService {
             triggerMarker !== null
             && readMarker(candidate) === triggerMarker
             && this.isMarkerGroupableIndicatorCompareTrigger(candidate)
+            // M3 (PR #1147 review)：marker 分支合并前增加 timeframe 一致性守卫——
+            //   两侧均缺失视为一致（marker 已隐含同分组）；任一存在则必须相等，
+            //   避免同 marker 下不同 timeframe 被错误并入同一卡片抹掉差异。
+            && (this.readString(candidate.params.timeframe) ?? '')
+              === (this.readString(trigger.params.timeframe) ?? '')
           )
         )
       ),
