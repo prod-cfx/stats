@@ -57,4 +57,20 @@ describe('INVARIANT-J: Sizing evidence registration', () => {
   it('SIZING_BEARING_ATOMS 包含 position.pyramiding_limit', () => {
     expect(SIZING_BEARING_ATOMS.has('position.pyramiding_limit')).toBe(true)
   })
+
+  // Issue #1198：grid 路径 sizing-evidence emit 已恢复（PR #1197 补顶层 kind），加入白名单
+  it('grid.range_rebalance sizingEvidence 指向 capital.allocate.per_order_budget + perGridSizing 参数源', () => {
+    const evidence = ATOM_CONTRACT_REGISTRY['grid.range_rebalance'].sizingEvidence
+    expect(evidence).not.toBeNull()
+    expect(evidence?.capability).toEqual({
+      domain: 'capital',
+      verb: 'allocate',
+      object: 'per_order_budget',
+    })
+    expect(evidence?.paramSource).toBe('perGridSizing')
+  })
+
+  it('SIZING_BEARING_ATOMS 包含 grid.range_rebalance', () => {
+    expect(SIZING_BEARING_ATOMS.has('grid.range_rebalance')).toBe(true)
+  })
 })

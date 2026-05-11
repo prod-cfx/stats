@@ -71,11 +71,19 @@ describe('utterance corpus baseline', () => {
       //   无独立 atomKey fixture；渲染契约在 semantic-state-projection.service.orchestration.spec
       //   单独覆盖，corpus 层全面豁免（cases / open-slot 均 N/A）。
       'position.pyramiding_limit',
+      // grid.range_rebalance (#1198)：通过 grid 触发器子句（"区间 X-Y, 每格 N USDT"）
+      //   间接落位 state.triggers，无独立 atomKey fixture；INVARIANT-J 路径在
+      //   sizing-evidence-invariant.spec 单独覆盖，corpus 层全面豁免。
+      'grid.range_rebalance',
     ])
 
     for (const atomKey of SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS) {
       // #1191 pyramiding 无独立 corpus fixture，跳过基础 case 数量与 locale 检查
       if (atomKey === 'position.pyramiding_limit') {
+        continue
+      }
+      // #1198 grid.range_rebalance 同理无独立 corpus fixture
+      if (atomKey === 'grid.range_rebalance') {
         continue
       }
       const cases = utteranceCorpus.filter(item => item.atomKey === atomKey)

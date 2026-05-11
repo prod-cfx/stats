@@ -20,6 +20,7 @@ export type SupportedExecutableUtteranceAtom =
   | 'risk.partial_take_profit'
   | 'position.dca_schedule'
   | 'position.pyramiding_limit'
+  | 'grid.range_rebalance'
   | 'indicator.divergence'
   | 'price.candle_pattern'
   | 'price.chart_pattern'

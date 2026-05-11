@@ -29,6 +29,9 @@ import type { AtomContractKey } from '../../atom-contracts/atom-contract-types'
 export const SIZING_BEARING_ATOMS: ReadonlySet<AtomContractKey> = new Set<AtomContractKey>([
   'position.dca_schedule',
   'position.pyramiding_limit',
+  // Issue #1198：grid 路径 emit `capital.allocate.per_order_budget` 已恢复（PR #1197 补 kind），
+  //   atom union 同步纳入 grid.range_rebalance 后白名单收口至 grid 路径。
+  'grid.range_rebalance',
 ])
 
 /**

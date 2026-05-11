@@ -47,6 +47,14 @@ const PYRAMIDING_SIZING_EVIDENCE: SizingEvidence = {
   paramSource: 'layerSizing',
 }
 
+// Grid per-order sizing evidence (Issue #1198) —— capability 三元组与 DCA 一致，
+//   paramSource 区分为 `perGridSizing`（grid 由 seed-extractor `buildGridOrderProgramActionContracts`
+//   从"每格 N USDT"提取的 perOrderBudget 字段；PR #1197 已恢复顶层 kind/value/asset emit）。
+const GRID_SIZING_EVIDENCE: SizingEvidence = {
+  capability: DCA_PER_ORDER_BUDGET_CAPABILITY,
+  paramSource: 'perGridSizing',
+}
+
 // =========================================================
 // 注册表定义
 // =========================================================
@@ -227,6 +235,19 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
     sizingEvidence: PYRAMIDING_SIZING_EVIDENCE,
+  },
+
+  // Issue #1198：grid.range_rebalance 加入 atom contract registry，sizingEvidence 指向
+  //   capital.allocate.per_order_budget；emit 路径在 seed-extractor
+  //   `buildGridOrderProgramActionContracts`，PR #1197 已补顶层 kind: 'quote'。
+  //   atom 通过 grid 触发器子句（"区间 X-Y, 每格 N USDT"）间接落位，无独立 utterance fixture
+  //   （已在 utterance-corpus.spec 的 atomsExemptFromOpenSlotCoverage + 顶层 for-skip 显式登记）。
+  'grid.range_rebalance': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    sizingEvidence: GRID_SIZING_EVIDENCE,
   },
 } satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>
 
