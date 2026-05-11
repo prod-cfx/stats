@@ -14,10 +14,6 @@ import {
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
-interface ExchangeApiSectionProps {
-  highlighted?: boolean
-}
-
 interface ExchangeFormState {
   name: string
   isTestnet: boolean
@@ -64,6 +60,13 @@ function createInitialForms(): Record<UserExchangeId, ExchangeFormState> {
       isTestnet: getOkxSaveRedirect() !== null,
     },
     hyperliquid: createEmptyFormState(),
+  }
+}
+
+function createBlankFormForExchange(exchangeId: UserExchangeId): ExchangeFormState {
+  return {
+    ...createEmptyFormState(),
+    isTestnet: exchangeId === 'okx' && getOkxSaveRedirect() !== null,
   }
 }
 
@@ -140,7 +143,7 @@ function buildValidationError(
   return null
 }
 
-export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionProps) {
+export function ExchangeApiSection() {
   const { t } = useTranslation()
   const [accounts, setAccounts] = useState<Record<UserExchangeId, UserExchangeAccountStatus>>({
     binance: buildEmptyStatus('binance'),
@@ -148,11 +151,8 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     hyperliquid: buildEmptyStatus('hyperliquid'),
   })
   const [forms, setForms] = useState<Record<UserExchangeId, ExchangeFormState>>(createInitialForms)
-  const [editing, setEditing] = useState<Record<UserExchangeId, boolean>>({
-    binance: false,
-    okx: false,
-    hyperliquid: false,
-  })
+  const [configExchangeId, setConfigExchangeId] = useState<UserExchangeId | null>(null)
+  const [deleteExchangeId, setDeleteExchangeId] = useState<UserExchangeId | null>(null)
   const [submittingExchange, setSubmittingExchange] = useState<UserExchangeId | null>(null)
   const [deletingExchange, setDeletingExchange] = useState<UserExchangeId | null>(null)
   const [errors, setErrors] = useState<Record<UserExchangeId, string | null>>({
@@ -161,12 +161,6 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     hyperliquid: null,
   })
   const [loading, setLoading] = useState(true)
-  const boundExchangeIds = EXCHANGES.reduce<UserExchangeId[]>((result, exchangeId) => {
-    if (accounts[exchangeId].isBound) {
-      result.push(exchangeId)
-    }
-    return result
-  }, [])
 
   useEffect(() => {
     void loadStatuses()
@@ -205,9 +199,9 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     }))
   }
 
-  function startEditing(exchangeId: UserExchangeId) {
+  function openConfigDialog(exchangeId: UserExchangeId) {
     const account = accounts[exchangeId]
-    setEditing(prev => ({ ...prev, [exchangeId]: true }))
+    setConfigExchangeId(exchangeId)
     setErrors(prev => ({ ...prev, [exchangeId]: null }))
     setForms(prev => ({
       ...prev,
@@ -219,11 +213,11 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     }))
   }
 
-  function cancelEditing(exchangeId: UserExchangeId) {
-    setEditing(prev => ({ ...prev, [exchangeId]: false }))
+  function closeConfigDialog(exchangeId: UserExchangeId) {
+    setConfigExchangeId(null)
     setForms(prev => ({
       ...prev,
-      [exchangeId]: createEmptyFormState(),
+      [exchangeId]: createBlankFormForExchange(exchangeId),
     }))
     setErrors(prev => ({ ...prev, [exchangeId]: null }))
   }
@@ -300,9 +294,9 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       }
       setForms(prev => ({
         ...prev,
-        [exchangeId]: createEmptyFormState(),
+        [exchangeId]: createBlankFormForExchange(exchangeId),
       }))
-      setEditing(prev => ({ ...prev, [exchangeId]: false }))
+      setConfigExchangeId(null)
       await loadStatuses()
     }
     catch (error) {
@@ -323,9 +317,9 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       await deleteUserExchangeAccount(exchangeId)
       setForms(prev => ({
         ...prev,
-        [exchangeId]: createEmptyFormState(),
+        [exchangeId]: createBlankFormForExchange(exchangeId),
       }))
-      setEditing(prev => ({ ...prev, [exchangeId]: false }))
+      setDeleteExchangeId(null)
       await loadStatuses()
     }
     catch (error) {
@@ -339,210 +333,230 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     }
   }
 
+  const configAccount = configExchangeId ? accounts[configExchangeId] : null
+  const deleteAccount = deleteExchangeId ? accounts[deleteExchangeId] : null
+
   return (
-    <section
-      id="exchange-api"
-      className={`space-y-4 rounded-2xl border bg-[color:var(--cf-surface)] p-5 ${
-        highlighted ? 'border-violet-500/40' : 'border-[color:var(--cf-border)]'
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.apiConfigTitle')}</h2>
-        <div className="flex gap-2 text-xs">
-          {EXCHANGES.map(exchangeId => {
-            const isBound = accounts[exchangeId].isBound
-            return (
-              <span
-                key={exchangeId}
-                className={`rounded-lg px-2 py-1 ${isBound ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}
-              >
-                {exchangeId === 'hyperliquid' ? 'Hyperliquid' : exchangeId.toUpperCase()} {isBound ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
-              </span>
-            )
-          })}
-        </div>
-      </div>
+    <>
+      <div id="exchange-api">
+        {loading ? (
+          <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4 text-sm text-[color:var(--cf-muted)]">
+            {t('aiQuant.loading')}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
+            {EXCHANGES.map(exchangeId => {
+              const account = accounts[exchangeId]
+              const isDeleting = deletingExchange === exchangeId
 
-      <p className="text-sm text-[color:var(--cf-muted)]">{t('aiQuant.apiConfigDesc')}</p>
-
-      {loading ? (
-        <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4 text-sm text-[color:var(--cf-muted)]">
-          {t('aiQuant.loading')}
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-3">
-          {EXCHANGES.map(exchangeId => {
-            const account = accounts[exchangeId]
-            const isEditing = editing[exchangeId] || !account.isBound
-            const form = forms[exchangeId]
-            const isSubmitting = submittingExchange === exchangeId
-            const isDeleting = deletingExchange === exchangeId
-
-            return (
-              <article key={exchangeId} className="space-y-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+              return (
+                <article
+                  key={exchangeId}
+                  className="flex flex-col gap-4 border-b border-[color:var(--cf-border)] px-6 py-5 last:border-b-0 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="min-w-0">
                     <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t(getTitleKey(exchangeId))}</h3>
-                    <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
-                      {account.isBound
-                        ? `${t('aiQuant.currentKey')}${account.maskedCredential ?? '-'}`
-                        : t('aiQuant.notConfigured')}
-                    </p>
-                    {account.lastValidatedAt && (
-                      <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
-                        {t('aiQuant.lastValidatedAt')} {new Date(account.lastValidatedAt).toLocaleString()}
-                      </p>
+                    {account.isBound ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+                        <span className="text-emerald-500">{t('aiQuant.configured')}</span>
+                        <span className="text-[color:var(--cf-muted)]">
+                          {t('aiQuant.currentKey')}{account.maskedCredential ?? '-'}
+                        </span>
+                        {account.lastValidatedAt && (
+                          <span className="text-[color:var(--cf-muted)]">
+                            {t('aiQuant.lastValidatedAt')} {new Date(account.lastValidatedAt).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-amber-500">{t('aiQuant.notConfigured')}</p>
+                    )}
+                    {errors[exchangeId] && configExchangeId !== exchangeId && (
+                      <p className="mt-2 text-xs text-red-500">{errors[exchangeId]}</p>
                     )}
                   </div>
-                  <span className={`rounded-lg px-2 py-1 text-xs ${account.isBound ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                    {account.isBound ? t('aiQuant.configured') : t('aiQuant.notConfigured')}
-                  </span>
-                </div>
 
-                {isEditing ? (
-                  <div className="space-y-3">
-                    <input
-                      value={form.name}
-                      onChange={event => setFormValue(exchangeId, 'name', event.target.value)}
-                      placeholder={t('aiQuant.accountName')}
-                      className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-                    />
-                    <label className="flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
-                      <input
-                        type="checkbox"
-                        checked={form.isTestnet}
-                        onChange={event => setForms(prev => ({
-                          ...prev,
-                          [exchangeId]: {
-                            ...prev[exchangeId],
-                            isTestnet: event.target.checked,
-                          },
-                        }))}
-                        className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
-                      />
-                      {t('aiQuant.useTestnet')}
-                    </label>
-                    {exchangeId !== 'hyperliquid' && (
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {account.isBound ? (
                       <>
-                        <input
-                          value={form.apiKey}
-                          onChange={event => setFormValue(exchangeId, 'apiKey', event.target.value)}
-                          placeholder={t('aiQuant.apiKey')}
-                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-                        />
-                        <input
-                          value={form.apiSecret}
-                          type="password"
-                          autoComplete="off"
-                          onChange={event => setFormValue(exchangeId, 'apiSecret', event.target.value)}
-                          placeholder={t('aiQuant.secretKey')}
-                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-                        />
-                      </>
-                    )}
-                    {exchangeId === 'okx' && (
-                      <input
-                        value={form.passphrase}
-                        type="password"
-                        autoComplete="off"
-                        onChange={event => setFormValue(exchangeId, 'passphrase', event.target.value)}
-                        placeholder={t('aiQuant.passphrase')}
-                        className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-                      />
-                    )}
-                    {exchangeId === 'hyperliquid' && (
-                      <>
-                        <input
-                          value={form.mainWalletAddress}
-                          onChange={event => setFormValue(exchangeId, 'mainWalletAddress', event.target.value)}
-                          placeholder={t('aiQuant.walletAddress')}
-                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-                        />
-                        <input
-                          value={form.agentPrivateKey}
-                          type="password"
-                          autoComplete="off"
-                          onChange={event => setFormValue(exchangeId, 'agentPrivateKey', event.target.value)}
-                          placeholder={t('aiQuant.agentPrivateKey')}
-                          className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm"
-                        />
-                      </>
-                    )}
-
-                    {errors[exchangeId] && (
-                      <p className="text-xs text-red-500">{errors[exchangeId]}</p>
-                    )}
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void save(exchangeId)}
-                        disabled={isSubmitting}
-                        className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700 disabled:opacity-60"
-                      >
-                        {isSubmitting
-                          ? t('aiQuant.saving')
-                          : account.isBound ? t('aiQuant.updateApiConfig') : t('aiQuant.saveApiConfig')}
-                      </button>
-                      {account.isBound && (
                         <button
                           type="button"
-                          onClick={() => cancelEditing(exchangeId)}
-                          disabled={isSubmitting}
-                          className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+                          onClick={() => openConfigDialog(exchangeId)}
+                          className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
                         >
-                          {t('aiQuant.cancelEdit')}
+                          {t('aiQuant.editApiConfig')}
                         </button>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3 text-xs text-[color:var(--cf-muted)]">
-                      <p>{t('aiQuant.boundAccountName')} {account.name ?? '-'}</p>
-                      <p className="mt-1">{t('aiQuant.currentKey')} {account.maskedCredential ?? '-'}</p>
-                    </div>
-
-                    {errors[exchangeId] && (
-                      <p className="text-xs text-red-500">{errors[exchangeId]}</p>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteExchangeId(exchangeId)}
+                          disabled={isDeleting}
+                          className="rounded-full border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-500 transition hover:bg-red-500/10 disabled:opacity-60"
+                        >
+                          {isDeleting ? t('aiQuant.deleting') : t('aiQuant.unbindApiConfig')}
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openConfigDialog(exchangeId)}
+                        className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+                      >
+                        {t('aiQuant.notConfigured')}
+                      </button>
                     )}
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => startEditing(exchangeId)}
-                        className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
-                      >
-                        {t('aiQuant.editApiConfig')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void remove(exchangeId)}
-                        disabled={isDeleting}
-                        className="rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-500 disabled:opacity-60"
-                      >
-                        {isDeleting ? t('aiQuant.deleting') : t('aiQuant.unbindApiConfig')}
-                      </button>
-                    </div>
                   </div>
-                )}
-              </article>
-            )
-          })}
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {configExchangeId && configAccount && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={() => closeConfigDialog(configExchangeId)}>
+          <div
+            className="w-full max-w-[520px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={event => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t(getTitleKey(configExchangeId))}</h3>
+            <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
+              {configAccount.isBound ? t('aiQuant.editApiConfig') : t('aiQuant.saveApiConfig')}
+            </p>
+            <div className="mt-4 space-y-3">
+              <input
+                value={forms[configExchangeId].name}
+                onChange={event => setFormValue(configExchangeId, 'name', event.target.value)}
+                placeholder={t('aiQuant.accountName')}
+                className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+              />
+              <label className="flex items-center gap-2 text-xs text-[color:var(--cf-muted)]">
+                <input
+                  type="checkbox"
+                  checked={forms[configExchangeId].isTestnet}
+                  onChange={event => setForms(prev => ({
+                    ...prev,
+                    [configExchangeId]: {
+                      ...prev[configExchangeId],
+                      isTestnet: event.target.checked,
+                    },
+                  }))}
+                  className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
+                />
+                {t('aiQuant.useTestnet')}
+              </label>
+              {configExchangeId !== 'hyperliquid' && (
+                <>
+                  <input
+                    value={forms[configExchangeId].apiKey}
+                    onChange={event => setFormValue(configExchangeId, 'apiKey', event.target.value)}
+                    placeholder={t('aiQuant.apiKey')}
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                  />
+                  <input
+                    value={forms[configExchangeId].apiSecret}
+                    type="password"
+                    autoComplete="off"
+                    onChange={event => setFormValue(configExchangeId, 'apiSecret', event.target.value)}
+                    placeholder={t('aiQuant.secretKey')}
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                  />
+                </>
+              )}
+              {configExchangeId === 'okx' && (
+                <input
+                  value={forms[configExchangeId].passphrase}
+                  type="password"
+                  autoComplete="off"
+                  onChange={event => setFormValue(configExchangeId, 'passphrase', event.target.value)}
+                  placeholder={t('aiQuant.passphrase')}
+                  className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                />
+              )}
+              {configExchangeId === 'hyperliquid' && (
+                <>
+                  <input
+                    value={forms[configExchangeId].mainWalletAddress}
+                    onChange={event => setFormValue(configExchangeId, 'mainWalletAddress', event.target.value)}
+                    placeholder={t('aiQuant.walletAddress')}
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                  />
+                  <input
+                    value={forms[configExchangeId].agentPrivateKey}
+                    type="password"
+                    autoComplete="off"
+                    onChange={event => setFormValue(configExchangeId, 'agentPrivateKey', event.target.value)}
+                    placeholder={t('aiQuant.agentPrivateKey')}
+                    className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 text-sm"
+                  />
+                </>
+              )}
+
+              {errors[configExchangeId] && (
+                <p className="text-xs text-red-500">{errors[configExchangeId]}</p>
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => closeConfigDialog(configExchangeId)}
+                disabled={submittingExchange === configExchangeId}
+                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void save(configExchangeId)}
+                disabled={submittingExchange === configExchangeId}
+                className="rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2 text-sm font-bold text-white transition-all hover:from-violet-600 hover:to-purple-700 disabled:opacity-60"
+              >
+                {submittingExchange === configExchangeId
+                  ? t('aiQuant.saving')
+                  : configAccount.isBound ? t('aiQuant.updateApiConfig') : t('aiQuant.saveApiConfig')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
-        <p className="text-xs font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.boundAccounts')}</p>
-        <div className="mt-2 space-y-2">
-          {boundExchangeIds.map(exchangeId => (
-            <div key={exchangeId} className="flex items-center justify-between text-xs text-[color:var(--cf-muted)]">
-              <span>{exchangeId === 'hyperliquid' ? 'Hyperliquid' : exchangeId.toUpperCase()} / {accounts[exchangeId].name ?? '-'}</span>
-              <span>{accounts[exchangeId].maskedCredential}</span>
+      {deleteExchangeId && deleteAccount && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={() => setDeleteExchangeId(null)}>
+          <div
+            className="w-full max-w-[420px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={event => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.unbindApiConfig')}</h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+              {t(getTitleKey(deleteExchangeId))} / {deleteAccount.name ?? deleteAccount.maskedCredential ?? '-'}
+            </p>
+            {errors[deleteExchangeId] && (
+              <p className="mt-3 text-xs text-red-500">{errors[deleteExchangeId]}</p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteExchangeId(null)}
+                disabled={deletingExchange === deleteExchangeId}
+                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={() => void remove(deleteExchangeId)}
+                disabled={deletingExchange === deleteExchangeId}
+                className="rounded-xl border border-red-500/30 px-4 py-2 text-sm font-semibold text-red-500 disabled:opacity-60"
+              >
+                {deletingExchange === deleteExchangeId ? t('aiQuant.deleting') : t('aiQuant.unbindApiConfig')}
+              </button>
             </div>
-          ))}
+          </div>
         </div>
-      </div>
-    </section>
+      )}
+    </>
   )
 }
