@@ -103,7 +103,7 @@ export class SemanticSeedExtractorService {
           this.mergeSeedTriggers(eventFrameTriggers, legacyTriggers),
         ))),
       ),
-    ))))
+    )), text))
     const actions = this.atomizeActions(this.mergeSeedActions(
       gatewayActions,
       this.mergeSeedActions(
@@ -528,11 +528,12 @@ export class SemanticSeedExtractorService {
     return stripped
   }
 
-  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[]): SeedTrigger[] {
+  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[], text: string): SeedTrigger[] {
     const movingAverageStackGroups = this.resolveMovingAverageStackCombinationGroups(triggers)
+    const heterogeneousEntryAndGroups = this.resolveHeterogeneousEntryAndGroups(triggers, text, movingAverageStackGroups)
 
     return triggers.map((trigger, index) => {
-      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index))
+      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index), heterogeneousEntryAndGroups.get(index))
       if (explicit) {
         return this.withTriggerCombinationContract(trigger, explicit)
       }
@@ -559,9 +560,14 @@ export class SemanticSeedExtractorService {
   private resolveRecognizedTriggerCombination(
     trigger: SeedTrigger,
     movingAverageStack: TriggerCombinationContractInput | undefined,
+    heterogeneousEntryAnd: TriggerCombinationContractInput | undefined,
   ): TriggerCombinationContractInput | null {
     if (movingAverageStack) {
       return movingAverageStack
+    }
+
+    if (heterogeneousEntryAnd) {
+      return heterogeneousEntryAnd
     }
 
     if (
@@ -576,6 +582,126 @@ export class SemanticSeedExtractorService {
     }
 
     return null
+  }
+
+  private resolveHeterogeneousEntryAndGroups(
+    triggers: SeedTrigger[],
+    text: string,
+    movingAverageStackGroups: Map<number, TriggerCombinationContractInput>,
+  ): Map<number, TriggerCombinationContractInput> {
+    const result = new Map<number, TriggerCombinationContractInput>()
+
+    // 1) 按 [。；;] 切分原文为子句，记录每个子句的字符 range
+    const clauses = this.splitIntoClauses(text)
+    if (clauses.length === 0) return result
+
+    // 2) 收集候选 entry trigger，按 (clauseIndex, sideScope) 双键归桶
+    type Member = { index: number, trigger: SeedTrigger }
+    const buckets = new Map<string, Member[]>()
+    triggers.forEach((trigger, index) => {
+      if (trigger.phase !== 'entry') return
+      if (trigger.key === 'logical.any_of') return
+      if (this.readTriggerGroupMarker(trigger) !== null) return
+      if (trigger.contracts?.some(c => this.isTriggerCombinationLikeContract(c))) return
+      // M1：MA stack 已识别为 AND 组的 trigger 不重复挂 hetero AND 组
+      if (movingAverageStackGroups.has(index)) return
+
+      const clauseIndex = this.locateTriggerClause(trigger, text, clauses)
+      if (clauseIndex < 0) return
+
+      const sideScope = trigger.sideScope ?? 'long'
+      const bucketKey = `${clauseIndex}::${sideScope}`
+      const bucket = buckets.get(bucketKey) ?? []
+      bucket.push({ index, trigger })
+      buckets.set(bucketKey, bucket)
+    })
+
+    // 3) 每桶独立判定：≥2 个 trigger 且子句仅含 AND 连词 → 挂同一 groupId
+    for (const [bucketKey, members] of buckets) {
+      if (members.length < 2) continue
+
+      const [clauseIndexStr, sideScope] = bucketKey.split('::')
+      const clauseIndex = Number(clauseIndexStr)
+      const clauseText = clauses[clauseIndex]?.text ?? ''
+      if (!this.hasConjunctiveAndOnly(clauseText)) continue
+
+      const groupId = `entry-and-${sideScope}-${this.shortHashOfKeys(members.map(m => m.trigger.key))}`
+      for (const { index } of members) {
+        result.set(index, { groupId, join: 'AND' })
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * 按 [。；;] 切分文本为子句，返回每个子句的文本与字符 range（含分隔符前的部分）。
+   * 不按「，」切分以避免误把「A 且 B，开多」拆开。
+   */
+  private splitIntoClauses(text: string): Array<{ text: string, start: number, end: number }> {
+    const result: Array<{ text: string, start: number, end: number }> = []
+    const re = /[。；;]/gu
+    let lastEnd = 0
+    let match: RegExpExecArray | null
+    // eslint-disable-next-line no-cond-assign
+    while ((match = re.exec(text)) !== null) {
+      const segText = text.slice(lastEnd, match.index)
+      if (segText.length > 0) {
+        result.push({ text: segText, start: lastEnd, end: match.index })
+      }
+      lastEnd = match.index + 1
+    }
+    if (lastEnd < text.length) {
+      result.push({ text: text.slice(lastEnd), start: lastEnd, end: text.length })
+    }
+    return result
+  }
+
+  /**
+   * 通过 evidence.text 在 text 中的命中位置，把 trigger 归到子句索引；
+   * 无 evidence 或定位失败 → 返回 -1（跳过该 trigger，不参与 hetero AND）。
+   */
+  private locateTriggerClause(
+    trigger: SeedTrigger,
+    text: string,
+    clauses: Array<{ start: number, end: number }>,
+  ): number {
+    const evText = trigger.evidence?.text
+    let pos = -1
+    if (typeof evText === 'string' && evText.length > 0) {
+      pos = text.indexOf(evText)
+    }
+    if (pos < 0) return -1
+    for (let i = 0; i < clauses.length; i++) {
+      const { start, end } = clauses[i]!
+      if (pos >= start && pos < end) return i
+    }
+    // 命中点恰好落在分隔符上（罕见）→ 归到下一个子句
+    for (let i = 0; i < clauses.length; i++) {
+      if (pos < clauses[i]!.start) return i
+    }
+    return clauses.length - 1
+  }
+
+  /**
+   * 把 trigger.key 列表去重排序后做 djb2 短 hash（避免 slice(40) 截断冲突）。
+   */
+  private shortHashOfKeys(keys: string[]): string {
+    const joined = Array.from(new Set(keys)).sort().join('_')
+    let hash = 5381
+    for (let i = 0; i < joined.length; i++) {
+      // eslint-disable-next-line no-bitwise
+      hash = ((hash << 5) + hash + joined.charCodeAt(i)) >>> 0
+    }
+    return hash.toString(36)
+  }
+
+  private hasConjunctiveAndOnly(text: string): boolean {
+    // 「和」在中文里大量作列举/并列名词（"BTC 和 ETH"、"MA20 和 EMA50"），
+    // 当作 AND 连词会把 list 误判为联立条件 → 从词表移除。
+    const hasAnd = /(?:且|同时|并且)/u.test(text)
+    const hasOr = /(?:或|或者|任一|any\s*of)/ui.test(text)
+    return hasAnd && !hasOr
   }
 
   private resolveMovingAverageStackCombinationGroups(
