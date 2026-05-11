@@ -2282,39 +2282,44 @@ export class SemanticStateProjectionService {
   }
 
   private buildPositionSummary(position: SemanticState['position']): string {
-    if (!this.hasValidLockedPosition(position)) {
+    // #1169：position.status==='locked' 即可进入；validateSemanticPositionContract 对
+    //   constraint_only 模式（sizing=null）会判 invalid 导致早退，而 constraints 路径仍可渲染。
+    //   只对"有 sizing 时"再做合约校验；纯 constraint_only 路径直接走 constraints 渲染。
+    if (position?.status !== 'locked') {
       return ''
     }
+    const hasSizingContract = validateSemanticPositionContract(position).ok
 
-    const sizing = position.sizing ?? normalizeLegacyPositionSizing(position)
-    if (!sizing) {
-      return ''
-    }
-
+    // #1169：sizing 在 position.mode='constraint_only'（如纯 DCA 入场）时为 null，
+    //   但 locked constraints 仍可能渲染（如 dca_schedule）。先算 sizingText / constraintParts
+    //   再决定如何拼接 / 早退；不再因 sizing=null 直接返回空串
     let sizingText = ''
-    if (sizing.kind === 'ratio') {
-      const ratioValue = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
-      sizingText = `仓位：${this.formatPercent(ratioValue)}%`
-    }
-    else if (sizing.kind === 'quote' || sizing.kind === 'base') {
-      sizingText = `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
-    }
-
-    if (!sizingText) {
-      return ''
-    }
-
-    const pyramidingLimit = (position.constraints ?? [])
-      .find(c => c.status === 'locked' && c.key === 'position.pyramiding_limit')
-    if (pyramidingLimit) {
-      const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
-      if (maxLayers !== null) {
-        return `${sizingText}，最多${maxLayers}次加仓`
+    if (hasSizingContract) {
+      const sizing = position.sizing ?? normalizeLegacyPositionSizing(position)
+      if (sizing) {
+        if (sizing.kind === 'ratio') {
+          const ratioValue = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
+          sizingText = `仓位：${this.formatPercent(ratioValue)}%`
+        }
+        else if (sizing.kind === 'quote' || sizing.kind === 'base') {
+          sizingText = `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
+        }
       }
     }
 
-    // Task 4 (#1162)：扫 locked constraints，通过 ATOM_CONTRACT_REGISTRY 路由 summaryContribution
-    // position.dca_schedule 走 VIA_PRESENTATION_DISPLAY → presentationRegistry.displayRenderer
+    // 有 sizing 时优先走 pyramiding_limit 简化输出
+    if (sizingText) {
+      const pyramidingLimit = (position.constraints ?? [])
+        .find(c => c.status === 'locked' && c.key === 'position.pyramiding_limit')
+      if (pyramidingLimit) {
+        const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
+        if (maxLayers !== null) {
+          return `${sizingText}，最多${maxLayers}次加仓`
+        }
+      }
+    }
+
+    // Task 4 (#1162)：扫 locked constraints 用 presentationRegistry 渲染（dca_schedule 等）
     const constraintParts: string[] = []
     for (const constraint of position.constraints ?? []) {
       if (constraint.status !== 'locked') continue
@@ -2327,15 +2332,21 @@ export class SemanticStateProjectionService {
         }
       }
       catch {
-        // presentationRegistry 未注册该 constraint key → skip（兜底：不影响 sizingText）
+        // presentationRegistry 未注册该 constraint key → skip
       }
     }
 
-    if (constraintParts.length > 0) {
+    if (sizingText && constraintParts.length > 0) {
       return `${sizingText}；${constraintParts.join('；')}`
     }
-
-    return sizingText
+    if (sizingText) {
+      return sizingText
+    }
+    if (constraintParts.length > 0) {
+      // constraint_only 模式：无 sizing 时也要渲染 constraint
+      return constraintParts.join('；')
+    }
+    return ''
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {
