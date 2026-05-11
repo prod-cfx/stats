@@ -199,7 +199,6 @@ it('[#6] exit trigger 不混入 entry AND 组', () => {
 it.each([
   ['同时', 'MA 金叉 同时 RSI 低于 35 开多，止损 5%'],
   ['并且', 'MA 金叉 并且 RSI 低于 35 开多，止损 5%'],
-  ['和', 'MA 金叉 和 RSI 低于 35 开多，止损 5%'],
 ])('[#7] 连词「%s」→ 触发 AND 分组', (_conjunction, message) => {
   const state = buildState(message)
 

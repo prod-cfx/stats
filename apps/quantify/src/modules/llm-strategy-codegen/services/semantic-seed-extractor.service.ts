@@ -628,7 +628,9 @@ export class SemanticSeedExtractorService {
   }
 
   private hasAndConjunctionWithoutOr(text: string): boolean {
-    const hasAnd = /(?:且|同时|并且|和)/u.test(text)
+    // 「和」在中文里大量作列举/并列名词（"BTC 和 ETH"、"MA20 和 EMA50"），
+    // 当作 AND 连词会把 list 误判为联立条件 → 从词表移除。
+    const hasAnd = /(?:且|同时|并且)/u.test(text)
     const hasOr = /(?:或|或者|任一|any\s*of)/ui.test(text)
     return hasAnd && !hasOr
   }
