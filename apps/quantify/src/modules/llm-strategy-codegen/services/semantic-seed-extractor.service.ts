@@ -530,7 +530,7 @@ export class SemanticSeedExtractorService {
 
   private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[], text: string): SeedTrigger[] {
     const movingAverageStackGroups = this.resolveMovingAverageStackCombinationGroups(triggers)
-    const heterogeneousEntryAndGroups = this.resolveHeterogeneousEntryAndGroups(triggers, text)
+    const heterogeneousEntryAndGroups = this.resolveHeterogeneousEntryAndGroups(triggers, text, movingAverageStackGroups)
 
     return triggers.map((trigger, index) => {
       const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index), heterogeneousEntryAndGroups.get(index))
@@ -587,16 +587,19 @@ export class SemanticSeedExtractorService {
   private resolveHeterogeneousEntryAndGroups(
     triggers: SeedTrigger[],
     text: string,
+    movingAverageStackGroups: Map<number, TriggerCombinationContractInput>,
   ): Map<number, TriggerCombinationContractInput> {
     const result = new Map<number, TriggerCombinationContractInput>()
 
-    // 按 sideScope 收集候选：phase=entry、无显式 combination marker、非 logical.any_of
+    // 按 sideScope 收集候选：phase=entry、无显式 combination marker、非 logical.any_of、未被 MA stack 命中
     const buckets = new Map<string, Array<{ index: number, trigger: SeedTrigger }>>()
     triggers.forEach((trigger, index) => {
       if (trigger.phase !== 'entry') return
       if (trigger.key === 'logical.any_of') return
       if (this.readTriggerGroupMarker(trigger) !== null) return
       if (trigger.contracts?.some(c => this.isTriggerCombinationLikeContract(c))) return
+      // M1：MA stack 已识别为 AND 组的 trigger 不重复挂 hetero AND 组（避免静默吞并）
+      if (movingAverageStackGroups.has(index)) return
 
       const sideScope = trigger.sideScope ?? 'long'
       const bucket = buckets.get(sideScope) ?? []
