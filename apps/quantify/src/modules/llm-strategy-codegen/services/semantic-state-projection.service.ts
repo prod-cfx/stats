@@ -624,21 +624,18 @@ export class SemanticStateProjectionService {
   }
 
   private formatDisplayAtomicTriggerCondition(trigger: SemanticState['triggers'][number]): string {
-    switch (trigger.key) {
-      case 'price.detect.indicator_boundary':
-        return this.formatDisplayIndicatorBoundaryCondition(trigger)
-      case 'volume.relative_average':
-        return this.formatDisplayRelativeVolumeCondition(trigger)
-      case 'condition.sequence':
-        return this.formatDisplaySequenceCondition(trigger)
-      case 'confirmation.rebound':
-        return this.formatDisplayReboundConfirmationCondition(trigger)
-      case 'price.rolling_extrema_breakout':
-        return this.formatDisplayRollingExtremaBreakoutCondition(trigger)
-      case 'logical.any_of':
-        return this.formatDisplayLogicalAnyOfCondition(trigger)
-      default:
-        return ''
+    // Issue #1179：只有显式声明 displayRenderer 的 atom 才被视为有"条件文案"。
+    //   默认 fallback（publicName via atom.${key}.name token）不构成条件 inline，调用方应走
+    //   sanitizeDisplayFallbackText / placeholder 路径，否则 UI 会看到"指标高于阈值"这类
+    //   名称误用作条件文本。
+    if (!this.presentationRegistry.hasExplicitDisplayRenderer(trigger.key)) {
+      return ''
+    }
+    try {
+      return this.presentationRegistry.renderDisplay(trigger.key, trigger.params) ?? ''
+    }
+    catch {
+      return ''
     }
   }
 
@@ -1225,19 +1222,6 @@ export class SemanticStateProjectionService {
           return this.formatIndicatorCompareTriggerSummary(trigger)
         }
 
-        if (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under') {
-          return this.formatCrossTriggerSummary(trigger)
-        }
-
-        if (trigger.key === 'oscillator.rsi_gte' || trigger.key === 'oscillator.rsi_lte') {
-          const period = typeof trigger.params.period === 'number' ? trigger.params.period : 14
-          const value = typeof trigger.params.value === 'number' ? trigger.params.value : null
-          const direction = trigger.key === 'oscillator.rsi_gte' ? '高于或等于' : '低于或等于'
-          const phase = trigger.phase === 'entry' ? '入场' : '出场'
-          const condition = value === null ? `RSI${period} ${direction}阈值` : `RSI${period} ${direction} ${value}`
-          return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
-        }
-
         if (trigger.key === 'price.range_position_lte' || trigger.key === 'price.range_position_gte') {
           const lookbackBars = typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : null
           const thresholdPct = typeof trigger.params.thresholdPct === 'number' ? trigger.params.thresholdPct : null
@@ -1261,23 +1245,9 @@ export class SemanticStateProjectionService {
           return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
-        if (
-          (trigger.key === 'bollinger.touch_upper' || trigger.key === 'bollinger.touch_lower' || trigger.key === 'bollinger.touch_middle')
-          && trigger.params.period !== undefined
-        ) {
-          const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
-          const stdDev = typeof trigger.params.stdDev === 'number' ? trigger.params.stdDev : null
-          const band = trigger.key === 'bollinger.touch_upper'
-            ? '上轨'
-            : trigger.key === 'bollinger.touch_lower'
-              ? '下轨'
-              : '中轨'
-          const condition = period !== null && stdDev !== null
-            ? `触及布林带 ${this.formatNumber(period)} 周期 ${this.formatNumber(stdDev)} 倍标准差${band}`
-            : `触及 ${period === null ? '周期待补充' : `MA${this.formatNumber(period)}`} 的布林带${band}`
-          return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
-        }
-
+        // price.detect.indicator_boundary 在 conversation summary 视图保留长描述形态
+        //   （"触及布林带 X 周期 Y 倍标准差<band>"），与 clarification view / display graph 走
+        //   presentationRegistry 的 "触及 BOLL <band>（X, Y）" 短形态并存——两路文案承载不同 UI 上下文
         if (trigger.key === 'price.detect.indicator_boundary') {
           return this.formatIndicatorBoundaryTriggerSummary(trigger)
         }
@@ -1292,6 +1262,9 @@ export class SemanticStateProjectionService {
           return `${phase}：${atomicCondition}${this.formatActionSuffix(trigger, atomicCondition)}`
         }
 
+        // 兜底：返回内部 key，让上游 sanitizeDisplayFallbackText 检测到内部 key 泄漏
+        //   并替换为 UNSAFE_DISPLAY_FALLBACK_PLACEHOLDER（"已识别条件，等待展示文案完善"）。
+        //   不要替换成空字符串——空串会让 condition item 被过滤掉，整条 rule block 丢失。
         return trigger.key
       })
       .filter(item => item.length > 0)
