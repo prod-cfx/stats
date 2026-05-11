@@ -54,20 +54,18 @@ describe('display logic graph — multi-EMA stack regression', () => {
     expect(texts.some(text => /价格低于\s?EMA20/.test(text))).toBe(true)
   })
 
-  it('BUG A: NL gateway 主线 condition.expression patch 行为不退化', () => {
+  it('BUG A: NL gateway 主线必然产出 long-side condition.expression gate（AND + ≥2 子项）', () => {
+    // m2 (PR #1147 review)：当前实现对 Bug A 输入必然命中；将软断言改为硬断言，消除非确定性
     const frames = gateway.parse(BUG_A)
     const patch = frameNormalizer.normalize(frames)
-    // 当前 NL gateway 对单方向 ema gate（含动作词）应能产出 condition.expression 主线
     const longGate = patch.triggers?.find(t =>
       t.key === 'condition.expression' && t.sideScope === 'long' && t.phase === 'gate',
     )
-    // 当前实现对 Bug A 输入 NL gateway 解析可能不命中（依赖更严格的语序）；不做强断言
-    // 但若命中，必须是 AND + ≥2 子项
-    if (longGate) {
-      const expression = longGate.params.expression as { kind: string, children?: unknown[] }
-      expect(expression.kind).toBe('AND')
-      expect(Array.isArray(expression.children) && expression.children.length).toBeGreaterThanOrEqual(2)
-    }
+    expect(longGate).toBeDefined()
+    const expression = longGate!.params.expression as { kind: string, children?: unknown[] }
+    expect(expression.kind).toBe('AND')
+    expect(Array.isArray(expression.children)).toBe(true)
+    expect(expression.children!.length).toBeGreaterThanOrEqual(2)
   })
 
   it('BUG B: 多空两侧 EMA stack 分别合并，且不与同向 condition.expression gate 重复', () => {
