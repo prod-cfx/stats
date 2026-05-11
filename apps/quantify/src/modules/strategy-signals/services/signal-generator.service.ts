@@ -1800,16 +1800,25 @@ export class SignalGeneratorService {
       //   2026-05-12-multi-leg-dispatch-failure-mode.md`): emit-stage
       //   validation already happened in the outcome builder; here we just
       //   persist N signals with leg metadata threaded through
-      //   `runtimeProvenance.leg` so downstream executor (PR4b) can read it.
+      //   `runtimeProvenance.leg` so downstream executor can read it.
       //   skipCooldown=true for sibling legs: cooldown is one-shot per
       //   strategy/symbol/timeframe; we must not block leg-B on leg-A.
+      //
+      // #1186 PR4b — fail-fast saga compensate (emit stage).
+      //   If any leg fails to create (cooldown / admission blocked), cancel all
+      //   previously created sibling signals and abort. The executor receives
+      //   only signals that were created in a complete batch; a partial batch
+      //   must not be dispatched.
       if (runtimeSignalOutcome.kind === 'multi_leg') {
+        const createdSiblingIds: string[] = []
+        let sagaTriggered = false
+
         for (let legIdx = 0; legIdx < runtimeSignalOutcome.legs.length; legIdx++) {
           const leg = runtimeSignalOutcome.legs[legIdx]
           // Lead leg (index 0) honours the caller's skipCooldown; sibling legs
           // always bypass cooldown so they co-emit with the lead leg regardless.
           const skipCooldownForLeg = legIdx === 0 ? (options.skipCooldown ?? false) : true
-          await this.createSignalWithCooldownAndLock(
+          const legResult = await this.createSignalWithCooldownAndLock(
             instance,
             strategy,
             persistenceGroup,
@@ -1830,11 +1839,29 @@ export class SignalGeneratorService {
             undefined,
             undefined,
           )
+
+          if (!legResult.created) {
+            // Leg N failed to emit — trigger fail-fast saga: cancel all siblings
+            // already created (indices 0..legIdx-1) with saga audit metadata.
+            sagaTriggered = true
+            this.logger.warn(
+              `[multi-leg saga] leg ${leg.legId} (index ${legIdx}) failed to create signal for strategy ${instance.strategyTemplateId}. ` +
+              `Cancelling ${createdSiblingIds.length} already-created sibling(s): [${createdSiblingIds.join(', ')}]`,
+            )
+            await this.cancelMultiLegSiblings(createdSiblingIds, leg.legId, instance.id)
+            break
+          }
+
+          if (legResult.signalId) {
+            createdSiblingIds.push(legResult.signalId)
+          }
         }
 
-        await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
-        if (activeRuntimeState) {
-          await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+        if (!sagaTriggered) {
+          await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
+          if (activeRuntimeState) {
+            await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+          }
         }
         return
       }
@@ -2920,6 +2947,46 @@ export class SignalGeneratorService {
     markPrice?: number
   }): context is { currentQty: number; equity: number; markPrice: number } {
     return this.decisionStage.hasExplicitDecisionContext(context)
+  }
+
+  /**
+   * #1186 PR4b — fail-fast saga compensate (emit stage).
+   *
+   * When a sibling leg fails to create a signal (cooldown / admission blocked),
+   * cancel all previously created sibling signals so no partial batch reaches
+   * the executor. Each cancelled signal receives a saga audit entry in metadata.
+   *
+   * Per `docs/decisions/2026-05-12-multi-leg-dispatch-failure-mode.md`:
+   *   scope = spot / single exchange / same account → fail-fast only;
+   *   market-close of already-EXECUTED positions is deferred to the executor
+   *   layer (PR4c) when sibling signals are not yet EXECUTED at emit time.
+   */
+  private async cancelMultiLegSiblings(
+    siblingSignalIds: readonly string[],
+    failedLegId: string,
+    strategyInstanceId: string,
+  ): Promise<void> {
+    const compensatedAt = new Date().toISOString()
+    for (const signalId of siblingSignalIds) {
+      try {
+        await this.tradingSignalRepository.updateStatus(signalId, 'CANCELLED', {
+          sagaCompensated: true,
+          sagaReason: 'sibling_leg_emit_failed',
+          failedLegId,
+          strategyInstanceId,
+          compensatedAt,
+        })
+        this.logger.log(
+          `[multi-leg saga] Cancelled sibling signal ${signalId} (failedLeg=${failedLegId})`,
+        )
+      }
+      catch (err) {
+        // Best-effort: log and continue — do not throw so all siblings get a cancel attempt.
+        this.logger.error(
+          `[multi-leg saga] Failed to cancel sibling signal ${signalId}: ${(err as Error).message}`,
+        )
+      }
+    }
   }
 }
 
