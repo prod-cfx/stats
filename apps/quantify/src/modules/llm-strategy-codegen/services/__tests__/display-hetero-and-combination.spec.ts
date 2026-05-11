@@ -173,8 +173,8 @@ describe('display logic graph — reference.period 缺失边界 (M5)', () => {
         key: 'indicator.above',
         phase: 'entry',
         params: { displayGroupId: 'grp1', indicator: 'ema' /* reference.period 故意缺失 */ },
-        status: 'resolved',
-        source: 'seed',
+        status: 'locked',
+        source: 'user_explicit',
         openSlots: [],
       },
       {
@@ -182,8 +182,8 @@ describe('display logic graph — reference.period 缺失边界 (M5)', () => {
         key: 'indicator.above',
         phase: 'entry',
         params: { displayGroupId: 'grp1', indicator: 'ema' /* reference.period 故意缺失 */ },
-        status: 'resolved',
-        source: 'seed',
+        status: 'locked',
+        source: 'user_explicit',
         openSlots: [],
       },
     ])
