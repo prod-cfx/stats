@@ -3107,6 +3107,145 @@ describe('SemanticContractReadinessService timeframe pairing', () => {
     // 核心断言：timeframe_mismatch 被豁免（timeframeOverride=true）
     expect(result.missingRequirements.filter(r => r.kind === 'timeframe_mismatch')).toEqual([])
   })
+
+  // PR3.4: CapabilityEvidenceIndex 路径——纯 DCA utterance per_order_budget 通过 EvidenceIndex 判 satisfied
+  it('PR3.4: per_order_budget requirement satisfied via CapabilityEvidenceIndex when DCA action provides the capability', () => {
+    const state = createSemanticState({
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'action.grid_ladder',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          support: { supportStatus: 'supported_executable' },
+          contracts: [{
+            id: 'contract-grid-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: { timeInForce: 'gtc' },
+            }],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+        {
+          id: 'action-dca',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          support: { supportStatus: 'supported_executable' },
+          contracts: [{
+            id: 'contract-dca-budget',
+            kind: 'action',
+            capabilities: [{
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: { kind: 'quote', value: 100, asset: 'USDT' },
+            }],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+      ],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    // per_order_budget requirement は EvidenceIndex 経由で satisfied と判定される
+    const capitalMissing = result.missingRequirements.filter(
+      r => r.domain === 'capital' && r.verb === 'allocate' && r.object === 'per_order_budget',
+    )
+    expect(capitalMissing).toHaveLength(0)
+  })
+
+  // PR3.4 Q1 negative path: open-status owner emit capability is NOT counted as satisfied evidence
+  it('PR3.4 Q1: per_order_budget requirement NOT satisfied when only an OPEN-status action provides the capability', () => {
+    const state = createSemanticState({
+      actions: [
+        {
+          id: 'action-grid-ladder',
+          key: 'action.grid_ladder',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          support: { supportStatus: 'supported_executable' },
+          contracts: [{
+            id: 'contract-grid-ladder',
+            kind: 'action',
+            capabilities: [{
+              domain: 'order_program',
+              verb: 'maintain',
+              object: 'limit_ladder',
+              shape: { timeInForce: 'gtc' },
+            }],
+            requires: [
+              { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+            ],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+        {
+          id: 'action-dca-open',
+          key: 'open_long',
+          status: 'open',                          // ← key: open, not locked
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'position.dca_schedule.per_order_sizing',
+            fieldPath: 'actions[action-dca-open].sizing',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认每次 DCA 补仓多少。',
+            affectsExecution: true,
+          }],
+          support: { supportStatus: 'supported_executable' },
+          contracts: [{
+            id: 'contract-dca-budget-open',
+            kind: 'action',
+            capabilities: [{
+              domain: 'capital',
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: { kind: 'quote', value: 100, asset: 'USDT' },
+            }],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        },
+      ],
+    })
+
+    const result = new SemanticContractReadinessService().normalize(state)
+
+    // per_order_budget requirement 必须仍在 missingRequirements 中 — open owner 不算 satisfied evidence
+    const capitalMissing = result.missingRequirements.filter(
+      r => r.domain === 'capital' && r.verb === 'allocate' && r.object === 'per_order_budget',
+    )
+    expect(capitalMissing.length).toBeGreaterThan(0)
+  })
 })
 
 function createSemanticState(overrides: Partial<SemanticState> = {}): SemanticState {

@@ -35,6 +35,8 @@ import type {
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
+import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
+import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { buildTriggerCombinationContract, isTriggerPredicateGroupContract, normalizeRiskSemantic } from './semantic-state-normalization'
 import { validateSemanticRiskContract } from './strategy-semantic-contracts'
@@ -59,11 +61,37 @@ const SYNTHESIZABLE_POSITION_MODES = new Set(['fixed_ratio', 'fixed_quote', 'fix
 const LEVEL_SET_DENSITY_SLOT_KEY = 'contract.shape.price.level_set.density'
 const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'USD']
 
+// PR3.7 helpers: map NormalizedSizing axis back to SemanticPositionSizingContract + legacy mode string
+
+// Caller MUST guard against risk_budget and base_qty axes — both throw to enforce
+// the contract instead of smuggling invalid shape/mode values downstream.
+//   - risk_budget: not representable in current SemanticPositionSizingContract union (PR4+)
+//   - base_qty: SizingAnchor.normalized has no asset symbol yet; projecting would emit asset=''
+type ProjectableSizingAxis = Exclude<SizingAxis, 'risk_budget' | 'base_qty'>
+
+function legacySizingFromNormalized(axis: ProjectableSizingAxis, value: number): SemanticPositionSizingContract {
+  switch (axis) {
+    case 'notional_quote':
+      return { kind: 'quote', value, asset: 'USDT' }
+    case 'equity_ratio':
+      // Resolver normalizes equity_ratio to 0-1; SemanticPositionSizingContract ratio uses unit='ratio'
+      return { kind: 'ratio', value, unit: 'ratio' }
+  }
+}
+
+function legacyModeFromAxis(axis: ProjectableSizingAxis): string {
+  switch (axis) {
+    case 'notional_quote': return 'fixed_quote'
+    case 'equity_ratio': return 'fixed_ratio'
+  }
+}
+
 @Injectable()
 export class SemanticSeedStateBuilderService {
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
+    private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
   ) {}
 
   build(semanticPatch: unknown): SemanticState | null {
@@ -1486,7 +1514,12 @@ export class SemanticSeedStateBuilderService {
       changed = true
     }
 
-    if (!state.position && !this.hasContractPerOrderBudget(state.actions)) {
+    // PR3.1: use PerTradeSizingResolver instead of hasContractPerOrderBudget
+    const anchors = this.sizingResolver.resolve(state)
+    const anyExecutionAnchored = [...anchors.values()].some(a => a.executionAnchored)
+
+    // critic M1 fix: anchored 时不创建 state.position 占位
+    if (!state.position && !anyExecutionAnchored) {
       return {
         ...state,
         contextSlots,
@@ -1509,19 +1542,37 @@ export class SemanticSeedStateBuilderService {
       }
     }
 
-    return changed ? { ...state, contextSlots } : state
+    // PR3.7 派生投影：在 anchored 情况下把单一 anchor 投影到 state.position.sizing 供下游消费
+    const baseState = changed ? { ...state, contextSlots } : state
+    return this.projectSingleAnchorToPosition(baseState, anchors)
   }
 
-  private hasContractPerOrderBudget(actions: SemanticActionState[]): boolean {
-    return actions.some(action =>
-      action.contracts?.some(contract =>
-        contract.capabilities.some(capability =>
-          capability.domain === 'capital'
-          && capability.verb === 'allocate'
-          && capability.object === 'per_order_budget',
-        ),
-      ),
-    )
+  private projectSingleAnchorToPosition(state: SemanticState, anchors: ReadonlyMap<string, SizingAnchor>): SemanticState {
+    if (state.position?.sizing) return state  // 主仓 sizing 已有，不覆盖
+    const executable = [...anchors.values()].filter(a => a.executionAnchored)
+    if (executable.length === 0) return state  // 无证据，守门会问
+    if (executable.length > 1) return { ...state, isMultiLeg: true }  // 多锚，标记 multi-leg
+    const single = executable[0]
+    if (!single.normalized) return state
+    const { axis, value } = single.normalized
+    // risk_budget / base_qty 不投影：
+    //   - risk_budget: SemanticPositionSizingContract union 不含 risk_budget kind（PR4+）
+    //   - base_qty: SizingAnchor.normalized 未透传 asset symbol，投影会硬编码 asset=''
+    // TODO(sizing follow-up): 在 SizingAnchor.normalized 加 asset 字段后启用 base_qty 投影
+    if (axis === 'risk_budget' || axis === 'base_qty') return state
+    return {
+      ...state,
+      position: {
+        ...(state.position ?? {}),
+        sizing: legacySizingFromNormalized(axis, value),
+        mode: legacyModeFromAxis(axis),
+        value,
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.actions),
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+    }
   }
 
   private inferPositionModeFromActions(actions: SemanticActionState[]): 'long_only' | 'short_only' | 'long_short' {

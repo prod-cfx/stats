@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
 import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
+import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
@@ -106,7 +107,7 @@ export class SemanticStateProjectionService {
       families: state.families,
     })
     const triggerSummary = this.buildTriggerSummary(deterministicTriggers, false)
-    const actionSummary = this.buildActionSummary(deterministicActions)
+    const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
     const positionSummary = this.buildPositionSummary(state.position)
     const executionContext = this.buildExecutionContext(state.contextSlots)
@@ -2124,11 +2125,11 @@ export class SemanticStateProjectionService {
     return '已识别风控，参数待补充'
   }
 
-  private buildActionSummary(actions: SemanticState['actions']): string {
+  private buildActionSummary(actions: SemanticState['actions'], state: SemanticState): string {
     return actions
       .filter(action => action.status === 'locked')
       .sort((left, right) => this.compareActionAtoms(left, right))
-      .map(action => this.buildAddPositionSummary(action) || this.buildContractOrderProgramSummary(action))
+      .map(action => this.buildAddPositionSummary(action) || this.buildContractOrderProgramSummary(action, state))
       .filter(item => item.length > 0)
       .join('；')
   }
@@ -2175,13 +2176,16 @@ export class SemanticStateProjectionService {
     return '加仓'
   }
 
-  private buildContractOrderProgramSummary(action: SemanticState['actions'][number]): string {
+  private buildContractOrderProgramSummary(action: SemanticState['actions'][number], state: SemanticState): string {
     const orderProgram = this.findCapability(action.contracts, 'order_program', 'maintain', 'limit_ladder')
     if (!orderProgram) {
       return ''
     }
 
-    const budget = this.findCapability(action.contracts, 'capital', 'allocate', 'per_order_budget')
+    // PR3.5: use CapabilityEvidenceIndex to read per_order_budget, scoped to this action
+    const budgetEvidences = CapabilityEvidenceIndex.build(state).byKey('capital', 'allocate', 'per_order_budget')
+      .filter(e => e.mount === 'action' && e.ownerId === action.id)
+    const budget = budgetEvidences[0]?.capability ?? null
     const orderType = this.readShapeString(orderProgram.shape, 'orderType') === 'limit' ? '限价' : '网格'
     const recycleText = this.readShapeBoolean(orderProgram.shape, 'recycleOnFill') === true
       ? '，成交后相邻网格反向挂单'
