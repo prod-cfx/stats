@@ -7,6 +7,7 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockPush = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
+let mockSession: { userId: string } | null = { userId: 'u-1' }
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -28,7 +29,7 @@ jest.mock('next/link', () => ({
 
 jest.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
-    session: { userId: 'u-1' },
+    session: mockSession,
     isLoading: false,
   }),
 }))
@@ -436,6 +437,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     document.body.appendChild(container)
     root = createRoot(container)
     localStorage.clear()
+    mockSession = { userId: 'u-1' }
     seedConfirmedConversation(Date.now())
     jest.clearAllMocks()
     jest.useFakeTimers()
@@ -454,6 +456,49 @@ describe('AiQuantPageClient backtest range integration', () => {
       root = null
     }
     document.body.innerHTML = ''
+  })
+
+  it('renders a page-level back link to account AI Quant when there is no source page', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+
+    expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
+  })
+
+  it('renders a page-level back link to account AI Quant for guests when there is no source page', async () => {
+    mockSession = null
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+
+    expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=ai-quant')
+  })
+
+  it('renders a page-level back link to the same-origin source page', async () => {
+    Object.defineProperty(document, 'referrer', {
+      configurable: true,
+      value: 'http://localhost/zh/account?tab=settings',
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const backLink = Array.from(container.querySelectorAll('a')).find(link => link.textContent?.includes('返回'))
+
+    expect(backLink?.getAttribute('href')).toBe('/zh/account?tab=settings')
   })
 
   it('blocks backtest when custom range is invalid and shows range error message', async () => {

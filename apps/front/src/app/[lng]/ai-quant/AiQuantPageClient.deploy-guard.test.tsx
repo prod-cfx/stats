@@ -380,7 +380,7 @@ describe('AiQuantPageClient deploy guard', () => {
 
     expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
     expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
-    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant#exchange-api')
+    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=settings#exchange-api')
   })
 
   it('shows 已部署运行 and blocks deploy when the published strategy is still running', async () => {
