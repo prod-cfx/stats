@@ -193,6 +193,12 @@ export const RENDER_CONTRACT_ATOM_FIELDS: Partial<Record<SupportedExecutableUtte
   mustAppearIn: 'summary' | 'riskSummary' | 'positionSummary'
 }>>> = {
   'risk.partial_take_profit': [{ field: 'params.tiers[0].trigger.threshold', mustAppearIn: 'riskSummary' }],
-  'action.add_position': [{ field: 'params.addRatio', mustAppearIn: 'summary' }],
+  'action.add_position': [
+    { field: 'params.addRatio', mustAppearIn: 'summary' },
+    // #1158：profit_pct/drawdown_pct 模式 emit 的触发阈值必须出现在 summary
+    //   spec it.each 对 readParamPath 返回 null 的字段自动跳过，未 emit 阈值的 case 不会被假红
+    { field: 'params.profitThreshold', mustAppearIn: 'summary' },
+    { field: 'params.drawdownThreshold', mustAppearIn: 'summary' },
+  ],
   'position.pyramiding_limit': [{ field: 'params.maxLayers', mustAppearIn: 'positionSummary' }],
 }

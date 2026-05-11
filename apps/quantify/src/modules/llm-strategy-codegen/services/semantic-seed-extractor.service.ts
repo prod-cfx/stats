@@ -1573,6 +1573,11 @@ export class SemanticSeedExtractorService {
       const addRatio = sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
         ? sizingPercent / 100
         : null
+      // #1158：profit_pct / drawdown_pct 模式下，同步提取触发阈值百分比，
+      //   渲染层据此输出 "盈利 N% 后加仓" / "回撤 N% 后加仓"
+      const triggerThreshold = addMode === 'profit_pct' || addMode === 'drawdown_pct'
+        ? this.extractAddPositionTriggerThreshold(clause, addMode)
+        : null
       push({
         key: 'action.add_position',
         params: {
@@ -1581,6 +1586,12 @@ export class SemanticSeedExtractorService {
           ...(addRatio !== null ? { addRatio } : {}),
           ...(addRatio !== null
             ? { sizing: { kind: 'ratio', value: addRatio, unit: 'ratio' } }
+            : {}),
+          ...(addMode === 'profit_pct' && triggerThreshold !== null
+            ? { profitThreshold: triggerThreshold }
+            : {}),
+          ...(addMode === 'drawdown_pct' && triggerThreshold !== null
+            ? { drawdownThreshold: triggerThreshold }
             : {}),
         },
       })
@@ -1834,6 +1845,34 @@ export class SemanticSeedExtractorService {
     if (/双向|多空|long\s*\/\s*short/iu.test(text)) return 'both'
     if (/空单|做空|开空|平空|short/iu.test(text) && !/多单|做多|开多|平多|long/iu.test(text)) return 'short'
     return 'long'
+  }
+
+  // #1158：从加仓子句中提取触发阈值百分比（如 "盈利 2% 后加仓" → 2；"drawdown 5% scale in" → 5）
+  //   返回值单位为 percent（与 risk.take_profit_pct.valuePct 一致），不做 0~1 归一化
+  private extractAddPositionTriggerThreshold(
+    clause: string,
+    mode: 'profit_pct' | 'drawdown_pct',
+  ): number | null {
+    const patterns = mode === 'profit_pct'
+      ? [
+          /(?:盈利|利润|获利|上涨|赚)\s*(\d+(?:\.\d+)?)\s*%/u,
+          /\bprofit\s*(?:of\s+)?(\d+(?:\.\d+)?)\s*%/iu,
+          /\b(?:when|if|after)\s+profit\s*(?:of\s+)?(\d+(?:\.\d+)?)\s*%/iu,
+        ]
+      : [
+          /(?:回撤|下跌|每跌)\s*(\d+(?:\.\d+)?)\s*%/u,
+          /\b(?:drawdown|pullback|drop)\s*(?:of\s+)?(\d+(?:\.\d+)?)\s*%/iu,
+        ]
+    for (const re of patterns) {
+      const match = clause.match(re)
+      if (match?.[1]) {
+        const value = Number(match[1])
+        if (Number.isFinite(value) && value > 0 && value <= 100) {
+          return value
+        }
+      }
+    }
+    return null
   }
 
   private resolveAddPositionMode(clause: string): 'signal_confirm' | 'profit_pct' | 'drawdown_pct' | null {

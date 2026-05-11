@@ -59,6 +59,35 @@ describe('SemanticStateProjectionService — render contract (#1154)', () => {
     expect(view.summary).toMatch(/加仓.*盈利后加仓.*每次\s*20\s*%/)
   })
 
+  // #1158
+  it('action.add_position profitThreshold=2 渲染为 "盈利2%后加仓"', () => {
+    const action: SemanticActionState = {
+      id: 'add-1',
+      key: 'action.add_position',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params: { addMode: 'profit_pct', addRatio: 0.2, profitThreshold: 2, sizing: { kind: 'ratio', value: 0.2 } },
+    }
+    const view = service.buildConversationView(baseState({ actions: [action] }))
+    expect(view.summary).toMatch(/盈利\s*2\s*%\s*后加仓/)
+    expect(view.summary).toMatch(/每次\s*20\s*%/)
+  })
+
+  it('action.add_position drawdownThreshold=5 渲染为 "回撤5%后加仓"', () => {
+    const action: SemanticActionState = {
+      id: 'add-1',
+      key: 'action.add_position',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+      params: { addMode: 'drawdown_pct', addRatio: 0.3, drawdownThreshold: 5, sizing: { kind: 'ratio', value: 0.3 } },
+    }
+    const view = service.buildConversationView(baseState({ actions: [action] }))
+    expect(view.summary).toMatch(/回撤\s*5\s*%\s*后加仓/)
+    expect(view.summary).toMatch(/每次\s*30\s*%/)
+  })
+
   it('risk.partial_take_profit 两档 tiers 必须出现在 riskSummary', () => {
     const risk = {
       id: 'ptp-1',

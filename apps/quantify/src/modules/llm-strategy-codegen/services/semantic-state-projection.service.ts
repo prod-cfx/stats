@@ -2102,19 +2102,25 @@ export class SemanticStateProjectionService {
     const addRatio = this.readFiniteNumber(action.params?.addRatio as unknown)
     const addRatioPct = addRatio !== null ? this.formatPercent(addRatio * 100) : null
 
-    // NOTE: extractor 当前只 emit addMode/addRatio/sizing；
-    //   触发阈值（如 "盈利 2%"、"回撤 5%"）尚未在 params 上保留。
-    //   待 extractor 增补 profitThreshold/drawdownThreshold 后此处再补阈值渲染（follow-up）。
+    // #1158：profitThreshold / drawdownThreshold 单位为 percent（如 2 表示 2%），不需要 * 100
     if (addMode === 'profit_pct') {
+      const profitThreshold = this.readFiniteNumber((action.params as Record<string, unknown>)?.profitThreshold as unknown)
+      const triggerText = profitThreshold !== null && profitThreshold > 0
+        ? `盈利${this.formatPercent(profitThreshold)}%后`
+        : '盈利后'
       return addRatioPct !== null
-        ? `加仓：盈利后加仓，每次${addRatioPct}%`
-        : `加仓：盈利后加仓`
+        ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
+        : `加仓：${triggerText}加仓`
     }
 
     if (addMode === 'drawdown_pct') {
+      const drawdownThreshold = this.readFiniteNumber((action.params as Record<string, unknown>)?.drawdownThreshold as unknown)
+      const triggerText = drawdownThreshold !== null && drawdownThreshold > 0
+        ? `回撤${this.formatPercent(drawdownThreshold)}%后`
+        : '回撤后'
       return addRatioPct !== null
-        ? `加仓：回撤后加仓，每次${addRatioPct}%`
-        : `加仓：回撤后加仓`
+        ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
+        : `加仓：${triggerText}加仓`
     }
 
     if (addMode === 'signal_confirm') {
