@@ -1405,8 +1405,11 @@ export class SemanticStateProjectionService {
    *   命中 → 返回合并文案（与 trigger 路径共享 renderer）；否则返回 null 由调用方回退原平铺逻辑。
    */
   private tryFormatMultiPeriodIndicatorCompareExpression(expression: SemanticExpression): string | null {
+    // M2 (PR #1147 review)：在入口加廉价早退守卫——O(1) 检查放最前，
+    //   避免深嵌套表达式每层都重复进入下方循环。
     if (expression.kind !== 'AND') return null
     if (expression.children.length < 2) return null
+    if (!expression.children.every(child => child.kind === 'predicate')) return null
 
     let direction: 'above' | 'below' | null = null
     let indicatorName: string | null = null
@@ -1797,7 +1800,12 @@ export class SemanticStateProjectionService {
     return ''
   }
 
-  private formatSemanticExpression(expression: unknown): string {
+  private formatSemanticExpression(expression: unknown, depth: number = 0): string {
+    // M2 (PR #1147 review)：递归深度上限——避免恶意/异常 AST 形成指数放大或栈溢出，
+    //   超过阈值返回 truncated 占位符，由上层 join 自然降级。
+    if (depth >= 16) {
+      return '…'
+    }
     if (!this.isSemanticExpression(expression)) {
       return ''
     }
@@ -1822,7 +1830,7 @@ export class SemanticStateProjectionService {
     }
 
     const children = expression.children
-      .map(child => this.formatSemanticExpression(child))
+      .map(child => this.formatSemanticExpression(child, depth + 1))
       .filter(item => item.length > 0)
     if (children.length === 0) {
       return ''
