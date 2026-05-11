@@ -40,7 +40,8 @@ export function StopRunningStrategyDialog({
   const openPositionsCount = strategy?.positionOverview?.openPositionsCount ?? 0
   const openOrdersCount = strategy?.openOrdersCount
   const hasUnknownOpenOrders = openOrdersCount == null
-  const requiresRiskChoice = openPositionsCount > 0 || hasUnknownOpenOrders || openOrdersCount > 0
+  const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
+  const requiresRiskChoice = openPositionsCount > 0 || hasOpenOrders
   const title = requiresRiskChoice ? '当前策略仍有持仓或挂单' : '确认停止策略？'
 
   return (

@@ -338,6 +338,13 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['RSI 大于 70'],
     negativeExamples: ['RSI 小于 30'],
     goldenUtterances: ['RSI 高于 70 时分批止盈'],
+    displayRenderer: ({ params }) => {
+      const period = typeof params?.period === 'number' ? params.period : 14
+      const value = typeof params?.value === 'number' ? params.value : null
+      return value !== null ? `RSI${period} ≥ ${value}` : `RSI${period} 高于阈值`
+    },
+    clarificationRenderer: (_slotKey, _params) =>
+      '请补充 RSI 阈值（0-100，常用：超卖 30 / 超买 70）。',
   }),
   presentation({
     key: 'oscillator.rsi_lte',
@@ -346,6 +353,13 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['RSI 小于 30'],
     negativeExamples: ['RSI 大于 70'],
     goldenUtterances: ['RSI 低于 30 且反弹时开多'],
+    displayRenderer: ({ params }) => {
+      const period = typeof params?.period === 'number' ? params.period : 14
+      const value = typeof params?.value === 'number' ? params.value : null
+      return value !== null ? `RSI${period} ≤ ${value}` : `RSI${period} 低于阈值`
+    },
+    clarificationRenderer: (_slotKey, _params) =>
+      '请补充 RSI 阈值（0-100，常用：超卖 30 / 超买 70）。',
   }),
   presentation({
     key: 'trend.direction',
@@ -725,6 +739,31 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['突破后再加一笔仓位', '信号再次出现时加仓 50%', '盈利 5% 后加仓 30%'],
     negativeExamples: ['只开第一笔仓位'],
     goldenUtterances: getGoldenUtterancesForAtom('action.add_position'),
+    displayRenderer: ({ params }) => {
+      const addRatio = typeof params?.addRatio === 'number' ? params.addRatio : null
+      const addMode = typeof params?.addMode === 'string' ? params.addMode : null
+      const profitThreshold = typeof params?.profitThreshold === 'number' ? params.profitThreshold : null
+      const drawdownThreshold = typeof params?.drawdownThreshold === 'number' ? params.drawdownThreshold : null
+      const ratioPct = addRatio !== null ? `${Math.round(addRatio * 100)}%` : null
+      if (addMode === 'profit_pct') {
+        const trigger = profitThreshold !== null ? `盈利 ${profitThreshold}% 后` : '盈利后'
+        return ratioPct ? `加仓：${trigger}加仓 ${ratioPct}` : `加仓：${trigger}加仓`
+      }
+      if (addMode === 'drawdown_pct') {
+        const trigger = drawdownThreshold !== null ? `回撤 ${drawdownThreshold}% 后` : '回撤后'
+        return ratioPct ? `加仓：${trigger}加仓 ${ratioPct}` : `加仓：${trigger}加仓`
+      }
+      if (addMode === 'signal_confirm') {
+        return ratioPct ? `加仓：信号确认后加仓 ${ratioPct}` : '加仓：信号确认后加仓'
+      }
+      return ratioPct ? `加仓：每次 ${ratioPct}` : '加仓'
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'action.add_position.constraint') {
+        return '请补充加仓约束，例如：最多加仓 3 次，或最大总敞口 30%。'
+      }
+      return '请补充加仓条件的缺失信息。'
+    },
   }),
   presentation({
     key: 'action.reverse_position',
@@ -733,6 +772,25 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
     positiveExamples: ['多单止损后反手开空', '信号反转时由多翻空，使用当前仓位', '由空翻多，下根 K 线执行'],
     negativeExamples: ['只平仓不反向'],
     goldenUtterances: getGoldenUtterancesForAtom('action.reverse_position'),
+    displayRenderer: ({ params }) => {
+      const fromSide = typeof params?.fromSide === 'string' ? params.fromSide : null
+      const toSide = typeof params?.toSide === 'string' ? params.toSide : null
+      if (fromSide && toSide) {
+        const from = fromSide === 'long' ? '多' : fromSide === 'short' ? '空' : fromSide
+        const to = toSide === 'long' ? '多' : toSide === 'short' ? '空' : toSide
+        return `反手：由${from}翻${to}`
+      }
+      return '反手'
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'action.reverse_position.same_bar_policy') {
+        return '请确认反手执行时机：same_bar（当根 K 线立即）或 next_bar（下根 K 线）。'
+      }
+      if (slotKey === 'action.reverse_position.sizing_source') {
+        return '请确认反手仓位来源：current_position（使用当前仓位）或 new_sizing（按新仓位规则）。'
+      }
+      return '请补充反手条件的缺失信息。'
+    },
   }),
   presentation({
     key: 'action.grid_ladder',
@@ -942,6 +1000,12 @@ const PRESENTATIONS: SemanticPresentationMetadata[] = [
         return `第${i + 1}档 ${pct} ${ratio}`.trim()
       })
       return renderDisplayToken('atom.risk.partial_take_profit.display', { tiers: parts.join('，') })
+    },
+    clarificationRenderer: (slotKey, _params) => {
+      if (slotKey === 'risk.partial_take_profit.tiers') {
+        return '请补充止盈档位，例如：盈利 5% 平 50%、盈利 10% 平 50%。'
+      }
+      return '请补充分批止盈的缺失信息。'
     },
   }),
   presentation({

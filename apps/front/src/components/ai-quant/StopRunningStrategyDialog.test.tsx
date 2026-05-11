@@ -62,6 +62,33 @@ describe('StopRunningStrategyDialog', () => {
     expect(onLiquidateAndStop).not.toHaveBeenCalled()
   })
 
+  it('shows a simple stop confirmation when open order count is unknown but no open position is reported', async () => {
+    await act(async () => {
+      root.render(
+        <StopRunningStrategyDialog
+          open
+          strategy={{
+            name: 'DOGE strategy',
+            exchange: 'okx',
+            symbol: 'DOGEUSDT',
+            positionOverview: {
+              openPositionsCount: 0,
+              totalUnrealizedPnl: 0,
+            },
+            openOrdersCount: null,
+          }}
+          onStopOnly={() => undefined}
+          onLiquidateAndStop={() => undefined}
+          onCancel={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('确认停止策略？')
+    expect(container.textContent).not.toContain('当前策略仍有持仓或挂单')
+    expect(container.textContent).not.toContain('平仓并停止')
+  })
+
   it('offers stop-only and liquidate-and-stop choices when positions exist', async () => {
     const onStopOnly = jest.fn()
     const onLiquidateAndStop = jest.fn()

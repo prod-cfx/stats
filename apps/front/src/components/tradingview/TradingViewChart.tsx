@@ -1925,6 +1925,7 @@ export const TradingViewChart = (
             // NOTE: This build gates legend actions behind these feature flags.
             // - `study_buttons_in_legend` is used internally (not always present in d.ts), but exists in our bundle.
             enabled_features: [
+              'iframe_loading_compatibility_mode',
               'show_hide_button_in_legend',
               'delete_button_in_legend',
               'legend_inplace_edit',

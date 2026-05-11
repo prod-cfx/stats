@@ -74,7 +74,11 @@
     "emailBound": "Email Bound",
     "codeSent": "Verification code sent",
     "logout": "Logout",
-    "settings": "Account Settings"
+    "settings": "Account Settings",
+    "telegramAvailable": "Telegram available",
+    "telegramWebAvailable": "Web available",
+    "telegramDesktopAvailable": "Desktop app available",
+    "telegramNotConfigured": "Not configured"
   },
   "aiQuant": {
     "title": "AI Quant",

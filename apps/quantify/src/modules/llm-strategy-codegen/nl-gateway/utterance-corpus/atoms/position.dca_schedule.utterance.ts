@@ -79,4 +79,18 @@ export const positionDcaScheduleUtterances = [
       openSlotKeys: [],
     },
   },
+  {
+    id: 'position-dca-schedule-zh-locked-rsi-bracketed-user-real',
+    atomKey: 'position.dca_schedule',
+    locale: 'zh',
+    coverage: 'locked',
+    utterance: 'OKX 现货 BTCUSDT 1h，RSI14 低于 30 开始 DCA，价格每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，RSI14 高于 70 卖出。',
+    expected: {
+      owner: 'positionConstraint',
+      key: 'position.dca_schedule',
+      status: 'locked',
+      params: { maxCount: 4, triggerMode: 'price_interval', priceIntervalPct: 5 },
+      openSlotKeys: [],
+    },
+  },
 ] satisfies readonly UtteranceCorpusCase[]

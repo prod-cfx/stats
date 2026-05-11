@@ -2,14 +2,20 @@ import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type { AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
+import type { SemanticState } from '../types/semantic-state'
 import { Injectable } from '@nestjs/common'
 import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 import { SemanticClarificationQuestionRendererService } from './semantic-clarification-question-renderer.service'
+import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 
-type StrategyClarificationInput = StrategyLogicSnapshot
+/**
+ * PR3.3: state-aware path for sizing detection via PerTradeSizingResolver.
+ * 可选 `state` 字段允许调用方传入 SemanticState 让 detectSizingItems 走 resolver 短路。
+ */
+type StrategyClarificationInput = StrategyLogicSnapshot & { state?: SemanticState }
 
 interface MarketScopeConflict {
   field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
@@ -29,6 +35,7 @@ const STATE_GATE_PATTERN = /趋势|震荡|波动|regime|volatility|trend/iu
 export class StrategyClarificationRulesService {
   constructor(
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
+    private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
   ) {}
 
   detectFromAmbiguities(input: {
@@ -63,7 +70,7 @@ export class StrategyClarificationRulesService {
         entryDetection.hasShortEntry,
         entryDetection.hasActionUniquenessConflict,
       ),
-      ...this.detectSizingItems(input.riskRules),
+      ...this.detectSizingItems(input.riskRules, input.state),
       ...this.detectBasisItems(input),
       ...this.detectRiskItems(input.riskRules ?? {}),
       ...this.detectGridItems(input),
@@ -416,8 +423,13 @@ export class StrategyClarificationRulesService {
     return items
   }
 
-  private detectSizingItems(riskRules: Record<string, unknown> | undefined): StrategyClarificationItem[] {
-    if (typeof riskRules?.positionPct === 'number') {
+  private detectSizingItems(riskRules: Record<string, unknown> | undefined, state?: SemanticState): StrategyClarificationItem[] {
+    // PR3.3: state-aware 路径优先
+    if (state) {
+      const anchors = this.sizingResolver.resolve(state, riskRules?.positionPct != null ? { riskRules: { positionPct: riskRules.positionPct as number } } : undefined)
+      if ([...anchors.values()].some(a => a.executionAnchored)) return []
+    }
+    else if (typeof riskRules?.positionPct === 'number') {
       return []
     }
 

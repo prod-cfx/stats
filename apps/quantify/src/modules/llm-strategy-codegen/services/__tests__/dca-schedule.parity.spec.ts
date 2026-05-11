@@ -22,6 +22,7 @@ import { SemanticPresentationRegistryService } from '../semantic-presentation-re
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticSupportClassifierService } from '../semantic-support-classifier.service'
+import { PerTradeSizingResolver } from '../per-trade-sizing-resolver.service'
 
 const registry = new SemanticAtomRegistryService()
 const extractor = new SemanticSeedExtractorService()
@@ -339,5 +340,40 @@ describe('position.dca_schedule parity spec', () => {
         expect(text.length).toBeGreaterThan(0)
       }
     })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PR3test DCA parity 扩展 (Issue #1175)
+//
+// 验证完整 RSI+DCA utterance 经整条对话 pipeline 输出无 position.sizing clarification。
+// golden utterance: position-dca-schedule-zh-locked-rsi-bracketed-user-real
+// source pin 留 PR4 段收紧；本 case 只断言"行为正确"。
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('position.dca_schedule parity — PR3test DCA sizing 守门扩展', () => {
+  const parityRegistry = new SemanticAtomRegistryService()
+  const parityExtractor = new SemanticSeedExtractorService()
+  const paritySeedBuilder = new SemanticSeedStateBuilderService()
+  const parityClassifier = new SemanticSupportClassifierService(parityRegistry)
+  const paritySizingResolver = new PerTradeSizingResolver()
+
+  it('golden utterance: OKX 现货 BTCUSDT 1h RSI14+DCA 整条 pipeline 输出无 position.sizing question', () => {
+    const utterance = 'OKX 现货 BTCUSDT 1h，RSI14 低于 30 开始 DCA，价格每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，RSI14 高于 70 卖出。'
+
+    const patch = parityExtractor.extract(utterance)
+    const state = paritySeedBuilder.build(patch)
+    expect(state).not.toBeNull()
+    if (!state) return
+
+    // 1. sizing resolver 产生执行锚点
+    const anchors = paritySizingResolver.resolve(state, {})
+    const anyAnchored = [...anchors.values()].some(a => a.executionAnchored)
+    expect(anyAnchored).toBe(true)
+
+    // 2. classifier.classify() open slots 不包含 position.sizing
+    const classified = parityClassifier.classify(state)
+    const openSlotKeys = classified.openSlots.map(s => s.slotKey)
+    expect(openSlotKeys).not.toContain('position.sizing')
   })
 })

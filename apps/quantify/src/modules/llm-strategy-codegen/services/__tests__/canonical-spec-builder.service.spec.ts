@@ -4810,4 +4810,25 @@ describe('canonicalSpecBuilderService', () => {
       expect(spec.orchestration!.programs![0].onDeactivate).toBe('close')
     })
   })
+
+  // PR3.8: 投影后 state.position.sizing 填充，canonical-spec 输出 sizing.value === DCA perOrderSizing
+  it('PR3.8: canonical spec reflects derived position.sizing from action per_order_budget projection', () => {
+    const service = new CanonicalSpecBuilderService()
+    // Simulate state after PR3.7 projection: position.sizing derived from action capital.allocate.per_order_budget
+    const state = createSemanticState({
+      position: {
+        sizing: { kind: 'quote', value: 100, asset: 'USDT' },
+        mode: 'fixed_quote',
+        value: 100,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+    })
+
+    const spec = service.buildFromSemanticState(state)
+
+    expect(spec.sizing).toEqual({ mode: 'QUOTE', value: 100, asset: 'USDT' })
+  })
 })

@@ -64,6 +64,7 @@ import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canoni
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 import { UnsupportedFallbackService } from './services/unsupported-fallback.service'
+import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
 
 @Module({
@@ -128,6 +129,7 @@ import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
     NaturalLanguageGatewayService,
     SemanticFrameNormalizerService,
     UnsupportedFallbackService,
+    PerTradeSizingResolver,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })

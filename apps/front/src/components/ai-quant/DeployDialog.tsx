@@ -184,7 +184,7 @@ export function DeployDialog({
         <div className="mt-4 flex flex-wrap gap-2">
           {!apiConfigured && (
             <Link
-              href={`/${lng}/account?tab=ai-quant#exchange-api`}
+              href={`/${lng}/account?tab=settings#exchange-api`}
               className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
             >
               {t('aiQuant.deployDialog.goConfig')}

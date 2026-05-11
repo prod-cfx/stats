@@ -1718,4 +1718,29 @@ describe('SemanticAtomInvariantService', () => {
       }),
     ]))
   })
+
+  // PR3.8: 投影后 state.position.sizing 填充，invariant 不报 sizing missing
+  it('PR3.8: invariant passes position_sizing check when position.sizing is derived from action per_order_budget', () => {
+    // Simulate state after PR3.7 projection: position.sizing is derived from action budget
+    const state: SemanticState = {
+      ...buildSemanticState(),
+      position: {
+        sizing: { kind: 'quote', value: 100, asset: 'USDT' },
+        mode: 'fixed_quote',
+        value: 100,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'derived',
+        openSlots: [],
+      },
+    }
+
+    const { canonicalSpec, ir, ast } = compileFromSemanticState(state)
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    // sizing check should pass (not fail) — projection filled in the correct value
+    const sizingChecks = checks.filter(c => c.key === 'semantic_contract.position_sizing')
+    expect(sizingChecks.length).toBeGreaterThan(0)
+    expect(sizingChecks.every(c => c.status === 'passed')).toBe(true)
+  })
 })

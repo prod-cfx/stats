@@ -6,6 +6,7 @@ import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capabi
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
+import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -28,6 +29,7 @@ import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStr
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
 import { AiQuantDeletionDialog, type AiQuantDeletionDialogKind } from '@/components/ai-quant/AiQuantDeletionDialog'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
+import { getSameOriginReturnHref } from '@/components/navigation/return-href'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
@@ -197,6 +199,8 @@ export function AiQuantPageClient({
   const router = useRouter()
   const { session, isLoading } = useAuth()
   const apiConfigHref = buildApiConfigHref(lng)
+  const defaultReturnHref = `/${lng}/account?tab=ai-quant`
+  const [returnHref, setReturnHref] = useState(defaultReturnHref)
 
   // Initialize state lazily to avoid hydration mismatch if possible,
   // but here we need to read from localStorage which is a side effect.
@@ -245,6 +249,10 @@ export function AiQuantPageClient({
     if (!activeConversationId) return conversations[0]
     return conversations.find(x => x.id === activeConversationId) || conversations[0]
   }, [activeConversationId, conversations])
+
+  useEffect(() => {
+    setReturnHref(getSameOriginReturnHref(defaultReturnHref))
+  }, [defaultReturnHref])
 
   useEffect(() => {
     if (!activeConversationId && conversations.length) {
@@ -1501,7 +1509,14 @@ export function AiQuantPageClient({
 
   if (!session) {
     return (
-      <main className="mx-auto flex w-full max-w-[1120px] flex-1 px-4 py-8 md:px-8">
+      <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
+        <Link
+          href={returnHref}
+          className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>{lng === 'en' ? 'Back' : '返回'}</span>
+        </Link>
         <GuestAiQuantLanding onRequireLogin={goLoginWithIntent} />
       </main>
     )
@@ -1526,6 +1541,14 @@ export function AiQuantPageClient({
 
   return (
     <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">
+      <Link
+        href={returnHref}
+        className="inline-flex w-fit items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span>{lng === 'en' ? 'Back' : '返回'}</span>
+      </Link>
+
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">
@@ -1541,7 +1564,7 @@ export function AiQuantPageClient({
             {t('aiQuant.plaza')}
           </Link>
           <Link
-            href={`/${lng}/account?tab=ai-quant#exchange-api`}
+            href={`/${lng}/account?tab=settings#exchange-api`}
             className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:bg-[color:var(--cf-surface-hover)]"
           >
             {t('aiQuant.configApi')}

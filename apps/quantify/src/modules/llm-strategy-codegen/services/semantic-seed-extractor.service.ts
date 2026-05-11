@@ -103,7 +103,7 @@ export class SemanticSeedExtractorService {
           this.mergeSeedTriggers(eventFrameTriggers, legacyTriggers),
         ))),
       ),
-    ))))
+    )), text))
     const actions = this.atomizeActions(this.mergeSeedActions(
       gatewayActions,
       this.mergeSeedActions(
@@ -528,11 +528,12 @@ export class SemanticSeedExtractorService {
     return stripped
   }
 
-  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[]): SeedTrigger[] {
+  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[], text: string): SeedTrigger[] {
     const movingAverageStackGroups = this.resolveMovingAverageStackCombinationGroups(triggers)
+    const heterogeneousEntryAndGroups = this.resolveHeterogeneousEntryAndGroups(triggers, text, movingAverageStackGroups)
 
     return triggers.map((trigger, index) => {
-      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index))
+      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index), heterogeneousEntryAndGroups.get(index))
       if (explicit) {
         return this.withTriggerCombinationContract(trigger, explicit)
       }
@@ -559,9 +560,14 @@ export class SemanticSeedExtractorService {
   private resolveRecognizedTriggerCombination(
     trigger: SeedTrigger,
     movingAverageStack: TriggerCombinationContractInput | undefined,
+    heterogeneousEntryAnd: TriggerCombinationContractInput | undefined,
   ): TriggerCombinationContractInput | null {
     if (movingAverageStack) {
       return movingAverageStack
+    }
+
+    if (heterogeneousEntryAnd) {
+      return heterogeneousEntryAnd
     }
 
     if (
@@ -576,6 +582,126 @@ export class SemanticSeedExtractorService {
     }
 
     return null
+  }
+
+  private resolveHeterogeneousEntryAndGroups(
+    triggers: SeedTrigger[],
+    text: string,
+    movingAverageStackGroups: Map<number, TriggerCombinationContractInput>,
+  ): Map<number, TriggerCombinationContractInput> {
+    const result = new Map<number, TriggerCombinationContractInput>()
+
+    // 1) 按 [。；;] 切分原文为子句，记录每个子句的字符 range
+    const clauses = this.splitIntoClauses(text)
+    if (clauses.length === 0) return result
+
+    // 2) 收集候选 entry trigger，按 (clauseIndex, sideScope) 双键归桶
+    type Member = { index: number, trigger: SeedTrigger }
+    const buckets = new Map<string, Member[]>()
+    triggers.forEach((trigger, index) => {
+      if (trigger.phase !== 'entry') return
+      if (trigger.key === 'logical.any_of') return
+      if (this.readTriggerGroupMarker(trigger) !== null) return
+      if (trigger.contracts?.some(c => this.isTriggerCombinationLikeContract(c))) return
+      // M1：MA stack 已识别为 AND 组的 trigger 不重复挂 hetero AND 组
+      if (movingAverageStackGroups.has(index)) return
+
+      const clauseIndex = this.locateTriggerClause(trigger, text, clauses)
+      if (clauseIndex < 0) return
+
+      const sideScope = trigger.sideScope ?? 'long'
+      const bucketKey = `${clauseIndex}::${sideScope}`
+      const bucket = buckets.get(bucketKey) ?? []
+      bucket.push({ index, trigger })
+      buckets.set(bucketKey, bucket)
+    })
+
+    // 3) 每桶独立判定：≥2 个 trigger 且子句仅含 AND 连词 → 挂同一 groupId
+    for (const [bucketKey, members] of buckets) {
+      if (members.length < 2) continue
+
+      const [clauseIndexStr, sideScope] = bucketKey.split('::')
+      const clauseIndex = Number(clauseIndexStr)
+      const clauseText = clauses[clauseIndex]?.text ?? ''
+      if (!this.hasConjunctiveAndOnly(clauseText)) continue
+
+      const groupId = `entry-and-${sideScope}-${this.shortHashOfKeys(members.map(m => m.trigger.key))}`
+      for (const { index } of members) {
+        result.set(index, { groupId, join: 'AND' })
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * 按 [。；;] 切分文本为子句，返回每个子句的文本与字符 range（含分隔符前的部分）。
+   * 不按「，」切分以避免误把「A 且 B，开多」拆开。
+   */
+  private splitIntoClauses(text: string): Array<{ text: string, start: number, end: number }> {
+    const result: Array<{ text: string, start: number, end: number }> = []
+    const re = /[。；;]/gu
+    let lastEnd = 0
+    let match: RegExpExecArray | null
+    // eslint-disable-next-line no-cond-assign
+    while ((match = re.exec(text)) !== null) {
+      const segText = text.slice(lastEnd, match.index)
+      if (segText.length > 0) {
+        result.push({ text: segText, start: lastEnd, end: match.index })
+      }
+      lastEnd = match.index + 1
+    }
+    if (lastEnd < text.length) {
+      result.push({ text: text.slice(lastEnd), start: lastEnd, end: text.length })
+    }
+    return result
+  }
+
+  /**
+   * 通过 evidence.text 在 text 中的命中位置，把 trigger 归到子句索引；
+   * 无 evidence 或定位失败 → 返回 -1（跳过该 trigger，不参与 hetero AND）。
+   */
+  private locateTriggerClause(
+    trigger: SeedTrigger,
+    text: string,
+    clauses: Array<{ start: number, end: number }>,
+  ): number {
+    const evText = trigger.evidence?.text
+    let pos = -1
+    if (typeof evText === 'string' && evText.length > 0) {
+      pos = text.indexOf(evText)
+    }
+    if (pos < 0) return -1
+    for (let i = 0; i < clauses.length; i++) {
+      const { start, end } = clauses[i]!
+      if (pos >= start && pos < end) return i
+    }
+    // 命中点恰好落在分隔符上（罕见）→ 归到下一个子句
+    for (let i = 0; i < clauses.length; i++) {
+      if (pos < clauses[i]!.start) return i
+    }
+    return clauses.length - 1
+  }
+
+  /**
+   * 把 trigger.key 列表去重排序后做 djb2 短 hash（避免 slice(40) 截断冲突）。
+   */
+  private shortHashOfKeys(keys: string[]): string {
+    const joined = Array.from(new Set(keys)).sort().join('_')
+    let hash = 5381
+    for (let i = 0; i < joined.length; i++) {
+      // eslint-disable-next-line no-bitwise
+      hash = ((hash << 5) + hash + joined.charCodeAt(i)) >>> 0
+    }
+    return hash.toString(36)
+  }
+
+  private hasConjunctiveAndOnly(text: string): boolean {
+    // 「和」在中文里大量作列举/并列名词（"BTC 和 ETH"、"MA20 和 EMA50"），
+    // 当作 AND 连词会把 list 误判为联立条件 → 从词表移除。
+    const hasAnd = /(?:且|同时|并且)/u.test(text)
+    const hasOr = /(?:或|或者|任一|any\s*of)/ui.test(text)
+    return hasAnd && !hasOr
   }
 
   private resolveMovingAverageStackCombinationGroups(
@@ -1447,6 +1573,11 @@ export class SemanticSeedExtractorService {
       const addRatio = sizingPercent !== null && sizingPercent > 0 && sizingPercent <= 100
         ? sizingPercent / 100
         : null
+      // #1158：profit_pct / drawdown_pct 模式下，同步提取触发阈值百分比，
+      //   渲染层据此输出 "盈利 N% 后加仓" / "回撤 N% 后加仓"
+      const triggerThreshold = addMode === 'profit_pct' || addMode === 'drawdown_pct'
+        ? this.extractAddPositionTriggerThreshold(clause, addMode)
+        : null
       push({
         key: 'action.add_position',
         params: {
@@ -1455,6 +1586,12 @@ export class SemanticSeedExtractorService {
           ...(addRatio !== null ? { addRatio } : {}),
           ...(addRatio !== null
             ? { sizing: { kind: 'ratio', value: addRatio, unit: 'ratio' } }
+            : {}),
+          ...(addMode === 'profit_pct' && triggerThreshold !== null
+            ? { profitThreshold: triggerThreshold }
+            : {}),
+          ...(addMode === 'drawdown_pct' && triggerThreshold !== null
+            ? { drawdownThreshold: triggerThreshold }
             : {}),
         },
       })
@@ -1710,6 +1847,34 @@ export class SemanticSeedExtractorService {
     return 'long'
   }
 
+  // #1158：从加仓子句中提取触发阈值百分比（如 "盈利 2% 后加仓" → 2；"drawdown 5% scale in" → 5）
+  //   返回值单位为 percent（与 risk.take_profit_pct.valuePct 一致），不做 0~1 归一化
+  private extractAddPositionTriggerThreshold(
+    clause: string,
+    mode: 'profit_pct' | 'drawdown_pct',
+  ): number | null {
+    const patterns = mode === 'profit_pct'
+      ? [
+          /(?:盈利|利润|获利|上涨|赚)\s*(\d+(?:\.\d+)?)\s*%/u,
+          /\bprofit\s*(?:of\s+)?(\d+(?:\.\d+)?)\s*%/iu,
+          /\b(?:when|if|after)\s+profit\s*(?:of\s+)?(\d+(?:\.\d+)?)\s*%/iu,
+        ]
+      : [
+          /(?:回撤|下跌|每跌)\s*(\d+(?:\.\d+)?)\s*%/u,
+          /\b(?:drawdown|pullback|drop)\s*(?:of\s+)?(\d+(?:\.\d+)?)\s*%/iu,
+        ]
+    for (const re of patterns) {
+      const match = clause.match(re)
+      if (match?.[1]) {
+        const value = Number(match[1])
+        if (Number.isFinite(value) && value > 0 && value <= 100) {
+          return value
+        }
+      }
+    }
+    return null
+  }
+
   private resolveAddPositionMode(clause: string): 'signal_confirm' | 'profit_pct' | 'drawdown_pct' | null {
     if (/盈利.{0,12}(?:后|时|再|则)|profit.{0,12}(?:add|scale|pyramid)|上涨.{0,12}(?:加仓|补仓)|(?:scale|add|pyramid).{0,20}(?:when|if|after)\s+profit/iu.test(clause)) {
       return 'profit_pct'
@@ -1917,7 +2082,7 @@ export class SemanticSeedExtractorService {
       })
     }
 
-    const takeProfit = this.extractPercent(text, [
+    const takeProfitPatterns = [
       /盈利\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
       /盈利(?:达到|达|到)?\s*[：:]?\s*(\d+(?:\.\d+)?)\s*%/u,
       /盈利\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
@@ -1925,22 +2090,40 @@ export class SemanticSeedExtractorService {
       /止盈\s*[：:]?\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止盈|盈利)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
-    ])
-    if (takeProfit !== null) {
-      const riskContext = this.resolveRiskClauseContext(text, 'take_profit')
-      const basis = this.resolveRiskBasis(riskContext)
-      const basisSource = this.resolveRiskBasisSource(riskContext, basis)
-      risk.push({
-        key: 'risk.take_profit_pct',
-        params: {
-          valuePct: takeProfit,
-          direction: 'profit',
-          basis,
-          basisSource,
-          effect: 'close_position',
-          scope: 'current_position',
-        },
+    ]
+    // INVARIANT-B1 guard：partial_take_profit 触发短语是 utterance 级语义，含 partial 则全文跳过单值止盈
+    const hasPartialTakeProfitPhrase =
+      this.partialTakeProfitPhraseRe.test(text)
+      || /盈利\s*\d+(?:\.\d+)?\s*%\s*平\s*(?:\d+\s*%|一半|半)/u.test(text)
+    if (!hasPartialTakeProfitPhrase) {
+      // INVARIANT-B2 guard：加仓触发上下文中的"盈利 N% 后加仓"是触发阈值，按子句作用域排除
+      //   防止复合 utterance "盈利 2% 后加仓 ... 止盈 10%" 中合法的 10% 被一并误杀
+      const addPositionTriggerPhrase = /盈利\s*\d+(?:\.\d+)?\s*%\s*(?:之后|后|再|则)\s*加仓/u
+      const addPositionTriggerEn = /(?:scale\s*in|\badd\b|pyramid)[^.,;。，；]{0,20}(?:when|if|after)\s+profit/iu
+      const takeProfitClause = this.splitRiskClauses(text).find((clause) => {
+        if (this.extractPercent(clause, takeProfitPatterns) === null) return false
+        if (addPositionTriggerPhrase.test(clause) || addPositionTriggerEn.test(clause)) return false
+        return true
       })
+      if (takeProfitClause) {
+        const takeProfit = this.extractPercent(takeProfitClause, takeProfitPatterns)
+        if (takeProfit !== null) {
+          const riskContext = this.resolveRiskClauseContext(takeProfitClause, 'take_profit')
+          const basis = this.resolveRiskBasis(riskContext)
+          const basisSource = this.resolveRiskBasisSource(riskContext, basis)
+          risk.push({
+            key: 'risk.take_profit_pct',
+            params: {
+              valuePct: takeProfit,
+              direction: 'profit',
+              basis,
+              basisSource,
+              effect: 'close_position',
+              scope: 'current_position',
+            },
+          })
+        }
+      }
     }
 
     const trailingStop = this.extractPercent(text, [
@@ -3517,7 +3700,13 @@ export class SemanticSeedExtractorService {
 
     for (const clause of clauses) {
       if (!/RSI/iu.test(clause) && !this.isRsiThresholdAliasClause(clause, segment)) continue
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+
+      // 子句含 DCA/补仓/加仓/定投 等入场动词时，强制 entry/long，避免 segment fallback 被污染的"卖出"意图覆盖
+      const isDcaEntryClause = /开始\s*DCA|补仓|加仓|定投|开仓|入场|开多|做多|买入/u.test(clause)
+        && !/卖出|平仓|平多|平空|close/iu.test(clause)
+      const intent = isDcaEntryClause
+        ? { phase: 'entry' as const, sideScope: 'long' as const }
+        : (this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment))
       if (!intent) continue
 
       const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
@@ -3556,7 +3745,7 @@ export class SemanticSeedExtractorService {
         continue
       }
 
-      if (/高于|大于|超过|上方/u.test(clause)) {
+      if (/高于|大于|超过|上方|\babove\b|\bover\b|\bgreater\s+than\b/iu.test(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'oscillator.rsi_gte',
           phase: intent.phase,
@@ -3571,7 +3760,7 @@ export class SemanticSeedExtractorService {
         continue
       }
 
-      if (/低于|小于|下方/u.test(clause)) {
+      if (/低于|小于|下方|\bbelow\b|\bunder\b|\bless\s+than\b/iu.test(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'oscillator.rsi_lte',
           phase: intent.phase,
@@ -3896,6 +4085,23 @@ export class SemanticSeedExtractorService {
         entry.valuePct !== null && entry.valuePct > 0,
       )
     if (!dcaPercentChange) return
+
+    // Guard：若 RSI 段落（以 ；。\n 等强分隔符切分后含 RSI 的子段）直接以 DCA/开始DCA
+    // 作为动词（RSI 是 DCA 的触发条件，而非独立入场），且 DCA 子句已确定
+    // price_interval triggerMode 和 priceIntervalPct，则 price.percent_change 已由
+    // dca_schedule.priceIntervalPct 承载，不再重复 emit 顶层 trigger（双路径冲突）。
+    // 注意：用强分隔符 ；。\n 切分，避免把同句"补仓"误作 RSI 子句的 DCA 动词。
+    const sentenceClauses = text.split(/[；;。\n]/u).map(s => s.trim()).filter(Boolean)
+    const hasRsiAsDirectDcaTrigger = sentenceClauses.some(
+      clause => /RSI/iu.test(clause) && /开始\s*DCA|DCA\s*触发|RSI.*(?:开始|触发)\s*DCA/iu.test(clause),
+    )
+    if (hasRsiAsDirectDcaTrigger) {
+      const hasDcaPriceIntervalLocked = this.extractDcaLifecycleTexts(text).some((clause) => {
+        const isPriceInterval = /(?:每跌|每下跌|price\s+drops?)/iu.test(clause)
+        return isPriceInterval && this.extractDcaPriceIntervalPct(clause) !== null
+      })
+      if (hasDcaPriceIntervalLocked) return
+    }
 
     this.pushTrigger(triggers, seen, {
       key: 'price.percent_change',
@@ -5147,7 +5353,14 @@ export class SemanticSeedExtractorService {
   private isRsiThresholdAliasClause(clause: string, segment: string): boolean {
     if (!/RSI/iu.test(segment)) return false
     if (/\b(?:MA|EMA)\s*\d{1,4}/iu.test(clause)) return false
-    return /(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)\s*\d+(?:\.\d+)?/u.test(clause)
+    // INVARIANT-C 防跨子句污染：含货币单位/仓位/账户语境的子句不属于 RSI 阈值
+    // 覆盖：货币单位、资金语义、仓位/账户语义、notional/equity 等英文同义词
+    if (/USDT|USDC|\bUSD\b|投入|本金|资金|capital|\bcap\b|持仓|仓位|总仓|账户|余额|\bbalance\b|\bequity\b|\bnotional\b|\bnet\s*worth\b/iu.test(clause)) return false
+    const match = clause.match(/(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)\s*(\d+(?:\.\d+)?)/u)
+    if (!match) return false
+    const value = Number(match[1])
+    // RSI 物理范围 0-100 fail-closed：超出范围的数值不会是 RSI 阈值
+    return value >= 0 && value <= 100
   }
 
   private extractMacdParams(text: string): { fastPeriod: number; slowPeriod: number; signalPeriod: number } | null {

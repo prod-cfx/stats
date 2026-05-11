@@ -1,7 +1,7 @@
 'use client'
 
 import type { AiQuantStrategyRecord, StrategyEquityPoint, AiQuantStrategyViewState } from './ai-quant-strategy-store'
-import { AlertTriangle } from 'lucide-react'
+import { Play } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,8 +31,12 @@ const EQUITY_CHART_HEIGHT = 220
 const EQUITY_CHART_PADDING_Y = 16
 const STOP_SUCCESS_MESSAGE = '策略已停止。现有持仓和挂单仍然保留，需要你单独管理。'
 const LIQUIDATE_AND_STOP_SUCCESS_MESSAGE = '策略已平仓并停止。'
+const RUN_SUCCESS_MESSAGE = '策略已开始运行。'
 const STOP_ERROR_MESSAGE = '停止策略失败，请稍后重试。'
 const LIQUIDATE_AND_STOP_ERROR_MESSAGE = '平仓并停止失败，请检查模拟盘账户状态后重试。'
+const RUN_ERROR_MESSAGE = '启动策略失败，请稍后重试。'
+const TIMELINE_PREVIEW_LIMIT = 3
+type RuntimeAction = 'run' | 'stop' | 'liquidate_and_stop'
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -302,12 +306,13 @@ function formatOrderEvidenceList(
 }
 
 function resolveRuntimeControlErrorMessage(
-  action: 'stop' | 'liquidate_and_stop',
+  action: RuntimeAction,
   error: unknown,
 ) {
   if (error instanceof Error && error.message.trim()) {
     return error.message
   }
+  if (action === 'run') return RUN_ERROR_MESSAGE
   return action === 'liquidate_and_stop' ? LIQUIDATE_AND_STOP_ERROR_MESSAGE : STOP_ERROR_MESSAGE
 }
 
@@ -328,12 +333,17 @@ export function AiQuantStrategyDetail({
     kind: 'success' | 'error'
     message: string
   } | null>(null)
-  const [pendingRuntimeAction, setPendingRuntimeAction] = useState<'stop' | 'liquidate_and_stop' | null>(null)
+  const [pendingRuntimeAction, setPendingRuntimeAction] = useState<RuntimeAction | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [showFullTimeline, setShowFullTimeline] = useState(false)
 
   useEffect(() => {
     setStrategy(initialStrategy)
   }, [initialStrategy])
+
+  useEffect(() => {
+    setShowFullTimeline(false)
+  }, [strategy?.id])
 
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
@@ -400,11 +410,16 @@ export function AiQuantStrategyDetail({
   const openPositionsCount = strategy.positionOverview?.openPositionsCount ?? 0
   const openOrdersCount = strategy.openOrdersCount
   const hasUnknownOpenOrders = openOrdersCount == null
-  const hasRuntimeRisk = openPositionsCount > 0 || hasUnknownOpenOrders || openOrdersCount > 0
+  const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
+  const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
+  const timelineItems = showFullTimeline
+    ? strategy.timeline
+    : strategy.timeline.slice(0, TIMELINE_PREVIEW_LIMIT)
+  const hasMoreTimelineItems = strategy.timeline.length > TIMELINE_PREVIEW_LIMIT
 
-  const handleRuntimeAction = async (action: 'stop' | 'liquidate_and_stop') => {
+  const handleRuntimeAction = async (action: RuntimeAction) => {
     if (!session?.userId || pendingRuntimeAction || !strategy) return
 
     setPendingRuntimeAction(action)
@@ -419,9 +434,11 @@ export function AiQuantStrategyDetail({
       setStopDialogOpen(false)
       setRuntimeControlFeedback({
         kind: 'success',
-        message: action === 'liquidate_and_stop'
-          ? LIQUIDATE_AND_STOP_SUCCESS_MESSAGE
-          : STOP_SUCCESS_MESSAGE,
+        message: action === 'run'
+          ? RUN_SUCCESS_MESSAGE
+          : action === 'liquidate_and_stop'
+            ? LIQUIDATE_AND_STOP_SUCCESS_MESSAGE
+            : STOP_SUCCESS_MESSAGE,
       })
     } catch (error) {
       setRuntimeControlFeedback({
@@ -501,9 +518,9 @@ export function AiQuantStrategyDetail({
               <p className="text-sm leading-6 text-[color:var(--cf-text)]">
                 {strategy.status === 'running'
                   ? (showLiquidateAndStop
-                      ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
+                      ? '策略当前正在运行且账户中存在持仓或未成交挂单。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
                       : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
-                  : '当前运行实例已结束。可返回 AI Quant 重新部署当前已发布版本。'}
+                  : '当前运行实例已结束。'}
               </p>
               {showLiquidateAndStop && (
                 <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
@@ -514,9 +531,36 @@ export function AiQuantStrategyDetail({
 
             <div
               data-testid="strategy-runtime-control-actions"
-              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:flex-row sm:items-center sm:justify-end"
             >
-              <div className="flex min-w-0 items-center">
+              <div className="flex flex-row flex-wrap items-center gap-2 sm:justify-end">
+                {strategy.status === 'running' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openStopDialogWithLatestDetail()
+                    }}
+                    disabled={runtimeActionDisabled}
+                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-red-500/20 bg-red-500/10 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
+                  >
+                    停止策略
+                  </button>
+                )}
+
+                {strategy.status === 'stopped' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleRuntimeAction('run')
+                    }}
+                    disabled={runtimeActionDisabled}
+                    className="inline-flex h-9 min-w-max items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
+                  >
+                    <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                    运行
+                  </button>
+                )}
+
                 {strategy.hasActiveConversation === true && (
                   <Link
                     href={`/${lng}/ai-quant`}
@@ -528,48 +572,10 @@ export function AiQuantStrategyDetail({
                         source: 'account-detail',
                       })
                     }}
-                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg px-2 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-white/5 hover:text-[color:var(--cf-text-strong)]"
+                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
                   >
                     返回对话
                   </Link>
-                )}
-              </div>
-
-              <div className="flex flex-row flex-wrap items-center gap-2 sm:justify-end">
-                {strategy.status === 'stopped' && (
-                  <Link
-                    href={`/${lng}/ai-quant`}
-                    className="from-primary to-secondary inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg bg-gradient-to-r px-4 text-sm font-bold text-white transition hover:opacity-90"
-                  >
-                    重新部署
-                  </Link>
-                )}
-
-                {strategy.status === 'running' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void openStopDialogWithLatestDetail()
-                    }}
-                    disabled={runtimeActionDisabled}
-                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
-                  >
-                    停止策略
-                  </button>
-                )}
-
-                {strategy.status === 'running' && showLiquidateAndStop && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void openStopDialogWithLatestDetail()
-                    }}
-                    disabled={runtimeActionDisabled}
-                    className="inline-flex h-9 min-w-max items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-rose-500/35 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                    平仓并停止
-                  </button>
                 )}
               </div>
             </div>
@@ -1065,9 +1071,26 @@ export function AiQuantStrategyDetail({
         </article>
 
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>
+              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                共 {strategy.timeline.length} 条
+                {hasMoreTimelineItems && !showFullTimeline ? `，默认显示最近 ${TIMELINE_PREVIEW_LIMIT} 条` : ''}
+              </p>
+            </div>
+            {hasMoreTimelineItems && (
+              <button
+                type="button"
+                onClick={() => setShowFullTimeline(curr => !curr)}
+                className="inline-flex h-8 min-w-max items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-3 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
+              >
+                {showFullTimeline ? '收起' : '展开全部'}
+              </button>
+            )}
+          </div>
           <ol className="mt-3 space-y-3">
-            {strategy.timeline.map(item => (
+            {timelineItems.map(item => (
               <li key={`${item.at}-${item.event}`} className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
                 <p className="text-xs text-[color:var(--cf-muted)]">{item.at}</p>
                 <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">{item.event}</p>

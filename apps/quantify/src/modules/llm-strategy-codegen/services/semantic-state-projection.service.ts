@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
-import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
+import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
@@ -105,19 +107,25 @@ export class SemanticStateProjectionService {
       families: state.families,
     })
     const triggerSummary = this.buildTriggerSummary(deterministicTriggers, false)
-    const actionSummary = this.buildActionSummary(deterministicActions)
+    const actionSummary = this.buildActionSummary(deterministicActions, state)
     const riskSummary = this.buildRiskSummary(deterministicRisk)
     const positionSummary = this.buildPositionSummary(state.position)
     const executionContext = this.buildExecutionContext(state.contextSlots)
     const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
+    // #1152 contract parity：orchestration locked 节点必须计入 deterministic 判定与 summary，
+    // 否则纯 orchestration-only utterance（如纯账户回撤）会被视作"空状态"通过 projection_gate
+    const lockedOrchestrationNodes = (state.orchestration?.nodes ?? [])
+      .filter(node => node.status === 'locked')
+    const orchestrationSummary = this.buildOrchestrationSummary(lockedOrchestrationNodes)
     const hasDeterministicSemantics = this.hasDeterministicSemantics({
       triggers: deterministicTriggers,
       actions: deterministicActions,
       risk: deterministicRisk,
       position: state.position,
       hasGridIntent: deterministicSignals.hasGridIntent,
+      lockedOrchestrationCount: lockedOrchestrationNodes.length,
     })
-    const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary]
+    const summaryItems = [triggerSummary, actionSummary, riskSummary, positionSummary, orchestrationSummary]
       .filter(item => item.length > 0)
 
     return {
@@ -473,7 +481,28 @@ export class SemanticStateProjectionService {
   }
 
   private shouldRenderDisplayGroupAsSingleCondition(group: SemanticState['triggers']): boolean {
-    return group.length > 1 && group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))
+    if (group.length <= 1) return false
+    if (group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) return true
+
+    // marker-grouped 路径：所有 trigger 共享 displayGroupId/contract.groupId 时合并为单条
+    const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
+    if (firstMarker === null) return false
+    const allShareMarker = group.every(trigger => this.readDisplayRuleGroupMarker(trigger) === firstMarker)
+    if (!allShareMarker) return false
+
+    // 原 timeframeGroupable 同 indicator/period fan-out 路径
+    if (group.every(trigger => this.isGroupableIndicatorCompareTriggerByMarker(trigger))) return true
+
+    // 新增异质 entryPredicate/exitPredicate marker 路径：所有成员都是 predicate 且共享 marker
+    //   → 进入单 condition 渲染，下游 formatGroupedDisplayTriggerCondition 的异质 fallback
+    //   负责将各 trigger 独立渲染后用"，且"拼接为单条文案
+    // 防御性 phase 一致性守卫：当前 canMergeDisplayRuleTriggers 已保证 group 内 phase 一致，
+    //   但 grouping 链路若未来变更，避免 entry+exit 误混入同 group 被当成 AND 单条渲染
+    if (!group.every(trigger => trigger.phase === group[0]!.phase)) return false
+    return group.every(trigger =>
+      (trigger.phase === 'entry' && isEntryPredicateTriggerKey(trigger.key))
+      || (trigger.phase === 'exit' && isExitPredicateTriggerKey(trigger.key)),
+    )
   }
 
   private canMergeDisplayRuleTriggers(
@@ -482,7 +511,7 @@ export class SemanticStateProjectionService {
   ): boolean {
     if (
       previous.phase !== next.phase
-      || previous.phase !== 'entry'
+      || (previous.phase !== 'entry' && previous.phase !== 'exit')
       || previous.key === 'logical.any_of'
       || next.key === 'logical.any_of'
       || (previous.sideScope ?? 'long') !== (next.sideScope ?? 'long')
@@ -767,9 +796,19 @@ export class SemanticStateProjectionService {
     triggers: SemanticState['triggers'],
     entryTrigger: SemanticState['triggers'][number],
   ): string | null {
+    // 入场卡片本身已经渲染 EMA stack 语义时（marker-grouped indicator.above/below），
+    //   不再追加同 sideScope 的 condition.expression gate 文本，避免重复表达
+    const entrySuppressesIndicatorGate = this.isGroupableIndicatorCompareTriggerByMarker(entryTrigger)
+      && this.readDisplayRuleGroupMarker(entryTrigger) !== null
+
     const gateTexts = triggers
       .filter(trigger => trigger.phase === 'gate')
       .filter(trigger => this.isDisplayGateCompatibleWithEntry(entryTrigger, trigger))
+      .filter(trigger => !(
+        entrySuppressesIndicatorGate
+        && trigger.key === 'condition.expression'
+        && (trigger.sideScope ?? '') === (entryTrigger.sideScope ?? '')
+      ))
       .map(trigger => this.buildDisplayConditionText(trigger, null))
       .filter(text => text.length > 0)
     return gateTexts.length > 0 ? gateTexts.join('，且') : null
@@ -779,29 +818,89 @@ export class SemanticStateProjectionService {
     triggers: SemanticState['triggers'],
     trigger: SemanticState['triggers'][number],
   ): Array<SemanticState['triggers'][number]> {
-    if (!this.isGroupableIndicatorCompareTrigger(trigger)) {
+    const triggerMarker = this.readDisplayRuleGroupMarker(trigger)
+    const isMarkerEligible = triggerMarker !== null
+      && this.isGroupableIndicatorCompareTriggerByMarker(trigger)
+
+    if (!this.isGroupableIndicatorCompareTrigger(trigger) && !isMarkerEligible) {
       return [trigger]
     }
 
+    // M1 (PR #1147 review)：避免对每个 candidate 重复解析 displayGroupId / contract.groupId，
+    //   将 marker 缓存到 Map，将 O(N²) marker 读取降为 O(N)。
+    const markerCache = new Map<SemanticState['triggers'][number], string | null>()
+    const readMarker = (candidate: SemanticState['triggers'][number]): string | null => {
+      const cached = markerCache.get(candidate)
+      if (cached !== undefined) return cached
+      const resolved = this.readDisplayRuleGroupMarker(candidate)
+      markerCache.set(candidate, resolved)
+      return resolved
+    }
+
+    // 多 EMA AND 合取 (#NLU-fix)：同一 displayGroupId/contract.groupId 标记的 indicator.above/below
+    //   triggers 即使 reference.period 不同（或缺失 per-trigger timeframe）也应合并为单卡片
     return triggers.filter(candidate =>
       candidate.id === trigger.id
       || (
-        this.isGroupableIndicatorCompareTrigger(candidate)
-        && candidate.phase === trigger.phase
+        candidate.phase === trigger.phase
         && candidate.key === trigger.key
         && (candidate.sideScope ?? '') === (trigger.sideScope ?? '')
         && String(candidate.params.indicator ?? 'ma').toLowerCase() === String(trigger.params.indicator ?? 'ma').toLowerCase()
-        && candidate.params['reference.period'] === trigger.params['reference.period']
+        && (
+          (
+            this.isGroupableIndicatorCompareTrigger(candidate)
+            && this.isGroupableIndicatorCompareTrigger(trigger)
+            && candidate.params['reference.period'] === trigger.params['reference.period']
+          )
+          || (
+            triggerMarker !== null
+            && readMarker(candidate) === triggerMarker
+            && this.isGroupableIndicatorCompareTriggerByMarker(candidate)
+            // M3 (PR #1147 review)：marker 分支合并前增加 timeframe 一致性守卫——
+            //   两侧均缺失视为一致（marker 已隐含同分组）；任一存在则必须相等，
+            //   避免同 marker 下不同 timeframe 被错误并入同一卡片抹掉差异。
+            && (this.readString(candidate.params.timeframe) ?? '')
+              === (this.readString(trigger.params.timeframe) ?? '')
+          )
+        )
       ),
     )
+  }
+
+  // marker-grouping 路径下的最小条件校验：
+  //   key 为 timeframeGroupable（indicator.above/below）或其他 entryPredicate/exitPredicate（异质 AND marker 组合）
+  //   phase 必须为 entry/exit；不要求 reference.period（marker 已隐含同分组语义）
+  //   注：此函数在 findGroupedDisplayTriggers 与 shouldRenderDisplayGroupAsSingleCondition 中
+  //       均用于"判断能否参与 indicator compare marker 合并渲染"，只有 timeframeGroupable key
+  //       才走 formatGroupedIndicatorCompareCondition；其余异质组合由 canMergeDisplayRuleTriggers
+  //       + shouldRenderDisplayGroupAsSingleCondition 联合判定
+  private isGroupableIndicatorCompareTriggerByMarker(
+    trigger: SemanticState['triggers'][number],
+  ): boolean {
+    return isTimeframeGroupableTriggerKey(trigger.key)
+      && (trigger.phase === 'entry' || trigger.phase === 'exit')
   }
 
   private formatGroupedDisplayTriggerCondition(
     trigger: SemanticState['triggers'][number],
     groupedTriggers: Array<SemanticState['triggers'][number]>,
   ): string {
-    return this.formatGroupedIndicatorCompareCondition(groupedTriggers)
-      ?? this.formatDisplayTriggerCondition(trigger)
+    // 同类 indicator.above/below 合并渲染（如"15m/30m MA20 上方"）
+    const grouped = this.formatGroupedIndicatorCompareCondition(groupedTriggers)
+    if (grouped) {
+      return grouped
+    }
+    // 异质 key 组合（如 indicator.cross_over + indicator.below）：
+    //   各 trigger 独立渲染后用"，且"连接，产生完整 AND 条件文本
+    if (groupedTriggers.length > 1) {
+      const parts = groupedTriggers
+        .map(t => this.formatDisplayTriggerCondition(t))
+        .filter(text => text.length > 0)
+      if (parts.length > 1) {
+        return parts.join('，且')
+      }
+    }
+    return this.formatDisplayTriggerCondition(trigger)
   }
 
   private isDisplayGateCompatibleWithEntry(
@@ -1053,6 +1152,8 @@ export class SemanticStateProjectionService {
     return value ? value : null
   }
 
+  // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
+  //   此处用 key 选择中文措辞（"上穿"/"下穿"/"上方"/"低于"等），属于展示层渲染逻辑，非能力白名单。
   private buildTriggerSummary(triggers: SemanticState['triggers'], includeSuperseded: boolean): string {
     const sourceTriggers = includeSuperseded
       ? [...triggers]
@@ -1273,7 +1374,16 @@ export class SemanticStateProjectionService {
   private formatGroupedIndicatorCompareCondition(
     group: Array<SemanticState['triggers'][number]>,
   ): string | null {
-    if (group.length <= 1 || !group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) {
+    if (group.length <= 1) {
+      return null
+    }
+    const allGroupable = group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))
+    const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
+    const allMarkerGroupable = firstMarker !== null
+      && group.every(trigger =>
+        this.isGroupableIndicatorCompareTriggerByMarker(trigger)
+        && this.readDisplayRuleGroupMarker(trigger) === firstMarker)
+    if (!allGroupable && !allMarkerGroupable) {
       return null
     }
 
@@ -1292,11 +1402,20 @@ export class SemanticStateProjectionService {
     const timeframes = this.uniqueSortedTimeframes(group)
     const periods = this.uniqueSortedIndicatorPeriods(group)
     if (timeframes.length === 1 && periods.length > 1) {
-      const indicator = this.formatIndicatorName(first)
-      const references = periods.map(period => `${indicator}${this.formatNumber(period)}`).join(' / ')
-      return first.key === 'indicator.above'
-        ? `${timeframes[0]} 价格在 ${references} 上方`
-        : `${timeframes[0]} 价格低于 ${references}`
+      return this.renderMultiPeriodIndicatorCompareCondition(
+        first.key === 'indicator.above' ? 'above' : 'below',
+        this.formatIndicatorName(first),
+        periods,
+        timeframes[0],
+      )
+    }
+    // marker-grouped 且 per-trigger timeframe 缺失（context 层级已声明）：去掉 timeframe 前缀
+    if (timeframes.length === 0 && periods.length > 1 && allMarkerGroupable) {
+      return this.renderMultiPeriodIndicatorCompareCondition(
+        first.key === 'indicator.above' ? 'above' : 'below',
+        this.formatIndicatorName(first),
+        periods,
+      )
     }
 
     if (timeframes.length > 1 && periods.length === 1) {
@@ -1305,6 +1424,92 @@ export class SemanticStateProjectionService {
 
     return null
   }
+
+  // #region multi-period indicator compare merge (PR #1147)
+  //   将「价格在 EMA20/EMA60/EMA144 上方/下方」类多周期指标比较语句的合并 renderer 与
+  //   AST 层合并判定集中归组，便于后续维护。runtime / canonical / IR / AST / invariant 零改动。
+
+  /**
+   * 多 period 指标比较合并渲染原语：两条路径（trigger 合并 + expression AST 合并）共享同一输出格式
+   *   - operator: 'above' => 「价格在 X/Y/Z 上方」
+   *   - operator: 'below' => 「价格低于 X/Y/Z」
+   *   - 当 timeframe 提供时前缀「<timeframe> 」
+   */
+  private renderMultiPeriodIndicatorCompareCondition(
+    operator: 'above' | 'below',
+    indicatorName: string,
+    periods: number[],
+    timeframe?: string,
+  ): string {
+    const references = periods.map(period => `${indicatorName}${this.formatNumber(period)}`).join(' / ')
+    const prefix = timeframe ? `${timeframe} ` : ''
+    return operator === 'above'
+      ? `${prefix}价格在 ${references} 上方`
+      : `${prefix}价格低于 ${references}`
+  }
+
+  /**
+   * 表达式 AST 层合并判定（BOLL 入场卡 gate 文本渲染路径）：
+   *   命中条件：AND 表达式 + ≥2 个 children 全部为 predicate；每个 predicate 主语相同（bar.close）、
+   *   indicator 同名（ema/sma/ma 大小写不敏感）、operator 一致（GT/GTE 视为 above；LT/LTE 视为 below）、
+   *   period 数量 >=2 且互异。
+   *   命中 → 返回合并文案（与 trigger 路径共享 renderer）；否则返回 null 由调用方回退原平铺逻辑。
+   */
+  private tryFormatMultiPeriodIndicatorCompareExpression(expression: SemanticExpression): string | null {
+    // M2 (PR #1147 review)：在入口加廉价早退守卫——O(1) 检查放最前，
+    //   避免深嵌套表达式每层都重复进入下方循环。
+    if (expression.kind !== 'AND') return null
+    if (expression.children.length < 2) return null
+    if (!expression.children.every(child => child.kind === 'predicate')) return null
+
+    let direction: 'above' | 'below' | null = null
+    let indicatorName: string | null = null
+    const periods = new Set<number>()
+
+    for (const child of expression.children) {
+      if (child.kind !== 'predicate') return null
+      const left = child.left
+      const right = child.right
+
+      // 主语 = bar.close
+      if (!(left.kind === 'series' && left.source === 'bar' && left.field === 'close')) return null
+      // 客体 = indicator(name ∈ {ema, sma, ma})
+      if (right.kind !== 'indicator') return null
+      const name = right.name.toLowerCase()
+      if (name !== 'ema' && name !== 'sma' && name !== 'ma') return null
+
+      // m3 (PR #1147 review)：SemanticExpressionOperand.indicator.params 已经是 Record<string, unknown>，
+      //   直接读取即可，无需 unchecked cast。
+      const period = right.params.period
+      if (typeof period !== 'number' || !Number.isFinite(period)) return null
+
+      // operator 归一化为 above / below；同一表达式必须方向一致
+      let childDirection: 'above' | 'below'
+      if (child.op === 'GT' || child.op === 'GTE') childDirection = 'above'
+      else if (child.op === 'LT' || child.op === 'LTE') childDirection = 'below'
+      else return null
+
+      if (direction === null) direction = childDirection
+      else if (direction !== childDirection) return null
+
+      if (indicatorName === null) indicatorName = name.toUpperCase()
+      else if (indicatorName !== name.toUpperCase()) return null
+
+      periods.add(period)
+    }
+
+    if (direction === null || indicatorName === null) return null
+    if (periods.size < 2) return null
+    // M4 (PR #1147 review)：period 必须互异——
+    //   去重前后数量不一致（如 close > ema20 AND close > ema20 AND close > ema60）应回退原平铺路径，
+    //   避免把重复 period 折叠为「价格在 EMA20/EMA60」抹掉重复表达。
+    if (periods.size !== expression.children.length) return null
+
+    const sortedPeriods = Array.from(periods).sort((a, b) => a - b)
+    return this.renderMultiPeriodIndicatorCompareCondition(direction, indicatorName, sortedPeriods)
+  }
+
+  // #endregion multi-period indicator compare merge
 
   private buildGroupedAtomicTriggerSummaries(
     triggers: SemanticState['triggers'],
@@ -1360,8 +1565,10 @@ export class SemanticStateProjectionService {
     return result
   }
 
+  // 无 marker 路径：trigger 需自证身份，要求 key 支持 timeframe 维度分组合并（indicator.above/below）
+  //   且有完整的 reference.period + timeframe params
   private isGroupableIndicatorCompareTrigger(trigger: SemanticState['triggers'][number]): boolean {
-    return (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+    return isTimeframeGroupableTriggerKey(trigger.key)
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
       && typeof trigger.params['reference.period'] === 'number'
       && typeof trigger.params.timeframe === 'string'
@@ -1390,6 +1597,8 @@ export class SemanticStateProjectionService {
     return '条件'
   }
 
+  // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
+  //   此处用 key 选择中文措辞（"上方"/"低于"），属于展示层渲染逻辑，非能力白名单。
   private formatIndicatorCompareCondition(trigger: SemanticState['triggers'][number]): string {
     const period = typeof trigger.params['reference.period'] === 'number'
       ? this.formatNumber(trigger.params['reference.period'])
@@ -1654,7 +1863,12 @@ export class SemanticStateProjectionService {
     return ''
   }
 
-  private formatSemanticExpression(expression: unknown): string {
+  private formatSemanticExpression(expression: unknown, depth: number = 0): string {
+    // M2 (PR #1147 review)：递归深度上限——避免恶意/异常 AST 形成指数放大或栈溢出，
+    //   超过阈值返回 truncated 占位符，由上层 join 自然降级。
+    if (depth >= 16) {
+      return '…'
+    }
     if (!this.isSemanticExpression(expression)) {
       return ''
     }
@@ -1669,8 +1883,17 @@ export class SemanticStateProjectionService {
       return `${left}${operator}${right}`
     }
 
+    // AND 多 period 指标比较合并（与 trigger 路径共享 renderer）：
+    //   "且收盘价高于 EMA20 且收盘价高于 EMA60 且收盘价高于 EMA144" → "价格在 EMA20/EMA60/EMA144 上方"
+    if (expression.kind === 'AND') {
+      const merged = this.tryFormatMultiPeriodIndicatorCompareExpression(expression)
+      if (merged) {
+        return merged
+      }
+    }
+
     const children = expression.children
-      .map(child => this.formatSemanticExpression(child))
+      .map(child => this.formatSemanticExpression(child, depth + 1))
       .filter(item => item.length > 0)
     if (children.length === 0) {
       return ''
@@ -1844,6 +2067,31 @@ export class SemanticStateProjectionService {
           return levelKey ? `跌破记录位 ${levelKey} 止损` : this.buildRiskFallbackSummary(risk)
         }
 
+        if (risk.key === 'risk.partial_take_profit') {
+          const tiers = risk.params.tiers
+          if (Array.isArray(tiers) && tiers.length > 0) {
+            const tierTexts = tiers
+              .map((tier: unknown) => {
+                if (!tier || typeof tier !== 'object') return null
+                const t = tier as Record<string, unknown>
+                const trigger = t.trigger as Record<string, unknown> | undefined
+                const threshold = trigger && typeof trigger.threshold === 'number' && Number.isFinite(trigger.threshold)
+                  ? trigger.threshold
+                  : null
+                const reduceRatio = typeof t.reduceRatio === 'number' && Number.isFinite(t.reduceRatio)
+                  ? t.reduceRatio
+                  : null
+                if (threshold === null || reduceRatio === null) return null
+                return `盈利${this.formatPercent(threshold)}%平${this.formatPercent(reduceRatio * 100)}%`
+              })
+              .filter((text): text is string => text !== null)
+            if (tierTexts.length > 0) {
+              return `分批止盈：${tierTexts.join('、')}`
+            }
+          }
+          return this.buildRiskFallbackSummary(risk)
+        }
+
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
           return this.buildRiskFallbackSummary(risk)
@@ -1877,22 +2125,67 @@ export class SemanticStateProjectionService {
     return '已识别风控，参数待补充'
   }
 
-  private buildActionSummary(actions: SemanticState['actions']): string {
+  private buildActionSummary(actions: SemanticState['actions'], state: SemanticState): string {
     return actions
       .filter(action => action.status === 'locked')
       .sort((left, right) => this.compareActionAtoms(left, right))
-      .map(action => this.buildContractOrderProgramSummary(action))
+      .map(action => this.buildAddPositionSummary(action) || this.buildContractOrderProgramSummary(action, state))
       .filter(item => item.length > 0)
       .join('；')
   }
 
-  private buildContractOrderProgramSummary(action: SemanticState['actions'][number]): string {
+  private buildAddPositionSummary(action: SemanticState['actions'][number]): string {
+    if (action.key !== 'action.add_position') {
+      return ''
+    }
+    const addMode = this.readString(action.params?.addMode as unknown)
+    const addRatio = this.readFiniteNumber(action.params?.addRatio as unknown)
+    const addRatioPct = addRatio !== null ? this.formatPercent(addRatio * 100) : null
+
+    // #1158：profitThreshold / drawdownThreshold 单位为 percent（如 2 表示 2%），不需要 * 100
+    if (addMode === 'profit_pct') {
+      const profitThreshold = this.readFiniteNumber((action.params as Record<string, unknown>)?.profitThreshold as unknown)
+      const triggerText = profitThreshold !== null && profitThreshold > 0
+        ? `盈利${this.formatPercent(profitThreshold)}%后`
+        : '盈利后'
+      return addRatioPct !== null
+        ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
+        : `加仓：${triggerText}加仓`
+    }
+
+    if (addMode === 'drawdown_pct') {
+      const drawdownThreshold = this.readFiniteNumber((action.params as Record<string, unknown>)?.drawdownThreshold as unknown)
+      const triggerText = drawdownThreshold !== null && drawdownThreshold > 0
+        ? `回撤${this.formatPercent(drawdownThreshold)}%后`
+        : '回撤后'
+      return addRatioPct !== null
+        ? `加仓：${triggerText}加仓，每次${addRatioPct}%`
+        : `加仓：${triggerText}加仓`
+    }
+
+    if (addMode === 'signal_confirm') {
+      return addRatioPct !== null
+        ? `加仓：信号确认后加仓，每次${addRatioPct}%`
+        : '加仓：信号确认后加仓'
+    }
+
+    if (addRatioPct !== null) {
+      return `加仓：每次${addRatioPct}%`
+    }
+
+    return '加仓'
+  }
+
+  private buildContractOrderProgramSummary(action: SemanticState['actions'][number], state: SemanticState): string {
     const orderProgram = this.findCapability(action.contracts, 'order_program', 'maintain', 'limit_ladder')
     if (!orderProgram) {
       return ''
     }
 
-    const budget = this.findCapability(action.contracts, 'capital', 'allocate', 'per_order_budget')
+    // PR3.5: use CapabilityEvidenceIndex to read per_order_budget, scoped to this action
+    const budgetEvidences = CapabilityEvidenceIndex.build(state).byKey('capital', 'allocate', 'per_order_budget')
+      .filter(e => e.mount === 'action' && e.ownerId === action.id)
+    const budget = budgetEvidences[0]?.capability ?? null
     const orderType = this.readShapeString(orderProgram.shape, 'orderType') === 'limit' ? '限价' : '网格'
     const recycleText = this.readShapeBoolean(orderProgram.shape, 'recycleOnFill') === true
       ? '，成交后相邻网格反向挂单'
@@ -2032,24 +2325,70 @@ export class SemanticStateProjectionService {
   }
 
   private buildPositionSummary(position: SemanticState['position']): string {
-    if (!this.hasValidLockedPosition(position)) {
+    // #1169：position.status==='locked' 即可进入；validateSemanticPositionContract 对
+    //   constraint_only 模式（sizing=null）会判 invalid 导致早退，而 constraints 路径仍可渲染。
+    //   只对"有 sizing 时"再做合约校验；纯 constraint_only 路径直接走 constraints 渲染。
+    if (position?.status !== 'locked') {
       return ''
     }
+    const hasSizingContract = validateSemanticPositionContract(position).ok
 
-    const sizing = position.sizing ?? normalizeLegacyPositionSizing(position)
-    if (!sizing) {
-      return ''
+    // #1169：sizing 在 position.mode='constraint_only'（如纯 DCA 入场）时为 null，
+    //   但 locked constraints 仍可能渲染（如 dca_schedule）。先算 sizingText / constraintParts
+    //   再决定如何拼接 / 早退；不再因 sizing=null 直接返回空串
+    let sizingText = ''
+    if (hasSizingContract) {
+      const sizing = position.sizing ?? normalizeLegacyPositionSizing(position)
+      if (sizing) {
+        if (sizing.kind === 'ratio') {
+          const ratioValue = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
+          sizingText = `仓位：${this.formatPercent(ratioValue)}%`
+        }
+        else if (sizing.kind === 'quote' || sizing.kind === 'base') {
+          sizingText = `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
+        }
+      }
     }
 
-    if (sizing.kind === 'ratio') {
-      const ratioValue = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
-      return `仓位：${this.formatPercent(ratioValue)}%`
+    // 有 sizing 时优先走 pyramiding_limit 简化输出
+    if (sizingText) {
+      const pyramidingLimit = (position.constraints ?? [])
+        .find(c => c.status === 'locked' && c.key === 'position.pyramiding_limit')
+      if (pyramidingLimit) {
+        const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
+        if (maxLayers !== null) {
+          return `${sizingText}，最多${maxLayers}次加仓`
+        }
+      }
     }
 
-    if (sizing.kind === 'quote' || sizing.kind === 'base') {
-      return `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
+    // Task 4 (#1162)：扫 locked constraints 用 presentationRegistry 渲染（dca_schedule 等）
+    const constraintParts: string[] = []
+    for (const constraint of position.constraints ?? []) {
+      if (constraint.status !== 'locked') continue
+      try {
+        const entry = this.presentationRegistry.getEntry(constraint.key)
+        const renderer = entry?.displayRenderer
+        if (typeof renderer === 'function') {
+          const rendered = renderer({ params: (constraint.params ?? {}) as Record<string, unknown> })
+          if (rendered) constraintParts.push(rendered)
+        }
+      }
+      catch {
+        // presentationRegistry 未注册该 constraint key → skip
+      }
     }
 
+    if (sizingText && constraintParts.length > 0) {
+      return `${sizingText}；${constraintParts.join('；')}`
+    }
+    if (sizingText) {
+      return sizingText
+    }
+    if (constraintParts.length > 0) {
+      // constraint_only 模式：无 sizing 时也要渲染 constraint
+      return constraintParts.join('；')
+    }
     return ''
   }
 
@@ -2115,6 +2454,7 @@ export class SemanticStateProjectionService {
       risk: SemanticState['risk']
       position: SemanticState['position']
       hasGridIntent: boolean
+      lockedOrchestrationCount: number
     },
   ): boolean {
     return input.triggers.length > 0
@@ -2122,6 +2462,38 @@ export class SemanticStateProjectionService {
       || input.risk.length > 0
       || this.hasValidLockedPosition(input.position)
       || input.hasGridIntent
+      || input.lockedOrchestrationCount > 0
+  }
+
+  // #1152：orchestration locked 节点摘要。优先 presentationRegistry.displayRenderer 输出完整人话；
+  //   displayRenderer 不可用时 fallback 到 publicName；publicName 不可用时 fallback 到 node.key。
+  //   #1162 Task 6：去掉 "orchestration：" 裸前缀（内部技术词），改用自然语言拼接。
+  private buildOrchestrationSummary(nodes: readonly SemanticOrchestrationNode[]): string {
+    if (nodes.length === 0) {
+      return ''
+    }
+    const parts: string[] = []
+    for (const node of nodes) {
+      if (!node.key) {
+        continue
+      }
+      let text: string | undefined
+      try {
+        const entry = this.presentationRegistry.getEntry(node.key)
+        if (entry?.displayRenderer) {
+          const rendered = entry.displayRenderer({ params: (node.params ?? {}) as Record<string, unknown> })
+          text = rendered ?? entry.publicName ?? node.key
+        }
+        else {
+          text = entry?.publicName ?? node.key
+        }
+      }
+      catch {
+        text = node.key
+      }
+      parts.push(text)
+    }
+    return parts.join('；')
   }
 
   private compareTriggers(left: SemanticState['triggers'][number], right: SemanticState['triggers'][number]): number {

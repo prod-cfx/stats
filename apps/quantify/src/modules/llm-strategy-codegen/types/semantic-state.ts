@@ -569,4 +569,12 @@ export interface SemanticState {
   updatedTurnId?: string
   orchestration?: SemanticOrchestrationState
   unsupportedFallback?: UnsupportedFallbackState | null
+  /**
+   * 由 PerTradeSizingResolver 派生投影阶段标记。
+   * true 表示存在多个 executionAnchored anchor，下游 canonical-spec / signal-executor
+   * 不可假设单仓 sizing，需走 multi-leg 处理路径（follow-up issue 跟进）。
+   *
+   * @internal 不进入 conversation response / persist / Redux 状态
+   */
+  readonly isMultiLeg?: boolean
 }

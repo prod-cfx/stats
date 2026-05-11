@@ -139,11 +139,15 @@ export class SemanticStateMergeService {
       const matchIndex = next.findIndex((candidate, index) =>
         !consumedDerivedIndexes.has(index) && this.isSameActionIdentity(persistedAction, candidate))
       if (matchIndex < 0) {
-        next.push({
-          ...persistedAction,
-          params: persistedAction.params ? { ...persistedAction.params } : undefined,
-          openSlots: (persistedAction.openSlots ?? []).map(slot => ({ ...slot })),
-        })
+        // #1162 Task 7：identity miss 时检查是否完全相同（真重复）→ 丢弃；否则 push（保留合法多档）
+        const isTrueDuplicate = next.some(candidate => this.isTrueDuplicateAction(persistedAction, candidate))
+        if (!isTrueDuplicate) {
+          next.push({
+            ...persistedAction,
+            params: persistedAction.params ? { ...persistedAction.params } : undefined,
+            openSlots: (persistedAction.openSlots ?? []).map(slot => ({ ...slot })),
+          })
+        }
         continue
       }
 
@@ -188,11 +192,15 @@ export class SemanticStateMergeService {
       const matchIndex = next.findIndex((candidate, index) =>
         !consumedDerivedIndexes.has(index) && this.isSameRiskIdentity(persistedRisk, candidate))
       if (matchIndex < 0) {
-        next.push({
-          ...persistedRisk,
-          params: { ...persistedRisk.params },
-          openSlots: persistedRisk.openSlots.map(slot => ({ ...slot })),
-        })
+        // #1162 Task 7：identity miss 时检查是否完全相同（真重复）→ 丢弃；否则 push
+        const isTrueDuplicate = next.some(candidate => this.isTrueDuplicateRisk(persistedRisk, candidate))
+        if (!isTrueDuplicate) {
+          next.push({
+            ...persistedRisk,
+            params: { ...persistedRisk.params },
+            openSlots: persistedRisk.openSlots.map(slot => ({ ...slot })),
+          })
+        }
         continue
       }
 
@@ -772,5 +780,39 @@ export class SemanticStateMergeService {
       default:
         return 0
     }
+  }
+
+  /**
+   * #1162 Task 7 — 真重复检测：key + sideScope + 参数字典深度稳定序列化
+   * 用于 mergeActions / mergeRisk fallback push 路径：仅当完全相同才丢弃新副本；
+   * params 不同（合法多档 add_position 等）则仍 push。
+   */
+  private stableParamsHash(params: Record<string, unknown> | undefined): string {
+    if (!params) return 'null'
+    // critic Major #1：递归稳定序列化，避免嵌套对象（如 tiers 数组、sizing 子对象）
+    //   因 key 顺序差异被误判为"不同"，导致真重复漏判
+    return JSON.stringify(this.stableValue(params))
+  }
+
+  private stableValue(value: unknown): unknown {
+    if (value === null || typeof value !== 'object') return value
+    if (Array.isArray(value)) return value.map(v => this.stableValue(v))
+    const obj = value as Record<string, unknown>
+    return Object.keys(obj).sort().reduce<Record<string, unknown>>((acc, k) => {
+      acc[k] = this.stableValue(obj[k])
+      return acc
+    }, {})
+  }
+
+  // #1167：SemanticActionState / SemanticRiskState 顶层无 sideScope 字段（在 params 内 / trigger 才有）
+  //   去掉 sideScope 比较；真重复判定用 key + stableParamsHash（params 内 sideScope 已含在 hash 内）
+  private isTrueDuplicateAction(left: SemanticActionState, right: SemanticActionState): boolean {
+    return left.key === right.key
+      && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
+  }
+
+  private isTrueDuplicateRisk(left: SemanticRiskState, right: SemanticRiskState): boolean {
+    return left.key === right.key
+      && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
   }
 }

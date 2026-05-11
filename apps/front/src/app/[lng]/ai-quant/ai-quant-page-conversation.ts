@@ -1819,7 +1819,7 @@ export function mapExchangeStatusesToDeployAccounts(
 }
 
 export function buildApiConfigHref(lng: 'zh' | 'en') {
-  return `/${lng}/account?tab=ai-quant#exchange-api`
+  return `/${lng}/account?tab=settings#exchange-api`
 }
 
 function normalizeRevisionSummaryText(value: string | null | undefined): string | null {

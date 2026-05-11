@@ -81,10 +81,12 @@ import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
+import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SemanticContractReadinessService } from './semantic-contract-readiness.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SemanticSeedStateBuilderService } from './semantic-seed-state-builder.service'
+import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
 import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
 import { SemanticSupportClassifierService } from './semantic-support-classifier.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -231,7 +233,8 @@ export class CodegenConversationService {
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
     private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
     private readonly semanticSeedStateBuilder: SemanticSeedStateBuilderService = new SemanticSeedStateBuilderService(),
-    private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService()),
+    private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
+    private readonly semanticSupportClassifier: SemanticSupportClassifierService = new SemanticSupportClassifierService(new SemanticAtomRegistryService(), new SemanticOrchestrationRegistryService()),
     private readonly unsupportedFallback: UnsupportedFallbackService = new UnsupportedFallbackService(),
     private readonly semanticContractReadiness: SemanticContractReadinessService = new SemanticContractReadinessService(),
     private readonly semanticQuestionRenderer: SemanticClarificationQuestionRendererService = new SemanticClarificationQuestionRendererService(),
@@ -3230,10 +3233,14 @@ export class CodegenConversationService {
     checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
+    // PR3.2: use PerTradeSizingResolver instead of hasContractPerOrderBudget
+    const anchors = this.sizingResolver.resolve(state, { riskRules: checklist.riskRules as { positionPct?: number } | undefined })
+    const anyExecutionAnchored = [...anchors.values()].some(a => a.executionAnchored)
+
     if (
       this.hasExplicitPositionSizing(checklist)
       || options?.preserveLockedPositionSizing === true
-      || this.hasContractPerOrderBudget(state)
+      || anyExecutionAnchored
     ) {
       return state.position
         ? {
@@ -3344,22 +3351,6 @@ export class CodegenConversationService {
         || risk.key === 'risk.max_drawdown_pct'
         || risk.key === 'risk.max_single_loss_pct'
     })
-  }
-
-  private hasContractPerOrderBudget(state: SemanticState): boolean {
-    return state.actions.some(action =>
-      action.status === 'locked'
-      && (action.contracts ?? []).some(contract =>
-        contract.capabilities.some(capability =>
-          capability.domain === 'capital'
-          && capability.verb === 'allocate'
-          && capability.object === 'per_order_budget'
-          && typeof capability.shape.value === 'number'
-          && Number.isFinite(capability.shape.value)
-          && capability.shape.value > 0,
-        ),
-      ),
-    )
   }
 
   private hasBoundaryCancelGuardCapability(risk: SemanticRiskState): boolean {

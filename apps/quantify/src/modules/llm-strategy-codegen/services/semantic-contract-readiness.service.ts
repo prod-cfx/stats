@@ -23,6 +23,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
+import { CapabilityEvidenceIndex } from './capability-evidence-index.service'
 import { SemanticOrchestrationRegistryService } from './semantic-orchestration-registry.service'
 import { isBlockingSemanticOpenSlot } from './semantic-open-slot-blocking'
 import { validateSemanticExpressionContract } from './strategy-semantic-contracts'
@@ -107,7 +108,7 @@ export class SemanticContractReadinessService {
     const providerContracts = providerNormalization.contracts
     const resolution = this.semanticAtomContractService.resolve(providerContracts)
     const missingRequirements = [
-      ...this.collectMissingRequirements(supportedOwners, resolution.capabilities),
+      ...this.collectMissingRequirements(supportedOwners, resolution.capabilities, state),
       ...this.validateTimeframePairing(supportedOwners, state),
     ]
     const slotsByOwnerKey = mergeSlotMaps(
@@ -223,11 +224,12 @@ export class SemanticContractReadinessService {
   private collectMissingRequirements(
     activeOwners: readonly SemanticContractOwnerRef[],
     capabilities: readonly SemanticCapability[],
+    state: SemanticState,
   ): MissingSemanticContractRequirement[] {
     return activeOwners.flatMap(owner =>
       owner.contracts.flatMap(contract =>
         contract.requires
-          .filter(requirement => !this.hasCapability(capabilities, requirement))
+          .filter(requirement => !this.hasCapability(capabilities, requirement, state))
           .map(requirement => ({
             ownerKind: owner.ownerKind,
             ownerId: owner.ownerId,
@@ -283,7 +285,16 @@ export class SemanticContractReadinessService {
   private hasCapability(
     capabilities: readonly SemanticCapability[],
     requirement: SemanticRequirement,
+    state: SemanticState,
   ): boolean {
+    // PR3.4: use CapabilityEvidenceIndex for per_order_budget to unify evidence scanning
+    // Q1 fix: filter to locked owners — unsupported/open atoms must not count as satisfied evidence
+    if (requirement.domain === 'capital' && requirement.verb === 'allocate' && requirement.object === 'per_order_budget') {
+      const evidences = CapabilityEvidenceIndex.build(state)
+        .byKey('capital', 'allocate', 'per_order_budget')
+        .filter(e => e.ownerStatus === 'locked')
+      return evidences.some(e => this.hasRequiredCapabilityShape(e.capability, requirement))
+    }
     return capabilities.some(capability =>
       capability.domain === requirement.domain
       && capability.verb === requirement.verb

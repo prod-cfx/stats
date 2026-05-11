@@ -1,8 +1,10 @@
 import type { SupportedExecutableUtteranceAtom, UtteranceCorpusCase } from './utterance-corpus.types'
+import { oscillatorRsiUtterances } from './atoms/oscillator.rsi.utterance'
 import { actionAddPositionUtterances } from './atoms/action.add_position.utterance'
 import { actionReversePositionUtterances } from './atoms/action.reverse_position.utterance'
 import { indicatorDivergenceUtterances } from './atoms/indicator.divergence.utterance'
 import { liquiditySweepUtterances } from './atoms/liquidity.sweep.utterance'
+import { portfolioDrawdownBlockUtterances } from './atoms/portfolio.drawdown_block.utterance'
 import { positionDcaScheduleUtterances } from './atoms/position.dca_schedule.utterance'
 import { positionHasPositionUtterances } from './atoms/position.has_position.utterance'
 import { positionNoPositionUtterances } from './atoms/position.no_position.utterance'
@@ -36,6 +38,8 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'price.candle_pattern',
   'price.chart_pattern',
   'liquidity.sweep',
+  'portfolioRisk.drawdown_block',
+  'oscillator.rsi_lte',
 ] as const satisfies readonly SupportedExecutableUtteranceAtom[]
 
 export const utteranceCorpus = [
@@ -52,6 +56,8 @@ export const utteranceCorpus = [
   ...priceCandlePatternUtterances,
   ...priceChartPatternUtterances,
   ...liquiditySweepUtterances,
+  ...portfolioDrawdownBlockUtterances,
+  ...oscillatorRsiUtterances,
 ] as const satisfies readonly UtteranceCorpusCase[]
 
 export function getUtteranceCorpusForAtom(atomKey: SupportedExecutableUtteranceAtom): UtteranceCorpusCase[] {
