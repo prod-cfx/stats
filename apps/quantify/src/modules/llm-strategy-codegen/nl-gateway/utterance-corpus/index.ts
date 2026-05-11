@@ -34,6 +34,7 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'action.reverse_position',
   'risk.partial_take_profit',
   'position.dca_schedule',
+  'position.pyramiding_limit',
   'indicator.divergence',
   'price.candle_pattern',
   'price.chart_pattern',

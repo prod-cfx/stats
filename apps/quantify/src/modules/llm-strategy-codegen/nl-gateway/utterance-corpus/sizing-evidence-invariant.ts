@@ -28,7 +28,7 @@ import type { AtomContractKey } from '../../atom-contracts/atom-contract-types'
  */
 export const SIZING_BEARING_ATOMS: ReadonlySet<AtomContractKey> = new Set<AtomContractKey>([
   'position.dca_schedule',
-  // 'position.pyramiding_limit',  // 待 pyramiding sizing-evidence emit follow-up（Issue #1175 plan 列出）
+  'position.pyramiding_limit',
 ])
 
 /**

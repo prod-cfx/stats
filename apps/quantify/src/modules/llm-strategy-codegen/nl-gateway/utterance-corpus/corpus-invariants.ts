@@ -189,11 +189,11 @@ export function readParamPath(obj: unknown, path: readonly string[]): unknown {
 // =========================================================
 
 // #1160：RENDER_CONTRACT_ATOM_FIELDS 允许声明 atom 不属于 corpus 顶层 SupportedExecutableUtteranceAtom
-//   联合（如 position.pyramiding_limit 通过 action.add_position 子句触发，无独立 atomKey fixture）。
+//   联合（如间接通过其他 atom 子句触发的渲染原子，无独立 atomKey fixture）。
 //   故引入 RenderContractAtomKey 超集类型，保持类型守门的同时容纳此类间接渲染原子。
-export type RenderContractAtomKey =
-  | SupportedExecutableUtteranceAtom
-  | 'position.pyramiding_limit'
+//   #1191：position.pyramiding_limit 已纳入 SupportedExecutableUtteranceAtom union，
+//   此处 alias 保留为后续扩展锚点。
+export type RenderContractAtomKey = SupportedExecutableUtteranceAtom
 
 export const RENDER_CONTRACT_ATOM_FIELDS: Partial<Record<RenderContractAtomKey, ReadonlyArray<{
   field: string

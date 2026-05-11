@@ -22,7 +22,11 @@ import {
   type SizingEvidence,
 } from './atom-contract-types'
 
-// DCA per-order budget capability triple — shared with semantic-seed-state-builder emit
+// Per-order budget capability triple — shared by DCA / pyramiding emit paths.
+// Issue #1191：常量名保留 DCA 前缀以维持向后兼容；pyramiding 复用同一三元组，
+//   通过 emit shape 顶层 `triggerSource` 字段（'position.dca_schedule' /
+//   'position.pyramiding_limit'）区分来源。后续若再有第三个消费者（grid 等），
+//   可在 cleanup PR 把常量改名为 PER_ORDER_BUDGET_CAPABILITY。
 export const DCA_PER_ORDER_BUDGET_CAPABILITY = {
   domain: 'capital' as const,
   verb: 'allocate' as const,
@@ -33,6 +37,14 @@ export const DCA_PER_ORDER_BUDGET_CAPABILITY = {
 const DCA_SIZING_EVIDENCE: SizingEvidence = {
   capability: DCA_PER_ORDER_BUDGET_CAPABILITY,
   paramSource: 'perOrderSizing',
+}
+
+// Pyramiding layer sizing evidence (Issue #1191) —— capability 三元组与 DCA 一致，
+//   paramSource 区分为 `layerSizing`（pyramiding 由 seed-extractor 从"每次加仓 N%"
+//   提取的 layerSizing 字段）。
+const PYRAMIDING_SIZING_EVIDENCE: SizingEvidence = {
+  capability: DCA_PER_ORDER_BUDGET_CAPABILITY,
+  paramSource: 'layerSizing',
 }
 
 // =========================================================
@@ -203,6 +215,18 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
     sizingEvidence: DCA_SIZING_EVIDENCE,
+  },
+
+  // Issue #1191：pyramiding 加入 atom contract registry，sizingEvidence 指向
+  //   capital.allocate.per_order_budget；atom 通过 action.add_position 子句间接
+  //   触发，无独立 utterance fixture（已在 utterance-corpus.spec
+  //   RENDER_CONTRACT_ALLOWED_MISSING_FIXTURE 显式登记）。
+  'position.pyramiding_limit': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    sizingEvidence: PYRAMIDING_SIZING_EVIDENCE,
   },
 } satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>
 

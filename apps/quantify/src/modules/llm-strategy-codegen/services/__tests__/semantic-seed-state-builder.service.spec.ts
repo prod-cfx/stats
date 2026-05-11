@@ -412,6 +412,70 @@ describe('SemanticSeedStateBuilderService', () => {
     ]))
   })
 
+  // Issue #1191：pyramiding 原子 emit capital.allocate.per_order_budget capability
+  it('emits capital.allocate.per_order_budget capability for pyramiding with layerSizing', () => {
+    const state = service.build({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        constraints: [{
+          key: 'position.pyramiding_limit',
+          params: {
+            maxLayers: 3,
+            layerSizing: { kind: 'ratio', value: 0.2, unit: 'ratio' },
+          },
+        }],
+      },
+    })
+
+    const capabilities = state?.position?.constraints?.[0]?.contracts?.[0]?.capabilities ?? []
+    // 既有 exposure.limit.pyramiding_layers
+    expect(capabilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'exposure',
+        verb: 'limit',
+        object: 'pyramiding_layers',
+      }),
+    ]))
+    // 新增 capital.allocate.per_order_budget，shape 顶层 kind/value/triggerSource
+    expect(capabilities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        domain: 'capital',
+        verb: 'allocate',
+        object: 'per_order_budget',
+        shape: expect.objectContaining({
+          kind: 'ratio',
+          value: 0.2,
+          triggerSource: 'position.pyramiding_limit',
+        }),
+      }),
+    ]))
+  })
+
+  it('skips per_order_budget emit when pyramiding has no layerSizing', () => {
+    const state = service.build({
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        constraints: [{
+          key: 'position.pyramiding_limit',
+          params: { maxLayers: 3 },
+        }],
+      },
+    })
+
+    const capabilities = state?.position?.constraints?.[0]?.contracts?.[0]?.capabilities ?? []
+    expect(capabilities).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        domain: 'capital',
+        verb: 'allocate',
+        object: 'per_order_budget',
+      }),
+    ]))
+  })
+
   it('closes synthesized fixed grid density slots from percent spacing answers', () => {
     const state = service.build({
       triggers: [{
@@ -1958,4 +2022,3 @@ describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
     expect(result.position?.sizing).toBeUndefined()
   })
 })
->>>>>>> d684550d (test(ai-quant): sub-fix 1 — tighten EC2/EC5 assertions, remove TODO(PR4) comments)

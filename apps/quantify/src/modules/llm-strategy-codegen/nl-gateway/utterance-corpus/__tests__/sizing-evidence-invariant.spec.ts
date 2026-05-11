@@ -41,4 +41,20 @@ describe('INVARIANT-J: Sizing evidence registration', () => {
   it('SIZING_BEARING_ATOMS 当前包含 position.dca_schedule', () => {
     expect(SIZING_BEARING_ATOMS.has('position.dca_schedule')).toBe(true)
   })
+
+  // Issue #1191：pyramiding sizing-evidence emit 已上线，加入白名单
+  it('position.pyramiding_limit sizingEvidence 指向 capital.allocate.per_order_budget + layerSizing 参数源', () => {
+    const evidence = ATOM_CONTRACT_REGISTRY['position.pyramiding_limit'].sizingEvidence
+    expect(evidence).not.toBeNull()
+    expect(evidence?.capability).toEqual({
+      domain: 'capital',
+      verb: 'allocate',
+      object: 'per_order_budget',
+    })
+    expect(evidence?.paramSource).toBe('layerSizing')
+  })
+
+  it('SIZING_BEARING_ATOMS 包含 position.pyramiding_limit', () => {
+    expect(SIZING_BEARING_ATOMS.has('position.pyramiding_limit')).toBe(true)
+  })
 })

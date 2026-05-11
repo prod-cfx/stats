@@ -67,9 +67,17 @@ describe('utterance corpus baseline', () => {
       // oscillator.rsi_lte：extractor 当前对阈值缺失时 skip（不 emit open-slot），豁免开放槽覆盖约束
       // TODO(#1155-follow-up): extractor 支持 RSI 无阈值 open-slot emit 后回收豁免
       'oscillator.rsi_lte',
+      // position.pyramiding_limit (#1191)：通过 action.add_position 子句间接触发，
+      //   无独立 atomKey fixture；渲染契约在 semantic-state-projection.service.orchestration.spec
+      //   单独覆盖，corpus 层全面豁免（cases / open-slot 均 N/A）。
+      'position.pyramiding_limit',
     ])
 
     for (const atomKey of SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS) {
+      // #1191 pyramiding 无独立 corpus fixture，跳过基础 case 数量与 locale 检查
+      if (atomKey === 'position.pyramiding_limit') {
+        continue
+      }
       const cases = utteranceCorpus.filter(item => item.atomKey === atomKey)
       expect(cases.length).toBeGreaterThanOrEqual(3)
       expect(cases.some(item => item.locale === 'zh' || item.locale === 'mixed')).toBe(true)

@@ -1662,8 +1662,30 @@ export class SemanticSeedStateBuilderService {
       params,
     }))
 
+    // Issue #1191: pyramiding 原子 emit capital.allocate.per_order_budget capability，
+    //   形态对齐 DCA：顶层 kind/value/asset/unit + triggerSource。仅当 layerSizing.value
+    //   为有限数字时 emit，避免半成品 capability 触发下游 sizing 守门。
+    const layerSizingShape = key === 'position.pyramiding_limit'
+      ? this.readUnknownShape(params.layerSizing)
+      : null
+    const extraCapabilities: SemanticCapability[] = (layerSizingShape !== null
+      && typeof layerSizingShape.value === 'number'
+      && Number.isFinite(layerSizingShape.value))
+      ? [{
+          ...DCA_PER_ORDER_BUDGET_CAPABILITY,
+          shape: this.toCapabilityShape({
+            kind: typeof layerSizingShape.kind === 'string' ? layerSizingShape.kind : 'ratio',
+            value: layerSizingShape.value,
+            asset: typeof layerSizingShape.asset === 'string' ? layerSizingShape.asset : undefined,
+            unit: typeof layerSizingShape.unit === 'string' ? layerSizingShape.unit : undefined,
+            triggerSource: 'position.pyramiding_limit',
+          }),
+        }]
+      : []
+
     return [{
       ...contract,
+      capabilities: [...contract.capabilities, ...extraCapabilities],
       effects: [
         { domain: 'guard', verb: 'block', object: 'exposure_increase' },
       ],
