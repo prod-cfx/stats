@@ -804,6 +804,17 @@ export class SemanticStateProjectionService {
       return [trigger]
     }
 
+    // M1 (PR #1147 review)：避免对每个 candidate 重复解析 displayGroupId / contract.groupId，
+    //   将 marker 缓存到 Map，将 O(N²) marker 读取降为 O(N)。
+    const markerCache = new Map<SemanticState['triggers'][number], string | null>()
+    const readMarker = (candidate: SemanticState['triggers'][number]): string | null => {
+      const cached = markerCache.get(candidate)
+      if (cached !== undefined) return cached
+      const resolved = this.readDisplayRuleGroupMarker(candidate)
+      markerCache.set(candidate, resolved)
+      return resolved
+    }
+
     // 多 EMA AND 合取 (#NLU-fix)：同一 displayGroupId/contract.groupId 标记的 indicator.above/below
     //   triggers 即使 reference.period 不同（或缺失 per-trigger timeframe）也应合并为单卡片
     return triggers.filter(candidate =>
@@ -821,7 +832,7 @@ export class SemanticStateProjectionService {
           )
           || (
             triggerMarker !== null
-            && this.readDisplayRuleGroupMarker(candidate) === triggerMarker
+            && readMarker(candidate) === triggerMarker
             && this.isMarkerGroupableIndicatorCompareTrigger(candidate)
           )
         )
