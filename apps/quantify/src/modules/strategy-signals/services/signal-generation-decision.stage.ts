@@ -25,11 +25,42 @@ export type GeneratedSignalPayload =
   | { type: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
   | { type: 'none'; reason: string }
 
+export interface MultiLegRuntimeSignalLeg {
+  legId: string
+  legScopeId: string
+  totalLegs: number
+  legSizing: {
+    mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio' | 'fixed_base'
+    value: number
+    asset?: string
+    pairedLegId?: string
+  }
+  payload: AiSignalPayload & { rawResponse: string }
+}
+
 export type PublishedRuntimeSignalOutcome =
   | { kind: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
+  | { kind: 'multi_leg'; legs: MultiLegRuntimeSignalLeg[] }
   | { kind: 'noop'; reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL'; reason: string }
   | { kind: 'missing_required_truth'; reasonCode: string; fields: string[] }
   | { kind: 'unexpected_error'; reasonCode: string; reason: string }
+
+/**
+ * #1186 PR4a — Compiled leg scope shape for multi-leg dispatch fan-out.
+ * Mirrors `CompiledOrchestrationLegScope` (packages/shared) + asset/`fixed_base`
+ * extension from canonical-strategy-spec-v2 PR2.
+ */
+export interface MultiLegFanOutScope {
+  id: string
+  legId: string
+  direction: 'long' | 'short'
+  legSizing?: {
+    mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio' | 'fixed_base'
+    value: number
+    asset?: string
+    pairedLegId?: string
+  }
+}
 
 export interface PublishedStrategyRuntimeContextInput {
   bars: Array<{
@@ -412,6 +443,127 @@ export class SignalGenerationDecisionStage {
     }
 
     return strictPromptData
+  }
+
+  /**
+   * #1186 PR4a — Multi-leg dispatch fan-out.
+   *
+   * Given a base runtime decision + the orchestration leg scopes (each with
+   * its own `legSizing`/`direction`), build N per-leg payloads. The base
+   * decision provides reasoning, prices, risk fields; each leg overrides
+   * direction (long→BUY / short→SELL) and position size from `legSizing`.
+   *
+   * `fixed_base` axis is currently unsupported (no AiSignalPayload shape for
+   * base qty). Per the dispatch failure-mode decision (`docs/decisions/
+   * 2026-05-12-multi-leg-dispatch-failure-mode.md`), emit-stage validation
+   * failures must reject the entire batch; if any leg fan-out fails, return
+   * `missing_required_truth` so the caller halts dispatch.
+   */
+  buildPublishedRuntimeMultiLegOutcome(
+    decision: StrategyDecisionV1,
+    legScopes: readonly MultiLegFanOutScope[],
+    ctx: {
+      exchange: string
+      marketType: 'spot' | 'perp'
+      symbol: string
+      timeframe: string
+      referencePrice?: number
+    },
+    config: StrategySignalsRuntimeConfig,
+  ): PublishedRuntimeSignalOutcome {
+    if (legScopes.length < 2) {
+      return this.missingRequiredTruth('MULTI_LEG_DISPATCH_REQUIRES_TWO_OR_MORE_LEGS', ['legScopes'])
+    }
+
+    const reason = typeof decision.reason === 'string' ? decision.reason.trim() : ''
+    if (!reason) {
+      return this.missingRequiredTruth('MULTI_LEG_DISPATCH_REASONING_MISSING', ['reason'])
+    }
+
+    if (typeof ctx.referencePrice !== 'number' || !Number.isFinite(ctx.referencePrice) || ctx.referencePrice <= 0) {
+      return this.missingRequiredTruth('MULTI_LEG_DISPATCH_REFERENCE_PRICE_MISSING', ['referencePrice'])
+    }
+
+    const optional = this.buildOptionalSignalFields(decision)
+    const totalLegs = legScopes.length
+    const rawResponse = this.truncateRawResponse(JSON.stringify(decision), config)
+    const legs: MultiLegRuntimeSignalLeg[] = []
+
+    for (const scope of legScopes) {
+      if (!scope.legSizing) {
+        return this.missingRequiredTruth('MULTI_LEG_DISPATCH_LEG_SIZING_MISSING', [`legScopes.${scope.legId}.legSizing`])
+      }
+
+      const sizing = scope.legSizing
+      if (!Number.isFinite(sizing.value) || sizing.value <= 0) {
+        return this.missingRequiredTruth('MULTI_LEG_DISPATCH_LEG_SIZING_VALUE_INVALID', [`legScopes.${scope.legId}.legSizing.value`])
+      }
+
+      let positionSizeQuote: number | undefined
+      let positionSizeRatio: number | undefined
+      if (sizing.mode === 'fixed_quote') {
+        positionSizeQuote = sizing.value
+      } else if (sizing.mode === 'fixed_ratio') {
+        positionSizeRatio = sizing.value
+      } else if (sizing.mode === 'fixed_pct') {
+        // `fixed_pct` values may arrive as percent (10 → 10%) OR as ratio (0.1 → 10%).
+        // Convention: treat values >1 as percent and divide by 100; values ≤1 already ratio.
+        // Both [0,1] ratio and (1,100] percent encodings are valid from canonical-spec-v2.
+        positionSizeRatio = sizing.value > 1 ? sizing.value / 100 : sizing.value
+      } else {
+        // 'fixed_base' axis (base-qty): not representable in current AiSignalPayload.
+        // Per dispatch failure-mode decision: emit-stage validation failure → reject batch.
+        return this.missingRequiredTruth('MULTI_LEG_DISPATCH_LEG_SIZING_MODE_UNSUPPORTED', [`legScopes.${scope.legId}.legSizing.mode`])
+      }
+
+      const direction: 'BUY' | 'SELL' = scope.direction === 'long' ? 'BUY' : 'SELL'
+      const payload: AiSignalPayload & { rawResponse: string } = {
+        direction,
+        signalType: 'ENTRY',
+        confidence: typeof decision.confidence === 'number' && Number.isFinite(decision.confidence) ? decision.confidence : 50,
+        entryPrice: ctx.referencePrice,
+        reasoning: `${reason} [leg ${scope.legId}]`,
+        rawResponse,
+      }
+      // Omit stopLoss/takeProfit when absent — 0 is not a valid sentinel value
+      // and would be misinterpreted as "no limit" by some downstream consumers.
+      if (optional.stopLoss !== undefined) payload.stopLoss = optional.stopLoss
+      if (optional.takeProfit !== undefined) payload.takeProfit = optional.takeProfit
+      if (positionSizeQuote !== undefined) payload.positionSizeQuote = positionSizeQuote
+      if (positionSizeRatio !== undefined) payload.positionSizeRatio = positionSizeRatio
+
+      legs.push({
+        legId: scope.legId,
+        legScopeId: scope.id,
+        totalLegs,
+        legSizing: { ...sizing },
+        payload,
+      })
+    }
+
+    return { kind: 'multi_leg', legs }
+  }
+
+  private missingRequiredTruth(reasonCode: string, fields: string[]): PublishedRuntimeSignalOutcome {
+    return { kind: 'missing_required_truth', reasonCode, fields }
+  }
+
+  private buildOptionalSignalFields(decision: StrategyDecisionV1): {
+    confidence?: number
+    stopLoss?: number
+    takeProfit?: number
+  } {
+    const out: { confidence?: number; stopLoss?: number; takeProfit?: number } = {}
+    if (typeof decision.confidence === 'number' && Number.isFinite(decision.confidence) && decision.confidence > 0) {
+      out.confidence = decision.confidence
+    }
+    if (typeof decision.risk?.stopLoss === 'number' && Number.isFinite(decision.risk.stopLoss) && decision.risk.stopLoss > 0) {
+      out.stopLoss = decision.risk.stopLoss
+    }
+    if (typeof decision.risk?.takeProfit === 'number' && Number.isFinite(decision.risk.takeProfit) && decision.risk.takeProfit > 0) {
+      out.takeProfit = decision.risk.takeProfit
+    }
+    return out
   }
 
   buildPublishedRuntimeSignalOutcomeFromDecision(

@@ -142,6 +142,23 @@ interface PublishedRuntimePositionContext {
 interface CompiledRuntimeAdapterResult {
   adapter: StrategyAdapterV1 | null
   parseError?: string
+  /**
+   * #1186 PR4a — multi-leg dispatch fan-out source. Mirrors
+   * `projection.orchestrationLegScopes` so the runtime caller can fan-out
+   * a single onBar decision into N per-leg signals without re-parsing the
+   * compiled script.
+   */
+  orchestrationLegScopes?: ReadonlyArray<{
+    id: string
+    legId: string
+    direction: 'long' | 'short'
+    legSizing?: {
+      mode: 'fixed_pct' | 'fixed_quote' | 'fixed_ratio' | 'fixed_base'
+      value: number
+      asset?: string
+      pairedLegId?: string
+    }
+  }>
 }
 
 @Injectable()
@@ -901,6 +918,9 @@ export class SignalGeneratorService {
             )
           },
         },
+        // #1186 PR4a — surface compiled leg scopes so the runtime caller can
+        // fan-out a single onBar decision into N per-leg signals.
+        orchestrationLegScopes: ((projection as { orchestrationLegScopes?: CompiledRuntimeAdapterResult['orchestrationLegScopes'] }).orchestrationLegScopes) ?? [],
       }
     } catch (error) {
       return {
@@ -1072,15 +1092,32 @@ export class SignalGeneratorService {
         }
       }
 
+      // #1186 PR4a — multi-leg dispatch fan-out.
+      //   When the compiled projection carries ≥2 leg scopes with `legSizing`,
+      //   the single onBar decision is fanned out into N per-leg payloads
+      //   (direction overridden by leg.direction, size by leg.legSizing).
+      //   Single/0-leg path is byte-equal: legScopes empty → fall through to
+      //   the existing single-decision builder.
+      const legScopes = compiledAdapter.orchestrationLegScopes ?? []
+      const sizingLegScopes = legScopes.filter((leg): leg is typeof leg & { legSizing: NonNullable<typeof leg.legSizing> } => leg.legSizing !== undefined)
+      const ctxForOutcome = {
+        exchange: ((symbol as unknown as { exchange?: string }).exchange ?? 'unknown'),
+        marketType: this.readSymbolRuntimeMarketType(symbol),
+        symbol: symbol.code,
+        timeframe,
+        referencePrice,
+      }
+      if (sizingLegScopes.length >= 2) {
+        return this.decisionStage.buildPublishedRuntimeMultiLegOutcome(
+          resolved.decision,
+          sizingLegScopes,
+          ctxForOutcome,
+          config,
+        )
+      }
       return this.decisionStage.buildPublishedRuntimeSignalOutcomeFromDecision(
         resolved.decision,
-        {
-          exchange: ((symbol as unknown as { exchange?: string }).exchange ?? 'unknown'),
-          marketType: this.readSymbolRuntimeMarketType(symbol),
-          symbol: symbol.code,
-          timeframe,
-          referencePrice,
-        },
+        ctxForOutcome,
         config,
       )
     } catch (error) {
@@ -1741,29 +1778,76 @@ export class SignalGeneratorService {
 
       await this.resetStrategyFailure(instance.id)
 
+      const persistenceGroup = {
+        symbol: {
+          ...symbol,
+          code: symbolCode,
+        },
+        timeframe: prismaTimeframe,
+        fields: new Map(),
+      }
+      const baseRuntimeProvenance: Prisma.JsonObject = {
+        ...runtimeProvenance,
+        timeframe,
+        ...(marketType ? { marketType } : {}),
+        ...(activeRuntimeState
+          ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
+          : {}),
+      }
+
+      // #1186 PR4a — multi-leg dispatch fan-out caller.
+      //   Per dispatch failure-mode decision (`docs/decisions/
+      //   2026-05-12-multi-leg-dispatch-failure-mode.md`): emit-stage
+      //   validation already happened in the outcome builder; here we just
+      //   persist N signals with leg metadata threaded through
+      //   `runtimeProvenance.leg` so downstream executor (PR4b) can read it.
+      //   skipCooldown=true for sibling legs: cooldown is one-shot per
+      //   strategy/symbol/timeframe; we must not block leg-B on leg-A.
+      if (runtimeSignalOutcome.kind === 'multi_leg') {
+        for (let legIdx = 0; legIdx < runtimeSignalOutcome.legs.length; legIdx++) {
+          const leg = runtimeSignalOutcome.legs[legIdx]
+          // Lead leg (index 0) honours the caller's skipCooldown; sibling legs
+          // always bypass cooldown so they co-emit with the lead leg regardless.
+          const skipCooldownForLeg = legIdx === 0 ? (options.skipCooldown ?? false) : true
+          await this.createSignalWithCooldownAndLock(
+            instance,
+            strategy,
+            persistenceGroup,
+            config,
+            {},
+            referenceBar?.time,
+            leg.payload,
+            {
+              ...baseRuntimeProvenance,
+              leg: {
+                legId: leg.legId,
+                legScopeId: leg.legScopeId,
+                totalLegs: leg.totalLegs,
+                legSizing: leg.legSizing as unknown as Prisma.JsonObject,
+              } as unknown as Prisma.JsonObject,
+            },
+            skipCooldownForLeg,
+            undefined,
+            undefined,
+          )
+        }
+
+        await this.persistPublishedSemanticRuntimeState(instance, runtimeProvenance, semanticRuntimeState)
+        if (activeRuntimeState) {
+          await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+        }
+        return
+      }
+
       const createdSignal = await this.createSignalWithCooldownAndLock(
         instance,
         strategy,
-        {
-          symbol: {
-            ...symbol,
-            code: symbolCode,
-          },
-          timeframe: prismaTimeframe,
-          fields: new Map(),
-        },
+        persistenceGroup,
         config,
         {},
         referenceBar?.time,
         runtimeSignalOutcome.payload,
-        {
-          ...runtimeProvenance,
-          timeframe,
-          ...(marketType ? { marketType } : {}),
-          ...(activeRuntimeState
-            ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
-            : {}),
-        },
+        baseRuntimeProvenance,
         options.skipCooldown ?? false,
         activeRuntimeState
           ? async () => {
