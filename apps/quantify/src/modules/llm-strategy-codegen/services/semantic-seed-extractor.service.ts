@@ -608,16 +608,15 @@ export class SemanticSeedExtractorService {
       // 至少 2 个 trigger 才需要合并
       if (members.length < 2) continue
 
-      // 文本必须含 AND 连词且不含 OR 连词
-      if (!this.hasAndConjunctionWithoutOr(text)) continue
+      // 桶子句窗口：找出所有 trigger 在原文中的 evidence 位置，取最小覆盖子串
+      const windowText = this.resolveBucketClauseWindow(text, members.map(m => m.trigger))
+      if (!windowText) continue
 
-      // 生成稳定 groupId：phase + sideScope + 各 trigger key 排序拼接（截 40 字符）
-      const keysFragment = members
-        .map(m => m.trigger.key)
-        .sort()
-        .join('_')
-        .slice(0, 40)
-      const groupId = `entry-and-${sideScope}-${keysFragment}`
+      // 仅对窗口判定 AND/OR — 跨子句的「或」不会污染本桶
+      if (!this.hasConjunctiveAndOnly(windowText)) continue
+
+      // 生成稳定 groupId：phase + sideScope + 各 trigger key 去重排序短 hash
+      const groupId = `entry-and-${sideScope}-${this.shortHashOfKeys(members.map(m => m.trigger.key))}`
 
       for (const { index } of members) {
         result.set(index, { groupId, join: 'AND' })
@@ -627,7 +626,54 @@ export class SemanticSeedExtractorService {
     return result
   }
 
-  private hasAndConjunctionWithoutOr(text: string): boolean {
+  /**
+   * 取 bucket 内所有 trigger 在原文中 evidence.text 命中位置的最小覆盖窗口。
+   * 若某 trigger 无 evidence.text 或无法在 text 中定位，则 fallback 使用 trigger.key 子串。
+   * 找不到任何 trigger 位置 → 返回 null（不判定 AND）。
+   */
+  private resolveBucketClauseWindow(text: string, triggers: SeedTrigger[]): string | null {
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+
+    for (const trigger of triggers) {
+      const evText = trigger.evidence?.text
+      let pos = -1
+      let len = 0
+      if (typeof evText === 'string' && evText.length > 0) {
+        pos = text.indexOf(evText)
+        len = evText.length
+      }
+      if (pos < 0) {
+        // fallback：trigger.key 中点号后的简短关键词
+        const fallback = trigger.key.split('.').pop() ?? ''
+        if (fallback.length > 0) {
+          pos = text.indexOf(fallback)
+          len = fallback.length
+        }
+      }
+      if (pos < 0) continue
+      if (pos < min) min = pos
+      if (pos + len > max) max = pos + len
+    }
+
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min >= max) return null
+    return text.slice(min, max)
+  }
+
+  /**
+   * 把 trigger.key 列表去重排序后做 djb2 短 hash（避免 slice(40) 截断冲突）。
+   */
+  private shortHashOfKeys(keys: string[]): string {
+    const joined = Array.from(new Set(keys)).sort().join('_')
+    let hash = 5381
+    for (let i = 0; i < joined.length; i++) {
+      // eslint-disable-next-line no-bitwise
+      hash = ((hash << 5) + hash + joined.charCodeAt(i)) >>> 0
+    }
+    return hash.toString(36)
+  }
+
+  private hasConjunctiveAndOnly(text: string): boolean {
     // 「和」在中文里大量作列举/并列名词（"BTC 和 ETH"、"MA20 和 EMA50"），
     // 当作 AND 连词会把 list 误判为联立条件 → 从词表移除。
     const hasAnd = /(?:且|同时|并且)/u.test(text)
