@@ -479,7 +479,7 @@ export class SemanticStateProjectionService {
     const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
     return firstMarker !== null
       && group.every(trigger =>
-        this.isMarkerGroupableIndicatorCompareTrigger(trigger)
+        this.isGroupableIndicatorCompareTriggerByMarker(trigger)
         && this.readDisplayRuleGroupMarker(trigger) === firstMarker)
   }
 
@@ -776,7 +776,7 @@ export class SemanticStateProjectionService {
   ): string | null {
     // 入场卡片本身已经渲染 EMA stack 语义时（marker-grouped indicator.above/below），
     //   不再追加同 sideScope 的 condition.expression gate 文本，避免重复表达
-    const entrySuppressesIndicatorGate = this.isMarkerGroupableIndicatorCompareTrigger(entryTrigger)
+    const entrySuppressesIndicatorGate = this.isGroupableIndicatorCompareTriggerByMarker(entryTrigger)
       && this.readDisplayRuleGroupMarker(entryTrigger) !== null
 
     const gateTexts = triggers
@@ -798,7 +798,7 @@ export class SemanticStateProjectionService {
   ): Array<SemanticState['triggers'][number]> {
     const triggerMarker = this.readDisplayRuleGroupMarker(trigger)
     const isMarkerEligible = triggerMarker !== null
-      && this.isMarkerGroupableIndicatorCompareTrigger(trigger)
+      && this.isGroupableIndicatorCompareTriggerByMarker(trigger)
 
     if (!this.isGroupableIndicatorCompareTrigger(trigger) && !isMarkerEligible) {
       return [trigger]
@@ -833,7 +833,7 @@ export class SemanticStateProjectionService {
           || (
             triggerMarker !== null
             && readMarker(candidate) === triggerMarker
-            && this.isMarkerGroupableIndicatorCompareTrigger(candidate)
+            && this.isGroupableIndicatorCompareTriggerByMarker(candidate)
             // M3 (PR #1147 review)：marker 分支合并前增加 timeframe 一致性守卫——
             //   两侧均缺失视为一致（marker 已隐含同分组）；任一存在则必须相等，
             //   避免同 marker 下不同 timeframe 被错误并入同一卡片抹掉差异。
@@ -847,7 +847,7 @@ export class SemanticStateProjectionService {
 
   // 仅校验 marker-grouping 必需的最小条件：key + reference.period 数值合法
   //   不要求 per-trigger params.timeframe（marker 已隐含同分组语义）
-  private isMarkerGroupableIndicatorCompareTrigger(
+  private isGroupableIndicatorCompareTriggerByMarker(
     trigger: SemanticState['triggers'][number],
   ): boolean {
     return (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
@@ -1339,7 +1339,7 @@ export class SemanticStateProjectionService {
     const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
     const allMarkerGroupable = firstMarker !== null
       && group.every(trigger =>
-        this.isMarkerGroupableIndicatorCompareTrigger(trigger)
+        this.isGroupableIndicatorCompareTriggerByMarker(trigger)
         && this.readDisplayRuleGroupMarker(trigger) === firstMarker)
     if (!allGroupable && !allMarkerGroupable) {
       return null
