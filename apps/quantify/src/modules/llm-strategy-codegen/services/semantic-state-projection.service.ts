@@ -495,6 +495,9 @@ export class SemanticStateProjectionService {
     // 新增异质 entryPredicate/exitPredicate marker 路径：所有成员都是 predicate 且共享 marker
     //   → 进入单 condition 渲染，下游 formatGroupedDisplayTriggerCondition 的异质 fallback
     //   负责将各 trigger 独立渲染后用"，且"拼接为单条文案
+    // 防御性 phase 一致性守卫：当前 canMergeDisplayRuleTriggers 已保证 group 内 phase 一致，
+    //   但 grouping 链路若未来变更，避免 entry+exit 误混入同 group 被当成 AND 单条渲染
+    if (!group.every(trigger => trigger.phase === group[0]!.phase)) return false
     return group.every(trigger =>
       (trigger.phase === 'entry' && isEntryPredicateTriggerKey(trigger.key))
       || (trigger.phase === 'exit' && isExitPredicateTriggerKey(trigger.key)),

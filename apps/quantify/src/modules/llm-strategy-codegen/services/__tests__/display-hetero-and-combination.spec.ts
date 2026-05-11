@@ -89,10 +89,14 @@ describe('display logic graph — hetero AND combination (Issue #1171)', () => {
   })
 
   /**
-   * C4: 用户现场原 prompt — trend + cross_over + rsi_lte 三段 AND → 单条入场卡片
-   * 实际渲染："MA20 上穿 MA50，且RSI14 低于或等于 35，且已识别条件..."
+   * C4: 用户现场原 prompt — 多余 trend.direction 输入不破坏 cross_over + rsi_lte 合并
+   *
+   * 现状：extractor 的 resolveHeterogeneousEntryAndGroups 不给 trend.direction 挂同 groupId，
+   *   故展示层只能合并 cross_over + rsi_lte 两段；trend 段在展示层不进入 condition 输出。
+   * 本 case 验证：包含 trend.direction 的多余输入不会破坏 cross_over + rsi_lte 的展示合并。
+   * Follow-up：extractor 扩展 trend.direction 联立识别后，应将此断言加严为三段全合并。
    */
-  it('C4: 用户现场原 prompt — trend + cross_over + rsi_lte 三段 AND → 单条入场卡片', () => {
+  it('C4: 用户现场原 prompt — trend 输入不破坏 cross_over + rsi_lte 合并', () => {
     const graph = buildDisplay(
       '市场趋势向上 且 MA20 上穿 MA50 且 RSI14 低于 35 时开多，止损 5%，止盈 8%，单笔 10%',
     )
