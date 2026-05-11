@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticCapability, SemanticExpression, SemanticExpressionOperand, SemanticExpressionOperator, SemanticOrchestrationNode, SemanticSlotState, SemanticState } from '../types/semantic-state'
+import { isEntryPredicateTriggerKey, isExitPredicateTriggerKey, isTimeframeGroupableTriggerKey } from '../atom-contracts/trigger-display-contract'
 import { SemanticAtomRegistryService } from './semantic-atom-registry.service'
 import { SemanticPresentationRegistryService } from './semantic-presentation-registry.service'
 import { normalizeLegacyPositionSizing, validateSemanticPositionContract } from './strategy-semantic-contracts'
@@ -851,22 +852,40 @@ export class SemanticStateProjectionService {
     )
   }
 
-  // 仅校验 marker-grouping 必需的最小条件：key + reference.period 数值合法
-  //   不要求 per-trigger params.timeframe（marker 已隐含同分组语义）
+  // marker-grouping 路径下的最小条件校验：
+  //   key 为 timeframeGroupable（indicator.above/below）或其他 entryPredicate/exitPredicate（异质 AND marker 组合）
+  //   phase 必须为 entry/exit；不要求 reference.period（marker 已隐含同分组语义）
+  //   注：此函数在 findGroupedDisplayTriggers 与 shouldRenderDisplayGroupAsSingleCondition 中
+  //       均用于"判断能否参与 indicator compare marker 合并渲染"，只有 timeframeGroupable key
+  //       才走 formatGroupedIndicatorCompareCondition；其余异质组合由 canMergeDisplayRuleTriggers
+  //       + shouldRenderDisplayGroupAsSingleCondition 联合判定
   private isGroupableIndicatorCompareTriggerByMarker(
     trigger: SemanticState['triggers'][number],
   ): boolean {
-    return (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+    return isTimeframeGroupableTriggerKey(trigger.key)
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
-      && typeof trigger.params['reference.period'] === 'number'
   }
 
   private formatGroupedDisplayTriggerCondition(
     trigger: SemanticState['triggers'][number],
     groupedTriggers: Array<SemanticState['triggers'][number]>,
   ): string {
-    return this.formatGroupedIndicatorCompareCondition(groupedTriggers)
-      ?? this.formatDisplayTriggerCondition(trigger)
+    // 同类 indicator.above/below 合并渲染（如"15m/30m MA20 上方"）
+    const grouped = this.formatGroupedIndicatorCompareCondition(groupedTriggers)
+    if (grouped) {
+      return grouped
+    }
+    // 异质 key 组合（如 indicator.cross_over + indicator.below）：
+    //   各 trigger 独立渲染后用"，且"连接，产生完整 AND 条件文本
+    if (groupedTriggers.length > 1) {
+      const parts = groupedTriggers
+        .map(t => this.formatDisplayTriggerCondition(t))
+        .filter(text => text.length > 0)
+      if (parts.length > 1) {
+        return parts.join('，且')
+      }
+    }
+    return this.formatDisplayTriggerCondition(trigger)
   }
 
   private isDisplayGateCompatibleWithEntry(
@@ -1529,8 +1548,10 @@ export class SemanticStateProjectionService {
     return result
   }
 
+  // 无 marker 路径：trigger 需自证身份，要求 key 支持 timeframe 维度分组合并（indicator.above/below）
+  //   且有完整的 reference.period + timeframe params
   private isGroupableIndicatorCompareTrigger(trigger: SemanticState['triggers'][number]): boolean {
-    return (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+    return isTimeframeGroupableTriggerKey(trigger.key)
       && (trigger.phase === 'entry' || trigger.phase === 'exit')
       && typeof trigger.params['reference.period'] === 'number'
       && typeof trigger.params.timeframe === 'string'
