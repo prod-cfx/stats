@@ -9,6 +9,7 @@ import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticCapability,
+  SemanticCapabilityShape,
   SemanticNodeStatus,
   SemanticPositionConstraintState,
   SemanticPositionSizingContract,
@@ -37,12 +38,12 @@ function makePerOrderBudgetCapability(
   value: number,
   unitOrKind: 'quote' | 'base' | 'ratio' | 'risk_budget',
 ): SemanticCapability {
-  const shape: Record<string, unknown> = { value, kind: unitOrKind }
+  const shape: SemanticCapabilityShape = { value, kind: unitOrKind }
   if (unitOrKind === 'quote') {
-    shape['asset'] = 'USDT'
+    shape.asset = 'USDT'
   }
   else if (unitOrKind === 'base') {
-    shape['asset'] = 'BTC'
+    shape.asset = 'BTC'
   }
 
   return {
@@ -53,10 +54,14 @@ function makePerOrderBudgetCapability(
   }
 }
 
-function makeContract(id: string, capabilities: SemanticCapability[]): SemanticAtomContract {
+function makeContract(
+  id: string,
+  capabilities: SemanticCapability[],
+  kind: SemanticAtomContract['kind'] = 'action',
+): SemanticAtomContract {
   return {
     id,
-    kind: 'action',
+    kind,
     capabilities,
     requires: [],
     params: {},
@@ -137,7 +142,7 @@ export function buildStateWithDcaPerOrderSizing(opts: {
   const capValue = opts.capabilityValue ?? opts.value
   const paramsVal = opts.paramsValue ?? opts.value
 
-  function makeShape(value: number): Record<string, unknown> {
+  function makeShape(value: number): SemanticCapabilityShape {
     return opts.unit === 'quote'
       ? { kind: 'quote', value, asset: 'USDT' }
       : { kind: 'base', value, asset: 'BTC' }
@@ -147,26 +152,14 @@ export function buildStateWithDcaPerOrderSizing(opts: {
   const paramsShape = makeShape(paramsVal)
 
   const contracts: SemanticAtomContract[] = opts.viaCapability
-    ? [
+    ? [makeContract(`contract-dca-${opts.ownerKey}`, [
         {
-          id: `contract-dca-${opts.ownerKey}`,
-          kind: 'position',
-          capabilities: [
-            {
-              domain: 'capital',
-              verb: 'allocate',
-              object: 'per_order_budget',
-              shape: capabilityShape,
-            },
-          ],
-          requires: [],
-          params: {},
-          runtimeRequirements: [],
-          stateRequirements: [],
-          orderRequirements: [],
-          openSlots: [],
+          domain: 'capital',
+          verb: 'allocate',
+          object: 'per_order_budget',
+          shape: capabilityShape,
         },
-      ]
+      ], 'position')]
     : []
 
   const constraint: SemanticPositionConstraintState = {
