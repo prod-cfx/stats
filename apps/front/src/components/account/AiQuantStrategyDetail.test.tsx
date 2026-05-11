@@ -24,7 +24,7 @@ jest.mock('@/hooks/use-auth', () => ({
 }))
 
 jest.mock('lucide-react', () => ({
-  AlertTriangle: () => <svg data-testid="alert-triangle-icon" />,
+  Play: () => <svg data-testid="play-icon" />,
 }), { virtual: true })
 
 jest.mock('next/link', () => ({
@@ -157,6 +157,12 @@ function findButton(label: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('button')).find(
     button => button.textContent?.trim() === label,
   ) as HTMLButtonElement | undefined
+}
+
+function findLink(label: string): HTMLAnchorElement | undefined {
+  return Array.from(document.querySelectorAll('a')).find(
+    link => link.textContent?.trim() === label,
+  ) as HTMLAnchorElement | undefined
 }
 
 describe('AiQuantStrategyDetail', () => {
@@ -809,9 +815,11 @@ describe('AiQuantStrategyDetail', () => {
     })
     expect(container.textContent).toContain('策略已停止。现有持仓和挂单仍然保留，需要你单独管理。')
     expect(container.textContent).toContain('已停止')
+    expect(findButton('停止策略')).toBeUndefined()
+    expect(findButton('运行')).toBeDefined()
   })
 
-  it('shows liquidate_and_stop control when open positions exist and disables controls while pending', async () => {
+  it('keeps liquidate_and_stop inside the stop dialog when open positions exist and disables controls while pending', async () => {
     let resolveAction: ((value: AccountAiQuantStrategyDetail) => void) | null = null
     mockPerformAccountAiQuantStrategyAction.mockReturnValue(new Promise<AccountAiQuantStrategyDetail>((resolve) => {
       resolveAction = resolve
@@ -844,19 +852,18 @@ describe('AiQuantStrategyDetail', () => {
     })
 
     const stopButton = findButton('停止策略')
-    const liquidateButton = findButton('平仓并停止')
 
-    expect(liquidateButton).toBeDefined()
+    expect(container.querySelector('[data-testid="strategy-runtime-control-actions"]')?.textContent).not.toContain('平仓并停止')
     expect(stopButton?.disabled).toBe(false)
-    expect(liquidateButton?.disabled).toBe(false)
-    expect(findButton('返回对话')).toBeUndefined()
+    expect(findLink('返回对话')).toBeDefined()
 
     await act(async () => {
-      liquidateButton?.click()
+      stopButton?.click()
     })
 
     expect(container.textContent).toContain('当前策略仍有持仓或挂单')
     expect(container.textContent).toContain('仅停止，保留持仓/挂单')
+    expect(container.textContent).toContain('平仓并停止')
 
     await act(async () => {
       container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
@@ -869,7 +876,7 @@ describe('AiQuantStrategyDetail', () => {
       action: 'liquidate_and_stop',
     })
     expect(findButton('停止策略')?.disabled).toBe(true)
-    expect(findButton('平仓并停止')?.disabled).toBe(true)
+    expect((container.querySelector('[data-testid="liquidate-and-stop-strategy"]') as HTMLButtonElement | null)?.disabled).toBe(true)
 
     await act(async () => {
       resolveAction?.(buildActionDetail({
@@ -906,26 +913,25 @@ describe('AiQuantStrategyDetail', () => {
 
     const panel = container.querySelector('[data-testid="strategy-runtime-control-panel"]')
     const actions = container.querySelector('[data-testid="strategy-runtime-control-actions"]')
-    const returnLink = Array.from(container.querySelectorAll('a')).find(item => item.textContent?.trim() === '返回对话')
+    const returnLink = findLink('返回对话')
     const stopButton = findButton('停止策略')
-    const liquidateButton = findButton('平仓并停止')
+    const actionLabels = Array.from(actions?.querySelectorAll('button, a') ?? []).map(item => item.textContent?.trim())
 
     expect(panel).toBeTruthy()
     expect(panel?.className).toContain('gap-4')
     expect(actions).toBeTruthy()
     expect(actions?.className).toContain('border-t')
     expect(actions?.className).toContain('sm:flex-row')
-    expect(actions?.className).toContain('sm:justify-between')
+    expect(actions?.className).toContain('sm:justify-end')
+    expect(actionLabels).toEqual(['停止策略', '返回对话'])
     expect(returnLink?.className).toContain('h-9')
     expect(returnLink?.className).toContain('min-w-max')
     expect(returnLink?.className).toContain('whitespace-nowrap')
+    expect(returnLink?.className).toContain('border')
     expect(stopButton?.className).toContain('h-9')
     expect(stopButton?.className).toContain('min-w-max')
     expect(stopButton?.className).not.toContain('rose')
-    expect(liquidateButton?.className).toContain('h-9')
-    expect(liquidateButton?.className).toContain('min-w-max')
-    expect(liquidateButton?.className).toContain('rose')
-    expect(liquidateButton?.querySelector('svg')).toBeTruthy()
+    expect(actions?.textContent).not.toContain('平仓并停止')
   })
 
   it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
@@ -957,7 +963,7 @@ describe('AiQuantStrategyDetail', () => {
     })
 
     await act(async () => {
-      findButton('平仓并停止')?.click()
+      findButton('停止策略')?.click()
     })
 
     await act(async () => {
@@ -987,6 +993,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('返回对话')
     expect(container.textContent).not.toContain('返回对话修改')
     expect(container.textContent).not.toContain('停止策略')
+    expect(findButton('运行')).toBeDefined()
   })
 
   it('hides return-to-chat entry for plaza-run strategies without a conversation', async () => {
@@ -1002,6 +1009,37 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('重新部署')
     expect(container.textContent).not.toContain('返回对话')
     expect(container.textContent).not.toContain('停止策略')
+    expect(findButton('运行')).toBeDefined()
+  })
+
+  it('runs a stopped strategy from detail and refreshes the runtime controls', async () => {
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValue(buildActionDetail({ status: 'running' }))
+
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({ status: 'stopped', hasActiveConversation: true })}
+        />,
+      )
+    })
+
+    const actions = container.querySelector('[data-testid="strategy-runtime-control-actions"]')
+    expect(Array.from(actions?.querySelectorAll('button, a') ?? []).map(item => item.textContent?.trim())).toEqual(['运行', '返回对话'])
+    expect(findButton('运行')?.className).toContain('emerald')
+    expect(container.querySelector('[data-testid="play-icon"]')).toBeTruthy()
+
+    await act(async () => {
+      findButton('运行')?.click()
+    })
+
+    expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('inst-runtime-control', {
+      userId: 'user-1',
+      action: 'run',
+    })
+    expect(container.textContent).toContain('策略已开始运行。')
+    expect(findButton('运行')).toBeUndefined()
+    expect(findButton('停止策略')).toBeDefined()
   })
 
   it('view-only strategy hides 运行控制 panel and renders read-only banner', async () => {

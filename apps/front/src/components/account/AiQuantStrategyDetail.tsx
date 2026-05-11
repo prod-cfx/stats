@@ -1,7 +1,7 @@
 'use client'
 
 import type { AiQuantStrategyRecord, StrategyEquityPoint, AiQuantStrategyViewState } from './ai-quant-strategy-store'
-import { AlertTriangle } from 'lucide-react'
+import { Play } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -31,8 +31,11 @@ const EQUITY_CHART_HEIGHT = 220
 const EQUITY_CHART_PADDING_Y = 16
 const STOP_SUCCESS_MESSAGE = '策略已停止。现有持仓和挂单仍然保留，需要你单独管理。'
 const LIQUIDATE_AND_STOP_SUCCESS_MESSAGE = '策略已平仓并停止。'
+const RUN_SUCCESS_MESSAGE = '策略已开始运行。'
 const STOP_ERROR_MESSAGE = '停止策略失败，请稍后重试。'
 const LIQUIDATE_AND_STOP_ERROR_MESSAGE = '平仓并停止失败，请检查模拟盘账户状态后重试。'
+const RUN_ERROR_MESSAGE = '启动策略失败，请稍后重试。'
+type RuntimeAction = 'run' | 'stop' | 'liquidate_and_stop'
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -302,12 +305,13 @@ function formatOrderEvidenceList(
 }
 
 function resolveRuntimeControlErrorMessage(
-  action: 'stop' | 'liquidate_and_stop',
+  action: RuntimeAction,
   error: unknown,
 ) {
   if (error instanceof Error && error.message.trim()) {
     return error.message
   }
+  if (action === 'run') return RUN_ERROR_MESSAGE
   return action === 'liquidate_and_stop' ? LIQUIDATE_AND_STOP_ERROR_MESSAGE : STOP_ERROR_MESSAGE
 }
 
@@ -328,7 +332,7 @@ export function AiQuantStrategyDetail({
     kind: 'success' | 'error'
     message: string
   } | null>(null)
-  const [pendingRuntimeAction, setPendingRuntimeAction] = useState<'stop' | 'liquidate_and_stop' | null>(null)
+  const [pendingRuntimeAction, setPendingRuntimeAction] = useState<RuntimeAction | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
 
   useEffect(() => {
@@ -404,7 +408,7 @@ export function AiQuantStrategyDetail({
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
 
-  const handleRuntimeAction = async (action: 'stop' | 'liquidate_and_stop') => {
+  const handleRuntimeAction = async (action: RuntimeAction) => {
     if (!session?.userId || pendingRuntimeAction || !strategy) return
 
     setPendingRuntimeAction(action)
@@ -419,9 +423,11 @@ export function AiQuantStrategyDetail({
       setStopDialogOpen(false)
       setRuntimeControlFeedback({
         kind: 'success',
-        message: action === 'liquidate_and_stop'
-          ? LIQUIDATE_AND_STOP_SUCCESS_MESSAGE
-          : STOP_SUCCESS_MESSAGE,
+        message: action === 'run'
+          ? RUN_SUCCESS_MESSAGE
+          : action === 'liquidate_and_stop'
+            ? LIQUIDATE_AND_STOP_SUCCESS_MESSAGE
+            : STOP_SUCCESS_MESSAGE,
       })
     } catch (error) {
       setRuntimeControlFeedback({
@@ -514,27 +520,8 @@ export function AiQuantStrategyDetail({
 
             <div
               data-testid="strategy-runtime-control-actions"
-              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex w-full flex-col gap-3 border-t border-[color:var(--cf-border)] pt-4 sm:flex-row sm:items-center sm:justify-end"
             >
-              <div className="flex min-w-0 items-center">
-                {strategy.hasActiveConversation === true && (
-                  <Link
-                    href={`/${lng}/ai-quant`}
-                    onClick={() => {
-                      setIntent({
-                        type: 'strategy-edit-session',
-                        strategyInstanceId: strategy.id,
-                        publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
-                        source: 'account-detail',
-                      })
-                    }}
-                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg px-2 text-sm font-semibold text-[color:var(--cf-muted)] transition hover:bg-white/5 hover:text-[color:var(--cf-text-strong)]"
-                  >
-                    返回对话
-                  </Link>
-                )}
-              </div>
-
               <div className="flex flex-row flex-wrap items-center gap-2 sm:justify-end">
                 {strategy.status === 'running' && (
                   <button
@@ -549,18 +536,35 @@ export function AiQuantStrategyDetail({
                   </button>
                 )}
 
-                {strategy.status === 'running' && showLiquidateAndStop && (
+                {strategy.status === 'stopped' && (
                   <button
                     type="button"
                     onClick={() => {
-                      void openStopDialogWithLatestDetail()
+                      void handleRuntimeAction('run')
                     }}
                     disabled={runtimeActionDisabled}
-                    className="inline-flex h-9 min-w-max items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-rose-500/35 bg-rose-500/10 px-4 text-sm font-semibold text-rose-200 transition hover:border-rose-400/50 hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 min-w-max items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
                   >
-                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                    平仓并停止
+                    <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                    运行
                   </button>
+                )}
+
+                {strategy.hasActiveConversation === true && (
+                  <Link
+                    href={`/${lng}/ai-quant`}
+                    onClick={() => {
+                      setIntent({
+                        type: 'strategy-edit-session',
+                        strategyInstanceId: strategy.id,
+                        publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
+                        source: 'account-detail',
+                      })
+                    }}
+                    className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
+                  >
+                    返回对话
+                  </Link>
                 )}
               </div>
             </div>
