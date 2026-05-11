@@ -37,20 +37,26 @@ function lockedDrawdownBlock(): SemanticOrchestrationNode {
 describe('SemanticStateProjectionService — orchestration parity (#1152)', () => {
   const service = new SemanticStateProjectionService()
 
-  it('A: 仅 locked portfolioRisk.drawdown_block → hasDeterministicSemantics=true 且 summary 含 orchestration 段', () => {
+  // #1162 Task 6：去除 "orchestration：" 内部技术词裸前缀，改走 presentationRegistry.displayRenderer 出人话
+  it('A: 仅 locked portfolioRisk.drawdown_block → hasDeterministicSemantics=true 且 summary 含人话 orchestration 内容', () => {
     const view = service.buildConversationView(baseState([lockedDrawdownBlock()]))
     expect(view.hasDeterministicSemantics).toBe(true)
-    expect(view.summary).toContain('orchestration')
+    // 走 presentationRegistry.displayRenderer，渲染如"账户回撤超过 10% 时阻止开新仓"
+    expect(view.summary).toMatch(/回撤|drawdown/iu)
+    expect(view.summary).toContain('10')
+    // 守 INVARIANT-G：不得有 "orchestration：" 内部技术词裸前缀
+    expect(view.summary).not.toMatch(/orchestration：/)
   })
 
-  it('B: orchestration 节点 status=open → 不计入 deterministic、summary 不含 orchestration 段', () => {
+  it('B: orchestration 节点 status=open → 不计入 deterministic、summary 不含人话渲染', () => {
     const openNode: SemanticOrchestrationNode = {
       ...lockedDrawdownBlock(),
       status: 'open',
     }
     const view = service.buildConversationView(baseState([openNode]))
     expect(view.hasDeterministicSemantics).toBe(false)
-    expect(view.summary).not.toContain('orchestration')
+    // status=open 节点不进 summary
+    expect(view.summary).not.toMatch(/回撤/)
   })
 
   it('C: presentationRegistry 未注册的 key → fallback 用 node.key 出现在 summary', () => {

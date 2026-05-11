@@ -2313,6 +2313,28 @@ export class SemanticStateProjectionService {
       }
     }
 
+    // Task 4 (#1162)：扫 locked constraints，通过 ATOM_CONTRACT_REGISTRY 路由 summaryContribution
+    // position.dca_schedule 走 VIA_PRESENTATION_DISPLAY → presentationRegistry.displayRenderer
+    const constraintParts: string[] = []
+    for (const constraint of position.constraints ?? []) {
+      if (constraint.status !== 'locked') continue
+      try {
+        const entry = this.presentationRegistry.getEntry(constraint.key)
+        const renderer = entry?.displayRenderer
+        if (typeof renderer === 'function') {
+          const rendered = renderer({ params: (constraint.params ?? {}) as Record<string, unknown> })
+          if (rendered) constraintParts.push(rendered)
+        }
+      }
+      catch {
+        // presentationRegistry 未注册该 constraint key → skip（兜底：不影响 sizingText）
+      }
+    }
+
+    if (constraintParts.length > 0) {
+      return `${sizingText}；${constraintParts.join('；')}`
+    }
+
     return sizingText
   }
 
@@ -2389,8 +2411,9 @@ export class SemanticStateProjectionService {
       || input.lockedOrchestrationCount > 0
   }
 
-  // #1152：orchestration locked 节点摘要。优先 presentationRegistry（与 buildDisplayOrchestrationBlock 共用入口）；
-  //   未注册 publicName 则 fallback 到 node.key，确保 deterministic 路径不静默丢失。
+  // #1152：orchestration locked 节点摘要。优先 presentationRegistry.displayRenderer 输出完整人话；
+  //   displayRenderer 不可用时 fallback 到 publicName；publicName 不可用时 fallback 到 node.key。
+  //   #1162 Task 6：去掉 "orchestration：" 裸前缀（内部技术词），改用自然语言拼接。
   private buildOrchestrationSummary(nodes: readonly SemanticOrchestrationNode[]): string {
     if (nodes.length === 0) {
       return ''
@@ -2400,17 +2423,23 @@ export class SemanticStateProjectionService {
       if (!node.key) {
         continue
       }
-      let publicName: string | undefined
+      let text: string | undefined
       try {
         const entry = this.presentationRegistry.getEntry(node.key)
-        publicName = entry?.publicName
+        if (entry?.displayRenderer) {
+          const rendered = entry.displayRenderer({ params: (node.params ?? {}) as Record<string, unknown> })
+          text = rendered ?? entry.publicName ?? node.key
+        }
+        else {
+          text = entry?.publicName ?? node.key
+        }
       }
       catch {
-        publicName = undefined
+        text = node.key
       }
-      parts.push(publicName ?? node.key)
+      parts.push(text)
     }
-    return parts.length > 0 ? `orchestration：${parts.join('、')}` : ''
+    return parts.join('；')
   }
 
   private compareTriggers(left: SemanticState['triggers'][number], right: SemanticState['triggers'][number]): number {

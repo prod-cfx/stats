@@ -12,8 +12,11 @@ import { SemanticAtomRegistryService } from '../../services/semantic-atom-regist
 import { SemanticOrchestrationRegistryService } from '../../services/semantic-orchestration-registry.service'
 import { SemanticSeedExtractorService } from '../../services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../../services/semantic-seed-state-builder.service'
+import { SemanticStateMergeService } from '../../services/semantic-state-merge.service'
 import { SemanticStateProjectionService } from '../../services/semantic-state-projection.service'
 import { SemanticSupportClassifierService } from '../../services/semantic-support-classifier.service'
+// #1162 INVARIANT-F：atom 必须在 ATOM_CONTRACT_REGISTRY 全链路声明 4 hook
+import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 import {
   ATOM_MUTEX,
   CLAUSE_BOUND_PARAM_CHECKS,
@@ -387,6 +390,97 @@ describe('utterance corpus baseline', () => {
           preserved: true,
         })
       }
+    },
+  )
+
+  // =========================================================
+  // 不变量 F — ATOM_CONTRACT_REGISTRY 覆盖完整性（#1162）
+  //   每条 locked utterance 在 state 中出现的 supported atom，必须在 ATOM_CONTRACT_REGISTRY
+  //   有 entry。TS exhaustive 已编译期守门；spec 兜底防 type assertion 绕过。
+  // =========================================================
+  it.each(lockedCases)(
+    '$id [INVARIANT-F] state 中每个 supported atom 必须在 ATOM_CONTRACT_REGISTRY 注册',
+    (item) => {
+      const state = seedStateBuilder.build(extractor.extract(item.utterance))
+      if (!state) return
+      const allAtomKeys = collectAllStateAtomKeys(state)
+      for (const key of allAtomKeys) {
+        if (!(key in ATOM_CONTRACT_REGISTRY)) continue // 仅对 SupportedExecutableUtteranceAtom 校验
+        expect({
+          caseId: item.id,
+          key,
+          hasEntry: ATOM_CONTRACT_REGISTRY[key as keyof typeof ATOM_CONTRACT_REGISTRY] !== undefined,
+        }).toEqual({
+          caseId: item.id,
+          key,
+          hasEntry: true,
+        })
+      }
+    },
+  )
+
+  // =========================================================
+  // 不变量 G — Conversation summary 不得含内部技术词裸前缀（#1162）
+  //   buildConversationView.summary 不得匹配 /^[a-z_][\w.]*：/m 模式
+  //   （如 "orchestration：xxx" 这类内部 namespace 前缀直接暴露给用户）
+  // =========================================================
+  const TECHNICAL_BARE_PREFIX_REGEX = /(?:^|[；;])\s*[a-z_][\w.]*：/m
+  it.each(lockedCases)(
+    '$id [INVARIANT-G] summary 不得出现内部技术词裸前缀（如 "orchestration："）',
+    (item) => {
+      const state = seedStateBuilder.build(extractor.extract(item.utterance))
+      if (!state) return
+      const view = projectionService.buildConversationView(supportClassifier.classify(state).state)
+      expect({
+        caseId: item.id,
+        matchedPrefix: TECHNICAL_BARE_PREFIX_REGEX.exec(view.summary)?.[0] ?? null,
+      }).toEqual({
+        caseId: item.id,
+        matchedPrefix: null,
+      })
+    },
+  )
+
+  // =========================================================
+  // 不变量 H — 多轮 reduce 真重复 dedup（#1162）
+  //   同一 utterance 连续 extract+merge 多次 → 最终 state 中同 key+sideScope+stableParams
+  //   不得重复（守 Case 3 "加仓×2 / 止损×2"）。允许 params 不同的合法多档。
+  // =========================================================
+  const mergeService = new SemanticStateMergeService()
+  it.each(lockedCases)(
+    '$id [INVARIANT-H] 同 utterance 连续 3 次 reduce 后 state 无真重复',
+    (item) => {
+      let merged = seedStateBuilder.build(extractor.extract(item.utterance))
+      if (!merged) return
+      for (let i = 0; i < 2; i++) {
+        const next = seedStateBuilder.build(extractor.extract(item.utterance))
+        if (!next) continue
+        merged = mergeService.merge({ persisted: merged, derived: next })
+      }
+      const collectDuplicates = <T extends { key?: string; sideScope?: string | null; params?: Record<string, unknown> }>(arr: readonly T[]): string[] => {
+        const seen = new Set<string>()
+        const dup: string[] = []
+        for (const a of arr) {
+          const hash = `${a.key ?? '-'}|${a.sideScope ?? ''}|${JSON.stringify(Object.keys(a.params ?? {}).sort().reduce<Record<string, unknown>>((acc, k) => { acc[k] = a.params?.[k]; return acc }, {}))}`
+          if (seen.has(hash)) dup.push(hash)
+          seen.add(hash)
+        }
+        return dup
+      }
+      const actionDup = collectDuplicates(merged.actions)
+      const riskDup = collectDuplicates(merged.risk)
+      const constraintDup = collectDuplicates(merged.position?.constraints ?? [])
+      expect({
+        caseId: item.id,
+        actionDup,
+        riskDup,
+        constraintDup,
+      }).toEqual({
+        caseId: item.id,
+        actionDup: [],
+        riskDup: [],
+        constraintDup: [],
+      })
     },
   )
 })
