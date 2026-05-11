@@ -179,3 +179,20 @@ export function readParamPath(obj: unknown, path: readonly string[]): unknown {
   }
   return current
 }
+
+// =========================================================
+// 不变量 E — Conversation render integrity（#1154）
+//
+// 对每条 locked utterance，若 state 中出现 RENDER_CONTRACT_ATOM_FIELDS 声明的 atom，
+// 则 buildConversationView 的相应 summary 段必须包含该 atom 的关键参数值字符串。
+// 新增需要渲染完整性保障的 atom 只需在此表声明，spec 会自动驱动断言。
+// =========================================================
+
+export const RENDER_CONTRACT_ATOM_FIELDS: Partial<Record<SupportedExecutableUtteranceAtom, ReadonlyArray<{
+  field: string
+  mustAppearIn: 'summary' | 'riskSummary' | 'positionSummary'
+}>>> = {
+  'risk.partial_take_profit': [{ field: 'params.tiers[0].trigger.threshold', mustAppearIn: 'riskSummary' }],
+  'action.add_position': [{ field: 'params.addRatio', mustAppearIn: 'summary' }],
+  'position.pyramiding_limit': [{ field: 'params.maxLayers', mustAppearIn: 'positionSummary' }],
+}

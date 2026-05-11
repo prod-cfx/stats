@@ -2027,6 +2027,31 @@ export class SemanticStateProjectionService {
           return levelKey ? `跌破记录位 ${levelKey} 止损` : this.buildRiskFallbackSummary(risk)
         }
 
+        if (risk.key === 'risk.partial_take_profit') {
+          const tiers = risk.params.tiers
+          if (Array.isArray(tiers) && tiers.length > 0) {
+            const tierTexts = tiers
+              .map((tier: unknown) => {
+                if (!tier || typeof tier !== 'object') return null
+                const t = tier as Record<string, unknown>
+                const trigger = t.trigger as Record<string, unknown> | undefined
+                const threshold = trigger && typeof trigger.threshold === 'number' && Number.isFinite(trigger.threshold)
+                  ? trigger.threshold
+                  : null
+                const reduceRatio = typeof t.reduceRatio === 'number' && Number.isFinite(t.reduceRatio)
+                  ? t.reduceRatio
+                  : null
+                if (threshold === null || reduceRatio === null) return null
+                return `盈利${this.formatPercent(threshold)}%平${this.formatPercent(reduceRatio * 100)}%`
+              })
+              .filter((text): text is string => text !== null)
+            if (tierTexts.length > 0) {
+              return `分批止盈：${tierTexts.join('、')}`
+            }
+          }
+          return this.buildRiskFallbackSummary(risk)
+        }
+
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
           return this.buildRiskFallbackSummary(risk)
@@ -2064,9 +2089,45 @@ export class SemanticStateProjectionService {
     return actions
       .filter(action => action.status === 'locked')
       .sort((left, right) => this.compareActionAtoms(left, right))
-      .map(action => this.buildContractOrderProgramSummary(action))
+      .map(action => this.buildAddPositionSummary(action) || this.buildContractOrderProgramSummary(action))
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private buildAddPositionSummary(action: SemanticState['actions'][number]): string {
+    if (action.key !== 'action.add_position') {
+      return ''
+    }
+    const addMode = this.readString(action.params?.addMode as unknown)
+    const addRatio = this.readFiniteNumber(action.params?.addRatio as unknown)
+    const addRatioPct = addRatio !== null ? this.formatPercent(addRatio * 100) : null
+
+    // NOTE: extractor 当前只 emit addMode/addRatio/sizing；
+    //   触发阈值（如 "盈利 2%"、"回撤 5%"）尚未在 params 上保留。
+    //   待 extractor 增补 profitThreshold/drawdownThreshold 后此处再补阈值渲染（follow-up）。
+    if (addMode === 'profit_pct') {
+      return addRatioPct !== null
+        ? `加仓：盈利后加仓，每次${addRatioPct}%`
+        : `加仓：盈利后加仓`
+    }
+
+    if (addMode === 'drawdown_pct') {
+      return addRatioPct !== null
+        ? `加仓：回撤后加仓，每次${addRatioPct}%`
+        : `加仓：回撤后加仓`
+    }
+
+    if (addMode === 'signal_confirm') {
+      return addRatioPct !== null
+        ? `加仓：信号确认后加仓，每次${addRatioPct}%`
+        : '加仓：信号确认后加仓'
+    }
+
+    if (addRatioPct !== null) {
+      return `加仓：每次${addRatioPct}%`
+    }
+
+    return '加仓'
   }
 
   private buildContractOrderProgramSummary(action: SemanticState['actions'][number]): string {
@@ -2224,16 +2285,29 @@ export class SemanticStateProjectionService {
       return ''
     }
 
+    let sizingText = ''
     if (sizing.kind === 'ratio') {
       const ratioValue = sizing.unit === 'percent' ? sizing.value : sizing.value * 100
-      return `仓位：${this.formatPercent(ratioValue)}%`
+      sizingText = `仓位：${this.formatPercent(ratioValue)}%`
+    }
+    else if (sizing.kind === 'quote' || sizing.kind === 'base') {
+      sizingText = `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
     }
 
-    if (sizing.kind === 'quote' || sizing.kind === 'base') {
-      return `仓位：${this.formatNumber(sizing.value)} ${sizing.asset}`
+    if (!sizingText) {
+      return ''
     }
 
-    return ''
+    const pyramidingLimit = (position.constraints ?? [])
+      .find(c => c.status === 'locked' && c.key === 'position.pyramiding_limit')
+    if (pyramidingLimit) {
+      const maxLayers = this.readFiniteNumber((pyramidingLimit.params as Record<string, unknown>)?.maxLayers as unknown)
+      if (maxLayers !== null) {
+        return `${sizingText}，最多${maxLayers}次加仓`
+      }
+    }
+
+    return sizingText
   }
 
   private hasValidLockedPosition(position: SemanticState['position']): position is SemanticState['position'] & { status: 'locked' } {

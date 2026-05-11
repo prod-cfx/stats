@@ -12,6 +12,7 @@ import { SemanticAtomRegistryService } from '../../services/semantic-atom-regist
 import { SemanticOrchestrationRegistryService } from '../../services/semantic-orchestration-registry.service'
 import { SemanticSeedExtractorService } from '../../services/semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../../services/semantic-seed-state-builder.service'
+import { SemanticStateProjectionService } from '../../services/semantic-state-projection.service'
 import { SemanticSupportClassifierService } from '../../services/semantic-support-classifier.service'
 import {
   ATOM_MUTEX,
@@ -19,6 +20,7 @@ import {
   FRAME_KIND_TO_STATE_LOOKUP,
   ORCHESTRATION_KIND_TO_REGISTRY_LOOKUP,
   PHRASE_CONTEXT_MUTEX,
+  RENDER_CONTRACT_ATOM_FIELDS,
   readParamPath,
   splitClauses,
 } from './corpus-invariants'
@@ -222,6 +224,111 @@ describe('utterance corpus baseline', () => {
             hostClauseFound: true,
           })
         }
+      }
+    },
+  )
+
+  // =========================================================
+  // 不变量 E — Conversation render integrity（#1154）
+  //   对每条 locked utterance，若 state 中出现 RENDER_CONTRACT_ATOM_FIELDS 声明的 atom，
+  //   则 buildConversationView 的相应 summary 段必须包含该 atom 的关键参数值。
+  // =========================================================
+  const projectionService = new SemanticStateProjectionService()
+
+  // INVARIANT-E sanity（per-key）：每个声明的 atomKey 都必须有 ≥1 条 corpus locked case，
+  //   否则该 atom 的渲染契约 spec 形同虚设。
+  //   允许暂时缺席的 key 在 RENDER_CONTRACT_ALLOWED_MISSING_FIXTURE 中显式登记，需带 TODO 链接。
+  const RENDER_CONTRACT_ALLOWED_MISSING_FIXTURE: ReadonlySet<string> = new Set([
+    // TODO(#1154 follow-up)：position.pyramiding_limit 当前通过 action.add_position 的
+    //   "最多加仓 N 次" 子句触发，无独立 atomKey='position.pyramiding_limit' 的 fixture；
+    //   渲染契约在 semantic-state-projection.service.orchestration.spec.ts 单独覆盖。
+    'position.pyramiding_limit',
+  ])
+
+  it('[INVARIANT-E sanity] 每个声明 atom 必须有 corpus locked case（或显式登记缺席）', () => {
+    const missing: string[] = []
+    for (const key of Object.keys(RENDER_CONTRACT_ATOM_FIELDS)) {
+      if (RENDER_CONTRACT_ALLOWED_MISSING_FIXTURE.has(key)) continue
+      const hit = lockedCases.some(c => c.atomKey === key)
+      if (!hit) missing.push(key)
+    }
+    expect(missing).toEqual([])
+  })
+
+  it.each(lockedCases)(
+    '$id [INVARIANT-E] locked atom 关键参数必须出现在 buildConversationView 相应 summary 段',
+    (item) => {
+      const fields = RENDER_CONTRACT_ATOM_FIELDS[item.atomKey]
+      if (!fields || fields.length === 0) return
+
+      const state = seedStateBuilder.build(extractor.extract(item.utterance))
+      expect(state).not.toBeNull()
+      if (!state) return
+
+      // 仅当该 atom 确实在 state 中以 locked 状态出现时才断言
+      const atomPresent = [
+        ...(state.triggers ?? []),
+        ...(state.actions ?? []),
+        ...(state.risk ?? []),
+        ...(state.position?.constraints ?? []),
+      ].some(a => a.key === item.atomKey && a.status === 'locked')
+      if (!atomPresent) return
+
+      const view = projectionService.buildConversationView(supportClassifier.classify(state).state)
+
+      for (const fieldSpec of fields) {
+        // 解析 params.tiers[0].trigger.threshold 风格的路径
+        const pathSegments = fieldSpec.field
+          .replace(/\[(\d+)\]/gu, '.$1')
+          .split('.')
+          .filter(s => s.length > 0)
+        // 找到 state 中对应 atom
+        const allAtoms: Array<{ key?: string; params?: unknown }> = [
+          ...(state.triggers ?? []),
+          ...(state.actions ?? []),
+          ...(state.risk ?? []),
+          ...(state.position?.constraints ?? []),
+        ]
+        const targetAtom = allAtoms.find(a => a.key === item.atomKey && (a as { status?: string }).status === 'locked')
+        if (!targetAtom) continue
+
+        // 路径起点是 atom 本身（field 以 params. 开头），将 atom 作为根
+        const rootObj = { params: targetAtom.params }
+        const value = readParamPath(rootObj, pathSegments)
+        if (value == null) continue
+
+        const segment = fieldSpec.mustAppearIn === 'summary'
+          ? view.summary
+          : fieldSpec.mustAppearIn === 'riskSummary'
+            ? view.riskSummary
+            : view.positionSummary
+
+        // 数值参数可能以原始值或百分比形式渲染（如 addRatio=0.2 → "20%"）
+        // 候选字符串：原始值 + 百分比转换值（仅对 0<v<1 的纯小数比例适用）
+        const numericValue = typeof value === 'number' ? value : null
+        const candidates: string[] = [String(value)]
+        if (numericValue !== null && numericValue > 0 && numericValue < 1) {
+          const pct = numericValue * 100
+          candidates.push(String(Number.isInteger(pct) ? pct : pct.toFixed(1).replace(/\.0$/, '')))
+        }
+        const valueStr = candidates[0]!
+        const segmentContains = candidates.some(c => segment.includes(c))
+
+        expect({
+          caseId: item.id,
+          atomKey: item.atomKey,
+          field: fieldSpec.field,
+          valueStr,
+          mustAppearIn: fieldSpec.mustAppearIn,
+          segmentContains,
+        }).toEqual({
+          caseId: item.id,
+          atomKey: item.atomKey,
+          field: fieldSpec.field,
+          valueStr,
+          mustAppearIn: fieldSpec.mustAppearIn,
+          segmentContains: true,
+        })
       }
     },
   )
