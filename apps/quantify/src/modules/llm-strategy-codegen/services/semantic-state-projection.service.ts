@@ -482,12 +482,23 @@ export class SemanticStateProjectionService {
   private shouldRenderDisplayGroupAsSingleCondition(group: SemanticState['triggers']): boolean {
     if (group.length <= 1) return false
     if (group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) return true
+
     // marker-grouped 路径：所有 trigger 共享 displayGroupId/contract.groupId 时合并为单条
     const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
-    return firstMarker !== null
-      && group.every(trigger =>
-        this.isGroupableIndicatorCompareTriggerByMarker(trigger)
-        && this.readDisplayRuleGroupMarker(trigger) === firstMarker)
+    if (firstMarker === null) return false
+    const allShareMarker = group.every(trigger => this.readDisplayRuleGroupMarker(trigger) === firstMarker)
+    if (!allShareMarker) return false
+
+    // 原 timeframeGroupable 同 indicator/period fan-out 路径
+    if (group.every(trigger => this.isGroupableIndicatorCompareTriggerByMarker(trigger))) return true
+
+    // 新增异质 entryPredicate/exitPredicate marker 路径：所有成员都是 predicate 且共享 marker
+    //   → 进入单 condition 渲染，下游 formatGroupedDisplayTriggerCondition 的异质 fallback
+    //   负责将各 trigger 独立渲染后用"，且"拼接为单条文案
+    return group.every(trigger =>
+      (trigger.phase === 'entry' && isEntryPredicateTriggerKey(trigger.key))
+      || (trigger.phase === 'exit' && isExitPredicateTriggerKey(trigger.key)),
+    )
   }
 
   private canMergeDisplayRuleTriggers(
@@ -496,7 +507,7 @@ export class SemanticStateProjectionService {
   ): boolean {
     if (
       previous.phase !== next.phase
-      || previous.phase !== 'entry'
+      || (previous.phase !== 'entry' && previous.phase !== 'exit')
       || previous.key === 'logical.any_of'
       || next.key === 'logical.any_of'
       || (previous.sideScope ?? 'long') !== (next.sideScope ?? 'long')
