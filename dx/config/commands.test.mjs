@@ -89,6 +89,36 @@ describe('dx command config', () => {
     assert.doesNotMatch(commands.test.e2e.all.command, /\bnx test:e2e\b/)
   })
 
+  it('compound bash wrappers that sequence multiple commands carry set -euo pipefail', () => {
+    // These commands chain multiple pnpm/nx calls and must not silently swallow
+    // failures from intermediate steps. If pipefail is ever dropped, a failed
+    // first command (e.g. tsc error) would not propagate an exit-code.
+    const knownPipefailEntries = [
+      { path: 'db.generate.command', cmd: commands.db.generate.command },
+      { path: 'db.generate.quantify.command', cmd: commands.db.generate?.quantify?.command },
+      { path: 'test.unit.all.command', cmd: commands.test.unit.all.command },
+    ]
+    for (const { path, cmd } of knownPipefailEntries) {
+      assert.ok(
+        typeof cmd === 'string',
+        `Expected string at commands.${path}, got ${typeof cmd} — commands.json structure may have changed`,
+      )
+      assert.ok(
+        cmd.includes('set -euo pipefail'),
+        `Command at commands.${path} is missing 'set -euo pipefail' and may silently swallow errors:\n  ${cmd}`,
+      )
+    }
+  })
+
+  it('quantify unit test routes through quantify-launcher for env passthrough', () => {
+    assert.match(
+      commands.test.unit.quantify.command,
+      /quantify-launcher/,
+      'dx test unit quantify must route through quantify-launcher.cjs so env mapping is applied',
+    )
+    assert.match(commands.test.unit.quantify.command, /npx nx test quantify/)
+  })
+
   it('documents dx test usage in help output config', () => {
     assert.equal(commands.help.commands.test.summary.includes('运行测试'), true)
     assert.equal(commands.help.commands.test.summary.includes('unit 允许 all'), true)
