@@ -179,4 +179,72 @@ describe('formatSemanticExpression — multi-EMA AND merge', () => {
     expect(out).not.toMatch(/价格在|价格低于/)
     expect(out).toContain('且')
   })
+
+  // M4 (PR #1147 review) edge cases
+  it('退化：AND 中 period 重复（ema20 出现两次）→ 不命中合并，回退平铺', () => {
+    const expression = {
+      kind: 'AND' as const,
+      children: [mkPredicate(20, 'GT'), mkPredicate(20, 'GT'), mkPredicate(60, 'GT')],
+    }
+    const out = formatExpr(expression)
+    expect(out).not.toMatch(/价格在\s?EMA20\s?\/\s?EMA60\s?上方/)
+    expect(out).toContain('且')
+  })
+
+  it('退化：AND children indicator 名混用（EMA + SMA）→ 不命中合并', () => {
+    const expression = {
+      kind: 'AND' as const,
+      children: [mkPredicate(20, 'GT', 'ema'), mkPredicate(60, 'GT', 'sma')],
+    }
+    const out = formatExpr(expression)
+    expect(out).not.toMatch(/价格在/)
+    expect(out).toContain('且')
+  })
+
+  it('退化：AND 主语为 bar.high（非 bar.close）→ 不命中合并', () => {
+    const expression = {
+      kind: 'AND' as const,
+      children: [
+        {
+          kind: 'predicate' as const,
+          op: 'GT' as const,
+          left: { kind: 'series' as const, source: 'bar' as const, field: 'high' as const },
+          right: { kind: 'indicator' as const, name: 'ema', params: { period: 20 }, output: 'value' },
+        },
+        {
+          kind: 'predicate' as const,
+          op: 'GT' as const,
+          left: { kind: 'series' as const, source: 'bar' as const, field: 'high' as const },
+          right: { kind: 'indicator' as const, name: 'ema', params: { period: 60 }, output: 'value' },
+        },
+      ],
+    }
+    const out = formatExpr(expression)
+    expect(out).not.toMatch(/价格在/)
+  })
+
+  it('退化：AND children=1（单 child）退化为非合并候选', () => {
+    const expression = {
+      kind: 'AND' as const,
+      children: [mkPredicate(20, 'GT')],
+    }
+    const out = formatExpr(expression)
+    expect(out).not.toMatch(/价格在\s?EMA/)
+  })
+
+  it('退化：嵌套 AND(AND(x,y), z) 外层不直接命中合并（外层 child 是 AND，非 predicate）', () => {
+    const inner = {
+      kind: 'AND' as const,
+      children: [mkPredicate(20, 'GT'), mkPredicate(60, 'GT')],
+    }
+    const expression = {
+      kind: 'AND' as const,
+      children: [inner, mkPredicate(144, 'GT')],
+    }
+    const out = formatExpr(expression)
+    // 外层 AND 不能误把含嵌套 AND 的 children 折叠为「价格在 EMA20/EMA60/EMA144 上方」
+    expect(out).not.toMatch(/价格在\s?EMA20\s?\/\s?EMA60\s?\/\s?EMA144\s?上方/)
+    // 内层 AND 在递归渲染时仍可合并
+    expect(out).toContain('价格在 EMA20 / EMA60 上方')
+  })
 })

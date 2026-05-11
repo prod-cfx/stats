@@ -1452,6 +1452,10 @@ export class SemanticStateProjectionService {
 
     if (direction === null || indicatorName === null) return null
     if (periods.size < 2) return null
+    // M4 (PR #1147 review)：period 必须互异——
+    //   去重前后数量不一致（如 close > ema20 AND close > ema20 AND close > ema60）应回退原平铺路径，
+    //   避免把重复 period 折叠为「价格在 EMA20/EMA60」抹掉重复表达。
+    if (periods.size !== expression.children.length) return null
 
     const sortedPeriods = Array.from(periods).sort((a, b) => a - b)
     return this.renderMultiPeriodIndicatorCompareCondition(direction, indicatorName, sortedPeriods)
