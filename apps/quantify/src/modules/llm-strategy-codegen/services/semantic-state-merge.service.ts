@@ -804,15 +804,15 @@ export class SemanticStateMergeService {
     }, {})
   }
 
+  // #1167：SemanticActionState / SemanticRiskState 顶层无 sideScope 字段（在 params 内 / trigger 才有）
+  //   去掉 sideScope 比较；真重复判定用 key + stableParamsHash（params 内 sideScope 已含在 hash 内）
   private isTrueDuplicateAction(left: SemanticActionState, right: SemanticActionState): boolean {
     return left.key === right.key
-      && (left.sideScope ?? '') === (right.sideScope ?? '')
       && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
   }
 
   private isTrueDuplicateRisk(left: SemanticRiskState, right: SemanticRiskState): boolean {
     return left.key === right.key
-      && (left.sideScope ?? '') === (right.sideScope ?? '')
       && this.stableParamsHash(left.params) === this.stableParamsHash(right.params)
   }
 }
