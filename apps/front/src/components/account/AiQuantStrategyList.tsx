@@ -13,10 +13,11 @@ import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAccountAiQuantStrategy,
   fetchAccountAiQuantStrategies,
+  fetchAccountAiQuantStrategyDetail,
   listAiQuantConversations,
   performAccountAiQuantStrategyAction,
 } from '@/lib/api'
-import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
+import { mapAccountStrategyDetailToRecord, mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamSummary } from './dynamic-param-summary'
 
 export const STRATEGY_LIST_FETCH_LIMIT = 100
@@ -251,13 +252,21 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
   }
 
-  const openStopDialog = (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
+  const openStopDialog = async (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
     e.preventDefault()
     e.stopPropagation()
     if (!session) return
 
     setError(null)
-    setStopDialogStrategy(item)
+    setPendingActionId(item.id)
+    try {
+      const detail = await fetchAccountAiQuantStrategyDetail(item.id, session.userId)
+      setStopDialogStrategy(mapAccountStrategyDetailToRecord(detail))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('aiQuant.errors.statusUpdateFailed', { defaultValue: 'Failed to update strategy status' }))
+    } finally {
+      setPendingActionId(null)
+    }
   }
 
   const handleStopDialogAction = async (action: 'stop' | 'liquidate_and_stop') => {
@@ -506,7 +515,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                   item.status === 'running' ? (
                     <button
                       type="button"
-                      onClick={e => openStopDialog(e, item)}
+                      onClick={e => { void openStopDialog(e, item) }}
                       disabled={pendingActionId === item.id}
                       className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
                     >
