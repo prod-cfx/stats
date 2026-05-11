@@ -35,6 +35,7 @@ const RUN_SUCCESS_MESSAGE = '策略已开始运行。'
 const STOP_ERROR_MESSAGE = '停止策略失败，请稍后重试。'
 const LIQUIDATE_AND_STOP_ERROR_MESSAGE = '平仓并停止失败，请检查模拟盘账户状态后重试。'
 const RUN_ERROR_MESSAGE = '启动策略失败，请稍后重试。'
+const TIMELINE_PREVIEW_LIMIT = 3
 type RuntimeAction = 'run' | 'stop' | 'liquidate_and_stop'
 
 function resolveEquityY(value: number, min: number, max: number) {
@@ -334,10 +335,15 @@ export function AiQuantStrategyDetail({
   } | null>(null)
   const [pendingRuntimeAction, setPendingRuntimeAction] = useState<RuntimeAction | null>(null)
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [showFullTimeline, setShowFullTimeline] = useState(false)
 
   useEffect(() => {
     setStrategy(initialStrategy)
   }, [initialStrategy])
+
+  useEffect(() => {
+    setShowFullTimeline(false)
+  }, [strategy?.id])
 
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
@@ -408,6 +414,10 @@ export function AiQuantStrategyDetail({
   const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
+  const timelineItems = showFullTimeline
+    ? strategy.timeline
+    : strategy.timeline.slice(0, TIMELINE_PREVIEW_LIMIT)
+  const hasMoreTimelineItems = strategy.timeline.length > TIMELINE_PREVIEW_LIMIT
 
   const handleRuntimeAction = async (action: RuntimeAction) => {
     if (!session?.userId || pendingRuntimeAction || !strategy) return
@@ -1061,9 +1071,26 @@ export function AiQuantStrategyDetail({
         </article>
 
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>
+              <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                共 {strategy.timeline.length} 条
+                {hasMoreTimelineItems && !showFullTimeline ? `，默认显示最近 ${TIMELINE_PREVIEW_LIMIT} 条` : ''}
+              </p>
+            </div>
+            {hasMoreTimelineItems && (
+              <button
+                type="button"
+                onClick={() => setShowFullTimeline(curr => !curr)}
+                className="inline-flex h-8 min-w-max items-center justify-center rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-3 text-xs font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
+              >
+                {showFullTimeline ? '收起' : '展开全部'}
+              </button>
+            )}
+          </div>
           <ol className="mt-3 space-y-3">
-            {strategy.timeline.map(item => (
+            {timelineItems.map(item => (
               <li key={`${item.at}-${item.event}`} className="rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
                 <p className="text-xs text-[color:var(--cf-muted)]">{item.at}</p>
                 <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">{item.event}</p>

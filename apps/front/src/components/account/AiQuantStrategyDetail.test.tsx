@@ -165,6 +165,14 @@ function findLink(label: string): HTMLAnchorElement | undefined {
   ) as HTMLAnchorElement | undefined
 }
 
+function buildTimeline(count: number): AiQuantStrategyRecord['timeline'] {
+  return Array.from({ length: count }, (_, idx) => ({
+    at: `2026-04-25 10:0${idx}`,
+    event: `运行事件 ${idx + 1}`,
+    note: `事件备注 ${idx + 1}`,
+  }))
+}
+
 describe('AiQuantStrategyDetail', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
@@ -353,6 +361,40 @@ describe('AiQuantStrategyDetail', () => {
     expect(statusSection?.className).not.toContain('cyan')
     expect(statusSection?.querySelector('p')?.className).toContain('text-[color:var(--cf-text)]')
     expect(statusSection?.querySelector('p')?.className).not.toContain('cyan')
+  })
+
+  it('keeps the runtime timeline compact by default and expands on demand', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            timeline: buildTimeline(5),
+          })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('运行时间线')
+    expect(container.textContent).toContain('共 5 条，默认显示最近 3 条')
+    expect(container.textContent).toContain('运行事件 1')
+    expect(container.textContent).toContain('运行事件 3')
+    expect(container.textContent).not.toContain('运行事件 4')
+    expect(container.textContent).toContain('展开全部')
+
+    await act(async () => {
+      findButton('展开全部')?.click()
+    })
+
+    expect(container.textContent).toContain('运行事件 5')
+    expect(container.textContent).toContain('收起')
+
+    await act(async () => {
+      findButton('收起')?.click()
+    })
+
+    expect(container.textContent).not.toContain('运行事件 4')
+    expect(container.textContent).toContain('展开全部')
   })
 
   it('shows compatibility warning and leverage drift from truthful execution data without edit controls', async () => {
