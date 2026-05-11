@@ -482,6 +482,13 @@ export class AccountStrategyViewService {
       totalRealizedPnl: account ? resolvedRealizedPnl : null,
       totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
     }
+    const spotHoldingSummary = marketType === 'spot'
+      ? this.buildSpotHoldingSummary({
+          symbol,
+          openPositions: openPositionsForValuation,
+          openPositionsCount: detailPositionOverview.openPositionsCount,
+        })
+      : null
     const latestOrders = buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions)
     const currentOpenOrders = await this.loadCurrentOpenOrdersForStrategy({
       userId,
@@ -593,6 +600,7 @@ export class AccountStrategyViewService {
         baseCurrency: overviewFundingSnapshot?.asset ?? overviewBaseCurrency,
       },
       positionOverview: detailPositionOverview,
+      spotHoldingSummary,
       latestOrders,
       openOrdersCount,
       runtimeExecutionStates,
@@ -1889,6 +1897,38 @@ export class AccountStrategyViewService {
     if (!row) return 'USDT'
     const raw = row.baseCurrency
     return typeof raw === 'string' && raw.trim().length > 0 ? raw : 'USDT'
+  }
+
+  private buildSpotHoldingSummary(input: {
+    symbol: string | null
+    openPositions: Array<{ quantity: unknown }>
+    openPositionsCount: number | null
+  }): { baseAsset: string | null; quantity: number | null; openPositionsCount: number | null } {
+    const quantity = input.openPositions.reduce((sum, position) => {
+      const value = this.toFiniteNumber(position.quantity)
+      return value == null ? sum : sum + Math.abs(value)
+    }, 0)
+
+    return {
+      baseAsset: this.resolveBaseAsset(input.symbol),
+      quantity: quantity > 0 ? Number(quantity.toFixed(12)) : null,
+      openPositionsCount: input.openPositionsCount,
+    }
+  }
+
+  private resolveBaseAsset(symbol: string | null): string | null {
+    if (!symbol) return null
+    const normalized = symbol
+      .trim()
+      .toUpperCase()
+      .replace(/:(PERP|SPOT)$/u, '')
+      .replace(/[-_/]/g, '')
+      .replace(/(SWAP|PERP|FUTURES)$/u, '')
+    const quoteAssets = ['USDT', 'USDC', 'USD', 'BTC', 'ETH']
+    const quote = quoteAssets.find(asset => normalized.endsWith(asset))
+    if (!quote) return symbol.trim().toUpperCase() || null
+    const base = normalized.slice(0, -quote.length)
+    return base || null
   }
 
   private buildIndustryEquitySeries(input: {

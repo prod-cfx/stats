@@ -506,6 +506,17 @@ export function mapAccountStrategyDetailToRecord(
         totalUnrealizedPnl: detail.positionOverview.totalUnrealizedPnl ?? null,
       }
     : undefined
+  const spotHoldingSummary = detail.spotHoldingSummary
+    ? {
+        baseAsset: detail.spotHoldingSummary.baseAsset ?? null,
+        quantity: typeof detail.spotHoldingSummary.quantity === 'number' && Number.isFinite(detail.spotHoldingSummary.quantity)
+          ? detail.spotHoldingSummary.quantity
+          : null,
+        openPositionsCount: typeof detail.spotHoldingSummary.openPositionsCount === 'number' && Number.isFinite(detail.spotHoldingSummary.openPositionsCount)
+          ? detail.spotHoldingSummary.openPositionsCount
+          : detail.spotHoldingSummary.openPositionsCount ?? null,
+      }
+    : null
   const latestOrders = Array.isArray(detail.latestOrders)
     ? detail.latestOrders.map((order) => {
         const semantic = classifyOrderSemantic({
@@ -595,6 +606,7 @@ export function mapAccountStrategyDetailToRecord(
         }
       : undefined,
     positionOverview,
+    spotHoldingSummary,
     latestOrders,
     openOrdersCount: typeof detail.openOrdersCount === 'number' && Number.isFinite(detail.openOrdersCount)
       ? detail.openOrdersCount

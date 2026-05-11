@@ -88,7 +88,7 @@ export class TradingExecutionService {
 
   async submitPrepared(prepared: PreparedOrderIntent): Promise<TradingExecutionSubmitPreparedResult> {
     const { intent, normalized } = prepared
-    const requiresPositions = intent.reduceOnly || intent.role === 'close_long' || intent.role === 'close_short'
+    const requiresPositions = this.requiresDerivativePositions(intent)
     let positions: UnifiedPosition[] = []
     if (requiresPositions) {
       try {
@@ -120,5 +120,10 @@ export class TradingExecutionService {
 
   private errorReason(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
+  }
+
+  private requiresDerivativePositions(intent: OrderIntent): boolean {
+    if (intent.marketType !== 'perp') return false
+    return intent.reduceOnly === true || intent.role === 'close_long' || intent.role === 'close_short'
   }
 }

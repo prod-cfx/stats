@@ -2043,6 +2043,11 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       todayPnl: -0.05265,
       baseCurrency: 'USDT',
     })
+    expect(detail.spotHoldingSummary).toEqual({
+      baseAsset: 'BTC',
+      quantity: 0.00117,
+      openPositionsCount: 1,
+    })
     expect(detail.equitySeries.at(-1)).toEqual(expect.objectContaining({ value: 999.94735 }))
   })
 

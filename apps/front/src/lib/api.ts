@@ -389,6 +389,11 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
     totalRealizedPnl: number | null
     totalUnrealizedPnl: number | null
   }
+  spotHoldingSummary?: {
+    baseAsset: string | null
+    quantity: number | null
+    openPositionsCount: number | null
+  } | null
   latestOrders: Array<{
     executedAt: string
     side: string

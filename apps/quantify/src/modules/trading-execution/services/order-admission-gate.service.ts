@@ -42,6 +42,7 @@ export class OrderAdmissionGateService {
   }
 
   private requiredPositionSide(intent: OrderIntent): 'long' | 'short' | null {
+    if (intent.marketType !== 'perp') return null
     if (intent.role === 'close_long') return 'long'
     if (intent.role === 'close_short') return 'short'
     if (!intent.reduceOnly) return null

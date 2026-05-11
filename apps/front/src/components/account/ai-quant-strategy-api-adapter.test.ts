@@ -126,6 +126,11 @@ describe('ai-quant-strategy-api-adapter', () => {
         totalRealizedPnl: 100,
         totalUnrealizedPnl: 20,
       },
+      spotHoldingSummary: {
+        baseAsset: 'BTC',
+        quantity: 0.02161279,
+        openPositionsCount: 1,
+      },
       latestOrders: [{
         executedAt: '2026-03-20T01:00:00.000Z',
         side: 'BUY',
@@ -154,6 +159,11 @@ describe('ai-quant-strategy-api-adapter', () => {
       closedPositionsCount: 3,
       totalRealizedPnl: 100,
       totalUnrealizedPnl: 20,
+    })
+    expect(record.spotHoldingSummary).toEqual({
+      baseAsset: 'BTC',
+      quantity: 0.02161279,
+      openPositionsCount: 1,
     })
     expect(record.latestOrders).toHaveLength(1)
     expect(record.latestOrders[0]?.orderId).toBe('ord-1')

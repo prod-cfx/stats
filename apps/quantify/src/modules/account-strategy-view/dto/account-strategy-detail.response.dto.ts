@@ -149,6 +149,17 @@ export class AccountStrategyPositionOverviewDto {
   totalUnrealizedPnl!: number | null
 }
 
+export class AccountStrategySpotHoldingSummaryDto {
+  @ApiPropertyOptional({ nullable: true })
+  baseAsset!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  quantity!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  openPositionsCount!: number | null
+}
+
 export class AccountStrategyLatestOrderDto {
   @ApiProperty()
   executedAt!: string
@@ -373,6 +384,9 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: AccountStrategyPositionOverviewDto })
   positionOverview!: AccountStrategyPositionOverviewDto
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategySpotHoldingSummaryDto })
+  spotHoldingSummary!: AccountStrategySpotHoldingSummaryDto | null
 
   @ApiProperty({ type: [AccountStrategyLatestOrderDto] })
   latestOrders!: AccountStrategyLatestOrderDto[]
