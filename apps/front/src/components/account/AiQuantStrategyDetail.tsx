@@ -503,7 +503,7 @@ export function AiQuantStrategyDetail({
                   ? (showLiquidateAndStop
                       ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
                       : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
-                  : '当前运行实例已结束。可返回 AI Quant 重新部署当前已发布版本。'}
+                  : '当前运行实例已结束。'}
               </p>
               {showLiquidateAndStop && (
                 <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
@@ -536,15 +536,6 @@ export function AiQuantStrategyDetail({
               </div>
 
               <div className="flex flex-row flex-wrap items-center gap-2 sm:justify-end">
-                {strategy.status === 'stopped' && (
-                  <Link
-                    href={`/${lng}/ai-quant`}
-                    className="from-primary to-secondary inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg bg-gradient-to-r px-4 text-sm font-bold text-white transition hover:opacity-90"
-                  >
-                    重新部署
-                  </Link>
-                )}
-
                 {strategy.status === 'running' && (
                   <button
                     type="button"

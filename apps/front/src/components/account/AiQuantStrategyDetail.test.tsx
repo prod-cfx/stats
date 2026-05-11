@@ -23,6 +23,24 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('lucide-react', () => ({
+  AlertTriangle: () => <svg data-testid="alert-triangle-icon" />,
+}), { virtual: true })
+
+jest.mock('next/link', () => ({
+  __esModule: true,
+  default: ({ href, children, onClick, className }: {
+    href: string
+    children: React.ReactNode
+    onClick?: () => void
+    className?: string
+  }) => (
+    <a href={href} onClick={onClick} className={className}>
+      {children}
+    </a>
+  ),
+}), { virtual: true })
+
 jest.mock('@/lib/api', () => ({
   fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchAccountAiQuantStrategyDetail(...args),
   performAccountAiQuantStrategyAction: (...args: unknown[]) => mockPerformAccountAiQuantStrategyAction(...args),
@@ -955,7 +973,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('策略已平仓并停止。')
   })
 
-  it('shows redeploy and return-to-chat entries after a bound-chat strategy is stopped', async () => {
+  it('hides redeploy copy and keeps return-to-chat entry after a bound-chat strategy is stopped', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
@@ -965,7 +983,7 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    expect(container.textContent).toContain('重新部署')
+    expect(container.textContent).not.toContain('重新部署')
     expect(container.textContent).toContain('返回对话')
     expect(container.textContent).not.toContain('返回对话修改')
     expect(container.textContent).not.toContain('停止策略')
@@ -981,7 +999,7 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    expect(container.textContent).toContain('重新部署')
+    expect(container.textContent).not.toContain('重新部署')
     expect(container.textContent).not.toContain('返回对话')
     expect(container.textContent).not.toContain('停止策略')
   })
