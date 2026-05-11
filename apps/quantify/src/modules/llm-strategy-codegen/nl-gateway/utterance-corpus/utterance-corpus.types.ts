@@ -24,6 +24,7 @@ export type SupportedExecutableUtteranceAtom =
   | 'price.chart_pattern'
   | 'liquidity.sweep'
   | 'portfolioRisk.drawdown_block'
+  | 'oscillator.rsi_lte'
 
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner

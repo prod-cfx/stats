@@ -3661,7 +3661,13 @@ export class SemanticSeedExtractorService {
 
     for (const clause of clauses) {
       if (!/RSI/iu.test(clause) && !this.isRsiThresholdAliasClause(clause, segment)) continue
-      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+
+      // 子句含 DCA/补仓/加仓/定投 等入场动词时，强制 entry/long，避免 segment fallback 被污染的"卖出"意图覆盖
+      const isDcaEntryClause = /开始\s*DCA|补仓|加仓|定投|开仓|入场|开多|做多|买入/u.test(clause)
+        && !/卖出|平仓|平多|平空|close/iu.test(clause)
+      const intent = isDcaEntryClause
+        ? { phase: 'entry' as const, sideScope: 'long' as const }
+        : (this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment))
       if (!intent) continue
 
       const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
@@ -3700,7 +3706,7 @@ export class SemanticSeedExtractorService {
         continue
       }
 
-      if (/高于|大于|超过|上方/u.test(clause)) {
+      if (/高于|大于|超过|上方|\babove\b|\bover\b|\bgreater\s+than\b/iu.test(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'oscillator.rsi_gte',
           phase: intent.phase,
@@ -3715,7 +3721,7 @@ export class SemanticSeedExtractorService {
         continue
       }
 
-      if (/低于|小于|下方/u.test(clause)) {
+      if (/低于|小于|下方|\bbelow\b|\bunder\b|\bless\s+than\b/iu.test(clause)) {
         this.pushTrigger(triggers, seen, {
           key: 'oscillator.rsi_lte',
           phase: intent.phase,
@@ -4040,6 +4046,23 @@ export class SemanticSeedExtractorService {
         entry.valuePct !== null && entry.valuePct > 0,
       )
     if (!dcaPercentChange) return
+
+    // Guard：若 RSI 段落（以 ；。\n 等强分隔符切分后含 RSI 的子段）直接以 DCA/开始DCA
+    // 作为动词（RSI 是 DCA 的触发条件，而非独立入场），且 DCA 子句已确定
+    // price_interval triggerMode 和 priceIntervalPct，则 price.percent_change 已由
+    // dca_schedule.priceIntervalPct 承载，不再重复 emit 顶层 trigger（双路径冲突）。
+    // 注意：用强分隔符 ；。\n 切分，避免把同句"补仓"误作 RSI 子句的 DCA 动词。
+    const sentenceClauses = text.split(/[；;。\n]/u).map(s => s.trim()).filter(Boolean)
+    const hasRsiAsDirectDcaTrigger = sentenceClauses.some(
+      clause => /RSI/iu.test(clause) && /开始\s*DCA|DCA\s*触发|RSI.*(?:开始|触发)\s*DCA/iu.test(clause),
+    )
+    if (hasRsiAsDirectDcaTrigger) {
+      const hasDcaPriceIntervalLocked = this.extractDcaLifecycleTexts(text).some((clause) => {
+        const isPriceInterval = /(?:每跌|每下跌|price\s+drops?)/iu.test(clause)
+        return isPriceInterval && this.extractDcaPriceIntervalPct(clause) !== null
+      })
+      if (hasDcaPriceIntervalLocked) return
+    }
 
     this.pushTrigger(triggers, seen, {
       key: 'price.percent_change',

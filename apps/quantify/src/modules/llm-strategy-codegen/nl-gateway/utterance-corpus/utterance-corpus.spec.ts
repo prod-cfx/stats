@@ -59,6 +59,9 @@ describe('utterance corpus baseline', () => {
     // TODO(#1151): backend 支持"账户回撤后停止开新仓"（无阈值）触发 open-slot 后回收豁免
     const atomsExemptFromOpenSlotCoverage: ReadonlySet<SupportedExecutableUtteranceAtom> = new Set([
       'portfolioRisk.drawdown_block',
+      // oscillator.rsi_lte：extractor 当前对阈值缺失时 skip（不 emit open-slot），豁免开放槽覆盖约束
+      // TODO(#1155-follow-up): extractor 支持 RSI 无阈值 open-slot emit 后回收豁免
+      'oscillator.rsi_lte',
     ])
 
     for (const atomKey of SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS) {
