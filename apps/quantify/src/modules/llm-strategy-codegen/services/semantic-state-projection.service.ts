@@ -1383,6 +1383,10 @@ export class SemanticStateProjectionService {
     return null
   }
 
+  // #region multi-period indicator compare merge (PR #1147)
+  //   将「价格在 EMA20/EMA60/EMA144 上方/下方」类多周期指标比较语句的合并 renderer 与
+  //   AST 层合并判定集中归组，便于后续维护。runtime / canonical / IR / AST / invariant 零改动。
+
   /**
    * 多 period 指标比较合并渲染原语：两条路径（trigger 合并 + expression AST 合并）共享同一输出格式
    *   - operator: 'above' => 「价格在 X/Y/Z 上方」
@@ -1460,6 +1464,8 @@ export class SemanticStateProjectionService {
     const sortedPeriods = Array.from(periods).sort((a, b) => a - b)
     return this.renderMultiPeriodIndicatorCompareCondition(direction, indicatorName, sortedPeriods)
   }
+
+  // #endregion multi-period indicator compare merge
 
   private buildGroupedAtomicTriggerSummaries(
     triggers: SemanticState['triggers'],
