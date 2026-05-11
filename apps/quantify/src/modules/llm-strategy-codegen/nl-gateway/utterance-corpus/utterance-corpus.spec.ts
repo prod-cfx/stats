@@ -17,6 +17,8 @@ import { SemanticStateProjectionService } from '../../services/semantic-state-pr
 import { SemanticSupportClassifierService } from '../../services/semantic-support-classifier.service'
 // #1162 INVARIANT-F：atom 必须在 ATOM_CONTRACT_REGISTRY 全链路声明 4 hook
 import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
+// #1171 INVARIANT-I：声明 summaryContribution 的 atom 必须真的渲染出文本
+import { NO_SUMMARY, UNSUPPORTED_SKIP } from '../../atom-contracts/atom-contract-types'
 import {
   ATOM_MUTEX,
   CLAUSE_BOUND_PARAM_CHECKS,
@@ -480,6 +482,54 @@ describe('utterance corpus baseline', () => {
         actionDup: [],
         riskDup: [],
         constraintDup: [],
+      })
+    },
+  )
+
+  // =========================================================
+  // 不变量 I — 渲染路径走通性守门（#1171）
+  //   声明了 summaryContribution !== NO_SUMMARY / UNSUPPORTED_SKIP 的 atom，
+  //   在 corpus locked utterance 里被 extractor 真实产出时，
+  //   buildConversationView 对应 summary 段必须非空。
+  //   守 PR #1166 type bug：state atom + registry hook 都对，但 projection 链路因为
+  //   早退路径（如 position.mode='constraint_only' 的 sizing=null）静默丢渲染。
+  // =========================================================
+  function pickSummarySection(view: ReturnType<SemanticStateProjectionService['buildConversationView']>, owner: UtteranceCorpusCase['expected']['owner']): string {
+    if (owner === 'risk') return view.riskSummary
+    if (owner === 'positionConstraint') return view.positionSummary
+    // trigger / action / orchestrationPortfolioRisk 等都落入聚合 summary
+    return view.summary
+  }
+
+  it.each(lockedCases)(
+    '$id [INVARIANT-I] declared-summary atom 在 state 中出现时对应 summary 段必须非空',
+    (item) => {
+      const contract = ATOM_CONTRACT_REGISTRY[item.atomKey]
+      if (!contract) return
+      // unsupported / NO_SUMMARY 不参与渲染走通性
+      if (contract.summaryContribution === NO_SUMMARY) return
+      if (contract.readinessCheck === UNSUPPORTED_SKIP) return
+
+      const state = seedStateBuilder.build(extractor.extract(item.utterance))
+      if (!state) return
+
+      const target = findCorpusTarget(state, item)
+      if (!target) return
+      if ((target as { status?: string }).status !== 'locked') return
+
+      const view = projectionService.buildConversationView(supportClassifier.classify(state).state)
+      const section = pickSummarySection(view, item.expected.owner)
+
+      expect({
+        caseId: item.id,
+        atomKey: item.atomKey,
+        owner: item.expected.owner,
+        sectionEmpty: section.length === 0,
+      }).toEqual({
+        caseId: item.id,
+        atomKey: item.atomKey,
+        owner: item.expected.owner,
+        sectionEmpty: false,
       })
     },
   )
