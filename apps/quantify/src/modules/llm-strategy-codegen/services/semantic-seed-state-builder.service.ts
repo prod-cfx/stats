@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 
 import type {
   MarketInstrumentQuote,
@@ -88,6 +88,8 @@ function legacyModeFromAxis(axis: ProjectableSizingAxis): string {
 
 @Injectable()
 export class SemanticSeedStateBuilderService {
+  private readonly logger = new Logger(SemanticSeedStateBuilderService.name)
+
   constructor(
     private readonly symbolResolver: MarketInstrumentSymbolResolverService = new MarketInstrumentSymbolResolverService(),
     private readonly semanticAtomRegistry: SemanticAtomRegistryService = new SemanticAtomRegistryService(),
@@ -1517,6 +1519,16 @@ export class SemanticSeedStateBuilderService {
     // PR3.1: use PerTradeSizingResolver instead of hasContractPerOrderBudget
     const anchors = this.sizingResolver.resolve(state)
     const anyExecutionAnchored = [...anchors.values()].some(a => a.executionAnchored)
+
+    // 8a: emit structured warn when sizing falls back to position_constraint_params_fallback
+    for (const anchor of anchors.values()) {
+      if (anchor.source === 'position_constraint_params_fallback') {
+        this.logger.warn({
+          event: 'sizing.fallback.position_constraint_params_fallback',
+          module: 'SemanticSeedStateBuilderService',
+        })
+      }
+    }
 
     // critic M1 fix: anchored 时不创建 state.position 占位
     if (!state.position && !anyExecutionAnchored) {

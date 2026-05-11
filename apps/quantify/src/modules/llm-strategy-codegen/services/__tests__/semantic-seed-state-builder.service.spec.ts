@@ -1875,3 +1875,45 @@ describe('SemanticSeedStateBuilderService', () => {
     expect(state?.isMultiLeg).toBe(true)
   })
 })
+
+describe('sizing.fallback.position_constraint_params_fallback warn (8a)', () => {
+  it('emits logger.warn when sizingResolver returns an anchor with source position_constraint_params_fallback', () => {
+    const { PerTradeSizingResolver } = jest.requireActual<typeof import('../per-trade-sizing-resolver.service')>(
+      '../per-trade-sizing-resolver.service',
+    )
+    const mockResolve = jest.fn().mockReturnValue(
+      new Map([
+        [
+          'position_constraint:dca',
+          {
+            scope: { kind: 'position_constraint', ownerKey: 'position.dca_schedule' },
+            executionAnchored: true,
+            fullySpecified: true,
+            normalized: { axis: 'quote', value: 100, needsRuntimeResolution: false },
+            source: 'position_constraint_params_fallback',
+          },
+        ],
+      ]),
+    )
+    const mockSizingResolver = { resolve: mockResolve } as unknown as InstanceType<typeof PerTradeSizingResolver>
+    const svc = new SemanticSeedStateBuilderService(undefined, undefined, mockSizingResolver)
+    const warnSpy = jest.spyOn((svc as unknown as { logger: { warn: jest.Mock } }).logger, 'warn')
+
+    svc.build({
+      actions: [{ key: 'open_long', phase: 'entry', sideScope: 'long' }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        constraints: [{
+          key: 'position.dca_schedule',
+          params: { perOrderSizing: { kind: 'quote', value: 100 } },
+        }],
+      },
+    })
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'sizing.fallback.position_constraint_params_fallback' }),
+    )
+  })
+})
