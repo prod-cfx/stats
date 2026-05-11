@@ -10,6 +10,7 @@ import { AiQuantConversationsRepository } from './repositories/ai-quant-conversa
 import { CodegenSessionsRepository } from './repositories/codegen-sessions.repository'
 import { PublishedStrategySnapshotsRepository } from './repositories/published-strategy-snapshots.repository'
 import { CallerIdentityService } from './services/caller-identity.service'
+import { CapabilityEvidenceIndex } from './services/capability-evidence-index.service'
 import { CanonicalSpecBuilderService } from './services/canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from './services/canonical-spec-v2-digest.service'
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
@@ -128,6 +129,7 @@ import { NlGatewayModule } from './nl-gateway/nl-gateway.module'
     NaturalLanguageGatewayService,
     SemanticFrameNormalizerService,
     UnsupportedFallbackService,
+    CapabilityEvidenceIndex,
   ],
   exports: [CallerIdentityService, CodegenConversationService],
 })
