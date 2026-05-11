@@ -473,7 +473,14 @@ export class SemanticStateProjectionService {
   }
 
   private shouldRenderDisplayGroupAsSingleCondition(group: SemanticState['triggers']): boolean {
-    return group.length > 1 && group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))
+    if (group.length <= 1) return false
+    if (group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) return true
+    // marker-grouped 路径：所有 trigger 共享 displayGroupId/contract.groupId 时合并为单条
+    const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
+    return firstMarker !== null
+      && group.every(trigger =>
+        this.isMarkerGroupableIndicatorCompareTrigger(trigger)
+        && this.readDisplayRuleGroupMarker(trigger) === firstMarker)
   }
 
   private canMergeDisplayRuleTriggers(
@@ -767,9 +774,19 @@ export class SemanticStateProjectionService {
     triggers: SemanticState['triggers'],
     entryTrigger: SemanticState['triggers'][number],
   ): string | null {
+    // 入场卡片本身已经渲染 EMA stack 语义时（marker-grouped indicator.above/below），
+    //   不再追加同 sideScope 的 condition.expression gate 文本，避免重复表达
+    const entrySuppressesIndicatorGate = this.isMarkerGroupableIndicatorCompareTrigger(entryTrigger)
+      && this.readDisplayRuleGroupMarker(entryTrigger) !== null
+
     const gateTexts = triggers
       .filter(trigger => trigger.phase === 'gate')
       .filter(trigger => this.isDisplayGateCompatibleWithEntry(entryTrigger, trigger))
+      .filter(trigger => !(
+        entrySuppressesIndicatorGate
+        && trigger.key === 'condition.expression'
+        && (trigger.sideScope ?? '') === (entryTrigger.sideScope ?? '')
+      ))
       .map(trigger => this.buildDisplayConditionText(trigger, null))
       .filter(text => text.length > 0)
     return gateTexts.length > 0 ? gateTexts.join('，且') : null
@@ -779,21 +796,47 @@ export class SemanticStateProjectionService {
     triggers: SemanticState['triggers'],
     trigger: SemanticState['triggers'][number],
   ): Array<SemanticState['triggers'][number]> {
-    if (!this.isGroupableIndicatorCompareTrigger(trigger)) {
+    const triggerMarker = this.readDisplayRuleGroupMarker(trigger)
+    const isMarkerEligible = triggerMarker !== null
+      && this.isMarkerGroupableIndicatorCompareTrigger(trigger)
+
+    if (!this.isGroupableIndicatorCompareTrigger(trigger) && !isMarkerEligible) {
       return [trigger]
     }
 
+    // 多 EMA AND 合取 (#NLU-fix)：同一 displayGroupId/contract.groupId 标记的 indicator.above/below
+    //   triggers 即使 reference.period 不同（或缺失 per-trigger timeframe）也应合并为单卡片
     return triggers.filter(candidate =>
       candidate.id === trigger.id
       || (
-        this.isGroupableIndicatorCompareTrigger(candidate)
-        && candidate.phase === trigger.phase
+        candidate.phase === trigger.phase
         && candidate.key === trigger.key
         && (candidate.sideScope ?? '') === (trigger.sideScope ?? '')
         && String(candidate.params.indicator ?? 'ma').toLowerCase() === String(trigger.params.indicator ?? 'ma').toLowerCase()
-        && candidate.params['reference.period'] === trigger.params['reference.period']
+        && (
+          (
+            this.isGroupableIndicatorCompareTrigger(candidate)
+            && this.isGroupableIndicatorCompareTrigger(trigger)
+            && candidate.params['reference.period'] === trigger.params['reference.period']
+          )
+          || (
+            triggerMarker !== null
+            && this.readDisplayRuleGroupMarker(candidate) === triggerMarker
+            && this.isMarkerGroupableIndicatorCompareTrigger(candidate)
+          )
+        )
       ),
     )
+  }
+
+  // 仅校验 marker-grouping 必需的最小条件：key + reference.period 数值合法
+  //   不要求 per-trigger params.timeframe（marker 已隐含同分组语义）
+  private isMarkerGroupableIndicatorCompareTrigger(
+    trigger: SemanticState['triggers'][number],
+  ): boolean {
+    return (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+      && (trigger.phase === 'entry' || trigger.phase === 'exit')
+      && typeof trigger.params['reference.period'] === 'number'
   }
 
   private formatGroupedDisplayTriggerCondition(
@@ -1273,7 +1316,16 @@ export class SemanticStateProjectionService {
   private formatGroupedIndicatorCompareCondition(
     group: Array<SemanticState['triggers'][number]>,
   ): string | null {
-    if (group.length <= 1 || !group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))) {
+    if (group.length <= 1) {
+      return null
+    }
+    const allGroupable = group.every(trigger => this.isGroupableIndicatorCompareTrigger(trigger))
+    const firstMarker = this.readDisplayRuleGroupMarker(group[0]!)
+    const allMarkerGroupable = firstMarker !== null
+      && group.every(trigger =>
+        this.isMarkerGroupableIndicatorCompareTrigger(trigger)
+        && this.readDisplayRuleGroupMarker(trigger) === firstMarker)
+    if (!allGroupable && !allMarkerGroupable) {
       return null
     }
 
@@ -1292,11 +1344,20 @@ export class SemanticStateProjectionService {
     const timeframes = this.uniqueSortedTimeframes(group)
     const periods = this.uniqueSortedIndicatorPeriods(group)
     if (timeframes.length === 1 && periods.length > 1) {
-      const indicator = this.formatIndicatorName(first)
-      const references = periods.map(period => `${indicator}${this.formatNumber(period)}`).join(' / ')
-      return first.key === 'indicator.above'
-        ? `${timeframes[0]} 价格在 ${references} 上方`
-        : `${timeframes[0]} 价格低于 ${references}`
+      return this.renderMultiPeriodIndicatorCompareCondition(
+        first.key === 'indicator.above' ? 'above' : 'below',
+        this.formatIndicatorName(first),
+        periods,
+        timeframes[0],
+      )
+    }
+    // marker-grouped 且 per-trigger timeframe 缺失（context 层级已声明）：去掉 timeframe 前缀
+    if (timeframes.length === 0 && periods.length > 1 && allMarkerGroupable) {
+      return this.renderMultiPeriodIndicatorCompareCondition(
+        first.key === 'indicator.above' ? 'above' : 'below',
+        this.formatIndicatorName(first),
+        periods,
+      )
     }
 
     if (timeframes.length > 1 && periods.length === 1) {
@@ -1304,6 +1365,77 @@ export class SemanticStateProjectionService {
     }
 
     return null
+  }
+
+  /**
+   * 多 period 指标比较合并渲染原语：两条路径（trigger 合并 + expression AST 合并）共享同一输出格式
+   *   - operator: 'above' => 「价格在 X/Y/Z 上方」
+   *   - operator: 'below' => 「价格低于 X/Y/Z」
+   *   - 当 timeframe 提供时前缀「<timeframe> 」
+   */
+  private renderMultiPeriodIndicatorCompareCondition(
+    operator: 'above' | 'below',
+    indicatorName: string,
+    periods: number[],
+    timeframe?: string,
+  ): string {
+    const references = periods.map(period => `${indicatorName}${this.formatNumber(period)}`).join(' / ')
+    const prefix = timeframe ? `${timeframe} ` : ''
+    return operator === 'above'
+      ? `${prefix}价格在 ${references} 上方`
+      : `${prefix}价格低于 ${references}`
+  }
+
+  /**
+   * 表达式 AST 层合并判定（BOLL 入场卡 gate 文本渲染路径）：
+   *   命中条件：AND 表达式 + ≥2 个 children 全部为 predicate；每个 predicate 主语相同（bar.close）、
+   *   indicator 同名（ema/sma/ma 大小写不敏感）、operator 一致（GT/GTE 视为 above；LT/LTE 视为 below）、
+   *   period 数量 >=2 且互异。
+   *   命中 → 返回合并文案（与 trigger 路径共享 renderer）；否则返回 null 由调用方回退原平铺逻辑。
+   */
+  private tryFormatMultiPeriodIndicatorCompareExpression(expression: SemanticExpression): string | null {
+    if (expression.kind !== 'AND') return null
+    if (expression.children.length < 2) return null
+
+    let direction: 'above' | 'below' | null = null
+    let indicatorName: string | null = null
+    const periods = new Set<number>()
+
+    for (const child of expression.children) {
+      if (child.kind !== 'predicate') return null
+      const left = child.left
+      const right = child.right
+
+      // 主语 = bar.close
+      if (!(left.kind === 'series' && left.source === 'bar' && left.field === 'close')) return null
+      // 客体 = indicator(name ∈ {ema, sma, ma})
+      if (right.kind !== 'indicator') return null
+      const name = right.name.toLowerCase()
+      if (name !== 'ema' && name !== 'sma' && name !== 'ma') return null
+
+      const period = (right.params as Record<string, unknown>).period
+      if (typeof period !== 'number' || !Number.isFinite(period)) return null
+
+      // operator 归一化为 above / below；同一表达式必须方向一致
+      let childDirection: 'above' | 'below'
+      if (child.op === 'GT' || child.op === 'GTE') childDirection = 'above'
+      else if (child.op === 'LT' || child.op === 'LTE') childDirection = 'below'
+      else return null
+
+      if (direction === null) direction = childDirection
+      else if (direction !== childDirection) return null
+
+      if (indicatorName === null) indicatorName = name.toUpperCase()
+      else if (indicatorName !== name.toUpperCase()) return null
+
+      periods.add(period)
+    }
+
+    if (direction === null || indicatorName === null) return null
+    if (periods.size < 2) return null
+
+    const sortedPeriods = Array.from(periods).sort((a, b) => a - b)
+    return this.renderMultiPeriodIndicatorCompareCondition(direction, indicatorName, sortedPeriods)
   }
 
   private buildGroupedAtomicTriggerSummaries(
@@ -1667,6 +1799,15 @@ export class SemanticStateProjectionService {
         return ''
       }
       return `${left}${operator}${right}`
+    }
+
+    // AND 多 period 指标比较合并（与 trigger 路径共享 renderer）：
+    //   "且收盘价高于 EMA20 且收盘价高于 EMA60 且收盘价高于 EMA144" → "价格在 EMA20/EMA60/EMA144 上方"
+    if (expression.kind === 'AND') {
+      const merged = this.tryFormatMultiPeriodIndicatorCompareExpression(expression)
+      if (merged) {
+        return merged
+      }
     }
 
     const children = expression.children
