@@ -22,9 +22,16 @@ import {
   type SizingEvidence,
 } from './atom-contract-types'
 
+// DCA per-order budget capability triple — shared with semantic-seed-state-builder emit
+export const DCA_PER_ORDER_BUDGET_CAPABILITY = {
+  domain: 'capital' as const,
+  verb: 'allocate' as const,
+  object: 'per_order_budget' as const,
+}
+
 // DCA per-order sizing evidence (reused by SIZING_BEARING_ATOMS in corpus-invariants)
 const DCA_SIZING_EVIDENCE: SizingEvidence = {
-  capability: { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+  capability: DCA_PER_ORDER_BUDGET_CAPABILITY,
   paramSource: 'perOrderSizing',
 }
 

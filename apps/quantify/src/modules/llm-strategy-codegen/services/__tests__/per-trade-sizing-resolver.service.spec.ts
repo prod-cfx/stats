@@ -169,6 +169,47 @@ describe('PerTradeSizingResolver', () => {
         expect(anchor?.normalized?.needsRuntimeResolution).toBe(false)
       })
 
+      it('base axis with asset: NormalizedSizing.asset is populated from capability shape', () => {
+        const state: SemanticState = {
+          version: 1,
+          families: ['single-leg'],
+          triggers: [],
+          actions: [{
+            id: 'a-base-asset',
+            key: 'action.open_long',
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+            contracts: [{
+              id: 'contract-base-asset',
+              kind: 'action',
+              capabilities: [{
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { kind: 'base', value: 0.01, asset: 'BTC' },
+              }],
+              requires: [],
+              params: {},
+              runtimeRequirements: [],
+              stateRequirements: [],
+              orderRequirements: [],
+              openSlots: [],
+            }],
+          }],
+          risk: [],
+          position: null,
+          contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+          normalizationNotes: [],
+          updatedAt: '2026-05-11T00:00:00.000Z',
+        }
+        const result = resolver.resolve(state)
+        const anchor = result.get('action:a-base-asset') as SizingAnchor
+        expect(anchor?.executionAnchored).toBe(true)
+        expect(anchor?.normalized?.axis).toBe('base_qty')
+        expect(anchor?.normalized?.asset).toBe('BTC')
+      })
+
       it('ratio axis: executionAnchored=true, needsRuntimeResolution=true', () => {
         const state = buildStateWithActionPerOrderBudget({
           actionId: 'a4',

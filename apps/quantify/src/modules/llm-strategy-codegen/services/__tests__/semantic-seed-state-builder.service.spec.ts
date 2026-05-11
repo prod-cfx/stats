@@ -1876,44 +1876,86 @@ describe('SemanticSeedStateBuilderService', () => {
   })
 })
 
-describe('sizing.fallback.position_constraint_params_fallback warn (8a)', () => {
-  it('emits logger.warn when sizingResolver returns an anchor with source position_constraint_params_fallback', () => {
-    const { PerTradeSizingResolver } = jest.requireActual<typeof import('../per-trade-sizing-resolver.service')>(
-      '../per-trade-sizing-resolver.service',
-    )
-    const mockResolve = jest.fn().mockReturnValue(
-      new Map([
-        [
-          'position_constraint:dca',
-          {
-            scope: { kind: 'position_constraint', ownerKey: 'position.dca_schedule' },
+// ─────────────────────────────────────────────────────────────────────────────
+// sub-fix 3: base_qty asset 字段投影启用
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('projectSingleAnchorToPosition — base_qty asset 投影', () => {
+  const svc = new SemanticSeedStateBuilderService()
+
+  function makeBaseQtyCapabilityState(asset: string | undefined): import('../../../types/semantic-state').SemanticState {
+    return {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [{
+        id: 'a-base',
+        key: 'action.open_long',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+        contracts: [{
+          id: 'contract-base',
+          kind: 'action',
+          capabilities: [{
+            domain: 'capital',
+            verb: 'allocate',
+            object: 'per_order_budget',
+            shape: asset !== undefined
+              ? { kind: 'base', value: 0.001, asset }
+              : { kind: 'base', value: 0.001 },
+          }],
+          requires: [],
+          params: {},
+          runtimeRequirements: [],
+          stateRequirements: [],
+          orderRequirements: [],
+          openSlots: [],
+        }],
+      }],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-05-11T00:00:00.000Z',
+    }
+  }
+
+  it('base_qty + asset → 投影出 position.sizing = { kind: base, asset } + mode = fixed_qty', () => {
+    // 直接构造已含 capability 的 state，走 projectSingleAnchorToPosition 路径
+    const result = (svc as unknown as { projectSingleAnchorToPosition: (state: import('../../../types/semantic-state').SemanticState, anchors: ReadonlyMap<string, import('../../per-trade-sizing-resolver.service').SizingAnchor>) => import('../../../types/semantic-state').SemanticState })
+      .projectSingleAnchorToPosition(
+        makeBaseQtyCapabilityState('BTC'),
+        new Map([
+          ['action:a-base', {
+            scope: { kind: 'action', id: 'a-base' },
             executionAnchored: true,
             fullySpecified: true,
-            normalized: { axis: 'quote', value: 100, needsRuntimeResolution: false },
-            source: 'position_constraint_params_fallback',
-          },
-        ],
-      ]),
-    )
-    const mockSizingResolver = { resolve: mockResolve } as unknown as InstanceType<typeof PerTradeSizingResolver>
-    const svc = new SemanticSeedStateBuilderService(undefined, undefined, mockSizingResolver)
-    const warnSpy = jest.spyOn((svc as unknown as { logger: { warn: jest.Mock } }).logger, 'warn')
+            normalized: { axis: 'base_qty', value: 0.001, needsRuntimeResolution: false, asset: 'BTC' },
+            source: 'action',
+          }],
+        ]),
+      )
+    expect(result.position?.sizing).toEqual({ kind: 'base', value: 0.001, asset: 'BTC' })
+    expect(result.position?.mode).toBe('fixed_qty')
+  })
 
-    svc.build({
-      actions: [{ key: 'open_long', phase: 'entry', sideScope: 'long' }],
-      position: {
-        mode: 'fixed_ratio',
-        value: 0,
-        positionMode: 'long_only',
-        constraints: [{
-          key: 'position.dca_schedule',
-          params: { perOrderSizing: { kind: 'quote', value: 100 } },
-        }],
-      },
-    })
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'sizing.fallback.position_constraint_params_fallback' }),
-    )
+  it('base_qty 无 asset → 不投影（守门继续追问）', () => {
+    const baseState = makeBaseQtyCapabilityState(undefined)
+    const result = (svc as unknown as { projectSingleAnchorToPosition: (state: import('../../../types/semantic-state').SemanticState, anchors: ReadonlyMap<string, import('../../per-trade-sizing-resolver.service').SizingAnchor>) => import('../../../types/semantic-state').SemanticState })
+      .projectSingleAnchorToPosition(
+        baseState,
+        new Map([
+          ['action:a-base', {
+            scope: { kind: 'action', id: 'a-base' },
+            executionAnchored: true,
+            fullySpecified: true,
+            normalized: { axis: 'base_qty', value: 0.001, needsRuntimeResolution: false },
+            source: 'action',
+          }],
+        ]),
+      )
+    expect(result.position?.sizing).toBeUndefined()
   })
 })
+>>>>>>> d684550d (test(ai-quant): sub-fix 1 — tighten EC2/EC5 assertions, remove TODO(PR4) comments)

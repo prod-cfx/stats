@@ -37,6 +37,7 @@ export interface NormalizedSizing {
   readonly axis: SizingAxis
   readonly value: number
   readonly needsRuntimeResolution: boolean
+  readonly asset?: string
 }
 
 export interface SizingAnchor {
@@ -74,17 +75,18 @@ function isExecutionAnchored(ownerStatus: SemanticNodeStatus, axis: SizingAxis, 
  * Returns null when the shape cannot be interpreted.
  * Only recognises explicit `kind` fields — no unit/asset heuristics.
  */
-function resolveAxisFromShape(shape: Record<string, unknown>): { axis: SizingAxis; value: number; needsRuntimeResolution?: boolean } | null {
+function resolveAxisFromShape(shape: Record<string, unknown>): { axis: SizingAxis; value: number; needsRuntimeResolution?: boolean; asset?: string } | null {
   const kind = shape['kind']
   const rawValue = shape['value']
+  const rawAsset = typeof shape['asset'] === 'string' && shape['asset'].trim() ? (shape['asset'] as string) : undefined
 
   if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) return null
 
   if (kind === 'quote') {
-    return { axis: 'notional_quote', value: rawValue }
+    return { axis: 'notional_quote', value: rawValue, asset: rawAsset }
   }
   if (kind === 'base') {
-    return { axis: 'base_qty', value: rawValue }
+    return { axis: 'base_qty', value: rawValue, asset: rawAsset }
   }
   if (kind === 'ratio') {
     const unit = typeof shape['unit'] === 'string' ? (shape['unit'] as string).toLowerCase() : ''
@@ -142,7 +144,7 @@ function readPerOrderSizingFromParams(params: unknown): { axis: SizingAxis; valu
 }
 
 /** Extract sizing shape from a capability's shape field */
-function resolveAxisFromCapabilityShape(cap: CapabilityEvidence): { axis: SizingAxis; value: number } | null {
+function resolveAxisFromCapabilityShape(cap: CapabilityEvidence): { axis: SizingAxis; value: number; asset?: string } | null {
   const shape = cap.capability.shape
   if (!shape || typeof shape !== 'object') return null
 
@@ -209,7 +211,7 @@ function anchorFromActionCapability(
     }
   }
 
-  const { axis, value } = resolved
+  const { axis, value, asset } = resolved
   const anchored = isExecutionAnchored(ev.ownerStatus, axis, value)
   const fullySpecified = anchored && ev.ownerStatus === 'locked' && (actionOpenSlots ?? []).length === 0
 
@@ -217,7 +219,7 @@ function anchorFromActionCapability(
     scope,
     executionAnchored: anchored,
     fullySpecified,
-    normalized: anchored ? { axis, value, needsRuntimeResolution: axisNeedsRuntimeResolution(axis) } : undefined,
+    normalized: anchored ? { axis, value, needsRuntimeResolution: axisNeedsRuntimeResolution(axis), asset } : undefined,
     source: 'action',
     evidenceRef: { mount: ev.mount, ownerId: ev.ownerId, contractId: ev.contractId },
   }
@@ -240,7 +242,7 @@ function anchorFromPositionConstraintCapability(
     }
   }
 
-  const { axis, value } = resolved
+  const { axis, value, asset } = resolved
   const anchored = isExecutionAnchored(ev.ownerStatus, axis, value)
   const fullySpecified = anchored && ev.ownerStatus === 'locked' && (pc?.openSlots ?? []).length === 0
 
@@ -248,7 +250,7 @@ function anchorFromPositionConstraintCapability(
     scope,
     executionAnchored: anchored,
     fullySpecified,
-    normalized: anchored ? { axis, value, needsRuntimeResolution: axisNeedsRuntimeResolution(axis) } : undefined,
+    normalized: anchored ? { axis, value, needsRuntimeResolution: axisNeedsRuntimeResolution(axis), asset } : undefined,
     source: 'position_constraint',
     evidenceRef: { mount: ev.mount, ownerId: ev.ownerId, contractId: ev.contractId },
   }

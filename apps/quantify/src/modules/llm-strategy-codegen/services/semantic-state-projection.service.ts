@@ -2099,10 +2099,12 @@ export class SemanticStateProjectionService {
   }
 
   private buildActionSummary(actions: SemanticState['actions'], state: SemanticState): string {
+    // sub-fix 4: hoist index build once per call, not once per action
+    const index = CapabilityEvidenceIndex.build(state)
     return actions
       .filter(action => action.status === 'locked')
       .sort((left, right) => this.compareActionAtoms(left, right))
-      .map(action => this.buildAddPositionSummary(action) || this.buildContractOrderProgramSummary(action, state))
+      .map(action => this.buildAddPositionSummary(action) || this.buildContractOrderProgramSummary(action, state, index))
       .filter(item => item.length > 0)
       .join('；')
   }
@@ -2149,14 +2151,15 @@ export class SemanticStateProjectionService {
     return '加仓'
   }
 
-  private buildContractOrderProgramSummary(action: SemanticState['actions'][number], state: SemanticState): string {
+  private buildContractOrderProgramSummary(action: SemanticState['actions'][number], state: SemanticState, index?: CapabilityEvidenceIndex): string {
     const orderProgram = this.findCapability(action.contracts, 'order_program', 'maintain', 'limit_ladder')
     if (!orderProgram) {
       return ''
     }
 
     // PR3.5: use CapabilityEvidenceIndex to read per_order_budget, scoped to this action
-    const budgetEvidences = CapabilityEvidenceIndex.build(state).byKey('capital', 'allocate', 'per_order_budget')
+    // sub-fix 4: accept pre-built index from caller to avoid per-action rebuild
+    const budgetEvidences = (index ?? CapabilityEvidenceIndex.build(state)).byKey('capital', 'allocate', 'per_order_budget')
       .filter(e => e.mount === 'action' && e.ownerId === action.id)
     const budget = budgetEvidences[0]?.capability ?? null
     const orderType = this.readShapeString(orderProgram.shape, 'orderType') === 'limit' ? '限价' : '网格'

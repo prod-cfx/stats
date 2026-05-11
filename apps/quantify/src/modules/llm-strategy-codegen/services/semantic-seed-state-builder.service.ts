@@ -33,6 +33,7 @@ import type {
   SemanticTriggerState,
 } from '../types/semantic-state'
 import { FIRST_WAVE_TRIGGER_ATOMS } from '../constants/canonical-strategy-capabilities'
+import { DCA_PER_ORDER_BUDGET_CAPABILITY } from '../atom-contracts/atom-contract-registry'
 import { toSemanticSupportOpenSlot } from '../types/semantic-atom-support'
 import { MarketInstrumentSymbolResolverService } from './market-instrument-symbol-resolver.service'
 import { PerTradeSizingResolver } from './per-trade-sizing-resolver.service'
@@ -63,16 +64,16 @@ const MARKET_INSTRUMENT_QUOTES: readonly MarketInstrumentQuote[] = ['FDUSD', 'US
 
 // PR3.7 helpers: map NormalizedSizing axis back to SemanticPositionSizingContract + legacy mode string
 
-// Caller MUST guard against risk_budget and base_qty axes — both throw to enforce
-// the contract instead of smuggling invalid shape/mode values downstream.
-//   - risk_budget: not representable in current SemanticPositionSizingContract union (PR4+)
-//   - base_qty: SizingAnchor.normalized has no asset symbol yet; projecting would emit asset=''
-type ProjectableSizingAxis = Exclude<SizingAxis, 'risk_budget' | 'base_qty'>
+// Caller MUST guard against risk_budget axis — not representable in SemanticPositionSizingContract (PR4+).
+// base_qty is now projectable: NormalizedSizing carries asset; caller skips if asset is absent.
+type ProjectableSizingAxis = Exclude<SizingAxis, 'risk_budget'>
 
-function legacySizingFromNormalized(axis: ProjectableSizingAxis, value: number): SemanticPositionSizingContract {
+function legacySizingFromNormalized(axis: ProjectableSizingAxis, value: number, asset?: string): SemanticPositionSizingContract {
   switch (axis) {
     case 'notional_quote':
-      return { kind: 'quote', value, asset: 'USDT' }
+      return { kind: 'quote', value, asset: asset ?? 'USDT' }
+    case 'base_qty':
+      return { kind: 'base', value, asset: asset ?? '' }
     case 'equity_ratio':
       // Resolver normalizes equity_ratio to 0-1; SemanticPositionSizingContract ratio uses unit='ratio'
       return { kind: 'ratio', value, unit: 'ratio' }
@@ -82,6 +83,7 @@ function legacySizingFromNormalized(axis: ProjectableSizingAxis, value: number):
 function legacyModeFromAxis(axis: ProjectableSizingAxis): string {
   switch (axis) {
     case 'notional_quote': return 'fixed_quote'
+    case 'base_qty': return 'fixed_qty'
     case 'equity_ratio': return 'fixed_ratio'
   }
 }
@@ -1566,17 +1568,16 @@ export class SemanticSeedStateBuilderService {
     if (executable.length > 1) return { ...state, isMultiLeg: true }  // 多锚，标记 multi-leg
     const single = executable[0]
     if (!single.normalized) return state
-    const { axis, value } = single.normalized
-    // risk_budget / base_qty 不投影：
-    //   - risk_budget: SemanticPositionSizingContract union 不含 risk_budget kind（PR4+）
-    //   - base_qty: SizingAnchor.normalized 未透传 asset symbol，投影会硬编码 asset=''
-    // TODO(sizing follow-up): 在 SizingAnchor.normalized 加 asset 字段后启用 base_qty 投影
-    if (axis === 'risk_budget' || axis === 'base_qty') return state
+    const { axis, value, asset } = single.normalized
+    // risk_budget 不投影：SemanticPositionSizingContract union 不含 risk_budget kind（PR4+）
+    if (axis === 'risk_budget') return state
+    // base_qty 仅在 asset 已知时投影，避免 emit asset='' 下游错误
+    if (axis === 'base_qty' && !asset) return state
     return {
       ...state,
       position: {
         ...(state.position ?? {}),
-        sizing: legacySizingFromNormalized(axis, value),
+        sizing: legacySizingFromNormalized(axis, value, asset),
         mode: legacyModeFromAxis(axis),
         value,
         positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.actions),
@@ -1711,9 +1712,7 @@ export class SemanticSeedStateBuilderService {
         && typeof perOrderSizingShape.value === 'number'
         && Number.isFinite(perOrderSizingShape.value)
           ? [{
-              domain: 'capital' as const,
-              verb: 'allocate',
-              object: 'per_order_budget',
+              ...DCA_PER_ORDER_BUDGET_CAPABILITY,
               shape: this.toCapabilityShape({
                 kind: typeof perOrderSizingShape.kind === 'string' ? perOrderSizingShape.kind : 'quote',
                 value: perOrderSizingShape.value,

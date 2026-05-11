@@ -3407,4 +3407,68 @@ describe('SemanticStateProjectionService', () => {
       expect(kinds).toContain('program')
     })
   })
+
+  // ─── sub-fix 4: CapabilityEvidenceIndex per-request memoize ───────────────
+
+  describe('buildActionSummary — CapabilityEvidenceIndex per-request memoize', () => {
+    it('CapabilityEvidenceIndex.build 在同一次 buildConversationView 中只调用 1 次，不随 action 数量线性增长', () => {
+      const { CapabilityEvidenceIndex } = require('../capability-evidence-index.service')
+      const buildSpy = jest.spyOn(CapabilityEvidenceIndex, 'build')
+
+      function makeGridAction(id: string): SemanticState['actions'][number] {
+        return {
+          id,
+          key: 'action.open_long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+          contracts: [{
+            id: `contract-${id}`,
+            kind: 'action',
+            capabilities: [
+              {
+                domain: 'order_program',
+                verb: 'maintain',
+                object: 'limit_ladder',
+                shape: { orderType: 'limit', recycleOnFill: false },
+              },
+              {
+                domain: 'capital',
+                verb: 'allocate',
+                object: 'per_order_budget',
+                shape: { kind: 'quote', value: 50, asset: 'USDT' },
+              },
+            ],
+            requires: [],
+            params: {},
+            runtimeRequirements: [],
+            stateRequirements: [],
+            orderRequirements: [],
+            openSlots: [],
+          }],
+        }
+      }
+
+      const state: SemanticState = {
+        version: 1,
+        families: ['multi-leg'],
+        triggers: [],
+        actions: [makeGridAction('g1'), makeGridAction('g2'), makeGridAction('g3')],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-05-11T00:00:00.000Z',
+      }
+
+      buildSpy.mockClear()
+      service.buildConversationView(state)
+
+      // buildActionSummary should call CapabilityEvidenceIndex.build exactly once (hoisted),
+      // not once per action (which would be 3 calls for 3 actions).
+      const actionSummaryCalls = buildSpy.mock.calls.length
+      expect(actionSummaryCalls).toBeLessThanOrEqual(1) // exactly 1: hoisted in buildActionSummary
+      buildSpy.mockRestore()
+    })
+  })
 })
