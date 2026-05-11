@@ -103,7 +103,7 @@ export class SemanticSeedExtractorService {
           this.mergeSeedTriggers(eventFrameTriggers, legacyTriggers),
         ))),
       ),
-    ))))
+    )), text))
     const actions = this.atomizeActions(this.mergeSeedActions(
       gatewayActions,
       this.mergeSeedActions(
@@ -528,11 +528,12 @@ export class SemanticSeedExtractorService {
     return stripped
   }
 
-  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[]): SeedTrigger[] {
+  private withRecognizedTriggerCombinationContracts(triggers: SeedTrigger[], text: string): SeedTrigger[] {
     const movingAverageStackGroups = this.resolveMovingAverageStackCombinationGroups(triggers)
+    const heterogeneousEntryAndGroups = this.resolveHeterogeneousEntryAndGroups(triggers, text)
 
     return triggers.map((trigger, index) => {
-      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index))
+      const explicit = this.resolveRecognizedTriggerCombination(trigger, movingAverageStackGroups.get(index), heterogeneousEntryAndGroups.get(index))
       if (explicit) {
         return this.withTriggerCombinationContract(trigger, explicit)
       }
@@ -559,9 +560,14 @@ export class SemanticSeedExtractorService {
   private resolveRecognizedTriggerCombination(
     trigger: SeedTrigger,
     movingAverageStack: TriggerCombinationContractInput | undefined,
+    heterogeneousEntryAnd: TriggerCombinationContractInput | undefined,
   ): TriggerCombinationContractInput | null {
     if (movingAverageStack) {
       return movingAverageStack
+    }
+
+    if (heterogeneousEntryAnd) {
+      return heterogeneousEntryAnd
     }
 
     if (
@@ -576,6 +582,55 @@ export class SemanticSeedExtractorService {
     }
 
     return null
+  }
+
+  private resolveHeterogeneousEntryAndGroups(
+    triggers: SeedTrigger[],
+    text: string,
+  ): Map<number, TriggerCombinationContractInput> {
+    const result = new Map<number, TriggerCombinationContractInput>()
+
+    // 按 sideScope 收集候选：phase=entry、无显式 combination marker、非 logical.any_of
+    const buckets = new Map<string, Array<{ index: number, trigger: SeedTrigger }>>()
+    triggers.forEach((trigger, index) => {
+      if (trigger.phase !== 'entry') return
+      if (trigger.key === 'logical.any_of') return
+      if (this.readTriggerGroupMarker(trigger) !== null) return
+      if (trigger.contracts?.some(c => this.isTriggerCombinationLikeContract(c))) return
+
+      const sideScope = trigger.sideScope ?? 'long'
+      const bucket = buckets.get(sideScope) ?? []
+      bucket.push({ index, trigger })
+      buckets.set(sideScope, bucket)
+    })
+
+    for (const [sideScope, members] of buckets) {
+      // 至少 2 个 trigger 才需要合并
+      if (members.length < 2) continue
+
+      // 文本必须含 AND 连词且不含 OR 连词
+      if (!this.hasAndConjunctionWithoutOr(text)) continue
+
+      // 生成稳定 groupId：phase + sideScope + 各 trigger key 排序拼接（截 40 字符）
+      const keysFragment = members
+        .map(m => m.trigger.key)
+        .sort()
+        .join('_')
+        .slice(0, 40)
+      const groupId = `entry-and-${sideScope}-${keysFragment}`
+
+      for (const { index } of members) {
+        result.set(index, { groupId, join: 'AND' })
+      }
+    }
+
+    return result
+  }
+
+  private hasAndConjunctionWithoutOr(text: string): boolean {
+    const hasAnd = /(?:且|同时|并且|和)/u.test(text)
+    const hasOr = /(?:或|或者|任一|any\s*of)/ui.test(text)
+    return hasAnd && !hasOr
   }
 
   private resolveMovingAverageStackCombinationGroups(
