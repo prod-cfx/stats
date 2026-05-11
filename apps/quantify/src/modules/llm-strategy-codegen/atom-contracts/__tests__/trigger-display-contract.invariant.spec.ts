@@ -34,11 +34,40 @@ describe('TRIGGER_DISPLAY_CONTRACT_REGISTRY invariants', () => {
     }
   })
 
-  it('至少 10 个 key 标了 entryPredicate（防止全部退化成 gate/action）', () => {
+  it('entryPredicate keys 精确匹配快照（防止全部退化成 gate/action，也防止误加）', () => {
     const entryPredicateKeys = NORMALIZED_TRIGGER_ATOM_KEYS.filter(key =>
       TRIGGER_DISPLAY_CONTRACT_REGISTRY[key].displayRoles.includes('entryPredicate'),
-    )
-    expect(entryPredicateKeys.length).toBeGreaterThanOrEqual(10)
+    ).sort()
+    expect(entryPredicateKeys).toMatchInlineSnapshot(`
+      [
+        "bollinger.touch_lower",
+        "bollinger.touch_middle",
+        "bollinger.touch_upper",
+        "indicator.above",
+        "indicator.below",
+        "indicator.cross_over",
+        "indicator.cross_under",
+        "indicator.divergence",
+        "liquidity.sweep",
+        "market.regime",
+        "oscillator.rsi_gte",
+        "oscillator.rsi_lte",
+        "price.breakout_down",
+        "price.breakout_up",
+        "price.candle_pattern",
+        "price.chart_pattern",
+        "price.detect.indicator_boundary",
+        "price.percent_change",
+        "price.range_position_gte",
+        "price.range_position_lte",
+        "price.rolling_extrema_breakout",
+        "trend.direction",
+        "volatility.atr_threshold",
+        "volatility.state",
+        "volume.relative_average",
+        "volume.threshold",
+      ]
+    `)
   })
 
   it('已知 entry predicate keys 的 isEntryPredicateTriggerKey 返回 true', () => {
@@ -113,5 +142,12 @@ describe('TRIGGER_DISPLAY_CONTRACT_REGISTRY invariants', () => {
     expect(isTimeframeGroupableTriggerKey('indicator.cross_under')).toBe(false)
     expect(isTimeframeGroupableTriggerKey('trend.direction')).toBe(false)
     expect(isTimeframeGroupableTriggerKey('bollinger.touch_lower')).toBe(false)
+  })
+
+  it('M4: timeframeGroupable 角色仅 indicator.above / indicator.below 可声明', () => {
+    const tgKeys = NORMALIZED_TRIGGER_ATOM_KEYS.filter(k =>
+      TRIGGER_DISPLAY_CONTRACT_REGISTRY[k].displayRoles.includes('timeframeGroupable'),
+    )
+    expect(tgKeys.sort()).toEqual(['indicator.above', 'indicator.below'])
   })
 })

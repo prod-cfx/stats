@@ -8,12 +8,14 @@
  *
  * 回归 case：
  * C1: indicator.cross_over + indicator.below（用户现场场景）
- * C2: indicator.cross_over + trend.direction
+ * C2: indicator.cross_over + oscillator.rsi_lte
  * C3: indicator.above + indicator.cross_over
  * C4: 用户原 prompt — trend + cross_over + rsi_lte 三段 AND
  * m5: sideScope=short 异质 AND 同样合并
+ * M5: reference.period 缺失时不产生 "undefined" 且不抛异常
  */
 
+import type { SemanticState } from '../../types/semantic-state'
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
@@ -128,5 +130,71 @@ describe('display logic graph — hetero AND combination (Issue #1171)', () => {
     expect(texts).toHaveLength(1)
     expect(texts[0]).toMatch(/下穿/)
     expect(texts[0]).toMatch(/RSI|高于/)
+  })
+})
+
+describe('display logic graph — reference.period 缺失边界 (M5)', () => {
+  const projection = new SemanticStateProjectionService()
+
+  function makeMinimalState(triggers: SemanticState['triggers']): SemanticState {
+    return {
+      version: 1,
+      families: [],
+      triggers,
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  /**
+   * M5: 两个共享 marker 的 indicator.above trigger，reference.period 缺失（非 number）
+   * 期望：不抛异常、渲染文本（如有）不含字面 "undefined"。
+   * 注：reference.period 缺失时，formatGroupedIndicatorCompareCondition 无法完成合并
+   *   (periods=[], timeframes=[])，fallback 到 buildTriggerSummary → 被 sanitizeDisplayFallbackText
+   *   过滤后产出空文本，最终条件项为 0 条——这是预期的保守降级行为，不是 bug。
+   */
+  it('M5: indicator.above 共享 marker 但 reference.period 缺失 → 不含 undefined 且不抛异常', () => {
+    const state = makeMinimalState([
+      {
+        id: 't1',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: { displayGroupId: 'grp1', indicator: 'ema' /* reference.period 故意缺失 */ },
+        status: 'resolved',
+        source: 'seed',
+        openSlots: [],
+      },
+      {
+        id: 't2',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: { displayGroupId: 'grp1', indicator: 'ema' /* reference.period 故意缺失 */ },
+        status: 'resolved',
+        source: 'seed',
+        openSlots: [],
+      },
+    ])
+
+    let graph: ReturnType<SemanticStateProjectionService['buildDisplayLogicGraph']> | undefined
+    expect(() => {
+      graph = projection.buildDisplayLogicGraph(state)
+    }).not.toThrow()
+
+    // 验证任何渲染出的文本都不含字面 "undefined"
+    const texts = graph!.blocks.flatMap(b => b.items.filter(i => i.kind === 'condition').map(i => i.text))
+    for (const text of texts) {
+      expect(text).not.toMatch(/undefined/)
+    }
+    // graph 结构本身有效（blocks 为数组）
+    expect(Array.isArray(graph!.blocks)).toBe(true)
   })
 })

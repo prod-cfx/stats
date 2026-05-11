@@ -1148,6 +1148,8 @@ export class SemanticStateProjectionService {
     return value ? value : null
   }
 
+  // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
+  //   此处用 key 选择中文措辞（"上穿"/"下穿"/"上方"/"低于"等），属于展示层渲染逻辑，非能力白名单。
   private buildTriggerSummary(triggers: SemanticState['triggers'], includeSuperseded: boolean): string {
     const sourceTriggers = includeSuperseded
       ? [...triggers]
@@ -1591,6 +1593,8 @@ export class SemanticStateProjectionService {
     return '条件'
   }
 
+  // 注：以下 trigger.key 字面比较均为"文案分支"——能力判定已在 isXxxTriggerKey 上游 registry 守门，
+  //   此处用 key 选择中文措辞（"上方"/"低于"），属于展示层渲染逻辑，非能力白名单。
   private formatIndicatorCompareCondition(trigger: SemanticState['triggers'][number]): string {
     const period = typeof trigger.params['reference.period'] === 'number'
       ? this.formatNumber(trigger.params['reference.period'])
