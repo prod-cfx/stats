@@ -19,7 +19,14 @@ import {
   VIA_PRESENTATION_DISPLAY,
   type AtomContract,
   type AtomContractKey,
+  type SizingEvidence,
 } from './atom-contract-types'
+
+// DCA per-order sizing evidence (reused by SIZING_BEARING_ATOMS in corpus-invariants)
+const DCA_SIZING_EVIDENCE: SizingEvidence = {
+  capability: { domain: 'capital', verb: 'allocate', object: 'per_order_budget' },
+  paramSource: 'perOrderSizing',
+}
 
 // =========================================================
 // 注册表定义
@@ -32,6 +39,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'volatility.atr_threshold': {
@@ -39,6 +47,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'strategy.time_window': {
@@ -46,6 +55,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'oscillator.rsi_lte': {
@@ -53,6 +63,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'indicator.divergence': {
@@ -60,6 +71,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'price.candle_pattern': {
@@ -67,6 +79,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'price.chart_pattern': {
@@ -74,6 +87,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   'liquidity.sweep': {
@@ -81,6 +95,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   // ── 持仓条件（positionConstraint 以 trigger 身份出现）
@@ -89,6 +104,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: ['position.no_position'],
+    sizingEvidence: null,
   },
 
   'position.no_position': {
@@ -96,6 +112,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: ['position.has_position'],
+    sizingEvidence: null,
   },
 
   // ── 行动（actions）
@@ -130,6 +147,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
       return '请补充加仓条件的缺失信息。'
     },
     mutex: [],
+    sizingEvidence: null,
   },
 
   'action.reverse_position': {
@@ -146,6 +164,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   // ── 风险（risk）
@@ -158,6 +177,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: UNSUPPORTED_SKIP,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
+    sizingEvidence: null,
   },
 
   // ── 组合风险 orchestration（portfolioRisk）
@@ -166,6 +186,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: null,
   },
 
   // ── 仓位约束（positionConstraint）
@@ -174,6 +195,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
     mutex: [],
+    sizingEvidence: DCA_SIZING_EVIDENCE,
   },
 } satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>
 

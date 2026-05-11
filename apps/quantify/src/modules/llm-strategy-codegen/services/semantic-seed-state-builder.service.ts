@@ -1663,6 +1663,7 @@ export class SemanticSeedStateBuilderService {
     index: number,
   ): SemanticAtomContract {
     const exitRuleShape = this.readUnknownShape(params.exitRule)
+    const perOrderSizingShape = this.readUnknownShape(params.perOrderSizing)
     const contract = this.withRegistryContractSubstrate(key, {
       id: `contract-seed-position-constraint-${index + 1}-${this.slugifyContractId(key)}`,
       kind: 'position',
@@ -1689,6 +1690,19 @@ export class SemanticSeedStateBuilderService {
               verb: 'define',
               object: 'dca_exit_rule',
               shape: exitRuleShape,
+            }]
+          : []),
+        // PR4.1: emit standard capital.allocate.per_order_budget evidence when perOrderSizing 已声明
+        // 与同函数 filterSatisfiedDcaContractOpenSlots 的 readUnknownShape !== null 判定一致
+        ...(perOrderSizingShape !== null
+          ? [{
+              domain: 'capital' as const,
+              verb: 'allocate',
+              object: 'per_order_budget',
+              shape: this.toCapabilityShape({
+                sizing: perOrderSizingShape,
+                triggerSource: 'position.dca_schedule',
+              }),
             }]
           : []),
       ],

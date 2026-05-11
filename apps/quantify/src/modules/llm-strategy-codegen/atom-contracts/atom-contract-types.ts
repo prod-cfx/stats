@@ -33,6 +33,20 @@ export const UNSUPPORTED_SKIP = Symbol('unsupported_skip')
 // AtomContract<TParams>
 // =========================================================
 
+/**
+ * SizingEvidence: per-trade order 金额贡献声明
+ *
+ * 新增 atom 时（plan critic Round 2 Mi SIZING_BEARING_ATOMS 新人指引）：
+ *   - 若该 atom 行为会决定 per-trade 下单金额（DCA / pyramiding / grid ladder 等）：
+ *     必须填 `sizingEvidence` 非空，并同步把 atom key 加入 `SIZING_BEARING_ATOMS` 白名单
+ *   - 否则显式填 `null`，表示已审计、该 atom 不贡献 sizing
+ *   - TS exhaustive Record + INVARIANT-J 双层守门防止漏填
+ */
+export interface SizingEvidence {
+  readonly capability: { readonly domain: string; readonly verb: string; readonly object: string }
+  readonly paramSource: string
+}
+
 export interface AtomContract<TParams = Record<string, unknown>> {
   /**
    * Summary 贡献：
@@ -71,6 +85,14 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    * 互斥 atom key 列表（融合 corpus-invariants ATOM_MUTEX）；无互斥时显式 []
    */
   mutex: readonly string[]
+
+  /**
+   * 是否贡献 per-trade sizing evidence
+   *   null    → 不贡献（需显式声明已审计）
+   *   非空    → 声明 capability + paramSource
+   * INVARIANT-J 守门：SIZING_BEARING_ATOMS 白名单内必须非 null
+   */
+  sizingEvidence: SizingEvidence | null
 }
 
 export type AtomContractKey = SupportedExecutableUtteranceAtom
