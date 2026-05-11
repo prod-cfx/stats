@@ -1436,7 +1436,9 @@ export class SemanticStateProjectionService {
       const name = right.name.toLowerCase()
       if (name !== 'ema' && name !== 'sma' && name !== 'ma') return null
 
-      const period = (right.params as Record<string, unknown>).period
+      // m3 (PR #1147 review)：SemanticExpressionOperand.indicator.params 已经是 Record<string, unknown>，
+      //   直接读取即可，无需 unchecked cast。
+      const period = right.params.period
       if (typeof period !== 'number' || !Number.isFinite(period)) return null
 
       // operator 归一化为 above / below；同一表达式必须方向一致
