@@ -164,7 +164,7 @@ describe('AiQuantStrategyDetail', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
+    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     mockPerformAccountAiQuantStrategyAction.mockReset()
     mockFetchAccountAiQuantStrategyDetail.mockReset()
     mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({ status: 'running' }))
