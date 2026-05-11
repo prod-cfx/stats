@@ -360,4 +360,20 @@ export class PerTradeSizingResolver {
 
     return out
   }
+
+  /**
+   * #1186 PR2 (decision 6): shared method 供 builder 多锚反填、PR3 readiness 多腿 per-leg 判定共用。
+   * 仅返回 `kind==='action'` 且 `executionAnchored===true` 的 anchor scopeKey；
+   * `kind==='position_constraint'` scope（PR4 emit 路径用）属"开仓后约束"，不构成 leg。
+   */
+  getExecutableLegScopes(state: SemanticState): readonly string[] {
+    const anchors = this.resolve(state)
+    const result: string[] = []
+    for (const [key, anchor] of anchors.entries()) {
+      if (anchor.scope.kind === 'action' && anchor.executionAnchored) {
+        result.push(key)
+      }
+    }
+    return result
+  }
 }

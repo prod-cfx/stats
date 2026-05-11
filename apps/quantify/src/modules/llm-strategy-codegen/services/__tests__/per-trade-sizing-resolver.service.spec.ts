@@ -621,6 +621,46 @@ describe('PerTradeSizingResolver', () => {
   })
 
   // ---------------------------------------------------------------------------
+  // #1186 PR2 (decision 6): getExecutableLegScopes shared method
+  // 仅返 kind==='action' 且 executionAnchored 的 scopeKey；
+  // position_constraint scope（开仓后约束）不构成 leg。
+  // ---------------------------------------------------------------------------
+
+  describe('getExecutableLegScopes', () => {
+    it('two action anchors → returns 2 scope keys', () => {
+      const state = buildMultiLegState({
+        legs: [
+          { actionId: 'leg-A1', value: 100, unit: 'quote' },
+          { actionId: 'leg-A2', value: 200, unit: 'quote' },
+        ],
+      })
+      const scopes = resolver.getExecutableLegScopes(state)
+      expect(scopes).toHaveLength(2)
+      expect(scopes).toEqual(expect.arrayContaining(['action:leg-A1', 'action:leg-A2']))
+    })
+
+    it('action + position_constraint co-exist → only action scope returned (NC6)', () => {
+      const state = buildStateWithActionAndConstraint({
+        actionId: 'main-action',
+        actionValue: 500,
+        actionUnit: 'quote',
+        constraintKey: 'position.dca_schedule',
+        constraintValue: 100,
+        constraintUnit: 'quote',
+        constraintViaCapability: true,
+      })
+      const scopes = resolver.getExecutableLegScopes(state)
+      expect(scopes).toEqual(['action:main-action'])
+      expect(scopes).not.toContain('position_constraint:position.dca_schedule')
+    })
+
+    it('empty state → returns []', () => {
+      const scopes = resolver.getExecutableLegScopes(buildEmptyState())
+      expect(scopes).toEqual([])
+    })
+  })
+
+  // ---------------------------------------------------------------------------
   // Group 6: 2 degraded path source label cases
   // ---------------------------------------------------------------------------
 

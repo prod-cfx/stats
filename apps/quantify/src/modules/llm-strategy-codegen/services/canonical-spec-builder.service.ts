@@ -42,6 +42,9 @@ import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapt
 import { SemanticAtomContractService } from './semantic-atom-contract.service'
 import { SemanticContractShapeNormalizerService } from './semantic-contract-shape-normalizer.service'
 import { SemanticTriggerCombinationContractService } from './semantic-trigger-combination-contract.service'
+import { PerTradeSizingResolver, scopeKey as sizingScopeKey } from './per-trade-sizing-resolver.service'
+import type { SizingAnchor, SizingAxis } from './per-trade-sizing-resolver.service'
+import type { CanonicalOrchestrationLegSizing, CanonicalOrchestrationLegSizingMode } from '../types/canonical-strategy-spec'
 import { normalizeLegacyPositionSizing, validateSemanticExpressionContract, validateSemanticPositionContract, validateSemanticRiskContract } from './strategy-semantic-contracts'
 
 interface StrategyLogicSnapshotInput {
@@ -83,6 +86,8 @@ export class CanonicalSpecBuilderService {
     private readonly contracts: SemanticAtomContractService = new SemanticAtomContractService(),
     private readonly shapeNormalizer: SemanticContractShapeNormalizerService = new SemanticContractShapeNormalizerService(),
     private readonly triggerCombinationContracts: SemanticTriggerCombinationContractService = new SemanticTriggerCombinationContractService(),
+    // #1186 PR2: 多锚 sizing 反填到 legScopes[*].legSizing 时使用
+    private readonly sizingResolver: PerTradeSizingResolver = new PerTradeSizingResolver(),
   ) {}
 
   buildFromLegacyChecklistForTestsOnly(legacySnapshot: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
@@ -529,9 +534,19 @@ export class CanonicalSpecBuilderService {
   buildFromSemanticState(state: SemanticState, fallbackMarket?: unknown): CanonicalStrategySpecV2 {
     const normalizedState = normalizeSemanticStateCombinationContracts(state)
     const market = this.resolveSemanticStateMarket(normalizedState, fallbackMarket)
-    const sizing = this.resolveSizingFromSemanticState(normalizedState.position) ?? { mode: 'RATIO' as const, value: 0.1 }
+    // #1186 PR2 (decision 7): 多腿场景 sizing 完全经 legScopes[*].legSizing 承载，spec.sizing===null；
+    //                          单腿沿用 spec.sizing，向后兼容。
+    const isMultiLeg = normalizedState.isMultiLeg === true
+    const sizing: CanonicalStrategySpecV2['sizing'] = isMultiLeg
+      ? null
+      : (this.resolveSizingFromSemanticState(normalizedState.position) ?? { mode: 'RATIO' as const, value: 0.1 })
 
     const orderPrograms = this.buildContractOrderPrograms(normalizedState)
+    // #1186 PR2 (decision 8): isMultiLeg + grid orderProgram 共存互斥 — grid 路径独占 orderPrograms 编排，
+    //                          多腿限价独占 legScopes 派单；共存会导致 PR4 派单链路同时存在 grid worker 与 multi-leg fan-out。
+    if (isMultiLeg && orderPrograms.some(p => p.programKind === 'fixed_grid_gated' || p.programKind === 'dynamic_grid' || p.programKind === 'adaptive_volatility_grid')) {
+      throw new Error('MultiLegMutuallyExclusiveWithOrderProgram: state.isMultiLeg===true 与 grid orderPrograms 不可共存')
+    }
     const rules = this.filterOrderProgramShadowRules(
       [
         ...this.buildRulesFromSemanticState(normalizedState, sizing),
@@ -589,9 +604,13 @@ export class CanonicalSpecBuilderService {
   }
 
   // Phase 5 S11 (#1112): scope.leg substrate
+  // #1186 PR2: 多锚（state.isMultiLeg===true）路径用 PerTradeSizingResolver anchor 反填 legSizing；
+  // 单腿/旧路径走 LLM 直供 legSizing fallback，零行为变更。
   private buildOrchestrationLegScopes(state: SemanticState): CanonicalOrchestrationLegScope[] {
     const nodes = state.orchestration?.nodes
     if (!nodes || nodes.length === 0) return []
+    const isMultiLeg = state.isMultiLeg === true
+    const anchorMap = isMultiLeg ? this.sizingResolver.resolve(state) : undefined
     const result: CanonicalOrchestrationLegScope[] = []
     for (const node of nodes) {
       if (
@@ -605,16 +624,22 @@ export class CanonicalSpecBuilderService {
       if (node.direction !== 'long' && node.direction !== 'short') continue
       const instrumentRef = typeof node.instrumentRef === 'string' ? node.instrumentRef.trim() : ''
       if (instrumentRef === '') continue
-      const sizing = node.legSizing
-      const legSizing = sizing
-        ? {
-            mode: sizing.mode,
-            value: sizing.value,
-            ...(typeof sizing.pairedLegId === 'string' && sizing.pairedLegId.trim() !== ''
-              ? { pairedLegId: sizing.pairedLegId.trim() }
-              : {}),
-          }
-        : undefined
+      // 优先：多锚反填路径
+      let legSizing: CanonicalOrchestrationLegSizing | undefined
+      if (isMultiLeg && anchorMap) {
+        legSizing = this.resolveLegSizingFromAnchor(anchorMap, node, state)
+      }
+      // Fallback：LLM 直供 legSizing（单腿场景或多锚 resolver 未匹配）
+      if (!legSizing && node.legSizing) {
+        const sizing = node.legSizing
+        legSizing = {
+          mode: sizing.mode,
+          value: sizing.value,
+          ...(typeof sizing.pairedLegId === 'string' && sizing.pairedLegId.trim() !== ''
+            ? { pairedLegId: sizing.pairedLegId.trim() }
+            : {}),
+        }
+      }
       result.push({
         id: node.id,
         scopeKind: 'leg',
@@ -626,6 +651,78 @@ export class CanonicalSpecBuilderService {
       })
     }
     return result
+  }
+
+  /**
+   * #1186 PR2: 把 PerTradeSizingResolver anchor 翻译成 CanonicalOrchestrationLegSizing。
+   *
+   * 匹配口径：以 LLM `legId` 为主映射到 `state.actions[*].id`（`SizingScope.kind==='action'` 时
+   * `scope.id` 即 actionId）。fixture 显式提供 legId↔actionId 映射；找不到则跳过 + log.warn。
+   */
+  private resolveLegSizingFromAnchor(
+    anchorMap: ReadonlyMap<string, SizingAnchor>,
+    node: SemanticOrchestrationNode,
+    state: SemanticState,
+  ): CanonicalOrchestrationLegSizing | undefined {
+    const legId = typeof node.legId === 'string' ? node.legId.trim() : ''
+    if (legId === '') return undefined
+    // 候选 actionId 集：直接 legId、或 actions 中 key 末尾命中 legId 的那个
+    const candidateActionIds: string[] = []
+    if (anchorMap.has(sizingScopeKey({ kind: 'action', id: legId }))) {
+      candidateActionIds.push(legId)
+    }
+    for (const action of state.actions) {
+      if (action.id === legId) continue
+      if (action.id.endsWith(legId) || action.key.endsWith(legId)) {
+        candidateActionIds.push(action.id)
+      }
+    }
+    let anchor: SizingAnchor | undefined
+    for (const aid of candidateActionIds) {
+      const a = anchorMap.get(sizingScopeKey({ kind: 'action', id: aid }))
+      if (a && a.executionAnchored) { anchor = a; break }
+    }
+    if (!anchor || !anchor.normalized) {
+      // eslint-disable-next-line no-console
+      console.warn(`[canonical-spec-builder] multi-leg legId=${legId} 未匹配到 executionAnchored anchor，跳过 legSizing 反填`)
+      return undefined
+    }
+    const mode = this.mapAnchorAxisToLegSizingMode(anchor.normalized.axis)
+    if (mode === null) {
+      // risk_budget axis: skip + warn
+      // eslint-disable-next-line no-console
+      console.warn(`[canonical-spec-builder] multi-leg legId=${legId} axis=${anchor.normalized.axis} 暂不支持映射到 legSizing，跳过`)
+      return undefined
+    }
+    const out: CanonicalOrchestrationLegSizing = {
+      mode,
+      value: anchor.normalized.value,
+    }
+    if (typeof anchor.normalized.asset === 'string' && anchor.normalized.asset.trim() !== '') {
+      out.asset = anchor.normalized.asset.trim()
+    }
+    return out
+  }
+
+  /**
+   * #1186 PR2 (decision 3): SizingAxis → CanonicalOrchestrationLegSizingMode 映射。
+   * 禁止把 base_qty 静默归入 fixed_quote。
+   * - notional_quote → fixed_quote
+   * - equity_ratio   → fixed_pct
+   * - base_qty       → fixed_base（新增 mode）
+   * - risk_budget    → null（跳过 + warn）
+   */
+  private mapAnchorAxisToLegSizingMode(axis: SizingAxis): CanonicalOrchestrationLegSizingMode | null {
+    switch (axis) {
+      case 'notional_quote':
+        return 'fixed_quote'
+      case 'equity_ratio':
+        return 'fixed_pct'
+      case 'base_qty':
+        return 'fixed_base'
+      case 'risk_budget':
+        return null
+    }
   }
 
   // Phase 5 S2 (#1104) + S3 (#1109) + S9 (#1110) + S10 (#1111): scope union substrate（symbol + timeframe + dataSource + subStrategy）

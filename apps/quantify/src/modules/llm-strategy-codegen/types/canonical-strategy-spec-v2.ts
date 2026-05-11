@@ -253,12 +253,15 @@ export interface CanonicalSymbolScope {
 }
 
 // Phase 5 S11 (#1112): scope.leg substrate
-export type CanonicalOrchestrationLegSizingMode = 'fixed_pct' | 'fixed_quote' | 'fixed_ratio'
+// #1186 PR2 (decision 3): adds `'fixed_base'` mode for base_qty axis (禁止静默归 fixed_quote)
+export type CanonicalOrchestrationLegSizingMode = 'fixed_pct' | 'fixed_quote' | 'fixed_ratio' | 'fixed_base'
 
 export interface CanonicalOrchestrationLegSizing {
   mode: CanonicalOrchestrationLegSizingMode
   value: number
   pairedLegId?: string
+  // #1186 PR2 (decision 5): asset 标记 quote/base 计价区分；新增可选字段不破现有 grid 多腿 byte-equal
+  asset?: string
 }
 
 export interface CanonicalOrchestrationLegScope {
