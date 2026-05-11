@@ -1433,7 +1433,7 @@ describe('SemanticSeedStateBuilderService', () => {
             domain: 'capital',
             verb: 'allocate',
             object: 'per_order_budget',
-            shape: { value: 20, asset: 'USDT' },
+            shape: { kind: 'quote', value: 20, asset: 'USDT' },
           }],
           requires: [],
           params: {},

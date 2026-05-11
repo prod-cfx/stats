@@ -2008,6 +2008,7 @@ export class SemanticSeedExtractorService {
                 verb: 'allocate',
                 object: 'per_order_budget',
                 shape: {
+                  kind: 'quote' as const,
                   value: perOrderBudget.value,
                   asset: perOrderBudget.asset,
                 },

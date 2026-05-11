@@ -1692,15 +1692,21 @@ export class SemanticSeedStateBuilderService {
               shape: exitRuleShape,
             }]
           : []),
-        // PR4.1: emit standard capital.allocate.per_order_budget evidence when perOrderSizing 已声明
-        // 与同函数 filterSatisfiedDcaContractOpenSlots 的 readUnknownShape !== null 判定一致
+        // PR4.1 + Issue #1190: emit standard capital.allocate.per_order_budget evidence.
+        // 形态对齐 PerTradeSizingResolver.resolveAxisFromShape 要求：顶层 kind/value，
+        // 不再嵌在 `sizing` 键下。仅当 value 为有限数字时才 emit，避免半成品 capability。
         ...(perOrderSizingShape !== null
+        && typeof perOrderSizingShape.value === 'number'
+        && Number.isFinite(perOrderSizingShape.value)
           ? [{
               domain: 'capital' as const,
               verb: 'allocate',
               object: 'per_order_budget',
               shape: this.toCapabilityShape({
-                sizing: perOrderSizingShape,
+                kind: typeof perOrderSizingShape.kind === 'string' ? perOrderSizingShape.kind : 'quote',
+                value: perOrderSizingShape.value,
+                asset: typeof perOrderSizingShape.asset === 'string' ? perOrderSizingShape.asset : undefined,
+                unit: typeof perOrderSizingShape.unit === 'string' ? perOrderSizingShape.unit : undefined,
                 triggerSource: 'position.dca_schedule',
               }),
             }]
