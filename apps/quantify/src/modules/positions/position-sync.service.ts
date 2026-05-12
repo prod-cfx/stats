@@ -37,6 +37,12 @@ export interface PositionDifference {
   action: 'created' | 'updated' | 'closed' | 'skipped'
 }
 
+interface SharedAccountAttribution {
+  quantities: Map<string, Decimal>
+  realTradeKeys: Set<string>
+  syntheticTradeKeys: Set<string>
+}
+
 /**
  * 仓位同步服务
  * 负责从交易所获取实际仓位并与本地数据库记录进行对比和同步
@@ -69,8 +75,11 @@ export class PositionSyncService {
     const errors: string[] = []
 
     try {
+      const resolvedExchangeAccountId = exchangeAccountId
+        ?? await this.resolveSyncExchangeAccountId(userId, accountId, exchangeId)
+
       // 1. 从交易所获取实际仓位
-      const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType, exchangeAccountId)
+      const exchangePositions = await this.tradingService.getPositions(userId, exchangeId, marketType, resolvedExchangeAccountId ?? undefined)
 
       // 2. 获取本地记录的开放仓位
       const allLocalPositions = await this.positionsRepository.findOpenByAccount(accountId)
@@ -85,9 +94,25 @@ export class PositionSyncService {
       // 3. 构建交易所仓位映射（按 symbol + side 分组）
       const exchangePositionMap = new Map<string, UnifiedPosition>()
       for (const pos of exchangePositions) {
-        const key = this.getPositionKey(pos.symbol, pos.side === 'long' ? 'LONG' : 'SHORT')
+        const positionSide = this.resolveExchangePositionSide(pos)
+        if (!positionSide) {
+          this.logger.warn(`Skipped non-directional exchange position: ${pos.symbol} ${pos.side}`)
+          continue
+        }
+
+        const key = this.getPositionKey(pos.symbol, positionSide)
         exchangePositionMap.set(key, pos)
       }
+      const sharedAccountSymbols = Array.from(exchangePositionMap.values())
+        .map(pos => normalizeLedgerSymbol(pos.symbol))
+      const sharedAccountAttribution = await this.loadSharedAccountAttribution(
+        userId,
+        accountId,
+        exchangeId,
+        marketType,
+        resolvedExchangeAccountId ?? undefined,
+        sharedAccountSymbols,
+      )
 
       // 4. 构建本地仓位映射
       const localPositionMap = new Map<string, typeof localPositions[0]>()
@@ -102,14 +127,46 @@ export class PositionSyncService {
         const localPos = localPositionMap.get(key)
         const exchangeQty = new Decimal(exchangePos.size)
         const localQty = localPos ? new Decimal(localPos.quantity) : new Decimal(0)
+        const positionSide = this.resolveExchangePositionSide(exchangePos)
+        if (!positionSide) {
+          continue
+        }
+
+        if (sharedAccountAttribution) {
+          try {
+            const handled = await this.syncSharedAccountPosition({
+              accountId,
+              key,
+              exchangePos,
+              exchangeQty,
+              localPos,
+              localQty,
+              localInSyncScope: localPos ? localPositions.includes(localPos) : false,
+              exchangeId,
+              marketType,
+              exchangeAccountId: resolvedExchangeAccountId ?? undefined,
+              attribution: sharedAccountAttribution,
+              differences,
+            })
+            if (handled) {
+              continue
+            }
+          }
+          catch (error) {
+            const errorMsg = `Failed to sync shared account position ${exchangePos.symbol}: ${(error as Error).message}`
+            errors.push(errorMsg)
+            this.logger.error(errorMsg, (error as Error).stack)
+            continue
+          }
+        }
 
         if (!localPos) {
           // 交易所有仓位，本地没有，需要创建
           try {
-            await this.createMissingPosition(accountId, exchangePos, exchangeId, marketType)
+            await this.createMissingPosition(accountId, exchangePos, exchangeId, marketType, resolvedExchangeAccountId)
             differences.push({
               symbol: exchangePos.symbol,
-              positionSide: exchangePos.side === 'long' ? 'LONG' : 'SHORT',
+              positionSide,
               exchangeQuantity: exchangeQty.toString(),
               localQuantity: '0',
               difference: exchangeQty.toString(),
@@ -127,10 +184,10 @@ export class PositionSyncService {
           // 数量不一致，需要调整
           const diff = exchangeQty.sub(localQty)
           try {
-            await this.adjustPositionQuantity(localPos, exchangePos, diff, exchangeId, marketType)
+            await this.adjustPositionQuantity(localPos, exchangePos, diff, exchangeId, marketType, undefined, resolvedExchangeAccountId)
             differences.push({
               symbol: exchangePos.symbol,
-              positionSide: exchangePos.side === 'long' ? 'LONG' : 'SHORT',
+              positionSide,
               exchangeQuantity: exchangeQty.toString(),
               localQuantity: localQty.toString(),
               difference: diff.toString(),
@@ -168,7 +225,7 @@ export class PositionSyncService {
           const localQty = new Decimal(localPos.quantity)
           if (localQty.gt(0)) {
             try {
-              await this.closeOrphanedPosition(localPos)
+              await this.closeOrphanedPosition(localPos, 'position-not-found-on-exchange', resolvedExchangeAccountId)
               differences.push({
                 symbol: localPos.symbol,
                 positionSide: localPos.positionSide,
@@ -354,6 +411,18 @@ export class PositionSyncService {
     return `${normalizeLedgerSymbol(symbol)}:${side}`
   }
 
+  private resolveExchangePositionSide(position: UnifiedPosition): PositionSide | null {
+    if (position.side === 'long') {
+      return PositionSide.LONG
+    }
+
+    if (position.side === 'short') {
+      return PositionSide.SHORT
+    }
+
+    return null
+  }
+
   private isPositionInSyncScope(
     localPos: { symbol?: string | null; exchangeId?: string | null; marketType?: string | null; metadata?: unknown },
     syncExchangeId: ExchangeId,
@@ -439,6 +508,268 @@ export class PositionSyncService {
     return typeof market === 'string' ? market : undefined
   }
 
+  private async loadSharedAccountAttribution(
+    userId: string,
+    accountId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    exchangeAccountId?: string,
+    symbols: string[] = [],
+  ): Promise<SharedAccountAttribution | null> {
+    if (exchangeId !== 'okx' || marketType !== 'perp') {
+      return null
+    }
+
+    if (!exchangeAccountId) {
+      return null
+    }
+
+    if (symbols.length === 0) {
+      return null
+    }
+
+    if (
+      typeof this.positionsRepository.countActiveStrategyBindingsByExchangeAccount !== 'function'
+      || typeof this.positionsRepository.findTradesByAccount !== 'function'
+    ) {
+      return null
+    }
+
+    const bindingCount = await this.positionsRepository.countActiveStrategyBindingsByExchangeAccount(userId, exchangeAccountId)
+    if (bindingCount <= 1) {
+      return null
+    }
+
+    const trades = await this.positionsRepository.findTradesByAccount(accountId, symbols)
+    const quantities = new Map<string, Decimal>()
+    const realTradeKeys = new Set<string>()
+    const syntheticTradeKeys = new Set<string>()
+
+    for (const trade of trades) {
+      if (!this.isTradeForExchangeAccount(trade, exchangeAccountId)) {
+        continue
+      }
+
+      if (!this.isTradeInSyncScope(trade, exchangeId, marketType)) {
+        continue
+      }
+
+      const key = this.getPositionKey(trade.symbol, trade.positionSide)
+      if (this.isSyntheticTrade(trade)) {
+        syntheticTradeKeys.add(key)
+        continue
+      }
+
+      realTradeKeys.add(key)
+      const signedQuantity = this.getSignedTradeQuantity(trade)
+      const nextQuantity = (quantities.get(key) ?? new Decimal(0)).add(signedQuantity)
+      quantities.set(key, nextQuantity.gt(0) ? nextQuantity : new Decimal(0))
+    }
+
+    return { quantities, realTradeKeys, syntheticTradeKeys }
+  }
+
+  private async resolveSyncExchangeAccountId(
+    userId: string,
+    accountId: string,
+    exchangeId: ExchangeId,
+  ): Promise<string | null> {
+    if (typeof this.positionsRepository.findExchangeAccountIdForStrategyAccount !== 'function') {
+      return null
+    }
+
+    return this.positionsRepository.findExchangeAccountIdForStrategyAccount(userId, accountId, exchangeId)
+  }
+
+  private async syncSharedAccountPosition(params: {
+    accountId: string
+    key: string
+    exchangePos: UnifiedPosition
+    exchangeQty: Decimal
+    localPos: Awaited<ReturnType<PositionsRepository['findOpenByAccount']>>[number] | undefined
+    localQty: Decimal
+    localInSyncScope: boolean
+    exchangeId: ExchangeId
+    marketType: MarketType
+    exchangeAccountId?: string
+    attribution: SharedAccountAttribution
+    differences: PositionDifference[]
+  }): Promise<boolean> {
+    const {
+      accountId,
+      key,
+      exchangePos,
+      exchangeQty,
+      localPos,
+      localQty,
+      localInSyncScope,
+      exchangeId,
+      marketType,
+      exchangeAccountId,
+      attribution,
+      differences,
+    } = params
+    const attributedQty = attribution.quantities.get(key) ?? new Decimal(0)
+    const positionSide = this.resolveExchangePositionSide(exchangePos)
+    if (!positionSide) {
+      return true
+    }
+
+    if (!localPos) {
+      if (attributedQty.gt(0)) {
+        await this.createMissingPosition(accountId, exchangePos, exchangeId, marketType, exchangeAccountId, attributedQty)
+        differences.push({
+          symbol: exchangePos.symbol,
+          positionSide,
+          exchangeQuantity: exchangeQty.toString(),
+          localQuantity: '0',
+          difference: attributedQty.toString(),
+          action: 'created',
+        })
+        return true
+      }
+
+      differences.push({
+        symbol: exchangePos.symbol,
+        positionSide,
+        exchangeQuantity: exchangeQty.toString(),
+        localQuantity: '0',
+        difference: exchangeQty.toString(),
+        action: 'skipped',
+      })
+      this.logger.warn(
+        `Skipped shared account position without strategy attribution: ${exchangePos.symbol} ${exchangePos.side}`,
+      )
+      return true
+    }
+
+    if (attributedQty.lte(0)) {
+      if (localInSyncScope && this.isSyntheticLocalPosition(localPos, key, attribution)) {
+        await this.closeOrphanedPosition(localPos, 'shared-account-unattributed-synthetic-position', exchangeAccountId)
+        differences.push({
+          symbol: exchangePos.symbol,
+          positionSide,
+          exchangeQuantity: exchangeQty.toString(),
+          localQuantity: localQty.toString(),
+          difference: localQty.neg().toString(),
+          action: 'closed',
+        })
+        return true
+      }
+
+      differences.push({
+        symbol: exchangePos.symbol,
+        positionSide,
+        exchangeQuantity: exchangeQty.toString(),
+        localQuantity: localQty.toString(),
+        difference: exchangeQty.sub(localQty).toString(),
+        action: 'skipped',
+      })
+      this.logger.warn(
+        `Skipped shared account adjustment without strategy attribution: ${exchangePos.symbol} ${exchangePos.side}`,
+      )
+      return true
+    }
+
+    if (!attributedQty.equals(localQty)) {
+      const diff = attributedQty.sub(localQty)
+      await this.adjustPositionQuantity(
+        localPos,
+        exchangePos,
+        diff,
+        exchangeId,
+        marketType,
+        attributedQty,
+        exchangeAccountId,
+      )
+      differences.push({
+        symbol: exchangePos.symbol,
+        positionSide,
+        exchangeQuantity: exchangeQty.toString(),
+        localQuantity: localQty.toString(),
+        difference: diff.toString(),
+        action: 'updated',
+      })
+      return true
+    }
+
+    return true
+  }
+
+  private isTradeInSyncScope(
+    trade: { symbol?: string | null; market?: string | null },
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+  ): boolean {
+    if (trade.market) {
+      return trade.market === `${exchangeId}:${marketType}`
+    }
+
+    return this.inferMarketTypeFromSymbol(trade.symbol) === marketType
+  }
+
+  private isTradeForExchangeAccount(
+    trade: { metadata?: unknown },
+    exchangeAccountId: string,
+  ): boolean {
+    return this.readMetadataExchangeAccountId(trade.metadata) === exchangeAccountId
+  }
+
+  private isSyntheticTrade(
+    trade: { orderId?: string | null; externalTradeId?: string | null; provider?: string | null; metadata?: unknown },
+  ): boolean {
+    if (trade.provider === 'reconciliation') {
+      return true
+    }
+
+    if (trade.orderId?.startsWith('sync-') || trade.externalTradeId?.startsWith('sync-')) {
+      return true
+    }
+
+    return Boolean(this.readSyncSource(trade.metadata))
+  }
+
+  private readMetadataExchangeAccountId(metadata: unknown): string | null {
+    if (!metadata || typeof metadata !== 'object' || !('exchangeAccountId' in metadata)) {
+      return null
+    }
+
+    const exchangeAccountId = metadata.exchangeAccountId
+    return typeof exchangeAccountId === 'string' ? exchangeAccountId : null
+  }
+
+  private isSyntheticLocalPosition(
+    localPos: { metadata?: unknown },
+    key: string,
+    attribution: SharedAccountAttribution,
+  ): boolean {
+    if (this.readSyncSource(localPos.metadata)) {
+      return true
+    }
+
+    return attribution.syntheticTradeKeys.has(key) && !attribution.realTradeKeys.has(key)
+  }
+
+  private readSyncSource(metadata: unknown): string | undefined {
+    if (!metadata || typeof metadata !== 'object' || !('syncSource' in metadata)) {
+      return undefined
+    }
+
+    const syncSource = metadata.syncSource
+    return typeof syncSource === 'string' ? syncSource : undefined
+  }
+
+  private getSignedTradeQuantity(
+    trade: { positionSide: PositionSide; side: TradeSide; quantity: Decimal | string | number },
+  ): Decimal {
+    const quantity = new Decimal(trade.quantity)
+    const isIncrease = trade.positionSide === PositionSide.LONG
+      ? trade.side === TradeSide.BUY
+      : trade.side === TradeSide.SELL
+
+    return isIncrease ? quantity : quantity.neg()
+  }
+
   /**
    * 创建本地缺失的仓位
    */
@@ -447,10 +778,18 @@ export class PositionSyncService {
     exchangePos: UnifiedPosition,
     exchangeId: ExchangeId,
     marketType: MarketType,
+    exchangeAccountId?: string | null,
+    quantityOverride?: Decimal,
   ): Promise<void> {
     // 由于不知道具体的成交历史，只能记录一个对账调整
-    const positionSide = exchangePos.side === 'long' ? PositionSide.LONG : PositionSide.SHORT
-    const tradeSide = exchangePos.side === 'long' ? TradeSide.BUY : TradeSide.SELL
+    const positionSide = this.resolveExchangePositionSide(exchangePos)
+    if (!positionSide) {
+      return
+    }
+
+    const tradeSide = positionSide === PositionSide.LONG ? TradeSide.BUY : TradeSide.SELL
+
+    const quantity = quantityOverride ?? new Decimal(exchangePos.size)
 
     await this.positionsService.recordTrade({
       userStrategyAccountId: accountId,
@@ -459,7 +798,7 @@ export class PositionSyncService {
       side: tradeSide,
       positionSide,
       price: exchangePos.entryPrice.toString(),
-      quantity: exchangePos.size.toString(),
+      quantity: quantity.toString(),
       fee: '0',
       orderId: `sync-${Date.now()}`,
       externalTradeId: `sync-${accountId}-${exchangePos.symbol}-${Date.now()}`,
@@ -468,7 +807,10 @@ export class PositionSyncService {
       metadata: {
         syncSource: 'position-reconciliation',
         market: `${exchangeId}:${marketType}`,
-        exchangePosition: exchangePos,
+        exchangeAccountId: exchangeAccountId ?? null,
+        exchangePosition: quantityOverride
+          ? { ...exchangePos, size: quantity.toString() }
+          : exchangePos,
       },
     })
   }
@@ -482,6 +824,8 @@ export class PositionSyncService {
     diff: Decimal,
     exchangeId: ExchangeId,
     marketType: MarketType,
+    targetQuantity: Decimal = new Decimal(exchangePos.size),
+    exchangeAccountId?: string | null,
   ): Promise<void> {
     // 差异为正：需要增加仓位（买入/加仓）
     // 差异为负：需要减少仓位（卖出/减仓）
@@ -506,8 +850,9 @@ export class PositionSyncService {
       metadata: {
         syncSource: 'position-adjustment',
         market: `${exchangeId}:${marketType}`,
+        exchangeAccountId: exchangeAccountId ?? null,
         originalQuantity: localPos.quantity.toString(),
-        targetQuantity: exchangePos.size.toString(),
+        targetQuantity: targetQuantity.toString(),
         difference: diff.toString(),
       },
     })
@@ -516,7 +861,11 @@ export class PositionSyncService {
   /**
    * 关闭孤立的仓位（交易所已不存在）
    */
-  private async closeOrphanedPosition(localPos: any): Promise<void> {
+  private async closeOrphanedPosition(
+    localPos: any,
+    reason: 'position-not-found-on-exchange' | 'shared-account-unattributed-synthetic-position' = 'position-not-found-on-exchange',
+    exchangeAccountId?: string | null,
+  ): Promise<void> {
     // 强制平仓
     const tradeSide = localPos.positionSide === PositionSide.LONG ? TradeSide.SELL : TradeSide.BUY
 
@@ -535,7 +884,8 @@ export class PositionSyncService {
       executedAt: new Date().toISOString(),
       metadata: {
         syncSource: 'position-closure',
-        reason: 'position-not-found-on-exchange',
+        reason,
+        exchangeAccountId: exchangeAccountId ?? null,
       },
     })
   }

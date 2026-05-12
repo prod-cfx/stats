@@ -755,6 +755,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
               metadata: {
                 signalId: signal.id,
                 executionId: execution.id,
+                exchangeAccountId: exchangeAccountId ?? null,
                 ...(runtimeProvenance ? { runtimeProvenance } : {}),
               },
             })

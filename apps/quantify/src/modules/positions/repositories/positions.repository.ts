@@ -121,6 +121,113 @@ export class PositionsRepository {
     ])
   }
 
+  async countActiveStrategyBindingsByExchangeAccount(userId: string, exchangeAccountId: string) {
+    const [strategySubs, llmSubs] = await Promise.all([
+      this.txHost.tx.userStrategySubscription.findMany({
+        where: {
+          userId,
+          status: 'active',
+          exchangeAccountId,
+        },
+        select: {
+          strategyInstance: {
+            select: {
+              strategyTemplateId: true,
+            },
+          },
+        },
+      }),
+      this.txHost.tx.userLlmStrategySubscription.findMany({
+        where: {
+          userId,
+          status: 'active',
+          exchangeAccountId,
+        },
+        select: {
+          llmStrategyInstance: {
+            select: {
+              strategyId: true,
+            },
+          },
+        },
+      }),
+    ])
+
+    const strategyKeys = new Set<string>()
+    for (const sub of strategySubs) {
+      if (sub.strategyInstance?.strategyTemplateId) {
+        strategyKeys.add(`template:${sub.strategyInstance.strategyTemplateId}`)
+      }
+    }
+    for (const sub of llmSubs) {
+      if (sub.llmStrategyInstance?.strategyId) {
+        strategyKeys.add(`llm:${sub.llmStrategyInstance.strategyId}`)
+      }
+    }
+
+    return strategyKeys.size
+  }
+
+  async findExchangeAccountIdForStrategyAccount(userId: string, accountId: string, exchangeId: ExchangeId) {
+    const account = await this.txHost.tx.userStrategyAccount.findUnique({
+      where: { id: accountId },
+      select: { strategyId: true },
+    })
+    if (!account) {
+      return null
+    }
+
+    const [strategySub, llmSub] = await Promise.all([
+      this.txHost.tx.userStrategySubscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          exchangeAccountId: { not: null },
+          exchangeAccount: { exchangeId },
+          strategyInstance: {
+            strategyTemplateId: account.strategyId,
+          },
+        },
+        select: { exchangeAccountId: true },
+      }),
+      this.txHost.tx.userLlmStrategySubscription.findFirst({
+        where: {
+          userId,
+          status: 'active',
+          exchangeAccountId: { not: null },
+          exchangeAccount: { exchangeId },
+          llmStrategyInstance: {
+            strategyId: account.strategyId,
+          },
+        },
+        select: { exchangeAccountId: true },
+      }),
+    ])
+
+    return strategySub?.exchangeAccountId ?? llmSub?.exchangeAccountId ?? null
+  }
+
+  async findTradesByAccount(accountId: string, symbols?: string[]) {
+    return this.txHost.tx.trade.findMany({
+      where: {
+        userStrategyAccountId: accountId,
+        ...(symbols && symbols.length > 0 ? { symbol: { in: symbols } } : {}),
+      },
+      select: {
+        symbol: true,
+        market: true,
+        side: true,
+        positionSide: true,
+        quantity: true,
+        orderId: true,
+        externalTradeId: true,
+        provider: true,
+        metadata: true,
+      },
+      orderBy: { executedAt: 'asc' },
+    })
+  }
+
   async saveSyncLog(data: {
     userId: string
     userStrategyAccountId: string
