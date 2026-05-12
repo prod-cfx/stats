@@ -569,6 +569,9 @@ const StrategyPlazaTemplateResponseDto = z
   })
   .passthrough()
 const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string().min(8) }).passthrough()
+const StrategyPlazaRunExistingResponseDto = z
+  .object({ result: z.literal('existing'), strategy: AccountAiQuantStrategyDetailResponseDto })
+  .passthrough()
 const StrategyPlazaEditSessionResponseDto = z
   .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
   .passthrough()
@@ -1503,6 +1506,7 @@ export const schemas = {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaRunRequestDto,
+  StrategyPlazaRunExistingResponseDto,
   StrategyPlazaEditSessionResponseDto,
   AdminLoginDto,
   AdminProfileDto,
@@ -4561,7 +4565,13 @@ const endpoints = makeApi([
       },
     ],
     response: z
-      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .object({
+        data: z.union([
+          AccountAiQuantStrategyDetailResponseDto,
+          StrategyPlazaRunExistingResponseDto,
+        ]),
+        message: z.string().optional(),
+      })
       .passthrough(),
   },
   {

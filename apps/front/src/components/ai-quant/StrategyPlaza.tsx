@@ -1,7 +1,7 @@
 'use client'
 
 import type { StrategyPlazaTemplate } from '@/lib/api'
-import { Activity, Edit3, Play } from 'lucide-react'
+import { Activity, Edit3, Loader2, Play } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const TRANSLATED_TEMPLATE_TAG_KEYS: Partial<Record<string, readonly string[]>> = {
@@ -242,9 +242,13 @@ export function StrategyPlaza({
                   disabled={hasPendingAction}
                   aria-busy={isEditing}
                   onClick={() => onEditStrategy(template.id)}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-wait disabled:opacity-70"
                 >
-                  <Edit3 className="h-4 w-4" />
+                  {isEditing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Edit3 className="h-4 w-4" />
+                  )}
                   {isEditing ? t('aiQuant.strategyPlazaCard.processing', { defaultValue: '处理中' }) : t('aiQuant.edit')}
                 </button>
               </div>

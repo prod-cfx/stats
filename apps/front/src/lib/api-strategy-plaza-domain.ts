@@ -43,6 +43,13 @@ export interface StrategyPlazaEditSessionResponse {
   initialMessage: string
 }
 
+export interface ExistingStrategyPlazaRunResult {
+  result: 'existing'
+  strategy: AccountAiQuantStrategyDetail
+}
+
+export type StrategyPlazaRunResult = AccountAiQuantStrategyDetail | ExistingStrategyPlazaRunResult
+
 async function parseStrategyPlazaJson(response: Response, fallbackMessage: string): Promise<unknown> {
   let json: unknown = null
   try {
@@ -114,7 +121,7 @@ export async function fetchStrategyPlazaTemplates(): Promise<StrategyPlazaTempla
 export async function runStrategyPlazaTemplate(
   templateId: string,
   runRequestId: string,
-): Promise<AccountAiQuantStrategyDetail> {
+): Promise<StrategyPlazaRunResult> {
   return apiCall(async () => {
     const slug = getStrategyPlazaTemplateSlug(templateId)
     if (!runRequestId?.trim()) {
@@ -130,8 +137,8 @@ export async function runStrategyPlazaTemplate(
       body: JSON.stringify({ runRequestId: runRequestId.trim() }),
     })
     const json = await parseStrategyPlazaJson(response, '运行策略广场模板失败')
-    return unwrapResponse<AccountAiQuantStrategyDetail>(
-      json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail; message?: string },
+    return unwrapResponse<StrategyPlazaRunResult>(
+      json as StrategyPlazaRunResult | { data?: StrategyPlazaRunResult; message?: string },
     )
   }, 'RUN_STRATEGY_PLAZA_TEMPLATE')
 }

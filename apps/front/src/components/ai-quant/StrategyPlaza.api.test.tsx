@@ -18,6 +18,7 @@ jest.mock('lucide-react', () => ({
   Activity: () => <span data-testid="activity-icon" />,
   BarChart3: () => <span data-testid="bar-chart-icon" />,
   Edit3: () => <span data-testid="edit-icon" />,
+  Loader2: () => <span data-testid="loader-icon" />,
   Play: () => <span data-testid="play-icon" />,
   Shield: () => <span data-testid="shield-icon" />,
   TrendingUp: () => <span data-testid="trending-up-icon" />,
@@ -258,5 +259,29 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(onRunStrategy).not.toHaveBeenCalled()
     expect(onEditStrategy).not.toHaveBeenCalled()
+  })
+
+  it('shows a spinner instead of the edit icon while a template edit action is pending', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          pendingTemplateId="ma-cross"
+          pendingAction="edit"
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const buttons = Array.from(container.querySelectorAll('button'))
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]?.disabled).toBe(true)
+    expect(buttons[1]?.disabled).toBe(true)
+    expect(buttons[1]?.getAttribute('aria-busy')).toBe('true')
+    expect(buttons[1]?.textContent).toContain('处理中')
+    expect(buttons[1]?.querySelector('[data-testid="loader-icon"]')).not.toBeNull()
+    expect(buttons[1]?.querySelector('[data-testid="edit-icon"]')).toBeNull()
   })
 })

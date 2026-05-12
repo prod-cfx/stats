@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ApiKeyStatusBadge } from './ApiKeyStatusBadge'
 
@@ -88,9 +89,15 @@ export function DeployDialog({
   const confirmLabel = isRedeploy
     ? t('aiQuant.deployDialog.confirmRedeploy', { defaultValue: isEn ? 'Confirm Redeploy' : '确认重新部署' })
     : t('aiQuant.deployDialog.confirmDeploy')
+  const submittingLabel = t('aiQuant.deployDialog.deploying', { defaultValue: '部署中' })
+  const handleDialogClose = () => {
+    if (!deploySubmitting) {
+      onClose()
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={handleDialogClose}>
       <div
         className="w-full max-w-[520px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
         onClick={event => event.stopPropagation()}
@@ -199,14 +206,17 @@ export function DeployDialog({
             type="button"
             onClick={onConfirmDeploy}
             disabled={!apiConfigured || !canDeploy || !marketTypeReady || !accountReady || !leverageReady || deploySubmitting}
-            className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            aria-busy={deploySubmitting}
+            className="from-primary to-secondary inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {confirmLabel}
+            {deploySubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {deploySubmitting ? submittingLabel : confirmLabel}
           </button>
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+            onClick={handleDialogClose}
+            disabled={deploySubmitting}
+            className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t('common.close')}
           </button>

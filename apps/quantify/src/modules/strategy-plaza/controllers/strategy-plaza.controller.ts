@@ -7,6 +7,10 @@ import { AccountStrategyDetailResponseDto } from '@/modules/account-strategy-vie
 import { CallerIdentityService } from '@/modules/llm-strategy-codegen/services/caller-identity.service'
 import { RunStrategyPlazaTemplateDto } from '../dto/run-strategy-plaza-template.dto'
 import { StrategyPlazaEditSessionResponseDto } from '../dto/strategy-plaza-edit-session.response.dto'
+import {
+  StrategyPlazaRunExistingResponseDto,
+  type StrategyPlazaRunResponseDto,
+} from '../dto/strategy-plaza-run-existing.response.dto'
 import { StrategyPlazaTemplateResponseDto } from '../dto/strategy-plaza-template.response.dto'
 import { OfficialStrategyPlazaTemplateService } from '../services/official-strategy-plaza-template.service'
 import { StrategyPlazaEditSessionService } from '../services/strategy-plaza-edit-session.service'
@@ -18,6 +22,7 @@ import { StrategyPlazaRunService } from '../services/strategy-plaza-run.service'
   StrategyPlazaTemplateResponseDto,
   AccountStrategyDetailResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaRunExistingResponseDto,
 )
 @Controller('strategy-plaza/templates')
 export class StrategyPlazaController {
@@ -66,13 +71,30 @@ export class StrategyPlazaController {
     required: false,
     description: '仅用于服务间转发校验；如提供，必须与 JWT 用户一致',
   })
-  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountStrategyDetailResponseDto) })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          oneOf: [
+            { $ref: getSchemaPath(AccountStrategyDetailResponseDto) },
+            { $ref: getSchemaPath(StrategyPlazaRunExistingResponseDto) },
+          ],
+        },
+        message: {
+          type: 'string',
+          example: 'Success',
+        },
+      },
+    },
+  })
   async run(
     @Param('id') id: string,
     @Body() dto: RunStrategyPlazaTemplateDto,
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
-  ): Promise<AccountStrategyDetailResponseDto> {
+  ): Promise<StrategyPlazaRunResponseDto> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.runService.runTemplate({
       userId,

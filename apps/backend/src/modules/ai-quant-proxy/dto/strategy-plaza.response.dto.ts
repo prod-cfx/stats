@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { AccountAiQuantStrategyDetailResponseDto } from './account-ai-quant-strategy.response.dto'
 
 export class StrategyPlazaDisplayMetricsResponseDto {
   @ApiProperty({ enum: ['official_sample_backtest'] })
@@ -77,3 +78,15 @@ export class StrategyPlazaEditSessionResponseDto {
   @ApiProperty()
   initialMessage!: string
 }
+
+export class StrategyPlazaRunExistingResponseDto {
+  @ApiProperty({ enum: ['existing'], example: 'existing' })
+  result!: 'existing'
+
+  @ApiProperty({ type: AccountAiQuantStrategyDetailResponseDto })
+  strategy!: AccountAiQuantStrategyDetailResponseDto
+}
+
+export type StrategyPlazaRunResponseDto =
+  | AccountAiQuantStrategyDetailResponseDto
+  | StrategyPlazaRunExistingResponseDto
