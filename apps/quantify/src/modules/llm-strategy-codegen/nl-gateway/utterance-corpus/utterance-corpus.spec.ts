@@ -31,7 +31,7 @@ import {
 } from './corpus-invariants'
 import {
   INDIRECTLY_COVERED_ATOMS,
-  SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
+  SUPPORTED_UTTERANCE_CORPUS_ATOMS,
   utteranceCorpus,
 } from './index'
 
@@ -72,7 +72,7 @@ describe('utterance corpus baseline', () => {
       'oscillator.rsi_lte',
     ])
 
-    for (const atomKey of SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS) {
+    for (const atomKey of SUPPORTED_UTTERANCE_CORPUS_ATOMS) {
       // 间接触发的 atom 全面豁免 corpus 基线（清单从共享常量导入，与 atom-coverage-contract.spec.ts 同源）
       if (INDIRECTLY_COVERED_ATOMS.has(atomKey)) {
         continue

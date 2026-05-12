@@ -29,6 +29,8 @@ export {
   getUtteranceCorpusForAtom,
   INDIRECTLY_COVERED_ATOMS,
   SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
+  SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS,
+  SUPPORTED_UTTERANCE_CORPUS_ATOMS,
   utteranceCorpus,
 } from './utterance-corpus'
 export type {

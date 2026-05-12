@@ -59,7 +59,15 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'liquidity.sweep',
   'portfolioRisk.drawdown_block',
   'oscillator.rsi_lte',
+] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+
+export const SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS = [
   'external.signal',
+] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+
+export const SUPPORTED_UTTERANCE_CORPUS_ATOMS = [
+  ...SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
+  ...SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS,
 ] as const satisfies readonly SupportedExecutableUtteranceAtom[]
 
 export const utteranceCorpus = [
