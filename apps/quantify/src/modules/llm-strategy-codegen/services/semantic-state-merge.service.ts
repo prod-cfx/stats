@@ -251,8 +251,42 @@ export class SemanticStateMergeService {
       ...stronger,
       value: stronger.value ?? weaker.value,
       contracts: this.mergeContracts(persisted.contracts, derived.contracts),
+      // #DCA-bug-fix：spread 后 stronger.constraints 会以整体形式覆盖 weaker.constraints；
+      // 如果 derived 是更强源但 constraints 缺/为空（典型场景：conversation planner LLM
+      // 只回 position.sizing 不回 position.dca_schedule constraint），就会把 seed 抽出的
+      // locked dca_schedule / pyramiding_limit 抹掉。按 key union 合并，每个 key 内部按
+      // strength 取强，保证 locked 持久态不被 derived 弱化。
+      constraints: this.mergePositionConstraints(persisted.constraints, derived.constraints),
       evidence: stronger.evidence ?? weaker.evidence,
     }
+  }
+
+  private mergePositionConstraints(
+    persisted: SemanticPositionState['constraints'],
+    derived: SemanticPositionState['constraints'],
+  ): SemanticPositionState['constraints'] {
+    if (!persisted && !derived) return undefined
+    const byKey = new Map<string, NonNullable<SemanticPositionState['constraints']>[number]>()
+    for (const constraint of persisted ?? []) {
+      byKey.set(constraint.key, constraint)
+    }
+    for (const incoming of derived ?? []) {
+      const existing = byKey.get(incoming.key)
+      if (!existing) {
+        byKey.set(incoming.key, incoming)
+        continue
+      }
+      const preferExisting = this.compareNodeStrength(existing, incoming) >= 0
+      const stronger = preferExisting ? existing : incoming
+      const weaker = preferExisting ? incoming : existing
+      byKey.set(incoming.key, {
+        ...weaker,
+        ...stronger,
+        params: { ...(weaker.params ?? {}), ...(stronger.params ?? {}) },
+      })
+    }
+    const merged = [...byKey.values()]
+    return merged.length > 0 ? merged : undefined
   }
 
   private mergeContracts(
