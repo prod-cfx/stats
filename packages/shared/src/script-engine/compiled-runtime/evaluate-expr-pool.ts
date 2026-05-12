@@ -1254,20 +1254,23 @@ function evaluateInTimeWindow(
   let localMinutes: number
   let localDayOfWeek: number
   try {
+    // hourCycle: 'h23' explicitly requests 0-23 range (midnight = '00'), independent of
+    // locale's hour12 default and ICU version differences. The earlier 'hour12: false' +
+    // `% 24` workaround relied on ICU returning '24' for midnight in some locales — that
+    // assumption fails on current Node/ICU (returns '00') and was a hidden no-op.
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       hour: 'numeric',
       minute: 'numeric',
       weekday: 'short',
-      hour12: false,
+      hourCycle: 'h23',
     })
     const parts = formatter.formatToParts(new Date(nowMs))
     const hourPart = parts.find(p => p.type === 'hour')?.value
     const minutePart = parts.find(p => p.type === 'minute')?.value
     const weekdayPart = parts.find(p => p.type === 'weekday')?.value
     if (!hourPart || !minutePart || !weekdayPart) return false
-    // hour12: false returns '24' for midnight — normalize to 0
-    const localHour = Number(hourPart) % 24
+    const localHour = Number(hourPart)
     const localMinute = Number(minutePart)
     if (!Number.isFinite(localHour) || !Number.isFinite(localMinute)) return false
     localMinutes = localHour * 60 + localMinute
