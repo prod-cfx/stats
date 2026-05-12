@@ -13,6 +13,12 @@ export type CompiledRuntimeValue =
     levels: number[]
   }
 
+interface CompiledTimeWindow {
+  readonly daysOfWeek?: readonly number[]
+  readonly start: string
+  readonly end: string
+}
+
 interface CompiledExprNode {
   id: string
   nodeType: 'series' | 'level_set' | 'predicate'
@@ -29,6 +35,7 @@ interface CompiledExprNode {
     memoryKey?: string
     path?: string[]
     timezone?: string
+    windows?: ReadonlyArray<CompiledTimeWindow>
   }
 }
 
@@ -118,6 +125,18 @@ function evaluateSeries(
       return readStringContextValue(ctx.volatilityState)
     case 'MEMORY':
       return evaluateMemoryOperand(node, ctx)
+    case 'IN_TIME_WINDOW': {
+      const bars = Array.isArray(ctx.bars) ? ctx.bars as Array<{ timestamp?: unknown }> : []
+      const nowRaw = typeof ctx.timestamp === 'number' && Number.isFinite(ctx.timestamp)
+        ? ctx.timestamp
+        : bars.length > 0
+          ? (bars[bars.length - 1]?.timestamp ?? null)
+          : null
+      if (typeof nowRaw !== 'number' || !Number.isFinite(nowRaw)) return false
+      const timezone = readStringValue(node.payload.timezone) ?? 'UTC'
+      const windows = node.payload.windows ?? []
+      return evaluateInTimeWindow(nowRaw, timezone, windows)
+    }
     default: {
       const firstDep = node.deps?.[0]
       return typeof firstDep === 'string' ? values[firstDep] ?? null : null
@@ -1202,6 +1221,148 @@ function evaluateMemoryOperand(
     return cur
   }
   return null
+}
+
+// ---------------------------------------------------------------------------
+// IN_TIME_WINDOW evaluator
+// ---------------------------------------------------------------------------
+// Converts a UTC ms timestamp to local time in the given IANA timezone using
+// Intl.DateTimeFormat, then checks whether the local time falls inside any of
+// the configured windows.  Each window specifies:
+//   start / end  — "H:MM" or "HH:MM" 24-hour local time strings (start inclusive,
+//                  end exclusive). Single-digit hour accepted ("9:30" == "09:30").
+//                  Minutes must be 2 digits.
+//   daysOfWeek   — optional array of integers in [0, 6] (0=Sunday).
+//
+// Asymmetric defaults (be explicit when configuring):
+//   - `windows: []` (empty array)        → never matches (fail-closed default)
+//   - `daysOfWeek` omitted on a window   → allows all 7 days
+//   - `daysOfWeek: []` (empty array)     → window never matches (`[].every()` is
+//                                          vacuously true so the day-range guard
+//                                          passes, but `[].includes(x)` is always
+//                                          false → always `continue` → window is
+//                                          effectively disabled. Same end-result as
+//                                          fail-closed, just semantically distinct
+//                                          from "no constraint")
+//
+// Returns true if the timestamp falls inside at least one window; false otherwise.
+// Non-parseable payload, missing timestamp, invalid timezone, out-of-range
+// daysOfWeek, or zero-duration windows (end === start) → fail-closed (false / skip).
+// ---------------------------------------------------------------------------
+
+function parseHHMM(value: string): number | null {
+  // Accepts "H:MM" or "HH:MM" (single-digit hour like "9:30" is intentional).
+  // Minutes must be exactly 2 digits to disambiguate "9:0" (rejected) vs "9:00".
+  const matched = value.match(/^(\d{1,2}):(\d{2})$/)
+  if (!matched) return null
+  const hours = Number(matched[1])
+  const minutes = Number(matched[2])
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null
+  return hours * 60 + minutes
+}
+
+// Module-level constants for IN_TIME_WINDOW evaluator hot path —
+// avoid re-allocating per-bar
+const WEEKDAY_MAP: Readonly<Record<string, number>> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+}
+
+// Module-level cache: timezones are a finite set fixed at strategy compile time
+// (typically 1 per strategy), so caching formatters avoids creating a new
+// Intl.DateTimeFormat instance on every bar (hot path, 1m-level strategies).
+// Stores `null` for timezones that throw (invalid IANA name) so we don't retry.
+//
+// Test isolation: Jest resets module state across test *files* (via --resetModules
+// or fresh require), but NOT between `describe` / `it` within a single file. Tests
+// that mutate this cache (e.g. "invalid timezone" path) share the null-sentinel
+// with later tests in the same file. Add a manual cache clear in `beforeEach` if a
+// future test needs to verify "recover after invalid timezone".
+const TIME_WINDOW_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat | null>()
+
+function getTimeWindowFormatter(timezone: string): Intl.DateTimeFormat | null {
+  const cached = TIME_WINDOW_FORMATTER_CACHE.get(timezone)
+  if (cached !== undefined) return cached
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: 'numeric',
+      minute: 'numeric',
+      weekday: 'short',
+      hourCycle: 'h23',
+    })
+    TIME_WINDOW_FORMATTER_CACHE.set(timezone, formatter)
+    return formatter
+  }
+  catch {
+    TIME_WINDOW_FORMATTER_CACHE.set(timezone, null)
+    return null
+  }
+}
+
+function evaluateInTimeWindow(
+  nowMs: number,
+  timezone: string,
+  windows: ReadonlyArray<CompiledTimeWindow>,
+): boolean {
+  if (windows.length === 0) return false
+
+  // Reuse cached formatter per timezone; null means timezone is invalid (IANA-unknown)
+  const formatter = getTimeWindowFormatter(timezone)
+  if (formatter === null) return false
+
+  let localMinutes: number
+  let localDayOfWeek: number
+  try {
+    // formatToParts accepts number directly — no Date() wrapper needed
+    const parts = formatter.formatToParts(nowMs)
+    const hourPart = parts.find(p => p.type === 'hour')?.value
+    const minutePart = parts.find(p => p.type === 'minute')?.value
+    const weekdayPart = parts.find(p => p.type === 'weekday')?.value
+    if (!hourPart || !minutePart || !weekdayPart) return false
+    const localHour = Number(hourPart)
+    const localMinute = Number(minutePart)
+    if (!Number.isFinite(localHour) || !Number.isFinite(localMinute)) return false
+    localMinutes = localHour * 60 + localMinute
+    const mapped = WEEKDAY_MAP[weekdayPart]
+    if (mapped === undefined) return false
+    localDayOfWeek = mapped
+  }
+  catch {
+    return false
+  }
+
+  for (const window of windows) {
+    if (!window || typeof window !== 'object') continue
+    const start = typeof window.start === 'string' ? parseHHMM(window.start) : null
+    const end = typeof window.end === 'string' ? parseHHMM(window.end) : null
+    if (start === null || end === null) continue
+
+    const daysOfWeek = window.daysOfWeek
+    if (daysOfWeek !== undefined) {
+      if (!Array.isArray(daysOfWeek)) continue
+      // fail-closed: every day must be a finite integer in [0, 6]; NaN / 7 / strings reject the window
+      const allowed = daysOfWeek.every(
+        (d): d is number =>
+          typeof d === 'number' && Number.isFinite(d) && Number.isInteger(d) && d >= 0 && d <= 6,
+      )
+      if (!allowed) continue
+      if (!daysOfWeek.includes(localDayOfWeek)) continue
+    }
+
+    // Zero-duration window (start === end): fail-closed treats as "never matches"
+    // rather than the previous accidental "all day" behavior (start <= end branch
+    // collapsed to `>= start || < start` which is tautologically true).
+    if (end === start) continue
+    // Window spans midnight (e.g. 22:00–02:00) — split into two sub-ranges
+    if (end < start) {
+      if (localMinutes >= start || localMinutes < end) return true
+    }
+    else {
+      if (localMinutes >= start && localMinutes < end) return true
+    }
+  }
+
+  return false
 }
 
 export function invalidateMemoryOperand(
