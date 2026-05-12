@@ -5826,6 +5826,21 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       expect(predicate?.kind).toBe('CROSS_OVER')
     })
 
+    it('indicator=macd 使用 atom 自定义 MACD 参数而不是默认参数', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-custom-cross-over',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const line = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_LINE')
+      const signal = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_SIGNAL')
+      expect(line?.params).toEqual(expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+      expect(signal?.params).toEqual(expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+    })
+
     it('multi-rule 不互盖 — 两条 indicator.cross_over 各落各的 guard', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const spec = buildBaseSpec()
