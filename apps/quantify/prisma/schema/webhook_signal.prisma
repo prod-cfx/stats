@@ -47,7 +47,7 @@ model WebhookSignalEvent {
   payload            Json
   sanitizedHeaders   Json?                        @map("sanitized_headers")
   rawBodySha256      String?                      @map("raw_body_sha256")
-  signatureStatus    WebhookSignalSignatureStatus @default(ACCEPTED) @map("signature_status")
+  signatureStatus    WebhookSignalSignatureStatus @map("signature_status")
   sourceTimestamp    DateTime?                    @map("source_timestamp")
   receivedAt         DateTime                     @default(now()) @map("received_at")
   createdAt          DateTime                     @default(now()) @map("created_at")

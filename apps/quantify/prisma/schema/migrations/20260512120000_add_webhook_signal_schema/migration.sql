@@ -33,7 +33,7 @@ CREATE TABLE "webhook_signal_events" (
   "payload" JSONB NOT NULL,
   "sanitized_headers" JSONB,
   "raw_body_sha256" TEXT,
-  "signature_status" "WebhookSignalSignatureStatus" NOT NULL DEFAULT 'ACCEPTED',
+  "signature_status" "WebhookSignalSignatureStatus" NOT NULL,
   "source_timestamp" TIMESTAMP(3),
   "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
