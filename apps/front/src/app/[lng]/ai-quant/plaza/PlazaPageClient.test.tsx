@@ -15,6 +15,17 @@ const mockCreateStrategyPlazaRunRequestId = jest.fn()
 const mockSetIntent = jest.fn()
 const mockGetIntent = jest.fn()
 const mockClearIntent = jest.fn()
+const mockTranslations: Record<string, string> = {
+  'aiQuant.guestLanding.plazaSubtitle': '精选策略模板',
+  'aiQuant.plaza': '策略广场',
+  'aiQuant.plazaPage.back': '返回',
+  'aiQuant.plazaPage.editSessionFailed': '创建策略广场编辑会话失败',
+  'aiQuant.plazaPage.guestHint': '登录后可以一键运行或编辑策略模板，未登录也可以先浏览策略广场。',
+  'aiQuant.plazaPage.loadFailed': '获取策略广场模板失败',
+  'aiQuant.plazaPage.runFailed': '运行策略广场模板失败',
+  'aiQuant.strategyPlazaSubtitle': '精选策略模板',
+}
+const mockT = (key: string) => mockTranslations[key] ?? key
 
 let mockSession: { userId: string } | null = { userId: 'u-1' }
 let mockIsLoading = false
@@ -56,7 +67,7 @@ const template: StrategyPlazaTemplate = {
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: mockT,
   }),
 }))
 

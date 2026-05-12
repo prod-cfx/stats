@@ -192,7 +192,7 @@ export class SignalExecutorRepository {
     const count = await this.txHost.tx.userSignalExecution.count({
       where: {
         userStrategyAccountId: accountId,
-        status: 'FAILED',
+        status: { in: ['FAILED', 'PENDING'] },
         orderSide: { in: ['BUY', 'SELL'] },
         signal: {
           signalType: 'ENTRY',

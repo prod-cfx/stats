@@ -45,7 +45,28 @@ const translationMap: Record<string, string> = {
   'aiQuant.messages.confirmGenerate': 'aiQuant.messages.confirmGenerate',
   'aiQuant.messages.generatedCodeTitle': '生成的策略代码：',
   'aiQuant.messages.staleConversationRecovered': '检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。',
+  'aiQuant.runningGuard.runningTitle': '策略正在运行，不能直接修改',
+  'aiQuant.runningGuard.runningDescription': '当前策略正在使用已部署版本运行。为避免运行逻辑与编辑内容不一致，请先停止策略。停止后你可以修改策略并重新部署。',
+  'aiQuant.runningGuard.unknownTitle': '部署状态待确认，暂不能直接修改',
+  'aiQuant.runningGuard.unknownDescription': '当前策略实例的部署状态仍在确认中。为避免误判为可编辑或可重复部署，请先查看运行策略或停止策略，确认后再继续修改。',
+  'aiQuant.runningGuard.viewRunningStrategy': '查看运行策略',
+  'aiQuant.runningGuard.stopStrategy': '停止策略',
+  'aiQuant.runningGuard.cancel': '取消',
+  'aiQuant.stopDialog.titleWithRisk': '当前策略仍有持仓或挂单',
+  'aiQuant.stopDialog.descriptionWithRisk': '停止前请确认如何处理当前持仓。仅停止不会平仓；平仓并停止会在 OKX 模拟盘提交平仓单。',
+  'aiQuant.stopDialog.strategy': '策略',
+  'aiQuant.stopDialog.exchangeSymbol': '交易所/交易对',
+  'aiQuant.stopDialog.openPositions': '当前持仓',
+  'aiQuant.stopDialog.unrealizedPnl': '当前浮盈亏',
+  'aiQuant.stopDialog.openOrders': '当前未成交挂单',
+  'aiQuant.stopDialog.unknown': '待确认',
+  'aiQuant.stopDialog.liquidateHint': '平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。',
+  'aiQuant.stopDialog.stopOnly': '仅停止，保留持仓/挂单',
+  'aiQuant.stopDialog.liquidateAndStop': '平仓并停止',
+  'aiQuant.stopDialog.cancel': '取消',
 }
+const mockT = (key: string, options?: { defaultValue?: string }) =>
+  translationMap[key] ?? options?.defaultValue ?? key
 
 function readStoredConversations<T>(): T[] {
   const raw = localStorage.getItem('ai_quant_conversations_v1')
@@ -63,8 +84,7 @@ function readStoredConversations<T>(): T[] {
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) =>
-      translationMap[key] ?? options?.defaultValue ?? key,
+    t: mockT,
   }),
 }))
 

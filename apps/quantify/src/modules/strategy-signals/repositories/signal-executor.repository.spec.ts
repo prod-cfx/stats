@@ -30,3 +30,33 @@ describe('signalExecutorRepository.findRecoverableSignals', () => {
     })
   })
 })
+
+describe('signalExecutorRepository.hasPendingReconcileRequiredEntryExecution', () => {
+  it('blocks admission for failed or pending reconcile-required entry executions', async () => {
+    const count = jest.fn().mockResolvedValue(1)
+    const repo = new SignalExecutorRepository({
+      tx: {
+        userSignalExecution: {
+          count,
+        },
+      },
+    } as any)
+
+    await expect(repo.hasPendingReconcileRequiredEntryExecution('account-1')).resolves.toBe(true)
+
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        userStrategyAccountId: 'account-1',
+        status: { in: ['FAILED', 'PENDING'] },
+        orderSide: { in: ['BUY', 'SELL'] },
+        signal: {
+          signalType: 'ENTRY',
+        },
+        metadata: {
+          path: ['reconcileRequired'],
+          equals: true,
+        },
+      },
+    })
+  })
+})

@@ -5,6 +5,7 @@ import { strategySignalsConfig } from "@/config/configuration"
 import { AiModule } from "@/modules/ai/ai.module"
 import { PublishedStrategySnapshotsRepository } from "@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository"
 import { MarketDataModule } from "@/modules/market-data/market-data.module"
+import { ShardingModule } from "@/modules/sharding/sharding.module"
 import { PrismaModule } from "@/prisma/prisma.module"
 import { SignalGeneratorRepository } from "./repositories/signal-generator.repository"
 import { StrategyRuntimeExecutionStateRepository } from "./repositories/strategy-runtime-execution-state.repository"
@@ -15,7 +16,7 @@ import { SignalTelemetryService } from "./services/signal-telemetry.service"
 import { StrategyRuntimeExecutionStateService } from "./services/strategy-runtime-execution-state.service"
 
 @Module({
-  imports: [PrismaModule, AiModule, MarketDataModule, ConfigModule.forFeature(strategySignalsConfig)],
+  imports: [PrismaModule, AiModule, MarketDataModule, ShardingModule, ConfigModule.forFeature(strategySignalsConfig)],
   providers: [
     SignalGeneratorService,
     SignalTelemetryService,

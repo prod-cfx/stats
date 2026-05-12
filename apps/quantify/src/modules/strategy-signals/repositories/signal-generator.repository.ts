@@ -274,7 +274,7 @@ export class SignalGeneratorRepository {
   }): Promise<boolean> {
     const count = await this.txHost.tx.userSignalExecution.count({
       where: {
-        status: 'FAILED',
+        status: { in: ['FAILED', 'PENDING'] },
         orderSide: { in: ['BUY', 'SELL'] },
         signal: {
           signalType: 'ENTRY',
