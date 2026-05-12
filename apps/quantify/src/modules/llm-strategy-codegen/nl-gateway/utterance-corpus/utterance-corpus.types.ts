@@ -28,6 +28,25 @@ export type SupportedExecutableUtteranceAtom =
   | 'portfolioRisk.drawdown_block'
   | 'oscillator.rsi_lte'
   | 'external.signal'
+  // ── first-wave (PR1b) ──
+  | 'oscillator.rsi_gte'
+  | 'bollinger.touch_upper'
+  | 'bollinger.touch_lower'
+  | 'bollinger.touch_middle'
+  | 'price.percent_change'
+  | 'price.breakout_up'
+  | 'price.breakout_down'
+  | 'price.detect.indicator_boundary'
+  | 'indicator.cross_over'
+  | 'indicator.cross_under'
+  | 'indicator.above'
+  | 'indicator.below'
+  | 'execution.on_start'
+  | 'trend.direction'
+  | 'market.regime'
+  | 'volatility.state'
+  | 'price.range_position_lte'
+  | 'price.range_position_gte'
 
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner

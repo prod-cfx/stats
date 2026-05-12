@@ -18,9 +18,36 @@ import {
   UNSUPPORTED_SKIP,
   VIA_PRESENTATION_DISPLAY,
   type AtomContract,
+  type AtomContractBucket,
   type AtomContractKey,
+  type AtomContractDisplay,
+  type AtomContractEmit,
   type SizingEvidence,
 } from './atom-contract-types'
+
+type AtomContractSeed = Omit<AtomContract, 'key' | 'bucket' | 'display' | 'emit'> & {
+  readonly display?: AtomContractDisplay
+  readonly emit?: AtomContractEmit
+}
+
+export type Pr1bStubIrShapeBuilder = AtomContractEmit['irShape'] & {
+  readonly __pr1bStub: true
+}
+
+type Pr1bStubEmit = Omit<AtomContractEmit, 'irShape'> & {
+  readonly capabilityStatus: 'pr1b-stub'
+  readonly irShape: Pr1bStubIrShapeBuilder
+}
+
+type CompletedPr1bRegistry<T extends Record<AtomContractKey, AtomContractSeed>> = {
+  readonly [K in keyof T]: Omit<T[K], 'display' | 'emit'> & {
+    readonly key: K
+    readonly bucket: AtomContractBucket
+    readonly canonicalWave: 'canonicalWave' extends keyof T[K] ? T[K]['canonicalWave'] : undefined
+    readonly display: AtomContractDisplay
+    readonly emit: Pr1bStubEmit
+  }
+}
 
 // Per-order budget capability triple — shared by DCA / pyramiding emit paths.
 // Issue #1191：常量名保留 DCA 前缀以维持向后兼容；pyramiding 复用同一三元组，
@@ -55,11 +82,137 @@ const GRID_SIZING_EVIDENCE: SizingEvidence = {
   paramSource: 'perGridSizing',
 }
 
+export const ATOM_BUCKETS = {
+  'volume.threshold': 'trigger',
+  'volatility.atr_threshold': 'trigger',
+  'strategy.time_window': 'trigger',
+  'oscillator.rsi_lte': 'trigger',
+  'oscillator.rsi_gte': 'trigger',
+  'indicator.divergence': 'trigger',
+  'price.candle_pattern': 'trigger',
+  'price.chart_pattern': 'trigger',
+  'liquidity.sweep': 'trigger',
+  'external.signal': 'trigger',
+  'position.has_position': 'trigger',
+  'position.no_position': 'trigger',
+  'bollinger.touch_upper': 'trigger',
+  'bollinger.touch_lower': 'trigger',
+  'bollinger.touch_middle': 'trigger',
+  'price.percent_change': 'trigger',
+  'price.breakout_up': 'trigger',
+  'price.breakout_down': 'trigger',
+  'price.detect.indicator_boundary': 'trigger',
+  'indicator.cross_over': 'trigger',
+  'indicator.cross_under': 'trigger',
+  'indicator.above': 'trigger',
+  'indicator.below': 'trigger',
+  'execution.on_start': 'trigger',
+  'trend.direction': 'trigger',
+  'market.regime': 'trigger',
+  'volatility.state': 'trigger',
+  'price.range_position_lte': 'trigger',
+  'price.range_position_gte': 'trigger',
+  'action.add_position': 'action',
+  'action.reverse_position': 'action',
+  'risk.partial_take_profit': 'risk',
+  'portfolioRisk.drawdown_block': 'orchestration',
+  'position.dca_schedule': 'positionConstraint',
+  'position.pyramiding_limit': 'positionConstraint',
+  'grid.range_rebalance': 'positionConstraint',
+} as const satisfies Record<AtomContractKey, AtomContractBucket>
+
+const ATOM_PUBLIC_NAMES = {
+  'volume.threshold': '成交量阈值',
+  'volatility.atr_threshold': 'ATR 波动率阈值',
+  'strategy.time_window': '交易时间窗口',
+  'oscillator.rsi_lte': 'RSI 低于阈值',
+  'oscillator.rsi_gte': 'RSI 高于阈值',
+  'indicator.divergence': '指标背离',
+  'price.candle_pattern': 'K 线形态',
+  'price.chart_pattern': '图形形态',
+  'liquidity.sweep': '流动性扫荡',
+  'external.signal': '外部喊单 / Webhook 信号',
+  'position.has_position': '已有仓位卫语句',
+  'position.no_position': '无仓位卫语句',
+  'bollinger.touch_upper': '触及布林上轨',
+  'bollinger.touch_lower': '触及布林下轨',
+  'bollinger.touch_middle': '触及布林中轨',
+  'price.percent_change': '价格百分比变化',
+  'price.breakout_up': '向上突破',
+  'price.breakout_down': '向下跌破',
+  'price.detect.indicator_boundary': '价格触及指标边界',
+  'indicator.cross_over': '指标上穿',
+  'indicator.cross_under': '指标下穿',
+  'indicator.above': '指标高于阈值',
+  'indicator.below': '指标低于阈值',
+  'execution.on_start': '启动后执行',
+  'trend.direction': '趋势方向',
+  'market.regime': '市场状态',
+  'volatility.state': '波动率状态',
+  'price.range_position_lte': '区间低位',
+  'price.range_position_gte': '区间高位',
+  'action.add_position': '加仓',
+  'action.reverse_position': '反手',
+  'risk.partial_take_profit': '分批止盈',
+  'portfolioRisk.drawdown_block': '组合回撤护栏',
+  'position.dca_schedule': 'DCA 补仓计划',
+  'position.pyramiding_limit': '金字塔加仓限制',
+  'grid.range_rebalance': '网格区间再平衡',
+} as const satisfies Record<AtomContractKey, string>
+
+function createPr1bStubIrShape(key: AtomContractKey): Pr1bStubIrShapeBuilder {
+  return Object.assign(
+    (() => {
+      throw new Error(`[#1279 PR1b stub] emit.irShape for ${key} pending PR3a IR compiler refactor`)
+    }) as AtomContractEmit['irShape'],
+    { __pr1bStub: true as const },
+  )
+}
+
+function createPr1bDisplay(publicName: string): AtomContractDisplay {
+  return {
+    publicName: { zh: publicName, en: publicName },
+    paramRenderers: {},
+    summaryTemplate: () => publicName,
+  }
+}
+
+function createPr1bEmit(key: AtomContractKey, bucket: AtomContractBucket): Pr1bStubEmit {
+  const [domain, ...objectParts] = key.split('.')
+  return {
+    capability: {
+      domain: bucket,
+      verb: 'emit',
+      object: objectParts.length > 0 ? objectParts.join('.') : domain,
+    },
+    capabilityStatus: 'pr1b-stub',
+    irShape: createPr1bStubIrShape(key),
+    evidenceSource: bucket === 'positionConstraint' || bucket === 'orchestration' ? 'segment' : 'clause',
+  }
+}
+
+function completePr1bRegistry<const T extends Record<AtomContractKey, AtomContractSeed>>(
+  registry: T,
+): CompletedPr1bRegistry<T> {
+  const completed: Partial<Record<AtomContractKey, AtomContract>> = {}
+  for (const key of Object.keys(registry) as Array<keyof T & AtomContractKey>) {
+    const bucket = ATOM_BUCKETS[key]
+    completed[key] = {
+      ...registry[key],
+      key,
+      bucket,
+      display: registry[key].display ?? createPr1bDisplay(ATOM_PUBLIC_NAMES[key]),
+      emit: createPr1bEmit(key, bucket),
+    } as AtomContract
+  }
+  return completed as CompletedPr1bRegistry<T>
+}
+
 // =========================================================
 // 注册表定义
 // =========================================================
 
-export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
+export const ATOM_CONTRACT_REGISTRY = completePr1bRegistry({
   // ── 触发信号（triggers）── 通用流水线 + presentationRegistry 文案
   'volume.threshold': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
@@ -123,6 +276,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
   },
 
   'oscillator.rsi_lte': {
+    canonicalWave: 'first-wave',
     summaryContribution: VIA_PRESENTATION_DISPLAY,
     readinessCheck: COMMON_PIPELINE,
     clarificationQuestion: VIA_PRESENTATION_DISPLAY,
@@ -137,6 +291,467 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
         },
       },
       paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'oscillator.rsi_gte': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['RSI', 'rsi', '超买'] as const,
+        verbs: {
+          gte: ['高于', '大于', '超过', '上方', 'above', 'over', 'greater than'] as const,
+        },
+      },
+      paramSlots: {
+        period: { kind: 'number', required: false, range: [1, 200], default: 14 },
+        value: { kind: 'number', required: true, range: [0, 100] },
+        thresholdRole: { kind: 'enum', required: false, enum: ['upper_threshold'], default: 'upper_threshold' },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'bollinger.touch_upper': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['布林带', '布林线', 'bollinger', '上轨'] as const,
+        verbs: {
+          touch_upper: ['触及', '碰到', '到达', 'touch', 'reaches'] as const,
+          breakout_up: ['突破', '上破', 'breakout'] as const,
+        },
+      },
+      paramSlots: {
+        band: { kind: 'enum', required: false, enum: ['upper'], default: 'upper' },
+        period: { kind: 'number', required: false, range: [1, 500], default: 20 },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2 },
+        confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'bollinger.touch_lower': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['布林带', '布林线', 'bollinger', '下轨'] as const,
+        verbs: {
+          touch_lower: ['触及', '碰到', '到达', 'touch', 'reaches'] as const,
+          breakout_down: ['跌破', '下破', 'breakdown'] as const,
+        },
+      },
+      paramSlots: {
+        band: { kind: 'enum', required: false, enum: ['lower'], default: 'lower' },
+        period: { kind: 'number', required: false, range: [1, 500], default: 20 },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2 },
+        confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'bollinger.touch_middle': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['布林带', '布林线', 'bollinger', '中轨', '中线'] as const,
+        verbs: {
+          touch_middle: ['触及', '回踩', '碰到', 'touch', 'retest'] as const,
+        },
+      },
+      paramSlots: {
+        band: { kind: 'enum', required: false, enum: ['middle'], default: 'middle' },
+        period: { kind: 'number', required: false, range: [1, 500], default: 20 },
+        stdDev: { kind: 'number', required: false, range: [0.1, 10], default: 2 },
+        confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'] },
+      },
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'price.percent_change': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['价格', '收盘价', '涨跌幅', '百分比', 'price', 'percent change'] as const,
+        verbs: {
+          gte: ['上涨', '涨', 'rise', 'up'] as const,
+          lte: ['下跌', '跌', 'drop', 'down'] as const,
+        },
+      },
+      paramSlots: {
+        direction: { kind: 'enum', required: true, enum: ['up', 'down'] },
+        valuePct: { kind: 'percent', required: true, range: [-100, 100] },
+        basis: { kind: 'enum', required: false, enum: ['prev_close', 'entry_avg_price', 'current_price'] },
+        window: { kind: 'duration', required: false },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'price.breakout_up': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['突破', '前高', '高点', 'channel high', 'breakout'] as const,
+        verbs: {
+          breakout_up: ['突破', '升破', '上破', 'breakout'] as const,
+        },
+      },
+      paramSlots: {
+        period: { kind: 'number', required: false, range: [1, 1000] },
+        reference: { kind: 'enum', required: true, enum: ['channel_high', 'unknown'] },
+        bufferPct: { kind: 'percent', required: false, range: [0, 100] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'price.breakout_down': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['跌破', '前低', '低点', 'channel low', 'breakdown'] as const,
+        verbs: {
+          breakout_down: ['跌破', '跌回', '下破', '跌穿', 'breakdown'] as const,
+        },
+      },
+      paramSlots: {
+        period: { kind: 'number', required: false, range: [1, 1000] },
+        reference: { kind: 'enum', required: true, enum: ['channel_low', 'unknown'] },
+        bufferPct: { kind: 'percent', required: false, range: [0, 100] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'price.detect.indicator_boundary': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['指标边界', '布林带', '通道', '上轨', '下轨', '中轨', 'boundary'] as const,
+        verbs: {
+          touch_upper: ['触及上轨', '触及上边界', 'touch upper'] as const,
+          touch_lower: ['触及下轨', '触及下边界', 'touch lower'] as const,
+          touch_middle: ['触及中轨', '触及中线', 'touch middle'] as const,
+          breakout_up: ['突破上轨', '上破边界', 'breakout upper'] as const,
+          breakout_down: ['跌破下轨', '下破边界', 'breakdown lower'] as const,
+        },
+      },
+      paramSlots: {
+        boundaryRole: { kind: 'enum', required: true, enum: ['upper', 'lower', 'middle'] },
+        confirmationMode: { kind: 'enum', required: false, enum: ['touch', 'breakout', 'close'] },
+        sourceText: { kind: 'enum', required: false, enum: ['boundary'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'indicator.cross_over': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['均线', 'MA', 'EMA', 'RSI', 'MACD', 'DIF', 'DEA', 'indicator'] as const,
+        verbs: {
+          cross_over: ['上穿', '金叉', '穿回', '向上穿回', 'cross over', 'crosses above'] as const,
+        },
+      },
+      paramSlots: {
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'] },
+        semantic: { kind: 'enum', required: false, enum: ['cross_up'] },
+        value: { kind: 'number', required: false, range: [0, 100] },
+        period: { kind: 'number', required: false, range: [1, 500] },
+        fastPeriod: { kind: 'number', required: false, range: [1, 500] },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500] },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'from-direction',
+    },
+  },
+
+  'indicator.cross_under': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['均线', 'MA', 'EMA', 'RSI', 'MACD', 'DIF', 'DEA', 'indicator'] as const,
+        verbs: {
+          cross_under: ['下穿', '死叉', '跌破', '向下穿过', 'cross under', 'crosses below'] as const,
+        },
+      },
+      paramSlots: {
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema', 'rsi', 'macd'] },
+        semantic: { kind: 'enum', required: false, enum: ['cross_down'] },
+        value: { kind: 'number', required: false, range: [0, 100] },
+        period: { kind: 'number', required: false, range: [1, 500] },
+        fastPeriod: { kind: 'number', required: false, range: [1, 500] },
+        slowPeriod: { kind: 'number', required: false, range: [1, 500] },
+        signalPeriod: { kind: 'number', required: false, range: [1, 500] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'from-direction',
+    },
+  },
+
+  'indicator.above': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['价格', '收盘价', 'MA', 'EMA', '均线', 'indicator'] as const,
+        verbs: {
+          gte: ['站上', '突破', '高于', '上方', 'above', 'over'] as const,
+        },
+      },
+      paramSlots: {
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema'] },
+        'reference.period': { kind: 'number', required: false, range: [1, 500] },
+        timeframeOverride: { kind: 'enum', required: false, enum: ['true'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'from-direction',
+    },
+  },
+
+  'indicator.below': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['价格', '收盘价', 'MA', 'EMA', '均线', 'indicator'] as const,
+        verbs: {
+          lte: ['跌破', '下穿', '低于', '下方', 'below', 'under'] as const,
+        },
+      },
+      paramSlots: {
+        indicator: { kind: 'enum', required: true, enum: ['ma', 'ema'] },
+        'reference.period': { kind: 'number', required: false, range: [1, 500] },
+        timeframeOverride: { kind: 'enum', required: false, enum: ['true'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'from-direction',
+    },
+  },
+
+  'execution.on_start': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: true,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['立即', '立刻', '开始时', '启动时', 'on start', 'immediately'] as const,
+        verbs: {
+          fixed: ['市价买入', '市价卖出', '开仓', '平仓', 'market'] as const,
+        },
+      },
+      paramSlots: {
+        timing: { kind: 'enum', required: false, enum: ['on_start'], default: 'on_start' },
+        orderType: { kind: 'enum', required: false, enum: ['market'], default: 'market' },
+        occurrence: { kind: 'enum', required: false, enum: ['once'], default: 'once' },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'trend.direction': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['趋势', '大趋势', '市场趋势', 'trend'] as const,
+        verbs: {
+          fixed: ['向上', '上涨', '多头', '向下', '下跌', '空头', 'up', 'down', 'bull', 'bear'] as const,
+        },
+      },
+      paramSlots: {
+        value: { kind: 'enum', required: true, enum: ['up', 'down'] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'market.regime': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['市场状态', '行情', '震荡', '盘整', 'regime', 'range-bound'] as const,
+        verbs: {
+          fixed: ['震荡区间', '区间震荡', '盘整', 'range-bound'] as const,
+        },
+      },
+      paramSlots: {
+        value: { kind: 'enum', required: true, enum: ['range', 'trend', 'volatile'] },
+      },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'both',
+    },
+  },
+
+  'volatility.state': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['波动率', '高波动', '低波动', 'volatility'] as const,
+        verbs: {
+          fixed: ['过高', '偏低', '升高', '降低', 'high', 'low'] as const,
+        },
+      },
+      paramSlots: {
+        value: { kind: 'enum', required: true, enum: ['high', 'low'] },
+      },
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'both',
+    },
+  },
+
+  'price.range_position_lte': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['区间', '区间低位', '区间底部', 'range'] as const,
+        verbs: {
+          lte: ['区间下', '低位', '底部', 'lower range'] as const,
+        },
+      },
+      paramSlots: {
+        lookbackBars: { kind: 'number', required: false, range: [1, 5000], default: 20 },
+        thresholdPct: { kind: 'percent', required: true, range: [0, 100] },
+      },
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
+  },
+
+  'price.range_position_gte': {
+    canonicalWave: 'first-wave',
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['区间', '区间高位', '区间顶部', 'range'] as const,
+        verbs: {
+          gte: ['区间上', '高位', '顶部', 'upper range'] as const,
+        },
+      },
+      paramSlots: {
+        lookbackBars: { kind: 'number', required: false, range: [1, 5000], default: 20 },
+        thresholdPct: { kind: 'percent', required: true, range: [0, 100] },
+      },
       phaseResolver: 'by-clause-verb',
       sideResolver: 'inherit',
     },
@@ -480,7 +1095,7 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
       sideResolver: 'both',
     },
   },
-} satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>
+})
 
 // TS exhaustive 编译期守门验证（无运行时开销）
 // 若 ATOM_CONTRACT_REGISTRY 缺少任一 SupportedExecutableUtteranceAtom key → TS error

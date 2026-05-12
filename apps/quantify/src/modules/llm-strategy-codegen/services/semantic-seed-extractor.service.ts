@@ -3723,6 +3723,22 @@ export class SemanticSeedExtractorService {
       })
     }
 
+    if (/(?:高波动|波动率(?:过高|升高|偏高)|high\s+volatility)/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'volatility.state',
+        phase: 'gate',
+        params: { value: 'high' },
+      })
+    }
+
+    if (/(?:低波动|波动率(?:过低|降低|偏低)|low\s+volatility)/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'volatility.state',
+        phase: 'gate',
+        params: { value: 'low' },
+      })
+    }
+
     if (/(?:市场趋势|大趋势|整体趋势|(?:\d{1,2}\s*(?:h|小时|时))?\s*趋势).{0,8}(?:向上|上涨|多头|up|bull)/iu.test(segment)) {
       this.pushTrigger(triggers, seen, {
         key: 'trend.direction',

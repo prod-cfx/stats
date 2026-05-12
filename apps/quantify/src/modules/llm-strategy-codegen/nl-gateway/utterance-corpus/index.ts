@@ -1,5 +1,23 @@
 import type { SupportedExecutableUtteranceAtom, UtteranceCorpusCase } from './utterance-corpus.types'
-import { oscillatorRsiUtterances } from './atoms/oscillator.rsi.utterance'
+import { oscillatorRsiLteUtterances } from './atoms/oscillator.rsi_lte.utterance'
+import { oscillatorRsiGteUtterances } from './atoms/oscillator.rsi_gte.utterance'
+import { bollingerTouchUpperUtterances } from './atoms/bollinger.touch_upper.utterance'
+import { bollingerTouchLowerUtterances } from './atoms/bollinger.touch_lower.utterance'
+import { bollingerTouchMiddleUtterances } from './atoms/bollinger.touch_middle.utterance'
+import { pricePercentChangeUtterances } from './atoms/price.percent_change.utterance'
+import { priceBreakoutUpUtterances } from './atoms/price.breakout_up.utterance'
+import { priceBreakoutDownUtterances } from './atoms/price.breakout_down.utterance'
+import { priceDetectIndicatorBoundaryUtterances } from './atoms/price.detect.indicator_boundary.utterance'
+import { indicatorCrossOverUtterances } from './atoms/indicator.cross_over.utterance'
+import { indicatorCrossUnderUtterances } from './atoms/indicator.cross_under.utterance'
+import { indicatorAboveUtterances } from './atoms/indicator.above.utterance'
+import { indicatorBelowUtterances } from './atoms/indicator.below.utterance'
+import { executionOnStartUtterances } from './atoms/execution.on_start.utterance'
+import { trendDirectionUtterances } from './atoms/trend.direction.utterance'
+import { marketRegimeUtterances } from './atoms/market.regime.utterance'
+import { volatilityStateUtterances } from './atoms/volatility.state.utterance'
+import { priceRangePositionLteUtterances } from './atoms/price.range_position_lte.utterance'
+import { priceRangePositionGteUtterances } from './atoms/price.range_position_gte.utterance'
 import { externalSignalUtterances } from './atoms/external.signal.utterance'
 import { actionAddPositionUtterances } from './atoms/action.add_position.utterance'
 import { actionReversePositionUtterances } from './atoms/action.reverse_position.utterance'
@@ -41,6 +59,19 @@ export const INDIRECTLY_COVERED_ATOMS: ReadonlySet<SupportedExecutableUtteranceA
   'grid.range_rebalance',
 ])
 
+/**
+ * PR1b canonical alias map.
+ *
+ * These atoms remain supported first-wave contract keys, but the current seed extractor
+ * canonicalizes explicit Bollinger boundary NL into the universal indicator-boundary atom.
+ * Coverage specs must count the source atom fixtures while validating the observed target key.
+ */
+export const CANONICAL_CORPUS_ALIASES = {
+  'bollinger.touch_upper': 'price.detect.indicator_boundary',
+  'bollinger.touch_lower': 'price.detect.indicator_boundary',
+  'bollinger.touch_middle': 'price.detect.indicator_boundary',
+} as const satisfies Partial<Record<SupportedExecutableUtteranceAtom, SupportedExecutableUtteranceAtom>>
+
 export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'volume.threshold',
   'volatility.atr_threshold',
@@ -59,6 +90,24 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'liquidity.sweep',
   'portfolioRisk.drawdown_block',
   'oscillator.rsi_lte',
+  'oscillator.rsi_gte',
+  'bollinger.touch_upper',
+  'bollinger.touch_lower',
+  'bollinger.touch_middle',
+  'price.percent_change',
+  'price.breakout_up',
+  'price.breakout_down',
+  'price.detect.indicator_boundary',
+  'indicator.cross_over',
+  'indicator.cross_under',
+  'indicator.above',
+  'indicator.below',
+  'execution.on_start',
+  'trend.direction',
+  'market.regime',
+  'volatility.state',
+  'price.range_position_lte',
+  'price.range_position_gte',
 ] as const satisfies readonly SupportedExecutableUtteranceAtom[]
 
 export const SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS = [
@@ -85,7 +134,25 @@ export const utteranceCorpus = [
   ...priceChartPatternUtterances,
   ...liquiditySweepUtterances,
   ...portfolioDrawdownBlockUtterances,
-  ...oscillatorRsiUtterances,
+  ...oscillatorRsiLteUtterances,
+  ...oscillatorRsiGteUtterances,
+  ...bollingerTouchUpperUtterances,
+  ...bollingerTouchLowerUtterances,
+  ...bollingerTouchMiddleUtterances,
+  ...pricePercentChangeUtterances,
+  ...priceBreakoutUpUtterances,
+  ...priceBreakoutDownUtterances,
+  ...priceDetectIndicatorBoundaryUtterances,
+  ...indicatorCrossOverUtterances,
+  ...indicatorCrossUnderUtterances,
+  ...indicatorAboveUtterances,
+  ...indicatorBelowUtterances,
+  ...executionOnStartUtterances,
+  ...trendDirectionUtterances,
+  ...marketRegimeUtterances,
+  ...volatilityStateUtterances,
+  ...priceRangePositionLteUtterances,
+  ...priceRangePositionGteUtterances,
   ...externalSignalUtterances,
 ] as const satisfies readonly UtteranceCorpusCase[]
 

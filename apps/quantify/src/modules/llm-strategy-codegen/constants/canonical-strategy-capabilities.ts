@@ -1,3 +1,5 @@
+import { ATOM_CONTRACT_REGISTRY } from '../atom-contracts/atom-contract-registry'
+
 export const DEFAULT_INDICATOR_PARAMS = {
   bollingerBands: { period: 20, stdDev: 2 },
   sma: { period: 20 },
@@ -26,37 +28,31 @@ export const CANONICAL_RULE_KEYS = {
 
 export type CanonicalRuleKeyValue = (typeof CANONICAL_RULE_KEYS)[keyof typeof CANONICAL_RULE_KEYS]
 
-export const FIRST_WAVE_TRIGGER_ATOMS = [
-  'execution.on_start',
-  'price.percent_change',
-  'price.range_position_lte',
-  'price.range_position_gte',
-  'price.breakout_up',
-  'price.breakout_down',
-  'price.detect.indicator_boundary',
-  'indicator.cross_over',
-  'indicator.cross_under',
-  'indicator.above',
-  'indicator.below',
-  'bollinger.touch_upper',
-  'bollinger.touch_lower',
-  'bollinger.touch_middle',
-  'oscillator.rsi_gte',
-  'oscillator.rsi_lte',
-  'trend.direction',
-  'market.regime',
-  'volatility.state',
-] as const
+type Registry = typeof ATOM_CONTRACT_REGISTRY
+type RegistryKey = keyof Registry
 
-export type FirstWaveTriggerAtom = (typeof FIRST_WAVE_TRIGGER_ATOMS)[number]
+export type FirstWaveTriggerAtom = {
+  [K in RegistryKey]:
+    Extract<Registry[K]['canonicalWave'], 'first-wave'> extends never
+      ? never
+      : K
+}[RegistryKey]
 
-export const FIRST_WAVE_STATE_TRIGGER_ATOMS = [
-  'trend.direction',
-  'market.regime',
-  'volatility.state',
-] as const
+export const FIRST_WAVE_TRIGGER_ATOMS = Object.values(ATOM_CONTRACT_REGISTRY)
+  .filter((contract): contract is Registry[FirstWaveTriggerAtom] =>
+    contract.bucket === 'trigger' && contract.canonicalWave === 'first-wave',
+  )
+  .map(contract => contract.key) as FirstWaveTriggerAtom[]
 
-export type FirstWaveStateTriggerAtom = (typeof FIRST_WAVE_STATE_TRIGGER_ATOMS)[number]
+export type FirstWaveStateTriggerAtom = Extract<
+  FirstWaveTriggerAtom,
+  'trend.direction' | 'market.regime' | 'volatility.state'
+>
+
+export const FIRST_WAVE_STATE_TRIGGER_ATOMS = FIRST_WAVE_TRIGGER_ATOMS
+  .filter((atom): atom is FirstWaveStateTriggerAtom =>
+    atom === 'trend.direction' || atom === 'market.regime' || atom === 'volatility.state',
+  )
 
 export const FIRST_WAVE_FAMILIES = [
   'single-leg',

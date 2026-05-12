@@ -1,0 +1,7 @@
+import type { UtteranceCorpusCase } from '../utterance-corpus.types'
+
+export const bollingerTouchUpperUtterances = [
+  { id: 'bollinger-touch-upper-zh-exit', atomKey: 'bollinger.touch_upper' as const, locale: 'zh' as const, coverage: 'locked' as const, utterance: '布林带20周期2倍标准差触及上轨卖出平仓，仓位 10%。', expected: { owner: 'trigger' as const, key: 'price.detect.indicator_boundary' as const, status: 'locked' as const, openSlotKeys: [] } },
+  { id: 'bollinger-touch-upper-zh-short', atomKey: 'bollinger.touch_upper' as const, locale: 'zh' as const, coverage: 'locked' as const, utterance: '布林带20周期2倍标准差突破上轨做空，固定仓位 10%。', expected: { owner: 'trigger' as const, key: 'price.detect.indicator_boundary' as const, status: 'locked' as const, openSlotKeys: [] } },
+  { id: 'bollinger-touch-upper-mixed', atomKey: 'bollinger.touch_upper' as const, locale: 'mixed' as const, coverage: 'locked' as const, utterance: 'BTCUSDT 15m，布林带20周期2倍标准差触及上轨平多，单笔 10%。', expected: { owner: 'trigger' as const, key: 'price.detect.indicator_boundary' as const, status: 'locked' as const, openSlotKeys: [] } },
+] satisfies readonly UtteranceCorpusCase[]

@@ -85,6 +85,11 @@ export type EvidenceSource = 'clause' | 'segment' | 'param'
  */
 export interface AtomContractEmit {
   readonly capability: CapabilityTriple
+  /**
+   * PR1b registry entries use placeholder capability triples until PR3a wires real
+   * IR builder hooks. Runtime code must not route business behavior by stub capability.
+   */
+  readonly capabilityStatus?: 'pr1b-stub' | 'ready'
   readonly irShape: IrShapeBuilder
   readonly evidenceSource: EvidenceSource
 }

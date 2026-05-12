@@ -18,7 +18,7 @@ import { SemanticSupportClassifierService } from '../../services/semantic-suppor
 // #1162 INVARIANT-F：atom 必须在 ATOM_CONTRACT_REGISTRY 全链路声明 4 hook
 import { ATOM_CONTRACT_REGISTRY } from '../../atom-contracts/atom-contract-registry'
 // #1171 INVARIANT-I：声明 summaryContribution 的 atom 必须真的渲染出文本
-import { NO_SUMMARY, UNSUPPORTED_SKIP } from '../../atom-contracts/atom-contract-types'
+import { NO_SUMMARY, UNSUPPORTED_SKIP, type AtomContract } from '../../atom-contracts/atom-contract-types'
 import {
   ATOM_MUTEX,
   CLAUSE_BOUND_PARAM_CHECKS,
@@ -30,10 +30,41 @@ import {
   splitClauses,
 } from './corpus-invariants'
 import {
+  CANONICAL_CORPUS_ALIASES,
   INDIRECTLY_COVERED_ATOMS,
   SUPPORTED_UTTERANCE_CORPUS_ATOMS,
   utteranceCorpus,
 } from './index'
+import { FIRST_WAVE_TRIGGER_ATOMS } from '../../constants/canonical-strategy-capabilities'
+
+const canonicalCorpusAliases: ReadonlyMap<SupportedExecutableUtteranceAtom, SupportedExecutableUtteranceAtom> = new Map(
+  Object.entries(CANONICAL_CORPUS_ALIASES) as Array<[SupportedExecutableUtteranceAtom, SupportedExecutableUtteranceAtom]>,
+)
+
+const PR1B_FIRST_WAVE_OPEN_SLOT_EXEMPT_ATOMS = [
+  // PR1b first-wave fixtures lock existing extractor behavior; generic open-slot synthesis
+  // moves to the PR2 dispatcher instead of being faked per atom here.
+  // TODO(#1279-PR2): remove these explicit exemptions as dispatcher open-slot synthesis lands.
+  'oscillator.rsi_lte',
+  'oscillator.rsi_gte',
+  'bollinger.touch_upper',
+  'bollinger.touch_lower',
+  'bollinger.touch_middle',
+  'price.percent_change',
+  'price.breakout_up',
+  'price.breakout_down',
+  'price.detect.indicator_boundary',
+  'indicator.cross_over',
+  'indicator.cross_under',
+  'indicator.above',
+  'indicator.below',
+  'execution.on_start',
+  'trend.direction',
+  'market.regime',
+  'volatility.state',
+  'price.range_position_lte',
+  'price.range_position_gte',
+] as const satisfies readonly SupportedExecutableUtteranceAtom[]
 
 type CorpusTarget =
   | SemanticTriggerState
@@ -70,7 +101,12 @@ describe('utterance corpus baseline', () => {
       // oscillator.rsi_lte：extractor 当前对阈值缺失时 skip（不 emit open-slot），豁免开放槽覆盖约束
       // TODO(#1155-follow-up): extractor 支持 RSI 无阈值 open-slot emit 后回收豁免
       'oscillator.rsi_lte',
+      ...PR1B_FIRST_WAVE_OPEN_SLOT_EXEMPT_ATOMS,
     ])
+
+    for (const atomKey of FIRST_WAVE_TRIGGER_ATOMS) {
+      expect(atomsExemptFromOpenSlotCoverage.has(atomKey)).toBe(true)
+    }
 
     for (const atomKey of SUPPORTED_UTTERANCE_CORPUS_ATOMS) {
       // 间接触发的 atom 全面豁免 corpus 基线（清单从共享常量导入，与 atom-coverage-contract.spec.ts 同源）
@@ -83,6 +119,10 @@ describe('utterance corpus baseline', () => {
       expect(cases.some(item => item.locale === 'en' || item.locale === 'mixed')).toBe(true)
       if (!atomsExemptFromOpenSlotCoverage.has(atomKey)) {
         expect(cases.some(item => item.coverage === 'open-slot' || item.coverage === 'missing-default')).toBe(true)
+      }
+      for (const item of cases) {
+        const allowedExpectedKey = canonicalCorpusAliases.get(item.atomKey) ?? item.atomKey
+        expect(item.expected.key).toBe(allowedExpectedKey)
       }
     }
   })
@@ -511,7 +551,7 @@ describe('utterance corpus baseline', () => {
   it.each(lockedCases)(
     '$id [INVARIANT-I] declared-summary atom 在 state 中出现时对应 summary 段必须非空',
     (item) => {
-      const contract = ATOM_CONTRACT_REGISTRY[item.atomKey]
+      const contract = ATOM_CONTRACT_REGISTRY[item.atomKey] as AtomContract | undefined
       if (!contract) return
       // unsupported / NO_SUMMARY 不参与渲染走通性
       if (contract.summaryContribution === NO_SUMMARY) return

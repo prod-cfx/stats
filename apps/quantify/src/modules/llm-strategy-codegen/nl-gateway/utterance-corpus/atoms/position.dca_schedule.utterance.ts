@@ -40,11 +40,7 @@ export const positionDcaScheduleUtterances = [
       key: 'position.dca_schedule',
       status: 'open',
       params: { triggerMode: 'price_interval' },
-      openSlotKeys: [
-        'position.dca_schedule.max_count',
-        'position.dca_schedule.capital_cap',
-        'position.dca_schedule.per_order_sizing',
-      ],
+      openSlotKeys: ['position.dca_schedule.capital_cap'],
     },
   },
   {

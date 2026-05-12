@@ -13,6 +13,7 @@
  */
 
 import {
+  CANONICAL_CORPUS_ALIASES,
   INDIRECTLY_COVERED_ATOMS,
   SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS,
   SUPPORTED_UTTERANCE_CORPUS_ATOMS,
@@ -25,6 +26,7 @@ import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service
 const registry = new SemanticAtomRegistryService()
 const extractor = new SemanticSeedExtractorService()
 const strictRequiresSlotCorpusAtoms = new Set<string>(SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS)
+const canonicalCorpusAliases: ReadonlyMap<string, string> = new Map(Object.entries(CANONICAL_CORPUS_ALIASES))
 
 // 一些 supported atom 在 NL 层是 action/risk/position，seed-extractor 输出在不同 patch 字段下。
 // 对这些 atom，识别探针需要扫整个 patch（triggers + actions + risk + position.constraints）。
@@ -79,15 +81,17 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
       const probe = cases[0].utterance
       const patch = extractor.extract(probe)
       const keys = collectAtomKeysFromPatch(patch)
+      const canonicalAlias = canonicalCorpusAliases.get(atomKey)
+      const recognized = keys.has(atomKey) || (canonicalAlias !== undefined && keys.has(canonicalAlias))
 
       const atom = registry.resolve(atomKey)
       if (
         atom.supportStatus === 'supported_executable'
         || strictRequiresSlotCorpusAtoms.has(atomKey)
       ) {
-        expect(keys.has(atomKey)).toBe(true)
+        expect(recognized).toBe(true)
       } else if (atom.supportStatus === 'supported_requires_slot') {
-        if (!keys.has(atomKey)) {
+        if (!recognized) {
           // 降噪：requires_slot 类 NL 识别缺口在 Issue #1231 遗留问题中跟踪
           // eslint-disable-next-line no-console
           console.warn(`[atom-coverage-contract] supported_requires_slot atom "${atomKey}" not recognized from probe "${probe}"`)
