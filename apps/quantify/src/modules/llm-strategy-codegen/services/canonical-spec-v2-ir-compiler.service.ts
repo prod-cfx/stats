@@ -1598,21 +1598,34 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'bollinger.upper_break':
-      case 'bollinger.lower_break': {
+      case 'bollinger.lower_break':
+      case 'bollinger.touch_upper':
+      case 'bollinger.touch_lower': {
         context.runtimeRequirements.helpers.add('bollinger')
-        const bandRef = atom.key === 'bollinger.upper_break'
+        const isUpper = atom.key === 'bollinger.upper_break' || atom.key === 'bollinger.touch_upper'
+        const bandRef = isUpper
           ? this.ensureBollingerSeries(context, 'UPPER_BAND')
           : this.ensureBollingerSeries(context, 'LOWER_BAND')
+        const confirmationMode = typeof atom.params?.confirmationMode === 'string'
+          ? atom.params.confirmationMode
+          : undefined
+        // touch_* 默认走 touch 语义（GTE/LTE）；cross 仅在 confirmationMode='cross' 时启用。
+        // upper_break/lower_break 保持原有 CROSS_* 默认，兼容 builder 既有路径。
+        const isTouchKey = atom.key === 'bollinger.touch_upper' || atom.key === 'bollinger.touch_lower'
+        const defaultOp = isUpper
+          ? (isTouchKey && confirmationMode !== 'cross' ? 'GTE' : 'CROSS_OVER')
+          : (isTouchKey && confirmationMode !== 'cross' ? 'LTE' : 'CROSS_UNDER')
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           'compare',
           [closeRef, bandRef],
-          { op: atom.op ?? (atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER') },
+          { op: atom.op ?? defaultOp },
         )
       }
 
-      case 'bollinger.middle_revert': {
+      case 'bollinger.middle_revert':
+      case 'bollinger.touch_middle': {
         context.runtimeRequirements.helpers.add('bollinger')
         const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
@@ -3372,16 +3385,31 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'bollinger.upper_break':
-        return condition.op === 'GTE'
+      case 'bollinger.touch_upper': {
+        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
+          ? condition.params.confirmationMode
+          : undefined
+        const isTouchKey = condition.key === 'bollinger.touch_upper'
+        const isTouch = condition.op === 'GTE' || (isTouchKey && confirmationMode !== 'cross')
+        return isTouch
           ? `GTE(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
           : `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+      }
 
       case 'bollinger.lower_break':
-        return condition.op === 'LTE'
+      case 'bollinger.touch_lower': {
+        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
+          ? condition.params.confirmationMode
+          : undefined
+        const isTouchKey = condition.key === 'bollinger.touch_lower'
+        const isTouch = condition.op === 'LTE' || (isTouchKey && confirmationMode !== 'cross')
+        return isTouch
           ? `LTE(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
           : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+      }
 
       case 'bollinger.middle_revert':
+      case 'bollinger.touch_middle':
         return `OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`
 
       case 'bollinger.bars_outside': {
