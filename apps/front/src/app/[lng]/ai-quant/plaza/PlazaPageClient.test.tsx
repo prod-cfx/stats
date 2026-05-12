@@ -271,7 +271,7 @@ describe('AiQuantPlazaPageClient', () => {
       await plazaProps?.onEditStrategy('ma-cross')
     })
 
-    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
+    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross', 'zh')
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-1' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })
@@ -288,7 +288,7 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockGetIntent).toHaveBeenCalledWith(10 * 60 * 1000)
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledTimes(1)
-    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
+    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross', 'zh')
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-resume-1' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })

@@ -24,10 +24,12 @@ export class CodegenConversationContextHelper {
     const guidePrompt = this.mergeGuidePromptConfig(undefined, raw.guidePrompt as CodegenGuideConfigDto | undefined)
     const conversationHistory = this.normalizeStringArray(raw.conversationHistory)
     const inferredConfirmation = this.normalizeInferredConfirmation(raw.inferredConfirmation)
+    const locale = raw.locale === 'en' ? 'en' : raw.locale === 'zh' ? 'zh' : undefined
 
     return {
       ...createDefaultConstraintPack(),
       ...raw,
+      locale,
       guidePrompt,
       conversationHistory,
       inferredConfirmation,

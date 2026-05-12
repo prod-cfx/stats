@@ -14,7 +14,6 @@ import type {
   SeriesDef,
   LevelSetDef,
 } from '../types/canonical-strategy-ir'
-import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
   CanonicalConditionGroup,
@@ -37,13 +36,14 @@ import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
+import { LIQUIDITY_SWEEP_DEFAULT_RECLAIM_BARS } from '../types/canonical-strategy-ir'
+import { ACTIONABLE_RULE_ACTION_TYPES } from '../types/canonical-strategy-spec-v2'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
 import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
-import { SizingEvidenceMissingException } from '../exceptions/sizing-evidence-missing.exception'
-import { ACTIONABLE_RULE_ACTION_TYPES } from '../types/canonical-strategy-spec-v2'
 
 interface CompileCanonicalSpecV2ToIrInput {
   canonicalSpec: CanonicalStrategySpecV2
@@ -968,6 +968,8 @@ export class CanonicalSpecV2IrCompilerService {
             positionHandlingOnDeactivate: scope.positionHandlingOnDeactivate,
             orderHandlingOnDeactivate: scope.orderHandlingOnDeactivate,
           }
+        default:
+          throw new Error('codegen.orchestration_scope_unsupported')
       }
     })
   }
@@ -1393,8 +1395,9 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'ma.golden_cross':
       case 'ma.death_cross': {
-        const fastRef = this.ensureMovingAverageSeries(context, context.movingAverage.fast)
-        const slowRef = this.ensureMovingAverageSeries(context, context.movingAverage.slow)
+        const movingAverage = this.resolveMovingAverageAtomConfig(atom, context.movingAverage)
+        const fastRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.fast)
+        const slowRef = this.ensureMovingAverageSeries(context, movingAverage.kind, movingAverage.slow)
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -2015,14 +2018,14 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
-  private ensureMovingAverageSeries(context: CompileContext, period: number): string {
+  private ensureMovingAverageSeries(context: CompileContext, kind: 'EMA' | 'SMA', period: number): string {
     const closeRef = this.ensurePriceSeries(context, 'close')
-    const prefix = context.movingAverage.kind.toLowerCase()
+    const prefix = kind.toLowerCase()
     const id = `${prefix}_${period}_${context.timeframe}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
-        kind: context.movingAverage.kind,
+        kind,
         inputs: [closeRef],
         params: { period },
       })
@@ -2049,6 +2052,33 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}:${indicator}`)
+  }
+
+  private resolveMovingAverageAtomConfig(
+    atom: CanonicalConditionAtom,
+    fallback: CompileContext['movingAverage'],
+  ): CompileContext['movingAverage'] {
+    const rawIndicator = this.readStringParam(atom.params?.indicator)?.toLowerCase()
+    const kind = rawIndicator === 'sma' || rawIndicator === 'ma'
+      ? 'SMA'
+      : (rawIndicator === 'ema' ? 'EMA' : fallback.kind)
+    const fast = this.readNumber([
+      atom.params?.fast,
+      atom.params?.short,
+      atom.params?.fastPeriod,
+    ], fallback.fast)
+    const slow = this.readNumber([
+      atom.params?.slow,
+      atom.params?.long,
+      atom.params?.slowPeriod,
+      atom.params?.period,
+    ], fallback.slow)
+
+    return {
+      kind,
+      fast,
+      slow: slow > fast ? slow : fast + 14,
+    }
   }
 
   private ensureRsiSeries(context: CompileContext, period: number): string {
@@ -3327,7 +3357,8 @@ export class CanonicalSpecV2IrCompilerService {
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const operator = condition.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
-        return `${operator}(${config.movingAverage.kind}(CLOSE,${config.movingAverage.fast}),${config.movingAverage.kind}(CLOSE,${config.movingAverage.slow}))`
+        const movingAverage = this.resolveMovingAverageAtomConfig(condition, config.movingAverage)
+        return `${operator}(${movingAverage.kind}(CLOSE,${movingAverage.fast}),${movingAverage.kind}(CLOSE,${movingAverage.slow}))`
       }
 
       case 'rsi.threshold_lte':

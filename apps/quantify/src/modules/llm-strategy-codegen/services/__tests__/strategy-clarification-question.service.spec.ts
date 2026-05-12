@@ -40,6 +40,31 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).toContain('该布林带条件是触碰即触发，还是收盘确认后触发')
   })
 
+  it('renders semantic clarification prompts in English when requested', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      summary: 'OKX BTCUSDT 15m.',
+      items: [
+        {
+          key: 'semantic.trigger.entry',
+          reason: 'missing_semantic_trigger',
+          field: 'triggers',
+          blocking: true,
+          question: 'Please provide the entry trigger condition.',
+          status: 'pending',
+          slotKey: 'trigger.entry',
+          fieldPath: 'triggers[entry]',
+        },
+      ],
+    }, 'en')
+
+    expect(prompt).toContain('My current understanding of the strategy is')
+    expect(prompt).toContain('One condition still needs clarification')
+    expect(prompt).toContain('strategy semantic slot to confirm')
+    expect(prompt).toContain('Please confirm: Please provide the entry trigger condition.')
+    expect(prompt).not.toContain('我当前理解')
+  })
+
   it('asks for exchange when execution context is incomplete', () => {
     const prompt = questionService.buildFromAmbiguities({
       summary: 'BTCUSDT 15m，网格区间 60000-80000，每格 0.5%，单笔 10% 仓位',

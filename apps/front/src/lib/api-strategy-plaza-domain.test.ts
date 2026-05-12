@@ -219,10 +219,10 @@ describe('strategy plaza domain API', () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const { startStrategyPlazaEditSession } = await import('./api')
-    await expect(startStrategyPlazaEditSession('ma-cross')).resolves.toEqual(editSessionPayload)
+    await expect(startStrategyPlazaEditSession('ma-cross', 'en')).resolves.toEqual(editSessionPayload)
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/api/v1/strategy-plaza/templates/ma-cross/edit-session',
+      'http://localhost:3000/api/v1/strategy-plaza/templates/ma-cross/edit-session?locale=en',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
