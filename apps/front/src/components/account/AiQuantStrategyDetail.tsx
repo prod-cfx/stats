@@ -14,10 +14,17 @@ import { mapAccountStrategyDetailToRecord } from './ai-quant-strategy-api-adapte
 import { buildDynamicParamRows } from './dynamic-param-summary'
 import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 
-const STATUS_LABEL: Record<AiQuantStrategyViewState, string> = {
-  running: '运行中',
-  stopped: '已停止',
-  draft: '草稿',
+const STATUS_LABEL: Record<'zh' | 'en', Record<AiQuantStrategyViewState, string>> = {
+  zh: {
+    running: '运行中',
+    stopped: '已停止',
+    draft: '草稿',
+  },
+  en: {
+    running: 'Running',
+    stopped: 'Stopped',
+    draft: 'Draft',
+  },
 }
 
 const STATUS_CLASS: Record<AiQuantStrategyViewState, string> = {
@@ -318,12 +325,18 @@ function formatOrderEvidenceList(
 function resolveRuntimeControlErrorMessage(
   action: RuntimeAction,
   error: unknown,
+  lng: 'zh' | 'en',
 ) {
+  const fallback = action === 'run'
+    ? (lng === 'en' ? 'Failed to start the strategy. Please try again later.' : RUN_ERROR_MESSAGE)
+    : action === 'liquidate_and_stop'
+      ? (lng === 'en' ? 'Liquidate and stop failed. Check the paper trading account status and try again.' : LIQUIDATE_AND_STOP_ERROR_MESSAGE)
+      : (lng === 'en' ? 'Failed to stop the strategy. Please try again later.' : STOP_ERROR_MESSAGE)
   if (error instanceof Error && error.message.trim()) {
-    return error.message
+    const message = error.message.trim()
+    return lng === 'en' && /[\u4E00-\u9FFF]/.test(message) ? fallback : message
   }
-  if (action === 'run') return RUN_ERROR_MESSAGE
-  return action === 'liquidate_and_stop' ? LIQUIDATE_AND_STOP_ERROR_MESSAGE : STOP_ERROR_MESSAGE
+  return fallback
 }
 
 interface AiQuantStrategyDetailProps {
@@ -336,6 +349,7 @@ export function AiQuantStrategyDetail({
   strategy: initialStrategy,
 }: AiQuantStrategyDetailProps) {
   const { t } = useTranslation()
+  const isEn = lng === 'en'
   const { session } = useAuth()
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(initialStrategy)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -396,13 +410,13 @@ export function AiQuantStrategyDetail({
     return (
       <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center">
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">策略不存在或不可访问</h1>
-          <p className="mt-2 text-sm text-[color:var(--cf-muted)]">请返回 AI量化列表重新选择已部署策略。</p>
+          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{isEn ? 'Strategy not found or inaccessible' : '策略不存在或不可访问'}</h1>
+          <p className="mt-2 text-sm text-[color:var(--cf-muted)]">{isEn ? 'Return to the AI Quant list and select a deployed strategy again.' : '请返回 AI量化列表重新选择已部署策略。'}</p>
           <Link
             href={`/${lng}/account?tab=ai-quant`}
             className="mt-5 inline-flex rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
           >
-            返回列表
+            {isEn ? 'Back to List' : '返回列表'}
           </Link>
         </section>
       </main>
@@ -423,7 +437,11 @@ export function AiQuantStrategyDetail({
   const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
   const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders || hasUnknownOpenOrders
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
-  const exposureSummary = isSpotMarket ? formatSpotHolding(strategy) : `${openPositionsCount} 个 open positions`
+  const exposureSummary = isSpotMarket
+    ? formatSpotHolding(strategy)
+    : isEn
+      ? `${openPositionsCount} open position${openPositionsCount === 1 ? '' : 's'}`
+      : `${openPositionsCount} 个 open positions`
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
   const timelineItems = showFullTimeline
     ? strategy.timeline
@@ -446,15 +464,15 @@ export function AiQuantStrategyDetail({
       setRuntimeControlFeedback({
         kind: 'success',
         message: action === 'run'
-          ? RUN_SUCCESS_MESSAGE
+          ? (isEn ? 'Strategy started.' : RUN_SUCCESS_MESSAGE)
           : action === 'liquidate_and_stop'
-            ? LIQUIDATE_AND_STOP_SUCCESS_MESSAGE
-            : STOP_SUCCESS_MESSAGE,
+            ? (isEn ? 'Strategy liquidated and stopped.' : LIQUIDATE_AND_STOP_SUCCESS_MESSAGE)
+            : (isEn ? 'Strategy stopped. Existing positions and open orders are still retained and need separate management.' : STOP_SUCCESS_MESSAGE),
       })
     } catch (error) {
       setRuntimeControlFeedback({
         kind: 'error',
-        message: resolveRuntimeControlErrorMessage(action, error),
+        message: resolveRuntimeControlErrorMessage(action, error, lng),
       })
     } finally {
       setPendingRuntimeAction(null)
@@ -474,7 +492,7 @@ export function AiQuantStrategyDetail({
     } catch (error) {
       setRuntimeControlFeedback({
         kind: 'error',
-        message: resolveRuntimeControlErrorMessage('stop', error),
+        message: resolveRuntimeControlErrorMessage('stop', error, lng),
       })
     } finally {
       setPendingRuntimeAction(null)
@@ -492,13 +510,13 @@ export function AiQuantStrategyDetail({
         </div>
         <div className="flex items-center gap-2">
           <span className={`rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
-            {semanticSummary?.headline ?? STATUS_LABEL[strategy.status]}
+            {semanticSummary?.headline ?? STATUS_LABEL[lng][strategy.status]}
           </span>
           <Link
             href={`/${lng}/account?tab=ai-quant`}
             className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)]"
           >
-            返回列表
+            {isEn ? 'Back to List' : '返回列表'}
           </Link>
         </div>
       </section>
@@ -508,7 +526,9 @@ export function AiQuantStrategyDetail({
           data-testid="strategy-detail-view-only-banner"
           className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-200"
         >
-          该策略已设为只读，所有运行控制操作均已禁用，仅作历史记录展示。
+          {isEn
+            ? 'This strategy is read-only. Runtime controls are disabled and this page is shown for historical review only.'
+            : '该策略已设为只读，所有运行控制操作均已禁用，仅作历史记录展示。'}
         </section>
       )}
 
@@ -519,9 +539,11 @@ export function AiQuantStrategyDetail({
         >
           <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行控制</h2>
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{isEn ? 'Runtime Control' : '运行控制'}</h2>
               <span className={`w-fit rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
-                {strategy.status === 'running' ? '运行实例在线' : '运行实例离线'}
+                {strategy.status === 'running'
+                  ? (isEn ? 'Runtime Online' : '运行实例在线')
+                  : (isEn ? 'Runtime Offline' : '运行实例离线')}
               </span>
             </div>
 
@@ -529,13 +551,19 @@ export function AiQuantStrategyDetail({
               <p className="text-sm leading-6 text-[color:var(--cf-text)]">
                 {strategy.status === 'running'
                   ? (showLiquidateAndStop
-                      ? `策略当前正在运行且账户中存在${isSpotMarket ? '现货持币' : '持仓'}或未成交挂单。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。`
-                      : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
-                  : '当前运行实例已结束。'}
+                      ? (isEn
+                          ? `The strategy is running and the account still has ${isSpotMarket ? 'spot holdings' : 'positions'} or open orders. You can stop only, or cancel open orders and liquidate before stopping.`
+                          : `策略当前正在运行且账户中存在${isSpotMarket ? '现货持币' : '持仓'}或未成交挂单。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。`)
+                      : (isEn
+                          ? 'The strategy is running. Stopping only stops the runtime instance; existing positions and open orders remain.'
+                          : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。'))
+                  : (isEn ? 'The runtime instance has ended.' : '当前运行实例已结束。')}
               </p>
               {showLiquidateAndStop && (
                 <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
-                  检测到 {isSpotMarket ? `现货持币 ${exposureSummary}` : exposureSummary}，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理{isSpotMarket ? '现货持币' : '持仓'}。
+                  {isEn
+                    ? `Detected ${isSpotMarket ? `spot holdings ${exposureSummary}` : exposureSummary}; open orders ${hasUnknownOpenOrders ? 'pending confirmation' : openOrdersCount}. Liquidate and stop first tries to cancel open exchange orders for this strategy symbol, then handles current ${isSpotMarket ? 'spot holdings' : 'positions'}.`
+                    : `检测到 ${isSpotMarket ? `现货持币 ${exposureSummary}` : exposureSummary}，当前未成交挂单 ${hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理${isSpotMarket ? '现货持币' : '持仓'}。`}
                 </p>
               )}
             </div>
@@ -554,7 +582,7 @@ export function AiQuantStrategyDetail({
                     disabled={runtimeActionDisabled}
                     className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-red-500/20 bg-red-500/10 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
                   >
-                    停止策略
+                    {isEn ? 'Stop Strategy' : '停止策略'}
                   </button>
                 )}
 
@@ -568,7 +596,7 @@ export function AiQuantStrategyDetail({
                     className="inline-flex h-9 min-w-max items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-4 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-emerald-400"
                   >
                     <Play className="h-4 w-4 fill-current" aria-hidden="true" />
-                    运行
+                    {isEn ? 'Run' : '运行'}
                   </button>
                 )}
 
@@ -585,7 +613,7 @@ export function AiQuantStrategyDetail({
                     }}
                     className="inline-flex h-9 min-w-max items-center justify-center whitespace-nowrap rounded-lg border border-[color:var(--cf-border)] bg-white/[0.02] px-4 text-sm font-semibold text-[color:var(--cf-text-strong)] transition hover:border-white/20 hover:bg-white/[0.05]"
                   >
-                    返回对话
+                    {isEn ? 'Back to Chat' : '返回对话'}
                   </Link>
                 )}
               </div>
@@ -605,6 +633,7 @@ export function AiQuantStrategyDetail({
       <StopRunningStrategyDialog
         open={stopDialogOpen}
         strategy={strategy}
+        lng={lng}
         pending={pendingRuntimeAction !== null}
         errorMessage={runtimeControlFeedback?.kind === 'error' ? runtimeControlFeedback.message : null}
         onStopOnly={() => {

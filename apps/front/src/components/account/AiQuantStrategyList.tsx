@@ -565,6 +565,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
       <StopRunningStrategyDialog
         open={stopDialogStrategy !== null}
         strategy={stopDialogStrategy}
+        lng={lng}
         pending={stopDialogStrategy !== null && pendingActionId === stopDialogStrategy.id}
         errorMessage={error}
         onStopOnly={() => {

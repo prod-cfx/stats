@@ -89,6 +89,36 @@ describe('StopRunningStrategyDialog', () => {
     expect(container.textContent).toContain('平仓并停止')
   })
 
+  it('renders stop choices in English when the page locale is English', async () => {
+    await act(async () => {
+      root.render(
+        <StopRunningStrategyDialog
+          open
+          lng="en"
+          strategy={{
+            name: 'DOGE strategy',
+            exchange: 'okx',
+            symbol: 'DOGEUSDT',
+            marketType: 'perp',
+            positionOverview: {
+              openPositionsCount: 2,
+              totalUnrealizedPnl: 12.5,
+            },
+            openOrdersCount: null,
+          }}
+          onStopOnly={() => undefined}
+          onLiquidateAndStop={() => undefined}
+          onCancel={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('The strategy still has positions or open orders')
+    expect(container.textContent).toContain('Stop only, keep positions/orders')
+    expect(container.textContent).toContain('Liquidate and Stop')
+    expect(container.textContent).not.toContain('平仓并停止')
+  })
+
   it('offers stop-only and liquidate-and-stop choices when positions exist', async () => {
     const onStopOnly = jest.fn()
     const onLiquidateAndStop = jest.fn()

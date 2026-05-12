@@ -3,6 +3,7 @@
 interface RunningStrategyEditGuardDialogProps {
   open: boolean
   mode: 'running' | 'unknown'
+  lng?: 'zh' | 'en'
   stopPending?: boolean
   errorMessage?: string | null
   onViewRunningStrategy: () => void
@@ -13,6 +14,7 @@ interface RunningStrategyEditGuardDialogProps {
 export function RunningStrategyEditGuardDialog({
   open,
   mode,
+  lng = 'zh',
   stopPending = false,
   errorMessage = null,
   onViewRunningStrategy,
@@ -20,13 +22,18 @@ export function RunningStrategyEditGuardDialog({
   onClose,
 }: RunningStrategyEditGuardDialogProps) {
   if (!open) return null
+  const isEn = lng === 'en'
 
   const title = mode === 'running'
-    ? '策略正在运行，不能直接修改'
-    : '部署状态待确认，暂不能直接修改'
+    ? (isEn ? 'Strategy is running and cannot be edited directly' : '策略正在运行，不能直接修改')
+    : (isEn ? 'Deployment status is still being confirmed' : '部署状态待确认，暂不能直接修改')
   const description = mode === 'running'
-    ? '当前策略正在使用已部署版本运行。为避免运行逻辑与编辑内容不一致，请先停止策略。停止后你可以修改策略并重新部署。'
-    : '当前策略实例的部署状态仍在确认中。为避免误判为可编辑或可重复部署，请先查看运行策略或停止策略，确认后再继续修改。'
+    ? (isEn
+        ? 'This strategy is running with the deployed version. Stop it before editing so runtime logic does not diverge from the edited strategy.'
+        : '当前策略正在使用已部署版本运行。为避免运行逻辑与编辑内容不一致，请先停止策略。停止后你可以修改策略并重新部署。')
+    : (isEn
+        ? 'The deployment status is still being confirmed. View or stop the running strategy before editing.'
+        : '当前策略实例的部署状态仍在确认中。为避免误判为可编辑或可重复部署，请先查看运行策略或停止策略，确认后再继续修改。')
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -50,7 +57,7 @@ export function RunningStrategyEditGuardDialog({
             onClick={onViewRunningStrategy}
             className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
           >
-            查看运行策略
+            {isEn ? 'View Running Strategy' : '查看运行策略'}
           </button>
           <button
             type="button"
@@ -59,7 +66,7 @@ export function RunningStrategyEditGuardDialog({
             onClick={onStopStrategy}
             className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
-            停止策略
+            {isEn ? 'Stop Strategy' : '停止策略'}
           </button>
           <button
             type="button"
@@ -67,7 +74,7 @@ export function RunningStrategyEditGuardDialog({
             onClick={onClose}
             className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
           >
-            取消
+            {isEn ? 'Cancel' : '取消'}
           </button>
         </div>
       </div>
