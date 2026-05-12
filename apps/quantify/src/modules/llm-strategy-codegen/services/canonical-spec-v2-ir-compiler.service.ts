@@ -1601,21 +1601,35 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'bollinger.upper_break':
-      case 'bollinger.lower_break': {
+      case 'bollinger.lower_break':
+      case 'bollinger.touch_upper':
+      case 'bollinger.touch_lower': {
         context.runtimeRequirements.helpers.add('bollinger')
-        const bandRef = atom.key === 'bollinger.upper_break'
+        const isUpper = atom.key === 'bollinger.upper_break' || atom.key === 'bollinger.touch_upper'
+        const bandRef = isUpper
           ? this.ensureBollingerSeries(context, 'UPPER_BAND')
           : this.ensureBollingerSeries(context, 'LOWER_BAND')
+        const confirmationMode = typeof atom.params?.confirmationMode === 'string'
+          ? atom.params.confirmationMode
+          : undefined
+        // touch_* 默认走 touch 语义（GTE/LTE）；显式确认模式（如 close_confirm）走 CROSS_*。
+        // upper_break/lower_break 保持原有 CROSS_* 默认，兼容 builder 既有路径。
+        const isTouchKey = atom.key === 'bollinger.touch_upper' || atom.key === 'bollinger.touch_lower'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const defaultOp = isUpper
+          ? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
+          : (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           'compare',
           [closeRef, bandRef],
-          { op: atom.op ?? (atom.key === 'bollinger.upper_break' ? 'CROSS_OVER' : 'CROSS_UNDER') },
+          { op: atom.op ?? defaultOp },
         )
       }
 
-      case 'bollinger.middle_revert': {
+      case 'bollinger.middle_revert':
+      case 'bollinger.touch_middle': {
         context.runtimeRequirements.helpers.add('bollinger')
         const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
@@ -3499,16 +3513,29 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'bollinger.upper_break':
-        return condition.op === 'GTE'
-          ? `GTE(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-          : `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+      case 'bollinger.touch_upper': {
+        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
+          ? condition.params.confirmationMode
+          : undefined
+        const isTouchKey = condition.key === 'bollinger.touch_upper'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const operator = condition.op ?? (usesTouchSemantics ? 'GTE' : 'CROSS_OVER')
+        return this.describeBollingerBandOperator(operator, 'UPPER_BAND', config)
+      }
 
       case 'bollinger.lower_break':
-        return condition.op === 'LTE'
-          ? `LTE(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-          : `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
+      case 'bollinger.touch_lower': {
+        const confirmationMode = typeof condition.params?.confirmationMode === 'string'
+          ? condition.params.confirmationMode
+          : undefined
+        const isTouchKey = condition.key === 'bollinger.touch_lower'
+        const usesTouchSemantics = isTouchKey && (confirmationMode === undefined || confirmationMode === 'touch')
+        const operator = condition.op ?? (usesTouchSemantics ? 'LTE' : 'CROSS_UNDER')
+        return this.describeBollingerBandOperator(operator, 'LOWER_BAND', config)
+      }
 
       case 'bollinger.middle_revert':
+      case 'bollinger.touch_middle':
         return `OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`
 
       case 'bollinger.bars_outside': {
@@ -3658,6 +3685,14 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return 'GTE'
+  }
+
+  private describeBollingerBandOperator(
+    operator: NonNullable<CanonicalConditionAtom['op']>,
+    band: 'UPPER_BAND' | 'LOWER_BAND',
+    config: { bollinger: CompileContext['bollinger'] },
+  ): string {
+    return `${operator}(CLOSE,${band}(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
   }
 
   private isConditionAtom(node: CanonicalConditionNode): node is CanonicalConditionAtom {

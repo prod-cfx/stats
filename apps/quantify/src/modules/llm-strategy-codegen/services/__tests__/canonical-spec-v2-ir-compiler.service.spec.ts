@@ -2325,6 +2325,162 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  // ────────────────────────────────────────────────────────────────────
+  // Wave 2 P3 #1216 / bollinger.touch_* atoms ghost atom fix
+  //   - registry 标 supported_executable，但 IR-compiler 此前没有对应 case，
+  //     直接走 compileCondition default → throw codegen.canonical_spec_v2_condition_unsupported。
+  //   - 修复策略：在 compileAtom + describeAtomCondition 两个层把 touch_* 与
+  //     既有 upper_break/lower_break/middle_revert 视作别名分支。
+  //   - 默认语义：touch_upper/lower 默认 GTE/LTE（touch 语义）；当 params.confirmationMode='close_confirm'
+  //     时退化为 CROSS_OVER/CROSS_UNDER；touch_middle 与 middle_revert 同形（OR(CROSS_OVER,CROSS_UNDER)）。
+  // ────────────────────────────────────────────────────────────────────
+  describe('bollinger.touch_* atoms — raw registry key path (Wave 2 P3 ghost atom fix)', () => {
+    function buildTouchSpec(
+      atomKey: 'bollinger.touch_upper' | 'bollinger.touch_lower' | 'bollinger.touch_middle',
+      overrides: { op?: 'GT' | 'GTE' | 'LT' | 'LTE', params?: Record<string, string | number | boolean>, period?: number, stdDev?: number } = {},
+    ) {
+      const { op, params, period = 20, stdDev = 2 } = overrides
+      return {
+        version: 2 as const,
+        market: { exchange: 'binance' as const, symbol: 'BTCUSDT', marketType: 'spot' as const, defaultTimeframe: '1h' },
+        indicators: [{ kind: 'bollingerBands' as const, params: { period, stdDev } }],
+        sizing: { mode: 'RATIO' as const, value: 0.1 },
+        executionPolicy: { signalTiming: 'BAR_CLOSE' as const, fillTiming: 'NEXT_BAR_OPEN' as const },
+        dataRequirements: { requiredTimeframes: ['1h'] },
+        rules: [
+          {
+            id: 'entry-touch-rule',
+            phase: 'entry' as const,
+            sideScope: 'long' as const,
+            priority: 200,
+            condition: {
+              kind: 'atom' as const,
+              key: atomKey,
+              semanticScope: 'market' as const,
+              ...(op ? { op } : {}),
+              value: 1,
+              ...(params ? { params } : {}),
+            },
+            actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+          },
+        ],
+      }
+    }
+
+    const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1h', positionPct: 10 }
+
+    it('touch_upper happy path: 默认 touch 语义 → GTE(CLOSE,UPPER_BAND)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_upper'), fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
+      expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'UPPER_BAND' }),
+      ]))
+    })
+
+    it('touch_lower happy path: 默认 touch 语义 → LTE(CLOSE,LOWER_BAND)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_lower'), fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+      ]))
+      expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'LOWER_BAND' }),
+      ]))
+    })
+
+    it('touch_middle happy path: 与 middle_revert 同形 OR(CROSS_OVER,CROSS_UNDER)', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({ canonicalSpec: buildTouchSpec('bollinger.touch_middle'), fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          operator: 'OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,20,2)),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2)))',
+        }),
+      ]))
+      expect(result.ir.signalCatalog?.series ?? []).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'MID_BAND' }),
+      ]))
+    })
+
+    it('touch_upper confirmationMode=close_confirm → 退化为 CROSS_OVER', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { params: { confirmationMode: 'close_confirm' } }),
+        fallback,
+      })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
+    })
+
+    it('touch_lower confirmationMode=close_confirm → 退化为 CROSS_UNDER', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_lower', { params: { confirmationMode: 'close_confirm' } }),
+        fallback,
+      })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+      ]))
+    })
+
+    it('多腿混合：touch_upper + touch_lower 同 spec 不互盖（独立 predicate）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildTouchSpec('bollinger.touch_upper')
+      spec.rules.push({
+        id: 'exit-touch-lower',
+        phase: 'entry' as const,
+        sideScope: 'long' as const,
+        priority: 150,
+        condition: {
+          kind: 'atom' as const,
+          key: 'bollinger.touch_lower',
+          semanticScope: 'market' as const,
+          value: 1,
+        },
+        actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+      })
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ operator: 'GTE(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+        expect.objectContaining({ operator: 'LTE(CLOSE,LOWER_BAND(CLOSE,20,2))' }),
+      ]))
+      const seriesKinds = (result.ir.signalCatalog?.series ?? []).map(s => s.kind)
+      expect(seriesKinds).toEqual(expect.arrayContaining(['UPPER_BAND', 'LOWER_BAND']))
+    })
+
+    it('precision: 非整数 stdDev → series id token 保留并展开（toFixed 链路兼容）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { stdDev: 2.5 }),
+        fallback,
+      })
+      // upper_band_20_2_5_1h —— normalizeNumberToken 把 2.5 转成 "2_5"
+      expect((result.ir.signalCatalog?.series ?? []).map(s => s.id)).toEqual(expect.arrayContaining([
+        expect.stringMatching(/^upper_band_20_2_5_1h$/),
+      ]))
+    })
+
+    it('atom.op 显式覆盖默认 touch 语义（如 op=GT 时透传到 predicate）', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const result = compiler.compile({
+        canonicalSpec: buildTouchSpec('bollinger.touch_upper', { op: 'GT' }),
+        fallback,
+      })
+      // compileAtom 优先采用 atom.op；只有 op 缺省才走 defaultOp（touch -> GTE）
+      const predicates = result.ir.signalCatalog?.predicates ?? []
+      const touchPred = predicates.find(p => p.id?.includes('touch_upper'))
+      expect(touchPred).toBeDefined()
+      expect(touchPred?.params).toMatchObject({ op: 'GT' })
+      expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+        expect.objectContaining({ phase: 'entry', operator: 'GT(CLOSE,UPPER_BAND(CLOSE,20,2))' }),
+      ]))
+    })
+  })
+
   it('compiles RSI threshold rules into RSI series and graph operators', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
