@@ -138,6 +138,12 @@ describe('external.signal atom 五层 parity', () => {
       expect(slotKeys).toContain('external.signal.secret')
     })
 
+    it('preserves signalId casing because webhook identifiers may be case-sensitive', () => {
+      const patch = seedExtractor.extract('OKX BTCUSDT 15m, on webhook signalId BTC_LONG_01 with secret configured, open long 100 USDT.')
+      const trigger = patch.triggers?.find(t => t.key === 'external.signal')
+      expect(trigger?.params?.signalId).toBe('BTC_LONG_01')
+    })
+
     // critic round 1 P4-5 B2 回归：provider 关键词必须与 signal-semantic 词共现
     it('B2 negative: bare provider keyword without signal context → 不产生 external.signal trigger', () => {
       const noSignalUtterances = [

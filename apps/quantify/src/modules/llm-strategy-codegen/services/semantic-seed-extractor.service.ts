@@ -5183,7 +5183,7 @@ export class SemanticSeedExtractorService {
       const match = pattern.exec(clause)
       const candidate = match?.[1]?.trim()
       if (candidate && !this.isExternalSignalReservedWord(candidate)) {
-        return candidate.toLowerCase()
+        return candidate
       }
     }
     return null
