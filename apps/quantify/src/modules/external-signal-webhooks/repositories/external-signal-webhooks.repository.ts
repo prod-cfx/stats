@@ -86,11 +86,37 @@ export class ExternalSignalWebhooksRepository {
   async findAcceptedEventForRuntime(eventId: string) {
     return this.txHost.tx.webhookSignalEvent.findUnique({
       where: { id: eventId },
-      include: {
-        subscription: true,
+      select: {
+        id: true,
+        subscriptionId: true,
+        strategyInstanceId: true,
+        provider: true,
+        signalId: true,
+        dedupeKey: true,
+        payload: true,
+        signatureStatus: true,
+        receivedAt: true,
+        subscription: {
+          select: {
+            id: true,
+            status: true,
+            userId: true,
+            strategyInstanceId: true,
+            signalId: true,
+          },
+        },
         strategyInstance: {
-          include: {
-            strategyTemplate: true,
+          select: {
+            id: true,
+            strategyTemplateId: true,
+            status: true,
+            mode: true,
+            strategyTemplate: {
+              select: {
+                id: true,
+                status: true,
+              },
+            },
           },
         },
       },
