@@ -82,6 +82,341 @@ describe('positionSyncService', () => {
     expect(positionsService.recordTrade).not.toHaveBeenCalled()
   })
 
+  it('skips creating missing positions for unassigned net exposure on shared exchange accounts', async () => {
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findTradesByAccount: jest.fn().mockResolvedValue([]),
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'ETH/USDT:PERP',
+        side: 'long',
+        size: '1.069',
+        entryPrice: '2287.03',
+      }]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.differences).toEqual([{
+      symbol: 'ETH/USDT:PERP',
+      positionSide: 'LONG',
+      exchangeQuantity: '1.069',
+      localQuantity: '0',
+      difference: '1.069',
+      action: 'skipped',
+    }])
+    expect(positionsService.recordTrade).not.toHaveBeenCalled()
+  })
+
+  it('keeps normal reconciliation for non-shared exchange accounts', async () => {
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(1),
+      findTradesByAccount: jest.fn().mockResolvedValue([]),
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'ETH/USDT:PERP',
+        side: 'long',
+        size: '1.069',
+        entryPrice: '2287.03',
+      }]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.differences).toEqual([expect.objectContaining({
+      action: 'created',
+      exchangeQuantity: '1.069',
+    })])
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      quantity: '1.069',
+      metadata: expect.objectContaining({ syncSource: 'position-reconciliation' }),
+    }))
+  })
+
+  it('keeps spot reconciliation out of shared perp attribution mode', async () => {
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findTradesByAccount: jest.fn().mockResolvedValue([]),
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'BTCUSDT',
+        side: 'long',
+        size: '0.01',
+        entryPrice: '80000',
+      }]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'spot',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.differences).toEqual([expect.objectContaining({
+      action: 'created',
+      exchangeQuantity: '0.01',
+    })])
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      market: 'okx:spot',
+      quantity: '0.01',
+    }))
+  })
+
+  it('resolves strategy-bound exchange account for manual sync when it is not passed by the controller', async () => {
+    const positionsRepository = {
+      findExchangeAccountIdForStrategyAccount: jest.fn().mockResolvedValue('exchange-account-1'),
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findTradesByAccount: jest.fn().mockResolvedValue([]),
+      findOpenByAccount: jest.fn().mockResolvedValue([]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'manual',
+      'user-1',
+    )
+
+    expect(tradingService.getPositions).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'perp',
+      'exchange-account-1',
+    )
+  })
+
+  it('closes synthetic reconciliation positions on shared exchange accounts when they have no real attributed trades', async () => {
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findTradesByAccount: jest.fn().mockResolvedValue([{
+        symbol: 'ETHUSDT:PERP',
+        market: 'okx:perp',
+        side: 'BUY',
+        positionSide: 'LONG',
+        quantity: '1.069',
+        orderId: 'sync-1778580001229',
+        externalTradeId: 'sync-strategy-account-1-ETH-USDT-SWAP',
+        provider: 'okx',
+        metadata: { syncSource: 'position-reconciliation' },
+      }]),
+      findOpenByAccount: jest.fn().mockResolvedValue([{
+        id: 'position-synthetic-1',
+        userStrategyAccountId: 'strategy-account-1',
+        symbol: 'ETHUSDT:PERP',
+        positionSide: 'LONG',
+        quantity: '1.069',
+        avgEntryPrice: '2287.03',
+        exchangeId: 'okx',
+        marketType: 'perp',
+        metadata: { syncSource: 'position-reconciliation', market: 'okx:perp' },
+      }]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'ETH/USDT:PERP',
+        side: 'long',
+        size: '1.069',
+        entryPrice: '2287.03',
+      }]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.differences).toEqual([{
+      symbol: 'ETH/USDT:PERP',
+      positionSide: 'LONG',
+      exchangeQuantity: '1.069',
+      localQuantity: '1.069',
+      difference: '-1.069',
+      action: 'closed',
+    }])
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      side: 'SELL',
+      positionSide: 'LONG',
+      market: 'okx:perp',
+      quantity: '1.069',
+      metadata: expect.objectContaining({
+        reason: 'shared-account-unattributed-synthetic-position',
+      }),
+    }))
+  })
+
+  it('reconciles shared exchange account positions to real attributed trade quantity instead of full exchange net quantity', async () => {
+    const positionsRepository = {
+      countActiveStrategyBindingsByExchangeAccount: jest.fn().mockResolvedValue(3),
+      findTradesByAccount: jest.fn().mockResolvedValue([
+        {
+          symbol: 'ETHUSDT:PERP',
+          market: 'okx:perp',
+          side: 'BUY',
+          positionSide: 'LONG',
+          quantity: '0.305',
+          orderId: '3559343634595618816',
+          externalTradeId: '3559343634595618816',
+          provider: 'okx',
+          metadata: { runtimeProvenance: { runtimeStrategyInstanceId: 'strategy-1' } },
+        },
+        {
+          symbol: 'ETHUSDT:PERP',
+          market: 'okx:perp',
+          side: 'BUY',
+          positionSide: 'LONG',
+          quantity: '0.764',
+          orderId: 'sync-adjust-1',
+          externalTradeId: 'sync-adjust-position-1',
+          provider: 'reconciliation',
+          metadata: { syncSource: 'position-adjustment' },
+        },
+      ]),
+      findOpenByAccount: jest.fn().mockResolvedValue([{
+        id: 'position-1',
+        userStrategyAccountId: 'strategy-account-1',
+        symbol: 'ETHUSDT:PERP',
+        positionSide: 'LONG',
+        quantity: '1.069',
+        avgEntryPrice: '2287.03',
+        exchangeId: 'okx',
+        marketType: 'perp',
+        metadata: { syncSource: 'position-adjustment', market: 'okx:perp' },
+      }]),
+      saveSyncLog: jest.fn().mockResolvedValue(undefined),
+    }
+    const tradingService = {
+      getPositions: jest.fn().mockResolvedValue([{
+        symbol: 'ETH/USDT:PERP',
+        side: 'long',
+        size: '1.069',
+        entryPrice: '2287.03',
+      }]),
+    }
+    const positionsService = {
+      recordTrade: jest.fn(),
+    }
+
+    const service = new PositionSyncService(
+      positionsRepository as any,
+      tradingService as any,
+      positionsService as any,
+    )
+
+    const result = await service.syncUserPositions(
+      'user-1',
+      'strategy-account-1',
+      'okx',
+      'perp',
+      'auto',
+      'position-sync',
+      'exchange-account-1',
+    )
+
+    expect(result.differences).toEqual([expect.objectContaining({
+      symbol: 'ETH/USDT:PERP',
+      positionSide: 'LONG',
+      exchangeQuantity: '1.069',
+      localQuantity: '1.069',
+      difference: '-0.764',
+      action: 'updated',
+    })])
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      side: 'SELL',
+      positionSide: 'LONG',
+      provider: 'reconciliation',
+      quantity: '0.764',
+      metadata: expect.objectContaining({
+        targetQuantity: '0.305',
+      }),
+    }))
+  })
+
   it('does not close spot positions when exchange positions are empty', async () => {
     const positionsRepository = {
       findOpenByAccount: jest.fn().mockResolvedValue([{
