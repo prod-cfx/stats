@@ -1,8 +1,8 @@
 import type { AiQuantConversationResponseDto } from './dto/ai-quant-conversation.response.dto'
 import type { CodegenSessionResponseDto } from './dto/codegen-session.response.dto'
-import type { AccountAiQuantStrategyDetailResponseDto } from './dto/account-ai-quant-strategy.response.dto'
 import type {
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaRunResponseDto,
   StrategyPlazaTemplateResponseDto,
 } from './dto/strategy-plaza.response.dto'
 import { ErrorCode } from '@ai/shared'
@@ -208,8 +208,8 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     templateId: string,
     body: Record<string, unknown>,
-  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
-    return this.quantifyClient.runStrategyPlazaTemplate<AccountAiQuantStrategyDetailResponseDto>(
+  ): Promise<StrategyPlazaRunResponseDto> {
+    return this.quantifyClient.runStrategyPlazaTemplate<StrategyPlazaRunResponseDto>(
       templateId,
       { runRequestId: body.runRequestId },
       { userId, headers: this.userHeaders(userId, authorization) },

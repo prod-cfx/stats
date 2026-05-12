@@ -9,6 +9,8 @@ import { AccountAiQuantStrategyDetailResponseDto } from './dto/account-ai-quant-
 import {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaRunExistingResponseDto,
+  type StrategyPlazaRunResponseDto,
   StrategyPlazaTemplateResponseDto,
 } from './dto/strategy-plaza.response.dto'
 import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto'
@@ -19,6 +21,7 @@ import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaRunExistingResponseDto,
 )
 @Controller('strategy-plaza/templates')
 export class StrategyPlazaProxyController {
@@ -64,14 +67,26 @@ export class StrategyPlazaProxyController {
   @ApiHeader({ name: 'authorization', required: true })
   @ApiOkResponse({
     description: 'Created or resolved AI Quant strategy detail.',
-    schema: buildBaseResponseSchema(AccountAiQuantStrategyDetailResponseDto),
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          oneOf: [
+            { $ref: getSchemaPath(AccountAiQuantStrategyDetailResponseDto) },
+            { $ref: getSchemaPath(StrategyPlazaRunExistingResponseDto) },
+          ],
+        },
+        message: { type: 'string', example: 'Success' },
+      },
+    },
   })
   async run(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() dto: StrategyPlazaRunRequestDto,
-  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
+  ): Promise<StrategyPlazaRunResponseDto> {
     return this.service.runStrategyPlazaTemplate(userId, authorization, id, {
       runRequestId: dto.runRequestId,
     })
