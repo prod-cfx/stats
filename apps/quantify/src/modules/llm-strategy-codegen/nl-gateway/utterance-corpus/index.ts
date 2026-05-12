@@ -1,5 +1,6 @@
 import type { SupportedExecutableUtteranceAtom, UtteranceCorpusCase } from './utterance-corpus.types'
 import { oscillatorRsiUtterances } from './atoms/oscillator.rsi.utterance'
+import { externalSignalUtterances } from './atoms/external.signal.utterance'
 import { actionAddPositionUtterances } from './atoms/action.add_position.utterance'
 import { actionReversePositionUtterances } from './atoms/action.reverse_position.utterance'
 import { indicatorDivergenceUtterances } from './atoms/indicator.divergence.utterance'
@@ -60,6 +61,15 @@ export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'oscillator.rsi_lte',
 ] as const satisfies readonly SupportedExecutableUtteranceAtom[]
 
+export const SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS = [
+  'external.signal',
+] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+
+export const SUPPORTED_UTTERANCE_CORPUS_ATOMS = [
+  ...SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
+  ...SUPPORTED_REQUIRES_SLOT_UTTERANCE_ATOMS,
+] as const satisfies readonly SupportedExecutableUtteranceAtom[]
+
 export const utteranceCorpus = [
   ...volumeThresholdUtterances,
   ...volatilityAtrThresholdUtterances,
@@ -76,6 +86,7 @@ export const utteranceCorpus = [
   ...liquiditySweepUtterances,
   ...portfolioDrawdownBlockUtterances,
   ...oscillatorRsiUtterances,
+  ...externalSignalUtterances,
 ] as const satisfies readonly UtteranceCorpusCase[]
 
 export function getUtteranceCorpusForAtom(atomKey: SupportedExecutableUtteranceAtom): UtteranceCorpusCase[] {
@@ -85,4 +96,3 @@ export function getUtteranceCorpusForAtom(atomKey: SupportedExecutableUtteranceA
 export function getGoldenUtterancesForAtom(atomKey: SupportedExecutableUtteranceAtom): string[] {
   return getUtteranceCorpusForAtom(atomKey).map(item => item.utterance)
 }
-

@@ -5091,16 +5091,17 @@ export class SemanticSeedExtractorService {
     triggers: SeedTrigger[],
     seen: Set<string>,
   ): void {
-    for (const clause of this.splitLogicClauses(segment)) {
+    const clauses = this.splitLogicClauses(segment)
+    for (const [index, clause] of clauses.entries()) {
       const intent = this.resolveUnsupportedTriggerIntent(clause, segment)
       // critic round 1 P4-5 B2 修复：provider 关键词必须与 signal-semantic 词共现，避免
       // "下载 webhook 文档"/"讨论 telegram 群" 等非信号语义文本被误识别为 external.signal。
-      const hasSignalSemantics = /(?:外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)
-      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:信号|喊单|推送|触发|signal|alert|hook|bot|webhook)|(?:信号|喊单|推送|触发|on)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
+      const hasSignalSemantics = /(?:外部信号|外部喊单|喊单群|KOL|口令|神秘评分|内部\s*AI|external\s+signal)/iu.test(clause)
+      const hasProviderWithSignalContext = /(?:tradingview|discord|telegram|webhook)\s*(?:(?:buy|sell|long|short|bullish|bearish|多|空)\s*)?(?:事件|信号|喊单|推送|触发|signal\s*id|signalId|signal|event|alert|hook|bot|webhook)|(?:事件|信号|喊单|推送|触发|event)\s*(?:tradingview|discord|telegram|webhook)/iu.test(clause)
       if (hasSignalSemantics || hasProviderWithSignalContext) {
         // P4-5: external.signal — atom-only `supported_requires_slot`
         // 必填 slot：provider（tradingview/discord/telegram/webhook）+ signalId + secret
-        // provider 可从文本关键词锁定；signalId / secret 必须由用户显式提供
+        // provider / signalId 可从文本关键词锁定；secret 只接受"已配置"语义，不从 NL 读取明文。
         const provider = /tradingview/iu.test(clause)
           ? 'tradingview'
           : /discord/iu.test(clause)
@@ -5110,7 +5111,20 @@ export class SemanticSeedExtractorService {
               : /webhook/iu.test(clause)
                 ? 'webhook'
                 : null
-        const externalOpenSlots: SeedTrigger['openSlots'] = []
+        const signalId = this.extractExternalSignalId(clause)
+        const previousClause = clauses[index - 1]
+        const nextClause = clauses[index + 1]
+        const secretConfigured = this.hasExternalSignalSecretConfigured(clause)
+          || this.isExternalSignalSecretCompanionClause(previousClause)
+          || this.isExternalSignalSecretCompanionClause(nextClause)
+        const externalOpenSlots: SeedTrigger['openSlots'] = [{
+          slotKey: 'external.signal.runtime',
+          fieldPath: 'trigger.params.runtime',
+          status: 'open',
+          priority: 'risk',
+          questionHint: 'Webhook 接收、HMAC 校验与信号队列运行时尚未启用，当前外部信号不能进入执行路径。',
+          affectsExecution: true,
+        }]
         if (!provider) {
           externalOpenSlots.push({
             slotKey: 'external.signal.provider',
@@ -5121,27 +5135,33 @@ export class SemanticSeedExtractorService {
             affectsExecution: true,
           })
         }
-        externalOpenSlots.push({
-          slotKey: 'external.signal.signalId',
-          fieldPath: 'trigger.params.signalId',
-          status: 'open',
-          priority: 'core',
-          questionHint: '请提供外部信号订阅 ID（用于过滤推送）。',
-          affectsExecution: true,
-        })
-        externalOpenSlots.push({
-          slotKey: 'external.signal.secret',
-          fieldPath: 'trigger.params.secret',
-          status: 'open',
-          priority: 'risk',
-          questionHint: '请提供 HMAC 校验 secret，避免冒名信号触发开仓（可由系统生成后回填）。',
-          affectsExecution: true,
-        })
+        if (!signalId) {
+          externalOpenSlots.push({
+            slotKey: 'external.signal.signalId',
+            fieldPath: 'trigger.params.signalId',
+            status: 'open',
+            priority: 'core',
+            questionHint: '请提供外部信号订阅 ID（用于过滤推送）。',
+            affectsExecution: true,
+          })
+        }
+        if (!secretConfigured) {
+          externalOpenSlots.push({
+            slotKey: 'external.signal.secret',
+            fieldPath: 'trigger.params.secret',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认 HMAC 校验 secret 已由系统生成并绑定，避免冒名信号触发开仓。',
+            affectsExecution: true,
+          })
+        }
         this.pushTrigger(triggers, seen, {
           key: 'external.signal',
           ...intent,
           params: {
             ...(provider ? { provider } : {}),
+            ...(signalId ? { signalId } : {}),
+            ...(secretConfigured ? { secret: 'configured' } : {}),
             sourceText: clause,
           },
           status: 'open',
@@ -5196,6 +5216,38 @@ export class SemanticSeedExtractorService {
         push('action.pause_trading', { sourceText: clause })
       }
     }
+  }
+
+  private extractExternalSignalId(clause: string): string | null {
+    const patterns = [
+      /\bsignalId\s*(?:为|是|=|:)?\s*([a-z0-9][a-z0-9_.:-]{0,63})\b/iu,
+      /\bsignal\s*id\s*(?:为|是|=|:)?\s*([a-z0-9][a-z0-9_.:-]{0,63})\b/iu,
+      /(?:信号|事件|喊单)\s*(?:ID|id|编号|为|是|=|:)?\s*([a-z0-9][a-z0-9_.:-]{1,63})/iu,
+      /(?:外部信号|webhook\s*信号|webhook\s*event|external\s+signal)\s+([a-z0-9][a-z0-9_.:-]{1,63})\b/iu,
+    ]
+
+    for (const pattern of patterns) {
+      const match = pattern.exec(clause)
+      const candidate = match?.[1]?.trim()
+      if (candidate && !this.isExternalSignalReservedWord(candidate)) {
+        return candidate
+      }
+    }
+    return null
+  }
+
+  private isExternalSignalReservedWord(value: string): boolean {
+    return /^(?:after|arrives?|bearish|bullish|buy|configured|event|hook|long|open|secret|sell|short|signal|signals?|trigger|when|with|触发|开多|开空)$/iu.test(value)
+  }
+
+  private hasExternalSignalSecretConfigured(clause: string): boolean {
+    return /(?:secret|密钥|秘钥|HMAC|签名)\s*(?:已|已经|already\s+)?(?:配置|绑定|生成|configured|bound|generated)/iu.test(clause)
+      || /(?:已|已经|already\s+)(?:配置|绑定|生成)\s*(?:secret|密钥|秘钥|HMAC|签名)/iu.test(clause)
+  }
+
+  private isExternalSignalSecretCompanionClause(clause: string | undefined): boolean {
+    if (!clause || !this.hasExternalSignalSecretConfigured(clause)) return false
+    return !/(?:tradingview|discord|telegram|webhook|外部信号|外部喊单|signal\s*id|signalId|external\s+signal|信号|事件|喊单)/iu.test(clause)
   }
 
   private extractRecognizedUnsupportedPosition(
