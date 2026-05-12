@@ -5732,6 +5732,28 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
     return spec
   }
 
+  function expectGuardBreachWrapsCross(
+    result: { ir: CanonicalStrategyIrV1 },
+    guardId: string,
+    passKind: Extract<PredicateDef['kind'], 'CROSS_OVER' | 'CROSS_UNDER'>,
+  ): PredicateDef {
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === guardId)
+    expect(guard).toBeDefined()
+    expect(guard?.kind).toBe('EXPRESSION_GUARD')
+    expect(guard?.onBreach).toBe('BLOCK_NEW_ENTRY')
+    const breachPredicate = findPredicate(
+      result.ir.signalCatalog.predicates,
+      p => p.id === (guard as { predicateRef?: string }).predicateRef,
+    )
+    expect(breachPredicate.kind).toBe('NOT')
+    const passPredicate = findPredicate(
+      result.ir.signalCatalog.predicates,
+      p => p.id === breachPredicate.args[0],
+    )
+    expect(passPredicate.kind).toBe(passKind)
+    return passPredicate
+  }
+
   it('preserves rule sideScope on indicator gate guard appliesTo', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildSpecWithIndicatorGate(
@@ -5763,14 +5785,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         1,
       )
       const result = compiler.compile({ canonicalSpec: spec, fallback })
-      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-sma-cross-over')
-      expect(guard).toBeDefined()
-      expect(guard?.kind).toBe('EXPRESSION_GUARD')
-      expect(guard?.onBreach).toBe('BLOCK_NEW_ENTRY')
-      const predicateRef = (guard as { predicateRef?: string }).predicateRef
-      expect(predicateRef).toBeTruthy()
-      const predicate = result.ir.signalCatalog.predicates.find(p => p.id === predicateRef)
-      expect(predicate?.kind).toBe('CROSS_OVER')
+      expectGuardBreachWrapsCross(result, 'guard_gate-sma-cross-over', 'CROSS_OVER')
       const smaSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'SMA')
       expect(smaSeries.length).toBe(2)
       expect(smaSeries.map(s => s.params?.period as number).sort((a, b) => a - b)).toEqual([20, 50])
@@ -5819,11 +5834,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const sig = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_SIGNAL')
       expect(line).toBeDefined()
       expect(sig).toBeDefined()
-      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-macd-cross-over')
-      const predicate = result.ir.signalCatalog.predicates.find(
-        p => p.id === (guard as { predicateRef?: string }).predicateRef,
-      )
-      expect(predicate?.kind).toBe('CROSS_OVER')
+      expectGuardBreachWrapsCross(result, 'guard_gate-macd-cross-over', 'CROSS_OVER')
     })
 
     it('indicator=macd 使用 atom 自定义 MACD 参数而不是默认参数', () => {
@@ -5992,12 +6003,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         1,
       )
       const result = compiler.compile({ canonicalSpec: spec, fallback })
-      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-sma-cross-under')
-      expect(guard).toBeDefined()
-      const predicate = result.ir.signalCatalog.predicates.find(
-        p => p.id === (guard as { predicateRef?: string }).predicateRef,
-      )
-      expect(predicate?.kind).toBe('CROSS_UNDER')
+      expectGuardBreachWrapsCross(result, 'guard_gate-sma-cross-under', 'CROSS_UNDER')
     })
 
     it('indicator=ema 路由 EMA', () => {
@@ -6022,12 +6028,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
         70,
       )
       const result = compiler.compile({ canonicalSpec: spec, fallback })
-      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-rsi-cross-under')
-      expect(guard).toBeDefined()
-      const predicate = result.ir.signalCatalog.predicates.find(
-        p => p.id === (guard as { predicateRef?: string }).predicateRef,
-      )
-      expect(predicate?.kind).toBe('CROSS_UNDER')
+      expectGuardBreachWrapsCross(result, 'guard_gate-rsi-cross-under', 'CROSS_UNDER')
       const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
       expect(rsi?.params?.period).toBe(14)
       expect(result.ir.signalCatalog.series.some(s => s.kind === 'CONST' && (s as { value?: number }).value === 70)).toBe(true)
@@ -6044,11 +6045,7 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const result = compiler.compile({ canonicalSpec: spec, fallback })
       expect(result.ir.signalCatalog.series.some(s => s.kind === 'MACD_LINE')).toBe(true)
       expect(result.ir.signalCatalog.series.some(s => s.kind === 'MACD_SIGNAL')).toBe(true)
-      const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-macd-cross-under')
-      const predicate = result.ir.signalCatalog.predicates.find(
-        p => p.id === (guard as { predicateRef?: string }).predicateRef,
-      )
-      expect(predicate?.kind).toBe('CROSS_UNDER')
+      expectGuardBreachWrapsCross(result, 'guard_gate-macd-cross-under', 'CROSS_UNDER')
     })
 
     it('multi-rule 不互盖 — cross_under 与 cross_over 共存', () => {

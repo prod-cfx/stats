@@ -181,6 +181,7 @@
         "guard.kind:EXPRESSION_GUARD",
         "guard:guard_probe-gate-rule",
         "predicate:CROSS_OVER",
+        "predicate:NOT",
         "series:SMA"
       ]
     },
@@ -193,6 +194,7 @@
         "guard.kind:EXPRESSION_GUARD",
         "guard:guard_probe-gate-rule",
         "predicate:CROSS_UNDER",
+        "predicate:NOT",
         "series:SMA"
       ]
     },

@@ -3080,12 +3080,13 @@ export class CanonicalSpecV2IrCompilerService {
       }
       const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', context.timeframe, macd)
       const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', context.timeframe, macd)
-      return this.upsertPredicate(
+      const crossRef = this.upsertPredicate(
         context.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_macd`,
         operator,
         [macdLineRef, macdSignalRef],
       )
+      return this.upsertPredicate(context.predicateMap, `${seed}_${atom.key.replace(/\./g, '_')}_macd_breach`, 'NOT', [crossRef])
     }
 
     if (indicator === 'rsi') {
@@ -3099,12 +3100,13 @@ export class CanonicalSpecV2IrCompilerService {
       }
       const rsiRef = this.ensureRsiSeries(context, period)
       const thresholdRef = this.ensureConstSeries(context, value)
-      return this.upsertPredicate(
+      const crossRef = this.upsertPredicate(
         context.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_rsi`,
         operator,
         [rsiRef, thresholdRef],
       )
+      return this.upsertPredicate(context.predicateMap, `${seed}_${atom.key.replace(/\./g, '_')}_rsi_breach`, 'NOT', [crossRef])
     }
 
     if (indicator === 'ema' || indicator === 'ma' || indicator === 'sma' || indicator.length === 0) {
@@ -3119,12 +3121,13 @@ export class CanonicalSpecV2IrCompilerService {
       const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
       const fastRef = this.ensureIndicatorSeries(context, seriesKind, fastPeriod)
       const slowRef = this.ensureIndicatorSeries(context, seriesKind, slowPeriod)
-      return this.upsertPredicate(
+      const crossRef = this.upsertPredicate(
         context.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_${seriesKind.toLowerCase()}`,
         operator,
         [fastRef, slowRef],
       )
+      return this.upsertPredicate(context.predicateMap, `${seed}_${atom.key.replace(/\./g, '_')}_${seriesKind.toLowerCase()}_breach`, 'NOT', [crossRef])
     }
 
     throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_indicator:${atom.key}:${indicator}`)
