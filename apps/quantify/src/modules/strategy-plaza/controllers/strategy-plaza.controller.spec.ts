@@ -147,12 +147,13 @@ describe('StrategyPlazaController', () => {
   it('starts an edit session using caller identity from auth', async () => {
     const { caller, controller, editSession } = await buildController()
 
-    const result = await controller.editSession('ma-cross', 'Bearer token', 'user-forwarded')
+    const result = await controller.editSession('ma-cross', 'Bearer token', 'user-forwarded', 'en')
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'user-forwarded')
     expect(editSession.startEditSession).toHaveBeenCalledWith({
       userId: 'user-1',
       templateId: 'ma-cross',
+      locale: 'en',
     })
     expect(result).toEqual({
       sessionId: 'session-1',

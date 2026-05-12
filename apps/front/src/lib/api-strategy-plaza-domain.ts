@@ -77,12 +77,25 @@ function extractBackendErrorCode(payload: unknown): string | undefined {
   return typeof error?.code === 'string' && error.code.trim() ? error.code : undefined
 }
 
-function buildStrategyPlazaUrl(templateId?: string, action?: 'run' | 'edit-session'): string {
+function buildStrategyPlazaUrl(
+  templateId?: string,
+  action?: 'run' | 'edit-session',
+  query?: Record<string, string | undefined>,
+): string {
   const baseUrl = `${API_BASE_URL}/strategy-plaza/templates`
-  if (!templateId) return baseUrl
+  const appendQuery = (url: string) => {
+    const params = new URLSearchParams()
+    Object.entries(query ?? {}).forEach(([key, value]) => {
+      if (value?.trim()) params.set(key, value.trim())
+    })
+    const queryString = params.toString()
+    return queryString ? `${url}?${queryString}` : url
+  }
+
+  if (!templateId) return appendQuery(baseUrl)
 
   const templateUrl = `${baseUrl}/${encodeURIComponent(templateId)}`
-  return action ? `${templateUrl}/${action}` : templateUrl
+  return appendQuery(action ? `${templateUrl}/${action}` : templateUrl)
 }
 
 export async function fetchStrategyPlazaTemplates(): Promise<StrategyPlazaTemplate[]> {
@@ -125,11 +138,12 @@ export async function runStrategyPlazaTemplate(
 
 export async function startStrategyPlazaEditSession(
   templateId: string,
+  locale?: 'zh' | 'en',
 ): Promise<StrategyPlazaEditSessionResponse> {
   return apiCall(async () => {
     const slug = getStrategyPlazaTemplateSlug(templateId)
 
-    const response = await fetch(buildStrategyPlazaUrl(slug, 'edit-session'), {
+    const response = await fetch(buildStrategyPlazaUrl(slug, 'edit-session', { locale }), {
       method: 'POST',
       headers: requireAuthHeaders(),
     })

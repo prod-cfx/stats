@@ -391,6 +391,7 @@ describe('quantifyAiQuantClient', () => {
     await expect(client.startStrategyPlazaEditSession('bollinger-reversion', {
       userId: 'user-1',
       headers: { authorization: 'Bearer token-1' },
+      locale: 'en',
     })).resolves.toEqual({
       sessionId: 'session-1',
       templateId: 'bollinger-reversion',
@@ -398,7 +399,7 @@ describe('quantifyAiQuantClient', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://quantify.test/api/v1/strategy-plaza/templates/bollinger-reversion/edit-session',
+      'http://quantify.test/api/v1/strategy-plaza/templates/bollinger-reversion/edit-session?locale=en',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({

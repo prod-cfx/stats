@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS decorators require runtime imports for metadata */
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
 import { ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { BaseResponseDto } from '@/common/dto/base.dto'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
@@ -95,11 +95,13 @@ export class StrategyPlazaController {
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
     @Headers('x-user-id') forwardedUserId?: string,
+    @Query('locale') locale?: string,
   ): Promise<StrategyPlazaEditSessionResponseDto> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.editSessionService.startEditSession({
       userId,
       templateId: id,
+      locale,
     })
   }
 }

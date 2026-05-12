@@ -115,7 +115,7 @@ export function AiQuantPlazaPageClient() {
     setPendingAction('edit')
     setActionError(null)
     try {
-      const editSession = await startStrategyPlazaEditSession(templateId)
+      const editSession = await startStrategyPlazaEditSession(templateId, lng)
       setIntent({ type: 'plaza-chat-session', sessionId: editSession.sessionId })
       router.push(`/${lng}/ai-quant`)
     } catch (error) {
