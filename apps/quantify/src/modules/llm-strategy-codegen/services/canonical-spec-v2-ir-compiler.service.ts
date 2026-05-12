@@ -224,7 +224,17 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
 
-      const reversePositionBlock = this.tryCompileActionReversePosition(rule, input.canonicalSpec, input.fallback.positionPct, context)
+      const reversePositionBlock = this.tryCompileActionReversePosition(
+        rule,
+        input.canonicalSpec,
+        input.fallback.positionPct,
+        context,
+        supportedSymbolScopeIds,
+        supportedLegScopeIds,
+        supportedTimeframeScopeIds,
+        supportedDataSourceScopeIds,
+        supportedSubStrategyScopeIds,
+      )
       if (reversePositionBlock) {
         ruleBlocks.push(reversePositionBlock)
         continue
@@ -2594,6 +2604,11 @@ export class CanonicalSpecV2IrCompilerService {
     spec: CanonicalStrategySpecV2,
     fallbackPositionPct: number,
     context: CompileContext,
+    supportedSymbolScopeIds: ReadonlySet<string>,
+    supportedLegScopeIds: ReadonlySet<string>,
+    supportedTimeframeScopeIds: ReadonlySet<string>,
+    supportedDataSourceScopeIds: ReadonlySet<string>,
+    supportedSubStrategyScopeIds: ReadonlySet<string>,
   ): RuleBlock | null {
     const reverseMeta = rule.metadata?.reversePosition
     if (!reverseMeta) {
@@ -2647,25 +2662,9 @@ export class CanonicalSpecV2IrCompilerService {
 
     this.collectPositionLifecycleRuntimeRequirements(rule, actions, context)
 
-    // Mirror the scope-id filtering logic from the main compile loop so that
+    // Reuse the scope-id Sets already computed in buildIr so that
     // symbolScopeRef / timeframeScopeRef / dataSourceScopeRef / subStrategyScopeRef
     // are subject to the same whitelist checks as rules compiled via the generic path.
-    const specScopes = spec.orchestration?.scopes ?? []
-    const supportedSymbolScopeIds = new Set<string>(
-      specScopes.filter(s => s.scopeKind === 'symbol').map(s => s.id),
-    )
-    const supportedTimeframeScopeIds = new Set<string>(
-      specScopes.filter(s => s.scopeKind === 'timeframe').map(s => s.id),
-    )
-    const supportedDataSourceScopeIds = new Set<string>(
-      specScopes.filter(s => s.scopeKind === 'dataSource').map(s => s.id),
-    )
-    const supportedSubStrategyScopeIds = new Set<string>(
-      specScopes.filter(s => s.scopeKind === 'subStrategy').map(s => s.id),
-    )
-    const supportedLegScopeIds = new Set<string>(
-      (spec.orchestration?.legScopes ?? []).map(l => l.id),
-    )
     const metadata = this.toRuleBlockMetadata(
       rule.metadata!,
       supportedSymbolScopeIds,
