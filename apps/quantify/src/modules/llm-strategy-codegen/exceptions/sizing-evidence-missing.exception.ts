@@ -1,4 +1,4 @@
-import { ErrorCode } from '@ai/shared/constants/error-codes'
+import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
