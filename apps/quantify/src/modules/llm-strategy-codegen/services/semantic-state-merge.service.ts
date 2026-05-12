@@ -251,6 +251,12 @@ export class SemanticStateMergeService {
       ...weaker,
       ...stronger,
       value: stronger.value ?? weaker.value,
+      // H1 修复：同函数顶层 `{...weaker, ...stronger}` 对 sizing 也有同样的整段覆盖
+      // 问题。如果 derived 是更强源但显式回 sizing: null/undefined（典型场景：planner
+      // LLM 不输出 sizing 字段，或 reducer 清空），会把 persisted 的 locked sizing 抹掉。
+      // 与 value/evidence 一致用 nullish fallback：stronger 真正给出新 sizing 才用，
+      // 否则保留 weaker 的非空 sizing。
+      sizing: stronger.sizing ?? weaker.sizing,
       contracts: this.mergeContracts(persisted.contracts, derived.contracts),
       // #DCA-bug-fix：spread 后 stronger.constraints 会以整体形式覆盖 weaker.constraints；
       // 如果 derived 是更强源但 constraints 缺/为空（典型场景：conversation planner LLM

@@ -202,6 +202,33 @@ describe('semantic-state-merge — position.constraints union merge', () => {
     expect(params.capitalCap).toEqual({ kind: 'quote', value: 500, asset: 'USDT' })
   })
 
+  it('H1 sizing nullish fallback — derived with null sizing must NOT wipe persisted locked sizing', () => {
+    const persisted: SemanticState = makePositionState({
+      mode: 'fixed_quote',
+      value: 200,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      sizing: { kind: 'quote', value: 200, asset: 'USDT' },
+      constraints: [],
+    })
+
+    // derived 与 persisted 同强度，stronger=derived；显式 sizing: null（模拟 LLM 不回此字段）
+    const derived: SemanticState = makePositionState({
+      mode: 'fixed_quote',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      sizing: null,
+      constraints: [],
+    })
+
+    const merged = mergeSvc.merge({ persisted, derived })
+    // sizing 必须保留 persisted 的非空合约，不能被 null 抹掉
+    expect(merged.position?.sizing).toEqual({ kind: 'quote', value: 200, asset: 'USDT' })
+  })
+
   it('M4 deep clone — merging must NOT mutate caller persisted/derived references', () => {
     // 防回归：旧版本直接 byKey.set(constraint, constraint) 入引用，下游 normalize 会反向污染入参
     const persistedDca = makeConstraint({
