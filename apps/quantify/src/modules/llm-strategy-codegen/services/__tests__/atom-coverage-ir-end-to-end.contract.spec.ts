@@ -390,8 +390,15 @@ const ACTION_SPECIAL_MUTATORS: Record<string, SpecMutation> = {
 const RISK_SPECIAL_MUTATORS: Record<string, SpecMutation> = {
   // risk.max_drawdown_pct: semanticScope='portfolio'，value 是 fraction (>0 <1)
   'risk.max_drawdown_pct': key => mutateAsRisk(key, { semanticScope: 'portfolio', op: 'GTE', value: 0.15 }),
+  // risk.cooldown_bars: IR compiler 无对应 case（真 ghost atom），直接走 condition_unsupported；无法通过补 params 修复
   'risk.cooldown_bars': key => mutateAsRisk(key, { semanticScope: 'position', op: 'GTE', value: 1, params: { bars: 3 } }),
-  'risk.time_stop_bars': key => mutateAsRisk(key, { semanticScope: 'position', op: 'GTE', value: 1, params: { maxBars: 10, scope: 'position', effect: 'force_exit' } }),
+  // risk.time_stop_bars: tryCompileRiskPredicate 要求 effect=close_position 才产出 RiskPredicateDef；
+  //   effect=force_exit 时 return null → 规则走主循环 → compileConditionAtom default → throw；
+  //   使用 close_position 确保走 RiskPredicate 路径，产出可观测痕迹
+  'risk.time_stop_bars': key => mutateAsRisk(key, { semanticScope: 'position', op: 'GTE', value: 1, params: { maxBars: 10, scope: 'position', effect: 'close_position' } }),
+  // risk.atr_multiple_stop/take_profit: tryCompileRiskPredicate 有对应 case，但需 params.multiple > 0
+  'risk.atr_multiple_stop': key => mutateAsRisk(key, { semanticScope: 'position', op: 'GTE', value: 1, params: { multiple: 2 } }),
+  'risk.atr_multiple_take_profit': key => mutateAsRisk(key, { semanticScope: 'position', op: 'GTE', value: 1, params: { multiple: 2 } }),
   // 这些 risk atom 不是 condition-shaped — 它们是 reduceAction-shape，需要专门 builder
   'risk.partial_take_profit': () => null,
   'risk.boundary_guard': () => null,

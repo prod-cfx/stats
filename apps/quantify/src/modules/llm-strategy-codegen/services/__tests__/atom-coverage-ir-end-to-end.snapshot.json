@@ -475,18 +475,20 @@
     {
       "key": "risk.atr_multiple_stop",
       "category": "risk",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_multiple_stop"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "risk-predicate:probe-risk-rule"
+      ]
     },
     {
       "key": "risk.atr_multiple_take_profit",
       "category": "risk",
-      "status": "uncovered",
-      "failureLayer": "compile-throw",
-      "trace": [],
-      "note": "codegen.canonical_spec_v2_condition_unsupported:risk.atr_multiple_take_profit"
+      "status": "covered",
+      "failureLayer": "none",
+      "trace": [
+        "risk-predicate:probe-risk-rule"
+      ]
     },
     {
       "key": "risk.boundary_guard",
@@ -585,12 +587,7 @@
       "status": "covered",
       "failureLayer": "none",
       "trace": [
-        "predicate:GTE",
-        "rule-block-action:CLOSE_LONG",
-        "rule-block-action:CLOSE_SHORT",
-        "rule-block:probe-risk-rule",
-        "series:CONST",
-        "series:POSITION_BARS_HELD"
+        "risk-predicate:probe-risk-rule"
       ]
     },
     {
