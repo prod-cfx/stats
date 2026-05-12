@@ -62,7 +62,7 @@ describe('StopRunningStrategyDialog', () => {
     expect(onLiquidateAndStop).not.toHaveBeenCalled()
   })
 
-  it('shows a simple stop confirmation when open order count is unknown but no open position is reported', async () => {
+  it('offers risk choices when open order count is unknown even if no open position is reported', async () => {
     await act(async () => {
       root.render(
         <StopRunningStrategyDialog
@@ -84,9 +84,9 @@ describe('StopRunningStrategyDialog', () => {
       )
     })
 
-    expect(container.textContent).toContain('确认停止策略？')
-    expect(container.textContent).not.toContain('当前策略仍有持仓或挂单')
-    expect(container.textContent).not.toContain('平仓并停止')
+    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
+    expect(container.textContent).toContain('当前未成交挂单待确认')
+    expect(container.textContent).toContain('平仓并停止')
   })
 
   it('offers stop-only and liquidate-and-stop choices when positions exist', async () => {
@@ -127,6 +127,43 @@ describe('StopRunningStrategyDialog', () => {
 
     expect(onLiquidateAndStop).toHaveBeenCalledTimes(1)
     expect(onStopOnly).not.toHaveBeenCalled()
+  })
+
+  it('uses spot holding wording for spot strategies', async () => {
+    await act(async () => {
+      root.render(
+        <StopRunningStrategyDialog
+          open
+          strategy={{
+            name: 'BTC spot strategy',
+            exchange: 'okx',
+            symbol: 'BTC-USDT',
+            marketType: 'spot',
+            spotHoldingSummary: {
+              baseAsset: 'BTC',
+              quantity: 0.02161279,
+              openPositionsCount: 1,
+            },
+            positionOverview: {
+              openPositionsCount: 1,
+              totalUnrealizedPnl: 8.21,
+            },
+            openOrdersCount: 0,
+          }}
+          onStopOnly={() => undefined}
+          onLiquidateAndStop={() => undefined}
+          onCancel={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('当前策略仍有现货持币或挂单')
+    expect(container.textContent).toContain('当前现货持币')
+    expect(container.textContent).toContain('0.02161279 BTC')
+    expect(container.textContent).toContain('当前未成交挂单0')
+    expect(container.textContent).toContain('再处理现货持币')
+    expect(container.textContent).toContain('仅停止，保留现货持币/挂单')
+    expect(container.textContent).not.toContain('再处理持仓')
   })
 
   it('disables dangerous actions while pending', async () => {

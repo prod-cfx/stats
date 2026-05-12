@@ -4,7 +4,7 @@ import type { PositionResponseDto } from './dto/position.response.dto'
 import type { PositionsQueryDto } from './dto/positions-query.dto'
 import type { RecordTradeDto } from './dto/record-trade.dto'
 import type { TradeResponseDto } from './dto/trade.response.dto'
-import type { ExchangeId, MarketType, UnifiedOrder } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedOrder, UnifiedOrderFill } from '@/modules/trading/core/types'
 import type { OrderIntent, TradingExecutionResult } from '@/modules/trading-execution/types/trading-execution.types'
 import type { Position, Trade, PrismaClient } from '@/prisma/prisma.types'
 import { randomUUID } from 'node:crypto'
@@ -32,6 +32,14 @@ import { PositionsRepository } from './repositories/positions.repository'
 type Decimal = Prisma.Decimal
 const Decimal = Prisma.Decimal
 /* eslint-enable no-redeclare, ts/no-redeclare */
+
+interface CloseTradeExecutionSummary {
+  price?: number
+  filledQuantity: number
+  feeAmount: number
+  feeCurrency: string | null
+  executedAt: number
+}
 
 @Injectable()
 export class PositionsService {
@@ -529,15 +537,17 @@ export class PositionsService {
       throw this.toClosePositionExecutionException(dto.positionId, executionResult)
     }
     const { order } = executionResult
-    const filledQuantity =
-      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
-        ? order.filled
-        : closeQuantity.toNumber()
-    const tradePrice =
-      typeof order.price === 'number' && Number.isFinite(order.price) && order.price > 0
-        ? order.price
-        : Number(position.avgEntryPrice)
-    const { amount: feeAmount, currency: feeCurrency } = this.extractOrderFee(order)
+    const executionSummary = await this.resolveCloseTradeExecutionSummary(intent, order, closeQuantity.toNumber())
+    if (executionSummary.price === undefined) {
+      await this.markManualClosePendingSync(position, dto, executionResult, closeQuantity.toString())
+      return {
+        success: true,
+        orderId: order.id,
+        positionId: dto.positionId,
+        filledQuantity: '0',
+        message: '市价平仓单已提交，成交均价待交易所同步',
+      }
+    }
 
     // 6. 下单成功后立即落地本地成交，避免仓位状态长期漂移
     await this.recordTrade({
@@ -546,14 +556,14 @@ export class PositionsService {
       market: `${exchangeId}:${marketType}`,
       side: orderSide === 'buy' ? TradeSide.BUY : TradeSide.SELL,
       positionSide: position.positionSide,
-      price: tradePrice.toString(),
-      quantity: filledQuantity.toString(),
-      fee: feeAmount > 0 ? feeAmount.toString() : '0',
-      feeCurrency: feeCurrency ?? undefined,
+      price: executionSummary.price.toString(),
+      quantity: executionSummary.filledQuantity.toString(),
+      fee: executionSummary.feeAmount > 0 ? executionSummary.feeAmount.toString() : '0',
+      feeCurrency: executionSummary.feeCurrency ?? undefined,
       orderId: order.id,
       externalTradeId: order.id,
       provider: exchangeId,
-      executedAt: new Date(order.createdAt).toISOString(),
+      executedAt: new Date(executionSummary.executedAt).toISOString(),
       metadata: {
         source: 'manual-close-position',
         positionId: dto.positionId,
@@ -573,14 +583,185 @@ export class PositionsService {
       success: true,
       orderId: order.id,
       positionId: dto.positionId,
-      filledQuantity: filledQuantity.toString(),
-      averagePrice: tradePrice.toString(),
+      filledQuantity: executionSummary.filledQuantity.toString(),
+      averagePrice: executionSummary.price.toString(),
       message: dto.note || '市价平仓成功',
     }
   }
 
   private createClosePositionSourceId(positionId: string, closeQuantity: Decimal): string {
     return `${positionId}:${closeQuantity.toString()}:${Date.now()}:${randomUUID()}`
+  }
+
+  private async resolveCloseTradeExecutionSummary(
+    intent: OrderIntent,
+    order: UnifiedOrder,
+    fallbackQuantity: number,
+  ): Promise<CloseTradeExecutionSummary> {
+    const submittedSummary = this.resolveOrderExecutionSummary(order, fallbackQuantity)
+    if (submittedSummary.price !== undefined) return submittedSummary
+
+    let latestOrder = order
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (attempt > 0) await this.delay(250)
+
+      try {
+        latestOrder = await this.tradingExecution.getSubmittedOrder(intent, order)
+        const latestSummary = this.resolveOrderExecutionSummary(latestOrder, fallbackQuantity)
+        if (latestSummary.price !== undefined) return latestSummary
+      }
+      catch {
+        latestOrder = order
+      }
+
+      try {
+        const fills = await this.tradingExecution.getSubmittedOrderFills(intent, latestOrder)
+        const fillsSummary = this.resolveFillsExecutionSummary(fills, latestOrder, fallbackQuantity)
+        if (fillsSummary.price !== undefined) return fillsSummary
+      }
+      catch {
+        // A submitted exchange order may need a short settlement window before fills are queryable.
+      }
+    }
+
+    return this.resolveOrderExecutionSummary(latestOrder, fallbackQuantity)
+  }
+
+  private resolveOrderExecutionSummary(order: UnifiedOrder, fallbackQuantity: number): CloseTradeExecutionSummary {
+    const fee = this.extractOrderFee(order)
+    const filledQuantity =
+      typeof order.filled === 'number' && Number.isFinite(order.filled) && order.filled > 0
+        ? order.filled
+        : fallbackQuantity
+
+    return {
+      price: this.firstPositiveNumber(
+        this.extractRawFilledAveragePrice(order.raw),
+        order.price,
+      ),
+      filledQuantity,
+      feeAmount: fee.amount,
+      feeCurrency: fee.currency,
+      executedAt: order.updatedAt ?? order.createdAt,
+    }
+  }
+
+  private resolveFillsExecutionSummary(
+    fills: UnifiedOrderFill[],
+    order: UnifiedOrder,
+    fallbackQuantity: number,
+  ): CloseTradeExecutionSummary {
+    const price = this.resolveWeightedAverageFillPrice(fills)
+    if (price === undefined) return this.resolveOrderExecutionSummary(order, fallbackQuantity)
+
+    let filledQuantity = 0
+    let feeAmount = 0
+    let feeCurrency: string | null = null
+    let executedAt = order.updatedAt ?? order.createdAt
+
+    for (const fill of fills) {
+      if (Number.isFinite(fill.amount) && fill.amount > 0) filledQuantity += fill.amount
+      if (Number.isFinite(fill.fee) && fill.fee && fill.fee !== 0) {
+        feeAmount += Math.abs(fill.fee)
+        feeCurrency ??= fill.feeCurrency ?? null
+      }
+      if (Number.isFinite(fill.executedAt) && fill.executedAt > executedAt) executedAt = fill.executedAt
+    }
+
+    return {
+      price,
+      filledQuantity: filledQuantity > 0 ? filledQuantity : fallbackQuantity,
+      feeAmount,
+      feeCurrency,
+      executedAt,
+    }
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  private async markManualClosePendingSync(
+    position: Position & { account?: { id: string, userId: string } },
+    dto: ClosePositionDto,
+    executionResult: Extract<TradingExecutionResult, { status: 'submitted' }>,
+    requestedQuantity: string,
+  ): Promise<void> {
+    const currentMetadata = this.asJsonObject(position.metadata)
+    await this.positionsRepository.updatePosition(position.id, {
+      metadata: {
+        ...currentMetadata,
+        pendingManualClose: this.toJsonSafe({
+          status: 'pending_sync',
+          orderId: executionResult.order.id,
+          clientOrderId: executionResult.normalized.clientOrderId,
+          positionId: dto.positionId,
+          requestedQuantity,
+          exchangeId: dto.exchangeId,
+          marketType: dto.marketType,
+          submittedAt: new Date(executionResult.order.createdAt).toISOString(),
+          reason: 'close_trade_price_pending',
+        }),
+      },
+    })
+  }
+
+  private extractRawFilledAveragePrice(raw: unknown): number | undefined {
+    if (!raw || typeof raw !== 'object') return undefined
+    const record = raw as Record<string, unknown>
+
+    const directPrice = this.firstPositiveNumber(record.avgPx, record.fillPx)
+    if (directPrice !== undefined) return directPrice
+
+    const fillsAverage = this.resolveWeightedAverageFillPrice(record.fills)
+    if (fillsAverage !== undefined) return fillsAverage
+
+    if (Array.isArray(record.data)) {
+      for (const item of record.data) {
+        const price = this.extractRawFilledAveragePrice(item)
+        if (price !== undefined) return price
+      }
+    }
+
+    return undefined
+  }
+
+  private resolveWeightedAverageFillPrice(fills: unknown): number | undefined {
+    if (!Array.isArray(fills) || fills.length === 0) return undefined
+
+    let totalQuantity = 0
+    let totalNotional = 0
+    for (const fill of fills) {
+      if (!fill || typeof fill !== 'object') continue
+      const record = fill as Record<string, unknown>
+      const price = this.firstPositiveNumber(record.fillPx, record.price)
+      const quantity = this.firstPositiveNumber(
+        record.fillSz,
+        record.sz,
+        record.amount,
+        record.qty,
+        record.quantity,
+      )
+      if (price === undefined || quantity === undefined) continue
+      totalQuantity += quantity
+      totalNotional += price * quantity
+    }
+
+    if (totalQuantity <= 0) return undefined
+    return totalNotional / totalQuantity
+  }
+
+  private firstPositiveNumber(...values: unknown[]): number | undefined {
+    for (const value of values) {
+      let parsed = Number.NaN
+      if (typeof value === 'number') {
+        parsed = value
+      } else if (typeof value === 'string') {
+        parsed = Number.parseFloat(value)
+      }
+      if (Number.isFinite(parsed) && parsed > 0) return parsed
+    }
+    return undefined
   }
 
   private resolveClosePositionRole(
@@ -657,6 +838,11 @@ export class PositionsService {
       return jsonObject
     }
     return String(value)
+  }
+
+  private asJsonObject(value: unknown): Prisma.JsonObject {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+    return this.toJsonSafe(value) as Prisma.JsonObject
   }
 
   private normalizeEntryTimeframe(value: string | undefined): MarketTimeframe | null {

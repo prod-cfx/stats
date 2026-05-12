@@ -1214,6 +1214,80 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('当前未成交挂单 1 条')
   })
 
+  it('shows liquidate_and_stop when current open order count is unknown', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            positionOverview: {
+              openPositionsCount: 0,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 0,
+            },
+            openOrdersCount: null,
+          })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('平仓并停止')
+    expect(container.textContent).toContain('当前未成交挂单 待确认 条')
+  })
+
+  it('shows spot holding quantity separately from pending order count', async () => {
+    const spotStrategy = buildStrategy({
+      symbol: 'BTC-USDT',
+      marketType: 'spot',
+      positionOverview: {
+        openPositionsCount: 1,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 6.14,
+      },
+      spotHoldingSummary: {
+        baseAsset: 'BTC',
+        quantity: 0.02161279,
+        openPositionsCount: 1,
+      },
+      openOrdersCount: 0,
+    })
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
+      status: 'running',
+      symbol: 'BTC-USDT',
+      snapshot: {
+        ...buildActionDetail().snapshot,
+        symbol: 'BTC-USDT',
+        strategyConfig: { exchange: 'okx', symbol: 'BTC-USDT', marketType: 'spot' },
+      },
+      positionOverview: spotStrategy.positionOverview,
+      spotHoldingSummary: spotStrategy.spotHoldingSummary,
+      openOrdersCount: 0,
+    }))
+
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={spotStrategy}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('现货持币 0.02161279 BTC')
+    expect(container.textContent).toContain('当前未成交挂单 0 条')
+
+    await act(async () => {
+      findButton('停止策略')?.click()
+    })
+
+    expect(container.textContent).toContain('当前策略仍有现货持币或挂单')
+    expect(container.textContent).toContain('当前现货持币')
+    expect(container.textContent).toContain('0.02161279 BTC')
+    expect(container.textContent).not.toContain('当前持仓1')
+  })
+
   it('shows latest order quantity with asset unit and notional value', async () => {
     await act(async () => {
       root.render(

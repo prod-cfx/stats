@@ -4,9 +4,15 @@ interface StopRunningStrategy {
   name?: string | null
   exchange?: string | null
   symbol?: string | null
+  marketType?: string | null
   positionOverview?: {
     openPositionsCount?: number | null
     totalUnrealizedPnl?: number | null
+  } | null
+  spotHoldingSummary?: {
+    baseAsset?: string | null
+    quantity?: number | null
+    openPositionsCount?: number | null
   } | null
   openOrdersCount?: number | null
 }
@@ -26,6 +32,22 @@ function formatOptionalNumber(value: number | null | undefined) {
   return value.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
 }
 
+function formatSpotHolding(strategy: StopRunningStrategy | null) {
+  const summary = strategy?.spotHoldingSummary
+  const quantity = summary?.quantity
+  const baseAsset = summary?.baseAsset
+  if (typeof quantity === 'number' && Number.isFinite(quantity) && baseAsset) {
+    return `${quantity.toLocaleString('zh-CN', { maximumFractionDigits: 8 })} ${baseAsset}`
+  }
+
+  const count = summary?.openPositionsCount ?? strategy?.positionOverview?.openPositionsCount
+  if (typeof count === 'number' && Number.isFinite(count)) {
+    return `${count} 条现货持币记录`
+  }
+
+  return '现货持币待确认'
+}
+
 export function StopRunningStrategyDialog({
   open,
   strategy,
@@ -39,10 +61,13 @@ export function StopRunningStrategyDialog({
 
   const openPositionsCount = strategy?.positionOverview?.openPositionsCount ?? 0
   const openOrdersCount = strategy?.openOrdersCount
+  const isSpotMarket = strategy?.marketType === 'spot'
   const hasUnknownOpenOrders = openOrdersCount == null
   const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
-  const requiresRiskChoice = openPositionsCount > 0 || hasOpenOrders
-  const title = requiresRiskChoice ? '当前策略仍有持仓或挂单' : '确认停止策略？'
+  const requiresRiskChoice = openPositionsCount > 0 || hasOpenOrders || hasUnknownOpenOrders
+  const title = requiresRiskChoice ? `当前策略仍有${isSpotMarket ? '现货持币' : '持仓'}或挂单` : '确认停止策略？'
+  const exposureLabel = isSpotMarket ? '当前现货持币' : '当前持仓'
+  const exposureValue = isSpotMarket ? formatSpotHolding(strategy) : String(openPositionsCount)
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/50 px-4" onClick={onCancel}>
@@ -53,7 +78,7 @@ export function StopRunningStrategyDialog({
         <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{title}</h3>
         <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
           {requiresRiskChoice
-            ? '停止前请确认如何处理当前持仓。仅停止不会平仓；平仓并停止会在 OKX 模拟盘提交平仓单。'
+            ? `停止前请确认如何处理当前${isSpotMarket ? '现货持币' : '持仓'}。仅停止不会平仓；平仓并停止会在 OKX 模拟盘提交平仓单。`
             : '停止后策略不再执行，也不会产生新的交易信号。'}
         </p>
 
@@ -69,8 +94,8 @@ export function StopRunningStrategyDialog({
             </span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-[color:var(--cf-muted)]">当前持仓</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">{openPositionsCount}</span>
+            <span className="text-[color:var(--cf-muted)]">{exposureLabel}</span>
+            <span className="text-right text-[color:var(--cf-text-strong)]">{exposureValue}</span>
           </div>
           <div className="flex justify-between gap-3">
             <span className="text-[color:var(--cf-muted)]">当前浮盈亏</span>
@@ -88,7 +113,7 @@ export function StopRunningStrategyDialog({
 
         {requiresRiskChoice && (
           <p className="mt-3 text-xs leading-5 text-[color:var(--cf-muted)]">
-            平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+            平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理{isSpotMarket ? '现货持币' : '持仓'}。
           </p>
         )}
 
@@ -108,14 +133,14 @@ export function StopRunningStrategyDialog({
                 onClick={onStopOnly}
                 className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                仅停止，保留持仓/挂单
+                {isSpotMarket ? '仅停止，保留现货持币/挂单' : '仅停止，保留持仓/挂单'}
               </button>
               <button
                 type="button"
                 data-testid="liquidate-and-stop-strategy"
                 disabled={pending}
                 onClick={onLiquidateAndStop}
-                className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400"
               >
                 平仓并停止
               </button>

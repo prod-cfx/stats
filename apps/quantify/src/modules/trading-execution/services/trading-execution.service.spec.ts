@@ -258,6 +258,60 @@ describe('TradingExecutionService', () => {
     )
   })
 
+  it('submits OKX spot sell reduce-only intents without fetching derivative positions', async () => {
+    const tradingService = createTradingServiceMock()
+    tradingService.getInstrumentConstraints.mockResolvedValue({
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      rawSymbol: 'BTC-USDT',
+      priceTickSize: '0.1',
+      quantityStepSize: '0.000001',
+      minQuantity: '0.000001',
+      contractValue: null,
+      clientOrderId: { maxLength: 32, pattern: '^[A-Za-z0-9]+$' },
+      raw: {},
+    })
+    const service = createService(tradingService)
+    const spotSellIntent: OrderIntent = {
+      source: 'signal',
+      sourceId: 'exec-okx-spot-sell-1',
+      userId: 'user-1',
+      exchangeAccountId: 'exchange-account-okx-1',
+      exchangeId: 'okx',
+      marketType: 'spot',
+      symbol: 'BTC/USDT',
+      side: 'sell',
+      type: 'market',
+      amount: 0.02161279,
+      role: 'spot_sell',
+      reduceOnly: true,
+    }
+
+    const result = await service.executeIntent(spotSellIntent)
+
+    expect(result.status).toBe('submitted')
+    if (result.status !== 'submitted') throw new Error('expected submitted result')
+    expect(tradingService.getPositions).not.toHaveBeenCalled()
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'spot',
+      expect.objectContaining({
+        symbol: 'BTC/USDT',
+        side: 'sell',
+        marketType: 'spot',
+        reduceOnly: undefined,
+        tdMode: undefined,
+        positionSide: undefined,
+        posSide: undefined,
+        amount: 0.021612,
+        clientOrderId: result.normalized.clientOrderId,
+      }),
+      'exchange-account-okx-1',
+    )
+  })
+
   it('prepares Hyperliquid signal intents with exchange-compatible cloids', async () => {
     const tradingService = createTradingServiceMock()
     tradingService.getInstrumentConstraints.mockResolvedValue({

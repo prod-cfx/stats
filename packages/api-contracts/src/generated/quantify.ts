@@ -460,6 +460,171 @@ const StrategyPnlDailyResponseDto = z
   })
   .passthrough()
 const GenerateDailyReportDto = z.object({ date: z.string() }).partial().passthrough()
+const LlmStrategyResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    status: z.enum(['draft', 'live', 'archived']),
+    systemPrompt: z.string().nullish(),
+    initialPromptTemplate: z.string().nullish(),
+    allowedSymbols: z.array(z.string()).optional(),
+    allowedTimeframes: z.array(z.string()).optional(),
+    riskConfig: z.object({}).partial().passthrough().nullish(),
+    createdBy: z.string(),
+    updatedBy: z.string(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateLlmStrategyDto = z
+  .object({
+    name: z.string().max(100),
+    description: z.string().max(1000),
+    systemPrompt: z.string().max(10000).optional(),
+    initialPromptTemplate: z.string().max(10000).optional(),
+    allowedSymbols: z.array(z.string()).optional(),
+    allowedTimeframes: z.array(z.string()).optional(),
+    riskConfig: z.object({}).partial().passthrough().optional(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    createdBy: z.string().optional(),
+  })
+  .passthrough()
+const UpdateLlmStrategyDto = z
+  .object({
+    name: z.string().max(100),
+    description: z.string().max(1000),
+    status: z.enum(['draft', 'live', 'archived']),
+    systemPrompt: z.string().max(10000),
+    initialPromptTemplate: z.string().max(10000),
+    allowedSymbols: z.array(z.string()).nullable(),
+    allowedTimeframes: z.array(z.string()).nullable(),
+    riskConfig: z.object({}).partial().passthrough().nullable(),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    updatedBy: z.string(),
+  })
+  .partial()
+  .passthrough()
+const LlmStrategyInstanceResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string(),
+    name: z.string(),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string(),
+    scheduleCron: z.string().nullish(),
+    maxToolCallsPerRun: z.number().nullish(),
+    maxRunsPerHour: z.number().nullish(),
+    cooldownSeconds: z.number().nullish(),
+    configOverrides: z.object({}).partial().passthrough().nullish(),
+    createdBy: z.string(),
+    updatedBy: z.string(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateLlmStrategyInstanceDto = z
+  .object({
+    strategyId: z.string(),
+    name: z.string().max(100),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string().max(100),
+    scheduleCron: z.string().max(100).optional(),
+    maxToolCallsPerRun: z.number().gte(1).lte(100).optional(),
+    maxRunsPerHour: z.number().gte(1).lte(60).optional(),
+    cooldownSeconds: z.number().gte(0).lte(86400).optional(),
+    configOverrides: z.object({}).partial().passthrough().optional(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    createdBy: z.string().optional(),
+  })
+  .passthrough()
+const UpdateLlmStrategyInstanceDto = z
+  .object({
+    name: z.string().max(100),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string().max(100),
+    scheduleCron: z.string().max(100),
+    maxToolCallsPerRun: z.number().gte(1).lte(100).nullable(),
+    maxRunsPerHour: z.number().gte(1).lte(60).nullable(),
+    cooldownSeconds: z.number().gte(0).lte(86400).nullable(),
+    configOverrides: z.object({}).partial().passthrough().nullable(),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    updatedBy: z.string(),
+  })
+  .partial()
+  .passthrough()
+const TradingSignalResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string().nullish(),
+    strategyInstanceId: z.string().nullish(),
+    llmStrategyId: z.string().nullish(),
+    llmStrategyInstanceId: z.string().nullish(),
+    symbolId: z.string(),
+    symbolCode: z.string().nullish(),
+    sourceType: z.enum(['AI_GENERATED', 'MANUAL', 'SYSTEM']),
+    signalType: z.enum(['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT']),
+    direction: z.enum(['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT']),
+    confidence: z.string().nullish(),
+    entryPrice: z.string().nullish(),
+    targetPrice: z.string().nullish(),
+    stopLoss: z.string().nullish(),
+    takeProfit: z.string().nullish(),
+    positionSizeQuote: z.string().nullish(),
+    positionSizeRatio: z.string().nullish(),
+    aiModel: z.string().nullish(),
+    aiReasoning: z.string().nullish(),
+    aiRawResponse: z.object({}).partial().passthrough().nullish(),
+    marketContext: z.object({}).partial().passthrough().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    status: z.enum(['PENDING', 'EXECUTED', 'PARTIAL', 'EXPIRED', 'CANCELLED', 'FAILED']),
+    publishedAt: z.string(),
+    expiresAt: z.string().nullish(),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const LlmStrategyRunResponseDto = z
+  .object({
+    id: z.string(),
+    strategyInstanceId: z.string(),
+    startedAt: z.string().datetime({ offset: true }),
+    finishedAt: z.string().datetime({ offset: true }).nullish(),
+    status: z.enum(['success', 'failed', 'skipped']),
+    reason: z.string().nullish(),
+    toolCallsCount: z.number().nullish(),
+    llmModel: z.string().nullish(),
+    rawDialogSnapshot: z.object({}).partial().passthrough().nullish(),
+    generatedSignalId: z.string().nullish(),
+    generatedSignal: TradingSignalResponseDto.nullish(),
+    errorMessage: z.string().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const LlmStrategyInstancePublicResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string(),
+    strategyName: z.string(),
+    strategyDescription: z.string().nullish(),
+    name: z.string(),
+    description: z.string().nullish(),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    isSubscribed: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
 const AccountStrategyMetricsDto = z
   .object({
     returnPct: z.number().nullable(),
@@ -566,6 +731,14 @@ const AccountStrategyPositionOverviewDto = z
     closedPositionsCount: z.number().nullable(),
     totalRealizedPnl: z.number().nullable(),
     totalUnrealizedPnl: z.number().nullable(),
+  })
+  .partial()
+  .passthrough()
+const AccountStrategySpotHoldingSummaryDto = z
+  .object({
+    baseAsset: z.string().nullable(),
+    quantity: z.number().nullable(),
+    openPositionsCount: z.number().nullable(),
   })
   .partial()
   .passthrough()
@@ -682,6 +855,7 @@ const AccountStrategyDetailResponseDto = z
     timeline: z.array(AccountStrategyTimelineEventDto),
     accountOverview: AccountStrategyAccountOverviewDto,
     positionOverview: AccountStrategyPositionOverviewDto,
+    spotHoldingSummary: AccountStrategySpotHoldingSummaryDto.nullish(),
     latestOrders: z.array(AccountStrategyLatestOrderDto),
     openOrdersCount: z.number().nullish(),
     runtimeExecutionStates: z.array(RuntimeExecutionStateDto),
@@ -1039,37 +1213,6 @@ const GridRuntimeFillDto = z
   })
   .passthrough()
 const GridRuntimeActionDto = z.object({ reason: z.string() }).partial().passthrough()
-const TradingSignalResponseDto = z
-  .object({
-    id: z.string(),
-    strategyId: z.string().nullish(),
-    strategyInstanceId: z.string().nullish(),
-    llmStrategyId: z.string().nullish(),
-    llmStrategyInstanceId: z.string().nullish(),
-    symbolId: z.string(),
-    symbolCode: z.string().nullish(),
-    sourceType: z.enum(['AI_GENERATED', 'MANUAL', 'SYSTEM']),
-    signalType: z.enum(['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT']),
-    direction: z.enum(['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT']),
-    confidence: z.string().nullish(),
-    entryPrice: z.string().nullish(),
-    targetPrice: z.string().nullish(),
-    stopLoss: z.string().nullish(),
-    takeProfit: z.string().nullish(),
-    positionSizeQuote: z.string().nullish(),
-    positionSizeRatio: z.string().nullish(),
-    aiModel: z.string().nullish(),
-    aiReasoning: z.string().nullish(),
-    aiRawResponse: z.object({}).partial().passthrough().nullish(),
-    marketContext: z.object({}).partial().passthrough().nullish(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    status: z.enum(['PENDING', 'EXECUTED', 'PARTIAL', 'EXPIRED', 'CANCELLED', 'FAILED']),
-    publishedAt: z.string(),
-    expiresAt: z.string().nullish(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough()
 const StrategyLegDefinitionDto = z
   .object({
     id: z.string(),
@@ -1462,140 +1605,6 @@ const LlmCodegenEngineTestResponseDto = z
     rejectReason: z.string().optional(),
   })
   .passthrough()
-const LlmStrategyResponseDto = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    description: z.string(),
-    status: z.enum(['draft', 'live', 'archived']),
-    systemPrompt: z.string().nullish(),
-    initialPromptTemplate: z.string().nullish(),
-    allowedSymbols: z.array(z.string()).optional(),
-    allowedTimeframes: z.array(z.string()).optional(),
-    riskConfig: z.object({}).partial().passthrough().nullish(),
-    createdBy: z.string(),
-    updatedBy: z.string(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const CreateLlmStrategyDto = z
-  .object({
-    name: z.string().max(100),
-    description: z.string().max(1000),
-    systemPrompt: z.string().max(10000).optional(),
-    initialPromptTemplate: z.string().max(10000).optional(),
-    allowedSymbols: z.array(z.string()).optional(),
-    allowedTimeframes: z.array(z.string()).optional(),
-    riskConfig: z.object({}).partial().passthrough().optional(),
-    metadata: z.object({}).partial().passthrough().optional(),
-    createdBy: z.string().optional(),
-  })
-  .passthrough()
-const UpdateLlmStrategyDto = z
-  .object({
-    name: z.string().max(100),
-    description: z.string().max(1000),
-    status: z.enum(['draft', 'live', 'archived']),
-    systemPrompt: z.string().max(10000),
-    initialPromptTemplate: z.string().max(10000),
-    allowedSymbols: z.array(z.string()).nullable(),
-    allowedTimeframes: z.array(z.string()).nullable(),
-    riskConfig: z.object({}).partial().passthrough().nullable(),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    updatedBy: z.string(),
-  })
-  .partial()
-  .passthrough()
-const LlmStrategyInstanceResponseDto = z
-  .object({
-    id: z.string(),
-    strategyId: z.string(),
-    name: z.string(),
-    status: z.enum(['running', 'paused', 'stopped']),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string(),
-    scheduleCron: z.string().nullish(),
-    maxToolCallsPerRun: z.number().nullish(),
-    maxRunsPerHour: z.number().nullish(),
-    cooldownSeconds: z.number().nullish(),
-    configOverrides: z.object({}).partial().passthrough().nullish(),
-    createdBy: z.string(),
-    updatedBy: z.string(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    lastRunAt: z.string().datetime({ offset: true }).nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const CreateLlmStrategyInstanceDto = z
-  .object({
-    strategyId: z.string(),
-    name: z.string().max(100),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string().max(100),
-    scheduleCron: z.string().max(100).optional(),
-    maxToolCallsPerRun: z.number().gte(1).lte(100).optional(),
-    maxRunsPerHour: z.number().gte(1).lte(60).optional(),
-    cooldownSeconds: z.number().gte(0).lte(86400).optional(),
-    configOverrides: z.object({}).partial().passthrough().optional(),
-    metadata: z.object({}).partial().passthrough().optional(),
-    createdBy: z.string().optional(),
-  })
-  .passthrough()
-const UpdateLlmStrategyInstanceDto = z
-  .object({
-    name: z.string().max(100),
-    status: z.enum(['running', 'paused', 'stopped']),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string().max(100),
-    scheduleCron: z.string().max(100),
-    maxToolCallsPerRun: z.number().gte(1).lte(100).nullable(),
-    maxRunsPerHour: z.number().gte(1).lte(60).nullable(),
-    cooldownSeconds: z.number().gte(0).lte(86400).nullable(),
-    configOverrides: z.object({}).partial().passthrough().nullable(),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    updatedBy: z.string(),
-  })
-  .partial()
-  .passthrough()
-const LlmStrategyRunResponseDto = z
-  .object({
-    id: z.string(),
-    strategyInstanceId: z.string(),
-    startedAt: z.string().datetime({ offset: true }),
-    finishedAt: z.string().datetime({ offset: true }).nullish(),
-    status: z.enum(['success', 'failed', 'skipped']),
-    reason: z.string().nullish(),
-    toolCallsCount: z.number().nullish(),
-    llmModel: z.string().nullish(),
-    rawDialogSnapshot: z.object({}).partial().passthrough().nullish(),
-    generatedSignalId: z.string().nullish(),
-    generatedSignal: TradingSignalResponseDto.nullish(),
-    errorMessage: z.string().nullish(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const LlmStrategyInstancePublicResponseDto = z
-  .object({
-    id: z.string(),
-    strategyId: z.string(),
-    strategyName: z.string(),
-    strategyDescription: z.string().nullish(),
-    name: z.string(),
-    description: z.string().nullish(),
-    status: z.enum(['running', 'paused', 'stopped']),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string(),
-    lastRunAt: z.string().datetime({ offset: true }).nullish(),
-    isSubscribed: z.boolean(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
 const CreateSubscriptionDto = z
   .object({
     userId: z.string(),
@@ -1665,17 +1674,6 @@ const UpdateLlmSubscriptionDto = z
     exchangeAccountId: z.string().nullish(),
   })
   .passthrough()
-const StrategyTemplateListQueryDto = z
-  .object({
-    page: z.number().gte(1).default(1),
-    limit: z.number().gte(1).lte(100).default(20),
-    status: z.enum(['draft', 'testing', 'live', 'disabled']),
-    keyword: z.string().max(100),
-    orderBy: z.string(),
-    onlyDraft: z.boolean(),
-  })
-  .partial()
-  .passthrough()
 const LlmStrategyListQueryDto = z
   .object({
     page: z.number().gte(1).default(1),
@@ -1698,6 +1696,17 @@ const LlmStrategyInstanceListQueryDto = z
   .passthrough()
 const LlmStrategyRunsListQueryDto = z
   .object({ page: z.number().gte(1).default(1), limit: z.number().gte(1).lte(100).default(20) })
+  .partial()
+  .passthrough()
+const StrategyTemplateListQueryDto = z
+  .object({
+    page: z.number().gte(1).default(1),
+    limit: z.number().gte(1).lte(100).default(20),
+    status: z.enum(['draft', 'testing', 'live', 'disabled']),
+    keyword: z.string().max(100),
+    orderBy: z.string(),
+    onlyDraft: z.boolean(),
+  })
   .partial()
   .passthrough()
 
@@ -1745,6 +1754,15 @@ export const schemas = {
   LedgerEntryResponseDto,
   StrategyPnlDailyResponseDto,
   GenerateDailyReportDto,
+  LlmStrategyResponseDto,
+  CreateLlmStrategyDto,
+  UpdateLlmStrategyDto,
+  LlmStrategyInstanceResponseDto,
+  CreateLlmStrategyInstanceDto,
+  UpdateLlmStrategyInstanceDto,
+  TradingSignalResponseDto,
+  LlmStrategyRunResponseDto,
+  LlmStrategyInstancePublicResponseDto,
   AccountStrategyMetricsDto,
   AccountStrategyListItemDto,
   AccountStrategyEquityPointDto,
@@ -1756,6 +1774,7 @@ export const schemas = {
   AccountStrategyTimelineEventDto,
   AccountStrategyAccountOverviewDto,
   AccountStrategyPositionOverviewDto,
+  AccountStrategySpotHoldingSummaryDto,
   AccountStrategyLatestOrderDto,
   RuntimeExecutionStateDto,
   AccountStrategyRuntimeSemanticOrderEvidenceDto,
@@ -1793,7 +1812,6 @@ export const schemas = {
   GridRuntimeOrderDto,
   GridRuntimeFillDto,
   GridRuntimeActionDto,
-  TradingSignalResponseDto,
   StrategyLegDefinitionDto,
   StrategyExecutionConfigDto,
   StrategyTemplateResponseDto,
@@ -1825,14 +1843,6 @@ export const schemas = {
   ContinueCodegenSessionDto,
   TestLlmCodegenEngineDto,
   LlmCodegenEngineTestResponseDto,
-  LlmStrategyResponseDto,
-  CreateLlmStrategyDto,
-  UpdateLlmStrategyDto,
-  LlmStrategyInstanceResponseDto,
-  CreateLlmStrategyInstanceDto,
-  UpdateLlmStrategyInstanceDto,
-  LlmStrategyRunResponseDto,
-  LlmStrategyInstancePublicResponseDto,
   CreateSubscriptionDto,
   SubscriptionStatus,
   SubscriptionResponseDto,
@@ -1840,10 +1850,10 @@ export const schemas = {
   CreateLlmSubscriptionDto,
   LlmSubscriptionResponseDto,
   UpdateLlmSubscriptionDto,
-  StrategyTemplateListQueryDto,
   LlmStrategyListQueryDto,
   LlmStrategyInstanceListQueryDto,
   LlmStrategyRunsListQueryDto,
+  StrategyTemplateListQueryDto,
 }
 
 const AccountStrategyDetailTransportEnvelope = z

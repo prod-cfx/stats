@@ -154,10 +154,20 @@ function inferQuoteAsset(symbol: string, fallback = 'USDT') {
   return quoteAssets.find(asset => normalized.endsWith(asset)) ?? fallback
 }
 
-function formatSpotHoldingCount(openPositionsCount: number | null | undefined, symbol: string) {
-  if (typeof openPositionsCount !== 'number' || !Number.isFinite(openPositionsCount)) return '--'
-  if (openPositionsCount === 0) return `0 ${inferBaseAsset(symbol)}`
-  return `${openPositionsCount} 个持币记录`
+function formatSpotHolding(strategy: AiQuantStrategyRecord) {
+  const quantity = strategy.spotHoldingSummary?.quantity
+  const baseAsset = strategy.spotHoldingSummary?.baseAsset ?? inferBaseAsset(strategy.symbol)
+  if (typeof quantity === 'number' && Number.isFinite(quantity) && baseAsset) {
+    return `${quantity.toLocaleString('zh-CN', { maximumFractionDigits: 8 })} ${baseAsset}`
+  }
+
+  const count = strategy.spotHoldingSummary?.openPositionsCount ?? strategy.positionOverview?.openPositionsCount
+  if (typeof count === 'number' && Number.isFinite(count)) {
+    if (count === 0) return `0 ${baseAsset}`
+    return `${count} 条现货持币记录`
+  }
+
+  return '现货持币待确认'
 }
 
 function formatExecutionValue(value: string | number | null | undefined, suffix = '') {
@@ -411,8 +421,9 @@ export function AiQuantStrategyDetail({
   const openOrdersCount = strategy.openOrdersCount
   const hasUnknownOpenOrders = openOrdersCount == null
   const hasOpenOrders = typeof openOrdersCount === 'number' && openOrdersCount > 0
-  const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders
+  const hasRuntimeRisk = openPositionsCount > 0 || hasOpenOrders || hasUnknownOpenOrders
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
+  const exposureSummary = isSpotMarket ? formatSpotHolding(strategy) : `${openPositionsCount} 个 open positions`
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
   const timelineItems = showFullTimeline
     ? strategy.timeline
@@ -518,13 +529,13 @@ export function AiQuantStrategyDetail({
               <p className="text-sm leading-6 text-[color:var(--cf-text)]">
                 {strategy.status === 'running'
                   ? (showLiquidateAndStop
-                      ? '策略当前正在运行且账户中存在持仓或未成交挂单。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
+                      ? `策略当前正在运行且账户中存在${isSpotMarket ? '现货持币' : '持仓'}或未成交挂单。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。`
                       : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
                   : '当前运行实例已结束。'}
               </p>
               {showLiquidateAndStop && (
                 <p className="mt-2 text-xs leading-5 text-[color:var(--cf-muted)]">
-                  检测到 {openPositionsCount} 个 open positions，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+                  检测到 {isSpotMarket ? `现货持币 ${exposureSummary}` : exposureSummary}，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理{isSpotMarket ? '现货持币' : '持仓'}。
                 </p>
               )}
             </div>
@@ -870,7 +881,7 @@ export function AiQuantStrategyDetail({
             <p className="text-[color:var(--cf-muted)]">{isSpotMarket ? '当前持币' : '当前持仓数'}</p>
             <p className="text-right text-[color:var(--cf-text-strong)]">
               {isSpotMarket
-                ? formatSpotHoldingCount(strategy.positionOverview?.openPositionsCount, strategy.symbol)
+                ? formatSpotHolding(strategy)
                 : (strategy.positionOverview?.openPositionsCount ?? '--')}
             </p>
             <p className="text-[color:var(--cf-muted)]">{isSpotMarket ? '已完成买卖轮次' : '已平仓数'}</p>

@@ -21,7 +21,7 @@ export class OrderNormalizerService {
       price: normalizedPrice === undefined ? undefined : Number(normalizedPrice),
       timeInForce: intent.timeInForce,
       reduceOnly: this.reduceOnly(intent),
-      tdMode: intent.tdMode,
+      tdMode: intent.marketType === 'perp' ? intent.tdMode : undefined,
       positionSide: positionSide?.positionSide,
       posSide: positionSide?.posSide,
       clientOrderId,
@@ -55,6 +55,7 @@ export class OrderNormalizerService {
   }
 
   private reduceOnly(intent: OrderIntent): boolean | undefined {
+    if (intent.marketType !== 'perp') return undefined
     if (intent.role === 'close_long' || intent.role === 'close_short') return true
     return intent.reduceOnly
   }

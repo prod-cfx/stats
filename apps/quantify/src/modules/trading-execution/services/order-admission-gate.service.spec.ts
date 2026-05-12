@@ -96,6 +96,12 @@ describe('OrderAdmissionGateService', () => {
     expect(result).toEqual({ ok: false, status: 'rejected', reason: 'spot_sell_requires_sell_side' })
   })
 
+  it('allows spot-sell reduce-only intent without derivative positions', () => {
+    const service = new OrderAdmissionGateService()
+    const result = service.evaluate({ ...baseIntent, role: 'spot_sell', side: 'sell', marketType: 'spot', symbol: 'BTC/USDT', reduceOnly: true }, [])
+    expect(result).toEqual({ ok: true })
+  })
+
   it('rejects open-long intent on spot market', () => {
     const service = new OrderAdmissionGateService()
     const result = service.evaluate({ ...baseIntent, role: 'open_long', side: 'buy', marketType: 'spot', symbol: 'BTC/USDT' }, [])

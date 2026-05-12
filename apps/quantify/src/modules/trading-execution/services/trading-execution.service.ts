@@ -1,4 +1,4 @@
-import type { UnifiedPosition } from '@/modules/trading/core/types'
+import type { UnifiedOrder, UnifiedOrderFill, UnifiedPosition } from '@/modules/trading/core/types'
 import { Injectable } from '@nestjs/common'
 import { TradingService } from '@/modules/trading/trading.service'
 import { ClientOrderIdFactoryService } from './client-order-id-factory.service'
@@ -88,7 +88,7 @@ export class TradingExecutionService {
 
   async submitPrepared(prepared: PreparedOrderIntent): Promise<TradingExecutionSubmitPreparedResult> {
     const { intent, normalized } = prepared
-    const requiresPositions = intent.reduceOnly || intent.role === 'close_long' || intent.role === 'close_short'
+    const requiresPositions = this.requiresDerivativePositions(intent)
     let positions: UnifiedPosition[] = []
     if (requiresPositions) {
       try {
@@ -118,7 +118,37 @@ export class TradingExecutionService {
     }
   }
 
+  async getSubmittedOrder(intent: OrderIntent, order: UnifiedOrder): Promise<UnifiedOrder> {
+    return this.tradingService.getOrder(
+      intent.userId,
+      intent.exchangeId,
+      intent.marketType,
+      order.id,
+      order.symbol || intent.symbol,
+      intent.exchangeAccountId ?? undefined,
+    )
+  }
+
+  async getSubmittedOrderFills(intent: OrderIntent, order: UnifiedOrder): Promise<UnifiedOrderFill[]> {
+    return this.tradingService.getOrderFills(
+      intent.userId,
+      intent.exchangeId,
+      intent.marketType,
+      {
+        symbol: order.symbol || intent.symbol,
+        orderId: order.id,
+        clientOrderId: order.clientOrderId,
+      },
+      intent.exchangeAccountId ?? undefined,
+    )
+  }
+
   private errorReason(error: unknown): string {
     return error instanceof Error ? error.message : String(error)
+  }
+
+  private requiresDerivativePositions(intent: OrderIntent): boolean {
+    if (intent.marketType !== 'perp') return false
+    return intent.reduceOnly === true || intent.role === 'close_long' || intent.role === 'close_short'
   }
 }

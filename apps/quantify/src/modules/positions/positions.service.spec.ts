@@ -450,6 +450,373 @@ describe('positionsService', () => {
     recordTrade.mockRestore()
   })
 
+  it('records OKX manual close trades with the exchange filled average price', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'pt-close-okx-avg',
+        normalizedAmount: '0.02161279',
+        exchangeSize: '0.02161279',
+        request: { clientOrderId: 'pt-close-okx-avg' },
+      },
+      order: {
+        id: '3558584406952026112',
+        status: 'closed',
+        amount: 0.02161279,
+        filled: 0.02161279,
+        createdAt: Date.parse('2026-05-11T12:00:00.000Z'),
+        marketType: 'spot',
+        side: 'sell',
+        type: 'market',
+        symbol: 'BTC/USDT',
+        raw: {
+          avgPx: '80688.291',
+          accFillSz: '0.02161279',
+        },
+      },
+    })
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+
+    const service = createService(
+      {},
+      {},
+      { executeIntent },
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-okx-close',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal('0.02161279'),
+          avgEntryPrice: new Prisma.Decimal('80789.754'),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
+    )
+
+    const result = await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-okx-close',
+      quantity: '0.02161279',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)
+
+    expect(recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: '3558584406952026112',
+      price: '80688.291',
+      quantity: '0.02161279',
+    }))
+    expect(result.averagePrice).toBe('80688.291')
+
+    recordTrade.mockRestore()
+  })
+
+  it('fetches OKX manual close order details before recording when the submit ack has no filled average price', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'pt-close-okx-refetch',
+        normalizedAmount: '0.02161279',
+        exchangeSize: '0.02161279',
+        request: { clientOrderId: 'pt-close-okx-refetch' },
+      },
+      order: {
+        id: '3558584406952026112',
+        status: 'open',
+        amount: 0.02161279,
+        filled: 0.02161279,
+        createdAt: Date.parse('2026-05-11T12:00:00.000Z'),
+        marketType: 'spot',
+        side: 'sell',
+        type: 'market',
+        symbol: 'BTC/USDT',
+        raw: {},
+      },
+    })
+    const getSubmittedOrder = jest.fn().mockResolvedValue({
+      id: '3558584406952026112',
+      status: 'closed',
+      amount: 0.02161279,
+      filled: 0.02161279,
+      createdAt: Date.parse('2026-05-11T12:00:01.000Z'),
+      marketType: 'spot',
+      side: 'sell',
+      type: 'market',
+      symbol: 'BTC/USDT',
+      raw: {
+        avgPx: '80688.291',
+        accFillSz: '0.02161279',
+      },
+    })
+    const getSubmittedOrderFills = jest.fn()
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+
+    const updatePosition = jest.fn().mockResolvedValue({})
+    const service = createService(
+      {},
+      {},
+      { executeIntent, getSubmittedOrder, getSubmittedOrderFills },
+      {
+        updatePosition,
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-okx-close',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal('0.02161279'),
+          avgEntryPrice: new Prisma.Decimal('80789.754'),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          account: {
+            id: 'account-1',
+            userId: 'user-1',
+          },
+        }),
+      },
+    )
+
+    const result = await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-okx-close',
+      quantity: '0.02161279',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)
+
+    expect(getSubmittedOrder).toHaveBeenCalledWith(expect.objectContaining({
+      source: 'position_tool',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    }), expect.objectContaining({ id: '3558584406952026112' }))
+    expect(getSubmittedOrderFills).not.toHaveBeenCalled()
+    expect(recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      orderId: '3558584406952026112',
+      price: '80688.291',
+      quantity: '0.02161279',
+    }))
+    expect(result.averagePrice).toBe('80688.291')
+
+    recordTrade.mockRestore()
+  })
+
+  it('uses weighted fill details when OKX manual close order details have no average price', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'pt-close-okx-fills',
+        normalizedAmount: '0.02161279',
+        exchangeSize: '0.02161279',
+        request: { clientOrderId: 'pt-close-okx-fills' },
+      },
+      order: {
+        id: 'okx-fill-order',
+        status: 'open',
+        amount: 0.02161279,
+        filled: 0,
+        createdAt: Date.parse('2026-05-11T12:00:00.000Z'),
+        marketType: 'spot',
+        side: 'sell',
+        type: 'market',
+        symbol: 'BTC/USDT',
+        raw: {},
+      },
+    })
+    const getSubmittedOrder = jest.fn().mockResolvedValue({
+      id: 'okx-fill-order',
+      status: 'closed',
+      amount: 0.02161279,
+      filled: 0.02161279,
+      createdAt: Date.parse('2026-05-11T12:00:01.000Z'),
+      marketType: 'spot',
+      side: 'sell',
+      type: 'market',
+      symbol: 'BTC/USDT',
+      raw: {},
+    })
+    const getSubmittedOrderFills = jest.fn().mockResolvedValue([
+      {
+        id: 'fill-1',
+        orderId: 'okx-fill-order',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'sell',
+        price: 80600,
+        amount: 0.01,
+        fee: -0.2,
+        feeCurrency: 'USDT',
+        executedAt: Date.parse('2026-05-11T12:00:02.000Z'),
+        raw: {},
+      },
+      {
+        id: 'fill-2',
+        orderId: 'okx-fill-order',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'sell',
+        price: 80700,
+        amount: 0.01161279,
+        fee: -0.3,
+        feeCurrency: 'USDT',
+        executedAt: Date.parse('2026-05-11T12:00:03.000Z'),
+        raw: {},
+      },
+    ])
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+
+    const service = createService(
+      {},
+      {},
+      { executeIntent, getSubmittedOrder, getSubmittedOrderFills },
+      {
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-okx-close',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal('0.02161279'),
+          avgEntryPrice: new Prisma.Decimal('80789.754'),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          metadata: { keep: 'value' },
+          account: { id: 'account-1', userId: 'user-1' },
+        }),
+      },
+    )
+
+    const result = await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-okx-close',
+      quantity: '0.02161279',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)
+
+    const expectedAverage = ((80600 * 0.01) + (80700 * 0.01161279)) / 0.02161279
+    expect(recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      price: expectedAverage.toString(),
+      quantity: '0.02161279',
+      fee: '0.5',
+      feeCurrency: 'USDT',
+      executedAt: '2026-05-11T12:00:03.000Z',
+    }))
+    expect(result.averagePrice).toBe(expectedAverage.toString())
+
+    recordTrade.mockRestore()
+  })
+
+  it('returns a pending-sync close result instead of using entry price when fills are not yet available', async () => {
+    const executeIntent = jest.fn().mockResolvedValue({
+      status: 'submitted',
+      intent: {},
+      normalized: {
+        clientOrderId: 'pt-close-okx-pending',
+        normalizedAmount: '0.02161279',
+        exchangeSize: '0.02161279',
+        request: { clientOrderId: 'pt-close-okx-pending' },
+      },
+      order: {
+        id: 'okx-pending-order',
+        status: 'open',
+        amount: 0.02161279,
+        filled: 0,
+        createdAt: Date.parse('2026-05-11T12:00:00.000Z'),
+        marketType: 'spot',
+        side: 'sell',
+        type: 'market',
+        symbol: 'BTC/USDT',
+        raw: {},
+      },
+    })
+    const getSubmittedOrder = jest.fn().mockResolvedValue({
+      id: 'okx-pending-order',
+      status: 'open',
+      amount: 0.02161279,
+      filled: 0,
+      createdAt: Date.parse('2026-05-11T12:00:01.000Z'),
+      marketType: 'spot',
+      side: 'sell',
+      type: 'market',
+      symbol: 'BTC/USDT',
+      raw: {},
+    })
+    const getSubmittedOrderFills = jest.fn().mockResolvedValue([])
+    const recordTrade = jest.spyOn(PositionsService.prototype, 'recordTrade').mockResolvedValue({} as any)
+
+    const updatePosition = jest.fn().mockResolvedValue({})
+    const service = createService(
+      {},
+      {},
+      { executeIntent, getSubmittedOrder, getSubmittedOrderFills },
+      {
+        updatePosition,
+        findUniqueWithAccount: jest.fn().mockResolvedValue({
+          id: 'position-okx-close',
+          userStrategyAccountId: 'account-1',
+          symbol: 'BTCUSDT',
+          positionSide: PositionSide.LONG,
+          quantity: new Prisma.Decimal('0.02161279'),
+          avgEntryPrice: new Prisma.Decimal('80789.754'),
+          status: 'OPEN',
+          exchangeId: 'okx',
+          marketType: 'spot',
+          metadata: { keep: 'value' },
+          account: { id: 'account-1', userId: 'user-1' },
+        }),
+      },
+    )
+    jest.spyOn(service as any, 'delay').mockResolvedValue(undefined)
+
+    const result = await service.closePosition({
+      userId: 'user-1',
+      userStrategyAccountId: 'account-1',
+      positionId: 'position-okx-close',
+      quantity: '0.02161279',
+      exchangeId: 'okx',
+      marketType: 'spot',
+    } as any)
+
+    expect(recordTrade).not.toHaveBeenCalled()
+    expect(updatePosition).toHaveBeenCalledWith('position-okx-close', {
+      metadata: expect.objectContaining({
+        keep: 'value',
+        pendingManualClose: expect.objectContaining({
+          status: 'pending_sync',
+          orderId: 'okx-pending-order',
+          clientOrderId: 'pt-close-okx-pending',
+          positionId: 'position-okx-close',
+          requestedQuantity: '0.02161279',
+          reason: 'close_trade_price_pending',
+        }),
+      }),
+    })
+    expect(getSubmittedOrder).toHaveBeenCalledTimes(3)
+    expect(getSubmittedOrderFills).toHaveBeenCalledTimes(3)
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      orderId: 'okx-pending-order',
+      filledQuantity: '0',
+      message: '市价平仓单已提交，成交均价待交易所同步',
+    }))
+    expect(result.averagePrice).toBeUndefined()
+
+    recordTrade.mockRestore()
+  })
+
   it('submits a spot close through the real trading execution admission and normalizer', async () => {
     const tradingService = {
       getInstrumentConstraints: jest.fn().mockResolvedValue({
