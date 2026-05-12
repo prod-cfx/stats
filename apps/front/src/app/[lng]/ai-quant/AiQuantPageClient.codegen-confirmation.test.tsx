@@ -52,6 +52,18 @@ const translationMap: Record<string, string> = {
   'aiQuant.runningGuard.viewRunningStrategy': '查看运行策略',
   'aiQuant.runningGuard.stopStrategy': '停止策略',
   'aiQuant.runningGuard.cancel': '取消',
+  'aiQuant.stopDialog.titleWithRisk': '当前策略仍有持仓或挂单',
+  'aiQuant.stopDialog.descriptionWithRisk': '停止前请确认如何处理当前持仓。仅停止不会平仓；平仓并停止会在 OKX 模拟盘提交平仓单。',
+  'aiQuant.stopDialog.strategy': '策略',
+  'aiQuant.stopDialog.exchangeSymbol': '交易所/交易对',
+  'aiQuant.stopDialog.openPositions': '当前持仓',
+  'aiQuant.stopDialog.unrealizedPnl': '当前浮盈亏',
+  'aiQuant.stopDialog.openOrders': '当前未成交挂单',
+  'aiQuant.stopDialog.unknown': '待确认',
+  'aiQuant.stopDialog.liquidateHint': '平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。',
+  'aiQuant.stopDialog.stopOnly': '仅停止，保留持仓/挂单',
+  'aiQuant.stopDialog.liquidateAndStop': '平仓并停止',
+  'aiQuant.stopDialog.cancel': '取消',
 }
 const mockT = (key: string, options?: { defaultValue?: string }) =>
   translationMap[key] ?? options?.defaultValue ?? key

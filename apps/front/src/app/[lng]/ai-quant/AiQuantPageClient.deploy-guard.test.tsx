@@ -12,6 +12,7 @@ const mockFetchAccountAiQuantDeployResult = jest.fn()
 const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 const mockFetchUserExchangeAccountStatuses = jest.fn()
 const mockTranslations: Record<string, string> = {
+  'aiQuant.deployPending': '部署状态待确认',
   'aiQuant.deployRunning': '已部署运行',
 }
 const mockT = (key: string, options?: { defaultValue?: string }) => mockTranslations[key] ?? options?.defaultValue ?? key
