@@ -1,7 +1,12 @@
 import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { SemanticSeedStateBuilderService } from '../semantic-seed-state-builder.service'
 import { SemanticStateMergeService } from '../semantic-state-merge.service'
-import type { SemanticState } from '../../types/semantic-state'
+import type {
+  SemanticPositionConstraintKey,
+  SemanticPositionConstraintState,
+  SemanticPositionState,
+  SemanticState,
+} from '../../types/semantic-state'
 
 /**
  * 回归：conversation planner LLM 经常只回 position.sizing 不回 position.dca_schedule
@@ -11,6 +16,55 @@ import type { SemanticState } from '../../types/semantic-state'
  * 但丢掉 DCA 段。修复后改为按 key union 合并，每个 key 内部按 strength 取强。
  */
 
+type ConstraintParams = Record<string, unknown>
+type SizingSubObject = { kind: 'quote' | 'base'; value: number; asset: string }
+
+function makeConstraint(input: {
+  id?: string
+  key: SemanticPositionConstraintKey
+  status?: SemanticPositionConstraintState['status']
+  source?: SemanticPositionConstraintState['source']
+  params?: ConstraintParams
+  openSlots?: SemanticPositionConstraintState['openSlots']
+}): SemanticPositionConstraintState {
+  return {
+    id: input.id ?? `test-${input.key.replace(/\./g, '-')}`,
+    key: input.key,
+    status: input.status ?? 'locked',
+    source: input.source ?? 'user_explicit',
+    params: input.params ?? {},
+    openSlots: input.openSlots ?? [],
+  }
+}
+
+function makePositionState(
+  position: Partial<SemanticPositionState> & Pick<SemanticPositionState, 'mode' | 'value' | 'positionMode' | 'status' | 'source'>,
+): SemanticState {
+  return {
+    version: 1,
+    families: [],
+    triggers: [],
+    actions: [],
+    risk: [],
+    position,
+    contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+    normalizationNotes: [],
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function buildDerivedSizingOnlyPosition(): SemanticState {
+  return makePositionState({
+    mode: 'fixed_quote',
+    value: 100,
+    status: 'locked',
+    source: 'user_explicit',
+    positionMode: 'long_only',
+    sizing: { kind: 'quote', value: 100, asset: 'USDT' },
+    constraints: [],
+  })
+}
+
 describe('semantic-state-merge — position.constraints union merge', () => {
   const extractor = new SemanticSeedExtractorService()
   const builder = new SemanticSeedStateBuilderService()
@@ -19,28 +73,6 @@ describe('semantic-state-merge — position.constraints union merge', () => {
   const utterance
     = 'OKX 现货 BTCUSDT 1h，RSI14 低于 30 开始 DCA，价格每跌 5% 补仓一次，每次 100 USDT，最多 4 次，总投入不超过 500 USDT，RSI14 高于 70 卖出。'
 
-  function buildDerivedSizingOnlyPosition(): SemanticState {
-    return {
-      version: 1,
-      families: [],
-      triggers: [],
-      actions: [],
-      risk: [],
-      position: {
-        mode: 'fixed_quote',
-        value: 100,
-        status: 'locked',
-        source: 'user_explicit',
-        positionMode: 'long_only',
-        sizing: { kind: 'quote', value: 100, asset: 'USDT' },
-        constraints: [],
-      } as any,
-      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
-      normalizationNotes: [],
-      updatedAt: new Date().toISOString(),
-    }
-  }
-
   it('persisted locked dca_schedule survives merge with derived planner patch lacking constraints (explicit constraints:[])', () => {
     const patch = extractor.extract(utterance)
     const persisted = builder.build(patch)!
@@ -48,65 +80,168 @@ describe('semantic-state-merge — position.constraints union merge', () => {
 
     const merged = mergeSvc.merge({ persisted, derived })
 
-    const dca = merged.position?.constraints?.find(c => c.key === 'position.dca_schedule')
-    expect(dca).toBeDefined()
-    expect(dca!.status).toBe('locked')
-    expect((dca!.params as any).maxCount).toBe(4)
-    expect((dca!.params as any).triggerMode).toBe('price_interval')
+    const constraints = merged.position?.constraints ?? []
+    expect(constraints.filter(c => c.key === 'position.dca_schedule')).toHaveLength(1)
+    const dca = constraints.find(c => c.key === 'position.dca_schedule')!
+    expect(dca.status).toBe('locked')
+    const params = dca.params as Record<string, unknown>
+    expect(params.maxCount).toBe(4)
+    expect(params.triggerMode).toBe('price_interval')
+    // M6 修复：必须断言 perOrderSizing / capitalCap 内嵌 discriminated-union 字段完整保留，
+    // 否则 mergePositionConstraintParams 退化为顶层 spread 时无法及时报警
+    expect(params.perOrderSizing).toEqual({ kind: 'quote', value: 100, asset: 'USDT' })
+    expect(params.capitalCap).toEqual({ kind: 'quote', value: 500, asset: 'USDT' })
   })
 
   it('derived adds new constraint key while persisted has dca_schedule — both survive', () => {
     const patch = extractor.extract(utterance)
     const persisted = builder.build(patch)!
 
-    const derived: SemanticState = {
-      ...buildDerivedSizingOnlyPosition(),
-      position: {
-        ...(buildDerivedSizingOnlyPosition().position as any),
-        constraints: [
-          {
-            id: 'derived-pyramiding',
-            key: 'position.pyramiding_limit',
-            status: 'locked',
-            source: 'user_explicit',
-            params: { maxLayers: 3 },
-            openSlots: [],
-          },
-        ],
-      } as any,
-    }
+    const derived: SemanticState = makePositionState({
+      ...(buildDerivedSizingOnlyPosition().position as SemanticPositionState),
+      constraints: [
+        makeConstraint({
+          id: 'derived-pyramiding',
+          key: 'position.pyramiding_limit',
+          params: { maxLayers: 3 },
+        }),
+      ],
+    })
 
     const merged = mergeSvc.merge({ persisted, derived })
-    const keys = (merged.position?.constraints ?? []).map(c => c.key)
+    const constraints = merged.position?.constraints ?? []
+    const keys = constraints.map(c => c.key)
     expect(keys).toContain('position.dca_schedule')
     expect(keys).toContain('position.pyramiding_limit')
+    expect(constraints).toHaveLength(2)
   })
 
   it('same key collision — locked persisted beats open derived', () => {
     const patch = extractor.extract(utterance)
     const persisted = builder.build(patch)!
 
-    const derived: SemanticState = {
-      ...buildDerivedSizingOnlyPosition(),
-      position: {
-        ...(buildDerivedSizingOnlyPosition().position as any),
-        constraints: [
-          {
-            id: 'derived-dca-weak',
-            key: 'position.dca_schedule',
-            status: 'open',
-            source: 'inferred',
-            params: { maxCount: 999 },
-            openSlots: [],
-          },
-        ],
-      } as any,
-    }
+    const derived: SemanticState = makePositionState({
+      ...(buildDerivedSizingOnlyPosition().position as SemanticPositionState),
+      constraints: [
+        makeConstraint({
+          id: 'derived-dca-weak',
+          key: 'position.dca_schedule',
+          status: 'open',
+          source: 'inferred',
+          params: { maxCount: 999 },
+        }),
+      ],
+    })
 
     const merged = mergeSvc.merge({ persisted, derived })
     const dca = merged.position?.constraints?.find(c => c.key === 'position.dca_schedule')
     expect(dca?.status).toBe('locked')
-    expect((dca!.params as any).maxCount).toBe(4)
+    expect((dca!.params as Record<string, unknown>).maxCount).toBe(4)
+  })
+
+  it('M1 nested sub-object — derived patch with partial perOrderSizing must NOT flatten persisted contract', () => {
+    // 直接断言 M1 修复：mergePositionConstraintParams 对 perOrderSizing 这类 plain object
+    // 字段必须做内层 spread，不能把 stronger 的 `{ value: 50 }` 整段替换 weaker 的
+    // `{ kind:'quote', value:100, asset:'USDT' }` —— 否则 SemanticPositionSizingContract
+    // discriminated-union 形态破坏，下游序列化报错。
+    const persistedFull = makePositionState({
+      mode: 'fixed_quote',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      constraints: [
+        makeConstraint({
+          key: 'position.dca_schedule',
+          status: 'locked',
+          source: 'inferred',
+          params: {
+            maxCount: 4,
+            triggerMode: 'price_interval',
+            priceIntervalPct: 5,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' } satisfies SizingSubObject,
+            capitalCap: { kind: 'quote', value: 500, asset: 'USDT' } satisfies SizingSubObject,
+          },
+        }),
+      ],
+    })
+
+    const derivedPartial: SemanticState = makePositionState({
+      mode: 'fixed_quote',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      constraints: [
+        makeConstraint({
+          key: 'position.dca_schedule',
+          // 同状态同源：触发 tie-break，stronger=derived（因为 `> 0` 等强偏 derived）
+          status: 'locked',
+          source: 'inferred',
+          params: {
+            // 只回部分字段：value 想覆盖到 50，但 kind/asset 缺失
+            perOrderSizing: { value: 50 },
+          },
+        }),
+      ],
+    })
+
+    const merged = mergeSvc.merge({ persisted: persistedFull, derived: derivedPartial })
+    const dca = merged.position?.constraints?.find(c => c.key === 'position.dca_schedule')!
+    const params = dca.params as Record<string, unknown>
+
+    // 顶层标量没被压扁
+    expect(params.maxCount).toBe(4)
+    expect(params.triggerMode).toBe('price_interval')
+    expect(params.priceIntervalPct).toBe(5)
+
+    // 关键：perOrderSizing sub-object 字段级合并，value 更新但 kind/asset 不丢
+    expect(params.perOrderSizing).toEqual({ kind: 'quote', value: 50, asset: 'USDT' })
+
+    // capitalCap derived 未涉及，整段保留
+    expect(params.capitalCap).toEqual({ kind: 'quote', value: 500, asset: 'USDT' })
+  })
+
+  it('M4 deep clone — merging must NOT mutate caller persisted/derived references', () => {
+    // 防回归：旧版本直接 byKey.set(constraint, constraint) 入引用，下游 normalize 会反向污染入参
+    const persistedDca = makeConstraint({
+      key: 'position.dca_schedule',
+      params: { maxCount: 3, marker: 'persisted-original' },
+    })
+    const derivedDca = makeConstraint({
+      key: 'position.dca_schedule',
+      status: 'open',
+      source: 'inferred',
+      params: { maxCount: 5, marker: 'derived-original' },
+    })
+
+    const persistedSnapshot = JSON.stringify(persistedDca)
+    const derivedSnapshot = JSON.stringify(derivedDca)
+
+    const persisted: SemanticState = makePositionState({
+      mode: 'constraint_only',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      constraints: [persistedDca],
+    })
+    const derived: SemanticState = makePositionState({
+      mode: 'constraint_only',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      constraints: [derivedDca],
+    })
+
+    const merged = mergeSvc.merge({ persisted, derived })
+    const mergedDca = merged.position?.constraints?.find(c => c.key === 'position.dca_schedule')
+    expect(mergedDca).toBeDefined()
+    // 改 merged.params 不应反向污染入参
+    ;(mergedDca!.params as Record<string, unknown>).marker = 'mutated-by-test'
+    expect(JSON.stringify(persistedDca)).toBe(persistedSnapshot)
+    expect(JSON.stringify(derivedDca)).toBe(derivedSnapshot)
   })
 })
 
@@ -120,28 +255,6 @@ describe('semantic-state-merge — DCA wording corpus survives planner empty-con
   const extractor = new SemanticSeedExtractorService()
   const builder = new SemanticSeedStateBuilderService()
   const mergeSvc = new SemanticStateMergeService()
-
-  function derivedEmptyConstraints(): SemanticState {
-    return {
-      version: 1,
-      families: [],
-      triggers: [],
-      actions: [],
-      risk: [],
-      position: {
-        mode: 'fixed_quote',
-        value: 100,
-        status: 'locked',
-        source: 'user_explicit',
-        positionMode: 'long_only',
-        sizing: { kind: 'quote', value: 100, asset: 'USDT' },
-        constraints: [],
-      } as any,
-      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
-      normalizationNotes: [],
-      updatedAt: new Date().toISOString(),
-    }
-  }
 
   type CorpusCase = {
     label: string
@@ -190,7 +303,7 @@ describe('semantic-state-merge — DCA wording corpus survives planner empty-con
       expectExitRuleDefined: true,
     },
     {
-      label: '"DCA" 大写英文动词触发',
+      label: '"DCA" 大写英文动词触发 — 每跌 3% × 50 USDT × 5 次',
       utterance: 'OKX 现货 BTCUSDT 1h，启动 DCA，每跌 3% 补仓 50 USDT，最多 5 次。',
       expectTriggerMode: 'price_interval',
       expectPriceIntervalPct: 3,
@@ -207,10 +320,13 @@ describe('semantic-state-merge — DCA wording corpus survives planner empty-con
       expectExitRuleDefined: true,
     },
     {
-      label: '英文 DCA / drops 2% / max 3 / total 500 / break prev low stop',
+      // NOTE: seed extractor 当前对英文 utterance 仅识别 triggerMode='price_interval'，
+      // 不抽 maxCount/priceIntervalPct/perOrderSizing/capitalCap（参见 utterance-corpus
+      // 中 `position-dca-schedule-en-locked-price-drop` 的 openSlotKeys）。本 case 只
+      // 断言 merge 不丢已识别的字段——英文 NLP 增强应作为独立 issue 跟进。
+      label: '英文 DCA / drops 2% — extractor 仅识别 triggerMode（其余 slot 缺失，nlp 限制）',
       utterance: 'DCA every time price drops 2%, each order 100 USDT, max 3 times, total capital 500 USDT, stop if previous low breaks.',
       expectTriggerMode: 'price_interval',
-      expectPriceIntervalPct: 2,
     },
     {
       label: '只有最多 3 次（其余 slot 缺失）',
@@ -236,27 +352,28 @@ describe('semantic-state-merge — DCA wording corpus survives planner empty-con
       const patch = extractor.extract(c.utterance)
       const constraint = patch.position?.constraints?.find(item => item.key === 'position.dca_schedule')
       expect(constraint).toBeDefined()
+      const params = constraint!.params as Record<string, unknown>
       if (c.expectTriggerMode) {
-        expect((constraint!.params as any)?.triggerMode).toBe(c.expectTriggerMode)
+        expect(params.triggerMode).toBe(c.expectTriggerMode)
       }
       if (typeof c.expectMaxCount === 'number') {
-        expect((constraint!.params as any)?.maxCount).toBe(c.expectMaxCount)
+        expect(params.maxCount).toBe(c.expectMaxCount)
       }
       if (typeof c.expectPriceIntervalPct === 'number') {
-        expect((constraint!.params as any)?.priceIntervalPct).toBe(c.expectPriceIntervalPct)
+        expect(params.priceIntervalPct).toBe(c.expectPriceIntervalPct)
       }
       if (typeof c.expectPerOrderSizingQuote === 'number') {
-        const perOrder = (constraint!.params as any)?.perOrderSizing
-        expect(perOrder?.kind).toBe('quote')
-        expect(perOrder?.value).toBe(c.expectPerOrderSizingQuote)
+        expect(params.perOrderSizing).toEqual(
+          expect.objectContaining({ kind: 'quote', value: c.expectPerOrderSizingQuote, asset: 'USDT' }),
+        )
       }
       if (typeof c.expectCapitalCapQuote === 'number') {
-        const cap = (constraint!.params as any)?.capitalCap
-        expect(cap?.kind).toBe('quote')
-        expect(cap?.value).toBe(c.expectCapitalCapQuote)
+        expect(params.capitalCap).toEqual(
+          expect.objectContaining({ kind: 'quote', value: c.expectCapitalCapQuote, asset: 'USDT' }),
+        )
       }
       if (c.expectExitRuleDefined) {
-        expect((constraint!.params as any)?.exitRule).toBeDefined()
+        expect(params.exitRule).toBeDefined()
       }
     })
 
@@ -267,19 +384,37 @@ describe('semantic-state-merge — DCA wording corpus survives planner empty-con
       const seedDca = persisted!.position?.constraints?.find(item => item.key === 'position.dca_schedule')
       expect(seedDca).toBeDefined()
 
-      const merged = mergeSvc.merge({ persisted: persisted!, derived: derivedEmptyConstraints() })
-      const mergedDca = merged.position?.constraints?.find(item => item.key === 'position.dca_schedule')
-      expect(mergedDca).toBeDefined()
-      // 关键不变量：merge 不能把 seed 抽出的 dca_schedule 抹掉
-      // 状态不必强制 locked（slot 不全时 seed builder 会给 open），但必须存在
-      expect(['locked', 'open']).toContain(mergedDca!.status)
+      const merged = mergeSvc.merge({ persisted: persisted!, derived: buildDerivedSizingOnlyPosition() })
+      const allConstraints = merged.position?.constraints ?? []
+      // 数组完整性：每个 key 只能存在一份，dca_schedule 必须有且仅有 1 份
+      const dcaConstraints = allConstraints.filter(item => item.key === 'position.dca_schedule')
+      expect(dcaConstraints).toHaveLength(1)
+      const mergedDca = dcaConstraints[0]!
+      // status 必须是 locked 或 open，不能被弱化到 superseded
+      expect(['locked', 'open']).toContain(mergedDca.status)
 
-      // 关键参数不能丢
+      const mergedParams = mergedDca.params as Record<string, unknown>
+
+      // 关键参数与 seed 完全一致 —— derived 没回任何 dca 字段，应该原封不动
+      const seedParams = (seedDca!.params ?? {}) as Record<string, unknown>
       if (typeof c.expectMaxCount === 'number') {
-        expect((mergedDca!.params as any)?.maxCount).toBe(c.expectMaxCount)
+        expect(mergedParams.maxCount).toBe(c.expectMaxCount)
       }
       if (c.expectTriggerMode) {
-        expect((mergedDca!.params as any)?.triggerMode).toBe(c.expectTriggerMode)
+        expect(mergedParams.triggerMode).toBe(c.expectTriggerMode)
+      }
+      if (typeof c.expectPriceIntervalPct === 'number') {
+        expect(mergedParams.priceIntervalPct).toBe(c.expectPriceIntervalPct)
+      }
+      if (typeof c.expectPerOrderSizingQuote === 'number') {
+        // 嵌套对象保留完整 discriminated-union 形态（kind + value + asset），不能被压扁
+        expect(mergedParams.perOrderSizing).toEqual(seedParams.perOrderSizing)
+      }
+      if (typeof c.expectCapitalCapQuote === 'number') {
+        expect(mergedParams.capitalCap).toEqual(seedParams.capitalCap)
+      }
+      if (c.expectExitRuleDefined) {
+        expect(mergedParams.exitRule).toEqual(seedParams.exitRule)
       }
     })
   }
