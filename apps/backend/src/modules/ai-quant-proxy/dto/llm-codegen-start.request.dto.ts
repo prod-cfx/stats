@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
-import { IsObject, IsOptional, IsString } from 'class-validator'
+import { IsIn, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class LlmCodegenStartRequestDto {
   @ApiPropertyOptional()
@@ -14,6 +14,6 @@ export class LlmCodegenStartRequestDto {
 
   @ApiPropertyOptional({ enum: ['zh', 'en'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['zh', 'en'])
   locale?: string
 }

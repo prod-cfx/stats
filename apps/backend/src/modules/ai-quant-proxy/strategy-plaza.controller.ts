@@ -1,6 +1,6 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS decorators require runtime imports for metadata */
 import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -83,6 +83,7 @@ export class StrategyPlazaProxyController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Start a strategy plaza edit session through the backend proxy.' })
   @ApiHeader({ name: 'authorization', required: true })
+  @ApiQuery({ name: 'locale', enum: ['zh', 'en'], required: false })
   @ApiOkResponse({
     description: 'Created AI Quant edit session.',
     schema: buildBaseResponseSchema(StrategyPlazaEditSessionResponseDto),

@@ -1454,7 +1454,12 @@ const CodegenGuideConfigDto = z
   .partial()
   .passthrough()
 const StartCodegenSessionDto = z
-  .object({ userId: z.string(), initialMessage: z.string(), guideConfig: CodegenGuideConfigDto })
+  .object({
+    userId: z.string(),
+    initialMessage: z.string(),
+    locale: z.enum(['zh', 'en']),
+    guideConfig: CodegenGuideConfigDto,
+  })
   .partial()
   .passthrough()
 const CodegenConversationMessageDto = z
@@ -1571,6 +1576,7 @@ const CodegenSessionResponseDto = z
 const ContinueCodegenSessionDto = z
   .object({
     userId: z.string().optional(),
+    locale: z.enum(['zh', 'en']).optional(),
     message: z.string(),
     clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: CodegenGuideConfigDto.optional(),
@@ -4369,6 +4375,11 @@ const endpoints = makeApi([
         name: 'x-user-id',
         type: 'Header',
         schema: z.string().optional(),
+      },
+      {
+        name: 'locale',
+        type: 'Query',
+        schema: z.enum(['zh', 'en']).optional(),
       },
     ],
     response: z
