@@ -110,6 +110,107 @@ strategy
     }))
   })
 
+  it('passes consistency for mixed EMA and SMA crossover atoms in one generated script', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'okx' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'perp' as const,
+        timeframe: '15m',
+      },
+      indicators: [
+        { kind: 'ema' as const, params: { fastPeriod: 7, slowPeriod: 21 } },
+        { kind: 'sma' as const, params: { fastPeriod: 20, slowPeriod: 50 } },
+        { kind: 'rsi' as const, params: { period: 14 } },
+      ],
+      sizing: { mode: 'RATIO' as const, value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-mixed-and',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          priority: 200,
+          condition: {
+            kind: 'AND' as const,
+            predicateForm: 'generic' as const,
+            children: [
+              {
+                kind: 'atom' as const,
+                key: 'ma.golden_cross',
+                semanticScope: 'market' as const,
+                op: 'CROSS_OVER' as const,
+                params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+              },
+              {
+                kind: 'atom' as const,
+                key: 'rsi.threshold_lte',
+                semanticScope: 'market' as const,
+                op: 'LTE' as const,
+                value: 35,
+                params: { period: 14 },
+              },
+              {
+                kind: 'atom' as const,
+                key: 'ma.golden_cross',
+                semanticScope: 'market' as const,
+                op: 'CROSS_OVER' as const,
+                params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
+              },
+            ],
+          },
+          actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+        {
+          id: 'exit-sma-cross',
+          phase: 'exit' as const,
+          sideScope: 'long' as const,
+          priority: 100,
+          condition: {
+            kind: 'atom' as const,
+            key: 'ma.death_cross',
+            semanticScope: 'market' as const,
+            op: 'CROSS_UNDER' as const,
+            params: { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+          },
+          actions: [{ type: 'CLOSE_LONG' as const }],
+        },
+        {
+          id: 'risk-stop-loss',
+          phase: 'risk' as const,
+          sideScope: 'long' as const,
+          priority: 50,
+          condition: {
+            kind: 'atom' as const,
+            key: 'position_loss_pct',
+            semanticScope: 'position' as const,
+            op: 'GTE' as const,
+            value: 0.05,
+            params: { basis: 'entry_avg_price' },
+          },
+          actions: [{ type: 'FORCE_EXIT' as const }],
+        },
+      ],
+    }
+    const { script } = compileCanonicalSpec(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.scriptProfile.indicators.map(indicator => indicator.kind)).toEqual(expect.arrayContaining(['ema', 'sma', 'rsi']))
+    expect(report.checks.find(check => check.key === 'indicators.required')).toEqual(expect.objectContaining({ status: 'passed' }))
+  })
+
   it('passes ATR risk predicates consistency without missing force-exit or close-long actions', () => {
     const canonicalSpec = canonicalBuilder.buildFromSemanticState(buildLockedAtomicState('atr-risk'))
     const { script } = compileCanonicalSpec(canonicalSpec)
