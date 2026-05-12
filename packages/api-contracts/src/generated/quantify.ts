@@ -1061,7 +1061,7 @@ const RecordTradeDto = z
       .optional(),
     orderId: z.string().optional(),
     externalTradeId: z.string().optional(),
-    provider: z.string().nullish(),
+    provider: z.string().optional(),
     executedAt: z.string(),
     metadata: z.object({}).partial().passthrough().optional(),
   })
