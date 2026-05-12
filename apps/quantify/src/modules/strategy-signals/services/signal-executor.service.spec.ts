@@ -2442,6 +2442,9 @@ describe('signalExecutorService', () => {
     })
 
     it('close signal 不受 requireExplicitSizing=true 影响', () => {
+      // #1232 Round 1 m3：close 路径数量由当前持仓 currentQty 决定，
+      // 不读 balance；这里 balance=Decimal(0) 仅用于断言 strict flag 豁免逻辑
+      // 不会误把 close signal 当作开仓拒单，而非验证余额相关行为。
       const service = createService()
 
       const result = (service as any).buildOrderParamsWithLockedAccount(
