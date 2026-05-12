@@ -5765,3 +5765,109 @@ describe('canonicalSpecV2IrCompilerService risk.stop_loss_pct', () => {
       .toThrow(/codegen\.canonical_spec_v2_stop_loss_pct_invalid_pct/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// risk.max_single_loss_pct ghost-atom fix (P3, #1264): canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.max_single_loss_pct', () => {
+  const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: 'entry-baseline',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: { kind: 'expression', op: 'GT', left: { kind: 'series', source: 'bar', field: 'close' }, right: { kind: 'series', source: 'bar', field: 'open' } },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithMaxSingleLoss(valuePct: number): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-max-single-loss',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((valuePct / 100).toFixed(4)) },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits MAX_SINGLE_LOSS_PCT guard into riskPolicy.guards for valuePct:5', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(5), fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')
+    expect(guard).toBeDefined()
+    expect(guard?.kind).toBe('MAX_SINGLE_LOSS_PCT')
+    expect(guard?.scope).toBe('position')
+    expect(guard?.value).toBeCloseTo(5, 4)
+    expect(guard?.onBreach).toBe('FORCE_EXIT')
+  })
+
+  it('does not leak risk.max_single_loss_pct into ruleBlocks or portfolioRisks', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(8), fallback })
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-max-single-loss')
+    expect((result.ir.orchestrationPortfolioRisks ?? []).map(r => r.id)).not.toContain('risk-max-single-loss')
+  })
+
+  it('preserves fractional valuePct precision (2.25 → value ≈ 2.25)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(2.25), fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')?.value).toBeCloseTo(2.25, 4)
+  })
+
+  it('accepts already-percentage values (>1) without double-converting', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push({ id: 'risk-max-single-loss', phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: 15 }, actions: [{ type: 'FORCE_EXIT' }] })
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-max-single-loss')?.value).toBeCloseTo(15, 4)
+  })
+
+  it('emits one guard per rule when spec carries multiple max_single_loss rules (no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, pct] of [['risk-msl-a', 2], ['risk-msl-b', 6]] as const) {
+      spec.rules.push({ id, phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: Number((pct / 100).toFixed(4)) }, actions: [{ type: 'FORCE_EXIT' }] })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-msl-a')?.value).toBeCloseTo(2, 4)
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-msl-b')?.value).toBeCloseTo(6, 4)
+  })
+
+  it('isolates MAX_SINGLE_LOSS_PCT from sibling STOP_LOSS_PCT (distinct guard kinds)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      { id: 'risk-msl', phase: 'risk', sideScope: 'both', priority: 95, condition: { kind: 'atom', key: 'risk.max_single_loss_pct', semanticScope: 'position', op: 'GTE', value: 0.04 }, actions: [{ type: 'FORCE_EXIT' }] },
+      { id: 'risk-sl', phase: 'risk', sideScope: 'long', priority: 90, condition: { kind: 'atom', key: 'risk.stop_loss_pct', semanticScope: 'position', op: 'GTE', value: 0.02 }, actions: [{ type: 'FORCE_EXIT' }] },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-msl')?.kind).toBe('MAX_SINGLE_LOSS_PCT')
+    expect(result.ir.riskPolicy.guards.find(g => g.id === 'guard_risk-sl')?.kind).toBe('STOP_LOSS_PCT')
+  })
+
+  it('fails closed when valuePct is 0 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(0), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_max_single_loss_pct_invalid_pct/)
+  })
+
+  it('fails closed when valuePct is 100 (throws invalid_pct)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithMaxSingleLoss(100), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_max_single_loss_pct_invalid_pct/)
+  })
+})

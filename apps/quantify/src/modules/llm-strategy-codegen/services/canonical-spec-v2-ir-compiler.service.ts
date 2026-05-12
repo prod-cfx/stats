@@ -2571,6 +2571,31 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    // risk.max_single_loss_pct ghost-atom fix (P3, #1264).
+    //
+    // canonical-spec-builder emits phase:'risk', condition.key:'risk.max_single_loss_pct',
+    // condition.value = valuePct/100 (fraction). The MAX_SINGLE_LOSS_PCT RiskGuard.kind is
+    // already declared in canonical-strategy-ir.ts but no compile branch existed —
+    // leaving the atom as a ghost (rule fell through to condition_unsupported).
+    //
+    // Boundary semantics and fail-closed contract mirror risk.stop_loss_pct above.
+    if (rule.condition.key === 'risk.max_single_loss_pct') {
+      const thresholdPct = threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold
+      if (!Number.isFinite(thresholdPct) || thresholdPct <= 0 || thresholdPct >= 100) {
+        throw new Error(
+          `codegen.canonical_spec_v2_max_single_loss_pct_invalid_pct:${rule.id}:${thresholdPct}`,
+        )
+      }
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'MAX_SINGLE_LOSS_PCT',
+        scope: 'position',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
+        value: thresholdPct,
+        onBreach,
+      }
+    }
+
     return null
   }
 
