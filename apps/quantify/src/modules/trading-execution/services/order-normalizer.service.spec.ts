@@ -114,6 +114,46 @@ describe('OrderNormalizerService', () => {
     expect(normalized.request.reduceOnly).toBeUndefined()
   })
 
+  it('strips derivative-only fields from spot orders even when the intent carries them', () => {
+    const service = new OrderNormalizerService()
+
+    const normalized = service.normalize(
+      {
+        ...intent,
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'sell',
+        type: 'market',
+        price: undefined,
+        role: 'spot_sell',
+        reduceOnly: true,
+        tdMode: 'cross',
+      },
+      {
+        ...constraints,
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        rawSymbol: 'BTC-USDT',
+        contractValue: null,
+        minQuantity: '0.0001',
+        quantityStepSize: '0.0001',
+      },
+      'gspotsell',
+    )
+
+    expect(normalized.request.reduceOnly).toBeUndefined()
+    expect(normalized.request.tdMode).toBeUndefined()
+    expect(normalized.request.positionSide).toBeUndefined()
+    expect(normalized.request.posSide).toBeUndefined()
+    expect(normalized.request).toEqual(expect.objectContaining({
+      marketType: 'spot',
+      side: 'sell',
+      type: 'market',
+      amount: 0.123,
+      clientOrderId: 'gspotsell',
+    }))
+  })
+
   it('rejects perp constraints without contract value', () => {
     const service = new OrderNormalizerService()
 
