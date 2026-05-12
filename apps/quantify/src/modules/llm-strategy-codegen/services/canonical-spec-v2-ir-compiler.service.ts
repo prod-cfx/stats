@@ -230,6 +230,22 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
 
+      const reversePositionBlock = this.tryCompileActionReversePosition(
+        rule,
+        input.canonicalSpec,
+        input.fallback.positionPct,
+        context,
+        supportedSymbolScopeIds,
+        supportedLegScopeIds,
+        supportedTimeframeScopeIds,
+        supportedDataSourceScopeIds,
+        supportedSubStrategyScopeIds,
+      )
+      if (reversePositionBlock) {
+        ruleBlocks.push(reversePositionBlock)
+        continue
+      }
+
       const compiledGuards = this.tryCompileRiskGuards(rule, context)
       if (compiledGuards.length > 0) {
         guards.push(...compiledGuards)
@@ -2671,6 +2687,92 @@ export class CanonicalSpecV2IrCompilerService {
       mode: 'enforce',
       thresholdPct,
       effectWhenTriggered: 'block_new_entries',
+    }
+  }
+
+  private tryCompileActionReversePosition(
+    rule: CanonicalRuleV2,
+    spec: CanonicalStrategySpecV2,
+    fallbackPositionPct: number,
+    context: CompileContext,
+    supportedSymbolScopeIds: ReadonlySet<string>,
+    supportedLegScopeIds: ReadonlySet<string>,
+    supportedTimeframeScopeIds: ReadonlySet<string>,
+    supportedDataSourceScopeIds: ReadonlySet<string>,
+    supportedSubStrategyScopeIds: ReadonlySet<string>,
+  ): RuleBlock | null {
+    const reverseMeta = rule.metadata?.reversePosition
+    if (!reverseMeta) {
+      return null
+    }
+
+    // fail-closed: fromSide must be 'long' | 'short'
+    if (reverseMeta.fromSide !== 'long' && reverseMeta.fromSide !== 'short') {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_from_side:${rule.id}:${reverseMeta.fromSide}`,
+      )
+    }
+
+    // fail-closed: toSide must be 'long' | 'short'
+    if (reverseMeta.toSide !== 'long' && reverseMeta.toSide !== 'short') {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_to_side:${rule.id}:${reverseMeta.toSide}`,
+      )
+    }
+
+    // fail-closed: fromSide and toSide must differ (reversing to same side is a no-op)
+    if (reverseMeta.fromSide === reverseMeta.toSide) {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_same_side:${rule.id}:${reverseMeta.fromSide}`,
+      )
+    }
+
+    // fail-closed: sameBarPolicy must be known
+    if (reverseMeta.sameBarPolicy !== 'allow' && reverseMeta.sameBarPolicy !== 'next_bar_only') {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_same_bar_policy:${rule.id}:${reverseMeta.sameBarPolicy}`,
+      )
+    }
+
+    // fail-closed: sizingSource must be known
+    if (
+      reverseMeta.sizingSource !== 'current_position'
+      && reverseMeta.sizingSource !== 'fixed'
+      && reverseMeta.sizingSource !== 'position_sizing'
+    ) {
+      throw new Error(
+        `codegen.canonical_spec_v2_reverse_position_invalid_sizing_source:${rule.id}:${reverseMeta.sizingSource}`,
+      )
+    }
+
+    const when = this.compileCondition(rule.condition, context, rule.id)
+    const actions = this.compileActions(rule, spec, fallbackPositionPct)
+    if (actions.length === 0) {
+      return null
+    }
+
+    this.collectPositionLifecycleRuntimeRequirements(rule, actions, context)
+
+    // Reuse the scope-id Sets already computed in buildIr so that
+    // symbolScopeRef / timeframeScopeRef / dataSourceScopeRef / subStrategyScopeRef
+    // are subject to the same whitelist checks as rules compiled via the generic path.
+    const metadata = this.toRuleBlockMetadata(
+      rule.metadata!,
+      supportedSymbolScopeIds,
+      supportedLegScopeIds,
+      supportedTimeframeScopeIds,
+      supportedDataSourceScopeIds,
+      supportedSubStrategyScopeIds,
+    )
+
+    return {
+      id: rule.id,
+      phase: this.mapRulePhase(rule, actions),
+      when,
+      priority: rule.priority,
+      cooldownBars: typeof rule.cooldownBars === 'number' && rule.cooldownBars > 0 ? rule.cooldownBars : undefined,
+      actions,
+      ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
     }
   }
 
