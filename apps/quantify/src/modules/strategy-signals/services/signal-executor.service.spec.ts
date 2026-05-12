@@ -168,6 +168,53 @@ describe('signalExecutorService', () => {
     })
   })
 
+  it('keeps a partially filled OKX private order pending for later fills', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const raw = { ordId: 'okx-order-partial', state: 'partially_filled' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-partial' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-partial',
+      state: 'partially_filled',
+      filledSize: 0.01,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw,
+    })
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).toHaveBeenCalledWith('exec-okx-partial', 'ORDER_ACKED', {
+      providerOrderId: 'okx-order-partial',
+      providerStatus: 'partially_filled',
+      source: 'okx_private_ws',
+      raw,
+    })
+  })
+
+  it('marks canceled OKX private order events as failed', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-canceled' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-canceled',
+      state: 'canceled',
+      filledSize: 0,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw: { ordId: 'okx-order-canceled', state: 'canceled' },
+    })
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).not.toHaveBeenCalled()
+    expect(executionRepository.markFailed).toHaveBeenCalledWith('exec-okx-canceled', 'OKX_ORDER_CANCELED')
+  })
+
   it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
     const service = createService()
 

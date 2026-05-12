@@ -181,6 +181,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
         return
       }
 
+      if (this.isFailedOkxPrivateOrderEvent(event)) {
+        await this.executionRepository.markFailed(execution.id, `OKX_ORDER_${event.state.toUpperCase()}`)
+        return
+      }
+
       await this.executionRepository.markStage(execution.id, 'ORDER_ACKED', metadata)
     }
     catch (error) {
@@ -1835,7 +1840,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
   private isFilledOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
     const state = event.state.toLowerCase()
-    return (state === 'filled' || state === 'partially_filled') && (event.filledSize ?? 0) > 0
+    return state === 'filled' && (event.filledSize ?? 0) > 0
+  }
+
+  private isFailedOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
+    return ['canceled', 'cancelled', 'rejected'].includes(event.state.toLowerCase())
   }
 
   private buildOkxPrivateOrderMetadata(event: OkxPrivateOrderEvent): Prisma.JsonObject {
