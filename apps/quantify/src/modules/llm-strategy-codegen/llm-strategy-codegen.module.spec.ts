@@ -1,4 +1,4 @@
-import { MODULE_METADATA } from '@nestjs/common/constants'
+import { MODULE_METADATA, OPTIONAL_DEPS_METADATA, SELF_DECLARED_DEPS_METADATA } from '@nestjs/common/constants'
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
 import { CodegenGraphSnapshotService } from './services/codegen-graph-snapshot.service'
 import { LlmStrategyCodegenModule } from './llm-strategy-codegen.module'
@@ -10,6 +10,10 @@ import { SemanticEventFrameProjectorService } from './services/semantic-event-fr
 import { SemanticMissingPlaceholderReconcilerService } from './services/semantic-missing-placeholder-reconciler.service'
 import { SemanticOpenSlotAnswerResolverService } from './services/semantic-open-slot-answer-resolver.service'
 import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
+import {
+  SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE,
+  SemanticSeedStateBuilderService,
+} from './services/semantic-seed-state-builder.service'
 import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 
 describe('LlmStrategyCodegenModule', () => {
@@ -73,5 +77,16 @@ describe('LlmStrategyCodegenModule', () => {
 
     expect(dependencies).toContain(PerTradeSizingResolver)
     expect(providers).toContain(PerTradeSizingResolver)
+  })
+
+  it('does not require a String provider for semantic seed evidence invariant mode', () => {
+    const explicitDependencies = Reflect.getMetadata(SELF_DECLARED_DEPS_METADATA, SemanticSeedStateBuilderService)
+    const optionalDependencies = Reflect.getMetadata(OPTIONAL_DEPS_METADATA, SemanticSeedStateBuilderService)
+
+    expect(explicitDependencies).toContainEqual({
+      index: 3,
+      param: SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE,
+    })
+    expect(optionalDependencies).toContain(3)
   })
 })
