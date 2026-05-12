@@ -6538,7 +6538,16 @@ export class CodegenConversationService {
   }): CanonicalCompileabilityReport {
     const entryRuleCount = spec.rules.filter(rule =>
       rule.phase === 'entry'
-      && rule.actions.some(action => action.type === 'OPEN_LONG' || action.type === 'OPEN_SHORT'),
+      // #1238 follow-up：DCA 策略的 entry rule 由 ADD_LONG / ADD_SHORT 表达
+      //   （"开始 DCA → ADD_LONG"），原白名单只认 OPEN_*，导致用户配完 DCA 策略点
+      //   "生成脚本" 时 entryRuleCount === 0 → "当前还不能稳定投影到可执行入场规则"。
+      //   纳入 ADD_LONG / ADD_SHORT，与 dca_schedule canonical projection 对齐。
+      && rule.actions.some(action =>
+        action.type === 'OPEN_LONG'
+        || action.type === 'OPEN_SHORT'
+        || action.type === 'ADD_LONG'
+        || action.type === 'ADD_SHORT',
+      ),
     ).length
 
     const exitRuleCount = spec.rules.filter(rule =>
