@@ -89,7 +89,9 @@ describe('oscillator/threshold trigger phase 由子句动词决定（Issue #1219
     expect(rsi!.sideScope).toBe('short')
   })
 
-  it('[#8] RSI14 高于 70 卖出（裸卖出）→ exit/long regression 兜底', () => {
+  it('[#8] RSI14 高于 70 卖出（裸卖出）→ exit/long（覆盖 resolveTradeIntent 委托路径）', () => {
+    // 覆盖范围：resolvePhaseByClauseVerb 委托给 resolveTradeIntent 后，裸"卖出"被正确识别为 exit/long
+    // 注意：此用例不是 resolvePhaseByClauseVerb 自身分支的 regression guard
     const triggers = extractTriggers('RSI14 高于 70 卖出')
     const rsi = findOscillatorTrigger(triggers, /rsi/i)
     expect(rsi).toBeDefined()
@@ -106,6 +108,8 @@ describe('oscillator/threshold trigger phase 由子句动词决定（Issue #1219
   })
 
   it('[#10] RSI14 低于 40（clause 无动词）且 segment 也无动词 → trigger 被整体跳过（intent=null）', () => {
+    // 覆盖范围：验证无动词时 intent=null → trigger 不产出，确认阈值方向不再兜底
+    // 注意：此用例不是 resolvePhaseByClauseVerb 自身分支的 regression guard（旧代码行为相同）
     const triggers = extractTriggers('RSI14 低于 40')
     const rsi = findOscillatorTrigger(triggers, /rsi/i)
     // 无动词时 intent=null → pushRsiTriggers 中 continue，trigger 不产出
@@ -122,10 +126,22 @@ describe('oscillator/threshold trigger phase 由子句动词决定（Issue #1219
 
   it('[#12] clause 含 平空，segment 含 开多策略（AND 分隔）→ clause 动词优先，phase=exit/short', () => {
     // "开多策略" 在独立 clause，RSI clause 只含"平空"，clause 动词应优先于 segment 回退
+    // 覆盖范围：hasCloseShortVerb 分支；旧代码通过 resolveTradeIntent priority 1 也能正确处理，
+    // 此用例不是 resolvePhaseByClauseVerb 新增显式分支的独有 regression guard
     const triggers = extractTriggers('开多策略 且 RSI14 高于 70 平空')
     const rsi = findOscillatorTrigger(triggers, /rsi/i)
     expect(rsi).toBeDefined()
     expect(rsi!.phase).toBe('exit')
     expect(rsi!.sideScope).toBe('short')
+  })
+
+  it('[#13] 单 clause 同时含入场词与平多词 → exit/long（负向守卫防止误判为 entry）', () => {
+    // 覆盖范围：hasEntryLongVerb 负向守卫（A-1 修复）
+    // 若移除负向守卫，"开多条件下...平多" 因 hasEntryLongVerb 短路会错误返回 entry/long
+    const triggers = extractTriggers('RSI14 低于 35 开多条件触发后平多出场')
+    const rsi = findOscillatorTrigger(triggers, /rsi/i)
+    expect(rsi).toBeDefined()
+    expect(rsi!.phase).toBe('exit')
+    expect(rsi!.sideScope).toBe('long')
   })
 })
