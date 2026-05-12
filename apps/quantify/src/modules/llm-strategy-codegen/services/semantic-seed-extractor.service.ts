@@ -3706,12 +3706,10 @@ export class SemanticSeedExtractorService {
     for (const clause of clauses) {
       if (!/RSI/iu.test(clause) && !this.isRsiThresholdAliasClause(clause, segment)) continue
 
-      // 子句含 DCA/补仓/加仓/定投 等入场动词时，强制 entry/long，避免 segment fallback 被污染的"卖出"意图覆盖
-      const isDcaEntryClause = /开始\s*DCA|补仓|加仓|定投|开仓|入场|开多|做多|买入/u.test(clause)
-        && !/卖出|平仓|平多|平空|close/iu.test(clause)
-      const intent = isDcaEntryClause
-        ? { phase: 'entry' as const, sideScope: 'long' as const }
-        : (this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment))
+      // Issue #1219: phase / sideScope 由子句动词决定，与阈值方向解耦；
+      // 子句无动词时跟随父级 segment 的动词，不用"低于→exit"硬编码兜底。
+      const intent = this.resolvePhaseByClauseVerb(clause)
+        ?? this.resolvePhaseByClauseVerb(segment)
       if (!intent) continue
 
       const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
@@ -5259,6 +5257,59 @@ export class SemanticSeedExtractorService {
     return /暂停策略|停止策略/u.test(text) && !/止损|平仓|全平/u.test(text)
   }
 
+  /**
+   * Issue #1219: clause-verb-driven phase/sideScope resolver。
+   * - 子句含 `开多/做多/买入/进场/入场/加仓/补仓/定投/开仓/开始 DCA` → entry/long（最高优先，
+   *   保护 DCA clause：防止同一子句中 segment 级"卖出"污染"开多/补仓"意图）
+   * - 子句含 `平空/买回平空/买回空单` → exit/short
+   * - 子句含 `止损|止盈|出场|离场|减仓|平仓`（generic exit）且含空头线索 → exit/short
+   *   （short-side exit 优先于 `开空|做空`：确保"做空+止损"归 exit/short 而非 entry/short）
+   * - 其余情况委托 `resolveTradeIntent`（含裸 `卖出`/`空单`/`long`/`buy` 等完整词汇集）
+   * - 子句无动词 → null（由调用方回退父级 segment，不再用阈值方向兜底）
+   */
+  private resolvePhaseByClauseVerb(
+    clause: string,
+  ): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+    // Long-side entry 优先：保护 DCA clause（e.g. segment 含"卖出"但 clause 含"开多/补仓"）
+    // 负向守卫：若 clause 同时含平仓词（平多/平空/平仓/卖出），不短路为 entry，交委托路径处理
+    const hasEntryLongVerb =
+      /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入/u.test(clause) &&
+      !/卖出|平仓|平多|平空/u.test(clause)
+    if (hasEntryLongVerb) return { phase: 'entry', sideScope: 'long' }
+
+    // Long-side 明确平仓词：与 exit/short 对称，避免依赖委托路径造成静默漂移
+    const hasCloseLongVerb = /平多|卖出平多|卖出多单/u.test(clause)
+    if (hasCloseLongVerb) return { phase: 'exit', sideScope: 'long' }
+
+    // Short-side 明确平仓词：优先于 entry/short，避免"做空+止损/平仓"误判为 entry/short
+    const hasCloseShortVerb = /买回平空|平空|买回空单/u.test(clause)
+    if (hasCloseShortVerb) return { phase: 'exit', sideScope: 'short' }
+
+    const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓/u.test(clause)
+    const hasShortContext = /做空|开空|空单|空头|空方|空仓|short/u.test(clause)
+    if (hasGenericExitVerb && hasShortContext) return { phase: 'exit', sideScope: 'short' }
+
+    // 其余情况委托 resolveTradeIntent，保持两套 resolver 词汇集统一
+    return this.resolveTradeIntent(clause)
+  }
+
+  /**
+   * 通用交易意图 resolver（segment 级）。
+   *
+   * 使用场景：
+   * - `resolvePhaseByClauseVerb` 在排除 long-side DCA entry 优先后委托此方法，
+   *   确保两路 resolver 词汇集统一，避免静默漂移。
+   * - 直接调用场景：MACD / Bollinger / 其他阈值路径中仍按 segment 粒度判断意图。
+   *
+   * 词汇覆盖（优先级从高到低）：
+   * 1. 平空类（`买回平空/平空/买回空单`）→ exit/short
+   * 2. 平多类（`卖出平多/平多/卖出多单`）→ exit/long
+   * 3. 出场/离场（side 取入参文本多/空线索，默认 long）→ exit
+   * 4. 做空/开空/空单/short → entry/short
+   * 5. 裸卖出/卖 → exit（side 取入参文本多/空线索，默认 long）
+   * 6. 做多/开多/买入/买/入场/开仓/long → entry/long
+   * 7. 平仓（side 取入参文本多/空线索，默认 long）→ exit
+   */
   private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
     if (/买回平空|平空|买回空单/u.test(segment)) {
       return { phase: 'exit', sideScope: 'short' }
