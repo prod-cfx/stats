@@ -57,7 +57,7 @@ overrides:
   sweetalert2: 11.22.4
   systeminformation: ^5.31.0
   tmp: ^0.2.5
-  undici: ^7.16.0
+  undici: ^7.25.0
   vite: ^7.1.11
   webpack: ^5.104.1
   reflect-metadata: ^0.2.2
