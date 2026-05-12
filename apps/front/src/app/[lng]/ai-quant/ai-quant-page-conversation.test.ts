@@ -860,7 +860,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.backtestDraftConfig?.range.preset).toBe('7D')
     expect(conversation.backtestDraftConfig?.execution.leverage).toBe(1)
     expect(conversation.paramValues.backtestRangePreset).toBe('7D')
-    expect(conversation.backtestResult?.recoveryStatus).toBe('range_mismatch')
+    expect(conversation.backtestResult).toBeNull()
     expect(isDeployableBacktestResult(conversation.backtestResult)).toBe(false)
   })
 
