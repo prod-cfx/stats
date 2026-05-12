@@ -2288,7 +2288,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
   describe('bollinger.touch_* atoms — raw registry key path (Wave 2 P3 ghost atom fix)', () => {
     function buildTouchSpec(
       atomKey: 'bollinger.touch_upper' | 'bollinger.touch_lower' | 'bollinger.touch_middle',
-      overrides: { op?: 'GT' | 'GTE' | 'LT' | 'LTE', params?: Record<string, unknown>, period?: number, stdDev?: number } = {},
+      overrides: { op?: 'GT' | 'GTE' | 'LT' | 'LTE', params?: Record<string, string | number | boolean>, period?: number, stdDev?: number } = {},
     ) {
       const { op, params, period = 20, stdDev = 2 } = overrides
       return {
