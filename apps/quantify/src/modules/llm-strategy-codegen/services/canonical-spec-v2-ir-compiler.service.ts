@@ -1483,11 +1483,7 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'macd.golden_cross':
       case 'macd.death_cross': {
-        const macd = {
-          fastPeriod: this.readNumber([atom.params?.fastPeriod], context.macd.fastPeriod),
-          slowPeriod: this.readNumber([atom.params?.slowPeriod], context.macd.slowPeriod),
-          signalPeriod: this.readNumber([atom.params?.signalPeriod], context.macd.signalPeriod),
-        }
+        const macd = this.resolveMacdAtomConfig(atom, context, 'codegen.canonical_spec_v2_macd_cross')
         const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', context.timeframe, macd)
         const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', context.timeframe, macd)
         return this.upsertPredicate(
@@ -3082,11 +3078,7 @@ export class CanonicalSpecV2IrCompilerService {
     const operator: 'CROSS_OVER' | 'CROSS_UNDER' = atom.key === 'indicator.cross_over' ? 'CROSS_OVER' : 'CROSS_UNDER'
 
     if (indicator === 'macd') {
-      const macd = {
-        fastPeriod: this.readNumber([atom.params?.fastPeriod], context.macd.fastPeriod),
-        slowPeriod: this.readNumber([atom.params?.slowPeriod], context.macd.slowPeriod),
-        signalPeriod: this.readNumber([atom.params?.signalPeriod], context.macd.signalPeriod),
-      }
+      const macd = this.resolveMacdAtomConfig(atom, context, 'codegen.canonical_spec_v2_indicator_cross')
       const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', timeframe, macd)
       const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', timeframe, macd)
       const crossRef = this.upsertPredicate(
@@ -3200,6 +3192,38 @@ export class CanonicalSpecV2IrCompilerService {
 
     // MACD 没有"指标 vs 常量阈值"语义 — 显式拒绝，与 builder 改写口径一致
     throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_indicator:${atom.key}:${indicator}`)
+  }
+
+  private resolveMacdAtomConfig(
+    atom: CanonicalConditionAtom,
+    context: CompileContext,
+    errorPrefix: string,
+  ): CompileContext['macd'] {
+    const fastPeriod = this.readRequiredPositiveNumberParam(
+      atom.params?.fastPeriod,
+      context.macd.fastPeriod,
+      `${errorPrefix}_invalid_fast_period`,
+    )
+    const slowPeriod = this.readRequiredPositiveNumberParam(
+      atom.params?.slowPeriod,
+      context.macd.slowPeriod,
+      `${errorPrefix}_invalid_slow_period`,
+    )
+    const signalPeriod = this.readRequiredPositiveNumberParam(
+      atom.params?.signalPeriod,
+      context.macd.signalPeriod,
+      `${errorPrefix}_invalid_signal_period`,
+    )
+
+    return { fastPeriod, slowPeriod, signalPeriod }
+  }
+
+  private readRequiredPositiveNumberParam(value: unknown, fallback: number, errorCode: string): number {
+    const resolved = value === undefined ? fallback : this.readNumber([value], Number.NaN)
+    if (!Number.isFinite(resolved) || resolved <= 0) {
+      throw new Error(`${errorCode}:${value ?? resolved}`)
+    }
+    return resolved
   }
 
   private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {

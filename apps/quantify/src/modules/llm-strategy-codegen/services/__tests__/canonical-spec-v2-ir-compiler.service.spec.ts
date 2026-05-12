@@ -1289,6 +1289,53 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('fails closed for invalid canonical MACD cross atom periods', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    expect(() => compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'macd', params: { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } }],
+        sizing: { mode: 'RATIO', value: 0.35 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-macd-cross',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'macd.golden_cross',
+              semanticScope: 'market',
+              op: 'CROSS_OVER',
+              params: { fastPeriod: 0, slowPeriod: 34, signalPeriod: 12 },
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 35,
+      },
+    })).toThrow(/codegen\.canonical_spec_v2_macd_cross_invalid_fast_period/)
+  })
+
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -5920,6 +5967,45 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const signal = result.ir.signalCatalog.series.find(s => s.kind === 'MACD_SIGNAL')
       expect(line?.params).toEqual(expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
       expect(signal?.params).toEqual(expect.objectContaining({ fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 }))
+    })
+
+    it('fail-closed — macd fastPeriod=0 抛 invalid_fast_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-bad-fast',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 0, slowPeriod: 34, signalPeriod: 12 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_fast_period/,
+      )
+    })
+
+    it('fail-closed — macd slowPeriod=-1 抛 invalid_slow_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-bad-slow',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 16, slowPeriod: -1, signalPeriod: 12 },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_slow_period/,
+      )
+    })
+
+    it('fail-closed — macd signalPeriod 非数字抛 invalid_signal_period', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-macd-bad-signal',
+        'indicator.cross_over',
+        { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 'bad' },
+        1,
+      )
+      expect(() => compiler.compile({ canonicalSpec: spec, fallback })).toThrow(
+        /codegen\.canonical_spec_v2_indicator_cross_invalid_signal_period/,
+      )
     })
 
     it('multi-rule 不互盖 — 两条 indicator.cross_over 各落各的 guard', () => {
