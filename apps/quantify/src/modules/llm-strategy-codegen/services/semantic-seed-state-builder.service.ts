@@ -146,7 +146,7 @@ export class SemanticSeedStateBuilderService {
       kind: 'trigger' | 'action' | 'risk',
     ): void => {
       if (evidenceMode === 'off' || typeof message !== 'string') return
-      for (const item of items) {
+      for (const [itemIndex, item] of items.entries()) {
         if (!this.isRecord(item)) continue
         if (item.source === 'system_default') continue
         const evidence = this.isRecord(item.evidence) ? item.evidence : null
@@ -156,7 +156,6 @@ export class SemanticSeedStateBuilderService {
         const phase = typeof item.phase === 'string' ? `/${item.phase}` : ''
         // Include array index to avoid atomId collision when multiple atoms share the same key+phase
         // (e.g. multi-MA strategies with several indicator.above/entry triggers)
-        const itemIndex = items.indexOf(item)
         const atomId = `${kind}[${itemIndex}:${key}${phase}]`
         let reason: string | null = null
         if (!hasEvidenceField || evidenceText === null) {
