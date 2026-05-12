@@ -28,6 +28,7 @@ export interface StartSessionBootstrapInput {
   plan: ConversationPlan
   normalizationBlocked?: boolean
   normalizationAssistantPrompt?: string
+  locale?: 'zh' | 'en'
 }
 
 export interface StartSessionBootstrapResult {
@@ -50,12 +51,15 @@ export function buildStartSessionBootstrap(
     : input.initialStatus)
   const shouldEnterConfirmationGate = status === 'CONFIRM_GATE'
 
+  const confirmSuffix = input.locale === 'en'
+    ? 'The logic graph has been updated. Please confirm it, then I will generate the strategy code.'
+    : '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
   const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
     : (shouldEnterConfirmationGate
         ? (input.confirmationAssistantPrompt?.trim()
             ? input.confirmationAssistantPrompt.trim()
-            : `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`)
+            : `${input.plan.assistantPrompt}\n${confirmSuffix}`)
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
             : input.plan.assistantPrompt))

@@ -474,7 +474,11 @@ const BacktestingCreateJobResponseDto = z
   })
   .passthrough()
 const LlmCodegenStartRequestDto = z
-  .object({ initialMessage: z.string(), guideConfig: z.object({}).partial().passthrough() })
+  .object({
+    initialMessage: z.string(),
+    guideConfig: z.object({}).partial().passthrough(),
+    locale: z.enum(['zh', 'en']),
+  })
   .partial()
   .passthrough()
 const CodegenConversationMessageResponseDto = z
@@ -525,6 +529,7 @@ const LlmCodegenContinueRequestDto = z
     message: z.string(),
     clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: z.object({}).partial().passthrough().optional(),
+    locale: z.enum(['zh', 'en']).optional(),
     confirmGenerate: z.boolean().optional(),
     confirmedCanonicalDigest: z.string().optional(),
     providerCode: z.string().optional(),

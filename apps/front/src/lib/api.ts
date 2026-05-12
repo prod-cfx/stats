@@ -627,10 +627,12 @@ export interface LlmSemanticGraphValidationReport {
 
 export interface StartLlmCodegenSessionPayload {
   initialMessage?: string
+  locale?: 'zh' | 'en'
 }
 
 export interface ContinueLlmCodegenSessionPayload {
   message: string
+  locale?: 'zh' | 'en'
   confirmGenerate?: boolean
   confirmedCanonicalDigest?: string
   clarificationAnswers?: Record<string, string>

@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -56,6 +57,11 @@ export class ContinueCodegenSessionDto {
   @ValidateNested()
   @Type(() => CodegenGuideConfigDto)
   guideConfig?: CodegenGuideConfigDto
+
+  @ApiPropertyOptional({ description: '助手对话语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: 'zh' | 'en'
 
   @ApiPropertyOptional({ description: '是否确认并触发代码生成（默认 false）' })
   @IsOptional()

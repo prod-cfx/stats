@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
-import { IsObject, IsOptional, IsString } from 'class-validator'
+import { IsIn, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class LlmCodegenStartRequestDto {
   @ApiPropertyOptional()
@@ -11,4 +11,9 @@ export class LlmCodegenStartRequestDto {
   @IsOptional()
   @IsObject()
   guideConfig?: Record<string, unknown>
+
+  @ApiPropertyOptional({ enum: ['zh', 'en'], description: 'Preferred assistant conversation language' })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: 'zh' | 'en'
 }

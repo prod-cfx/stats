@@ -22,6 +22,28 @@ describe('llmStrategyCodegenController', () => {
     )
   })
 
+  it('forwards locale on startSession', async () => {
+    const service = {
+      startCodegen: jest.fn().mockResolvedValue({ id: 'session-1', status: 'DRAFTING' }),
+    }
+    const controller = new LlmStrategyCodegenController(service as never)
+
+    await controller.startSession('user-1', 'Bearer token-1', {
+      initialMessage: 'build me a strategy',
+      locale: 'en',
+    })
+
+    expect(service.startCodegen).toHaveBeenCalledWith(
+      'user-1',
+      'Bearer token-1',
+      {
+        initialMessage: 'build me a strategy',
+        guideConfig: undefined,
+        locale: 'en',
+      },
+    )
+  })
+
   it('forwards confirmedCanonicalDigest on continueSession', async () => {
     const service = {
       continueCodegen: jest.fn().mockResolvedValue({ id: 'session-1', status: 'CONFIRM_GATE' }),

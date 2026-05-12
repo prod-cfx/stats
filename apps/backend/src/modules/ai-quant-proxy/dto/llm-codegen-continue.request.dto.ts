@@ -2,6 +2,7 @@ import type { ValidationArguments, ValidatorConstraintInterface } from 'class-va
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -41,6 +42,11 @@ export class LlmCodegenContinueRequestDto {
   @IsOptional()
   @IsObject()
   guideConfig?: Record<string, unknown>
+
+  @ApiPropertyOptional({ enum: ['zh', 'en'], description: 'Preferred assistant conversation language' })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: 'zh' | 'en'
 
   @ApiPropertyOptional()
   @IsOptional()

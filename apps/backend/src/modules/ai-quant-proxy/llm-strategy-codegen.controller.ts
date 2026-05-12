@@ -28,6 +28,7 @@ export class LlmStrategyCodegenController {
     return this.service.startCodegen(userId, authorization, {
       initialMessage: dto.initialMessage,
       guideConfig: dto.guideConfig,
+      ...(dto.locale ? { locale: dto.locale } : {}),
     })
   }
 
@@ -54,6 +55,7 @@ export class LlmStrategyCodegenController {
   ): Promise<CodegenSessionResponseDto> {
     return this.service.continueCodegen(userId, authorization, id, {
       message: dto.message,
+      ...(dto.locale ? { locale: dto.locale } : {}),
       clarificationAnswers: dto.clarificationAnswers,
       guideConfig: dto.guideConfig,
       confirmGenerate: dto.confirmGenerate,

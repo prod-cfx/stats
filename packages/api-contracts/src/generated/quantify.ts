@@ -1454,7 +1454,12 @@ const CodegenGuideConfigDto = z
   .partial()
   .passthrough()
 const StartCodegenSessionDto = z
-  .object({ userId: z.string(), initialMessage: z.string(), guideConfig: CodegenGuideConfigDto })
+  .object({
+    userId: z.string(),
+    initialMessage: z.string(),
+    guideConfig: CodegenGuideConfigDto,
+    locale: z.enum(['zh', 'en']),
+  })
   .partial()
   .passthrough()
 const CodegenConversationMessageDto = z
@@ -1574,6 +1579,7 @@ const ContinueCodegenSessionDto = z
     message: z.string(),
     clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: CodegenGuideConfigDto.optional(),
+    locale: z.enum(['zh', 'en']).optional(),
     confirmGenerate: z.boolean().optional(),
     confirmedCanonicalDigest: z.string().optional(),
     providerCode: z.string().optional(),

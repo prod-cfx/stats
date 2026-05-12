@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
 
 export class StartCodegenSessionDto {
@@ -19,4 +19,9 @@ export class StartCodegenSessionDto {
   @ValidateNested()
   @Type(() => CodegenGuideConfigDto)
   guideConfig?: CodegenGuideConfigDto
+
+  @ApiPropertyOptional({ description: '助手对话语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: 'zh' | 'en'
 }

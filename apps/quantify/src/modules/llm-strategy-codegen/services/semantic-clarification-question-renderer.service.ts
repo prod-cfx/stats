@@ -255,6 +255,16 @@ export class SemanticClarificationQuestionRendererService {
     return renderSemanticClarificationQuestion(input)
   }
 
+  renderLocalized(
+    input: RenderSemanticClarificationQuestionInput,
+    locale: ClarificationQuestionLocale,
+  ): string {
+    if (locale === 'en') {
+      return this.renderStructured(input, locale).question
+    }
+    return this.render(input)
+  }
+
   renderStructured(
     input: RenderSemanticClarificationQuestionInput,
     locale: ClarificationQuestionLocale,
