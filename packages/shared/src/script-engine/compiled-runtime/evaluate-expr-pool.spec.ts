@@ -1190,6 +1190,37 @@ describe('evaluateExprPool', () => {
       expect(values.in_time_window_node).toBe(false)
     })
 
+    it('falls back to last bar timestamp when ctx.timestamp is NaN (not just absent)', () => {
+      // !Number.isFinite(NaN) === true so we must fall through to bar fallback,
+      // not return false outright. Previously this path was uncovered by tests.
+      const values = evaluateExprPool(
+        {
+          timestamp: Number.NaN,
+          bars: [
+            { open: 1, high: 1, low: 1, close: 1, volume: 1, timestamp: MON_1430_UTC },
+          ],
+        },
+        [buildNode('UTC', [{ start: '14:00', end: '15:00' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
+    it('handles bar.timestamp = 0 (1970-01-01 epoch) without rejecting as falsy', () => {
+      // Number.isFinite(0) === true → 0 is a legal timestamp (UTC 00:00 Thu 1970-01-01).
+      // Make sure the `?? null` fallback chain doesn't short-circuit on the falsy zero.
+      const values = evaluateExprPool(
+        {
+          bars: [
+            { open: 1, high: 1, low: 1, close: 1, volume: 1, timestamp: 0 },
+          ],
+        },
+        [buildNode('UTC', [{ start: '00:00', end: '00:01' }])],
+        ['in_time_window_node'],
+      )
+      expect(values.in_time_window_node).toBe(true)
+    })
+
     it('returns false for zero-duration window (end === start)', () => {
       // Both 14:30 (matching local time) and 09:00 (non-matching) start===end → never match.
       // Previously this collapsed to `localMinutes >= 14:30 || localMinutes < 14:30` which
