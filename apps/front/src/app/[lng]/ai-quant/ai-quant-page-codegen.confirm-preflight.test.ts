@@ -123,6 +123,34 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     expect(payload).not.toHaveProperty('riskRules')
   })
 
+  it('forwards English locale to new codegen sessions', async () => {
+    mockStartLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-en',
+      status: 'DRAFTING',
+    })
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-en',
+      conversations: [buildConversation('conv-en')],
+      locale: 'en',
+      message: 'Create an RSI strategy',
+      params: DEFAULT_PARAMS,
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+    })
+
+    expect(mockStartLlmCodegenSession).toHaveBeenCalledWith({
+      initialMessage: 'Create an RSI strategy',
+      locale: 'en',
+    })
+  })
+
   it('blocks local request submission when semantic-era params are invalid', async () => {
     await requestAiQuantCodegen({
       backtestCapabilities: null,

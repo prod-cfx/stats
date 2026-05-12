@@ -1158,6 +1158,7 @@ export function AiQuantPageClient({
       conversations,
       locale: lng,
       sessionUserId: session?.userId,
+      locale: lng,
       setCodegenBusyConversationIds,
       setConversations,
       t,

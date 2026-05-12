@@ -1650,12 +1650,15 @@ export class SemanticSeedExtractorService {
 
     for (const clause of this.extractDcaLifecycleTexts(text)) {
       const maxCount = this.extractNumberBefore(clause, ['次'], /(?:次|回)/u)
+        ?? this.extractEnglishDcaMaxCount(clause)
       const perOrderSizing = this.extractQuoteAmountAfter(clause, '每次')
         ?? this.extractQuoteAmountAfter(clause, '定投补仓')
         ?? this.extractQuoteAmountAfter(clause, '补仓')
         ?? this.extractQuoteAmountAfter(clause, '定投')
+        ?? this.extractEnglishDcaPerOrderSizing(clause)
       const capitalCap = this.extractQuoteAmountAfter(clause, '总投入不超过')
         ?? this.extractQuoteAmountAfter(clause, '总投入')
+        ?? this.extractEnglishDcaCapitalCap(clause)
       const exitRule = this.hasDcaExitRule(clause) ? this.resolveDcaExitRule(clause) : null
       // critic round 1 A-C1 修复：triggerMode 不再硬编码 'price_interval'
       // 按 utterance 关键词分流：time_interval (每天/每周/每小时) / signal (信号触发/on signal) / price_interval (默认或每跌)
@@ -1663,7 +1666,7 @@ export class SemanticSeedExtractorService {
         ? 'time_interval'
         : /(?:信号触发|on\s+signal|信号驱动|按信号)/iu.test(clause)
           ? 'signal'
-          : /(?:每跌|每下跌|price\s+drops?|drops?\s+\d+(?:\.\d+)?\s*%)/iu.test(clause)
+          : /(?:每跌|每下跌|price\s+drops?|drops?\s+(?:another\s+)?\d+(?:\.\d+)?\s*%)/iu.test(clause)
             ? 'price_interval'
             : undefined
       const priceIntervalPct = triggerMode === 'price_interval' ? this.extractDcaPriceIntervalPct(clause) : null
@@ -1753,6 +1756,21 @@ export class SemanticSeedExtractorService {
     return texts
   }
 
+  private extractEnglishDcaContinuationText(text: string): string | null {
+    if (!/\bDCA\b/iu.test(text) || !/\b(?:add\s+to\s+(?:the\s+)?position|per\s+buy|per\s+order|total\s+investment)\b/iu.test(text)) {
+      return null
+    }
+
+    const startIndex = text.search(/\b(?:start\s+DCA|DCA)\b/iu)
+    if (startIndex < 0) {
+      return null
+    }
+    const tail = text.slice(startIndex)
+    const exitIndex = tail.search(/\b(?:sell|exit|close)\b/iu)
+    const dcaText = (exitIndex >= 0 ? tail.slice(0, exitIndex) : tail).trim()
+    return dcaText.length > 0 ? dcaText : null
+  }
+
   private extractDcaLifecycleTexts(text: string): string[] {
     const texts: string[] = []
     for (const segment of this.splitPositionLifecycleSegments(text)) {
@@ -1782,6 +1800,11 @@ export class SemanticSeedExtractorService {
           break
         }
       }
+    }
+
+    const englishDcaContinuation = this.extractEnglishDcaContinuationText(text)
+    if (englishDcaContinuation && (texts.length === 0 || englishDcaContinuation.length > texts[0].length)) {
+      return [englishDcaContinuation]
     }
 
     return texts
@@ -1815,7 +1838,7 @@ export class SemanticSeedExtractorService {
       return false
     }
 
-    return /(?:每跌|每下跌|DCA|dca|定投)/u.test(clause)
+    return /(?:每跌|每下跌|DCA|dca|定投|\badd\s+to\s+(?:the\s+)?position\b|\bscale\s+in\b)/iu.test(clause)
   }
 
   private withInheritedLifecycleContextSlots(
@@ -1936,8 +1959,34 @@ export class SemanticSeedExtractorService {
     return { kind: 'quote', value, asset }
   }
 
+  private extractEnglishDcaMaxCount(text: string): number | null {
+    const match = text.match(/\b(?:up\s+to\s+(?:a\s+)?maximum\s+of|max(?:imum)?|no\s+more\s+than)\s*(\d+(?:\.\d+)?)\s*(?:buys?|orders?|times?)\b/iu)
+      ?? text.match(/\b(\d+(?:\.\d+)?)\s*(?:buys?|orders?|times?)\s*(?:maximum|max)\b/iu)
+    if (!match?.[1]) return null
+    const value = Number(match[1])
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  private extractEnglishDcaPerOrderSizing(text: string): { kind: 'quote'; value: number; asset: QuoteAsset } | null {
+    const match = text.match(/\b(?:with\s+)?(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U)\s*(?:per|each)\s*(?:buy|order|DCA)\b/iu)
+      ?? text.match(/\b(?:per|each)\s*(?:buy|order|DCA).{0,16}?(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U)\b/iu)
+    if (!match?.[1] || !match[2]) return null
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return { kind: 'quote', value, asset: this.normalizeQuoteAsset(match[2]) }
+  }
+
+  private extractEnglishDcaCapitalCap(text: string): { kind: 'quote'; value: number; asset: QuoteAsset } | null {
+    const match = text.match(/\b(?:total\s+(?:investment|capital|allocation|budget).{0,24}?(?:not\s+exceeding|not\s+exceed|no\s+more\s+than|up\s+to|max(?:imum)?|cap(?:ped)?\s+at)\s*)(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U)\b/iu)
+      ?? text.match(/\b(?:not\s+exceeding|not\s+exceed|no\s+more\s+than|up\s+to|max(?:imum)?|cap(?:ped)?\s+at)\s*(\d+(?:\.\d+)?)\s*(USDT|USDC|USD|U).{0,24}?\b(?:total\s+)?(?:investment|capital|allocation|budget)\b/iu)
+    if (!match?.[1] || !match[2]) return null
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return { kind: 'quote', value, asset: this.normalizeQuoteAsset(match[2]) }
+  }
+
   private extractDcaPriceIntervalPct(text: string): number | null {
-    const match = text.match(/(?:每\s*(?:跌|下跌)|price\s+drops?)\s*(\d+(?:\.\d+)?)\s*%/iu)
+    const match = text.match(/(?:每\s*(?:跌|下跌)|price\s+drops?)\s*(?:another\s+)?(\d+(?:\.\d+)?)\s*%/iu)
     if (!match?.[1]) return null
 
     const value = Number(match[1])
@@ -5306,8 +5355,8 @@ export class SemanticSeedExtractorService {
     // Long-side entry 优先：保护 DCA clause（e.g. segment 含"卖出"但 clause 含"开多/补仓"）
     // 负向守卫：若 clause 同时含平仓词（平多/平空/平仓/卖出），不短路为 entry，交委托路径处理
     const hasEntryLongVerb =
-      /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入/u.test(clause) &&
-      !/卖出|平仓|平多|平空/u.test(clause)
+      /开始\s*DCA|补仓|加仓|定投|开仓|入场|进场|开多|做多|买入|\b(?:start\s+DCA|add\s+to\s+(?:the\s+)?position|scale\s+in|enter|open\s+long|go\s+long|buy)\b/iu.test(clause) &&
+      !/卖出|平仓|平多|平空|\b(?:sell|close|exit)\b/iu.test(clause)
     if (hasEntryLongVerb) return { phase: 'entry', sideScope: 'long' }
 
     // Long-side 明确平仓词：与 exit/short 对称，避免依赖委托路径造成静默漂移
@@ -5318,7 +5367,7 @@ export class SemanticSeedExtractorService {
     const hasCloseShortVerb = /买回平空|平空|买回空单/u.test(clause)
     if (hasCloseShortVerb) return { phase: 'exit', sideScope: 'short' }
 
-    const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓/u.test(clause)
+    const hasGenericExitVerb = /止损|止盈|出场|离场|减仓|平仓|\b(?:take\s+profit|stop\s+loss|exit|close|sell)\b/iu.test(clause)
     const hasShortContext = /做空|开空|空单|空头|空方|空仓|short/u.test(clause)
     if (hasGenericExitVerb && hasShortContext) return { phase: 'exit', sideScope: 'short' }
 
@@ -5366,16 +5415,16 @@ export class SemanticSeedExtractorService {
     if (/卖出平多|平多|卖出多单/u.test(segment)) {
       return { phase: 'exit', sideScope: 'long' }
     }
-    if (/出场|离场/u.test(segment)) {
+    if (/出场|离场|\b(?:exit|close)\b/iu.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
     if (/做空|开空|空单|short/u.test(segment)) {
       return { phase: 'entry', sideScope: 'short' }
     }
-    if (/卖出|卖/u.test(segment)) {
+    if (/卖出|卖|\bsell\b/iu.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
-    if (/做多|开多|买入|买|入场|开仓|long/u.test(segment)) {
+    if (/做多|开多|买入|买|入场|开仓|long|\b(?:buy|enter|open\s+long|go\s+long|start\s+DCA|add\s+to\s+(?:the\s+)?position|scale\s+in)\b/iu.test(segment)) {
       return { phase: 'entry', sideScope: 'long' }
     }
     if (/平仓/u.test(segment)) {
@@ -5441,6 +5490,12 @@ export class SemanticSeedExtractorService {
   }
 
   private extractRsiThreshold(clause: string, period: number): number | null {
+    const englishThreshold = this.extractNumber(clause, [
+      /\b(?:above|over|greater\s+than|below|under|less\s+than|falls?\s+below|drops?\s+below|rises?\s+above|cross(?:es)?\s+(?:above|below))\s*(\d+(?:\.\d+)?)/iu,
+      /\b(\d+(?:\.\d+)?)\s*(?:or\s+)?(?:above|over|below|under)\b/iu,
+    ])
+    if (englishThreshold !== null) return englishThreshold
+
     const compact = clause.replace(/\s+/gu, '')
     const explicitThreshold = this.extractNumber(compact, [
       /(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)(\d+(?:\.\d+)?)/u,
