@@ -4,6 +4,7 @@ import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticContextSlotState,
+  SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
   SemanticState,
@@ -250,9 +251,131 @@ export class SemanticStateMergeService {
       ...weaker,
       ...stronger,
       value: stronger.value ?? weaker.value,
+      // H1 修复：同函数顶层 `{...weaker, ...stronger}` 对 sizing 也有同样的整段覆盖
+      // 问题。如果 derived 是更强源但显式回 sizing: null/undefined（典型场景：planner
+      // LLM 不输出 sizing 字段，或 reducer 清空），会把 persisted 的 locked sizing 抹掉。
+      // 与 value/evidence 一致用 nullish fallback：stronger 真正给出新 sizing 才用，
+      // 否则保留 weaker 的非空 sizing。
+      sizing: stronger.sizing ?? weaker.sizing,
       contracts: this.mergeContracts(persisted.contracts, derived.contracts),
+      // #DCA-bug-fix：spread 后 stronger.constraints 会以整体形式覆盖 weaker.constraints；
+      // 如果 derived 是更强源但 constraints 缺/为空（典型场景：conversation planner LLM
+      // 只回 position.sizing 不回 position.dca_schedule constraint），就会把 seed 抽出的
+      // locked dca_schedule / pyramiding_limit 抹掉。按 key union 合并，每个 key 内部按
+      // strength 取强，保证 locked 持久态不被 derived 弱化。
+      constraints: this.mergePositionConstraints(persisted.constraints, derived.constraints),
       evidence: stronger.evidence ?? weaker.evidence,
     }
+  }
+
+  private mergePositionConstraints(
+    persisted: SemanticPositionState['constraints'],
+    derived: SemanticPositionState['constraints'],
+  ): SemanticPositionState['constraints'] {
+    if (!persisted && !derived) return undefined
+    const byKey = new Map<string, SemanticPositionConstraintState>()
+
+    // 持久态先全量克隆入桶 —— 避免后续路径直接持有 caller 引用，对齐
+    // mergeTriggers / mergeActions / mergeRisks 的克隆约定（参数与 openSlots 浅克隆）。
+    for (const constraint of persisted ?? []) {
+      byKey.set(constraint.key, this.clonePositionConstraint(constraint))
+    }
+
+    for (const incoming of derived ?? []) {
+      const existing = byKey.get(incoming.key)
+      if (!existing) {
+        byKey.set(incoming.key, this.clonePositionConstraint(incoming))
+        continue
+      }
+
+      // tie-break 统一到 `> 0`（等强偏 derived），与 mergeTriggers / mergeActions /
+      // mergeRisk / mergePosition 顶层 / mergeSlotState 全文件其它 6 处保持一致；
+      // 等强偏 persisted 的语义已经由本函数顶层"persisted 先入桶 + derived 仅在更强时
+      // 覆盖"的顺序保证：strict greater 让真正更强的 derived（如 planner 后续 patch
+      // 把 dca_schedule 从 open 推到 locked）能压过持久态。
+      const preferPersisted = this.compareNodeStrength(existing, incoming) > 0
+      const stronger = preferPersisted ? existing : incoming
+      const weaker = preferPersisted ? incoming : existing
+
+      byKey.set(existing.key, {
+        ...weaker,
+        ...stronger,
+        id: existing.id,
+        // params 一层 spread 仍会把 stronger.perOrderSizing 这类 sub-object 整段覆盖
+        // weaker 同名 sub-object（典型现象：stronger 只回 `{ value: 50 }` 会把
+        // `{ kind:'quote', value:100, asset:'USDT' }` 压扁成 `{ value:50 }`），破坏
+        // SemanticPositionSizingContract discriminated-union 形态。
+        // 改走 mergePositionConstraintParams 做一层深合并：plain object 字段（如
+        // perOrderSizing/capitalCap/exitRule）走子对象 spread，其余字段沿用顶层 spread。
+        params: this.mergePositionConstraintParams(
+          weaker.params,
+          stronger.params,
+        ),
+        contracts: this.mergeContracts(existing.contracts, incoming.contracts),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          existing,
+          incoming,
+          existing.openSlots,
+          incoming.openSlots,
+        ),
+        evidence: preferPersisted
+          ? existing.evidence ?? incoming.evidence
+          : incoming.evidence ?? existing.evidence,
+      })
+    }
+
+    // m1 修复：原先 length===0 返回 undefined 与原 spread 行为不完全等价
+    // （旧逻辑会保留 stronger 的 [] 引用）。返回 `[]` 让 'constraints' in pos 等
+    // 存在性判断与 .length 判空仍保持一致。
+    return [...byKey.values()]
+  }
+
+  private clonePositionConstraint(
+    constraint: SemanticPositionConstraintState,
+  ): SemanticPositionConstraintState {
+    return {
+      ...constraint,
+      params: { ...(constraint.params ?? {}) },
+      openSlots: (constraint.openSlots ?? []).map(slot => ({ ...slot })),
+      contracts: constraint.contracts
+        ? constraint.contracts.map(item => ({ ...item }))
+        : undefined,
+    }
+  }
+
+  private mergePositionConstraintParams(
+    weaker: Record<string, unknown> | undefined,
+    stronger: Record<string, unknown> | undefined,
+  ): Record<string, unknown> {
+    const base: Record<string, unknown> = { ...(weaker ?? {}) }
+    for (const [key, strongerValue] of Object.entries(stronger ?? {})) {
+      // R2-M1 修复：null/undefined 一律视为"stronger 未说"，保留 weaker——与 H1 顶层
+      //   `sizing: stronger.sizing ?? weaker.sizing` 语义对齐。否则同一份 patch 里
+      //   顶层 sizing 与内层 perOrderSizing/capitalCap 出现两种 null 语义，调用方
+      //   （planner / reducer）容易踩坑。如需"显式清空子合约"语义请走专用 reducer 路径。
+      if (strongerValue === null || strongerValue === undefined) {
+        continue
+      }
+      const weakerValue = base[key]
+      if (
+        this.isPlainObject(strongerValue)
+        && this.isPlainObject(weakerValue)
+      ) {
+        // R2-m2 限制说明：仅做一层 spread。当前 contract shape 是两层
+        //   （params.perOrderSizing.{kind,value,asset}）；若未来出现三层嵌套
+        //   （如 perOrderSizing.range.{lo,hi}）需要递归扩展，spec 应同步加 case。
+        base[key] = { ...weakerValue, ...strongerValue }
+        continue
+      }
+      base[key] = strongerValue
+    }
+    return base
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value !== null
+      && typeof value === 'object'
+      && !Array.isArray(value)
   }
 
   private mergeContracts(
