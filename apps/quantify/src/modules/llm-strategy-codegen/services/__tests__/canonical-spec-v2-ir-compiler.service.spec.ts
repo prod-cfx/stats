@@ -5871,3 +5871,109 @@ describe('canonicalSpecV2IrCompilerService risk.max_single_loss_pct', () => {
       .toThrow(/codegen\.canonical_spec_v2_max_single_loss_pct_invalid_pct/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// risk.cooldown_bars ghost-atom fix (P3, #1264): canonical→IR compile branch
+// ---------------------------------------------------------------------------
+describe('canonicalSpecV2IrCompilerService risk.cooldown_bars', () => {
+  const fallback = { exchange: 'binance' as const, symbol: 'BTCUSDT', baseTimeframe: '1m', positionPct: 10 }
+
+  function buildBaseSpec(): CanonicalStrategySpecV2 {
+    return {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '1m' },
+      indicators: [],
+      sizing: { mode: 'QUOTE', value: 10 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['1m'] },
+      rules: [{
+        id: 'entry-baseline',
+        phase: 'entry',
+        sideScope: 'long',
+        priority: 200,
+        condition: { kind: 'expression', op: 'GT', left: { kind: 'series', source: 'bar', field: 'close' }, right: { kind: 'series', source: 'bar', field: 'open' } },
+        actions: [{ type: 'OPEN_LONG' }],
+      }],
+    } satisfies CanonicalStrategySpecV2
+  }
+
+  function buildSpecWithCooldownBars(bars: number | string | undefined): CanonicalStrategySpecV2 {
+    const spec = buildBaseSpec()
+    spec.rules.push({
+      id: 'risk-cooldown',
+      phase: 'risk',
+      sideScope: 'both',
+      priority: 100,
+      condition: { kind: 'atom', key: 'risk.cooldown_bars', semanticScope: 'position', op: 'GTE', value: 1, params: bars !== undefined ? { bars } : {} },
+      actions: [{ type: 'FORCE_EXIT' }],
+    })
+    return spec
+  }
+
+  it('emits cooldownBars RiskPredicateDef into riskPolicy.riskPredicates for bars:3', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(3), fallback })
+    const preds = result.ir.riskPolicy.riskPredicates ?? []
+    const cd = preds.find(p => p.id === 'risk-cooldown')
+    expect(cd).toBeDefined()
+    expect(cd?.kind).toBe('cooldownBars')
+    expect(cd?.params.bars).toBe(3)
+    expect(cd?.actions?.[0]?.kind).toBe('FORCE_EXIT')
+  })
+
+  it('does not leak risk.cooldown_bars into ruleBlocks or guards', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(5), fallback })
+    expect(result.ir.ruleBlocks.map(r => r.id)).not.toContain('risk-cooldown')
+    expect(result.ir.riskPolicy.guards.map(g => g.id)).not.toContain('guard_risk-cooldown')
+  })
+
+  it('preserves the bars count verbatim (no scaling)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const result = compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(12), fallback })
+    expect((result.ir.riskPolicy.riskPredicates ?? []).find(p => p.id === 'risk-cooldown')?.params.bars).toBe(12)
+  })
+
+  it('emits one predicate per rule when spec carries multiple cooldown_bars rules (no merge)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    for (const [id, bars] of [['risk-cd-fast', 2], ['risk-cd-slow', 10]] as const) {
+      spec.rules.push({ id, phase: 'risk', sideScope: 'both', priority: 100, condition: { kind: 'atom', key: 'risk.cooldown_bars', semanticScope: 'position', op: 'GTE', value: 1, params: { bars } }, actions: [{ type: 'FORCE_EXIT' }] })
+    }
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const preds = result.ir.riskPolicy.riskPredicates ?? []
+    expect(preds.find(p => p.id === 'risk-cd-fast')?.params.bars).toBe(2)
+    expect(preds.find(p => p.id === 'risk-cd-slow')?.params.bars).toBe(10)
+  })
+
+  it('isolates cooldownBars from sibling timeStopBars (both in riskPredicates, distinct kinds)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildBaseSpec()
+    spec.rules.push(
+      { id: 'risk-cooldown', phase: 'risk', sideScope: 'both', priority: 95, condition: { kind: 'atom', key: 'risk.cooldown_bars', semanticScope: 'position', op: 'GTE', value: 1, params: { bars: 4 } }, actions: [{ type: 'FORCE_EXIT' }] },
+      { id: 'risk-time-stop', phase: 'risk', sideScope: 'both', priority: 90, condition: { kind: 'atom', key: 'risk.time_stop_bars', semanticScope: 'position', op: 'GTE', value: 1, params: { maxBars: 20, scope: 'both', effect: 'close_position' } }, actions: [{ type: 'FORCE_EXIT' }] },
+    )
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const preds = result.ir.riskPolicy.riskPredicates ?? []
+    expect(preds.find(p => p.id === 'risk-cooldown')?.kind).toBe('cooldownBars')
+    expect(preds.find(p => p.id === 'risk-time-stop')?.kind).toBe('timeStopBars')
+  })
+
+  it('fails closed when params.bars is missing (throws invalid_bars)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(undefined), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_cooldown_bars_invalid_bars/)
+  })
+
+  it('fails closed when params.bars is 0 (throws invalid_bars)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(0), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_cooldown_bars_invalid_bars/)
+  })
+
+  it('fails closed when params.bars is fractional (throws invalid_bars)', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    expect(() => compiler.compile({ canonicalSpec: buildSpecWithCooldownBars(2.5), fallback }))
+      .toThrow(/codegen\.canonical_spec_v2_cooldown_bars_invalid_bars/)
+  })
+})

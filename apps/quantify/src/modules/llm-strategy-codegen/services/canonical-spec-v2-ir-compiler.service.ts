@@ -2384,6 +2384,35 @@ export class CanonicalSpecV2IrCompilerService {
       }
     }
 
+    // risk.cooldown_bars ghost-atom fix (P3, #1264).
+    //
+    // The registry declares risk.cooldown_bars as executableRisk('risk.cooldown_bars', ['bars']).
+    // canonical-spec-builder has no case for it, so rules reach tryCompileRiskPredicate directly.
+    // Previously there was no matching branch → rule fell through to compileConditionAtom → throw
+    // condition_unsupported (ghost atom).
+    //
+    // Shape contract: phase:'risk', condition.kind:'atom', condition.key:'risk.cooldown_bars',
+    // condition.params.bars: positive integer (bars to suppress new entries after fill/exit).
+    //
+    // Fail-closed: non-integer, ≤ 0, or missing bars → throw a distinct invalid_bars error.
+    // Silent return-null is forbidden here because cooldown_bars is a safety-affecting parameter;
+    // falling through to condition_unsupported would mask the contract violation.
+    if (rule.condition.key === 'risk.cooldown_bars') {
+      const barsRaw = (rule.condition.params ?? {}).bars
+      const bars = typeof barsRaw === 'number' ? barsRaw : Number(barsRaw)
+      if (!Number.isInteger(bars) || bars <= 0) {
+        throw new Error(
+          `codegen.canonical_spec_v2_cooldown_bars_invalid_bars:${rule.id}:${barsRaw}`,
+        )
+      }
+      return {
+        id: rule.id,
+        kind: 'cooldownBars',
+        params: { bars },
+        actions: this.compileRiskPredicateActions(rule),
+      }
+    }
+
     if (rule.condition.key === 'risk.remembered_level_stop') {
       const levelKey = typeof rule.condition.params?.levelKey === 'string' && rule.condition.params.levelKey.trim().length > 0
         ? rule.condition.params.levelKey.trim()
