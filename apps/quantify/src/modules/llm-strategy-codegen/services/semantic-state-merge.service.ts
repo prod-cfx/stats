@@ -4,6 +4,7 @@ import type {
   SemanticActionState,
   SemanticAtomContract,
   SemanticContextSlotState,
+  SemanticPositionConstraintState,
   SemanticPositionState,
   SemanticRiskState,
   SemanticState,
@@ -266,27 +267,99 @@ export class SemanticStateMergeService {
     derived: SemanticPositionState['constraints'],
   ): SemanticPositionState['constraints'] {
     if (!persisted && !derived) return undefined
-    const byKey = new Map<string, NonNullable<SemanticPositionState['constraints']>[number]>()
+    const byKey = new Map<string, SemanticPositionConstraintState>()
+
+    // 持久态先全量克隆入桶 —— 避免后续路径直接持有 caller 引用，对齐
+    // mergeTriggers / mergeActions / mergeRisks 的克隆约定（参数与 openSlots 浅克隆）。
     for (const constraint of persisted ?? []) {
-      byKey.set(constraint.key, constraint)
+      byKey.set(constraint.key, this.clonePositionConstraint(constraint))
     }
+
     for (const incoming of derived ?? []) {
       const existing = byKey.get(incoming.key)
       if (!existing) {
-        byKey.set(incoming.key, incoming)
+        byKey.set(incoming.key, this.clonePositionConstraint(incoming))
         continue
       }
-      const preferExisting = this.compareNodeStrength(existing, incoming) >= 0
-      const stronger = preferExisting ? existing : incoming
-      const weaker = preferExisting ? incoming : existing
-      byKey.set(incoming.key, {
+
+      // tie-break 统一到 `> 0`（等强偏 derived），与 mergeTriggers / mergeActions /
+      // mergeRisk / mergePosition 顶层 / mergeSlotState 全文件其它 6 处保持一致；
+      // 等强偏 persisted 的语义已经由本函数顶层"persisted 先入桶 + derived 仅在更强时
+      // 覆盖"的顺序保证：strict greater 让真正更强的 derived（如 planner 后续 patch
+      // 把 dca_schedule 从 open 推到 locked）能压过持久态。
+      const preferPersisted = this.compareNodeStrength(existing, incoming) > 0
+      const stronger = preferPersisted ? existing : incoming
+      const weaker = preferPersisted ? incoming : existing
+
+      byKey.set(existing.key, {
         ...weaker,
         ...stronger,
-        params: { ...(weaker.params ?? {}), ...(stronger.params ?? {}) },
+        id: existing.id,
+        // params 一层 spread 仍会把 stronger.perOrderSizing 这类 sub-object 整段覆盖
+        // weaker 同名 sub-object（典型现象：stronger 只回 `{ value: 50 }` 会把
+        // `{ kind:'quote', value:100, asset:'USDT' }` 压扁成 `{ value:50 }`），破坏
+        // SemanticPositionSizingContract discriminated-union 形态。
+        // 改走 mergePositionConstraintParams 做一层深合并：plain object 字段（如
+        // perOrderSizing/capitalCap/exitRule）走子对象 spread，其余字段沿用顶层 spread。
+        params: this.mergePositionConstraintParams(
+          weaker.params,
+          stronger.params,
+        ),
+        contracts: this.mergeContracts(existing.contracts, incoming.contracts),
+        openSlots: this.mergeOpenSlotsForMatchedNodes(
+          existing,
+          incoming,
+          existing.openSlots,
+          incoming.openSlots,
+        ),
+        evidence: preferPersisted
+          ? existing.evidence ?? incoming.evidence
+          : incoming.evidence ?? existing.evidence,
       })
     }
-    const merged = [...byKey.values()]
-    return merged.length > 0 ? merged : undefined
+
+    // m1 修复：原先 length===0 返回 undefined 与原 spread 行为不完全等价
+    // （旧逻辑会保留 stronger 的 [] 引用）。返回 `[]` 让 'constraints' in pos 等
+    // 存在性判断与 .length 判空仍保持一致。
+    return [...byKey.values()]
+  }
+
+  private clonePositionConstraint(
+    constraint: SemanticPositionConstraintState,
+  ): SemanticPositionConstraintState {
+    return {
+      ...constraint,
+      params: { ...(constraint.params ?? {}) },
+      openSlots: (constraint.openSlots ?? []).map(slot => ({ ...slot })),
+      contracts: constraint.contracts
+        ? constraint.contracts.map(item => ({ ...item }))
+        : undefined,
+    }
+  }
+
+  private mergePositionConstraintParams(
+    weaker: Record<string, unknown> | undefined,
+    stronger: Record<string, unknown> | undefined,
+  ): Record<string, unknown> {
+    const base: Record<string, unknown> = { ...(weaker ?? {}) }
+    for (const [key, strongerValue] of Object.entries(stronger ?? {})) {
+      const weakerValue = base[key]
+      if (
+        this.isPlainObject(strongerValue)
+        && this.isPlainObject(weakerValue)
+      ) {
+        base[key] = { ...weakerValue, ...strongerValue }
+        continue
+      }
+      base[key] = strongerValue
+    }
+    return base
+  }
+
+  private isPlainObject(value: unknown): value is Record<string, unknown> {
+    return value !== null
+      && typeof value === 'object'
+      && !Array.isArray(value)
   }
 
   private mergeContracts(
