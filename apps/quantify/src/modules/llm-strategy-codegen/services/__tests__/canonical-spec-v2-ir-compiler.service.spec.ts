@@ -4703,21 +4703,20 @@ describe('canonicalSpecV2IrCompilerService position.dca_schedule', () => {
     expect(exitRule?.reference).toBe('previous_low')
   })
 
-  // ── 6. exitRule 缺失 → cap_only 哨兵透传 ─────────────────────────────────
+  // ── 6. exitRule 缺省 → IR compiler 不会人为补 cap_only 哨兵 ─────────────
 
-  it('metadata.dcaSchedule exitRule is cap_only sentinel when no exitRule specified', () => {
+  it('metadata.dcaSchedule exitRule stays undefined when spec omits it (compiler does not inject sentinel)', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
     const spec = buildBaseSpec()
-    // 不传 exitRule，模拟 canonical-spec-builder 已插入 cap_only
+    // 真正不传 exitRule：helper 的 spread 会跳过该字段，断言 compiler 不会替我们补默认
     pushDcaRule(spec, {
       maxCount: 3,
       capitalCap: 1000,
-      exitRule: { type: 'cap_only' },
     })
     const { ir } = compiler.compile({ canonicalSpec: spec, fallback })
     const dcaBlock = ir.ruleBlocks.find(b => b.metadata?.dcaSchedule)
-    const exitRule = dcaBlock?.metadata?.dcaSchedule?.exitRule as Record<string, string> | undefined
-    expect(exitRule?.type).toBe('cap_only')
+    expect(dcaBlock).toBeDefined()
+    expect(dcaBlock?.metadata?.dcaSchedule?.exitRule).toBeUndefined()
   })
 
   // ── 7. multi-rule: 2 条 dca_schedule 规则不互相覆盖 ─────────────────────
