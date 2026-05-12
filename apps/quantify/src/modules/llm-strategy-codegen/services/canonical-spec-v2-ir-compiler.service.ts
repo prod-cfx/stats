@@ -2493,7 +2493,7 @@ export class CanonicalSpecV2IrCompilerService {
         id: `guard_${rule.id}`,
         kind: 'EXPRESSION_GUARD',
         scope: 'strategy',
-        appliesTo: 'both',
+        appliesTo: this.toRiskGuardAppliesTo(rule.sideScope),
         predicateRef,
         onBreach: 'BLOCK_NEW_ENTRY',
       }

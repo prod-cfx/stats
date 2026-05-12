@@ -5732,6 +5732,24 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
     return spec
   }
 
+  it('preserves rule sideScope on indicator gate guard appliesTo', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+    const spec = buildSpecWithIndicatorGate(
+      'gate-long-only-cross',
+      'indicator.cross_over',
+      { indicator: 'sma', fastPeriod: 20, slowPeriod: 50 },
+      1,
+    )
+    const gateRule = spec.rules.find(rule => rule.id === 'gate-long-only-cross')
+    if (gateRule) {
+      gateRule.sideScope = 'long'
+    }
+
+    const result = compiler.compile({ canonicalSpec: spec, fallback })
+    const guard = result.ir.riskPolicy.guards.find(g => g.id === 'guard_gate-long-only-cross')
+    expect(guard?.appliesTo).toBe('long')
+  })
+
   // -------------------------------------------------------------------------
   // indicator.cross_over
   // -------------------------------------------------------------------------
