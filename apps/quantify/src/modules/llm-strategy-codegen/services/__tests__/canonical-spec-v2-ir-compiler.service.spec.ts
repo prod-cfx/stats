@@ -5805,6 +5805,20 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       expect(emaSeries.map(s => s.params?.period as number).sort((a, b) => a - b)).toEqual([12, 26])
     })
 
+    it('indicator cross 使用 atom timeframe 编译对应周期的 series', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-ema-cross-timeframe',
+        'indicator.cross_over',
+        { indicator: 'ema', fastPeriod: 12, slowPeriod: 26, timeframe: '5m' },
+        1,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const emaSeries = result.ir.signalCatalog.series.filter(s => s.kind === 'EMA')
+      expect(emaSeries).toHaveLength(2)
+      expect(emaSeries.every(s => s.timeframe === '5m')).toBe(true)
+    })
+
     it('indicator=rsi 路由到 RSI × const(value)', () => {
       const compiler = new CanonicalSpecV2IrCompilerService()
       const spec = buildSpecWithIndicatorGate(
@@ -6156,6 +6170,20 @@ describe('canonicalSpecV2IrCompilerService indicator.cross_* / threshold_* (P3 g
       const sma = result.ir.signalCatalog.series.find(s => s.kind === 'SMA')
       expect(sma?.params?.period).toBe(50)
       expect(result.ir.signalCatalog.series.some(s => s.kind === 'CONST' && (s as { value?: number }).value === 100)).toBe(true)
+    })
+
+    it('indicator threshold 使用 atom timeframe 编译对应周期的 RSI series', () => {
+      const compiler = new CanonicalSpecV2IrCompilerService()
+      const spec = buildSpecWithIndicatorGate(
+        'gate-rsi-th-gte-timeframe',
+        'indicator.threshold_gte',
+        { indicator: 'rsi', period: 14, timeframe: '15m' },
+        70,
+      )
+      const result = compiler.compile({ canonicalSpec: spec, fallback })
+      const rsi = result.ir.signalCatalog.series.find(s => s.kind === 'RSI')
+      expect(rsi?.timeframe).toBe('15m')
+      expect(rsi?.params?.period).toBe(14)
     })
 
     it('indicator=ema 路由 EMA × const', () => {

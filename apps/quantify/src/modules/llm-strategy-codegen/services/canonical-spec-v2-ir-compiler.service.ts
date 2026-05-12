@@ -3070,6 +3070,10 @@ export class CanonicalSpecV2IrCompilerService {
     const indicator = typeof atom.params?.indicator === 'string'
       ? atom.params.indicator.trim().toLowerCase()
       : ''
+    const timeframe = this.resolveOperandTimeframe(
+      typeof atom.params?.timeframe === 'string' ? atom.params.timeframe : undefined,
+      context.timeframe,
+    )
     const operator: 'CROSS_OVER' | 'CROSS_UNDER' = atom.key === 'indicator.cross_over' ? 'CROSS_OVER' : 'CROSS_UNDER'
 
     if (indicator === 'macd') {
@@ -3078,8 +3082,8 @@ export class CanonicalSpecV2IrCompilerService {
         slowPeriod: this.readNumber([atom.params?.slowPeriod], context.macd.slowPeriod),
         signalPeriod: this.readNumber([atom.params?.signalPeriod], context.macd.signalPeriod),
       }
-      const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', context.timeframe, macd)
-      const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', context.timeframe, macd)
+      const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE', timeframe, macd)
+      const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL', timeframe, macd)
       const crossRef = this.upsertPredicate(
         context.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_macd`,
@@ -3098,7 +3102,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (!Number.isFinite(value)) {
         throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_value:${atom.key}:${atom.value}`)
       }
-      const rsiRef = this.ensureRsiSeries(context, period)
+      const rsiRef = this.ensureIndicatorSeries(context, 'RSI', period, timeframe)
       const thresholdRef = this.ensureConstSeries(context, value)
       const crossRef = this.upsertPredicate(
         context.predicateMap,
@@ -3119,8 +3123,8 @@ export class CanonicalSpecV2IrCompilerService {
         throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_slow_period:${atom.key}:${slowPeriod}`)
       }
       const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
-      const fastRef = this.ensureIndicatorSeries(context, seriesKind, fastPeriod)
-      const slowRef = this.ensureIndicatorSeries(context, seriesKind, slowPeriod)
+      const fastRef = this.ensureIndicatorSeries(context, seriesKind, fastPeriod, timeframe)
+      const slowRef = this.ensureIndicatorSeries(context, seriesKind, slowPeriod, timeframe)
       const crossRef = this.upsertPredicate(
         context.predicateMap,
         `${seed}_${atom.key.replace(/\./g, '_')}_${seriesKind.toLowerCase()}`,
@@ -3141,6 +3145,10 @@ export class CanonicalSpecV2IrCompilerService {
     const indicator = typeof atom.params?.indicator === 'string'
       ? atom.params.indicator.trim().toLowerCase()
       : ''
+    const timeframe = this.resolveOperandTimeframe(
+      typeof atom.params?.timeframe === 'string' ? atom.params.timeframe : undefined,
+      context.timeframe,
+    )
     const value = this.readNumber([atom.value], Number.NaN)
     if (!Number.isFinite(value)) {
       throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_value:${atom.key}:${atom.value}`)
@@ -3156,7 +3164,7 @@ export class CanonicalSpecV2IrCompilerService {
       if (!Number.isFinite(period) || period <= 0) {
         throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}:${period}`)
       }
-      const rsiRef = this.ensureRsiSeries(context, period)
+      const rsiRef = this.ensureIndicatorSeries(context, 'RSI', period, timeframe)
       const thresholdRef = this.ensureConstSeries(context, value)
       return this.upsertPredicate(
         context.predicateMap,
@@ -3175,7 +3183,7 @@ export class CanonicalSpecV2IrCompilerService {
         throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}:${period}`)
       }
       const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
-      const indicatorRef = this.ensureIndicatorSeries(context, seriesKind, period)
+      const indicatorRef = this.ensureIndicatorSeries(context, seriesKind, period, timeframe)
       const thresholdRef = this.ensureConstSeries(context, value)
       return this.upsertPredicate(
         context.predicateMap,
