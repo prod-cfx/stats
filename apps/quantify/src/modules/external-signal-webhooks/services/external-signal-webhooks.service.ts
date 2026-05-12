@@ -352,9 +352,20 @@ export class ExternalSignalWebhooksService {
       if (value === null) {
         continue
       }
-      sanitized[key.toLowerCase()] = key.toLowerCase().includes('signature') ? '[redacted]' : value
+      const normalizedKey = key.toLowerCase()
+      sanitized[normalizedKey] = this.isSensitiveHeader(normalizedKey) ? '[redacted]' : value
     }
     return sanitized
+  }
+
+  private isSensitiveHeader(key: string): boolean {
+    return key.includes('signature')
+      || key === 'authorization'
+      || key === 'cookie'
+      || key === 'set-cookie'
+      || key === 'x-api-key'
+      || key === 'x-auth-token'
+      || key === 'x-access-token'
   }
 
   private readHeader(value: string | string[] | undefined): string | null {
