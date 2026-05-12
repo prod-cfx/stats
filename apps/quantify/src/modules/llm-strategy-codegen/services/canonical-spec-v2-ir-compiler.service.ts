@@ -188,7 +188,7 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
 
-      const maxDrawdownRisk = this.tryCompileMaxDrawdownPortfolioRisk(rule)
+      const maxDrawdownRisk = this.tryCompileRiskMaxDrawdownPct(rule)
       if (maxDrawdownRisk) {
         rulePortfolioRisks.push(maxDrawdownRisk)
         continue
@@ -2510,7 +2510,7 @@ export class CanonicalSpecV2IrCompilerService {
    * injection). Silent skip is forbidden — it would let users believe the
    * drawdown guard is in effect when it is not.
    */
-  private tryCompileMaxDrawdownPortfolioRisk(
+  private tryCompileRiskMaxDrawdownPct(
     rule: CanonicalRuleV2,
   ): IrOrchestrationPortfolioRisk | null {
     if (
