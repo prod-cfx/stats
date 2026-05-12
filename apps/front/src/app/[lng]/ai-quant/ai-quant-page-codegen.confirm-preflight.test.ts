@@ -113,6 +113,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
 
     expect(mockStartLlmCodegenSession).toHaveBeenCalledWith({
       initialMessage: '帮我生成一版布林带策略',
+      locale: 'zh',
     })
     const payload = mockStartLlmCodegenSession.mock.calls.at(-1)?.[0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('symbols')
@@ -504,6 +505,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
       confirmGenerate: true,
       confirmedCanonicalDigest: 'sha256:canonical-1',
       clarificationAnswers: undefined,
+      locale: 'zh',
     })
     const confirmPayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
     expect(confirmPayload).not.toHaveProperty('symbols')
@@ -587,6 +589,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
       confirmGenerate: false,
       confirmedCanonicalDigest: undefined,
       clarificationAnswers: undefined,
+      locale: 'zh',
     })
     const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
     expect(continuePayload).not.toHaveProperty('symbols')

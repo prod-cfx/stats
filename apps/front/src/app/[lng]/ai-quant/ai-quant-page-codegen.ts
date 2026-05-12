@@ -941,7 +941,7 @@ export async function requestAiQuantCodegen(args: {
   confirmedCanonicalDigest?: string
   conversationId: string
   conversations: ConversationState[]
-  locale: 'zh' | 'en'
+  locale?: 'zh' | 'en'
   message: string
   params: QuantParams
   sessionId: string | null
@@ -960,7 +960,7 @@ export async function requestAiQuantCodegen(args: {
     confirmedCanonicalDigest,
     conversationId,
     conversations,
-    locale,
+    locale = 'zh',
     message,
     params: targetParams,
     sessionId,
