@@ -2478,7 +2478,11 @@ export class CanonicalSpecV2IrCompilerService {
       && (rule.condition.key === 'volume.threshold'
         || rule.condition.key === 'volatility.atr_threshold'
         || rule.condition.key === 'strategy.time_window'
-        || rule.condition.key === 'strategy.multi_timeframe')
+        || rule.condition.key === 'strategy.multi_timeframe'
+        || rule.condition.key === 'indicator.cross_over'
+        || rule.condition.key === 'indicator.cross_under'
+        || rule.condition.key === 'indicator.threshold_gte'
+        || rule.condition.key === 'indicator.threshold_lte')
       && rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
     ) {
       const predicateRef = this.compilePhase1GateAtom(rule.condition, context, rule.id)
@@ -3017,7 +3021,164 @@ export class CanonicalSpecV2IrCompilerService {
       )
     }
 
+    // ---------------------------------------------------------------------
+    // Wave 2 P3 ghost-atom 修复 (Issue #1262)：indicator.cross_over /
+    // indicator.cross_under / indicator.threshold_gte / indicator.threshold_lte
+    //
+    // canonical-spec-builder 中这 4 atom 会被改写为 ma.golden_cross /
+    // rsi.cross_over / macd.golden_cross 等子 atom；但 contract spec 直接构造
+    // 原始 atom 进入 IR-compiler，绕过 builder rewrite，因此需要 IR-compiler
+    // 层独立识别。
+    //
+    // 路由规则（与 canonical-spec-builder.service.ts 的 indicator.cross_*
+    // case 行为对齐）：
+    //   - params.indicator='macd'：cross_* 走 MACD_LINE × MACD_SIGNAL；
+    //     threshold_gte/lte 不接受（MACD 没有"指标 vs 常量阈值"语义）
+    //   - params.indicator='rsi'：cross_* 走 RSI × const(value)；
+    //     threshold_gte/lte 走 RSI × const(value)
+    //   - params.indicator='ema'：cross_* 走 EMA(fast) × EMA(slow)；
+    //     threshold_gte/lte 走 EMA(period) × const(value)
+    //   - params.indicator='ma' | 'sma' | 缺省：SMA 对应实现
+    //
+    // fail-closed：indicator 不识别 / period 缺失或非正整数 / cross 缺失
+    // fastPeriod 或 slowPeriod / threshold 缺失 value → 抛
+    //   `codegen.canonical_spec_v2_indicator_cross_invalid_*` /
+    //   `codegen.canonical_spec_v2_indicator_threshold_invalid_*`
+    // 直接 throw 而非 return null，避免静默吞掉 BLOCK_NEW_ENTRY guard。
+    if (
+      atom.key === 'indicator.cross_over'
+      || atom.key === 'indicator.cross_under'
+    ) {
+      return this.compileIndicatorCrossGateAtom(atom, context, seed)
+    }
+
+    if (
+      atom.key === 'indicator.threshold_gte'
+      || atom.key === 'indicator.threshold_lte'
+    ) {
+      return this.compileIndicatorThresholdGateAtom(atom, context, seed)
+    }
+
     return null
+  }
+
+  private compileIndicatorCrossGateAtom(
+    atom: CanonicalConditionAtom,
+    context: CompileContext,
+    seed: string,
+  ): string {
+    const indicator = typeof atom.params?.indicator === 'string'
+      ? atom.params.indicator.trim().toLowerCase()
+      : ''
+    const operator: 'CROSS_OVER' | 'CROSS_UNDER' = atom.key === 'indicator.cross_over' ? 'CROSS_OVER' : 'CROSS_UNDER'
+
+    if (indicator === 'macd') {
+      const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE')
+      const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL')
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_macd`,
+        operator,
+        [macdLineRef, macdSignalRef],
+      )
+    }
+
+    if (indicator === 'rsi') {
+      const period = this.readNumber([atom.params?.period], context.rsi.period)
+      if (!Number.isFinite(period) || period <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_period:${atom.key}`)
+      }
+      const value = this.readNumber([atom.value], Number.NaN)
+      if (!Number.isFinite(value)) {
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_value:${atom.key}`)
+      }
+      const rsiRef = this.ensureRsiSeries(context, period)
+      const thresholdRef = this.ensureConstSeries(context, value)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_rsi`,
+        operator,
+        [rsiRef, thresholdRef],
+      )
+    }
+
+    if (indicator === 'ema' || indicator === 'ma' || indicator === 'sma' || indicator.length === 0) {
+      const fastPeriod = this.readNumber([atom.params?.fastPeriod], Number.NaN)
+      const slowPeriod = this.readNumber([atom.params?.slowPeriod], Number.NaN)
+      if (!Number.isFinite(fastPeriod) || fastPeriod <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_fast_period:${atom.key}`)
+      }
+      if (!Number.isFinite(slowPeriod) || slowPeriod <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_slow_period:${atom.key}`)
+      }
+      const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
+      const fastRef = this.ensureIndicatorSeries(context, seriesKind, fastPeriod)
+      const slowRef = this.ensureIndicatorSeries(context, seriesKind, slowPeriod)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_${seriesKind.toLowerCase()}`,
+        operator,
+        [fastRef, slowRef],
+      )
+    }
+
+    throw new Error(`codegen.canonical_spec_v2_indicator_cross_invalid_indicator:${atom.key}:${indicator}`)
+  }
+
+  private compileIndicatorThresholdGateAtom(
+    atom: CanonicalConditionAtom,
+    context: CompileContext,
+    seed: string,
+  ): string {
+    const indicator = typeof atom.params?.indicator === 'string'
+      ? atom.params.indicator.trim().toLowerCase()
+      : ''
+    const value = this.readNumber([atom.value], Number.NaN)
+    if (!Number.isFinite(value)) {
+      throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_value:${atom.key}`)
+    }
+
+    // gate phase：用户 op 描述的是"通过 gate 的条件"，guard 需要触发的是反向比较；
+    // 与 volume.threshold / volatility.atr_threshold 的 flipGateOperator 用法一致。
+    const userOp: 'GTE' | 'LTE' = atom.key === 'indicator.threshold_gte' ? 'GTE' : 'LTE'
+    const predicateKind = this.flipGateOperator(userOp)
+
+    if (indicator === 'rsi') {
+      const period = this.readNumber([atom.params?.period], context.rsi.period)
+      if (!Number.isFinite(period) || period <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}`)
+      }
+      const rsiRef = this.ensureRsiSeries(context, period)
+      const thresholdRef = this.ensureConstSeries(context, value)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_rsi`,
+        predicateKind,
+        [rsiRef, thresholdRef],
+      )
+    }
+
+    if (indicator === 'ema' || indicator === 'ma' || indicator === 'sma' || indicator.length === 0) {
+      const period = this.readNumber(
+        [atom.params?.period, atom.params?.slowPeriod, atom.params?.fastPeriod],
+        Number.NaN,
+      )
+      if (!Number.isFinite(period) || period <= 0) {
+        throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_period:${atom.key}`)
+      }
+      const seriesKind: Extract<SeriesDef['kind'], 'SMA' | 'EMA'> = indicator === 'ema' ? 'EMA' : 'SMA'
+      const indicatorRef = this.ensureIndicatorSeries(context, seriesKind, period)
+      const thresholdRef = this.ensureConstSeries(context, value)
+      return this.upsertPredicate(
+        context.predicateMap,
+        `${seed}_${atom.key.replace(/\./g, '_')}_${seriesKind.toLowerCase()}`,
+        predicateKind,
+        [indicatorRef, thresholdRef],
+      )
+    }
+
+    // MACD 没有"指标 vs 常量阈值"语义 — 显式拒绝，与 builder 改写口径一致
+    throw new Error(`codegen.canonical_spec_v2_indicator_threshold_invalid_indicator:${atom.key}:${indicator}`)
   }
 
   private toRiskGuardAppliesTo(sideScope: CanonicalRuleSideScope | undefined): NonNullable<RiskGuard['appliesTo']> {
