@@ -8,6 +8,33 @@
  */
 
 import type { SupportedExecutableUtteranceAtom } from '../nl-gateway/utterance-corpus/utterance-corpus.types'
+import type { AtomContractSurface } from './atom-contract-surface.types'
+import type { AtomContractDisplay } from './atom-contract-display.types'
+import type { AtomContractEmit } from './atom-contract-emit.types'
+
+export type {
+  AtomContractSurface,
+  Direction,
+  ParamSlotSchema,
+  PhaseResolverSpec,
+  PhaseResolverFn,
+  SideResolverSpec,
+  SideResolverFn,
+} from './atom-contract-surface.types'
+export type {
+  AtomContractDisplay,
+  LocaleMap,
+  ParamRenderer,
+  SummaryTemplateFn,
+} from './atom-contract-display.types'
+export type {
+  AtomContractEmit,
+  CapabilityTriple,
+  IrBuildContext,
+  CanonicalIrNode,
+  IrShapeBuilder,
+  EvidenceSource,
+} from './atom-contract-emit.types'
 
 // =========================================================
 // Symbol sentinels（编译期常量）
@@ -103,6 +130,35 @@ export interface AtomContract<TParams = Record<string, unknown>> {
    *   - non-actionable atom：必须为 null
    */
   sizingEvidence: SizingEvidence | null
+
+  /**
+   * NL 识别面契约（Issue #1279 PR1a）—— 取代 semantic-seed-extractor 内的 39 个 push* 方法。
+   *
+   * PR1a 阶段：可选起步，仅 `intent.keywords` + `intent.verbs` 必填。
+   * PR1b 阶段：改为必选，paramSlots / phaseResolver / sideResolver 全部补齐。
+   * PR2 阶段：dispatcher 唯一消费此字段。
+   */
+  surface?: AtomContractSurface
+
+  /**
+   * 渲染层契约（Issue #1279 PR1a）—— 取代 semantic-presentation-registry.service.ts（2157 行）
+   * 与 display-token-table.ts（336 行）两个并行真相源。
+   *
+   * PR1a 阶段：可选起步，registry 不填。
+   * PR1b 阶段：改为必选，先填 zh-only stub。
+   * PR1c 阶段：从 presentation-registry 迁移真实双语数据，删除并行真相源。
+   */
+  display?: AtomContractDisplay
+
+  /**
+   * IR emit 层契约（Issue #1279 PR1a）—— 取代 canonical-spec-v2-ir-compiler.service.ts
+   * 内 40+ case 分支。
+   *
+   * PR1a 阶段：可选起步，registry 不填。
+   * PR1b 阶段：改为必选，irShape 用 stub `() => throw new Error('PR1b stub pending PR3a')`。
+   * PR3a 阶段：在 IR compiler refactor 时真实兑现，反转 `_IrShapeAllStub` invariant。
+   */
+  emit?: AtomContractEmit
 }
 
 export type AtomContractKey = SupportedExecutableUtteranceAtom

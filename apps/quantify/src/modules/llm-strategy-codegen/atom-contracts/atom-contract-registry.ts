@@ -68,6 +68,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['成交量', '量能', '放量', 'volume'] as const,
+        verbs: {
+          gte: ['大于', '超过', 'gte', 'greater than', 'exceeds'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'volatility.atr_threshold': {
@@ -77,6 +88,18 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['ATR', 'atr', '波动率'] as const,
+        verbs: {
+          gte: ['大于', '超过', 'greater than'] as const,
+          lte: ['小于', '低于', 'less than'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'strategy.time_window': {
@@ -86,6 +109,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['时间窗口', '北京时间', 'time window', 'allow entries', 'trade during'] as const,
+        verbs: {
+          fixed: ['内允许', '内开仓', 'between', 'during'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'oscillator.rsi_lte': {
@@ -95,6 +129,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['RSI', 'rsi'] as const,
+        verbs: {
+          lte: ['低于', '小于', '下方', '跌破', 'below', 'under', 'less than', 'falls below', 'drops below'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'indicator.divergence': {
@@ -104,6 +149,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['背离', '顶背离', '底背离', 'divergence', 'bullish divergence', 'bearish divergence'] as const,
+        verbs: {
+          divergence: ['背离', 'divergence'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'price.candle_pattern': {
@@ -113,6 +169,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['吞没', '锤子', '十字星', 'candle pattern', 'engulfing', 'hammer', 'doji'] as const,
+        verbs: {
+          fixed: ['出现', '形态', 'pattern', 'confirmed'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'price.chart_pattern': {
@@ -122,6 +189,18 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['头肩', '双顶', '双底', '三角形', 'chart pattern', 'head and shoulders', 'double top', 'double bottom', 'triangle'] as const,
+        verbs: {
+          breakout_up: ['突破', '上破', 'breakout'] as const,
+          breakout_down: ['跌破', '下破', 'breakdown'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'liquidity.sweep': {
@@ -131,6 +210,19 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['流动性', '前低', '前高', '扫', 'sweep', 'liquidity', 'prev low', 'prev high', 'session low', 'session high'] as const,
+        verbs: {
+          // critic m1 fix: '扫前低'/'扫前高' 在 extractor 中仅作为提示文本出现，PR1b 加 fixture 后再决定保留
+          touch_lower: ['sweep at prev low'] as const,
+          touch_upper: ['sweep at prev high'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'external.signal': {
@@ -140,6 +232,18 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        // critic m1 fix: 'whale_buy'/'whale_sell' 是事件名而非 utterance 同义词，移除；'on'/'when' 是连接词非触发动词，移除
+        keywords: ['webhook', '外部信号', '信号', 'signal', 'signalId'] as const,
+        verbs: {
+          fixed: ['收到', '触发'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   // ── 持仓条件（positionConstraint 以 trigger 身份出现）
@@ -150,6 +254,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: ['position.no_position'],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['已有', '已持有', '持仓时', 'has position', 'in position', 'when in'] as const,
+        verbs: {
+          fixed: ['不再', '时不', 'block entries', 'when'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'position.no_position': {
@@ -159,6 +274,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: ['position.has_position'],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['无仓位', '无多头', '无空头', '空仓', 'flat', 'only when flat', 'enter only when'] as const,
+        verbs: {
+          fixed: ['才', '时', 'when'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   // ── 行动（actions）
@@ -195,6 +321,19 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        // critic m1 fix: 删除 '加码'/'追仓'（extractor/utterance/fixture 全仓 0 命中的凭空同义词）
+        keywords: ['加仓', '补仓', 'add position', 'scale in', 'pullback'] as const,
+        verbs: {
+          // critic M2 fix: 移除通用连接词 '后'/'时'/'when'/'after'，仅保留语义触发词
+          fixed: ['回踩', '盈利', '回撤'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   'action.reverse_position': {
@@ -213,6 +352,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: true,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['反手', '翻仓', '反向开仓', '反转持仓', 'reverse position', 'flip position'] as const,
+        verbs: {
+          fixed: ['下穿', '信号反转', '由多翻空', '由空翻多', 'reverse', 'flip'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'by-clause-verb',
+      sideResolver: 'inherit',
+    },
   },
 
   // ── 风险（risk）
@@ -227,6 +377,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: ATOM_MUTEX['risk.partial_take_profit'] ?? [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['止盈', '分批止盈', '部分平仓', 'take profit', 'partial take profit', 'scale out'] as const,
+        verbs: {
+          gte: ['盈利', '达到', 'profit', 'at'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-exit',
+      sideResolver: 'inherit',
+    },
   },
 
   // ── 组合风险 orchestration（portfolioRisk）
@@ -237,6 +398,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: false,
     sizingEvidence: null,
+    surface: {
+      intent: {
+        keywords: ['账户回撤', '最大回撤', '组合回撤', '熔断', 'drawdown', 'account drawdown', 'max drawdown'] as const,
+        verbs: {
+          gte: ['超过', '达到', '触及', 'exceeds', 'reaches'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'both',
+    },
   },
 
   // ── 仓位约束（positionConstraint）
@@ -247,6 +419,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: true,
     sizingEvidence: DCA_SIZING_EVIDENCE,
+    surface: {
+      intent: {
+        keywords: ['定投', 'DCA', 'dca', '每跌', '分批入场', 'price drops', 'each interval'] as const,
+        verbs: {
+          fixed: ['跌', '每', '间隔', 'every', 'drops', 'interval'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
   },
 
   // Issue #1191：pyramiding 加入 atom contract registry，sizingEvidence 指向
@@ -260,6 +443,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: true,
     sizingEvidence: PYRAMIDING_SIZING_EVIDENCE,
+    surface: {
+      intent: {
+        keywords: ['最多加仓', '金字塔', '加仓层数', 'pyramiding', 'max adds', 'max layers'] as const,
+        verbs: {
+          fixed: ['最多', '不超过', 'max', 'up to'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'inherit',
+    },
   },
 
   // Issue #1198：grid.range_rebalance 加入 atom contract registry，sizingEvidence 指向
@@ -274,6 +468,17 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     mutex: [],
     isActionable: true,
     sizingEvidence: GRID_SIZING_EVIDENCE,
+    surface: {
+      intent: {
+        keywords: ['网格', '区间网格', '区间', '挂格', 'grid', 'range', 'rebalance'] as const,
+        verbs: {
+          fixed: ['网格', '区间', '每格', '挂', 'grid', 'range', 'each grid'] as const,
+        },
+      },
+      paramSlots: {},
+      phaseResolver: 'fixed-entry',
+      sideResolver: 'both',
+    },
   },
 } satisfies Record<SupportedExecutableUtteranceAtom, AtomContract>
 
