@@ -152,6 +152,37 @@ describe('SignalGenerationDecisionStage#generateSignalWithAi — LLM Direct sizi
     expect(aiService.chat).toHaveBeenCalledTimes(1)
   })
 
+  it('案例5: close signal (EXIT) 即使 sizing 不匹配也不触发 mismatch 校验', async () => {
+    // #1232 Round 1 M5：平仓信号 sizing 由当前持仓决定，与开仓 sizing 无关，
+    // strict 模式下也不应被 mismatch 拒单，与 executor 层 close signal 豁免对称。
+    const llmResponse = {
+      direction: 'CLOSE_LONG',
+      signalType: 'EXIT',
+      confidence: 80,
+      entryPrice: 50_000,
+      stopLoss: 48_000,
+      takeProfit: 53_000,
+      // sizing 字段空 / 任意值——close 路径不关心
+      reasoning: 'exit signal',
+    }
+    const aiService = makeAiService(llmResponse)
+    const stage = new SignalGenerationDecisionStage(aiService, new Logger('spec'))
+
+    const result = await stage.generateSignalWithAi(
+      { ...baseInstance, params: { positionSizeQuote: 100 } },
+      baseStrategy,
+      baseSymbol,
+      baseTimeframe,
+      baseIndicators,
+      makeConfig(true), // 即使 strict
+      referencePrice,
+    )
+
+    expect(result).not.toBeNull()
+    expect(result?.signalType).toBe('EXIT')
+    expect(aiService.chat).toHaveBeenCalledTimes(1)
+  })
+
   it('案例4: 策略层未指定 sizing → 沿用原逻辑，LLM 自由指定，正常返回', async () => {
     const llmResponse = {
       direction: 'BUY',

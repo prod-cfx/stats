@@ -283,7 +283,10 @@ export class SignalGenerationDecisionStage {
         }
 
         // #1230 — sizing 校验：策略层指定了 sizing 时检查 LLM 响应是否匹配
-        if (hasStrategyLevelSizing) {
+        // close signal (signalType='EXIT') 走平仓路径，仓位大小由当前持仓决定，
+        // 与开仓 sizing 无关，跳过校验，与 signal-executor.service.ts:1064 行
+        // 的 close signal 豁免语义保持对称。
+        if (hasStrategyLevelSizing && parsed.signalType !== 'EXIT') {
           const llmSizeQuote = this.readNumeric(parsed.positionSizeQuote)
           const llmSizeRatio = this.readNumeric(parsed.positionSizeRatio)
           let sizingMismatch = false
