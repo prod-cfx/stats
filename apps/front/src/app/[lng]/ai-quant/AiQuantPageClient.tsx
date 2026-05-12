@@ -678,15 +678,15 @@ export function AiQuantPageClient({
   ])
   const deployLabel = useMemo(() => {
     if (deploymentState === 'running') {
-      return t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
+      return t('aiQuant.deployRunning', { defaultValue: 'Running' })
     }
     if (deploymentState === 'stopped') {
-      return t('aiQuant.deploy.redeploy', { defaultValue: '重新部署' })
+      return t('aiQuant.deployRedeploy', { defaultValue: 'Redeploy' })
     }
     if (deploymentState === 'unknown') {
       return deploymentDetailStatus === 'loading'
-        ? t('aiQuant.deploy.loading', { defaultValue: '正在确认部署状态' })
-        : t('aiQuant.deploy.pending', { defaultValue: '部署状态待确认' })
+        ? t('aiQuant.deployLoading', { defaultValue: 'Checking deployment status' })
+        : t('aiQuant.deployPending', { defaultValue: 'Deployment status pending' })
     }
     return t('aiQuant.deploy')
   }, [deploymentDetailStatus, deploymentState, t])
