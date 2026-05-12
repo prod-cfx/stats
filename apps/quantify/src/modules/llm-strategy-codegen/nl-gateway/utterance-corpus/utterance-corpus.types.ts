@@ -27,6 +27,7 @@ export type SupportedExecutableUtteranceAtom =
   | 'liquidity.sweep'
   | 'portfolioRisk.drawdown_block'
   | 'oscillator.rsi_lte'
+  | 'external.signal'
 
 export interface UtteranceCorpusExpected {
   owner: UtteranceCorpusOwner
@@ -44,4 +45,3 @@ export interface UtteranceCorpusCase {
   utterance: string
   expected: UtteranceCorpusExpected
 }
-

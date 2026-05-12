@@ -4,7 +4,7 @@
  *
  * 覆盖：
  * 1. atom registry: supported_requires_slot + executableSinceVersion=undefined + requiredParams
- * 2. seed extractor: provider 关键词锁定 + 必填 slot 始终 open（signalId / secret）
+ * 2. seed extractor: provider/signalId 关键词锁定 + secret 只接受"已配置"语义
  * 3. semantic state: trigger 状态构建
  * 4. readiness/classifier: 永远走 open_slots 路径，不会进入 unsupportedAtoms 或 unknownAtoms
  * 7. display + clarification renderer
@@ -28,6 +28,7 @@ const TRADINGVIEW_UTTERANCE = 'OKX 合约 BTCUSDT 15m，收到 tradingview webho
 const DISCORD_UTTERANCE = 'OKX BTCUSDT 15m, on discord buy signal open long, 5% stop loss.'
 const TELEGRAM_UTTERANCE = 'OKX 合约 BTCUSDT 15m，telegram bot 推送外部信号 BTC_LONG_01 时开仓，5% 止损。'
 const GENERIC_UTTERANCE = 'OKX 合约 BTCUSDT 15m，收到外部喊单群信号就开多，单笔 10%。'
+const WEBHOOK_SIGNAL_ID_UTTERANCE = 'OKX 合约 BTCUSDT 15m，收到 webhook 事件 signalId 为 whale_buy 且 secret 已配置时开多，每次 100 USDT，止损 5%。'
 
 describe('external.signal atom 五层 parity', () => {
   // ─── Layer 1: atom registry ──────────────────────────────────────────────────
@@ -95,7 +96,7 @@ describe('external.signal atom 五层 parity', () => {
       expect(slotKeys).toContain('external.signal.provider')
     })
 
-    it('signalId and secret always open_slot (cannot be inferred from text)', () => {
+    it('signalId and secret stay open_slot when not explicitly provided', () => {
       const patch = seedExtractor.extract(TRADINGVIEW_UTTERANCE)
       const trigger = patch.triggers?.find(t => t.key === 'external.signal')
       const slotKeys = trigger?.openSlots?.map(s => s.slotKey) ?? []
@@ -109,6 +110,32 @@ describe('external.signal atom 五层 parity', () => {
       const patch = seedExtractor.extract(TRADINGVIEW_UTTERANCE)
       const trigger = patch.triggers?.find(t => t.key === 'external.signal')
       expect(trigger?.status).toBe('open')
+    })
+
+    it('webhook signalId phrase locks signalId and configured secret marker', () => {
+      const patch = seedExtractor.extract(WEBHOOK_SIGNAL_ID_UTTERANCE)
+      const trigger = patch.triggers?.find(t => t.key === 'external.signal')
+      expect(trigger).toBeDefined()
+      expect(trigger?.params).toMatchObject({
+        provider: 'webhook',
+        signalId: 'whale_buy',
+        secret: 'configured',
+      })
+      const slotKeys = trigger?.openSlots?.map(s => s.slotKey) ?? []
+      expect(slotKeys).not.toContain('external.signal.signalId')
+      expect(slotKeys).not.toContain('external.signal.secret')
+    })
+
+    it('webhook signalId without configured secret keeps only secret open', () => {
+      const patch = seedExtractor.extract('OKX BTCUSDT 15m, when webhook signalId=whale_sell arrives, open short 100 USDT.')
+      const trigger = patch.triggers?.find(t => t.key === 'external.signal')
+      expect(trigger?.params).toMatchObject({
+        provider: 'webhook',
+        signalId: 'whale_sell',
+      })
+      const slotKeys = trigger?.openSlots?.map(s => s.slotKey) ?? []
+      expect(slotKeys).not.toContain('external.signal.signalId')
+      expect(slotKeys).toContain('external.signal.secret')
     })
 
     // critic round 1 P4-5 B2 回归：provider 关键词必须与 signal-semantic 词共现

@@ -79,7 +79,7 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
       const keys = collectAtomKeysFromPatch(patch)
 
       const atom = registry.resolve(atomKey)
-      if (atom.supportStatus === 'supported_executable') {
+      if (atom.supportStatus === 'supported_executable' || atomKey === 'external.signal') {
         expect(keys.has(atomKey)).toBe(true)
       } else if (atom.supportStatus === 'supported_requires_slot') {
         if (!keys.has(atomKey)) {
@@ -105,5 +105,21 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
     // 不强制断言：requires_slot 的 NL 探针缺口在 Issue #1231 follow-up (#1247) 中收口；
     // 此处仅暴露数据形状，保证未来缺口列表始终是 string[] 而非异常类型
     expect(Array.isArray(requiresSlotGaps)).toBe(true)
+  })
+
+  it('external.signal 的 registry 必填槽位与 seed extractor open-slot 契约保持一致', () => {
+    const atom = registry.get('external.signal')
+    expect(atom.requiredParams).toEqual(expect.arrayContaining(['provider', 'signalId', 'secret']))
+
+    const patch = extractor.extract('OKX 合约 BTCUSDT 15m，收到 webhook 信号时开多，单笔 10%。')
+    const trigger = patch.triggers?.find(item => item.key === 'external.signal')
+    expect(trigger).toBeDefined()
+    expect(trigger?.params?.provider).toBe('webhook')
+
+    const openSlotKeys = trigger?.openSlots?.map(slot => slot.slotKey) ?? []
+    expect(openSlotKeys).toEqual(expect.arrayContaining([
+      'external.signal.signalId',
+      'external.signal.secret',
+    ]))
   })
 })

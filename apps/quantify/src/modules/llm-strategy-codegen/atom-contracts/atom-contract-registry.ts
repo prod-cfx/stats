@@ -133,6 +133,15 @@ export const ATOM_CONTRACT_REGISTRY: Record<AtomContractKey, AtomContract> = {
     sizingEvidence: null,
   },
 
+  'external.signal': {
+    summaryContribution: VIA_PRESENTATION_DISPLAY,
+    readinessCheck: COMMON_PIPELINE,
+    clarificationQuestion: VIA_PRESENTATION_DISPLAY,
+    mutex: [],
+    isActionable: false,
+    sizingEvidence: null,
+  },
+
   // ── 持仓条件（positionConstraint 以 trigger 身份出现）
   'position.has_position': {
     summaryContribution: VIA_PRESENTATION_DISPLAY,
