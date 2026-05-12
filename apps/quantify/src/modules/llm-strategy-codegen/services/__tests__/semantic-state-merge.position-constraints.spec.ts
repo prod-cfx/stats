@@ -202,6 +202,62 @@ describe('semantic-state-merge — position.constraints union merge', () => {
     expect(params.capitalCap).toEqual({ kind: 'quote', value: 500, asset: 'USDT' })
   })
 
+  it('R2-M1 params nullish fallback — derived with null sub-contract field must NOT wipe persisted', () => {
+    // 与 H1 顶层 sizing 对齐：params 内子合约（perOrderSizing/capitalCap）的 null
+    // 也视为"stronger 未说"。否则 LLM 不输出该字段时（typical case）会被显式
+    // null 抹掉。守门：本 case 假设 persisted 与 derived 同 (status='locked', source='inferred')
+    // 强度相等，stronger=derived（compareNodeStrength === 0 时 mergePositionConstraints
+    // 走 `> 0` 取 incoming）；若未来 strength 模型微调让等强反转，本 case 期望也要同步调整。
+    const persistedFull = makePositionState({
+      mode: 'fixed_quote',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      constraints: [
+        makeConstraint({
+          key: 'position.dca_schedule',
+          status: 'locked',
+          source: 'inferred',
+          params: {
+            maxCount: 4,
+            perOrderSizing: { kind: 'quote', value: 100, asset: 'USDT' } satisfies SizingSubObject,
+            capitalCap: { kind: 'quote', value: 500, asset: 'USDT' } satisfies SizingSubObject,
+          },
+        }),
+      ],
+    })
+
+    const derivedWithNulls: SemanticState = makePositionState({
+      mode: 'fixed_quote',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      constraints: [
+        makeConstraint({
+          key: 'position.dca_schedule',
+          status: 'locked',
+          source: 'inferred',
+          params: {
+            // LLM 不输出这两个字段时 JSON 反序列化后会是 null
+            perOrderSizing: null,
+            capitalCap: null,
+          },
+        }),
+      ],
+    })
+
+    const merged = mergeSvc.merge({ persisted: persistedFull, derived: derivedWithNulls })
+    const dca = merged.position?.constraints?.find(c => c.key === 'position.dca_schedule')!
+    const params = dca.params as Record<string, unknown>
+
+    // null 不应抹掉 persisted 子合约
+    expect(params.perOrderSizing).toEqual({ kind: 'quote', value: 100, asset: 'USDT' })
+    expect(params.capitalCap).toEqual({ kind: 'quote', value: 500, asset: 'USDT' })
+    expect(params.maxCount).toBe(4)
+  })
+
   it('H1 sizing nullish fallback — derived with null sizing must NOT wipe persisted locked sizing', () => {
     const persisted: SemanticState = makePositionState({
       mode: 'fixed_quote',

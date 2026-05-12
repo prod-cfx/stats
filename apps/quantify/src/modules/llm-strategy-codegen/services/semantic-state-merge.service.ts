@@ -349,11 +349,21 @@ export class SemanticStateMergeService {
   ): Record<string, unknown> {
     const base: Record<string, unknown> = { ...(weaker ?? {}) }
     for (const [key, strongerValue] of Object.entries(stronger ?? {})) {
+      // R2-M1 修复：null/undefined 一律视为"stronger 未说"，保留 weaker——与 H1 顶层
+      //   `sizing: stronger.sizing ?? weaker.sizing` 语义对齐。否则同一份 patch 里
+      //   顶层 sizing 与内层 perOrderSizing/capitalCap 出现两种 null 语义，调用方
+      //   （planner / reducer）容易踩坑。如需"显式清空子合约"语义请走专用 reducer 路径。
+      if (strongerValue === null || strongerValue === undefined) {
+        continue
+      }
       const weakerValue = base[key]
       if (
         this.isPlainObject(strongerValue)
         && this.isPlainObject(weakerValue)
       ) {
+        // R2-m2 限制说明：仅做一层 spread。当前 contract shape 是两层
+        //   （params.perOrderSizing.{kind,value,asset}）；若未来出现三层嵌套
+        //   （如 perOrderSizing.range.{lo,hi}）需要递归扩展，spec 应同步加 case。
         base[key] = { ...weakerValue, ...strongerValue }
         continue
       }
