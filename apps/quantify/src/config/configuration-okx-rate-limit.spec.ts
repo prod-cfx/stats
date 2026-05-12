@@ -74,6 +74,13 @@ describe('OKX rate limit configuration', () => {
     expect(strategySignalsConfig().spread).toEqual({ enabled: true, windowSeconds: 180 })
   })
 
+  it('rejects shard indexes outside the configured shard count', () => {
+    process.env.SHARD_COUNT = '2'
+    process.env.SHARD_INDEX = '2'
+
+    expect(() => shardingConfig()).toThrow('SHARD_INDEX (2) must be less than SHARD_COUNT (2)')
+  })
+
   it('loads the new configuration namespaces globally', () => {
     const names = backendConfigLoaders.map(loader => loader.KEY)
 

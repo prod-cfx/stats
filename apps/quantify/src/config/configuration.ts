@@ -144,11 +144,19 @@ export const featureFlagsConfig = registerAs('featureFlags', () => ({
   shardingEnabled: env.bool('QUANTIFY_SHARDING_ENABLED', false),
 }))
 
-export const shardingConfig = registerAs('sharding', () => ({
-  enabled: env.bool('QUANTIFY_SHARDING_ENABLED', false),
-  count: parsePositiveInt(env.str('SHARD_COUNT'), 1),
-  index: Math.max(0, env.int('SHARD_INDEX', 0)),
-}))
+export const shardingConfig = registerAs('sharding', () => {
+  const count = parsePositiveInt(env.str('SHARD_COUNT'), 1)
+  const index = Math.max(0, env.int('SHARD_INDEX', 0))
+  if (index >= count) {
+    throw new Error(`Invalid shard config: SHARD_INDEX (${index}) must be less than SHARD_COUNT (${count})`)
+  }
+
+  return {
+    enabled: env.bool('QUANTIFY_SHARDING_ENABLED', false),
+    count,
+    index,
+  }
+})
 
 export const httpEgressConfig = registerAs('httpEgress', () => ({
   proxyUrl: env.str('QUANTIFY_EGRESS_PROXY_URL', ''),
