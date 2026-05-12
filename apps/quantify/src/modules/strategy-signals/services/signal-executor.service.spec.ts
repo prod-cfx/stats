@@ -230,6 +230,46 @@ describe('signalExecutorService', () => {
     expect(executionRepository.markPendingFailed).toHaveBeenCalledWith('exec-okx-canceled', 'OKX_ORDER_CANCELED')
   })
 
+  it('records filled quantity from canceled OKX private order events before terminal failure handling', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const updatedAt = new Date('2026-05-12T01:02:03.000Z')
+    const raw = { ordId: 'okx-order-canceled-filled', state: 'canceled', accFillSz: '0.02' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-canceled-filled' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-canceled-filled',
+      state: 'canceled',
+      avgPrice: 60000,
+      filledSize: 0.02,
+      fee: 0.2,
+      feeCurrency: 'USDT',
+      updatedAt,
+      raw,
+    })
+
+    expect(executionRepository.markPendingExecuted).toHaveBeenCalledWith('exec-okx-canceled-filled', {
+      executedPrice: 60000,
+      executedQuantity: 0.02,
+      fee: 0.2,
+      feeCurrency: 'USDT',
+      tradeId: undefined,
+      executedAt: updatedAt,
+      metadata: {
+        providerOrderId: 'okx-order-canceled-filled',
+        providerStatus: 'canceled',
+        exchangeAccountId: 'exchange-account-okx-1',
+        source: 'okx_private_ws',
+        raw,
+      },
+    })
+    expect(executionRepository.markPendingFailed).not.toHaveBeenCalled()
+  })
+
   it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
     const service = createService()
 

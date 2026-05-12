@@ -1847,7 +1847,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
   private isFilledOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
     const state = event.state.toLowerCase()
-    return state === 'filled' && (event.filledSize ?? 0) > 0
+    return (state === 'filled' || this.isFailedOkxPrivateOrderEvent(event)) && (event.filledSize ?? 0) > 0
   }
 
   private isFailedOkxPrivateOrderEvent(event: OkxPrivateOrderEvent): boolean {
