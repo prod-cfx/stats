@@ -120,8 +120,9 @@ describe('oscillator/threshold trigger phase 由子句动词决定（Issue #1219
     expect(rsi!.sideScope).toBe('short')
   })
 
-  it('[#12] segment 含 开多策略，clause 含 平空 → clause 动词优先，phase=exit/short', () => {
-    const triggers = extractTriggers('开多策略：RSI14 高于 70 平空')
+  it('[#12] clause 含 平空，segment 含 开多策略（AND 分隔）→ clause 动词优先，phase=exit/short', () => {
+    // "开多策略" 在独立 clause，RSI clause 只含"平空"，clause 动词应优先于 segment 回退
+    const triggers = extractTriggers('开多策略 且 RSI14 高于 70 平空')
     const rsi = findOscillatorTrigger(triggers, /rsi/i)
     expect(rsi).toBeDefined()
     expect(rsi!.phase).toBe('exit')
