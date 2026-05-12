@@ -94,7 +94,10 @@ import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StaticGuardrailService } from './static-guardrail.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
+import {
+  pickPendingClarificationTarget,
+  StrategyClarificationQuestionService,
+} from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 import { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
@@ -1707,10 +1710,15 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
+    const plannerAssistantPrompt = this.localizePlannerPromptForResponse({
+      assistantPrompt: plan.assistantPrompt,
+      locale: responseLocale,
+      clarificationState,
+    })
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
-      plan.assistantPrompt,
+      plannerAssistantPrompt,
     )
 
     if (!plan.logicReady) {
@@ -1731,7 +1739,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: plan.assistantPrompt,
+        assistantPrompt: plannerAssistantPrompt,
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -1741,7 +1749,7 @@ export class CodegenConversationService {
       id: session.id,
       status: 'DRAFTING',
       missingFields: [],
-      assistantPrompt: plan.assistantPrompt,
+      assistantPrompt: plannerAssistantPrompt,
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -8600,6 +8608,48 @@ export class CodegenConversationService {
 
   private localizedText(locale: CodegenConversationLocale, en: string, zh: string): string {
     return locale === 'en' ? en : zh
+  }
+
+  private localizePlannerPromptForResponse(args: {
+    assistantPrompt: string
+    locale: CodegenConversationLocale
+    clarificationState?: StrategyClarificationStateWithSummary | null
+  }): string {
+    const prompt = args.assistantPrompt.trim()
+    if (args.locale !== 'en' || !this.containsCjkText(prompt)) {
+      return prompt
+    }
+
+    const pendingItem = args.clarificationState?.status === 'NEEDS_CLARIFICATION'
+      ? pickPendingClarificationTarget(args.clarificationState.items)
+      : null
+    if (!pendingItem) {
+      return 'I understand the strategy idea so far. Please keep describing the trading logic or the condition you want to modify.'
+    }
+
+    const question = this.renderEnglishClarificationQuestion(pendingItem)
+    return [
+      'I understand the strategy logic you described.',
+      'One condition still needs clarification for consistent script generation.',
+      `Please confirm: ${question}`,
+    ].join('\n')
+  }
+
+  private containsCjkText(value: string): boolean {
+    return /[\u3400-\u9fff]/u.test(value)
+  }
+
+  private renderEnglishClarificationQuestion(item: StrategyClarificationItem): string {
+    if (item.slotKey) {
+      return this.semanticQuestionRenderer.renderStructured({
+        slotKey: item.slotKey,
+        fallback: item.question,
+      }, 'en').question
+    }
+    if (!this.containsCjkText(item.question)) {
+      return item.question
+    }
+    return 'Please provide the missing strategy condition.'
   }
 
   private renderSemanticSlotQuestion(

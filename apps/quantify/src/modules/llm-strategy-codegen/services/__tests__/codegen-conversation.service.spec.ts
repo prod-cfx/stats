@@ -995,6 +995,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('guards English responses from Chinese planner prompts when clarification is pending', () => {
+    const prompt = (service as any).localizePlannerPromptForResponse({
+      locale: 'en',
+      assistantPrompt: '我当前理解的策略是：入场和出场已识别。请确认：请确认单笔仓位大小。',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        summary: '入场和出场已识别。',
+        items: [
+          {
+            key: 'semantic.position.sizing',
+            reason: 'missing_semantic_position_sizing',
+            field: 'position.sizing',
+            blocking: true,
+            question: '请确认单笔仓位大小，例如 10% / 10 USDT / 0.001 BTC。',
+            status: 'pending',
+            slotKey: 'position.sizing',
+            fieldPath: 'position.sizing',
+          },
+        ],
+      },
+    })
+
+    expect(prompt).toContain('I understand the strategy logic you described.')
+    expect(prompt).toContain('Please confirm: Please confirm the position size for each trade')
+    expect(prompt).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('estimates missing risk atom blockers above execution context gaps', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
