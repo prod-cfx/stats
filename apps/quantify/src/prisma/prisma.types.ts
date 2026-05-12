@@ -38,4 +38,9 @@ export type {
   UserSignalExecution,
   UserStrategyAccount,
   UserStrategySubscription,
+  WebhookSignalAudit,
+  WebhookSignalEvent,
+  WebhookSignalSignatureStatus,
+  WebhookSignalSubscription,
+  WebhookSignalSubscriptionStatus,
 } from '../../generated/prisma'
