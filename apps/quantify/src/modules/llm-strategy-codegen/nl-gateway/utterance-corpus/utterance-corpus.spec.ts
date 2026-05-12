@@ -30,6 +30,7 @@ import {
   splitClauses,
 } from './corpus-invariants'
 import {
+  INDIRECTLY_COVERED_ATOMS,
   SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
   utteranceCorpus,
 } from './index'
@@ -62,28 +63,18 @@ describe('utterance corpus baseline', () => {
     // portfolioRisk.drawdown_block 的 NLG 正则强制要求 threshold%，
     // 现阶段无 open-slot/missing-default 语义实现；豁免该约束，待 backend 支持后补齐
     // TODO(#1151): backend 支持"账户回撤后停止开新仓"（无阈值）触发 open-slot 后回收豁免
+    // 仅"open-slot 覆盖"维度的豁免（与全面豁免 INDIRECTLY_COVERED_ATOMS 不同）：
+    // 这些 atom 有完整 fixtures，只是 extractor 当前不 emit open-slot
     const atomsExemptFromOpenSlotCoverage: ReadonlySet<SupportedExecutableUtteranceAtom> = new Set([
       'portfolioRisk.drawdown_block',
       // oscillator.rsi_lte：extractor 当前对阈值缺失时 skip（不 emit open-slot），豁免开放槽覆盖约束
       // TODO(#1155-follow-up): extractor 支持 RSI 无阈值 open-slot emit 后回收豁免
       'oscillator.rsi_lte',
-      // position.pyramiding_limit (#1191)：通过 action.add_position 子句间接触发，
-      //   无独立 atomKey fixture；渲染契约在 semantic-state-projection.service.orchestration.spec
-      //   单独覆盖，corpus 层全面豁免（cases / open-slot 均 N/A）。
-      'position.pyramiding_limit',
-      // grid.range_rebalance (#1198)：通过 grid 触发器子句（"区间 X-Y, 每格 N USDT"）
-      //   间接落位 state.triggers，无独立 atomKey fixture；INVARIANT-J 路径在
-      //   sizing-evidence-invariant.spec 单独覆盖，corpus 层全面豁免。
-      'grid.range_rebalance',
     ])
 
     for (const atomKey of SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS) {
-      // #1191 pyramiding 无独立 corpus fixture，跳过基础 case 数量与 locale 检查
-      if (atomKey === 'position.pyramiding_limit') {
-        continue
-      }
-      // #1198 grid.range_rebalance 同理无独立 corpus fixture
-      if (atomKey === 'grid.range_rebalance') {
+      // 间接触发的 atom 全面豁免 corpus 基线（清单从共享常量导入，与 atom-coverage-contract.spec.ts 同源）
+      if (INDIRECTLY_COVERED_ATOMS.has(atomKey)) {
         continue
       }
       const cases = utteranceCorpus.filter(item => item.atomKey === atomKey)

@@ -289,36 +289,50 @@ export class CodegenConversationService {
       recommendationStyle,
     }
     if (initialSupportGate.route === 'unsupported_fallback') {
-      const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(initialSupportGate.unsupportedAtoms)
-      initialSemanticState = this.withUnsupportedFallback(initialSemanticState, unsupportedFallback)
-      const clarificationState = this.buildUnsupportedFallbackClarificationState()
-      const session = await this.sessionsRepo.createSession({
-        userId: sessionUserId,
-        status: 'DRAFTING',
-        semanticState: initialSemanticState as unknown as Prisma.InputJsonValue,
-        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
-        constraintPack: {
-          ...initialConstraintPack,
-          conversationHistory: this.appendConversationHistory([], dto.initialMessage, unsupportedFallback.prompt),
-        } as unknown as Prisma.InputJsonValue,
-        latestDraftCode: null,
-        latestSpecDesc: null,
-        rejectReason: null,
-        strategyInstanceId: null,
-      } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
+      const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
+        initialSupportGate.unsupportedAtoms,
+        initialSupportGate.state.triggers,
+      )
+      if (unsupportedFallback !== null) {
+        initialSemanticState = this.withUnsupportedFallback(initialSemanticState, unsupportedFallback)
+        const clarificationState = this.buildUnsupportedFallbackClarificationState()
+        const session = await this.sessionsRepo.createSession({
+          userId: sessionUserId,
+          status: 'DRAFTING',
+          semanticState: initialSemanticState as unknown as Prisma.InputJsonValue,
+          clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+          constraintPack: {
+            ...initialConstraintPack,
+            conversationHistory: this.appendConversationHistory([], dto.initialMessage, unsupportedFallback.prompt),
+          } as unknown as Prisma.InputJsonValue,
+          latestDraftCode: null,
+          latestSpecDesc: null,
+          rejectReason: null,
+          strategyInstanceId: null,
+        } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        specDesc: null,
-        canonicalDigest: null,
-        semanticGraph: null,
-        assistantPrompt: unsupportedFallback.prompt,
-        clarificationState,
-        unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
+        const response = this.finalizeSessionResponse({
+          id: session.id,
+          status: 'DRAFTING',
+          missingFields: [],
+          specDesc: null,
+          canonicalDigest: null,
+          semanticGraph: null,
+          assistantPrompt: unsupportedFallback.prompt,
+          clarificationState,
+          unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
+        })
+        return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+      }
+      // 全部 unsupported atom 已被 supported 触发器同义覆盖，清掉 fallback 状态后继续走常规路径
+      this.logger.warn({
+        event: 'unsupported_fallback_covered_by_supported',
+        site: 'initial_session',
+        userId: sessionUserId,
+        unsupportedAtoms: initialSupportGate.unsupportedAtoms.map(a => a.key),
+        supportedTriggers: initialSupportGate.state.triggers?.map(t => t.key) ?? [],
       })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+      initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
     }
     if (initialSupportGate.route === 'unknown_unsupported') {
       const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(initialSupportGate.unknownAtoms)
@@ -7043,45 +7057,64 @@ export class CodegenConversationService {
     const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
     const classification = this.semanticSupportClassifier.classify(args.semanticState, strategyVersion)
     if (classification.route === 'unsupported_fallback') {
-      const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(classification.unsupportedAtoms)
-      const nextState = this.withUnsupportedFallback(classification.state, unsupportedFallback)
-      const clarificationState = this.buildUnsupportedFallbackClarificationState()
-      const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
-      await this.sessionsRepo.updateSession(args.session.id, {
-        ...this.stateMachine.buildConversationUpdate({
-          status: 'DRAFTING',
-          semanticState: nextState,
-          clarificationState,
-          constraintPack: {
-            ...nextConstraintPack,
-            conversationHistory: this.appendConversationHistory(
-              args.constraintPack.conversationHistory ?? [],
-              args.message,
-              unsupportedFallback.prompt,
-            ),
-          },
-          latestSpecDesc: null,
-        }),
-        latestDraftCode: null,
-        rejectReason: null,
-        validationReport: null,
-        semanticGraph: null,
-      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+      const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
+        classification.unsupportedAtoms,
+        classification.state.triggers,
+      )
+      if (unsupportedFallback !== null) {
+        const nextState = this.withUnsupportedFallback(classification.state, unsupportedFallback)
+        const clarificationState = this.buildUnsupportedFallbackClarificationState()
+        const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
+        await this.sessionsRepo.updateSession(args.session.id, {
+          ...this.stateMachine.buildConversationUpdate({
+            status: 'DRAFTING',
+            semanticState: nextState,
+            clarificationState,
+            constraintPack: {
+              ...nextConstraintPack,
+              conversationHistory: this.appendConversationHistory(
+                args.constraintPack.conversationHistory ?? [],
+                args.message,
+                unsupportedFallback.prompt,
+              ),
+            },
+            latestSpecDesc: null,
+          }),
+          latestDraftCode: null,
+          rejectReason: null,
+          validationReport: null,
+          semanticGraph: null,
+        } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
-      const response = this.finalizeSessionResponse({
-        id: args.session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        specDesc: null,
-        canonicalDigest: null,
-        semanticGraph: null,
-        assistantPrompt: unsupportedFallback.prompt,
-        clarificationState,
-        unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
+        const response = this.finalizeSessionResponse({
+          id: args.session.id,
+          status: 'DRAFTING',
+          missingFields: [],
+          specDesc: null,
+          canonicalDigest: null,
+          semanticGraph: null,
+          assistantPrompt: unsupportedFallback.prompt,
+          clarificationState,
+          unsupportedFallback: unsupportedFallback as unknown as Record<string, unknown>,
+        })
+        return {
+          semanticState: nextState,
+          response: await this.returnPersistedSessionResponse(args.session.id, args.userId, response),
+          strategyVersion,
+        }
+      }
+      // 全部 unsupported atom 已被 supported 触发器同义覆盖；清掉 fallback 状态后让上层继续
+      this.logger.warn({
+        event: 'unsupported_fallback_covered_by_supported',
+        site: 'continue_session',
+        userId: args.userId,
+        sessionId: args.session.id,
+        unsupportedAtoms: classification.unsupportedAtoms.map(a => a.key),
+        supportedTriggers: classification.state.triggers?.map(t => t.key) ?? [],
       })
       return {
-        semanticState: nextState,
-        response: await this.returnPersistedSessionResponse(args.session.id, args.userId, response),
+        semanticState: this.clearUnsupportedFallback(classification.state),
+        response: null,
         strategyVersion,
       }
     }

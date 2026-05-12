@@ -16,6 +16,14 @@ interface UnsupportedAtomInput {
 
 const DEFAULT_FALLBACK_ATOM_KEY = 'risk.atr_stop'
 
+// 当用户输入既触发 supported 的具体识别（如 price.candle_pattern / price.chart_pattern /
+// liquidity.sweep），又被裸 pattern 兜底分支误捕成 unsupported 的 price.pattern 时，
+// 下游 fallback 会读 unsupported 误导用户改用替代策略。
+// 该映射声明：当 supported 集中存在 `value`，就过滤掉 unsupported 中 `key` 项。
+const UNSUPPORTED_COVERED_BY_SUPPORTED: Record<string, readonly string[]> = {
+  'price.pattern': ['price.candle_pattern', 'price.chart_pattern', 'liquidity.sweep'],
+}
+
 const CHINESE_NEGATIVE_TERMS = ['不要', '算了', '等支持再说', '不改', '先不', '取消', '不可以', '不确认', '不好']
 const CHINESE_ACCEPT_TERMS = ['确认', '可以', '好', '就这个', '继续', '先测试这个', '用这个']
 const CHINESE_MODIFY_TERMS = ['改成', '换成', '不过', '但是', '但', '仓位', '周期', '标的', '交易所']
@@ -28,9 +36,37 @@ const ENGLISH_MODIFY_PATTERN = /\b(change|switch|but|however|position|timeframe|
 export class UnsupportedFallbackService {
   constructor(private readonly registry: SemanticAtomRegistryService = new SemanticAtomRegistryService()) {}
 
-  buildPendingFallback(unsupportedAtoms: UnsupportedAtomInput[]): UnsupportedFallbackState {
-    const replacement = this.resolveReplacement(unsupportedAtoms[0]?.key)
-    const unsupportedAtomCopies = unsupportedAtoms.map(atom => ({ ...atom }))
+  /**
+   * 过滤掉与 supported 触发器形成"同义覆盖"的 unsupported atom。
+   * 典型场景：K 线形态既被 supported `price.candle_pattern` 识别，也被裸 pattern 兜底分支
+   * 误捕成 unsupported `price.pattern`。两者并存时，下游 fallback 会读 unsupported 误导用户。
+   */
+  filterUnsupportedAtomsCoveredBySupported(
+    unsupportedAtoms: UnsupportedAtomInput[],
+    supportedTriggers: ReadonlyArray<{ key: string }>,
+  ): UnsupportedAtomInput[] {
+    const supportedKeys = new Set(supportedTriggers.map(trigger => trigger.key))
+    return unsupportedAtoms.filter((atom) => {
+      const coveredBy = UNSUPPORTED_COVERED_BY_SUPPORTED[atom.key]
+      if (!coveredBy) {
+        return true
+      }
+      return !coveredBy.some(supportedKey => supportedKeys.has(supportedKey))
+    })
+  }
+
+  buildPendingFallback(
+    unsupportedAtoms: UnsupportedAtomInput[],
+    supportedTriggers: ReadonlyArray<{ key: string }> = [],
+  ): UnsupportedFallbackState | null {
+    const filtered = this.filterUnsupportedAtomsCoveredBySupported(unsupportedAtoms, supportedTriggers)
+
+    if (filtered.length === 0) {
+      return null
+    }
+
+    const replacement = this.resolveReplacement(filtered[0]?.key)
+    const unsupportedAtomCopies = filtered.map(atom => ({ ...atom }))
     const names = [...new Set(unsupportedAtomCopies.map(atom => atom.displayName))].join('、')
     const publicReasons = [...new Set(unsupportedAtomCopies.map(atom => atom.publicReason))]
 

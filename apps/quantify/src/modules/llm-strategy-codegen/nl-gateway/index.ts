@@ -27,6 +27,7 @@ export type {
 export {
   getGoldenUtterancesForAtom,
   getUtteranceCorpusForAtom,
+  INDIRECTLY_COVERED_ATOMS,
   SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
   utteranceCorpus,
 } from './utterance-corpus'
