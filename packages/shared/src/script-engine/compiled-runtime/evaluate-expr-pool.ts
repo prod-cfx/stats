@@ -1244,20 +1244,16 @@ function parseHHMM(value: string): number | null {
   return hours * 60 + minutes
 }
 
-function evaluateInTimeWindow(
-  nowMs: number,
-  timezone: string,
-  windows: ReadonlyArray<CompiledTimeWindow>,
-): boolean {
-  if (windows.length === 0) return false
+// Module-level cache: timezones are a finite set fixed at strategy compile time
+// (typically 1 per strategy), so caching formatters avoids creating a new
+// Intl.DateTimeFormat instance on every bar (hot path, 1m-level strategies).
+// Stores `null` for timezones that throw (invalid IANA name) so we don't retry.
+const TIME_WINDOW_FORMATTER_CACHE = new Map<string, Intl.DateTimeFormat | null>()
 
-  let localMinutes: number
-  let localDayOfWeek: number
+function getTimeWindowFormatter(timezone: string): Intl.DateTimeFormat | null {
+  const cached = TIME_WINDOW_FORMATTER_CACHE.get(timezone)
+  if (cached !== undefined) return cached
   try {
-    // hourCycle: 'h23' explicitly requests 0-23 range (midnight = '00'), independent of
-    // locale's hour12 default and ICU version differences. The earlier 'hour12: false' +
-    // `% 24` workaround relied on ICU returning '24' for midnight in some locales — that
-    // assumption fails on current Node/ICU (returns '00') and was a hidden no-op.
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       hour: 'numeric',
@@ -1265,7 +1261,31 @@ function evaluateInTimeWindow(
       weekday: 'short',
       hourCycle: 'h23',
     })
-    const parts = formatter.formatToParts(new Date(nowMs))
+    TIME_WINDOW_FORMATTER_CACHE.set(timezone, formatter)
+    return formatter
+  }
+  catch {
+    TIME_WINDOW_FORMATTER_CACHE.set(timezone, null)
+    return null
+  }
+}
+
+function evaluateInTimeWindow(
+  nowMs: number,
+  timezone: string,
+  windows: ReadonlyArray<CompiledTimeWindow>,
+): boolean {
+  if (windows.length === 0) return false
+
+  // Reuse cached formatter per timezone; null means timezone is invalid (IANA-unknown)
+  const formatter = getTimeWindowFormatter(timezone)
+  if (formatter === null) return false
+
+  let localMinutes: number
+  let localDayOfWeek: number
+  try {
+    // formatToParts accepts number directly — no Date() wrapper needed
+    const parts = formatter.formatToParts(nowMs)
     const hourPart = parts.find(p => p.type === 'hour')?.value
     const minutePart = parts.find(p => p.type === 'minute')?.value
     const weekdayPart = parts.find(p => p.type === 'weekday')?.value
