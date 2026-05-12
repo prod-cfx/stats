@@ -1,10 +1,12 @@
 import { MODULE_METADATA, OPTIONAL_DEPS_METADATA, SELF_DECLARED_DEPS_METADATA } from '@nestjs/common/constants'
+import { Test } from '@nestjs/testing'
 import { LlmStrategyCodegenModule } from './llm-strategy-codegen.module'
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
 import { CodegenGraphSnapshotService } from './services/codegen-graph-snapshot.service'
 import { MarketInstrumentSymbolResolverService } from './services/market-instrument-symbol-resolver.service'
 import { PerTradeSizingResolver } from './services/per-trade-sizing-resolver.service'
 import { SemanticAtomContractService } from './services/semantic-atom-contract.service'
+import { SemanticAtomRegistryService } from './services/semantic-atom-registry.service'
 import { SemanticContractReadinessService } from './services/semantic-contract-readiness.service'
 import { SemanticEventFrameParserService } from './services/semantic-event-frame-parser.service'
 import { SemanticEventFrameProjectorService } from './services/semantic-event-frame-projector.service'
@@ -88,5 +90,20 @@ describe('llmStrategyCodegenModule', () => {
       param: SEMANTIC_SEED_EVIDENCE_INVARIANT_MODE,
     })
     expect(optionalDependencies).toContain(3)
+  })
+
+  it('compiles semantic seed builder without registering evidence invariant mode token', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        MarketInstrumentSymbolResolverService,
+        PerTradeSizingResolver,
+        SemanticAtomRegistryService,
+        SemanticSeedStateBuilderService,
+      ],
+    }).compile()
+
+    expect(moduleRef.get(SemanticSeedStateBuilderService)).toBeInstanceOf(SemanticSeedStateBuilderService)
+
+    await moduleRef.close()
   })
 })
