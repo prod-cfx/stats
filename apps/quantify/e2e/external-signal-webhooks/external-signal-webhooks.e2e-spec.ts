@@ -172,6 +172,7 @@ describe('External signal webhooks (E2E)', () => {
 
     const timestamp = String(Date.now())
     const rawBody = JSON.stringify({ signalId: 'BTC_PERP_LONG_01', provider: 'tradingview', side: 'long' })
+    let acceptedEventId = ''
     await client
       .post(`webhook/strategy/${instanceId}/signal`)
       .set('content-type', 'application/json')
@@ -181,6 +182,18 @@ describe('External signal webhooks (E2E)', () => {
       .expect(202)
       .expect(res => {
         expect(res.body.data).toEqual(expect.objectContaining({ accepted: true, eventId: expect.any(String) }))
+        acceptedEventId = res.body.data.eventId as string
+      })
+
+    await client
+      .post(`webhook/strategy/${instanceId}/signal`)
+      .set('content-type', 'application/json')
+      .set('x-external-signal-timestamp', timestamp)
+      .set('x-external-signal-signature', sign(rotated.secret, timestamp, rawBody))
+      .send(rawBody)
+      .expect(202)
+      .expect(res => {
+        expect(res.body.data).toEqual({ accepted: true, eventId: acceptedEventId })
       })
 
     await client
@@ -217,7 +230,7 @@ describe('External signal webhooks (E2E)', () => {
     ])
 
     expect(events).toHaveLength(1)
-    expect(audits.filter(audit => audit.signatureStatus === 'ACCEPTED')).toHaveLength(1)
+    expect(audits.filter(audit => audit.signatureStatus === 'ACCEPTED')).toHaveLength(2)
     expect(audits.filter(audit => audit.signatureStatus === 'REJECTED')).toHaveLength(3)
     expect(outbox).toHaveLength(1)
     expect(outbox[0].payload).toEqual(expect.objectContaining({

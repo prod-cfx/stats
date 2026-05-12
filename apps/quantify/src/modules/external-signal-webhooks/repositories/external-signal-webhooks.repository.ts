@@ -110,6 +110,13 @@ export class ExternalSignalWebhooksRepository {
     })
   }
 
+  async findEventByDedupeKey(dedupeKey: string): Promise<{ id: string; receivedAt: Date } | null> {
+    return this.txHost.tx.webhookSignalEvent.findUnique({
+      where: { dedupeKey },
+      select: { id: true, receivedAt: true },
+    })
+  }
+
   async markSubscriptionAccepted(subscriptionId: string, acceptedAt: Date): Promise<void> {
     await this.txHost.tx.webhookSignalSubscription.update({
       where: { id: subscriptionId },

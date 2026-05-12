@@ -215,6 +215,25 @@ export class ExternalSignalWebhooksService {
     }
     catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existingEvent = await this.repo.findEventByDedupeKey(dedupeKey)
+        if (existingEvent) {
+          await this.repo.createAudit({
+            subscriptionId: subscription.id,
+            eventId: existingEvent.id,
+            strategyInstanceId: input.strategyInstanceId,
+            provider: subscription.provider ?? provider,
+            signalId,
+            dedupeKey,
+            signatureStatus: 'ACCEPTED',
+            reason: 'duplicate_event',
+            requestHeaders: headers,
+            rawBodySha256,
+            remoteIp,
+            userAgent,
+          })
+          return { accepted: true, eventId: existingEvent.id }
+        }
+
         await this.auditRejected({
           subscriptionId: subscription.id,
           strategyInstanceId: input.strategyInstanceId,
