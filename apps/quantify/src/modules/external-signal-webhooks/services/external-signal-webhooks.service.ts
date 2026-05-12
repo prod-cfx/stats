@@ -42,13 +42,23 @@ export class ExternalSignalWebhooksService {
     dto: CreateExternalSignalWebhookSubscriptionDto,
   ): Promise<ExternalSignalWebhookSubscriptionSecretResponseDto> {
     await this.assertOwner(userId, strategyInstanceId)
+    const signalId = dto.signalId.trim()
+    const existingSubscription = await this.repo.findActiveSubscription(strategyInstanceId, signalId)
+    if (existingSubscription) {
+      throw new DomainException('external_signal.subscription_conflict', {
+        code: ErrorCode.EXTERNAL_SIGNAL_WEBHOOK_SUBSCRIPTION_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { strategyInstanceId, signalId },
+      })
+    }
+
     const secret = this.generateSecret()
     try {
       const record = await this.repo.createSubscription({
         userId,
         strategyInstanceId,
         provider: this.normalizeOptionalString(dto.provider),
-        signalId: dto.signalId.trim(),
+        signalId,
         secretCiphertext: this.crypto.encryptConfig<SecretEnvelope>({ secret }),
         metadata: this.toJsonObject(dto.metadata),
       })
@@ -62,7 +72,7 @@ export class ExternalSignalWebhooksService {
         throw new DomainException('external_signal.subscription_conflict', {
           code: ErrorCode.EXTERNAL_SIGNAL_WEBHOOK_SUBSCRIPTION_CONFLICT,
           status: HttpStatus.CONFLICT,
-          args: { strategyInstanceId, signalId: dto.signalId.trim() },
+          args: { strategyInstanceId, signalId },
         })
       }
       throw error
