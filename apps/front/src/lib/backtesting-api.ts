@@ -237,6 +237,10 @@ function formatRangeBoundary(value: { fromTs: number; toTs: number }): string {
   return `${new Date(value.fromTs).toISOString()} ~ ${new Date(value.toTs).toISOString()}`
 }
 
+function isEnglishLocale(lng?: string): boolean {
+  return lng?.toLowerCase().startsWith('en') === true
+}
+
 async function requestJson<T>(
   operation: (signal: AbortSignal) => Promise<unknown>,
   timeoutMs: number,
@@ -419,15 +423,21 @@ export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> 
   )
 }
 
-export function formatBacktestJobFailure(job: Pick<BacktestJob, 'error' | 'errorDetails'>): string {
+export function formatBacktestJobFailure(
+  job: Pick<BacktestJob, 'error' | 'errorDetails'>,
+  lng?: 'zh' | 'en',
+): string {
   const details = job.errorDetails
   const rawFailure = `${details?.code ?? ''} ${details?.message ?? ''} ${job.error ?? ''}`.toLowerCase()
+  const isEn = isEnglishLocale(lng)
   if (
     details?.code === 'TOO_MANY_REQUESTS'
     || rawFailure.includes('status code 429')
     || rawFailure.includes('too many requests')
   ) {
-    return '回测行情数据暂时被限流，请稍后重试；如果是 1m 长区间，可以先缩短回测范围后再跑。'
+    return isEn
+      ? 'Backtest market data is temporarily rate limited. Please try again later; for long 1m ranges, shorten the backtest range first.'
+      : '回测行情数据暂时被限流，请稍后重试；如果是 1m 长区间，可以先缩短回测范围后再跑。'
   }
 
   if (details?.code === 'backtest.data_range_out_of_coverage') {
@@ -435,15 +445,25 @@ export function formatBacktestJobFailure(job: Pick<BacktestJob, 'error' | 'error
     const availableRange = readRangeBoundary(details.args?.availableRange)
 
     if (suggestedRange) {
-      return `当前选择的回测时间范围没有完整市场数据覆盖，建议改为 ${formatRangeBoundary(suggestedRange)} 后重试。`
+      return isEn
+        ? `The selected backtest range is not fully covered by market data. Try ${formatRangeBoundary(suggestedRange)} instead.`
+        : `当前选择的回测时间范围没有完整市场数据覆盖，建议改为 ${formatRangeBoundary(suggestedRange)} 后重试。`
     }
 
     if (availableRange) {
-      return `当前选择的回测时间范围没有完整市场数据覆盖，当前完整可用范围为 ${formatRangeBoundary(availableRange)}。`
+      return isEn
+        ? `The selected backtest range is not fully covered by market data. The fully available range is ${formatRangeBoundary(availableRange)}.`
+        : `当前选择的回测时间范围没有完整市场数据覆盖，当前完整可用范围为 ${formatRangeBoundary(availableRange)}。`
     }
 
-    return '当前选择的回测时间范围没有完整市场数据覆盖，请把结束时间往前调整一点后再试。'
+    return isEn
+      ? 'The selected backtest range is not fully covered by market data. Move the end time earlier and try again.'
+      : '当前选择的回测时间范围没有完整市场数据覆盖，请把结束时间往前调整一点后再试。'
   }
 
-  return details?.message?.trim() || job.error?.trim() || '回测任务执行失败'
+  const upstreamMessage = details?.message?.trim() || job.error?.trim()
+  if (isEn && upstreamMessage && /[\u4E00-\u9FFF]/.test(upstreamMessage)) {
+    return 'Backtest job failed. Please adjust the strategy or backtest parameters and try again.'
+  }
+  return upstreamMessage || (isEn ? 'Backtest job failed' : '回测任务执行失败')
 }

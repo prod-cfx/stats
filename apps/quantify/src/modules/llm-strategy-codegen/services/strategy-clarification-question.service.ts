@@ -6,6 +6,7 @@ import { Injectable } from '@nestjs/common'
 type StrategyClarificationPromptState = StrategyClarificationState & {
   summary?: string | null
 }
+type StrategyClarificationLocale = 'zh' | 'en'
 
 interface PendingClarificationTargetCandidate {
   status?: unknown
@@ -62,22 +63,35 @@ export function pickPendingClarificationTarget<T extends PendingClarificationTar
 
 @Injectable()
 export class StrategyClarificationQuestionService {
-  buildFromDecision(decision: StrategyDecision): string {
+  buildFromDecision(decision: StrategyDecision, locale: StrategyClarificationLocale = 'zh'): string {
     if (decision.kind === 'CONFIRM_INFERRED') {
-      return [
-        `我当前理解的策略是：${decision.normalizedSummary}`,
-        '以下内容是系统推断，不是你明确给出的：',
-        ...decision.inferredAssumptions.map(item => `- ${item.key}: ${item.value}`),
-        '请确认这些推断是否成立；确认后我再生成策略代码。',
-      ].join('\n')
+      return locale === 'en'
+        ? [
+            `My current understanding of the strategy is: ${decision.normalizedSummary}`,
+            'The following items were inferred by the system rather than explicitly provided:',
+            ...decision.inferredAssumptions.map(item => `- ${item.key}: ${item.value}`),
+            'Please confirm whether these assumptions are valid; after confirmation I will generate the strategy code.',
+          ].join('\n')
+        : [
+            `我当前理解的策略是：${decision.normalizedSummary}`,
+            '以下内容是系统推断，不是你明确给出的：',
+            ...decision.inferredAssumptions.map(item => `- ${item.key}: ${item.value}`),
+            '请确认这些推断是否成立；确认后我再生成策略代码。',
+          ].join('\n')
     }
 
     if (decision.kind === 'ASK_CLARIFY') {
-      return [
-        `我当前理解的策略是：${decision.normalizedSummary}`,
-        `现在还缺一个会影响脚本生成一致性的条件：${this.renderDecisionGapLabel(decision.nextActionPayload.question.reason)}`,
-        `请确认：${decision.nextActionPayload.question.question}`,
-      ].join('\n')
+      return locale === 'en'
+        ? [
+            `My current understanding of the strategy is: ${decision.normalizedSummary}`,
+            `One condition still needs clarification for consistent script generation: ${this.renderDecisionGapLabel(decision.nextActionPayload.question.reason, locale)}`,
+            `Please confirm: ${decision.nextActionPayload.question.question}`,
+          ].join('\n')
+        : [
+            `我当前理解的策略是：${decision.normalizedSummary}`,
+            `现在还缺一个会影响脚本生成一致性的条件：${this.renderDecisionGapLabel(decision.nextActionPayload.question.reason, locale)}`,
+            `请确认：${decision.nextActionPayload.question.question}`,
+          ].join('\n')
     }
 
     return ''
@@ -86,32 +100,73 @@ export class StrategyClarificationQuestionService {
   buildFromAmbiguities(input: {
     summary?: string | null
     ambiguities?: StrategyAmbiguity[] | null
-  }): string {
+  }, locale: StrategyClarificationLocale = 'zh'): string {
     const target = this.pickHighestPriorityAmbiguity(input.ambiguities ?? [])
     if (!target) return ''
 
-    return [
-      `我当前理解的策略是：${input.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
-      `现在还缺一个会影响脚本生成一致性的条件：${this.readAmbiguityMessage(target)}`,
-      `请确认：${this.renderAmbiguityQuestion(target)}`,
-    ].join('\n')
+    return locale === 'en'
+      ? [
+          `My current understanding of the strategy is: ${input.summary?.trim() || 'some conditions have been identified, but the strategy is still incomplete.'}`,
+          `One condition still needs clarification for consistent script generation: ${this.readAmbiguityMessage(target, locale)}`,
+          `Please confirm: ${this.renderAmbiguityQuestion(target, locale)}`,
+        ].join('\n')
+      : [
+          `我当前理解的策略是：${input.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
+          `现在还缺一个会影响脚本生成一致性的条件：${this.readAmbiguityMessage(target, locale)}`,
+          `请确认：${this.renderAmbiguityQuestion(target, locale)}`,
+        ].join('\n')
   }
 
-  build(state: StrategyClarificationPromptState | null | undefined): string {
+  build(state: StrategyClarificationPromptState | null | undefined, locale: StrategyClarificationLocale = 'zh'): string {
     if (!state || state.status !== 'NEEDS_CLARIFICATION') return ''
 
     const target = pickPendingClarificationTarget(state.items)
 
     if (!target) return ''
 
-    return [
-      `我当前理解的策略是：${state.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
-      `现在还缺一个会影响脚本生成一致性的条件：${this.renderGapLabel(target)}`,
-      `请确认：${target.question}`,
-    ].join('\n')
+    return locale === 'en'
+      ? [
+          `My current understanding of the strategy is: ${state.summary?.trim() || 'some conditions have been identified, but the strategy is still incomplete.'}`,
+          `One condition still needs clarification for consistent script generation: ${this.renderGapLabel(target, locale)}`,
+          `Please confirm: ${target.question}`,
+        ].join('\n')
+      : [
+          `我当前理解的策略是：${state.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
+          `现在还缺一个会影响脚本生成一致性的条件：${this.renderGapLabel(target, locale)}`,
+          `请确认：${target.question}`,
+        ].join('\n')
   }
 
-  private renderGapLabel(item: StrategyClarificationItem): string {
+  private renderGapLabel(item: StrategyClarificationItem, locale: StrategyClarificationLocale): string {
+    if (locale === 'en') {
+      if (item.key.startsWith('semantic.')) {
+        if (item.key.includes('confirmationMode')) return 'trigger semantic slot to confirm.'
+        if (item.key.includes('reference.period')) return 'indicator parameter slot to confirm.'
+        if (item.key.includes('risk.')) return 'risk semantic slot to confirm.'
+        return 'strategy semantic slot to confirm.'
+      }
+      if (item.key.startsWith('grid.')) return 'grid parameters.'
+      if (item.key.startsWith('executionContext.')) return 'execution context slot to confirm.'
+      if (item.reason === 'missing_position_pct') return 'position configuration.'
+      if (
+        item.reason === 'missing_exchange'
+        || item.reason === 'missing_symbol'
+        || item.reason === 'missing_timeframe'
+        || item.reason === 'missing_market_type'
+        || item.reason === 'missing_position_mode'
+      ) return 'key market constraints.'
+      if (item.reason === 'conflicting_market_scope' || item.reason === 'invalid_spot_short_combo') return 'market constraints conflict with direction rules.'
+      if (item.reason === 'missing_side_scope' || item.reason === 'direction_ambiguous') return 'missing direction constraint.'
+      if (item.reason === 'missing_action_uniqueness') return 'action uniqueness constraint.'
+      if (item.reason === 'ambiguous_risk_effect') return 'risk action definition.'
+      if (item.reason === 'missing_risk_atom') return 'risk semantic slot to confirm.'
+      if (item.reason === 'ambiguous_condition_basis') return 'condition comparison basis.'
+      if (item.reason === 'grid_params_missing') return 'grid parameters.'
+      if (item.reason === 'ambiguous_state_gate') return 'state gate allowlist.'
+      if (item.reason === 'atomic_semantic_fork') return 'execution semantic fork.'
+      return 'key condition.'
+    }
+
     if (item.key.startsWith('semantic.')) {
       if (item.key.includes('confirmationMode')) return '待确认的触发语义槽位。'
       if (item.key.includes('reference.period')) return '待确认的指标参数槽位。'
@@ -172,7 +227,15 @@ export class StrategyClarificationQuestionService {
     return '关键条件。'
   }
 
-  private renderDecisionGapLabel(reason: string): string {
+  private renderDecisionGapLabel(reason: string, locale: StrategyClarificationLocale): string {
+    if (locale === 'en') {
+      if (reason === 'trigger_semantics_fork') return 'execution semantic fork.'
+      if (reason === 'basis_ambiguity') return 'semantic slot to confirm.'
+      if (reason === 'direction_ambiguity') return 'semantic slot to confirm.'
+      if (reason === 'runtime_context_missing') return 'execution context slot to confirm.'
+      if (reason === 'exit_semantics_missing') return 'strategy semantic slot to confirm.'
+      return 'key condition.'
+    }
     if (reason === 'trigger_semantics_fork') return '执行语义分叉。'
     if (reason === 'basis_ambiguity') return '待确认的语义槽位。'
     if (reason === 'direction_ambiguity') return '待确认的语义槽位。'
@@ -212,23 +275,23 @@ export class StrategyClarificationQuestionService {
     return 99
   }
 
-  private renderAmbiguityQuestion(ambiguity: StrategyAmbiguity): string {
+  private renderAmbiguityQuestion(ambiguity: StrategyAmbiguity, locale: StrategyClarificationLocale): string {
     if (ambiguity.kind === 'open_semantic_slot' || ambiguity.kind === 'semantic_conflict') {
       return ambiguity.question ?? ambiguity.message
     }
 
     if (ambiguity.kind === 'execution_context_missing') {
       if (ambiguity.field === 'exchange') {
-        return '请确认交易所（binance / okx / hyperliquid）。'
+        return locale === 'en' ? 'Please confirm the exchange (binance / okx / hyperliquid).' : '请确认交易所（binance / okx / hyperliquid）。'
       }
       if (ambiguity.field === 'symbol') {
-        return '请确认策略交易标的（例如 BTCUSDT）。'
+        return locale === 'en' ? 'Please confirm the trading symbol, for example BTCUSDT.' : '请确认策略交易标的（例如 BTCUSDT）。'
       }
       if (ambiguity.field === 'marketType') {
-        return '请确认市场类型（现货或合约/perp）。'
+        return locale === 'en' ? 'Please confirm the market type (spot or perp).' : '请确认市场类型（现货或合约/perp）。'
       }
       if (ambiguity.field === 'timeframe') {
-        return '请确认策略主周期（例如 15m 或 1h）。'
+        return locale === 'en' ? 'Please confirm the primary timeframe, for example 15m or 1h.' : '请确认策略主周期（例如 15m 或 1h）。'
       }
     }
 
@@ -240,14 +303,25 @@ export class StrategyClarificationQuestionService {
       }) ?? []
 
       return labels.length > 0
-        ? `请确认采用哪种触发方式：${labels.join('，还是')}？`
-        : '该布林带条件是触碰即触发，还是收盘确认后触发？'
+        ? (locale === 'en' ? `Please confirm which trigger mode to use: ${labels.join(' or ')}?` : `请确认采用哪种触发方式：${labels.join('，还是')}？`)
+        : (locale === 'en' ? 'Should this Bollinger condition trigger on touch or only after close confirmation?' : '该布林带条件是触碰即触发，还是收盘确认后触发？')
     }
 
     return ambiguity.message
   }
 
-  private readAmbiguityMessage(ambiguity: StrategyAmbiguity): string {
+  private readAmbiguityMessage(ambiguity: StrategyAmbiguity, locale: StrategyClarificationLocale): string {
+    if (locale === 'en') {
+      if (ambiguity.kind === 'open_semantic_slot') return 'core signal is not closed'
+      if (ambiguity.kind === 'semantic_conflict') return 'core semantics conflict'
+      if (ambiguity.kind === 'execution_context_missing') {
+        if (ambiguity.field === 'exchange') return 'missing unique exchange'
+        if (ambiguity.field === 'symbol') return 'missing unique trading symbol'
+        if (ambiguity.field === 'marketType') return 'missing unique market type'
+        if (ambiguity.field === 'timeframe') return 'missing unique timeframe'
+      }
+      return 'key condition'
+    }
     if (ambiguity.kind === 'open_semantic_slot') {
       return '核心信号未闭合'
     }

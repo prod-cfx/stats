@@ -39,6 +39,18 @@ export const SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY: Record<string, string> = {
 }
 
 const SEMANTIC_BUSINESS_QUESTION_I18N_BY_SLOT_KEY: Record<string, LocalizedClarificationCopy> = {
+  'trigger.entry': localizedCopy(
+    '请补充入场触发条件。',
+    'Please provide the entry trigger condition.',
+    ['MA6 上穿 MA48', '价格突破前高'],
+    ['MA6 crosses above MA48', 'price breaks above the previous high'],
+  ),
+  'trigger.exit': localizedCopy(
+    '请补充出场触发条件。',
+    'Please provide the exit trigger condition.',
+    ['MA6 下穿 MA48', '价格跌破 MA20'],
+    ['MA6 crosses below MA48', 'price falls below MA20'],
+  ),
   'contract.shape.price.level_set.density': localizedCopy(
     SEMANTIC_BUSINESS_QUESTION_BY_SLOT_KEY['contract.shape.price.level_set.density'],
     'Please confirm the grid count or spacing, for example 20 levels, 100 USDT per level, or 0.5% per level.',
@@ -102,6 +114,14 @@ const SEMANTIC_BUSINESS_QUESTION_I18N_BY_SLOT_KEY: Record<string, LocalizedClari
 }
 
 const CLARIFICATION_SLOT_LABEL_OVERRIDES: Record<string, Record<ClarificationQuestionLocale, string>> = {
+  'trigger.entry': {
+    zh: '入场触发条件',
+    en: 'entry trigger condition',
+  },
+  'trigger.exit': {
+    zh: '出场触发条件',
+    en: 'exit trigger condition',
+  },
   'contract.shape.price.level_set.density': {
     zh: '网格数量或间距',
     en: 'grid count or spacing',

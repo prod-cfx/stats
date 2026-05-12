@@ -371,6 +371,33 @@ describe('codegenConversationService edit recovery', () => {
     expect(result.conversationMessages?.[0]?.content).toContain('请直接说明你要修改的原子语义')
   })
 
+  it('recovers from a published snapshot with English edit context', async () => {
+    const harness = createHarness()
+    harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)
+    harness.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser.mockResolvedValue(null)
+    harness.publishedSnapshotsRepo.findEditableSnapshotForUser.mockResolvedValue(buildSnapshot())
+
+    const result = await harness.service.recoverEditConversation('user-1', {
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      source: 'account-detail',
+      locale: 'en',
+    })
+
+    expect(harness.sessionsRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      constraintPack: expect.objectContaining({ locale: 'en' }),
+    }))
+    expect(harness.conversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Edit BTCUSDT strategy',
+      messages: [expect.objectContaining({
+        role: 'assistant',
+        content: expect.stringContaining('Recovered the published strategy'),
+      })],
+    }))
+    expect(result.conversationMessages?.[0]?.content).toContain('Tell me which atomic semantic')
+    expect(result.conversationMessages?.[0]?.content).not.toContain('当前策略')
+  })
+
   it('synthesizes a graph-shaped semantic graph when the snapshot has no semantic graph', async () => {
     const harness = createHarness()
     harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)

@@ -995,6 +995,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('guards English responses from Chinese planner prompts when clarification is pending', () => {
+    const prompt = (service as any).localizePlannerPromptForResponse({
+      locale: 'en',
+      assistantPrompt: '我当前理解的策略是：入场和出场已识别。请确认：请确认单笔仓位大小。',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        summary: '入场和出场已识别。',
+        items: [
+          {
+            key: 'semantic.position.sizing',
+            reason: 'missing_semantic_position_sizing',
+            field: 'position.sizing',
+            blocking: true,
+            question: '请确认单笔仓位大小，例如 10% / 10 USDT / 0.001 BTC。',
+            status: 'pending',
+            slotKey: 'position.sizing',
+            fieldPath: 'position.sizing',
+          },
+        ],
+      },
+    })
+
+    expect(prompt).toContain('I understand the strategy logic you described.')
+    expect(prompt).toContain('Please confirm: Please confirm the position size for each trade')
+    expect(prompt).not.toMatch(/[\u3400-\u9fff]/u)
+  })
+
   it('estimates missing risk atom blockers above execution context gaps', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
@@ -8967,7 +8994,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           },
         ],
       },
-      constraintPack: {},
+      constraintPack: { locale: 'en' },
     }))
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -8986,6 +9013,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('I organized the strategy logic')
+    expect(result.assistantPrompt).not.toContain('我整理出的策略逻辑如下')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect((result as any).clarificationGate).toEqual(expect.objectContaining({
       blocked: false,
@@ -11820,6 +11849,38 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.latestSpecDesc).not.toEqual(oldSpecDesc)
     expect(JSON.stringify(updatePayload.latestSpecDesc)).toContain('rsi')
     expect(result.status).toBe('CONFIRM_GATE')
+  })
+
+  it('keeps whole-strategy replacement responses in the persisted English locale', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-semantic-english-whole-strategy-replacement',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { locale: 'en' },
+      latestDraftCode: 'const oldMaStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为 RSI 策略，请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-english-whole-strategy-replacement', {
+      userId: 'u1',
+      message: '重新做一个 RSI 策略',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('I organized the strategy logic')
+    expect(result.assistantPrompt).not.toContain('我整理出的策略逻辑如下')
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('重新做一个 RSI 策略')
   })
 
   it('clears failed artifacts when a rejected session enters semantic edit clarification', async () => {

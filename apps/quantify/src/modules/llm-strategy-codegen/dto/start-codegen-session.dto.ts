@@ -14,14 +14,14 @@ export class StartCodegenSessionDto {
   @IsString()
   initialMessage?: string
 
+  @ApiPropertyOptional({ description: '会话回复语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: string
+
   @ApiPropertyOptional({ description: '会话级引导参数配置', type: CodegenGuideConfigDto })
   @IsOptional()
   @ValidateNested()
   @Type(() => CodegenGuideConfigDto)
   guideConfig?: CodegenGuideConfigDto
-
-  @ApiPropertyOptional({ description: '助手对话语言', enum: ['zh', 'en'] })
-  @IsOptional()
-  @IsIn(['zh', 'en'])
-  locale?: 'zh' | 'en'
 }

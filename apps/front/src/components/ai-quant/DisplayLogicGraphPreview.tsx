@@ -1,4 +1,5 @@
 import type { DisplayBlock, DisplayExecuteItem, DisplayLogicGraph } from './display-logic-graph'
+import { localizeDisplayLogicGraph } from './display-logic-graph'
 import { useTranslation } from 'react-i18next'
 
 interface DisplayLogicGraphPreviewProps {
@@ -9,8 +10,6 @@ interface DisplayLogicGraphPreviewProps {
   confirmed?: boolean
   publishedSnapshotId?: string | null
 }
-
-const EMPTY_THEN_FALLBACK = '等待策略规则补充'
 
 function getBlockHeading(type: DisplayBlock['type']) {
   switch (type) {
@@ -41,7 +40,12 @@ export function DisplayLogicGraphPreview({
   confirmed = false,
   publishedSnapshotId = null,
 }: DisplayLogicGraphPreviewProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = (i18n?.resolvedLanguage ?? i18n?.language ?? 'zh').toLowerCase().startsWith('en')
+    ? 'en'
+    : 'zh'
+  const localizedGraph = localizeDisplayLogicGraph(graph, locale)
+  const emptyThenFallback = locale === 'en' ? 'Waiting for strategy rule details' : '等待策略规则补充'
   const normalizedSnapshotId = typeof publishedSnapshotId === 'string'
     ? publishedSnapshotId.trim()
     : ''
@@ -57,7 +61,7 @@ export function DisplayLogicGraphPreview({
       </div>
 
       <div className="mt-4 space-y-3">
-        {graph.blocks.map(block => (
+        {localizedGraph.blocks.map(block => (
           <div key={`${block.type}-${block.items[0]?.id ?? 'block'}`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[color:var(--cf-muted)]">
               {getBlockHeading(block.type)}
@@ -99,7 +103,7 @@ export function DisplayLogicGraphPreview({
                                   {item.text}
                                 </div>
                               ))
-                          : <div className="text-sm text-[color:var(--cf-muted)]">{EMPTY_THEN_FALLBACK}</div>}
+                          : <div className="text-sm text-[color:var(--cf-muted)]">{emptyThenFallback}</div>}
                       </div>
                     </div>
                   </div>

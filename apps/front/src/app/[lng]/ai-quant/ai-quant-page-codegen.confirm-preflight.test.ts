@@ -113,6 +113,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
 
     expect(mockStartLlmCodegenSession).toHaveBeenCalledWith({
       initialMessage: '帮我生成一版布林带策略',
+      locale: 'zh',
     })
     const payload = mockStartLlmCodegenSession.mock.calls.at(-1)?.[0] as Record<string, unknown>
     expect(payload).not.toHaveProperty('symbols')
@@ -325,7 +326,41 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     expect(mockGetLlmCodegenSession).not.toHaveBeenCalled()
     const updater = setConversations.mock.calls.at(-1)?.[0] as (items: typeof conversation[]) => typeof conversation[]
     const next = updater([conversation])
-    expect(next[0].messages.at(-1)?.content).toBe('请求前校验失败：仓位比例需要在 0 到 100 之间。')
+    expect(next[0].messages.at(-1)?.content).toBe('aiQuant.codegenValidation.invalidRatioSizing')
+  })
+
+  it('localizes invalid ratio sizing preflight errors in English', async () => {
+    const setConversations = jest.fn()
+    const conversation = buildConversation('conv-invalid-ratio-en')
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-invalid-ratio-en',
+      conversations: [conversation],
+      locale: 'en',
+      message: 'Generate strategy',
+      params: {
+        ...DEFAULT_PARAMS,
+        sizing: { mode: 'RATIO', value: 120 },
+        positionPct: 120,
+      },
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: setConversations as any,
+      t: (key: string) => key === 'aiQuant.codegenValidation.invalidRatioSizing'
+        ? 'Preflight validation failed: position percentage must be between 0 and 100.'
+        : key,
+    })
+
+    expect(mockStartLlmCodegenSession).not.toHaveBeenCalled()
+    expect(mockContinueLlmCodegenSession).not.toHaveBeenCalled()
+    expect(mockGetLlmCodegenSession).not.toHaveBeenCalled()
+    const updater = setConversations.mock.calls.at(-1)?.[0] as (items: typeof conversation[]) => typeof conversation[]
+    const next = updater([conversation])
+    expect(next[0].messages.at(-1)?.content).toBe('Preflight validation failed: position percentage must be between 0 and 100.')
   })
 
   it('continues the active session after a terminal preflight reconciliation fetch', async () => {
@@ -498,6 +533,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
       confirmGenerate: true,
       confirmedCanonicalDigest: 'sha256:canonical-1',
       clarificationAnswers: undefined,
+      locale: 'zh',
     })
     const confirmPayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
     expect(confirmPayload).not.toHaveProperty('symbols')
@@ -581,6 +617,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
       confirmGenerate: false,
       confirmedCanonicalDigest: undefined,
       clarificationAnswers: undefined,
+      locale: 'zh',
     })
     const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
     expect(continuePayload).not.toHaveProperty('symbols')

@@ -4528,6 +4528,11 @@ const endpoints = makeApi([
         type: 'Path',
         schema: z.string(),
       },
+      {
+        name: 'locale',
+        type: 'Query',
+        schema: z.enum(['zh', 'en']).optional(),
+      },
     ],
     response: z
       .object({ data: StrategyPlazaEditSessionResponseDto, message: z.string().optional() })

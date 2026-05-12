@@ -551,6 +551,7 @@ export interface RecoverAiQuantEditConversationPayload {
   conversationId?: string
   sessionId?: string
   source?: 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
+  locale?: 'zh' | 'en'
 }
 
 export interface LlmClarificationGateItem {

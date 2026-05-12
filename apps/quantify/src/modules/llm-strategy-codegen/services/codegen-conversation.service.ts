@@ -94,7 +94,10 @@ import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StaticGuardrailService } from './static-guardrail.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
+import {
+  pickPendingClarificationTarget,
+  StrategyClarificationQuestionService,
+} from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 import { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
@@ -125,6 +128,7 @@ interface GenerationOptions {
   temperature?: number
   maxTokens?: number
 }
+type CodegenConversationLocale = 'zh' | 'en'
 
 interface NormalizationResult {
   normalizedIntent: StrategyNormalizedIntent
@@ -250,6 +254,7 @@ export class CodegenConversationService {
     dto: StartCodegenSessionDto,
     callerUserId?: string,
   ): Promise<CodegenSessionResponseDto> {
+    const responseLocale = this.resolveResponseLocale(dto.locale)
     const sessionUserId = this.resolveSessionUserId(callerUserId, dto.userId)
     if (!sessionUserId) {
       throw new DomainException('codegen.missing_caller_identity', {
@@ -257,7 +262,6 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    const locale = this.normalizeConversationLocale(dto.locale)
     const seedSemanticState = this.mergeSemanticPatchIntoState(
       this.createEmptySemanticState(),
       this.extractSemanticPatchFromMessage(dto.initialMessage),
@@ -266,7 +270,8 @@ export class CodegenConversationService {
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedSemanticState, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
-    }, [], locale)
+      locale: responseLocale,
+    }, [])
     let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
       plan,
@@ -287,13 +292,14 @@ export class CodegenConversationService {
     )
     const initialConstraintPack = {
       ...createDefaultConstraintPack(guidePrompt),
+      locale: responseLocale,
       recommendationStyle,
-      locale,
     }
     if (initialSupportGate.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         initialSupportGate.unsupportedAtoms,
         initialSupportGate.state.triggers,
+        responseLocale,
       )
       if (unsupportedFallback !== null) {
         initialSemanticState = this.withUnsupportedFallback(initialSemanticState, unsupportedFallback)
@@ -337,7 +343,7 @@ export class CodegenConversationService {
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
     }
     if (initialSupportGate.route === 'unknown_unsupported') {
-      const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(initialSupportGate.unknownAtoms, locale)
+      const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(initialSupportGate.unknownAtoms, responseLocale)
       initialSemanticState = this.clearUnsupportedFallback(initialSemanticState)
       const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const session = await this.sessionsRepo.createSession({
@@ -365,7 +371,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     initialSemanticState = this.normalizeSemanticContractReadiness(initialSemanticState, initialStrategyVersion)
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(initialSemanticState, locale)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(initialSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
     const normalization = semanticArtifacts.normalization
     const initialCanonicalSpec = this.buildCanonicalSpecForConversation(initialSemanticState, normalization)
@@ -381,10 +387,10 @@ export class CodegenConversationService {
       decisionKind: decision.kind,
     })
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(decision)
+      ? this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       : semanticArtifacts.clarificationPrompt
     const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
-      ? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState, locale)
+      ? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState, responseLocale)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
@@ -396,9 +402,9 @@ export class CodegenConversationService {
       plan,
       normalizationBlocked: normalization?.blocked === true,
       normalizationAssistantPrompt: normalization?.blocked
-        ? this.buildSemanticNormalizationAssistantPrompt(initialSemanticState, normalization, locale)
+        ? this.buildSemanticNormalizationAssistantPrompt(initialSemanticState, normalization, responseLocale)
         : undefined,
-      locale,
+      locale: responseLocale,
     })
     const initialSpecDesc = bootstrap.shouldEnterConfirmationGate && initialCanonicalSpec
       ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '', {
@@ -748,11 +754,12 @@ export class CodegenConversationService {
     }
 
     const semanticState = this.recoverSemanticStateFromEditableSnapshot(snapshot)
+    const responseLocale = this.resolveResponseLocale(input.locale)
     const normalization = this.buildNormalizationFromSemanticState(semanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(semanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
-      executionContext: this.resolveSemanticClarificationArtifacts(semanticState).executionContext.context,
+      executionContext: this.resolveSemanticClarificationArtifacts(semanticState, responseLocale).executionContext.context,
       semanticState,
     })
     const recoveredSpecDesc = {
@@ -760,9 +767,10 @@ export class CodegenConversationService {
       publishedSnapshotId: snapshot.id,
     }
     const semanticGraph = this.resolveRecoveredSemanticGraph(snapshot, semanticState)
-    const recoveryAssistantMessage = this.buildEditRecoveryAssistantMessage(semanticState)
+    const recoveryAssistantMessage = this.buildEditRecoveryAssistantMessage(semanticState, responseLocale)
     const constraintPack = {
       ...createDefaultConstraintPack(),
+      locale: responseLocale,
       conversationHistory: [`A: ${recoveryAssistantMessage}`],
     }
 
@@ -780,10 +788,13 @@ export class CodegenConversationService {
     } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
     const titleSymbol = this.readRecoveredSnapshotSymbol(snapshot) ?? '上一版'
+    const conversationTitle = responseLocale === 'en'
+      ? `Edit ${titleSymbol === '上一版' ? 'previous' : titleSymbol} strategy`
+      : `修改 ${titleSymbol} 策略`
     const conversation = await this.conversationsRepo.upsertConversationSnapshot({
       userId,
       codegenSessionId: session.id,
-      title: `修改 ${titleSymbol} 策略`,
+      title: conversationTitle,
       messages: [{ role: 'assistant', content: recoveryAssistantMessage }],
     })
 
@@ -794,25 +805,30 @@ export class CodegenConversationService {
     }
   }
 
-  private buildEditRecoveryAssistantMessage(semanticState: SemanticState): string {
+  private buildEditRecoveryAssistantMessage(
+    semanticState: SemanticState,
+    locale: CodegenConversationLocale = 'zh',
+  ): string {
     const view = this.semanticStateProjection.buildConversationView(semanticState)
     const contextParts = [
       view.executionContext.exchange?.toUpperCase(),
       view.executionContext.marketType === 'perp'
-        ? '合约'
+        ? this.localizedText(locale, 'perpetual', '合约')
         : view.executionContext.marketType === 'spot'
-          ? '现货'
+          ? this.localizedText(locale, 'spot', '现货')
           : null,
       view.executionContext.symbol,
       view.executionContext.timeframe,
     ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     const contextSummary = contextParts.length > 0 ? contextParts.join(' ') : ''
-    const semanticSummary = view.summary?.trim() || '已识别部分条件，但仍未完整。'
-    const currentStrategy = contextSummary
-      ? `${contextSummary}；${semanticSummary}`
-      : semanticSummary
+    const semanticSummary = view.summary?.trim() || this.localizedText(locale, 'Some conditions were recovered, but the strategy is not complete yet.', '已识别部分条件，但仍未完整。')
+    const currentStrategy = locale === 'en'
+      ? (contextSummary || 'Recovered published strategy')
+      : (contextSummary ? `${contextSummary}；${semanticSummary}` : semanticSummary)
 
-    return `${EDIT_RECOVERY_ASSISTANT_MESSAGE}\n当前策略：${currentStrategy}\n请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。`
+    return locale === 'en'
+      ? `Recovered the published strategy and opened an editable draft.\nCurrent strategy: ${currentStrategy}\nTell me which atomic semantic you want to change, such as symbol, exchange, timeframe, trigger condition, action, risk rule, or position size.`
+      : `${EDIT_RECOVERY_ASSISTANT_MESSAGE}\n当前策略：${currentStrategy}\n请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。`
   }
 
   private recoverSemanticStateFromEditableSnapshot(
@@ -1281,6 +1297,8 @@ export class CodegenConversationService {
     let currentSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState),
     )
+    const persistedConstraintPack = this.readConstraintPack(session.constraintPack)
+    const responseLocale = this.resolveResponseLocale(dto.locale, persistedConstraintPack.locale)
     const startedFromChecklistOnlySession = this.shouldRejectChecklistOnlySession(session, currentSemanticState)
     const unsupportedFallbackOutcome = await this.handlePendingUnsupportedFallback({
       session,
@@ -1337,7 +1355,7 @@ export class CodegenConversationService {
       })
     }
     if (hasChecklistOnlyNonReplacementEditIntent) {
-      return this.rejectChecklistOnlySession(session, sessionUserId)
+      return this.rejectChecklistOnlySession(session, sessionUserId, responseLocale)
     }
     if (dto.confirmGenerate === true) {
       return this.continueConfirmedSession(session, dto, sessionUserId)
@@ -1362,7 +1380,11 @@ export class CodegenConversationService {
         id: session.id,
         status: session.status,
         missingFields: [],
-        assistantPrompt: '我识别到你想修改策略语义。当前可直接修改交易标的、主周期、交易所、市场类型，或说“之前策略不对，重新做一个...”来重建策略。止损、行动、仓位等语义修改请补充成完整规则后再继续。',
+        assistantPrompt: this.localizedText(
+          responseLocale,
+          'I detected that you want to edit the strategy semantics. You can directly change the symbol, main timeframe, exchange, or market type, or say "the previous strategy is wrong, rebuild it..." to recreate the strategy. For stop-loss, action, position, and similar semantic edits, please provide a complete rule before continuing.',
+          '我识别到你想修改策略语义。当前可直接修改交易标的、主周期、交易所、市场类型，或说“之前策略不对，重新做一个...”来重建策略。止损、行动、仓位等语义修改请补充成完整规则后再继续。',
+        ),
         clarificationState: this.readClarificationState(session.clarificationState),
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -1390,15 +1412,12 @@ export class CodegenConversationService {
     if (startedFromChecklistOnlySession
       && semanticEditDecision.kind !== 'NO_EDIT'
       && semanticEditDecision.kind !== 'REPLACE_STRATEGY_DRAFT') {
-      return this.rejectChecklistOnlySession(session, sessionUserId)
+      return this.rejectChecklistOnlySession(session, sessionUserId, responseLocale)
     }
-    const baseConstraintPack = this.readConstraintPack(session.constraintPack)
-    const locale = this.resolveConversationLocale(dto.locale, baseConstraintPack.locale)
-    const localeConstraintPack = this.withConversationLocale(baseConstraintPack, locale)
     const baseClarificationState = this.readClarificationState(session.clarificationState)
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
-      : this.resolveSemanticClarificationArtifacts(currentSemanticState, locale).clarificationState
+      : this.resolveSemanticClarificationArtifacts(currentSemanticState, responseLocale).clarificationState
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       activeClarificationState,
       dto.message,
@@ -1424,6 +1443,10 @@ export class CodegenConversationService {
         effectiveClarificationAnswers,
       ),
     )
+    const baseConstraintPack = {
+      ...persistedConstraintPack,
+      locale: responseLocale,
+    }
     const structuredOpenSlotAnswerState = this.resolveStructuredSemanticOpenSlotAnswers(
       rawSemanticStateAfterAnswers,
       activeClarificationState,
@@ -1435,7 +1458,7 @@ export class CodegenConversationService {
         semanticState: structuredOpenSlotAnswerState,
         message: dto.message,
         userId: sessionUserId,
-        constraintPack: localeConstraintPack,
+        constraintPack: baseConstraintPack,
         guideConfig: dto.guideConfig,
       })
     }
@@ -1450,7 +1473,7 @@ export class CodegenConversationService {
         semanticState: openSlotAnswer.nextState,
         message: dto.message,
         userId: sessionUserId,
-        constraintPack: localeConstraintPack,
+        constraintPack: baseConstraintPack,
         guideConfig: dto.guideConfig,
       })
     }
@@ -1459,9 +1482,9 @@ export class CodegenConversationService {
       semanticState: rawSemanticStateAfterAnswers,
       message: dto.message,
       userId: sessionUserId,
-      constraintPack: localeConstraintPack,
-      guidePrompt: this.mergeGuidePromptConfig(localeConstraintPack.guidePrompt, dto.guideConfig),
-      recommendationStyle: localeConstraintPack.recommendationStyle,
+      constraintPack: baseConstraintPack,
+      guidePrompt: this.mergeGuidePromptConfig(baseConstraintPack.guidePrompt, dto.guideConfig),
+      recommendationStyle: baseConstraintPack.recommendationStyle,
     })
     if (preReadinessSupportGateResponse.response) {
       return preReadinessSupportGateResponse.response
@@ -1471,7 +1494,7 @@ export class CodegenConversationService {
       preReadinessSupportGateResponse.strategyVersion,
     )
     const inferredConfirmation = await this.withConfirmedInferredDecisionKeys(
-      localeConstraintPack,
+      baseConstraintPack,
       semanticStateAfterAnswers,
       dto.message,
       {
@@ -1482,7 +1505,7 @@ export class CodegenConversationService {
     )
     const baseSemanticState = this.reconcileSemanticMissingPlaceholders(inferredConfirmation.semanticState)
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
-      ? this.resolveSemanticClarificationArtifacts(baseSemanticState, locale).clarificationState
+      ? this.resolveSemanticClarificationArtifacts(baseSemanticState, responseLocale).clarificationState
       : this.attachSemanticSummaryToClarification(baseClarificationState, baseSemanticState)
     const preMergedSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.mergeSemanticPatchIntoState(
@@ -1491,12 +1514,13 @@ export class CodegenConversationService {
         dto.message,
       ),
     )
-    const constraintPack = this.withConversationLocale(inferredConfirmation.constraintPack, locale)
+    const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
-    }, constraintPack.conversationHistory ?? [], locale)
+      locale: responseLocale,
+    }, constraintPack.conversationHistory ?? [])
     const plannedSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.applyConversationPlanToSemanticState({
         currentState: preMergedSemanticState,
@@ -1529,7 +1553,7 @@ export class CodegenConversationService {
       }),
       supportGateResponse.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, locale)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const clarificationPrompt = semanticArtifacts.clarificationPrompt
@@ -1554,7 +1578,7 @@ export class CodegenConversationService {
       constraintPack: nextConstraintPack,
     })
     const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(decision)
+      ? this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
@@ -1570,12 +1594,12 @@ export class CodegenConversationService {
 
     if (deterministicAuthority) {
       const assistantPrompt = deterministicAuthority === 'clarification'
-        ? (clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        ? (clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
         : deterministicAuthority === 'decision'
-          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
           : deterministicAuthority === 'normalization'
-            ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, locale)
-            : this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, locale)
+            ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale)
+            : this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const shouldPersistDecisionSpecDesc = deterministicAuthority === 'decision' && hasStructuredClarificationAnswers
       const shouldPersistDeterministicOutcome = plan.related
@@ -1661,7 +1685,7 @@ export class CodegenConversationService {
         || this.hasLockedTriggerPhase(semanticStateBeforeRequiredSlots, 'exit')
         || this.hasCompleteOrderProgramSemantics(semanticStateBeforeRequiredSlots)
       if (startedFromChecklistOnlySession && !inferredConfirmation.consumed && !recoveredExecutableSemantics && !hasSemanticNativeClarificationAnswers) {
-        return this.rejectChecklistOnlySession(session, sessionUserId)
+        return this.rejectChecklistOnlySession(session, sessionUserId, responseLocale)
       }
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
@@ -1675,7 +1699,15 @@ export class CodegenConversationService {
         })
       }
       if (inferredConfirmation.consumed) {
-        const assistantPrompt = plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。'
+        const assistantPrompt = this.localizePlannerPromptForResponse({
+          assistantPrompt: plan.assistantPrompt,
+          locale: responseLocale,
+          clarificationState: clarificationStateAfterAnswers,
+        }) || this.localizedText(
+          responseLocale,
+          'This message seems unrelated to the strategy. Please describe the trading logic or the condition you want to modify.',
+          '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+        )
         const consumedUnrelatedStatus = session.status === 'CONFIRM_GATE' ? 'CONFIRM_GATE' : 'DRAFTING'
         const historyAfterConsumedUnrelated = this.appendConversationHistory(
           constraintPack.conversationHistory ?? [],
@@ -1696,15 +1728,28 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+        assistantPrompt: this.localizePlannerPromptForResponse({
+          assistantPrompt: plan.assistantPrompt,
+          locale: responseLocale,
+          clarificationState: clarificationStateAfterAnswers,
+        }) || this.localizedText(
+          responseLocale,
+          'This message seems unrelated to the strategy. Please describe the trading logic or the condition you want to modify.',
+          '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+        ),
         clarificationState: clarificationStateAfterAnswers,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
+    const plannerAssistantPrompt = this.localizePlannerPromptForResponse({
+      assistantPrompt: plan.assistantPrompt,
+      locale: responseLocale,
+      clarificationState,
+    })
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
-      plan.assistantPrompt,
+      plannerAssistantPrompt,
     )
 
     if (!plan.logicReady) {
@@ -1725,7 +1770,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: plan.assistantPrompt,
+        assistantPrompt: plannerAssistantPrompt,
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -1735,7 +1780,7 @@ export class CodegenConversationService {
       id: session.id,
       status: 'DRAFTING',
       missingFields: [],
-      assistantPrompt: plan.assistantPrompt,
+      assistantPrompt: plannerAssistantPrompt,
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -1749,6 +1794,7 @@ export class CodegenConversationService {
     constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
     guideConfig?: CodegenGuideConfigDto
   }): Promise<CodegenSessionResponseDto> {
+    const responseLocale = args.constraintPack.locale ?? 'zh'
     const reconciledSemanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
     const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
     const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
@@ -1779,7 +1825,7 @@ export class CodegenConversationService {
       }),
       supportGateResponse.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const normalization = semanticArtifacts.normalization
@@ -1798,7 +1844,7 @@ export class CodegenConversationService {
       constraintPack: nextConstraintPack,
     })
     const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(decision)
+      ? this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
@@ -1808,14 +1854,14 @@ export class CodegenConversationService {
       semanticReadyForGenerate,
     })
     const assistantPrompt = deterministicAuthority === 'clarification'
-      ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+      ? (semanticArtifacts.clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
       : deterministicAuthority === 'decision'
-        ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+        ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
         : deterministicAuthority === 'normalization'
-          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale)
           : deterministicAuthority === 'confirm_gate'
-            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
-            : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
+            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
+            : this.localizedText(responseLocale, `Updated strategy semantics: ${this.buildSemanticClarificationSummary(reducedSemanticState)}`, `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`)
     const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
     const historyAfterOpenSlotAnswer = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
@@ -2025,12 +2071,14 @@ export class CodegenConversationService {
     }
 
     const constraintPack = this.readConstraintPack(args.session.constraintPack)
+    const responseLocale = this.resolveResponseLocale(undefined, constraintPack.locale)
 
     if (args.decision.kind === 'REPLACE_STRATEGY_DRAFT') {
       const seedSemanticState = this.createEmptySemanticState()
       const plan = await this.planConversationByLlm(args.decision.seedText, seedSemanticState, {
         providerCode: this.resolveProviderCode(args.providerCode),
         model: args.model,
+        locale: responseLocale,
       }, [])
       const plannedSemanticState = this.applyConversationPlanToSemanticState({
         currentState: seedSemanticState,
@@ -2064,7 +2112,7 @@ export class CodegenConversationService {
         this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
         supportGate.strategyVersion,
       )
-      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState)
+      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState, responseLocale)
       const clarificationState = semanticArtifacts.clarificationState
       const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
       const normalization = semanticArtifacts.normalization
@@ -2083,7 +2131,7 @@ export class CodegenConversationService {
         constraintPack: nextConstraintPack,
       })
       const decisionPrompt = strategyDecision.kind === 'CONFIRM_INFERRED'
-        ? this.clarificationQuestion.buildFromDecision(strategyDecision)
+        ? this.clarificationQuestion.buildFromDecision(strategyDecision, responseLocale)
         : semanticArtifacts.clarificationPrompt
       const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
         semanticState: replacementState,
@@ -2093,14 +2141,18 @@ export class CodegenConversationService {
         semanticReadyForGenerate,
       })
       const assistantPrompt = deterministicAuthority === 'clarification'
-        ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        ? (semanticArtifacts.clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
         : deterministicAuthority === 'decision'
-          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
           : deterministicAuthority === 'normalization'
-            ? this.buildSemanticNormalizationAssistantPrompt(replacementState, normalization)
+            ? this.buildSemanticNormalizationAssistantPrompt(replacementState, normalization, responseLocale)
             : deterministicAuthority === 'confirm_gate'
-              ? this.buildSemanticLogicGateAssistantPrompt(replacementState)
-              : (plan.assistantPrompt || '我已按你的新描述重新创建策略草稿，请继续补充缺失语义。')
+              ? this.buildSemanticLogicGateAssistantPrompt(replacementState, responseLocale)
+              : (this.localizePlannerPromptForResponse({
+                  assistantPrompt: plan.assistantPrompt,
+                  locale: responseLocale,
+                  clarificationState,
+                }) || this.localizedText(responseLocale, 'I recreated the strategy draft from your new description. Please continue filling in the missing semantics.', '我已按你的新描述重新创建策略草稿，请继续补充缺失语义。'))
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const historyAfterReplacement = this.appendConversationHistory(
         [],
@@ -2156,13 +2208,22 @@ export class CodegenConversationService {
       const nextState = this.reconcileSemanticMissingPlaceholders(
         withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit),
       )
-      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState)
+      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState, responseLocale)
+      const editClarificationQuestion = this.localizePlannerPromptForResponse({
+        assistantPrompt: args.decision.question,
+        locale: responseLocale,
+        clarificationState: semanticArtifacts.clarificationState,
+      }) || this.localizedText(
+        responseLocale,
+        'Please clarify the edit you want to apply, then I will update the strategy logic.',
+        '请先澄清你要如何修改策略，我再更新策略逻辑。',
+      )
       const shouldClearFailedArtifacts = args.session.status === 'REJECTED'
         || args.session.status === 'CONSISTENCY_FAILED'
       const historyAfterQuestion = this.appendConversationHistory(
         constraintPack.conversationHistory ?? [],
         args.message,
-        args.decision.question,
+        editClarificationQuestion,
       )
       await this.sessionsRepo.updateSession(args.session.id, {
         ...this.stateMachine.buildConversationUpdate({
@@ -2189,7 +2250,7 @@ export class CodegenConversationService {
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: args.decision.question,
+        assistantPrompt: editClarificationQuestion,
         clarificationState: semanticArtifacts.clarificationState,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
@@ -2225,7 +2286,7 @@ export class CodegenConversationService {
       this.reconcileSemanticMissingPlaceholders(supportGate.semanticState),
       supportGate.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const normalization = semanticArtifacts.normalization
@@ -2244,7 +2305,7 @@ export class CodegenConversationService {
       constraintPack: nextConstraintPack,
     })
     const decisionPrompt = strategyDecision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(strategyDecision)
+      ? this.clarificationQuestion.buildFromDecision(strategyDecision, responseLocale)
       : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
@@ -2254,14 +2315,14 @@ export class CodegenConversationService {
       semanticReadyForGenerate,
     })
     const baseAssistantPrompt = deterministicAuthority === 'clarification'
-      ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+      ? (semanticArtifacts.clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
       : deterministicAuthority === 'decision'
-        ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+        ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
         : deterministicAuthority === 'normalization'
-          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale)
           : deterministicAuthority === 'confirm_gate'
-            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
-            : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
+            ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
+            : this.localizedText(responseLocale, `Updated strategy semantics: ${this.buildSemanticClarificationSummary(reducedSemanticState)}`, `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`)
     const assistantPrompt = this.withAppliedSemanticEditSummary(args.decision, baseAssistantPrompt)
     const targetStatus = shouldRestorePublishedOnCancel
       ? 'PUBLISHED'
@@ -2355,12 +2416,14 @@ export class CodegenConversationService {
     const persistedSemanticState = this.reconcileSemanticMissingPlaceholders(
       this.readSemanticState(session.semanticState),
     )
+    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const responseLocale = this.resolveResponseLocale(dto.locale, constraintPack.locale)
     if (this.shouldRejectChecklistOnlySession(session, persistedSemanticState)) {
-      return this.rejectChecklistOnlySession(session, sessionUserId)
+      return this.rejectChecklistOnlySession(session, sessionUserId, responseLocale)
     }
     const activeClarificationState = this.hasPendingBlockingClarification(baseClarificationState)
       ? baseClarificationState
-      : this.resolveSemanticClarificationArtifacts(persistedSemanticState).clarificationState
+      : this.resolveSemanticClarificationArtifacts(persistedSemanticState, responseLocale).clarificationState
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       activeClarificationState,
       dto.message,
@@ -2376,7 +2439,6 @@ export class CodegenConversationService {
         effectiveClarificationAnswers,
       ),
     )
-    const constraintPack = this.readConstraintPack(session.constraintPack)
     const supportGateResponse = await this.handleSemanticSupportGateForExistingSession({
       session,
       semanticState: rawSemanticStateAfterAnswers,
@@ -2393,7 +2455,7 @@ export class CodegenConversationService {
       this.reconcileSemanticMissingPlaceholders(supportGateResponse.semanticState),
       supportGateResponse.strategyVersion,
     )
-    const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers)
+    const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers, responseLocale)
     const confirmationViewNormalization = confirmationViewArtifacts.normalization
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
       this.buildCanonicalSpecForConversation(semanticStateAfterAnswers, confirmationViewNormalization),
@@ -2415,7 +2477,7 @@ export class CodegenConversationService {
       ),
       supportGateResponse.strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       semanticArtifacts.clarificationState,
       baseClarificationState,
@@ -2473,7 +2535,7 @@ export class CodegenConversationService {
     }
 
     if (hasBlockingClarificationItems) {
-      const assistantPrompt = clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
+      const assistantPrompt = clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。')
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -2510,7 +2572,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization),
+        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale),
         clarificationState,
         specDesc,
       })
@@ -2538,10 +2600,10 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: projectionLoss.blocked
-          ? this.buildSemanticProjectionLossAssistantPrompt(reducedSemanticState, projectionLoss)
+          ? this.buildSemanticProjectionLossAssistantPrompt(reducedSemanticState, projectionLoss, responseLocale)
           : semanticReadyForGenerate
-          ? this.buildCanonicalProjectionFailureAssistantPrompt(reducedSemanticState, compileability)
-          : (clarificationPrompt || '请先补充未关闭的语义问题，我再继续生成脚本。'),
+          ? this.buildCanonicalProjectionFailureAssistantPrompt(reducedSemanticState, compileability, responseLocale)
+          : (clarificationPrompt || this.localizedText(responseLocale, 'Please answer the remaining semantic question before I generate the script.', '请先补充未关闭的语义问题，我再继续生成脚本。')),
         clarificationState,
         specDesc,
       })
@@ -2611,6 +2673,7 @@ export class CodegenConversationService {
 
     return /^(?:对|对的|是|是的|确认|确定|无误|没问题|可以|可以了|就这样|按这个|按此生成|确认生成|确认并生成|直接生成|生成脚本|生成代码|开始生成|继续生成)$/u.test(text)
       || /^(?:确认|确定|无误|对的|是的).*(?:生成|编译|脚本|代码|继续)?$/u.test(text)
+      || /^(?:yes|yep|yeah|ok|okay|confirm|confirmed|looks good|go ahead|proceed|continue|do it|generate|generate script|generate code|start generation)$/iu.test(text)
   }
 
   private readSemanticState(
@@ -2655,7 +2718,14 @@ export class CodegenConversationService {
   private async rejectChecklistOnlySession(
     session: PersistedConversationSessionForContinue,
     sessionUserId: string,
+    locale?: CodegenConversationLocale,
   ): Promise<CodegenSessionResponseDto> {
+    const responseLocale = locale ?? this.resolveResponseLocale(undefined, this.readConstraintPack(session.constraintPack).locale)
+    const assistantPrompt = this.localizedText(
+      responseLocale,
+      'I could not recover executable strategy semantics from this session. Please describe the entry, exit, risk, and position rules again.',
+      MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+    )
     const clarificationState: StrategyClarificationStateWithSummary = {
       status: 'NEEDS_CLARIFICATION',
       summary: null,
@@ -2664,13 +2734,13 @@ export class CodegenConversationService {
         reason: 'missing_semantic_trigger',
         field: 'semanticState',
         blocking: true,
-        question: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+        question: assistantPrompt,
         status: 'pending',
       }],
     }
     await this.sessionsRepo.updateSession(session.id, {
       status: 'REJECTED',
-      rejectReason: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+      rejectReason: assistantPrompt,
       clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
     } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
@@ -2678,9 +2748,9 @@ export class CodegenConversationService {
       id: session.id,
       status: 'REJECTED',
       missingFields: [],
-      assistantPrompt: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+      assistantPrompt,
       clarificationState,
-      rejectReason: MISSING_SEMANTIC_STATE_ASSISTANT_PROMPT,
+      rejectReason: assistantPrompt,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
   }
@@ -3519,12 +3589,8 @@ export class CodegenConversationService {
   private mergeSemanticClarificationState(
     semanticState: SemanticState,
     fallbackState: StrategyClarificationStateWithSummary,
-    locale: 'zh' | 'en' = 'zh',
   ): StrategyClarificationStateWithSummary {
     const clarificationView = this.semanticStateProjection.buildClarificationView(semanticState)
-    const summary = locale === 'en'
-      ? this.buildSemanticClarificationSummary(semanticState, locale)
-      : clarificationView.summary
     const nextOpenSlot = this.findNextOpenSemanticSlot(semanticState)
     if (!clarificationView.nextQuestion || !nextOpenSlot) {
       const pendingFallbackItems = fallbackState.status === 'NEEDS_CLARIFICATION'
@@ -3538,14 +3604,14 @@ export class CodegenConversationService {
         return {
           status: 'NEEDS_CLARIFICATION',
           items: preservedFallbackItems,
-          summary: fallbackState.summary || summary || null,
+          summary: fallbackState.summary || clarificationView.summary || null,
         }
       }
 
       return {
         status: 'CLEAR',
         items: [],
-        summary: summary || fallbackState.summary || null,
+        summary: clarificationView.summary || fallbackState.summary || null,
       }
     }
 
@@ -3553,10 +3619,10 @@ export class CodegenConversationService {
       const openSemanticSlots = this.listOpenSemanticSlots(semanticState)
       const semanticItems = openSemanticSlots
         .filter(slot => slot.priority !== 'context')
-        .map(slot => this.buildSemanticClarificationItem(slot, locale))
+        .map(slot => this.buildSemanticClarificationItem(slot))
       const semanticContextItems = openSemanticSlots
         .filter(slot => slot.priority === 'context')
-        .map(slot => this.buildSemanticClarificationItem(slot, locale))
+        .map(slot => this.buildSemanticClarificationItem(slot))
       const allSemanticItems = [...semanticItems, ...semanticContextItems]
       const semanticItemKeys = new Set(allSemanticItems.map(item => item.key))
       const semanticSlotIds = new Set(allSemanticItems.map(item => item.slotId).filter((slotId): slotId is string => typeof slotId === 'string'))
@@ -3577,7 +3643,7 @@ export class CodegenConversationService {
       return {
         status: 'NEEDS_CLARIFICATION',
         items: [...allSemanticItems, ...filteredPendingItems],
-        summary,
+        summary: clarificationView.summary,
       }
     }
 
@@ -3596,13 +3662,13 @@ export class CodegenConversationService {
         items.unshift(targetItem)
       }
     } else if (targetIndex < 0) {
-      items.unshift(this.buildSemanticClarificationItem(nextOpenSlot, locale))
+      items.unshift(this.buildSemanticClarificationItem(nextOpenSlot))
     }
 
     return {
       status: 'NEEDS_CLARIFICATION',
       items,
-      summary,
+      summary: clarificationView.summary,
     }
   }
 
@@ -3776,7 +3842,7 @@ export class CodegenConversationService {
 
   private buildSemanticClarificationItem(
     slot: SemanticSlotState,
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): StrategyClarificationItem {
     const isContractReadinessSlot = isContractReadinessSemanticSlot(slot)
     const isStateGateSlot = !isContractReadinessSlot && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition')
@@ -3815,10 +3881,7 @@ export class CodegenConversationService {
       reason,
       field,
       blocking: true,
-      question: this.semanticQuestionRenderer.renderLocalized({
-        slotKey: slot.slotKey,
-        fallback: slot.questionHint,
-      }, locale),
+      question: this.renderSemanticSlotQuestion(slot, locale),
       status: 'pending',
       slotId: buildSemanticSlotId(slot),
       slotKey: slot.slotKey,
@@ -3828,7 +3891,7 @@ export class CodegenConversationService {
 
   private buildSemanticClarificationPrompt(
     state: SemanticState,
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): string | null {
     const clarificationView = this.semanticStateProjection.buildClarificationView(state)
     const nextOpenSlot = this.findNextOpenSemanticSlot(state)
@@ -3839,8 +3902,8 @@ export class CodegenConversationService {
     return this.clarificationQuestion.build({
       status: 'NEEDS_CLARIFICATION',
       items: [this.buildSemanticClarificationItem(nextOpenSlot, locale)],
-      summary: locale === 'en' ? this.buildSemanticClarificationSummary(state, locale) : clarificationView.summary,
-    })
+      summary: clarificationView.summary,
+    }, locale)
   }
 
   private listOpenSemanticSlots(state: SemanticState): SemanticSlotState[] {
@@ -3866,17 +3929,16 @@ export class CodegenConversationService {
 
   private buildClarificationFromSemanticState(
     semanticState: SemanticState,
-    locale: 'zh' | 'en' = 'zh',
   ): StrategyClarificationStateWithSummary {
     const normalizedSemanticState = this.ensureExecutableAtomSlots(semanticState)
     const semanticSafetyItems = this.buildSemanticSafetyClarificationItems(normalizedSemanticState)
     const semanticBaseState: StrategyClarificationStateWithSummary = {
       status: semanticSafetyItems.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
       items: semanticSafetyItems,
-      summary: this.buildSemanticClarificationSummary(normalizedSemanticState, locale),
+      summary: this.buildSemanticClarificationSummary(normalizedSemanticState),
     }
 
-    return this.mergeSemanticClarificationState(normalizedSemanticState, semanticBaseState, locale)
+    return this.mergeSemanticClarificationState(normalizedSemanticState, semanticBaseState)
   }
 
   private buildSemanticSafetyClarificationItems(state: SemanticState): StrategyClarificationItem[] {
@@ -5118,6 +5180,7 @@ export class CodegenConversationService {
   private async continueWithStructuredClarificationAnswers(
     args: StructuredClarificationContinuationArgs,
   ): Promise<CodegenSessionResponseDto> {
+    const responseLocale = this.resolveResponseLocale(undefined, args.constraintPack.locale)
     const semanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
     const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
     const historyAfterAnswer = this.appendConversationHistory(
@@ -5134,14 +5197,14 @@ export class CodegenConversationService {
       ),
       strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const semanticClarificationState = this.buildClarificationFromSemanticState(reducedSemanticState)
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
-        || this.clarificationQuestion.build(semanticClarificationState)
+      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState, responseLocale)
+        || this.clarificationQuestion.build(semanticClarificationState, responseLocale)
         || semanticArtifacts.clarificationPrompt
-        || '请先澄清这条规则，我再继续完善逻辑图。'
+        || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。')
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -5178,7 +5241,7 @@ export class CodegenConversationService {
     })
 
     if (decision.kind === 'CONFIRM_INFERRED') {
-      const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
+      const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -5218,14 +5281,14 @@ export class CodegenConversationService {
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization),
+        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale),
         clarificationState: semanticClarificationState,
         specDesc,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
+    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
     const historyAfterLogicGate = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
@@ -5283,11 +5346,8 @@ export class CodegenConversationService {
   ): Promise<CodegenSessionResponseDto> {
     await this.persistConversationProjectionForSessionId(sessionId, userId)
     const conversation = await this.conversationsRepo.findByCodegenSessionId(sessionId)
-    const session = await this.sessionsRepo.findById(sessionId)
-    const locale = this.readConstraintPack(session?.constraintPack ?? null).locale ?? 'zh'
     return {
       ...response,
-      assistantPrompt: this.localizeKnownAssistantPrompt(response.assistantPrompt, locale),
       conversationId: conversation?.id ?? response.conversationId ?? null,
     }
   }
@@ -5990,23 +6050,17 @@ export class CodegenConversationService {
     return segments.length > 0 ? segments.join('；') : null
   }
 
-  private buildSemanticClarificationSummary(
-    semanticState: SemanticState,
-    locale: 'zh' | 'en' = 'zh',
-  ): string {
-    if (locale === 'en') {
-      return this.buildEnglishSemanticSummary(semanticState)
-    }
+  private buildSemanticClarificationSummary(semanticState: SemanticState): string {
     return this.semanticStateProjection.buildConversationView(semanticState).summary
   }
 
   private buildSemanticLogicGateAssistantPrompt(
     semanticState: SemanticState,
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): string {
-    const summary = this.buildSemanticClarificationSummary(semanticState, locale)
+    const summary = this.buildSemanticClarificationSummary(semanticState)
     if (locale === 'en') {
-      return `Here is the strategy logic I have organized: ${summary}. Please confirm whether I should generate the script with this logic.`
+      return `I organized the strategy logic as follows: ${summary}. Please confirm whether I should generate the script with this logic.`
     }
     return `我整理出的策略逻辑如下：${summary}。请确认是否按这个逻辑生成脚本。`
   }
@@ -6014,11 +6068,11 @@ export class CodegenConversationService {
   private buildSemanticNormalizationAssistantPrompt(
     semanticState: SemanticState,
     normalization: NormalizationResult,
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): string {
-    const summary = this.buildSemanticClarificationSummary(semanticState, locale)
+    const summary = this.buildSemanticClarificationSummary(semanticState)
     if (locale === 'en') {
-      const blocker = normalization.blockerReason ? `Still missing: ${normalization.blockerReason}` : 'The strategy semantics are still incomplete.'
+      const blocker = normalization.blockerReason ? `Current missing item: ${normalization.blockerReason}` : 'The current semantics are still incomplete.'
       return `My current understanding of the strategy is: ${summary}\n${blocker}`
     }
     const blocker = normalization.blockerReason ? `当前还缺少：${normalization.blockerReason}` : '当前语义仍未完整。'
@@ -6093,12 +6147,24 @@ export class CodegenConversationService {
   private buildCanonicalProjectionFailureAssistantPrompt(
     semanticState: SemanticState,
     compileability: CanonicalCompileabilityReport,
+    locale: CodegenConversationLocale = 'zh',
   ): string {
     const summary = this.buildSemanticClarificationSummary(semanticState)
-    const missing = [
-      compileability.reasons.includes('canonical_projection_missing_entry_program') ? '可执行入场规则' : null,
-      compileability.reasons.includes('canonical_projection_missing_exit_program') ? '可执行出场/风控规则' : null,
-    ].filter((item): item is string => item !== null)
+    const missing = locale === 'en'
+      ? [
+          compileability.reasons.includes('canonical_projection_missing_entry_program') ? 'executable entry rules' : null,
+          compileability.reasons.includes('canonical_projection_missing_exit_program') ? 'executable exit/risk rules' : null,
+        ].filter((item): item is string => item !== null)
+      : [
+          compileability.reasons.includes('canonical_projection_missing_entry_program') ? '可执行入场规则' : null,
+          compileability.reasons.includes('canonical_projection_missing_exit_program') ? '可执行出场/风控规则' : null,
+        ].filter((item): item is string => item !== null)
+    if (locale === 'en') {
+      const blocker = missing.length > 0
+        ? `The current logic cannot be projected reliably into ${missing.join(' and ')}.`
+        : 'The current logic cannot be projected reliably into executable rules.'
+      return `My current understanding of the strategy is: ${summary}\n${blocker} Please provide clearer trigger or exit conditions, then I will generate the script.`
+    }
     const blocker = missing.length > 0
       ? `当前还不能稳定投影到${missing.join('和')}。`
       : '当前还不能稳定投影到可执行规则。'
@@ -6108,9 +6174,16 @@ export class CodegenConversationService {
   private buildSemanticProjectionLossAssistantPrompt(
     semanticState: SemanticState,
     projectionLoss: { reasons: string[] },
+    locale: CodegenConversationLocale = 'zh',
   ): string {
     const summary = this.buildSemanticClarificationSummary(semanticState)
     const hasUnsupported = projectionLoss.reasons.some(reason => reason.startsWith('unsupported:'))
+    if (locale === 'en') {
+      const blocker = hasUnsupported
+        ? 'Some recognized semantics are not supported by the execution layer yet.'
+        : 'Some recognized semantics cannot yet be projected reliably into executable rules.'
+      return `My current understanding of the strategy is: ${summary}\n${blocker} Please adjust to currently supported trigger, risk, or execution conditions, then I will generate the script.`
+    }
     const blocker = hasUnsupported
       ? '当前有已识别但执行层暂不支持的语义。'
       : '当前有已识别语义尚未稳定投影到可执行规则。'
@@ -7098,11 +7171,13 @@ export class CodegenConversationService {
     strategyVersion: StrategyVersionInfo
   }> {
     const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
+    const responseLocale = this.resolveResponseLocale(undefined, args.constraintPack.locale)
     const classification = this.semanticSupportClassifier.classify(args.semanticState, strategyVersion)
     if (classification.route === 'unsupported_fallback') {
       const unsupportedFallback = this.unsupportedFallback.buildPendingFallback(
         classification.unsupportedAtoms,
         classification.state.triggers,
+        responseLocale,
       )
       if (unsupportedFallback !== null) {
         const nextState = this.withUnsupportedFallback(classification.state, unsupportedFallback)
@@ -7164,7 +7239,7 @@ export class CodegenConversationService {
 
     if (classification.route === 'unknown_unsupported') {
       const nextState = this.clearUnsupportedFallback(classification.state)
-      const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(classification.unknownAtoms)
+      const assistantPrompt = this.buildUnknownSemanticSupportAssistantPrompt(classification.unknownAtoms, responseLocale)
       const clarificationState = this.buildUnsupportedFallbackClarificationState()
       const nextConstraintPack = this.withGuidePrompt(args.constraintPack, args.guidePrompt, args.recommendationStyle)
       await this.sessionsRepo.updateSession(args.session.id, {
@@ -7226,6 +7301,7 @@ export class CodegenConversationService {
 
     const intent = this.unsupportedFallback.classifyConfirmation(args.message)
     const constraintPack = this.readConstraintPack(args.session.constraintPack)
+    const responseLocale = this.resolveResponseLocale(undefined, constraintPack.locale)
     if (intent.kind === 'reject_fallback') {
       const semanticState = this.clearRejectedUnsupportedFallbackState(args.semanticState)
       return {
@@ -7234,7 +7310,11 @@ export class CodegenConversationService {
           session: args.session,
           semanticState,
           message: args.message,
-          assistantPrompt: '好的，这次不改用推荐策略。你可以继续描述一个当前公测支持的入场、出场、风控和仓位组合，我会重新整理逻辑图。',
+          assistantPrompt: this.localizedText(
+            responseLocale,
+            'Okay, I will not switch to the recommended strategy. You can continue describing a currently supported entry, exit, risk, and sizing combination, and I will rebuild the logic graph.',
+            '好的，这次不改用推荐策略。你可以继续描述一个当前公测支持的入场、出场、风控和仓位组合，我会重新整理逻辑图。',
+          ),
           userId: args.userId,
           constraintPack,
         }),
@@ -7248,7 +7328,11 @@ export class CodegenConversationService {
           session: args.session,
           semanticState: args.semanticState,
           message: args.message,
-          assistantPrompt: `请确认是否改用推荐策略：${pendingFallback.recommendedStrategy.description}。也可以直接说明要改哪个周期或仓位。`,
+          assistantPrompt: this.localizedText(
+            responseLocale,
+            `Please confirm whether to switch to the recommended strategy: ${pendingFallback.recommendedStrategy.description}. You can also say which timeframe or position size you want to change.`,
+            `请确认是否改用推荐策略：${pendingFallback.recommendedStrategy.description}。也可以直接说明要改哪个周期或仓位。`,
+          ),
           userId: args.userId,
           constraintPack,
         }),
@@ -7274,7 +7358,11 @@ export class CodegenConversationService {
           session: args.session,
           semanticState: args.semanticState,
           message: args.message,
-          assistantPrompt: '我可以先按推荐策略继续，并支持把周期改成 15m/1h/4h/日线，或把仓位改成例如 5%。请确认要改用，或说明具体周期/仓位。',
+          assistantPrompt: this.localizedText(
+            responseLocale,
+            'I can continue with the recommended strategy and adjust the timeframe to 15m/1h/4h/daily, or change the position size, for example to 5%. Please confirm switching, or specify the timeframe/position change.',
+            '我可以先按推荐策略继续，并支持把周期改成 15m/1h/4h/日线，或把仓位改成例如 5%。请确认要改用，或说明具体周期/仓位。',
+          ),
           userId: args.userId,
           constraintPack,
         }),
@@ -7300,8 +7388,12 @@ export class CodegenConversationService {
         constraintPack,
         guideConfig: args.guideConfig,
         prefix: replacementPatchResult.modifiedFields.length > 0
-          ? `已改用推荐策略，并调整${replacementPatchResult.modifiedFields.join('、')}。`
-          : '已改用推荐策略。',
+          ? this.localizedText(
+              responseLocale,
+              `Switched to the recommended strategy and adjusted ${replacementPatchResult.modifiedFields.join(', ')}. `,
+              `已改用推荐策略，并调整${replacementPatchResult.modifiedFields.join('、')}。`,
+            )
+          : this.localizedText(responseLocale, 'Switched to the recommended strategy. ', '已改用推荐策略。'),
       }),
     }
   }
@@ -7375,6 +7467,7 @@ export class CodegenConversationService {
     guideConfig?: CodegenGuideConfigDto
     prefix: string
   }): Promise<CodegenSessionResponseDto> {
+    const responseLocale = this.resolveResponseLocale(undefined, args.constraintPack.locale)
     const semanticState = this.reconcileSemanticMissingPlaceholders(args.semanticState)
     const strategyVersion = await this.resolveStrategyVersionForRuntimeGate(args.session.strategyInstanceId)
     const supportGate = this.semanticSupportClassifier.classify(semanticState, strategyVersion)
@@ -7402,7 +7495,7 @@ export class CodegenConversationService {
       }),
       strategyVersion,
     )
-    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState, responseLocale)
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const normalization = semanticArtifacts.normalization
@@ -7420,7 +7513,7 @@ export class CodegenConversationService {
       constraintPack: args.constraintPack,
     })
     const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(decision)
+      ? this.clarificationQuestion.buildFromDecision(decision, responseLocale)
       : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
@@ -7431,14 +7524,14 @@ export class CodegenConversationService {
     })
     const assistantPrompt = `${args.prefix}${
       deterministicAuthority === 'clarification'
-        ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        ? (semanticArtifacts.clarificationPrompt || this.localizedText(responseLocale, 'Please clarify this rule first, then I will continue refining the logic graph.', '请先澄清这条规则，我再继续完善逻辑图。'))
         : deterministicAuthority === 'decision'
-          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          ? (decisionPrompt || this.localizedText(responseLocale, 'Please confirm the current inference first, then I will continue refining the logic graph.', '请先确认当前推断，我再继续整理逻辑图。'))
           : deterministicAuthority === 'normalization'
-            ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+            ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization, responseLocale)
             : deterministicAuthority === 'confirm_gate'
-              ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
-              : '我已重新整理成当前可测试的策略，请继续补充入场、出场、风控或仓位。'
+              ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, responseLocale)
+              : this.localizedText(responseLocale, 'I rebuilt this into a currently testable strategy. Please continue adding entry, exit, risk, or sizing details.', '我已重新整理成当前可测试的策略，请继续补充入场、出场、风控或仓位。')
     }`
     const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
     const guidePrompt = this.mergeGuidePromptConfig(args.constraintPack.guidePrompt, args.guideConfig)
@@ -7640,52 +7733,15 @@ export class CodegenConversationService {
 
   private buildUnknownSemanticSupportAssistantPrompt(
     unknownAtoms: readonly string[],
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): string {
     const atomText = unknownAtoms.length > 0
-      ? `：${unknownAtoms.join('、')}`
+      ? this.localizedText(locale, `: ${unknownAtoms.join(', ')}`, `：${unknownAtoms.join('、')}`)
       : ''
     if (locale === 'en') {
-      return `I cannot map this description to supported trading atoms yet${atomText}. Please describe the entry, exit, risk control, and position sizing more explicitly, then I will organize it into a testable strategy.`
+      return `I cannot map this description to currently supported trading atom semantics${atomText}. Please describe the entry, exit, risk, and position rules more clearly, then I will organize it into a testable strategy.`
     }
     return `当前还没把该描述映射到可支持交易原子语义${atomText}。请更明确描述入场、出场、风控、仓位，我再继续整理成可测试策略。`
-  }
-
-  private buildEnglishSemanticSummary(semanticState: SemanticState): string {
-    const context = Object.entries(semanticState.contextSlots ?? {})
-      .map(([key, value]) => {
-        if (typeof value === 'string' || typeof value === 'number') {
-          return `${key}=${value}`
-        }
-        if (value && typeof value === 'object' && 'value' in value) {
-          return `${key}=${String((value as { value?: unknown }).value ?? '')}`
-        }
-        return null
-      })
-      .filter((item): item is string => Boolean(item))
-      .join(', ')
-    const triggers = semanticState.triggers
-      .filter(trigger => trigger.status === 'locked')
-      .map(trigger => `${trigger.phase}:${trigger.key}${trigger.sideScope ? `/${trigger.sideScope}` : ''}${this.formatEnglishSummaryParams(trigger.params)}`)
-    const actions = semanticState.actions
-      .filter(action => action.status === 'locked')
-      .map(action => action.key)
-    const positionConstraints = semanticState.position?.constraints
-      ?.map(constraint => `${constraint.key}${this.formatEnglishSummaryParams(constraint.params)}`) ?? []
-    const parts = [
-      context ? `context: ${context}` : '',
-      triggers.length ? `rules: ${triggers.join('; ')}` : '',
-      actions.length ? `actions: ${actions.join(', ')}` : '',
-      positionConstraints.length ? `position: ${positionConstraints.join('; ')}` : '',
-    ].filter(Boolean)
-    return parts.length > 0 ? parts.join(' | ') : 'some strategy conditions are recognized, but the strategy is not complete yet'
-  }
-
-  private formatEnglishSummaryParams(params: Record<string, unknown> | undefined): string {
-    if (!params || Object.keys(params).length === 0) {
-      return ''
-    }
-    return ` ${JSON.stringify(params)}`
   }
 
   private buildUnsupportedFallbackClarificationState(): StrategyClarificationStateWithSummary {
@@ -7928,7 +7984,7 @@ export class CodegenConversationService {
 
   private buildNormalizationFromSemanticState(
     semanticState: SemanticState,
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): NormalizationResult {
     const normalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
     const nextOpenSlot = this.findNextOpenSemanticSlot(semanticState)
@@ -7938,10 +7994,7 @@ export class CodegenConversationService {
       blocked: nextOpenSlot !== null,
       ...(nextOpenSlot
         ? {
-            blockerReason: this.semanticQuestionRenderer.renderLocalized({
-              slotKey: nextOpenSlot.slotKey,
-              fallback: nextOpenSlot.questionHint,
-            }, locale),
+            blockerReason: this.renderSemanticSlotQuestion(nextOpenSlot, locale),
           }
         : {}),
     }
@@ -7949,7 +8002,7 @@ export class CodegenConversationService {
 
   private resolveSemanticClarificationArtifacts(
     semanticState: SemanticState,
-    locale: 'zh' | 'en' = 'zh',
+    locale: CodegenConversationLocale = 'zh',
   ): {
     clarificationState: StrategyClarificationStateWithSummary
     normalization: NormalizationResult
@@ -7957,12 +8010,12 @@ export class CodegenConversationService {
     blockingReasons: StrategyBlockingReason[]
     clarificationPrompt: string | null
   } {
-    const clarificationState = this.buildClarificationFromSemanticState(semanticState, locale)
+    const clarificationState = this.buildClarificationFromSemanticState(semanticState)
     const normalization = this.buildNormalizationFromSemanticState(semanticState, locale)
     const executionContext = this.executionContext.resolveFromSemanticState(semanticState)
     const blockingReasons = this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState)
     const clarificationPrompt = this.buildSemanticClarificationPrompt(semanticState, locale)
-      || this.clarificationQuestion.build(clarificationState)
+      || this.clarificationQuestion.build(clarificationState, locale)
 
     return {
       clarificationState,
@@ -8646,76 +8699,74 @@ export class CodegenConversationService {
     return conversationContextHelper.readConstraintPack(payload)
   }
 
-  private normalizeConversationLocale(locale?: string | null): 'zh' | 'en' {
-    return locale === 'en' ? 'en' : 'zh'
+  private resolveResponseLocale(
+    requested?: string | null,
+    fallback?: string | null,
+  ): CodegenConversationLocale {
+    const normalized = requested?.trim().toLowerCase() || fallback?.trim().toLowerCase()
+    return normalized === 'en' ? 'en' : 'zh'
   }
 
-  private resolveConversationLocale(
-    requestLocale?: string | null,
-    currentLocale?: string | null,
-  ): 'zh' | 'en' {
-    return requestLocale === 'en' || requestLocale === 'zh'
-      ? requestLocale
-      : this.normalizeConversationLocale(currentLocale)
+  private localizedText(locale: CodegenConversationLocale, en: string, zh: string): string {
+    return locale === 'en' ? en : zh
   }
 
-  private withConversationLocale(
-    pack: ConstraintPackSnapshot,
-    locale: 'zh' | 'en',
-  ): ConstraintPackSnapshot {
-    return {
-      ...pack,
-      locale,
-    }
-  }
-
-  private localizedPlannerFallback(
-    key: 'empty_message' | 'missing_entry_exit' | 'confirm_logic_graph' | 'missing_key_condition',
-    locale: 'zh' | 'en',
-  ): string {
-    if (locale === 'en') {
-      const en: Record<typeof key, string> = {
-        empty_message: 'Please describe your trading logic first, and I will help refine it.',
-        missing_entry_exit: 'I understand your trading idea so far. Please provide the entry and exit trigger conditions, then I will organize it into a logic graph.',
-        confirm_logic_graph: 'I have organized the strategy logic. Please confirm the logic graph.',
-        missing_key_condition: 'I will keep refining the strategy logic. Please provide one key missing condition.',
-      }
-      return en[key]
-    }
-
-    const zh: Record<typeof key, string> = {
-      empty_message: '请先描述你的交易逻辑，我会继续帮你完善。',
-      missing_entry_exit: '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。',
-      confirm_logic_graph: '我已整理出策略逻辑，请确认逻辑图。',
-      missing_key_condition: '我先继续完善策略逻辑，请补充一个关键条件。',
-    }
-    return zh[key]
-  }
-
-  private localizeKnownAssistantPrompt(
-    prompt: string | null | undefined,
-    locale: 'zh' | 'en',
-  ): string | null | undefined {
-    if (locale !== 'en' || !prompt) {
+  private localizePlannerPromptForResponse(args: {
+    assistantPrompt: string
+    locale: CodegenConversationLocale
+    clarificationState?: StrategyClarificationStateWithSummary | null
+  }): string {
+    const prompt = args.assistantPrompt.trim()
+    if (args.locale !== 'en' || !this.containsCjkText(prompt)) {
       return prompt
     }
 
-    const normalized = prompt.trim()
-    const known: Record<string, string> = {
-      '请先描述你的交易逻辑，我会继续帮你完善。': this.localizedPlannerFallback('empty_message', 'en'),
-      '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。': this.localizedPlannerFallback('missing_entry_exit', 'en'),
-      '我先继续完善策略逻辑，请补充入场和出场条件。': this.localizedPlannerFallback('missing_entry_exit', 'en'),
-      '我已整理出策略逻辑，请确认逻辑图。': this.localizedPlannerFallback('confirm_logic_graph', 'en'),
-      '我先继续完善策略逻辑，请补充一个关键条件。': this.localizedPlannerFallback('missing_key_condition', 'en'),
-      '请先澄清这条规则，我再继续完善逻辑图。': 'Please clarify this rule first, then I will keep refining the logic graph.',
-      '请先确认当前推断，我再继续整理逻辑图。': 'Please confirm the current inference first, then I will keep organizing the logic graph.',
-      '这条消息看起来和策略无关。请描述交易逻辑或修改条件。': 'This message does not look related to the strategy. Please describe trading logic or a condition change.',
-      '当前会话缺少语义状态，请重新输入完整策略。': 'This session is missing semantic state. Please enter the full strategy again.',
+    const pendingItem = args.clarificationState?.status === 'NEEDS_CLARIFICATION'
+      ? pickPendingClarificationTarget(args.clarificationState.items)
+      : null
+    if (!pendingItem) {
+      return 'I understand the strategy idea so far. Please keep describing the trading logic or the condition you want to modify.'
     }
-    if (known[normalized]) {
-      return known[normalized]
+
+    const question = this.renderEnglishClarificationQuestion(pendingItem)
+    return [
+      'I understand the strategy logic you described.',
+      'One condition still needs clarification for consistent script generation.',
+      `Please confirm: ${question}`,
+    ].join('\n')
+  }
+
+  private containsCjkText(value: string): boolean {
+    return /[\u3400-\u9fff]/u.test(value)
+  }
+
+  private renderEnglishClarificationQuestion(item: StrategyClarificationItem): string {
+    if (item.slotKey) {
+      return this.semanticQuestionRenderer.renderStructured({
+        slotKey: item.slotKey,
+        fallback: item.question,
+      }, 'en').question
     }
-    return prompt
+    if (!this.containsCjkText(item.question)) {
+      return item.question
+    }
+    return 'Please provide the missing strategy condition.'
+  }
+
+  private renderSemanticSlotQuestion(
+    slot: SemanticSlotState,
+    locale: CodegenConversationLocale,
+  ): string {
+    if (locale === 'en') {
+      return this.semanticQuestionRenderer.renderStructured({
+        slotKey: slot.slotKey,
+        fallback: slot.questionHint,
+      }, 'en').question
+    }
+    return this.semanticQuestionRenderer.render({
+      slotKey: slot.slotKey,
+      fallback: slot.questionHint,
+    })
   }
 
   private withGuidePrompt(
@@ -8950,16 +9001,16 @@ export class CodegenConversationService {
   private async planConversationByLlm(
     message: string,
     currentSemanticState: SemanticState,
-    options?: { providerCode?: string, model?: string },
+    options?: { providerCode?: string, model?: string, locale?: CodegenConversationLocale },
     history: string[] = [],
-    locale: 'zh' | 'en' = 'zh',
   ): Promise<ConversationPlan> {
     const text = message.trim()
+    const locale = options?.locale ?? 'zh'
     if (!text) {
       return {
         related: false,
         logicReady: false,
-        assistantPrompt: this.localizedPlannerFallback('empty_message', locale),
+        assistantPrompt: this.localizedText(locale, 'Please describe your trading logic first, and I will help refine it.', '请先描述你的交易逻辑，我会继续帮你完善。'),
       }
     }
 
@@ -8992,7 +9043,7 @@ export class CodegenConversationService {
         return {
           related: true,
           logicReady: false,
-          assistantPrompt: this.localizedPlannerFallback('missing_entry_exit', locale),
+          assistantPrompt: this.localizedText(locale, 'I understand the trading idea so far. Please provide the entry and exit trigger conditions, then I will organize the logic graph.', '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。'),
           ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       }
@@ -9011,8 +9062,8 @@ export class CodegenConversationService {
         const assistantPrompt = typeof parsed.assistantPrompt === 'string' && parsed.assistantPrompt.trim()
           ? parsed.assistantPrompt.trim()
           : (logicReady
-              ? this.localizedPlannerFallback('confirm_logic_graph', locale)
-              : this.localizedPlannerFallback('missing_key_condition', locale))
+              ? this.localizedText(locale, 'I have organized the strategy logic. Please confirm the logic graph.', '我已整理出策略逻辑，请确认逻辑图。')
+              : this.localizedText(locale, 'I will keep refining the strategy logic. Please provide one key condition.', '我先继续完善策略逻辑，请补充一个关键条件。'))
         const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
         return {
           related,
@@ -9026,7 +9077,7 @@ export class CodegenConversationService {
         return {
           related: true,
           logicReady: false,
-          assistantPrompt: this.localizedPlannerFallback('missing_entry_exit', locale),
+          assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
           ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       }
@@ -9043,7 +9094,7 @@ export class CodegenConversationService {
         return {
           related: true,
           logicReady: false,
-          assistantPrompt: this.localizedPlannerFallback('missing_entry_exit', locale),
+          assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
           ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
@@ -9060,7 +9111,7 @@ export class CodegenConversationService {
         return {
           related: true,
           logicReady: false,
-          assistantPrompt: this.localizedPlannerFallback('missing_entry_exit', locale),
+          assistantPrompt: this.localizedText(locale, 'I will keep refining the strategy logic. Please provide the entry and exit conditions.', '我先继续完善策略逻辑，请补充入场和出场条件。'),
           ...(semanticPatch ? { semanticPatch } : {}),
         }
       }

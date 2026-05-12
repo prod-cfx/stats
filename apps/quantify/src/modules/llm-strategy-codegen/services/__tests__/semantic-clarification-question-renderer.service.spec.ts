@@ -115,6 +115,23 @@ describe('SemanticClarificationQuestionRendererService', () => {
     expect(publicText(question)).not.toContain('trigger.volume.relative_average.multiplier')
   })
 
+  it('renders missing executable entry and exit triggers in English', () => {
+    expect(service.renderStructured({
+      slotKey: 'trigger.entry',
+      fallback: '请补充入场触发条件。',
+    }, 'en')).toEqual({
+      title: 'Clarification required',
+      question: 'Please provide the entry trigger condition.',
+      slotLabel: 'entry trigger condition',
+      examples: ['MA6 crosses above MA48', 'price breaks above the previous high'],
+    })
+
+    expect(service.renderStructured({
+      slotKey: 'trigger.exit',
+      fallback: '请补充出场触发条件。',
+    }, 'en').question).toBe('Please provide the exit trigger condition.')
+  })
+
   it('uses display-registry slot tokens for structured slot labels', () => {
     expect(service.renderStructured({
       slotKey: 'volume.threshold.value',

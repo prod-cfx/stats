@@ -12,8 +12,8 @@ export class LlmCodegenStartRequestDto {
   @IsObject()
   guideConfig?: Record<string, unknown>
 
-  @ApiPropertyOptional({ enum: ['zh', 'en'], description: 'Preferred assistant conversation language' })
+  @ApiPropertyOptional({ enum: ['zh', 'en'] })
   @IsOptional()
   @IsIn(['zh', 'en'])
-  locale?: 'zh' | 'en'
+  locale?: string
 }

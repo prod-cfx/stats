@@ -3,8 +3,14 @@ import { act } from 'react'
 import { createRoot  } from 'react-dom/client'
 import { DisplayLogicGraphPreview } from './DisplayLogicGraphPreview'
 
+let mockLanguage = 'zh'
+
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
+    i18n: {
+      language: mockLanguage,
+      resolvedLanguage: mockLanguage,
+    },
     t: (key: string) => key,
   }),
 }))
@@ -16,9 +22,92 @@ describe('displayLogicGraphPreview', () => {
   let root: Root
 
   beforeEach(() => {
+    mockLanguage = 'zh'
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+  })
+
+  it('localizes server-provided graph labels and semantic text in English', () => {
+    mockLanguage = 'en'
+
+    act(() => {
+      root.render(
+        <DisplayLogicGraphPreview
+          graph={{
+            blocks: [
+              {
+                type: 'IF',
+                items: [
+                  {
+                    kind: 'condition',
+                    id: 'condition-rsi-entry',
+                    text: 'RSI14 上穿阈值',
+                  },
+                  {
+                    kind: 'action',
+                    id: 'action-entry',
+                    text: '开多 25%',
+                  },
+                ],
+              },
+              {
+                type: 'AND_AT_THEN',
+                items: [
+                  {
+                    kind: 'condition',
+                    id: 'condition-rsi-exit',
+                    text: 'RSI14 高于阈值',
+                  },
+                  {
+                    kind: 'action',
+                    id: 'action-exit',
+                    text: '平仓',
+                  },
+                ],
+              },
+              {
+                type: 'EXECUTE',
+                items: [
+                  {
+                    kind: 'execute',
+                    id: 'execute-exchange',
+                    key: 'exchange',
+                    text: '交易所: OKX',
+                  },
+                  {
+                    kind: 'execute',
+                    id: 'execute-market-type',
+                    key: 'marketType',
+                    text: '市场: 现货',
+                  },
+                  {
+                    kind: 'execute',
+                    id: 'execute-risk',
+                    key: 'risk',
+                    text: '风控: 亏损达到 5% -> 平仓',
+                  },
+                ],
+              },
+            ],
+          }}
+          confirmed
+          onConfirm={() => {}}
+          onRevise={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('RSI14 crosses above threshold')
+    expect(container.textContent).toContain('Open long 25%')
+    expect(container.textContent).toContain('RSI14 above threshold')
+    expect(container.textContent).toContain('Close position')
+    expect(container.textContent).toContain('Exchange: OKX')
+    expect(container.textContent).toContain('Market: Spot')
+    expect(container.textContent).toContain('Risk: Loss reaches 5% -> Close position')
+    expect(container.textContent).not.toContain('交易所')
+    expect(container.textContent).not.toContain('开多')
+    expect(container.textContent).not.toContain('平仓')
   })
 
   afterEach(() => {

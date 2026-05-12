@@ -14,7 +14,10 @@ interface UnsupportedAtomInput {
   publicReason: string
 }
 
+type UnsupportedFallbackLocale = 'zh' | 'en'
+
 const DEFAULT_FALLBACK_ATOM_KEY = 'risk.atr_stop'
+const DEFAULT_REPLACEMENT_EN_DESCRIPTION = 'Go long when MA20 crosses above MA50, close when MA20 crosses below MA50, with 5% stop loss, 10% take profit, and 10% position size per trade.'
 
 // 当用户输入既触发 supported 的具体识别（如 price.candle_pattern / price.chart_pattern /
 // liquidity.sweep），又被裸 pattern 兜底分支误捕成 unsupported 的 price.pattern 时，
@@ -58,6 +61,7 @@ export class UnsupportedFallbackService {
   buildPendingFallback(
     unsupportedAtoms: UnsupportedAtomInput[],
     supportedTriggers: ReadonlyArray<{ key: string }> = [],
+    locale: UnsupportedFallbackLocale = 'zh',
   ): UnsupportedFallbackState | null {
     const filtered = this.filterUnsupportedAtomsCoveredBySupported(unsupportedAtoms, supportedTriggers)
 
@@ -67,20 +71,46 @@ export class UnsupportedFallbackService {
 
     const replacement = this.resolveReplacement(filtered[0]?.key)
     const unsupportedAtomCopies = filtered.map(atom => ({ ...atom }))
-    const names = [...new Set(unsupportedAtomCopies.map(atom => atom.displayName))].join('、')
-    const publicReasons = [...new Set(unsupportedAtomCopies.map(atom => atom.publicReason))]
+    const names = locale === 'en'
+      ? [...new Set(unsupportedAtomCopies.map(atom => atom.key))].join(', ')
+      : [...new Set(unsupportedAtomCopies.map(atom => atom.displayName))].join('、')
+    const publicReasons = locale === 'en'
+      ? [...new Set(unsupportedAtomCopies.map(atom => atom.reasonCode))]
+        .map(reasonCode => `Reason: ${reasonCode}. This semantic is recognized but is not supported by the current public beta execution layer yet.`)
+      : [...new Set(unsupportedAtomCopies.map(atom => atom.publicReason))]
+    const localizedReplacement = {
+      ...cloneReplacement(replacement),
+      description: this.localizeReplacementDescription(replacement, locale),
+    }
 
     return {
       status: 'pending',
       unsupportedAtoms: unsupportedAtomCopies,
-      recommendedStrategy: cloneReplacement(replacement),
-      prompt: [
-        `我听懂了，你要的是 ${names}。`,
-        ...publicReasons,
-        `可以先测试这个相近策略：${replacement.description}`,
-        '是否改用这个策略继续？',
-      ].join('\n'),
+      recommendedStrategy: localizedReplacement,
+      prompt: locale === 'en'
+        ? [
+            `I understand you want: ${names}.`,
+            ...publicReasons,
+            `You can test this similar supported strategy first: ${localizedReplacement.description}`,
+            'Switch to this strategy and continue?',
+          ].join('\n')
+        : [
+            `我听懂了，你要的是 ${names}。`,
+            ...publicReasons,
+            `可以先测试这个相近策略：${localizedReplacement.description}`,
+            '是否改用这个策略继续？',
+          ].join('\n'),
     }
+  }
+
+  private localizeReplacementDescription(
+    replacement: SemanticAtomReplacementStrategy,
+    locale: UnsupportedFallbackLocale,
+  ): string {
+    if (locale === 'en' && replacement.strategyKey === 'ma_cross_with_fixed_risk') {
+      return DEFAULT_REPLACEMENT_EN_DESCRIPTION
+    }
+    return replacement.description
   }
 
   classifyConfirmation(message: string): UnsupportedFallbackIntent {

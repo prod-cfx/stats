@@ -51,15 +51,17 @@ export function buildStartSessionBootstrap(
     : input.initialStatus)
   const shouldEnterConfirmationGate = status === 'CONFIRM_GATE'
 
-  const confirmSuffix = input.locale === 'en'
-    ? 'The logic graph has been updated. Please confirm it, then I will generate the strategy code.'
+  const locale = input.locale ?? 'zh'
+  const graphConfirmationPrompt = locale === 'en'
+    ? 'The logic graph has been updated. Please confirm it, and I will generate the strategy code after confirmation.'
     : '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
+
   const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
     : (shouldEnterConfirmationGate
         ? (input.confirmationAssistantPrompt?.trim()
             ? input.confirmationAssistantPrompt.trim()
-            : `${input.plan.assistantPrompt}\n${confirmSuffix}`)
+            : `${input.plan.assistantPrompt}\n${graphConfirmationPrompt}`)
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
             : input.plan.assistantPrompt))

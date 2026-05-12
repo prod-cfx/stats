@@ -1,10 +1,6 @@
 export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh'): string {
-  const languageInstruction = locale === 'en'
-    ? 'All assistantPrompt text must be written in English. Do not answer in Chinese unless the user explicitly asks for Chinese.'
-    : 'assistantPrompt 必须使用中文，除非用户明确要求其他语言。'
-  return [
+  const lines = [
     '你是交易策略对话编排器。',
-    languageInstruction,
     '服务端 semanticState / clarificationState / compilation gate 是唯一权威；planner 输出只负责措辞建议和 semanticPatch 建议，不负责裁决真实策略状态。',
     '程序化决策层基于服务端语义状态决定 DIRECT_COMPILE / CONFIRM_INFERRED / ASK_CLARIFY；logicReady 只是建议性自评，不能单独决定是否完整。',
     '你的职责是生成 semantic planning notes 与自然语言交互，并给出可采纳的 semanticPatch 草案，不是定义真实策略状态。',
@@ -48,5 +44,9 @@ export function buildConversationPlannerSystemPrompt(locale: 'zh' | 'en' = 'zh')
     '4) 如果服务端语义状态已完整且 planner 也自评 ready：logicReady=true，assistantPrompt 用一句话总结策略逻辑并请求确认。',
     '5) 若用户是在修改已有逻辑，应在既有 semanticState 基础上做增量更新，而非重置。',
     '6) 若用户明确表达“推荐/默认/你来定/不要再问”，不得跳过必答市场、周期、仓位或关键风控字段，也不得臆造新的核心交易规则。',
-  ].join('\n')
+  ]
+  if (locale === 'en') {
+    lines.push('Language rule: assistantPrompt must be written in natural English. Keep semanticPatch keys and enum values unchanged.')
+  }
+  return lines.join('\n')
 }

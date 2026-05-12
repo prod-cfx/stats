@@ -37,6 +37,11 @@ export class ContinueCodegenSessionDto {
   @IsString()
   userId?: string
 
+  @ApiPropertyOptional({ description: '会话回复语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: string
+
   @ApiProperty({ description: '用户本轮输入' })
   @IsString()
   @IsNotEmpty()
@@ -57,11 +62,6 @@ export class ContinueCodegenSessionDto {
   @ValidateNested()
   @Type(() => CodegenGuideConfigDto)
   guideConfig?: CodegenGuideConfigDto
-
-  @ApiPropertyOptional({ description: '助手对话语言', enum: ['zh', 'en'] })
-  @IsOptional()
-  @IsIn(['zh', 'en'])
-  locale?: 'zh' | 'en'
 
   @ApiPropertyOptional({ description: '是否确认并触发代码生成（默认 false）' })
   @IsOptional()

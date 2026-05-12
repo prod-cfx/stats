@@ -10,6 +10,7 @@ describe('llmStrategyCodegenController', () => {
     await controller.startSession('user-1', 'Bearer token-1', {
       initialMessage: 'build me a strategy',
       guideConfig: { symbolExample: 'BTCUSDT' },
+      locale: 'en',
     })
 
     expect(service.startCodegen).toHaveBeenCalledWith(
@@ -18,6 +19,7 @@ describe('llmStrategyCodegenController', () => {
       {
         initialMessage: 'build me a strategy',
         guideConfig: { symbolExample: 'BTCUSDT' },
+        locale: 'en',
       },
     )
   })
@@ -52,6 +54,7 @@ describe('llmStrategyCodegenController', () => {
 
     await controller.continueSession('user-1', 'Bearer token-1', 'session-1', {
       message: '确认逻辑图',
+      locale: 'zh',
       confirmGenerate: true,
       confirmedCanonicalDigest: 'sha256:canonical-1',
     })
@@ -62,6 +65,7 @@ describe('llmStrategyCodegenController', () => {
       'session-1',
       {
         message: '确认逻辑图',
+        locale: 'zh',
         confirmGenerate: true,
         confirmedCanonicalDigest: 'sha256:canonical-1',
       },
@@ -76,6 +80,7 @@ describe('llmStrategyCodegenController', () => {
 
     await controller.continueSession('user-1', 'Bearer token-1', 'session-1', {
       message: '回答澄清',
+      locale: 'en',
       clarificationAnswers: {
         'entry.side': 'short',
         'market.marketType': 'perp',
@@ -88,6 +93,7 @@ describe('llmStrategyCodegenController', () => {
       'session-1',
       {
         message: '回答澄清',
+        locale: 'en',
         clarificationAnswers: {
           'entry.side': 'short',
           'market.marketType': 'perp',
