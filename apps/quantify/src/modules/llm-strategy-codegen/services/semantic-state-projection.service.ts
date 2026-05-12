@@ -388,7 +388,14 @@ export class SemanticStateProjectionService {
   } {
     const triggerSummary = this.buildTriggerSummary(state.triggers, true)
     const riskSummary = this.buildRiskSummary(state.risk)
-    const summaryItems = [triggerSummary, riskSummary].filter(item => item.length > 0)
+    // #1217 follow-up：clarification 路径下"我当前理解的策略是"这条提示长期只渲染
+    // trigger + risk，遗漏 position 段（含 sizing、dca_schedule / pyramiding_limit
+    // 等 constraint 显示），导致用户给出 DCA / 加仓配置时即使 state.position.constraints
+    // 里已 locked，UI 也不会回显，看起来像"DCA 没识别"。与 buildConversationView 对齐
+    // 让 clarification summary 也包含 position 段。actionSummary / orchestrationSummary
+    // 暂不并入，避免破坏现有 not-toContain 类断言；如后续需要可同步对齐。
+    const positionSummary = this.buildPositionSummary(state.position)
+    const summaryItems = [triggerSummary, riskSummary, positionSummary].filter(item => item.length > 0)
 
     const nextSlot = this.findNextOpenSlot(state)
 
