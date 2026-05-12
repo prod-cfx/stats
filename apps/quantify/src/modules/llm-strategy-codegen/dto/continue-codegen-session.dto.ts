@@ -36,6 +36,11 @@ export class ContinueCodegenSessionDto {
   @IsString()
   userId?: string
 
+  @ApiPropertyOptional({ description: '会话回复语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsString()
+  locale?: string
+
   @ApiProperty({ description: '用户本轮输入' })
   @IsString()
   @IsNotEmpty()

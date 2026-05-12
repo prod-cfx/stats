@@ -1134,6 +1134,7 @@ export function AiQuantPageClient({
       callingMessage,
       codegenRequestMutexRef,
       conversations,
+      locale: lng,
       sessionUserId: session?.userId,
       setCodegenBusyConversationIds,
       setConversations,

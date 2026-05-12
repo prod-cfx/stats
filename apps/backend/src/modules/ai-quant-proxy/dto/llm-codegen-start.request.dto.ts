@@ -11,4 +11,9 @@ export class LlmCodegenStartRequestDto {
   @IsOptional()
   @IsObject()
   guideConfig?: Record<string, unknown>
+
+  @ApiPropertyOptional({ enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsString()
+  locale?: string
 }

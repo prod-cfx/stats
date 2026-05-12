@@ -14,6 +14,11 @@ export class StartCodegenSessionDto {
   @IsString()
   initialMessage?: string
 
+  @ApiPropertyOptional({ description: '会话回复语言', enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsString()
+  locale?: string
+
   @ApiPropertyOptional({ description: '会话级引导参数配置', type: CodegenGuideConfigDto })
   @IsOptional()
   @ValidateNested()

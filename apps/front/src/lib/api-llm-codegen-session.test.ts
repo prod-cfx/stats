@@ -131,10 +131,10 @@ describe('llm codegen session transport handling', () => {
 
     await expect(getLlmCodegenSession('session-1')).resolves.toEqual(sessionPayload)
     await expect(
-      startLlmCodegenSession({ initialMessage: 'Breakout setup' }),
+      startLlmCodegenSession({ initialMessage: 'Breakout setup', locale: 'en' }),
     ).resolves.toEqual(sessionPayload)
     await expect(
-      continueLlmCodegenSession('session-1', { message: 'Use isolated margin' }),
+      continueLlmCodegenSession('session-1', { message: 'Use isolated margin', locale: 'en' }),
     ).resolves.toEqual(sessionPayload)
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -152,6 +152,7 @@ describe('llm codegen session transport handling', () => {
       'http://localhost:3000/api/v1/llm-strategy-codegen/sessions',
       expect.objectContaining({
         method: 'POST',
+        body: JSON.stringify({ initialMessage: 'Breakout setup', locale: 'en' }),
         headers: expect.objectContaining({
           Authorization: 'Bearer a.b.c',
           'Content-Type': 'application/json',
@@ -163,6 +164,7 @@ describe('llm codegen session transport handling', () => {
       'http://localhost:3000/api/v1/llm-strategy-codegen/sessions/session-1/messages',
       expect.objectContaining({
         method: 'POST',
+        body: JSON.stringify({ message: 'Use isolated margin', locale: 'en' }),
         headers: expect.objectContaining({
           Authorization: 'Bearer a.b.c',
           'Content-Type': 'application/json',

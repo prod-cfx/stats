@@ -941,6 +941,7 @@ export async function requestAiQuantCodegen(args: {
   confirmedCanonicalDigest?: string
   conversationId: string
   conversations: ConversationState[]
+  locale: 'zh' | 'en'
   message: string
   params: QuantParams
   sessionId: string | null
@@ -959,6 +960,7 @@ export async function requestAiQuantCodegen(args: {
     confirmedCanonicalDigest,
     conversationId,
     conversations,
+    locale,
     message,
     params: targetParams,
     sessionId,
@@ -1088,11 +1090,13 @@ export async function requestAiQuantCodegen(args: {
     const startNewSession = async () =>
       startLlmCodegenSession({
         initialMessage: requestMessage,
+        locale,
       })
 
     const continueSession = async (id: string) =>
       continueLlmCodegenSession(id, {
         message: requestMessage,
+        locale,
         confirmGenerate,
         confirmedCanonicalDigest,
         clarificationAnswers,
