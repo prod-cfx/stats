@@ -49,7 +49,10 @@ describe('UnsupportedFallbackService — covered-by-supported dedup', () => {
     expect(result?.prompt).toContain('图形形态识别当前公测暂未支持生成和回测')
   })
 
-  it('混合：unsupported price.pattern 被 candle_pattern 覆盖，其它 unsupported atom 保留', () => {
+  // 反向覆盖意图（防止未来误把映射改成"全部 unsupported 都被任一 supported 吃掉"）：
+  // - price.pattern 在 UNSUPPORTED_COVERED_BY_SUPPORTED 映射里，被 candle_pattern 覆盖 → 应过滤
+  // - volume.spike 不在该映射里，即使存在 supported 触发器也必须保留，让用户感知该原子未支持
+  it('混合：unsupported price.pattern 被 candle_pattern 覆盖，未在映射中的 volume.spike 必须保留', () => {
     const result = service.buildPendingFallback(
       [
         unsupportedPricePattern,
