@@ -129,6 +129,43 @@ describe('StopRunningStrategyDialog', () => {
     expect(onStopOnly).not.toHaveBeenCalled()
   })
 
+  it('uses spot holding wording for spot strategies', async () => {
+    await act(async () => {
+      root.render(
+        <StopRunningStrategyDialog
+          open
+          strategy={{
+            name: 'BTC spot strategy',
+            exchange: 'okx',
+            symbol: 'BTC-USDT',
+            marketType: 'spot',
+            spotHoldingSummary: {
+              baseAsset: 'BTC',
+              quantity: 0.02161279,
+              openPositionsCount: 1,
+            },
+            positionOverview: {
+              openPositionsCount: 1,
+              totalUnrealizedPnl: 8.21,
+            },
+            openOrdersCount: 0,
+          }}
+          onStopOnly={() => undefined}
+          onLiquidateAndStop={() => undefined}
+          onCancel={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('当前策略仍有现货持币或挂单')
+    expect(container.textContent).toContain('当前现货持币')
+    expect(container.textContent).toContain('0.02161279 BTC')
+    expect(container.textContent).toContain('当前未成交挂单0')
+    expect(container.textContent).toContain('再处理现货持币')
+    expect(container.textContent).toContain('仅停止，保留现货持币/挂单')
+    expect(container.textContent).not.toContain('再处理持仓')
+  })
+
   it('disables dangerous actions while pending', async () => {
     await act(async () => {
       root.render(

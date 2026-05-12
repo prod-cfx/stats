@@ -113,7 +113,7 @@ export function StopRunningStrategyDialog({
 
         {requiresRiskChoice && (
           <p className="mt-3 text-xs leading-5 text-[color:var(--cf-muted)]">
-            平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+            平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理{isSpotMarket ? '现货持币' : '持仓'}。
           </p>
         )}
 
@@ -133,7 +133,7 @@ export function StopRunningStrategyDialog({
                 onClick={onStopOnly}
                 className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                仅停止，保留持仓/挂单
+                {isSpotMarket ? '仅停止，保留现货持币/挂单' : '仅停止，保留持仓/挂单'}
               </button>
               <button
                 type="button"
