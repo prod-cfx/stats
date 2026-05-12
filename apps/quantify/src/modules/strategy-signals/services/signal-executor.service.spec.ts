@@ -43,9 +43,13 @@ describe('signalExecutorService', () => {
     const positionsService = { recordTrade: jest.fn() }
     const tradingSignalRepository = { updateStatus: jest.fn(), findById: jest.fn().mockResolvedValue(null) }
     const executionRepository = {
+      findPendingByOkxOrderIds: jest.fn(),
       markStage: jest.fn(),
+      markPendingStage: jest.fn(),
       markExecuted: jest.fn(),
+      markPendingExecuted: jest.fn(),
       markFailed: jest.fn(),
+      markPendingFailed: jest.fn(),
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
@@ -73,6 +77,231 @@ describe('signalExecutorService', () => {
     )
     return service
   }
+
+  it('keeps OKX private filled order events pending until ledger reconciliation', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const updatedAt = new Date('2026-05-12T01:02:03.000Z')
+    const raw = { ordId: 'okx-order-1', state: 'filled' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-ws-1' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-1',
+      clientOrderId: 'client-order-1',
+      state: 'filled',
+      avgPrice: 60123.45,
+      fillPrice: 60120,
+      filledSize: 0.01,
+      fee: 0.12,
+      feeCurrency: 'USDT',
+      tradeId: 'trade-1',
+      updatedAt,
+      raw,
+    })
+
+    expect(executionRepository.findPendingByOkxOrderIds).toHaveBeenCalledWith({
+      orderId: 'okx-order-1',
+      clientOrderId: 'client-order-1',
+      exchangeAccountId: 'exchange-account-okx-1',
+    })
+    expect((service as any).txEvents.withAfterCommit).toHaveBeenCalled()
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-ws-1', 'RECONCILE_REQUIRED', {
+      providerOrderId: 'okx-order-1',
+      providerStatus: 'filled',
+      exchangeAccountId: 'exchange-account-okx-1',
+      source: 'okx_private_ws',
+      raw,
+      ledgerApplied: false,
+      reconcileRequired: true,
+      reason: 'OKX_PRIVATE_WS_FILLED_REQUIRES_LEDGER_RECONCILIATION',
+      orderResponse: {
+        id: 'okx-order-1',
+        status: 'filled',
+        amount: 0.01,
+        filled: 0.01,
+        price: 60123.45,
+        createdAt: updatedAt.toISOString(),
+        raw: {
+          ...raw,
+          fee: '0.12',
+          feeCcy: 'USDT',
+        },
+      },
+      providerFill: {
+        executedPrice: 60123.45,
+        executedQuantity: 0.01,
+        fee: 0.12,
+        feeCurrency: 'USDT',
+        tradeId: 'trade-1',
+        executedAt: updatedAt.toISOString(),
+      },
+    })
+    expect(executionRepository.markPendingExecuted).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when an OKX private filled order event has no pending execution match', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue(null)
+
+    await expect((service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'already-executed-order',
+      state: 'filled',
+      avgPrice: 60123.45,
+      filledSize: 0.01,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw: {},
+    })).resolves.toBeUndefined()
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingStage).not.toHaveBeenCalled()
+  })
+
+  it('acks a non-terminal OKX private order event without marking execution complete', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const raw = { ordId: 'okx-order-open', state: 'live' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-open' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-open',
+      clientOrderId: 'client-order-open',
+      state: 'live',
+      filledSize: 0,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw,
+    })
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-open', 'ORDER_ACKED', {
+      providerOrderId: 'okx-order-open',
+      providerStatus: 'live',
+      exchangeAccountId: 'exchange-account-okx-1',
+      source: 'okx_private_ws',
+      raw,
+    })
+  })
+
+  it('keeps a partially filled OKX private order pending for later fills', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const raw = { ordId: 'okx-order-partial', state: 'partially_filled' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-partial' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-partial',
+      state: 'partially_filled',
+      filledSize: 0.01,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw,
+    })
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-partial', 'ORDER_ACKED', {
+      providerOrderId: 'okx-order-partial',
+      providerStatus: 'partially_filled',
+      exchangeAccountId: 'exchange-account-okx-1',
+      source: 'okx_private_ws',
+      raw,
+    })
+  })
+
+  it('marks canceled OKX private order events as failed', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-canceled' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-canceled',
+      state: 'canceled',
+      filledSize: 0,
+      updatedAt: new Date('2026-05-12T01:02:03.000Z'),
+      raw: { ordId: 'okx-order-canceled', state: 'canceled' },
+    })
+
+    expect(executionRepository.markExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markStage).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingFailed).toHaveBeenCalledWith('exec-okx-canceled', 'OKX_ORDER_CANCELED')
+  })
+
+  it('keeps filled quantity from canceled OKX private order events pending for ledger reconciliation', async () => {
+    const service = createService()
+    const executionRepository = (service as any).executionRepository
+    const updatedAt = new Date('2026-05-12T01:02:03.000Z')
+    const raw = { ordId: 'okx-order-canceled-filled', state: 'canceled', accFillSz: '0.02' }
+    executionRepository.findPendingByOkxOrderIds.mockResolvedValue({ id: 'exec-okx-canceled-filled' })
+
+    await (service as any).handleOkxPrivateOrderEvent({
+      exchangeId: 'okx',
+      exchangeAccountId: 'exchange-account-okx-1',
+      apiKey: 'masked-key',
+      instId: 'BTC-USDT-SWAP',
+      orderId: 'okx-order-canceled-filled',
+      state: 'canceled',
+      avgPrice: 60000,
+      filledSize: 0.02,
+      fee: 0.2,
+      feeCurrency: 'USDT',
+      updatedAt,
+      raw,
+    })
+
+    expect(executionRepository.markPendingStage).toHaveBeenCalledWith('exec-okx-canceled-filled', 'RECONCILE_REQUIRED', {
+      providerOrderId: 'okx-order-canceled-filled',
+      providerStatus: 'canceled',
+      exchangeAccountId: 'exchange-account-okx-1',
+      source: 'okx_private_ws',
+      raw,
+      ledgerApplied: false,
+      reconcileRequired: true,
+      reason: 'OKX_PRIVATE_WS_FILLED_REQUIRES_LEDGER_RECONCILIATION',
+      orderResponse: {
+        id: 'okx-order-canceled-filled',
+        status: 'canceled',
+        amount: 0.02,
+        filled: 0.02,
+        price: 60000,
+        createdAt: updatedAt.toISOString(),
+        raw: {
+          ...raw,
+          fee: '0.2',
+          feeCcy: 'USDT',
+        },
+      },
+      providerFill: {
+        executedPrice: 60000,
+        executedQuantity: 0.02,
+        fee: 0.2,
+        feeCurrency: 'USDT',
+        tradeId: undefined,
+        executedAt: updatedAt.toISOString(),
+      },
+    })
+    expect(executionRepository.markPendingExecuted).not.toHaveBeenCalled()
+    expect(executionRepository.markPendingFailed).not.toHaveBeenCalled()
+  })
 
   it('rejects hyperliquid spot entries below minimum notional after precision rounding', () => {
     const service = createService()

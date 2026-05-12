@@ -18,6 +18,7 @@ jest.mock('lucide-react', () => ({
   Activity: () => <span data-testid="activity-icon" />,
   BarChart3: () => <span data-testid="bar-chart-icon" />,
   Edit3: () => <span data-testid="edit-icon" />,
+  Loader2: () => <span data-testid="loader-icon" />,
   Play: () => <span data-testid="play-icon" />,
   Shield: () => <span data-testid="shield-icon" />,
   TrendingUp: () => <span data-testid="trending-up-icon" />,
@@ -80,6 +81,14 @@ describe('StrategyPlaza API rendering', () => {
   })
 
   it('renders backend templates with official sample backtest metrics', async () => {
+    mockTranslations = {
+      'aiQuant.strategies.ma-cross.tags.trend': 'Trend Follow',
+      'aiQuant.strategies.ma-cross.tags.ma': 'Moving Average',
+      'aiQuant.strategies.ma-cross.tags.okxDemo': 'OKX Demo',
+      'aiQuant.strategyPlazaCard.okxDemo': 'OKX Demo',
+      'aiQuant.strategyPlazaCard.marketType.perp': 'Perp',
+    }
+
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -93,11 +102,11 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(container.textContent).toContain('MA Cross Demo')
     expect(container.textContent).toContain('Use moving averages to follow confirmed trends.')
-    expect(container.textContent).toContain('trend')
-    expect(container.textContent).toContain('demo')
+    expect(container.textContent).toContain('Trend Follow')
+    expect(container.textContent).toContain('Moving Average')
     expect(container.textContent).toContain('BTC-USDT-SWAP / 15m')
-    expect(container.textContent).toContain('OKX 模拟盘')
-    expect(container.textContent).toContain('永续')
+    expect(container.textContent).toContain('OKX Demo')
+    expect(container.textContent).toContain('Perp')
     expect(container.textContent).toContain('25%')
     expect(container.textContent).toContain('3x')
     expect(container.textContent).toContain('58.14%')
@@ -136,6 +145,45 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.textContent).toContain('OKX Demo')
     expect(container.textContent).toContain('Spot')
     expect(container.textContent).not.toContain('网格区间')
+  })
+
+  it('uses localized copy for backend Chinese MA crossover templates', async () => {
+    mockTranslations = {
+      'aiQuant.strategies.ma-cross.name': 'MA Crossover',
+      'aiQuant.strategies.ma-cross.desc': 'Go long when the short moving average crosses above the long moving average.',
+      'aiQuant.strategies.ma-cross.tags.trend': 'Trend Follow',
+      'aiQuant.strategies.ma-cross.tags.ma': 'Moving Average',
+      'aiQuant.strategies.ma-cross.tags.okxDemo': 'OKX Demo',
+      'aiQuant.strategyPlazaCard.okxDemo': 'OKX Demo',
+      'aiQuant.strategyPlazaCard.marketType.perp': 'Perp',
+    }
+    const chineseMaTemplate: StrategyPlazaTemplate = {
+      ...template,
+      id: 'ma-cross',
+      name: 'MA 均线交叉',
+      description: '短均线上穿长均线做多，跌回长均线下方退出。',
+      tags: ['趋势跟随', '均线', 'OKX 模拟盘'],
+    }
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[chineseMaTemplate]}
+          loading={false}
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('MA Crossover')
+    expect(container.textContent).toContain('Go long when the short moving average crosses above the long moving average.')
+    expect(container.textContent).toContain('Trend Follow')
+    expect(container.textContent).toContain('Moving Average')
+    expect(container.textContent).toContain('OKX Demo')
+    expect(container.textContent).not.toContain('MA 均线交叉')
+    expect(container.textContent).not.toContain('短均线上穿长均线做多')
+    expect(container.textContent).not.toContain('趋势跟随')
   })
 
   it('passes the template id to run and edit actions', async () => {
@@ -211,5 +259,29 @@ describe('StrategyPlaza API rendering', () => {
 
     expect(onRunStrategy).not.toHaveBeenCalled()
     expect(onEditStrategy).not.toHaveBeenCalled()
+  })
+
+  it('shows a spinner instead of the edit icon while a template edit action is pending', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          pendingTemplateId="ma-cross"
+          pendingAction="edit"
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    const buttons = Array.from(container.querySelectorAll('button'))
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]?.disabled).toBe(true)
+    expect(buttons[1]?.disabled).toBe(true)
+    expect(buttons[1]?.getAttribute('aria-busy')).toBe('true')
+    expect(buttons[1]?.textContent).toContain('处理中')
+    expect(buttons[1]?.querySelector('[data-testid="loader-icon"]')).not.toBeNull()
+    expect(buttons[1]?.querySelector('[data-testid="edit-icon"]')).toBeNull()
   })
 })

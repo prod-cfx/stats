@@ -1,11 +1,16 @@
 'use client'
 
 import type { StrategyPlazaTemplate } from '@/lib/api'
-import { Activity, Edit3, Play } from 'lucide-react'
+import { Activity, Edit3, Loader2, Play } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 const TRANSLATED_TEMPLATE_TAG_KEYS: Partial<Record<string, readonly string[]>> = {
+  'ma-cross': ['trend', 'ma', 'okxDemo'],
+  'bollinger-reversion': ['meanReversion', 'bollinger', 'okxDemo'],
   'grid-range': ['range', 'buyLowSellHigh', 'okxDemo'],
+  'rsi-reversal': ['rsi', 'reversal', 'okxDemo'],
+  'breakout-follow': ['breakout', 'trend', 'okxDemo'],
+  'macd-cross': ['macd', 'momentum', 'okxDemo'],
 }
 
 interface StrategyPlazaProps {
@@ -25,12 +30,12 @@ function formatPositionPct(value: number): string {
   return `${Number(percent.toFixed(2)).toString()}%`
 }
 
-function getMarketTypeLabel(marketType: StrategyPlazaTemplate['marketType']): string {
-  return marketType === 'perp' ? '永续' : '现货'
+function getMarketTypeLabel(marketType: StrategyPlazaTemplate['marketType'], t: ReturnType<typeof useTranslation>['t']): string {
+  return t(`aiQuant.strategyPlazaCard.marketType.${marketType}`)
 }
 
-function getLeverageLabel(leverage: number | null): string {
-  return leverage ? `${leverage}x` : '无杠杆'
+function getLeverageLabel(leverage: number | null, t: ReturnType<typeof useTranslation>['t']): string {
+  return leverage ? `${leverage}x` : t('aiQuant.strategyPlazaCard.noLeverage')
 }
 
 function formatMetricPct(value: number | null, options: { sign?: boolean } = {}): string {
@@ -109,7 +114,7 @@ export function StrategyPlaza({
       <section className="space-y-4">
         <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
         <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center text-sm text-[color:var(--cf-muted)]">
-          暂无可用策略模板
+          {t('aiQuant.strategyPlazaCard.empty')}
         </div>
       </section>
     )
@@ -179,7 +184,7 @@ export function StrategyPlaza({
                     <span>{t('aiQuant.strategyPlazaCard.market', { defaultValue: '市场' })}</span>
                     <span className="font-semibold text-[color:var(--cf-text)]">
                       {t(`aiQuant.strategyPlazaCard.marketType.${template.marketType}`, {
-                        defaultValue: getMarketTypeLabel(template.marketType),
+                        defaultValue: getMarketTypeLabel(template.marketType, t),
                       })}
                     </span>
                   </div>
@@ -188,7 +193,7 @@ export function StrategyPlaza({
                     <span className="font-mono font-semibold text-[color:var(--cf-text)]">
                       {formatPositionPct(template.positionPct)}
                       {' / '}
-                      {getLeverageLabel(template.leverage)}
+                      {getLeverageLabel(template.leverage, t)}
                     </span>
                   </div>
                 </div>
@@ -237,9 +242,13 @@ export function StrategyPlaza({
                   disabled={hasPendingAction}
                   aria-busy={isEditing}
                   onClick={() => onEditStrategy(template.id)}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-wait disabled:opacity-70"
                 >
-                  <Edit3 className="h-4 w-4" />
+                  {isEditing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Edit3 className="h-4 w-4" />
+                  )}
                   {isEditing ? t('aiQuant.strategyPlazaCard.processing', { defaultValue: '处理中' }) : t('aiQuant.edit')}
                 </button>
               </div>

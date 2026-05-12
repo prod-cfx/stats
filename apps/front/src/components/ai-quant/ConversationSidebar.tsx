@@ -1,6 +1,6 @@
 'use client'
 
-import { Pencil, Trash2 } from 'lucide-react'
+import { CheckCircle2, Pencil, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -48,9 +48,10 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
           return (
             <div
               key={item.id}
+              data-active-conversation={active ? 'true' : undefined}
               className={`w-full rounded-xl border px-3 py-2 text-left transition ${
                 active
-                  ? 'border-violet-500/40 bg-violet-500/10'
+                  ? 'border-violet-400 bg-[#f3e8ff] shadow-sm shadow-violet-500/10 dark:border-violet-500/50 dark:bg-violet-500/15'
                   : 'border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] hover:bg-[color:var(--cf-surface-hover)]'
               }`}
               role="button"
@@ -88,8 +89,19 @@ export function ConversationSidebar({ items, activeId, onSwitch, onCreate, onRen
                   className="h-8 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
                 />
               ) : (
-                <div className="w-full truncate text-left text-sm font-semibold text-[color:var(--cf-text-strong)]">
-                  {item.title}
+                <div className="flex w-full min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0 truncate text-left text-sm font-semibold text-[color:var(--cf-text-strong)]">
+                    {item.title}
+                  </div>
+                  {active && (
+                    <span
+                      className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-violet-600 dark:text-violet-300"
+                      aria-label={t('aiQuant.current')}
+                      title={t('aiQuant.current')}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                    </span>
+                  )}
                 </div>
               )}
               <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{t('aiQuant.updatedAt')} {formatTime(item.updatedAt)}</div>

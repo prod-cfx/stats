@@ -1,6 +1,6 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS decorators require runtime imports for metadata */
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common'
-import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
+import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -9,6 +9,8 @@ import { AccountAiQuantStrategyDetailResponseDto } from './dto/account-ai-quant-
 import {
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaRunExistingResponseDto,
+  type StrategyPlazaRunResponseDto,
   StrategyPlazaTemplateResponseDto,
 } from './dto/strategy-plaza.response.dto'
 import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto'
@@ -19,6 +21,7 @@ import { StrategyPlazaRunRequestDto } from './dto/strategy-plaza-run.request.dto
   StrategyPlazaDisplayMetricsResponseDto,
   StrategyPlazaTemplateResponseDto,
   StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaRunExistingResponseDto,
 )
 @Controller('strategy-plaza/templates')
 export class StrategyPlazaProxyController {
@@ -64,14 +67,26 @@ export class StrategyPlazaProxyController {
   @ApiHeader({ name: 'authorization', required: true })
   @ApiOkResponse({
     description: 'Created or resolved AI Quant strategy detail.',
-    schema: buildBaseResponseSchema(AccountAiQuantStrategyDetailResponseDto),
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          oneOf: [
+            { $ref: getSchemaPath(AccountAiQuantStrategyDetailResponseDto) },
+            { $ref: getSchemaPath(StrategyPlazaRunExistingResponseDto) },
+          ],
+        },
+        message: { type: 'string', example: 'Success' },
+      },
+    },
   })
   async run(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
     @Body() dto: StrategyPlazaRunRequestDto,
-  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
+  ): Promise<StrategyPlazaRunResponseDto> {
     return this.service.runStrategyPlazaTemplate(userId, authorization, id, {
       runRequestId: dto.runRequestId,
     })
@@ -83,6 +98,7 @@ export class StrategyPlazaProxyController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Start a strategy plaza edit session through the backend proxy.' })
   @ApiHeader({ name: 'authorization', required: true })
+  @ApiQuery({ name: 'locale', enum: ['zh', 'en'], required: false })
   @ApiOkResponse({
     description: 'Created AI Quant edit session.',
     schema: buildBaseResponseSchema(StrategyPlazaEditSessionResponseDto),
@@ -91,7 +107,8 @@ export class StrategyPlazaProxyController {
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
+    @Query('locale') locale?: string,
   ): Promise<StrategyPlazaEditSessionResponseDto> {
-    return this.service.startStrategyPlazaEditSession(userId, authorization, id)
+    return this.service.startStrategyPlazaEditSession(userId, authorization, id, { locale })
   }
 }

@@ -121,6 +121,15 @@
     "backtestError.nonNegative": "请输入大于等于 0 的数值",
     "backtestError.priceSource": "请选择成交价来源",
     "backtestError.allowPartial": "请选择有效的布尔值",
+    "codegenValidation": {
+      "invalidExchange": "请求前校验失败：请先确认交易所参数有效。",
+      "missingSymbol": "请求前校验失败：请先确认交易标的。",
+      "missingTimeframe": "请求前校验失败：请先确认策略周期。",
+      "invalidSizing": "请求前校验失败：仓位配置无效。",
+      "invalidRatioSizing": "请求前校验失败：仓位比例需要在 0 到 100 之间。",
+      "invalidQuoteSizing": "请求前校验失败：固定金额需要大于 0。",
+      "invalidQuantitySizing": "请求前校验失败：固定数量需要大于 0。"
+    },
     "backtestPriceSource.open": "开盘价",
     "backtestPriceSource.close": "收盘价",
     "backtestPriceSource.mid": "中间价",
@@ -141,6 +150,12 @@
     "openTradeCount": "未平仓笔数",
     "openPnl": "浮动盈亏",
     "deploy": "一键部署",
+    "deployRunning": "已部署运行",
+    "deployRedeploy": "重新部署",
+    "deployLoading": "正在确认部署状态",
+    "deployPending": "部署状态待确认",
+    "deployPendingHint": "正在确认部署状态，确认前暂不能重复部署。",
+    "deployViewRunning": "查看运行策略",
     "optimize": "继续优化",
     "fullScreen": "全屏查看",
     "logicGraph": "策略逻辑图",
@@ -174,6 +189,8 @@
         "perp": "永续"
       },
       "positionLeverage": "仓位 / 杠杆",
+      "noLeverage": "无杠杆",
+      "empty": "暂无可用策略模板",
       "running": "运行中",
       "processing": "处理中"
     },
@@ -191,7 +208,10 @@
     },
     "actions": {
       "run": "运行",
-      "stop": "停止"
+      "stop": "停止",
+      "stopStrategy": "停止策略",
+      "delete": "删除",
+      "deleting": "删除中..."
     },
     "timeframe": "时间周期",
     "position": "单笔仓位",
@@ -201,6 +221,285 @@
     "deployTimeLabel": "部署时间",
     "legacyUnsupportedTitle": "策略参数不可用",
     "legacyUnsupportedMessage": "不支持旧策略，请重新生成",
+    "apiKeyStatus": {
+      "configured": "API 已配置",
+      "notConfigured": "API 未配置"
+    },
+    "plazaPage": {
+      "loadFailed": "获取策略广场模板失败",
+      "runFailed": "运行策略广场模板失败",
+      "editSessionFailed": "创建策略广场编辑会话失败",
+      "back": "返回",
+      "guestHint": "登录后可以一键运行或编辑策略模板，未登录也可以先浏览策略广场。"
+    },
+    "authGate": {
+      "title": "登录后可使用 AI量化",
+      "description": "为了保存你的策略、回测记录和部署状态，AI量化模块要求先登录。",
+      "login": "立即登录"
+    },
+    "detail": {
+      "notFoundTitle": "策略不存在或不可访问",
+      "notFoundDescription": "请返回 AI量化列表重新选择已部署策略。",
+      "backToList": "返回列表",
+      "viewOnlyBanner": "该策略已设为只读，所有运行控制操作均已禁用，仅作历史记录展示。",
+      "runtimeControl": "运行控制",
+      "runtimeOnline": "运行实例在线",
+      "runtimeOffline": "运行实例离线",
+      "runningWithRiskDescription": "策略当前正在运行且账户中存在持仓或未成交挂单。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。",
+      "runningWithSpotRiskDescription": "策略当前正在运行且账户中存在现货持币或未成交挂单。你可以只停止策略，或先撤销未成交挂单并卖出持币后再停止。",
+      "runningDescription": "策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。",
+      "stoppedDescription": "当前运行实例已结束。",
+      "riskHint": "检测到 {{positions}} 个 open positions，当前未成交挂单 {{orders}} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。",
+      "spotRiskHint": "检测到现货持币 {{holding}}，当前未成交挂单 {{orders}} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理现货持币。",
+      "unknown": "待确认",
+      "stopSuccess": "策略已停止。现有持仓和挂单仍然保留，需要你单独管理。",
+      "liquidateAndStopSuccess": "策略已平仓并停止。",
+      "runSuccess": "策略已开始运行。",
+      "stopFailed": "停止策略失败，请稍后重试。",
+      "liquidateAndStopFailed": "平仓并停止失败，请检查模拟盘账户状态后重试。",
+      "runFailed": "启动策略失败，请稍后重试。",
+      "run": "运行",
+      "returnToChat": "返回对话",
+      "republishRequired": "需要重新发布",
+      "legacySnapshotDescription": "当前快照仍是 legacy 结构。",
+      "republishBacktestRequired": " 回测前需要重新发布。",
+      "republishDeployRequired": " 重新部署前也需要重新发布。",
+      "snapshotBindingInvalid": "快照绑定已失效",
+      "snapshotBindingInvalidDescription": "当前部署实例的运行时绑定与快照真相不一致，已自动隐藏执行配置与运行时状态。请重新发布并重新部署。",
+      "currentStatusExplanation": "当前状态解释",
+      "strategyService": "策略服务",
+      "currentPosition": "当前仓位",
+      "currentCycle": "当前周期",
+      "evidenceSource": "本地持仓台账、最新成交、发布快照规则",
+      "latestEntry": "最近入场：",
+      "latestExit": "最近出场：",
+      "nextExpectedAction": "下一步预期：",
+      "evidenceSourceLabel": "证据来源：",
+      "advancedRuntimeDiagnostics": "高级运行诊断",
+      "runtimeDiagnosticsSummary": "已执行 {{consumed}} 个运行诊断项，待执行/冷却/失败 {{pending}} 个。当前状态只代表已注册的运行语义，不等同于所有规则都已进入持续监控。",
+      "snapshot": "快照：{{id}}",
+      "lastAttempt": "最近尝试：",
+      "consumedAt": "已执行时间：",
+      "cooldownUntil": "冷却到期：",
+      "failureFamily": "失败分类：",
+      "failureReason": "失败原因：",
+      "publishedSnapshotRuleSummary": "发布快照规则摘要",
+      "backtestBaseline": "回测基线",
+      "initialCash": "初始资金",
+      "backtestLeverage": "回测杠杆",
+      "marketType": "市场类型",
+      "priceSource": "价格来源",
+      "price": "价格",
+      "executionConfig": "执行配置",
+      "baselineExecutionLeverage": "基线执行杠杆",
+      "currentExecutionLeverage": "当前执行杠杆",
+      "allowedLeverageRange": "允许杠杆范围",
+      "returnPct": "收益率",
+      "maxDrawdown": "最大回撤",
+      "winRate": "胜率",
+      "tradeCount": "交易次数",
+      "totalPnl": "总收益额",
+      "todayPnl": "今日 {{value}} {{currency}}",
+      "accountOverview": "账户概览",
+      "accountOverviewSource": "来源：本地账户台账 + 最新行情估值；不等同于 OKX 钱包实时余额。",
+      "initialBalance": "初始资金",
+      "totalEquity": "总权益",
+      "availableBalance": "可用余额",
+      "positionOverview": "持仓概览",
+      "holdingOverview": "持币概览",
+      "positionOverviewSource": "来源：本地成交与持仓台账，未实现盈亏按行情估值刷新。",
+      "currentHoldings": "当前持币",
+      "currentPositionCount": "当前持仓数",
+      "completedSpotCycles": "已完成买卖轮次",
+      "closedPositions": "已平仓数",
+      "totalRealizedPnl": "累计已实现盈亏",
+      "currentFloatingPnl": "当前浮动盈亏",
+      "currentUnrealizedPnl": "当前未实现盈亏",
+      "latestTrades": "最新成交",
+      "latestTradesSource": "来源：交易所订单回执落库；手续费优先展示 OKX 原始 fee / feeCcy。",
+      "time": "时间",
+      "side": "方向",
+      "semanticAction": "语义动作",
+      "quantityNotional": "数量 / 名义价值",
+      "fee": "手续费",
+      "semanticPending": "语义待确认",
+      "localReconcilePending": "待本地对账",
+      "noTrades": "暂无成交记录",
+      "equitySeriesTitle": "策略收益曲线",
+      "equitySeriesSourceContract": "来源：策略合约账户权益台账，按保证金币种、已实现/未实现盈亏口径展示。",
+      "equitySeriesSourceSpot": "来源：策略现货账户权益台账，按现金余额、持币市值、已实现/未实现盈亏口径展示。",
+      "noEquityData": "暂无收益曲线数据",
+      "equity": "权益",
+      "change": "变化",
+      "approx": "约 {{value}} {{currency}}",
+      "spotZeroHolding": "0 {{asset}}",
+      "spotHoldingRecords": "{{count}} 个持币记录",
+      "marketTypes": {
+        "spot": "现货",
+        "perp": "永续合约",
+        "swap": "永续合约",
+        "futures": "交割合约"
+      },
+      "runtimeExecutionStatus": {
+        "ready": "待执行",
+        "consumed": "已执行",
+        "failed": "失败",
+        "cooldown": "冷却中"
+      },
+      "runtimeExecutionFailure": {
+        "binding": "部署绑定异常，请重新发布并重新部署",
+        "activationMissingBar": "当前执行条件未满足（缺少参考K线）",
+        "activation": "当前执行条件未满足",
+        "persistence": "信号已生成但持久化失败",
+        "noSignal": "未生成可执行信号"
+      },
+      "runtimeExecutionFailureFamily": {
+        "binding": "绑定",
+        "activation": "激活",
+        "execution": "执行",
+        "persistence": "持久化"
+      },
+      "runtimeSemantics": {
+        "serviceStatus": {
+          "running": "运行中",
+          "stopped": "已停止",
+          "draft": "草稿"
+        },
+        "positionState": {
+          "spotFlat": "空仓",
+          "contractFlat": "无仓位",
+          "spot_holding": "持有现货",
+          "long": "持有多头",
+          "short": "持有空头",
+          "unknown": "方向待确认"
+        },
+        "cycleState": {
+          "waiting_entry": "等待入场",
+          "entered": "等待出场",
+          "exit_triggered": "已触发出场",
+          "completed": "本轮已完成",
+          "needs_attention": "需处理",
+          "unknown": "查看成交与规则"
+        },
+        "nextAction": {
+          "waitEntry": "等待下一次入场条件",
+          "waitExit": "等待出场条件触发",
+          "checkOpenPosition": "核对并处理未平仓位"
+        },
+        "explanation": {
+          "spotHolding": "当前持有 {{symbol}} 现货仓位，策略服务{{serviceStatus}}，等待出场条件触发。",
+          "spotCompletedRunning": "本轮现货交易已完成，当前未持有 {{symbol}}。策略服务运行中，等待下一次入场条件。",
+          "spotCompletedStopped": "本轮现货交易已完成，当前未持有 {{symbol}}。策略服务{{serviceStatus}}。",
+          "spotWaitingEntry": "当前未持有 {{symbol}}。策略服务{{serviceStatus}}，等待入场条件触发。",
+          "contractHolding": "当前{{positionStatus}}仓位，策略服务{{serviceStatus}}，等待出场条件触发。",
+          "contractCompletedRunning": "上一轮合约仓位已平，当前无未平仓位。策略服务运行中，等待下一次入场条件。",
+          "contractCompletedStopped": "上一轮合约仓位已平，当前无未平仓位。策略服务{{serviceStatus}}。",
+          "contractWaitingEntry": "当前无未平仓位。策略服务{{serviceStatus}}，等待入场条件触发。",
+          "stoppedNeedsAttention": "策略服务已停止，但本地台账仍显示存在未平仓位，请核对交易所仓位和本地记录。",
+          "stoppedFlat": "策略服务已停止，当前无未平仓位。启动策略后才会继续等待入场条件。",
+          "unknown": "当前策略类型暂未提供专用语义解释，请结合成交记录、持仓概览和发布快照规则核对。"
+        }
+      },
+      "orderSemanticActions": {
+        "spotBuy": "买入",
+        "spotSell": "卖出",
+        "openLong": "开多",
+        "openShort": "开空",
+        "closeLong": "平多",
+        "closeShort": "平空",
+        "closePosition": "平仓",
+        "contractTrade": "合约成交"
+      },
+      "ruleSummary": {
+        "onStart": "启动时执行：{{actions}}",
+        "priceChange": "价格变化 {{operator}} {{pct}}：{{actions}}",
+        "positionLoss": "持仓亏损 {{operator}} {{pct}}：{{actions}}"
+      },
+      "feePendingReconcile": "待对账",
+      "feeMissingSync": "--（同步记录未含手续费）",
+      "truthAudit": "真实性审计",
+      "strategyInstance": "策略实例",
+      "publishedSnapshot": "发布快照",
+      "snapshotHash": "快照哈希",
+      "entryOrderEvidence": "入场订单证据",
+      "exitOrderEvidence": "出场订单证据",
+      "syncOrderEvidence": "同步订单证据",
+      "dataBoundary": "数据边界",
+      "dataBoundaryText": "回测使用发布快照；部署执行绑定同一快照；当前成交来自交易所回执落库。",
+      "runtimeTimeline": "运行时间线",
+      "timelineCount": "共 {{count}} 条",
+      "timelinePreviewSuffix": "，默认显示最近 {{limit}} 条",
+      "timelineEvents": {
+        "strategyCreated": "创建策略",
+        "strategySubscribed": "订阅策略",
+        "signalExecuted": "信号执行",
+        "backtestPassed": "回测通过",
+        "deployed": "已部署",
+        "started": "已启动",
+        "stopped": "已停止"
+      },
+      "collapse": "收起",
+      "expandAll": "展开全部"
+    },
+    "stopDialog": {
+      "titleWithRisk": "当前策略仍有持仓或挂单",
+      "titleWithSpotRisk": "当前策略仍有现货持币或挂单",
+      "titleConfirm": "确认停止策略？",
+      "descriptionWithRisk": "停止前请确认如何处理当前持仓。仅停止不会平仓；平仓并停止会在 OKX 模拟盘提交平仓单。",
+      "descriptionWithSpotRisk": "停止前请确认如何处理当前现货持币。仅停止不会卖出持币；平仓并停止会在 OKX 模拟盘提交平仓单。",
+      "descriptionConfirm": "停止后策略不再执行，也不会产生新的交易信号。",
+      "strategy": "策略",
+      "exchangeSymbol": "交易所/交易对",
+      "openPositions": "当前持仓",
+      "spotHolding": "当前现货持币",
+      "spotHoldingRecords": "{{count}} 条现货持币记录",
+      "spotHoldingPending": "现货持币待确认",
+      "unrealizedPnl": "当前浮盈亏",
+      "openOrders": "当前未成交挂单",
+      "unknown": "待确认",
+      "liquidateHint": "平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。",
+      "liquidateSpotHint": "平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理现货持币。",
+      "stopOnly": "仅停止，保留持仓/挂单",
+      "stopOnlySpot": "仅停止，保留现货持币/挂单",
+      "liquidateAndStop": "平仓并停止",
+      "confirmStop": "确认停止",
+      "cancel": "取消"
+    },
+    "deleteDialog": {
+      "loadingTitle": "正在确认策略状态",
+      "loadingDescription": "正在确认关联策略的运行状态。",
+      "unknownTitle": "暂时无法删除",
+      "unknownDescription": "暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。",
+      "runningTitle": "当前策略正在运行",
+      "runningDescription": "当前会话关联的策略正在运行，不能删除。请先前往策略详情停止运行；如有持仓或挂单，可选择仅停止或平仓并停止。",
+      "noConversationTitle": "删除策略",
+      "noConversationDescription": "该策略由「策略广场」直接运行生成，没有关联 AI Quant 会话。默认保留在我的策略列表中（仅可查看详情）；如不再需要可勾选下方选项彻底删除。",
+      "withConversationTitle": "删除 AI Quant 会话",
+      "withConversationDescription": "这个会话已生成过策略，当前策略已停止。默认只删除 AI 对话和生成过程，不删除我的策略列表中的策略记录。",
+      "cancel": "取消",
+      "goToRunningStrategy": "前往运行策略",
+      "close": "关闭",
+      "deleteConversationAndStrategy": "删除会话和策略",
+      "deleteConversationOnly": "仅删除会话",
+      "deleteStrategyPermanently": "彻底删除策略",
+      "keepViewOnly": "保留为只读",
+      "deleteStrategyRecord": "彻底删除策略记录（不可恢复）",
+      "deleteStrategyRecordHint": "勾选后该策略将从我的策略列表移除，不能再次运行。",
+      "deleteStoppedStrategy": "同时删除已停止策略记录",
+      "deleteStoppedStrategyHint": "删除后该策略将从我的策略列表移除，不能再次运行。",
+      "destructiveWarning": "此操作不可恢复。继续之前请确认你已不再需要该策略记录。",
+      "conversation": "会话",
+      "strategy": "策略"
+    },
+    "runningGuard": {
+      "runningTitle": "策略正在运行，不能直接修改",
+      "unknownTitle": "部署状态待确认，暂不能直接修改",
+      "runningDescription": "当前策略正在使用已部署版本运行。为避免运行逻辑与编辑内容不一致，请先停止策略。停止后你可以修改策略并重新部署。",
+      "unknownDescription": "当前策略实例的部署状态仍在确认中。为避免误判为可编辑或可重复部署，请先查看运行策略或停止策略，确认后再继续修改。",
+      "viewRunningStrategy": "查看运行策略",
+      "stopStrategy": "停止策略",
+      "cancel": "取消"
+    },
     "saveApiConfig": "保存 API 配置",
     "apiConfigTitle": "交易所 API 配置",
     "apiConfigDesc": "配置后会由后端代用户转发到量化服务校验。只有验证成功的凭据才会被保存。",
@@ -449,6 +748,15 @@
       "returnRevise": "返回对话修改"
     },
     "strategies": {
+      "ma-cross": {
+        "name": "MA 均线交叉",
+        "desc": "短均线上穿长均线做多，跌回长均线下方退出。",
+        "tags": {
+          "trend": "趋势跟随",
+          "ma": "均线",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
       "momentum-steady": {
         "name": "价格动量（稳健）",
         "desc": "3分钟跌 1% 买入，15分钟涨 2% 卖出，10% 仓位",
@@ -476,12 +784,40 @@
           "okxDemo": "OKX 模拟盘"
         }
       },
+      "rsi-reversal": {
+        "name": "RSI 超买超卖",
+        "desc": "RSI 低位买入，高位退出，适合短周期反转。",
+        "tags": {
+          "rsi": "RSI",
+          "reversal": "反转",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
+      "breakout-follow": {
+        "name": "突破追踪",
+        "desc": "价格突破近期区间后跟随趋势，跌回区间则退出。",
+        "tags": {
+          "breakout": "突破",
+          "trend": "趋势",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
+      "macd-cross": {
+        "name": "MACD 金叉死叉",
+        "desc": "MACD 金叉做多，死叉退出，适合趋势确认。",
+        "tags": {
+          "macd": "MACD",
+          "momentum": "动能",
+          "okxDemo": "OKX 模拟盘"
+        }
+      },
       "bollinger-reversion": {
         "name": "布林带均值回归",
-        "desc": "15分钟周期，上轨做空下轨做多，单笔 10%",
+        "desc": "价格触及布林带外轨后等待回归，中轨附近止盈。",
         "tags": {
           "meanReversion": "均值回归",
-          "bollinger": "布林带"
+          "bollinger": "布林带",
+          "okxDemo": "OKX 模拟盘"
         }
       },
       "breakout-short": {

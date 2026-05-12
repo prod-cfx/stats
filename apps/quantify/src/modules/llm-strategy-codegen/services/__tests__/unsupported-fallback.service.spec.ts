@@ -23,6 +23,23 @@ describe('UnsupportedFallbackService', () => {
     ]))
   })
 
+  it('builds English replacement prompt for unsupported atoms', () => {
+    const fallback = service.buildPendingFallback([
+      {
+        key: 'risk.atr_stop',
+        displayName: 'ATR 动态止损',
+        reasonCode: 'atr_stop_public_beta_unsupported',
+        publicReason: 'ATR 动态止损当前公测暂未支持生成和回测。',
+      },
+    ], [], 'en')
+
+    expect(fallback).not.toBeNull()
+    expect(fallback!.prompt).toContain('I understand you want: risk.atr_stop')
+    expect(fallback!.prompt).toContain('Switch to this strategy and continue')
+    expect(fallback!.prompt).not.toContain('是否改用')
+    expect(fallback!.recommendedStrategy.description).toContain('Go long when MA20 crosses above MA50')
+  })
+
   it.each(['确认', '可以', '好', '就这个', '先测试这个', '确认，可以等等', '可以，继续', '确认 可以等等', 'ok continue', 'no problem, yes'])(
     'recognizes accept wording: %s',
     (message) => {

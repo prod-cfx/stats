@@ -38,6 +38,8 @@
   "UserCredentialType",
   "VenueType",
   "VerificationCodePurpose",
+  "WebhookSignalSignatureStatus",
+  "WebhookSignalSubscriptionStatus",
   "WhaleNotificationChannel",
   "WhaleNotificationDeliveryStatus",
   "WhaleNotificationRuleType"

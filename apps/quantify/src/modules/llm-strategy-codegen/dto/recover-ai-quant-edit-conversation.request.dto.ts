@@ -33,4 +33,9 @@ export class RecoverAiQuantEditConversationRequestDto {
   @IsOptional()
   @IsIn(['account-detail', 'backtest', 'plaza', 'ai-quant'])
   source?: 'account-detail' | 'backtest' | 'plaza' | 'ai-quant'
+
+  @ApiPropertyOptional({ enum: ['zh', 'en'] })
+  @IsOptional()
+  @IsIn(['zh', 'en'])
+  locale?: 'zh' | 'en'
 }

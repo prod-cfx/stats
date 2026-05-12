@@ -3,7 +3,26 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import mockEnCommon from '../../../public/locales/en/common.json'
+import mockZhCommon from '../../../public/locales/zh/common.json'
 import { StopRunningStrategyDialog } from './StopRunningStrategyDialog'
+
+let mockCommon = mockZhCommon
+
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) => {
+      const value = key.split('.').reduce<unknown>((curr, segment) => (
+        curr && typeof curr === 'object' ? (curr as Record<string, unknown>)[segment] : undefined
+      ), mockCommon)
+      const template = typeof value === 'string' ? value : key
+      return Object.entries(options ?? {}).reduce(
+        (text, [name, replacement]) => text.replaceAll(`{{${name}}}`, String(replacement)),
+        template,
+      )
+    },
+  }),
+}))
 
 describe('StopRunningStrategyDialog', () => {
   let container: HTMLDivElement
@@ -11,6 +30,7 @@ describe('StopRunningStrategyDialog', () => {
 
   beforeEach(() => {
     ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    mockCommon = mockZhCommon
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -87,6 +107,37 @@ describe('StopRunningStrategyDialog', () => {
     expect(container.textContent).toContain('当前策略仍有持仓或挂单')
     expect(container.textContent).toContain('当前未成交挂单待确认')
     expect(container.textContent).toContain('平仓并停止')
+  })
+
+  it('renders stop choices in English when the page locale is English', async () => {
+    mockCommon = mockEnCommon
+
+    await act(async () => {
+      root.render(
+        <StopRunningStrategyDialog
+          open
+          strategy={{
+            name: 'DOGE strategy',
+            exchange: 'okx',
+            symbol: 'DOGEUSDT',
+            marketType: 'perp',
+            positionOverview: {
+              openPositionsCount: 2,
+              totalUnrealizedPnl: 12.5,
+            },
+            openOrdersCount: null,
+          }}
+          onStopOnly={() => undefined}
+          onLiquidateAndStop={() => undefined}
+          onCancel={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('This strategy still has positions or open orders')
+    expect(container.textContent).toContain('Stop only, keep positions/orders')
+    expect(container.textContent).toContain('Liquidate and Stop')
+    expect(container.textContent).not.toContain('平仓并停止')
   })
 
   it('offers stop-only and liquidate-and-stop choices when positions exist', async () => {

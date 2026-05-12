@@ -2,7 +2,17 @@ import { ExchangeOperationFailedException } from './exceptions'
 import { TradingService } from './trading.service'
 
 describe('tradingService', () => {
-  function createService() {
+  function createService(options: {
+    publicDataShared?: boolean
+    latestQuote?: {
+      lastPrice: string
+      bidPrice: string | null
+      askPrice: string | null
+      highPrice: string | null
+      lowPrice: string | null
+      volume: string | null
+    }
+  } = {}) {
     const client = {
       createOrder: jest.fn(),
       cancelOrder: jest.fn(),
@@ -22,10 +32,25 @@ describe('tradingService', () => {
       getAccountConfig: jest.fn(),
       getAccountConfigById: jest.fn(),
     }
+    const configService = {
+      get: jest.fn((key: string) => {
+        if (key === 'featureFlags.publicDataShared') return options.publicDataShared ?? false
+        if (key === 'featureFlags') return { publicDataShared: options.publicDataShared ?? false }
+        return undefined
+      }),
+    }
+    const marketDataReadGateway = {
+      getLatestQuote: jest.fn(async () => options.latestQuote),
+    }
 
-    const service = new TradingService(exchangeFactory as any, accountStore as any)
+    const service = new TradingService(
+      exchangeFactory as any,
+      accountStore as any,
+      configService as any,
+      marketDataReadGateway as any,
+    )
 
-    return { service, client, exchangeFactory, accountStore }
+    return { service, client, exchangeFactory, accountStore, configService, marketDataReadGateway }
   }
 
   it('fetches order detail through the selected exchange account', async () => {
@@ -111,6 +136,53 @@ describe('tradingService', () => {
 
     expect(client.fetchTicker).toHaveBeenCalledWith('DOGE/USDT')
     expect(result).toEqual({ symbol: 'DOGE/USDT', last: 0.1 })
+  })
+
+  it('uses shared market data quote for OKX ticker when enabled', async () => {
+    const { service, exchangeFactory, accountStore, marketDataReadGateway } = createService({
+      publicDataShared: true,
+      latestQuote: {
+        lastPrice: '0.12',
+        bidPrice: '0.11',
+        askPrice: '0.13',
+        highPrice: '0.2',
+        lowPrice: '0.08',
+        volume: '12345',
+      },
+    })
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+
+    const result = await service.getTicker(
+      'user-1',
+      'okx',
+      'spot',
+      'DOGE/USDT',
+      'exchange-account-1',
+    )
+
+    expect(marketDataReadGateway.getLatestQuote).toHaveBeenCalledWith('DOGE/USDT')
+    expect(exchangeFactory.createClient).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      symbol: 'DOGE/USDT',
+      last: 0.12,
+      bid: 0.11,
+      ask: 0.13,
+      high: 0.2,
+      low: 0.08,
+      volume: 12345,
+      raw: {
+        lastPrice: '0.12',
+        bidPrice: '0.11',
+        askPrice: '0.13',
+        highPrice: '0.2',
+        lowPrice: '0.08',
+        volume: '12345',
+      },
+    })
   })
 
   it('wraps generic instrument constraints lookup failures', async () => {

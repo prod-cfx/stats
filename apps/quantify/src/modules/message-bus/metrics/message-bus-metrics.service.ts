@@ -1,4 +1,4 @@
-import type { OnModuleInit } from '@nestjs/common';
+import type { OnModuleInit } from '@nestjs/common'
 import { Injectable, Logger } from '@nestjs/common'
 
 export interface MessageBusMetricsSnapshot {
@@ -9,6 +9,10 @@ export interface MessageBusMetricsSnapshot {
     dead: number
     dispatchLatencyAvgMs: number
     dispatchCount: number
+  }
+  okx: {
+    rateLimitTotal: Record<string, number>
+    tokenBucketQueueDepth: Record<string, number>
   }
   timestamp: string
 }
@@ -23,6 +27,8 @@ export class MessageBusMetricsService implements OnModuleInit {
   private outboxDead = 0
   private outboxDispatchCount = 0
   private outboxDispatchLatencySumMs = 0
+  private okxRateLimitTotal: Record<string, number> = {}
+  private okxTokenBucketQueueDepth: Record<string, number> = {}
 
   onModuleInit() {
     this.logger.log('MessageBus metrics initialized')
@@ -48,6 +54,17 @@ export class MessageBusMetricsService implements OnModuleInit {
     }
   }
 
+  // OKX metrics
+  incOkxRateLimit(code: string) {
+    this.okxRateLimitTotal[code] = (this.okxRateLimitTotal[code] ?? 0) + 1
+  }
+
+  setOkxTokenBucketQueueDepth(accountId: string, depth: number) {
+    if (depth >= 0 && Number.isFinite(depth)) {
+      this.okxTokenBucketQueueDepth[accountId] = depth
+    }
+  }
+
   reset() {
     this.outboxClaimed = 0
     this.outboxSent = 0
@@ -55,6 +72,8 @@ export class MessageBusMetricsService implements OnModuleInit {
     this.outboxDead = 0
     this.outboxDispatchCount = 0
     this.outboxDispatchLatencySumMs = 0
+    this.okxRateLimitTotal = {}
+    this.okxTokenBucketQueueDepth = {}
   }
 
   getSnapshot(): MessageBusMetricsSnapshot {
@@ -69,6 +88,10 @@ export class MessageBusMetricsService implements OnModuleInit {
         dead: this.outboxDead,
         dispatchLatencyAvgMs: Math.round(avg),
         dispatchCount: this.outboxDispatchCount,
+      },
+      okx: {
+        rateLimitTotal: { ...this.okxRateLimitTotal },
+        tokenBucketQueueDepth: { ...this.okxTokenBucketQueueDepth },
       },
       timestamp: new Date().toISOString(),
     }

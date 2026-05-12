@@ -23,6 +23,12 @@ interface ExecutionStageMetadata extends Prisma.JsonObject {
   stageHistory?: Prisma.JsonArray
 }
 
+interface FindPendingByOkxOrderIdsInput {
+  orderId: string
+  clientOrderId?: string
+  exchangeAccountId?: string
+}
+
 @Injectable()
 export class SignalExecutionRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -38,6 +44,93 @@ export class SignalExecutionRepository {
           signalId,
           userStrategyAccountId,
         },
+      },
+    })
+  }
+
+  findPendingByOkxOrderIds(input: FindPendingByOkxOrderIdsInput) {
+    const clientOrderId = input.clientOrderId?.trim()
+    const or: Prisma.UserSignalExecutionWhereInput[] = [
+      {
+        metadata: {
+          path: ['orderResponse', 'id'],
+          equals: input.orderId,
+        },
+      },
+      {
+        metadata: {
+          path: ['providerOrderId'],
+          equals: input.orderId,
+        },
+      },
+    ]
+
+    if (clientOrderId) {
+      or.push(
+        {
+          metadata: {
+            path: ['clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+        {
+          metadata: {
+            path: ['orderRequest', 'clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+        {
+          metadata: {
+            path: ['tradingExecution', 'clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+        {
+          metadata: {
+            path: ['tradingExecution', 'normalizedRequest', 'clientOrderId'],
+            equals: clientOrderId,
+          },
+        },
+      )
+    }
+
+    const where: Prisma.UserSignalExecutionWhereInput = {
+      status: ExecutionStatus.PENDING,
+      OR: or,
+    }
+    if (input.exchangeAccountId) {
+      where.AND = [
+        {
+          OR: [
+            {
+              metadata: {
+                path: ['exchangeAccountId'],
+                equals: input.exchangeAccountId,
+              },
+            },
+            {
+              metadata: {
+                path: ['tradingExecution', 'exchangeAccountId'],
+                equals: input.exchangeAccountId,
+              },
+            },
+            {
+              metadata: {
+                path: ['tradingExecution', 'normalizedRequest', 'exchangeAccountId'],
+                equals: input.exchangeAccountId,
+              },
+            },
+          ],
+        },
+      ]
+    }
+
+    return this.txHost.tx.userSignalExecution.findFirst({
+      where: {
+        ...where,
+      },
+      orderBy: {
+        createdAt: 'desc',
       },
     })
   }
@@ -71,6 +164,39 @@ export class SignalExecutionRepository {
     })
   }
 
+  async markPendingStage(id: string, stage: ExecutionStage, metadataPatch: Prisma.JsonObject = {}): Promise<boolean> {
+    const existing = await this.txHost.tx.userSignalExecution.findUnique({
+      where: { id },
+      select: { metadata: true },
+    })
+
+    const current = this.asExecutionMetadata(existing?.metadata)
+    const currentHistory = Array.isArray(current.stageHistory) ? current.stageHistory : []
+    const nextMetadata: Prisma.JsonObject = {
+      ...current,
+      ...metadataPatch,
+      stage,
+      stageHistory: [
+        ...currentHistory,
+        {
+          stage,
+          at: new Date().toISOString(),
+        },
+      ] as Prisma.JsonArray,
+    }
+
+    const result = await this.txHost.tx.userSignalExecution.updateMany({
+      where: {
+        id,
+        status: ExecutionStatus.PENDING,
+      },
+      data: {
+        metadata: nextMetadata,
+      },
+    })
+    return result.count === 1
+  }
+
   async markExecuted(id: string, payload: ExecutionUpdatePayload = {}) {
     const existing = await this.txHost.tx.userSignalExecution.findUnique({
       where: { id },
@@ -102,6 +228,41 @@ export class SignalExecutionRepository {
     })
   }
 
+  async markPendingExecuted(id: string, payload: ExecutionUpdatePayload = {}): Promise<boolean> {
+    const existing = await this.txHost.tx.userSignalExecution.findUnique({
+      where: { id },
+      select: { metadata: true },
+    })
+    const current = this.asExecutionMetadata(existing?.metadata)
+    const nextMetadata
+      = payload.metadata && typeof payload.metadata === 'object' && !Array.isArray(payload.metadata)
+        ? {
+            ...current,
+            ...(payload.metadata as Prisma.JsonObject),
+          }
+        : current
+
+    const result = await this.txHost.tx.userSignalExecution.updateMany({
+      where: {
+        id,
+        status: ExecutionStatus.PENDING,
+      },
+      data: {
+        status: ExecutionStatus.EXECUTED,
+        executedPrice: payload.executedPrice,
+        executedQuantity: payload.executedQuantity,
+        fee: payload.fee,
+        feeCurrency: payload.feeCurrency,
+        tradeId: payload.tradeId,
+        positionId: payload.positionId,
+        executedAt: payload.executedAt ?? new Date(),
+        metadata: nextMetadata,
+        errorMessage: null,
+      },
+    })
+    return result.count === 1
+  }
+
   async markFailed(id: string, errorMessage: string) {
     await this.txHost.tx.userSignalExecution.update({
       where: { id },
@@ -111,6 +272,21 @@ export class SignalExecutionRepository {
         executedAt: new Date(),
       },
     })
+  }
+
+  async markPendingFailed(id: string, errorMessage: string): Promise<boolean> {
+    const result = await this.txHost.tx.userSignalExecution.updateMany({
+      where: {
+        id,
+        status: ExecutionStatus.PENDING,
+      },
+      data: {
+        status: ExecutionStatus.FAILED,
+        errorMessage,
+        executedAt: new Date(),
+      },
+    })
+    return result.count === 1
   }
 
   async markSkipped(id: string, reason: string) {

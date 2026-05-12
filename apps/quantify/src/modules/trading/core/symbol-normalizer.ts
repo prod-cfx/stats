@@ -17,8 +17,19 @@ const KNOWN_QUOTES = [
 export function normalizeExecutionSymbol(
   raw: string,
   marketType: MarketType,
-  _exchangeId: ExchangeId,
+  exchangeId: ExchangeId,
 ): string {
+  const trimmed = raw.trim()
+  if (exchangeId === 'okx' && trimmed.includes('-')) {
+    const upper = trimmed.toUpperCase().replace(/:(PERP|SPOT)$/, '')
+    const parts = upper.split('-').filter(Boolean)
+    const [base, quote, suffix] = parts
+    if (base && quote && (parts.length === 2 || suffix === 'SWAP')) {
+      const unified = `${base}/${quote}`
+      return marketType === 'perp' ? `${unified}:PERP` : unified
+    }
+  }
+
   if (raw.includes('/')) {
     if (marketType === 'perp' && !raw.endsWith(':PERP')) {
       return `${raw}:PERP`

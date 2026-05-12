@@ -99,6 +99,10 @@ export interface OfficialStrategyPlazaEditSeed {
     exitRuleExample?: string
     riskRuleExample?: string
   }
+  locales?: Partial<Record<'zh' | 'en', {
+    initialMessage: string
+    guideConfig?: OfficialStrategyPlazaEditSeed['guideConfig']
+  }>>
 }
 
 export interface OfficialStrategyPlazaTemplate {

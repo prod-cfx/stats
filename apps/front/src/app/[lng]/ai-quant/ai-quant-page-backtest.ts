@@ -38,6 +38,10 @@ export const BACKTEST_JOB_TIMEOUT_MS = 180_000
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
+function isEnglishLocale(lng?: string): boolean {
+  return lng?.toLowerCase().startsWith('en') === true
+}
+
 function isTransientBacktestError(error: unknown): boolean {
   const candidate = error as {
     code?: unknown
@@ -69,10 +73,12 @@ function isTransientBacktestError(error: unknown): boolean {
 function buildInvalidExecutionConfigMessage(args: {
   activeConversation: ConversationState
   executionConfig: ReturnType<typeof resolveBacktestExecutionConfig>
+  lng?: 'zh' | 'en'
   marketType: 'spot' | 'perp' | null
   t: Translate
 }): string {
-  const { activeConversation, executionConfig, marketType, t } = args
+  const { activeConversation, executionConfig, lng, marketType, t } = args
+  const isEn = isEnglishLocale(lng)
 
   if (activeConversation.publishedSnapshotId) {
     if (
@@ -80,52 +86,61 @@ function buildInvalidExecutionConfigMessage(args: {
       activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
     ) {
       return t('aiQuant.messages.backtestPayloadInvalid', {
-        reason:
-          'published_snapshot_backtest_truth_missing：当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
+        reason: isEn
+          ? 'published_snapshot_backtest_truth_missing: the published snapshot is missing the strategy market binding truth. Republish the strategy and run the backtest again.'
+          : 'published_snapshot_backtest_truth_missing：当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
       })
     }
   }
 
   if (!marketType) {
-    return '请先确认策略交易的是现货还是合约，然后再开始回测。'
+    return isEn
+      ? 'Please confirm whether the strategy trades spot or perpetual contracts before running a backtest.'
+      : '请先确认策略交易的是现货还是合约，然后再开始回测。'
   }
 
   if (!executionConfig.allowPartialValid) {
     return t('aiQuant.messages.backtestPayloadInvalid', {
-      reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
+      reason: isEn
+        ? 'invalid_allow_partial: allow partial fill must be true or false.'
+        : 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
     })
   }
 
   const invalidFields: string[] = []
   const leverage = executionConfig.leverage
   if (!Number.isFinite(executionConfig.initialCash) || executionConfig.initialCash <= 0) {
-    invalidFields.push('初始资金')
+    invalidFields.push(isEn ? 'initial cash' : '初始资金')
   }
   if (marketType === 'perp' && (!Number.isFinite(leverage) || (leverage ?? 0) <= 0)) {
-    invalidFields.push('杠杆')
+    invalidFields.push(isEn ? 'leverage' : '杠杆')
   }
   if (!Number.isFinite(executionConfig.slippageBps) || executionConfig.slippageBps < 0) {
-    invalidFields.push('滑点')
+    invalidFields.push(isEn ? 'slippage' : '滑点')
   }
   if (!Number.isFinite(executionConfig.feeBps) || executionConfig.feeBps < 0) {
-    invalidFields.push('手续费')
+    invalidFields.push(isEn ? 'fee' : '手续费')
   }
   if (
     executionConfig.priceSource !== 'open' &&
     executionConfig.priceSource !== 'close' &&
     executionConfig.priceSource !== 'mid'
   ) {
-    invalidFields.push('成交价来源')
+    invalidFields.push(isEn ? 'price source' : '成交价来源')
   }
 
   if (invalidFields.length > 0) {
     return t('aiQuant.messages.backtestPayloadInvalid', {
-      reason: `invalid_execution_config：以下回测执行参数无效或缺失：${invalidFields.join('、')}。`,
+      reason: isEn
+        ? `invalid_execution_config: invalid or missing execution fields: ${invalidFields.join(', ')}.`
+        : `invalid_execution_config：以下回测执行参数无效或缺失：${invalidFields.join('、')}。`,
     })
   }
 
   return t('aiQuant.messages.backtestPayloadInvalid', {
-    reason: 'invalid_execution_config：回测执行参数无效，请重新检查后再试。',
+    reason: isEn
+      ? 'invalid_execution_config: backtest execution parameters are invalid. Please review them and try again.'
+      : 'invalid_execution_config：回测执行参数无效，请重新检查后再试。',
   })
 }
 
@@ -173,6 +188,7 @@ export async function runAiQuantBacktest(args: {
   backtestRunTokenRef: MutableRefObject<Map<string, number>>
   graphConfirmed: boolean
   isMountedRef: MutableRefObject<boolean>
+  lng?: 'zh' | 'en'
   setConversationBacktestExecutionState: (
     conversationId: string,
     state: ConversationState['backtestExecutionState'],
@@ -192,6 +208,7 @@ export async function runAiQuantBacktest(args: {
     backtestRunTokenRef,
     graphConfirmed,
     isMountedRef,
+    lng = 'zh',
     setConversationBacktestExecutionState,
     t,
     updateConversationById,
@@ -271,7 +288,9 @@ export async function runAiQuantBacktest(args: {
     })
     if (!publishedMarketType) {
       throw new ApiError(
-        '请先确认策略交易的是现货还是合约，然后再开始回测。',
+        isEnglishLocale(lng)
+          ? 'Please confirm whether the strategy trades spot or perpetual contracts before running a backtest.'
+          : '请先确认策略交易的是现货还是合约，然后再开始回测。',
         'MARKET_TYPE_UNCONFIRMED',
       )
     }
@@ -282,7 +301,9 @@ export async function runAiQuantBacktest(args: {
     })
     if (!effectiveInputs) {
       throw new ApiError(
-        '当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
+        isEnglishLocale(lng)
+          ? 'The published snapshot is missing the strategy market binding truth. Please republish the strategy and run the backtest again.'
+          : '当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
         'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
       )
     }
@@ -295,7 +316,12 @@ export async function runAiQuantBacktest(args: {
         editableParamValues: activeConversation.paramValues,
       })
     ) {
-      throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
+      throw new ApiError(
+        isEnglishLocale(lng)
+          ? 'Current parameters no longer match the published snapshot. Please republish the strategy and run the backtest again.'
+          : '当前参数已脱离已发布快照，请重新发布后再回测。',
+        'REPUBLISH_REQUIRED',
+      )
     }
 
     const executionConfig = resolveBacktestExecutionConfig(activeConversation.paramValues)
@@ -359,6 +385,7 @@ export async function runAiQuantBacktest(args: {
           return buildInvalidExecutionConfigMessage({
             activeConversation,
             executionConfig: resolveBacktestExecutionConfig(activeConversation.paramValues),
+            lng,
             marketType: resolvePublishedBacktestMarketType({
               publishedSnapshotId: activeConversation.publishedSnapshotId,
               publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
@@ -513,7 +540,7 @@ export async function runAiQuantBacktest(args: {
     }
     if (latestJob.status === 'failed') {
       setConversationBacktestExecutionState(conversationId, 'failed')
-      updateBacktestMessage(formatBacktestJobFailure(latestJob))
+      updateBacktestMessage(formatBacktestJobFailure(latestJob, lng))
       return
     }
 

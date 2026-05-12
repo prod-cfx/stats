@@ -216,4 +216,43 @@ describe('signalGeneratorRepository.findRunningInstances', () => {
       }),
     })
   })
+
+  it('blocks generation admission for failed or pending reconcile-required entry executions', async () => {
+    const count = jest.fn().mockResolvedValue(1)
+    const repo = new SignalGeneratorRepository({
+      tx: {
+        userSignalExecution: { count },
+      },
+    } as any)
+
+    await expect(repo.hasPendingReconcileRequiredEntryExecution({
+      strategyId: 'strategy-1',
+      strategyInstanceId: 'instance-1',
+    })).resolves.toBe(true)
+
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        status: { in: ['FAILED', 'PENDING'] },
+        orderSide: { in: ['BUY', 'SELL'] },
+        signal: {
+          signalType: 'ENTRY',
+        },
+        metadata: {
+          path: ['reconcileRequired'],
+          equals: true,
+        },
+        account: {
+          strategyId: 'strategy-1',
+          user: {
+            strategySubscriptions: {
+              some: {
+                strategyInstanceId: 'instance-1',
+                status: 'active',
+              },
+            },
+          },
+        },
+      },
+    })
+  })
 })

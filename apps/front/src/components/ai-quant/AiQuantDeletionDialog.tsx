@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export type AiQuantDeletionDialogKind =
   | 'loading'
@@ -29,33 +30,33 @@ interface DialogContent {
   description: string
 }
 
-function resolveContent(kind: AiQuantDeletionDialogKind): DialogContent {
+function resolveContent(kind: AiQuantDeletionDialogKind, t: (key: string) => string): DialogContent {
   switch (kind) {
     case 'loading':
       return {
-        title: '正在确认策略状态',
-        description: '正在确认关联策略的运行状态。',
+        title: t('aiQuant.deleteDialog.loadingTitle'),
+        description: t('aiQuant.deleteDialog.loadingDescription'),
       }
     case 'unknown':
       return {
-        title: '暂时无法删除',
-        description: '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+        title: t('aiQuant.deleteDialog.unknownTitle'),
+        description: t('aiQuant.deleteDialog.unknownDescription'),
       }
     case 'running':
       return {
-        title: '当前策略正在运行',
-        description: '当前会话关联的策略正在运行，不能删除。请先前往策略详情停止运行；如有持仓或挂单，可选择仅停止或平仓并停止。',
+        title: t('aiQuant.deleteDialog.runningTitle'),
+        description: t('aiQuant.deleteDialog.runningDescription'),
       }
     case 'no-conversation':
       return {
-        title: '删除策略',
-        description: '该策略由「策略广场」直接运行生成，没有关联 AI Quant 会话。默认保留在我的策略列表中（仅可查看详情）；如不再需要可勾选下方选项彻底删除。',
+        title: t('aiQuant.deleteDialog.noConversationTitle'),
+        description: t('aiQuant.deleteDialog.noConversationDescription'),
       }
     case 'with-conversation':
     default:
       return {
-        title: '删除 AI Quant 会话',
-        description: '这个会话已生成过策略，当前策略已停止。默认只删除 AI 对话和生成过程，不删除我的策略列表中的策略记录。',
+        title: t('aiQuant.deleteDialog.withConversationTitle'),
+        description: t('aiQuant.deleteDialog.withConversationDescription'),
       }
   }
 }
@@ -74,6 +75,7 @@ export function AiQuantDeletionDialog({
   onGoToRunningStrategy,
   onClose,
 }: AiQuantDeletionDialogProps) {
+  const { t } = useTranslation()
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null)
   // pending state 是异步生效的；从「点击主按钮」到 setState 反映 pending=true
@@ -138,7 +140,7 @@ export function AiQuantDeletionDialog({
 
   if (!open) return null
 
-  const { title, description } = resolveContent(kind)
+  const { title, description } = resolveContent(kind, t)
 
   // 视觉风格预设：safe = 绿/紫主按钮（默认 Enter 触发的安全操作），
   // destructive_primary = 红色破坏性主按钮，destructive_secondary = 红色破坏性副按钮，
@@ -152,21 +154,23 @@ export function AiQuantDeletionDialog({
   let primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
   let primaryHandler: (() => void) | null = null
 
-  let secondaryLabel: string | null = '取消'
+  let secondaryLabel: string | null = t('aiQuant.deleteDialog.cancel')
   let secondaryClassName = NEUTRAL_SECONDARY_CLASS
   let secondaryHandler: (() => void) | null = onClose
 
   if (kind === 'running') {
-    primaryLabel = '前往运行策略'
+    primaryLabel = t('aiQuant.deleteDialog.goToRunningStrategy')
     primaryClassName = SAFE_PRIMARY_CLASS
     primaryHandler = onGoToRunningStrategy ?? null
-    secondaryLabel = '关闭'
+    secondaryLabel = t('aiQuant.deleteDialog.close')
     secondaryHandler = onClose
   } else if (kind === 'with-conversation') {
-    primaryLabel = deleteStoppedStrategy ? '删除会话和策略' : '仅删除会话'
+    primaryLabel = deleteStoppedStrategy
+      ? t('aiQuant.deleteDialog.deleteConversationAndStrategy')
+      : t('aiQuant.deleteDialog.deleteConversationOnly')
     primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
     primaryHandler = onConfirm
-    secondaryLabel = '取消'
+    secondaryLabel = t('aiQuant.deleteDialog.cancel')
     secondaryHandler = onClose
   } else if (kind === 'no-conversation') {
     // plaza 分支：默认动作随复选框切换。
@@ -174,15 +178,15 @@ export function AiQuantDeletionDialog({
     // - 已勾选：主按钮「彻底删除策略」（destructive），点击归档 strategy → onConfirm
     // 副按钮固定为「取消」，关闭弹框不做任何操作。
     if (deleteStoppedStrategy) {
-      primaryLabel = '彻底删除策略'
+      primaryLabel = t('aiQuant.deleteDialog.deleteStrategyPermanently')
       primaryClassName = DESTRUCTIVE_PRIMARY_CLASS
       primaryHandler = onConfirm
     } else {
-      primaryLabel = '保留为只读'
+      primaryLabel = t('aiQuant.deleteDialog.keepViewOnly')
       primaryClassName = SAFE_PRIMARY_CLASS
       primaryHandler = onKeepAsViewOnly ?? null
     }
-    secondaryLabel = '取消'
+    secondaryLabel = t('aiQuant.deleteDialog.cancel')
     secondaryHandler = onClose
   }
 
@@ -194,12 +198,12 @@ export function AiQuantDeletionDialog({
   const showInfoBlock = kind === 'with-conversation' || kind === 'running' || kind === 'no-conversation'
   const checkboxLabel = kind === 'no-conversation'
     ? {
-        main: '彻底删除策略记录（不可恢复）',
-        hint: '勾选后该策略将从我的策略列表移除，不能再次运行。',
+        main: t('aiQuant.deleteDialog.deleteStrategyRecord'),
+        hint: t('aiQuant.deleteDialog.deleteStrategyRecordHint'),
       }
     : {
-        main: '同时删除已停止策略记录',
-        hint: '删除后该策略将从我的策略列表移除，不能再次运行。',
+        main: t('aiQuant.deleteDialog.deleteStoppedStrategy'),
+        hint: t('aiQuant.deleteDialog.deleteStoppedStrategyHint'),
       }
 
   const handleBackdropClick = () => {
@@ -240,7 +244,7 @@ export function AiQuantDeletionDialog({
           <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
             {conversation && (
               <div className="flex justify-between gap-3">
-                <span className="text-[color:var(--cf-muted)]">会话</span>
+                <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deleteDialog.conversation')}</span>
                 <span className="text-right text-[color:var(--cf-text-strong)]">
                   {conversation.title}
                 </span>
@@ -248,7 +252,7 @@ export function AiQuantDeletionDialog({
             )}
             {strategy && (
               <div className="flex justify-between gap-3">
-                <span className="text-[color:var(--cf-muted)]">策略</span>
+                <span className="text-[color:var(--cf-muted)]">{t('aiQuant.deleteDialog.strategy')}</span>
                 <span className="text-right text-[color:var(--cf-text-strong)]">
                   {strategy.name?.trim() || strategy.id}
                 </span>
@@ -286,7 +290,7 @@ export function AiQuantDeletionDialog({
                 data-testid="ai-quant-deletion-destructive-warning"
                 className="mt-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs leading-5 text-red-200"
               >
-                此操作不可恢复。继续之前请确认你已不再需要该策略记录。
+                {t('aiQuant.deleteDialog.destructiveWarning')}
               </div>
             )}
           </>
