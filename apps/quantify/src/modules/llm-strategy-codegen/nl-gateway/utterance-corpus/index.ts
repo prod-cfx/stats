@@ -24,6 +24,22 @@ export type {
   UtteranceCorpusOwner,
 } from './utterance-corpus.types'
 
+/**
+ * Issue #1231 + #1191/#1198：间接触发的 supported_executable 原子白名单豁免。
+ *
+ * 这些 atom 通过其他子句（如 action.add_position、grid 触发器）间接落位 state.triggers，
+ * 没有独立 atomKey fixture。它们的契约由专门的 projection/invariant spec 覆盖
+ * （semantic-state-projection.service.orchestration.spec / sizing-evidence-invariant.spec），
+ * 在 utterance-corpus 与 atom-coverage-contract 层全面豁免"≥3 utterances + 探针可识别"两个约束。
+ *
+ * Single source of truth：utterance-corpus.spec.ts 与 atom-coverage-contract.spec.ts
+ * 必须共享同一份豁免清单，禁止任一侧自行硬编码扩展。
+ */
+export const INDIRECTLY_COVERED_ATOMS: ReadonlySet<SupportedExecutableUtteranceAtom> = new Set([
+  'position.pyramiding_limit',
+  'grid.range_rebalance',
+])
+
 export const SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS = [
   'volume.threshold',
   'volatility.atr_threshold',

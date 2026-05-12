@@ -13,6 +13,7 @@
  */
 
 import {
+  INDIRECTLY_COVERED_ATOMS,
   SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS,
   getUtteranceCorpusForAtom,
   type SupportedExecutableUtteranceAtom,
@@ -51,17 +52,9 @@ describe('Atom coverage contract — supported atoms have ≥3 utterances and re
     expect(supportedAtoms.length).toBeGreaterThan(0)
   })
 
-  // 与 utterance-corpus.spec.ts 保持一致的"间接触发"豁免清单：
-  // 这些 atom 通过其他子句间接落位 state，无独立 atomKey fixture，covered by 专门的 projection/invariant spec。
-  // - position.pyramiding_limit (#1191)：通过 action.add_position 子句间接触发
-  // - grid.range_rebalance (#1198)：通过 grid 触发器子句（"区间 X-Y, 每格 N USDT"）间接触发
-  const INDIRECTLY_COVERED_ATOMS: ReadonlySet<string> = new Set([
-    'position.pyramiding_limit',
-    'grid.range_rebalance',
-  ])
-
   describe.each(SUPPORTED_EXECUTABLE_UTTERANCE_ATOMS)('utterance corpus — %s', (atomKey) => {
-    const skipReason = INDIRECTLY_COVERED_ATOMS.has(atomKey)
+    // 豁免清单从 utterance-corpus/index.ts 单点导入，避免与 utterance-corpus.spec.ts 漂移
+    const skipReason = INDIRECTLY_COVERED_ATOMS.has(atomKey as SupportedExecutableUtteranceAtom)
       ? '间接触发，豁免独立 corpus fixture 要求（详见 utterance-corpus.spec.ts 同步豁免说明）'
       : null
 
