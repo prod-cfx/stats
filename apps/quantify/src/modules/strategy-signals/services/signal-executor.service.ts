@@ -176,12 +176,27 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
       const metadata = this.buildOkxPrivateOrderMetadata(event)
       if (this.isFilledOkxPrivateOrderEvent(event)) {
+        const executedPrice = event.avgPrice ?? event.fillPrice
         await this.executionRepository.markPendingStage(execution.id, 'RECONCILE_REQUIRED', {
           ...metadata,
+          ledgerApplied: false,
           reconcileRequired: true,
           reason: 'OKX_PRIVATE_WS_FILLED_REQUIRES_LEDGER_RECONCILIATION',
+          orderResponse: {
+            id: event.orderId,
+            status: event.state,
+            amount: event.filledSize,
+            filled: event.filledSize,
+            ...(typeof executedPrice === 'number' ? { price: executedPrice } : {}),
+            createdAt: event.updatedAt.toISOString(),
+            raw: {
+              ...event.raw,
+              ...(typeof event.fee === 'number' ? { fee: String(event.fee) } : {}),
+              ...(event.feeCurrency ? { feeCcy: event.feeCurrency } : {}),
+            },
+          },
           providerFill: {
-            executedPrice: event.avgPrice ?? event.fillPrice,
+            executedPrice,
             executedQuantity: event.filledSize,
             fee: event.fee,
             feeCurrency: event.feeCurrency,
