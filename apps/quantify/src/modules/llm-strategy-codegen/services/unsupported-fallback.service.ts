@@ -14,10 +14,6 @@ interface UnsupportedAtomInput {
   publicReason: string
 }
 
-interface SupportedTriggerHint {
-  key: string
-}
-
 const DEFAULT_FALLBACK_ATOM_KEY = 'risk.atr_stop'
 
 // 当用户输入既触发 supported 的具体识别（如 price.candle_pattern / price.chart_pattern /
@@ -47,7 +43,7 @@ export class UnsupportedFallbackService {
    */
   filterUnsupportedAtomsCoveredBySupported(
     unsupportedAtoms: UnsupportedAtomInput[],
-    supportedTriggers: ReadonlyArray<SupportedTriggerHint>,
+    supportedTriggers: ReadonlyArray<{ key: string }>,
   ): UnsupportedAtomInput[] {
     const supportedKeys = new Set(supportedTriggers.map(trigger => trigger.key))
     return unsupportedAtoms.filter((atom) => {
@@ -61,7 +57,7 @@ export class UnsupportedFallbackService {
 
   buildPendingFallback(
     unsupportedAtoms: UnsupportedAtomInput[],
-    supportedTriggers: ReadonlyArray<SupportedTriggerHint> = [],
+    supportedTriggers: ReadonlyArray<{ key: string }> = [],
   ): UnsupportedFallbackState | null {
     const filtered = this.filterUnsupportedAtomsCoveredBySupported(unsupportedAtoms, supportedTriggers)
 
